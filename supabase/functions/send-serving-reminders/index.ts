@@ -53,7 +53,10 @@ const SERVING_LINK_MODE = Deno.env.get("SERVING_LINK_MODE") || "signed";
 // which resolves them to a different, incompatible instantiation; that is why
 // CWA-45 kept a hand-written SupabaseClient<any, "public", any> alias here.
 // Bound through the factory, the type tracks whatever the pinned 2.110.9
-// call actually returns, so a version bump needs no re-verification.
+// call actually returns, so a version bump no longer needs the ALIAS
+// re-derived — but the OrgListClient cast in Deno.serve still does (see its
+// TS2589 note), and the pin still has to move in lockstep with
+// package-lock.json. Mirrored byte-for-byte in send-event-reminders.
 function createServiceClient() {
   return createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
 }
