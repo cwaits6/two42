@@ -194,6 +194,19 @@ export async function POST(request: Request) {
       .single<{ signup_id: string; signup_org_id: string; created: boolean }>();
 
     if (rpcError || !rpc) {
+      // SV001 is an ordinary race. Everything else is an anomaly the member
+      // cannot act on, and it matters more here than on the authenticated
+      // route: SV002 and SV003 collapse into one deliberately deniable message
+      // below, so the log is the only place that distinction survives.
+      if (rpcError?.code !== "SV001") {
+        console.error(
+          "Signed-link signup rpc failed for group %s (profile %s, data=%s):",
+          payload.g,
+          payload.p,
+          rpc === null ? "null" : "present",
+          rpcError
+        );
+      }
       switch (rpcError?.code) {
         case "SV001":
           return NextResponse.json(
@@ -214,11 +227,13 @@ export async function POST(request: Request) {
             { status: 403 }
           );
       }
-      console.error("Signed-link signup rpc failed for group %s:", payload.g, rpcError);
       return NextResponse.json({ error: "Failed to sign up" }, { status: 500 });
     }
 
-    if (profile.email) {
+    // Same created guard as the authenticated route. This is the surface where
+    // a double tap is most likely — /serving/go is a one-button page reached
+    // from an email, and LinkActionConfirm has no in-flight guard.
+    if (rpc.created && profile.email) {
       try {
         await sendSignupConfirmation(service, {
           signupId: rpc.signup_id,

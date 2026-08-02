@@ -124,6 +124,22 @@ export async function POST(request: Request) {
     .single<{ signup_id: string; signup_org_id: string; created: boolean }>();
 
   if (rpcError || !rpc) {
+    // SV001 is an ordinary race — the expected outcome of two members tapping
+    // the same Sunday. Everything else means the app-layer checks above
+    // (group, settings, profile, attendees) and the RPC's own checks
+    // disagreed, or the request org failed to resolve: anomalies that must not
+    // reach the member with no operator signal (CLAUDE.md's app_request_org_id
+    // fail-closed rule requires the NULL case be logged). Logged before the
+    // switch because every mapped case returns from inside it.
+    if (rpcError?.code !== "SV001") {
+      console.error(
+        "Serving signup rpc failed for group %s (user %s, data=%s):",
+        groupId,
+        user.id,
+        rpc === null ? "null" : "present",
+        rpcError
+      );
+    }
     switch (rpcError?.code) {
       case "SV001":
         return NextResponse.json(
@@ -143,11 +159,13 @@ export async function POST(request: Request) {
           { status: 403 }
         );
     }
-    console.error("Serving signup rpc failed for group %s:", groupId, rpcError);
     return NextResponse.json({ error: "Failed to sign up" }, { status: 500 });
   }
 
-  if (user.email) {
+  // The RPC is additive, so a re-signup succeeds with created = false. Only a
+  // freshly claimed Sunday warrants a confirmation; re-sending on an idempotent
+  // no-op reads as a double booking (and ships a second ICS for one Sunday).
+  if (rpc.created && user.email) {
     try {
       await sendSignupConfirmation(supabase, {
         signupId: rpc.signup_id,

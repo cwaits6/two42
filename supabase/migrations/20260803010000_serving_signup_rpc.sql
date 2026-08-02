@@ -76,12 +76,17 @@ begin
       using errcode = 'SV002';
   end if;
 
-  -- Household rule (moved here from the routes, closing the direct-PostgREST
-  -- hole in the "Signup owners can add attendees" policy): every attendee is
+  -- Household rule, enforced here rather than only in the routes (deliberate
+  -- defence in depth — the route copy at signups/route.ts:97-109 stays for the
+  -- specific 400 message and to fail before a round trip): every attendee is
   -- the actor, or shares the actor's non-null household with relationship
-  -- primary/spouse — and carries the group's org_id. count(*) over the
-  -- DISTINCT subquery (not count(distinct ...)) so a NULL element still
-  -- counts on the total side and fails the comparison.
+  -- primary/spouse — and carries the group's org_id. NOTE this constrains the
+  -- RPC path only: the "Signup owners can add attendees" INSERT policy
+  -- (20260731000008_rls_serving.sql:59-74) still lets a signup owner attach any
+  -- same-org profile via direct PostgREST, with no household predicate.
+  -- Narrowing that policy is follow-up work, not closed here.
+  -- count(*) over the DISTINCT subquery (not count(distinct ...)) so a NULL
+  -- element still counts on the total side and fails the comparison.
   select count(*) into _attendee_total
   from (select distinct att.pid from unnest(_attendee_ids) as att(pid)) ids;
 
