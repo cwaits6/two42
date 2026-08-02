@@ -639,8 +639,10 @@ describe("planImport semantics", () => {
     );
     expect(plan.summary.error).toBe(0);
     expect(plan.writes.length).toBeGreaterThan(0);
-    // The tenancy assertion CI's SQL lint cannot make: no payload names a
-    // tenant — inserts rely on the org_id column DEFAULT.
+    // The tenancy assertion CI's SQL lint cannot make: no payload the PLANNER
+    // produces names a tenant, because everything it sees came out of an
+    // uploaded file. The org is stamped downstream by applyWrites() from the
+    // caller's validated orgId — see apply.test.ts.
     expect(JSON.stringify(plan.writes)).not.toContain("org_id");
   });
 

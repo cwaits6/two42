@@ -176,15 +176,24 @@ describe("applyWrites — write routing", () => {
         isLeader: true,
       },
     ]);
+    // toEqual, not toMatchObject: an assignment row carries these five
+    // columns and nothing else — approved_role and friends must never ride
+    // along on a write an import controls.
     expect(calls[0].payload).toEqual({
       profile_id: "p1",
       group_id: "g1",
       is_leader: true,
       assigned_by: USER,
+      org_id: ORG,
     });
   });
 
-  it("carries no org_id in any insert payload — the column DEFAULT resolves it", async () => {
+  it("stamps org_id on EVERY insert payload — the column DEFAULT is not enough", async () => {
+    // The other half of the tier-C floor. The DEFAULT
+    // public.app_current_org_id() resolves the right org for an authenticated
+    // principal, but a SupabaseClient parameter may be a service-role client,
+    // where there is no principal to resolve and BYPASSRLS means nothing
+    // else is checking. Covers all three insert kinds in one pass.
     const { client, calls } = fakeClient();
     await applyWrites(client, USER, ORG, [
       {
@@ -194,6 +203,13 @@ describe("applyWrites — write routing", () => {
         values: { family_name: "Zeta" },
       },
       {
+        kind: "insert_family_member",
+        line: 1,
+        familyId: "f-existing",
+        householdKey: null,
+        values: { first_name: "Zeb", relationship: "child" },
+      },
+      {
         kind: "insert_profile_group",
         line: 2,
         profileId: "p1",
@@ -201,8 +217,72 @@ describe("applyWrites — write routing", () => {
         isLeader: false,
       },
     ]);
-    for (const call of calls.filter((c) => c.op === "insert")) {
-      expect(JSON.stringify(call.payload)).not.toContain("org_id");
+    const inserts = calls.filter((c) => c.op === "insert");
+    expect(inserts.map((c) => c.table)).toEqual([
+      "family_units",
+      "family_members",
+      "profile_groups",
+    ]);
+    for (const call of inserts) {
+      expect(call.payload).toMatchObject({ org_id: ORG });
+    }
+  });
+
+  it("scopes every write — no kind reaches the DB without an org_id", async () => {
+    // The regression net for the guard finding as a whole: one write of each
+    // kind, asserted structurally rather than per-case, so a NEW PlannedWrite
+    // variant added without scoping fails here and not only in CI's tenancy
+    // guard. An insert proves it via its payload, an update/delete via its
+    // filter list.
+    const { client, calls } = fakeClient();
+    const everyKind: PlannedWrite[] = [
+      {
+        kind: "insert_family_unit",
+        line: 1,
+        householdKey: "hh-1",
+        values: { family_name: "Zeta" },
+      },
+      {
+        kind: "insert_family_member",
+        line: 1,
+        familyId: "f-existing",
+        householdKey: null,
+        values: { first_name: "Zeb", relationship: "child" },
+      },
+      {
+        kind: "update_family_member",
+        line: 2,
+        id: "m1",
+        values: { relationship: "child" },
+      },
+      { kind: "update_profile", line: 3, id: "p1", values: { city: "Austin" } },
+      {
+        kind: "insert_profile_group",
+        line: 4,
+        profileId: "p1",
+        groupId: "g1",
+        isLeader: false,
+      },
+      {
+        kind: "update_profile_group",
+        line: 5,
+        profileId: "p1",
+        groupId: "g1",
+        isLeader: true,
+      },
+      { kind: "delete_profile_group", line: 6, profileId: "p1", groupId: "g2" },
+    ];
+    const result = await applyWrites(client, USER, ORG, everyKind);
+    expect(result.ok).toBe(true);
+    // Every planned write produced exactly one statement — nothing was
+    // skipped, which would make the assertion below vacuous.
+    expect(calls).toHaveLength(everyKind.length);
+    for (const call of calls) {
+      const scoped =
+        call.op === "insert"
+          ? (call.payload as Record<string, unknown>).org_id === ORG
+          : call.filters.some(([col, val]) => col === "org_id" && val === ORG);
+      expect(scoped, `${call.op} on ${call.table} is not org-scoped`).toBe(true);
     }
   });
 });

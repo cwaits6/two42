@@ -6,13 +6,25 @@
  * .eq() here flips is_leader on the wrong row, or silently no-ops — and a
  * no-op is indistinguishable from success without a test.
  *
- * Tenancy: no insert payload carries org_id. Every target table's column
- * DEFAULT is public.app_current_org_id(), the fail-closed resolver, and the
- * client is the caller's cookie-bound request client, so RLS is the boundary
- * on both the reads and the writes. `orgId` is threaded in only to scope the
- * updates/deletes, which address rows by id and would otherwise rely on RLS
- * alone against a client this signature cannot prove is request-scoped (the
+ * Tenancy: `orgId` scopes EVERY write, insert included. A
+ * `SupabaseClient<Database>` PARAMETER is untyped as to privilege — a
+ * service-role client satisfies it identically and carries BYPASSRLS — so
+ * from inside lib/ this code cannot know whether RLS is running at all, and
+ * the explicit predicate is the only tenant boundary it can guarantee (the
  * same tier-C reasoning as loadOrgSnapshot).
+ *
+ * That cuts two ways, and both matter:
+ *   - Inserts carry an explicit org_id instead of leaning on the column
+ *     DEFAULT public.app_current_org_id(). The DEFAULT is the fail-closed
+ *     resolver for an authenticated principal, but under a service-role
+ *     client there is no authenticated principal to resolve, so it yields
+ *     nothing useful.
+ *   - Updates and deletes carry .eq("org_id", orgId) alongside their id
+ *     predicate. An id-only update is the leak: a row id belonging to
+ *     another tenant would be written without it.
+ *
+ * `orgId` must come from a validated anchor — requireOrgAdmin() reads it off
+ * the caller's own RLS-scoped profile row. Never off a request body.
  *
  * PII: response bodies may carry member data (the admin uploaded the file);
  * console.* must not. Log lines, kinds, counts, and the constraint identity.
@@ -113,7 +125,7 @@ export async function applyWrites(
         case "insert_family_unit": {
           const { data, error } = await supabase
             .from("family_units")
-            .insert({ family_name: write.values.family_name })
+            .insert({ family_name: write.values.family_name, org_id: orgId })
             .select("id")
             .single();
           if (error || !data) {
@@ -132,7 +144,7 @@ export async function applyWrites(
           }
           const { error } = await supabase
             .from("family_members")
-            .insert({ ...write.values, family_id: familyId });
+            .insert({ ...write.values, family_id: familyId, org_id: orgId });
           failure = error;
           break;
         }
@@ -160,6 +172,7 @@ export async function applyWrites(
             group_id: write.groupId,
             is_leader: write.isLeader,
             assigned_by: userId,
+            org_id: orgId,
           });
           failure = error;
           break;

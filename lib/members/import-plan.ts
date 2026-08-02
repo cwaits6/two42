@@ -7,8 +7,10 @@
  * test instead of an integration test.
  *
  * Tenancy: MemberRow has no org_id field (parseMembers hard-fails on the
- * column) and no PlannedWrite payload ever carries one — inserts rely on the
- * column DEFAULT public.app_current_org_id(), the fail-closed resolver.
+ * column) and no PlannedWrite payload carries one either — an org id read out
+ * of an uploaded file is exactly the anchor the tenancy rules forbid. The org
+ * is applied at execution time instead: applyWrites() stamps the caller's
+ * validated orgId onto every insert and filters every update/delete by it.
  *
  * Write paths (profiles has NO INSERT policy — a CSV row cannot become a
  * profile):

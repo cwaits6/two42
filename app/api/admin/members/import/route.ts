@@ -4,9 +4,10 @@
  * Accepts the export CSV shape back (multipart `file` field, or a raw
  * text/csv body), validates EVERY row before writing any of them, and — in
  * apply mode only — executes the planned writes through the cookie-bound
- * client. RLS is the tenant boundary: no insert payload ever carries org_id
- * (the column DEFAULT public.app_current_org_id() is the fail-closed
- * resolver), and a file containing an org_id column is a hard 400.
+ * client. Tenancy: a file containing an org_id column is a hard 400, and the
+ * org the writes land in comes from gate.orgId — the caller's own RLS-scoped
+ * profile row, never the request body. applyWrites() stamps that id on every
+ * insert and filters every update/delete by it.
  *
  * The uploaded bytes live only in memory — never a temp file, never disk.
  * Response bodies legitimately contain member data (the admin already holds
