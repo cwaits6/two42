@@ -1,5 +1,8 @@
 import imageCompression from "browser-image-compression";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { resolveOrgSlug, resolveRequestOrgId } from "@/lib/org";
+import { orgObjectPath } from "@/lib/storagePaths";
 
 export type ImageUploadType = "avatar" | "event" | "family";
 
@@ -24,8 +27,10 @@ const CONFIG: Record<ImageUploadType, UploadConfig> = {
     maxWidthOrHeight: 1200,
     maxSizeMB: 1,
   },
-  // Family portraits live in the avatars bucket under families/<familyId>/
-  // (see 20260704000001_family_photos.sql for the admin storage policies)
+  // Family portraits live in the avatars bucket under
+  // <orgId>/families/<familyId>/ (see
+  // 20260803000000_storage_org_partitioned_policies.sql for the admin
+  // storage policies)
   family: {
     bucket: "avatars",
     maxWidthOrHeight: 1000,
@@ -33,12 +38,35 @@ const CONFIG: Record<ImageUploadType, UploadConfig> = {
   },
 };
 
+// Every object key is org-partitioned (CWA-57): the caller passes a key
+// relative to the org prefix and this resolves `<orgId>/` in front of it.
+// Resolved per call, never cached in module scope — a stale org id would
+// survive a logout/login into a different org. resolveRequestOrgId()
+// already logs both failure modes (RPC error and NULL), so the throw here
+// only has to fail closed.
+async function resolveOrgPrefixedPath(
+  supabase: SupabaseClient,
+  label: string,
+  path: string,
+): Promise<string> {
+  const orgId = await resolveRequestOrgId(supabase, {
+    label,
+    orgSlug: resolveOrgSlug(),
+  });
+  if (!orgId) {
+    throw new Error(`${label} failed: could not resolve organization`);
+  }
+  return `${orgObjectPath(orgId, path)}.jpg`;
+}
+
 /**
  * Compresses an image client-side and uploads it to Supabase Storage.
  *
  * @param file - The image file to upload
- * @param type - "avatar" or "event" — determines bucket and sizing
- * @param path - Storage path without extension (e.g. `${userId}/avatar`)
+ * @param type - "avatar", "event" or "family" — determines bucket and sizing
+ * @param path - Storage path **relative to the org prefix**, without
+ *   extension (e.g. `profiles/${userId}/avatar` — build it with
+ *   `relObjectPath()` from `@/lib/storagePaths`)
  * @returns The public URL of the uploaded image
  */
 export async function uploadImage(
@@ -57,7 +85,7 @@ export async function uploadImage(
   });
 
   const supabase = createClient();
-  const fullPath = `${path}.jpg`;
+  const fullPath = await resolveOrgPrefixedPath(supabase, "uploadImage", path);
 
   const { error } = await supabase.storage
     .from(config.bucket)
@@ -73,4 +101,28 @@ export async function uploadImage(
 
   const { data } = supabase.storage.from(config.bucket).getPublicUrl(fullPath);
   return data.publicUrl;
+}
+
+/**
+ * Deletes an uploaded image from Supabase Storage.
+ *
+ * @param type - Same bucket selector as uploadImage()
+ * @param path - Storage path **relative to the org prefix**, without
+ *   extension — the same value that was passed to uploadImage()
+ */
+export async function deleteImage(
+  type: ImageUploadType,
+  path: string,
+): Promise<void> {
+  const config = CONFIG[type];
+  const supabase = createClient();
+  const fullPath = await resolveOrgPrefixedPath(supabase, "deleteImage", path);
+
+  const { error } = await supabase.storage
+    .from(config.bucket)
+    .remove([fullPath]);
+
+  if (error) {
+    throw new Error(`Delete failed: ${error.message}`);
+  }
 }

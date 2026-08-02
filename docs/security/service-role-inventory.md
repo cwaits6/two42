@@ -66,7 +66,20 @@ blind spots matter in practice:
 `org_id` is now the database-enforced boundary for anon/authenticated roles
 (see [`tenancy-model.md`](tenancy-model.md)) — but service-role clients
 carry `BYPASSRLS`, so every site below needed its own per-site mitigation.
-With this pass both tables are closed; storage is still open.
+With this pass both tables are closed; storage writes/deletes were closed
+by CWA-57 / #328 (org-partitioned `storage.objects` policies — see
+tenancy-model.md "Storage tenancy"; reads deliberately stay public under
+ADR-3 there).
+
+One service-key user lives outside the tables below by design:
+`scripts/rekey-storage-objects.mjs` (CWA-57), the one-time operator script
+that moves legacy storage objects onto the org-partitioned key layout. It
+is not app code — it runs from an operator's shell, not in any request
+path, and is not scanned by the guard (which covers `app/` and `lib/`). It
+needs the service key precisely because the legacy un-prefixed keys are
+invisible to every RLS-constrained role; it derives its org id from the
+`organizations` table (refusing to guess when more than one exists) and
+filters its URL-column updates on that org.
 
 Every app-code site below now derives `org_id` from an anchor it has already
 validated — the calendar subscription-token row, the HMAC-signed link's

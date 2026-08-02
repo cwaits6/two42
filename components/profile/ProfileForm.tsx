@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { uploadImage } from "@/lib/uploadImage";
+import { relObjectPath } from "@/lib/storagePaths";
 import {
   titleCaseName,
   titleCaseStreet,
@@ -236,7 +237,11 @@ export function ProfileForm({
 
     setUploadingAvatar(true);
     try {
-      const url = await uploadImage(file, "avatar", `${profile.id}/avatar`);
+      const url = await uploadImage(
+        file,
+        "avatar",
+        relObjectPath("profiles", profile.id, "avatar"),
+      );
       // Cache-bust so the new image shows immediately.
       const bustedUrl = `${url}?t=${Date.now()}`;
       setAvatarUrl(bustedUrl);

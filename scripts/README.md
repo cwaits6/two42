@@ -1,5 +1,34 @@
 # scripts/
 
+## `rekey-storage-objects.mjs` — one-time legacy storage re-key (CWA-57)
+
+Moves pre-CWA-57 storage objects onto the org-partitioned key layout
+(`<org_id>/<kind>/<entity_id>/<file>`) and updates the matching URL column
+(`profiles.avatar_url`, `family_units.photo_url`,
+`family_members.avatar_url`) in the same pass. An operator runs it once,
+post-deploy, per environment:
+
+```bash
+SUPABASE_URL=https://<project>.supabase.co \
+SUPABASE_SECRET_KEY=<service key> \
+node scripts/rekey-storage-objects.mjs            # dry run — prints the plan
+node scripts/rekey-storage-objects.mjs --apply    # actually moves
+```
+
+It is deliberately **not** a migration: Supabase Storage keys the physical
+blob by `bucket/name`, so a SQL `UPDATE storage.objects SET name = …` would
+rename the DB row, orphan the blob, and 404 every public URL. The Storage
+`move()` API — HTTP-only — is the single operation that moves both.
+
+Idempotent: keys already starting with a UUID are skipped, so a re-run after
+a partial failure continues where it stopped. The org id is derived from the
+`organizations` table; if more than one org exists the script refuses to
+guess and requires `--org <uuid>` (legacy keys carry no org marker — they can
+only have belonged to the org that predates partitioning). Until it runs,
+legacy objects keep rendering (public buckets serve reads without consulting
+RLS) but cannot be deleted or overwritten by any client — see
+`docs/security/tenancy-model.md` ("Storage tenancy").
+
 ## `check-service-role-org-scope.mjs` — the service-role tenancy guard (CWA-44)
 
 Service-role Supabase clients carry `BYPASSRLS`, so the `.eq("org_id", …)`
