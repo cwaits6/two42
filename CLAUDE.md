@@ -48,7 +48,7 @@ Full rationale, the helper inventory, and the deviations register: [`docs/securi
              supabase/functions/send-serving-reminders/index.ts
   ```
 
-- **The two `index.ts` entry points are not gated on a PR.** They import an unpinned `https://esm.sh/@supabase/supabase-js@2`, so CI type-checks them `continue-on-error` (a PR annotation, not a failure) to avoid failing on CDN drift. The only blocking compile is `supabase functions deploy`, which runs post-merge — and it runs *before* `supabase db push` in the same job, so a broken entry point blocks every migration behind it. Run `deno check` on both files yourself before pushing.
+- **The two `index.ts` entry points are type-checked as a blocking PR gate** (CWA-45 / #311). Their esm.sh import is pinned to an exact version (`@supabase/supabase-js@2.110.9`) with a `deno.lock` integrity entry, and the `deno-test` job in `.github/workflows/supabase.yml` runs `deno check --frozen` on both files as a failing step. Post-merge, `supabase functions deploy` compiles them again — and it runs *before* `supabase db push` in the same job, so a broken entry point that somehow reached `main` would block every migration behind it. That is why the PR check blocks; run `deno check` on both files yourself before pushing.
 - Keep logic that can be unit tested in `_shared/`: the entry points execute `Deno.env.get(...)`, `resolveServiceKey()`, and `Deno.serve()` at module top level, so nothing in them is importable from a test.
 
 ### Testing
@@ -63,6 +63,7 @@ Full rationale, the helper inventory, and the deviations register: [`docs/securi
 - **Never run `supabase test db` locally.** It resets the database, which violates the shared-stack rules above. CI runs it in the `pgtap` job of `.github/workflows/supabase.yml` against an ephemeral, isolated Postgres.
 - Regenerate DB types after schema changes with `npm run db:types` (read-only against the local stack); CI fails if `lib/supabase/database.types.ts` drifts from the migrations.
 - Adding a service-role client anywhere? Document it in `docs/security/service-role-inventory.md` in the same PR — every service-role query bypasses RLS and must be justified. Both entry points count: `createServiceClient()` in the app layer, and `createClient(SUPABASE_URL, resolveServiceKey())` in the edge functions.
+- `npm run lint` is a blocking PR check (the `Lint` job in `.github/workflows/test.yml`) and runs with `--max-warnings=0`, so a warning fails the build. It was broken repo-wide by a brace-expansion/minimatch conflict (#299) until #309 scoped the override by major; any older instruction to skip lint is stale.
 
 ## Git & PRs
 

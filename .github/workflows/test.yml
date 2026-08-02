@@ -6,10 +6,33 @@ on:
   push:
     branches: [main]
 
-# No paths: filter. Both jobs are cheap, and a tenancy guard that can be
-# skipped by not touching a path in a filter list is not a guard.
+# No paths: filter. All three jobs are cheap, and a gate that can be
+# skipped by not touching a path in a filter list is not a gate.
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # The lint script carries --max-warnings=0, so a warning fails this
+      # job — warnings are not advisory here.
+      - name: Run ESLint
+        run: npm run lint
+
   unit:
     name: Unit tests
     runs-on: ubuntu-latest
