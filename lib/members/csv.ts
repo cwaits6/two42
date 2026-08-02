@@ -22,19 +22,37 @@ export const FORMULA_TRIGGERS: ReadonlySet<string> = new Set([
 
 const NEEDS_QUOTING = /[",\r\n]/;
 
+export interface CsvParseResult {
+  rows: string[][];
+  /**
+   * 1-based physical line on which a quote was opened and never closed. Set
+   * only when the input ends mid-quote — see parseCsv's contract note.
+   */
+  unterminatedQuoteLine?: number;
+}
+
 /**
  * Parse RFC 4180 CSV text into rows of cells. Strips a single leading BOM.
  * Handles doubled-quote escapes, embedded commas and newlines inside quoted
  * cells, CRLF and LF line endings, and a trailing newline (which does NOT
  * produce a final empty row). Cells are returned verbatim — no trimming, no
  * unguarding; those are deliberate decisions the format layer makes.
+ *
+ * An unterminated quote is reported, not swallowed. Without the report a
+ * single stray `"` on line 2 absorbs the entire rest of the file into one
+ * cell, and the truncated result still parses as a well-formed (short) row —
+ * a 3,000-row roster silently importing as one row. Once quote state is
+ * wrong every subsequent row boundary is untrustworthy, so this is a
+ * file-level signal for the caller to abort on, not a per-row warning.
  */
-export function parseCsv(text: string): string[][] {
+export function parseCsv(text: string): CsvParseResult {
   const input = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = "";
   let inQuotes = false;
+  let line = 1;
+  let quoteOpenedAtLine = 0;
   let i = 0;
 
   while (i < input.length) {
@@ -50,12 +68,22 @@ export function parseCsv(text: string): string[][] {
         i += 1;
         continue;
       }
+      // Newlines inside a quoted cell are content, but they still advance the
+      // physical line count so the reported open line matches the file.
+      if (ch === "\r" && input[i + 1] === "\n") {
+        cell += "\r\n";
+        line += 1;
+        i += 2;
+        continue;
+      }
+      if (ch === "\n" || ch === "\r") line += 1;
       cell += ch;
       i += 1;
       continue;
     }
     if (ch === '"') {
       inQuotes = true;
+      quoteOpenedAtLine = line;
       i += 1;
       continue;
     }
@@ -70,6 +98,7 @@ export function parseCsv(text: string): string[][] {
       rows.push(row);
       row = [];
       cell = "";
+      line += 1;
       i += 2;
       continue;
     }
@@ -78,6 +107,7 @@ export function parseCsv(text: string): string[][] {
       rows.push(row);
       row = [];
       cell = "";
+      line += 1;
       i += 1;
       continue;
     }
@@ -91,7 +121,7 @@ export function parseCsv(text: string): string[][] {
     row.push(cell);
     rows.push(row);
   }
-  return rows;
+  return inQuotes ? { rows, unterminatedQuoteLine: quoteOpenedAtLine } : { rows };
 }
 
 /**
@@ -126,8 +156,9 @@ export function guardCell(value: string): string {
 }
 
 /**
- * The exact inverse of guardCell: strip one leading apostrophe iff the next
- * character is a formula trigger. Anything else is untouched. Known and
+ * The inverse of guardCell over every value guardCell produces: strip one
+ * leading apostrophe iff the next character is a formula trigger. Anything
+ * else is untouched. Known and
  * accepted asymmetry: a value that legitimately starts with `'` followed by a
  * trigger (e.g. `'=x`) is indistinguishable from a guarded `=x` and loses its
  * apostrophe — pinned by test rather than "fixed" with an escaping scheme no

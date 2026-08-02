@@ -94,10 +94,17 @@ export const HIDDEN_FIELD_COLUMNS = {
 /**
  * One data row of the file. Blank cells parse to null (strings/numbers/tri-
  * state booleans) or [] (list cells) — both mean "not provided", never
- * "clear this field". `has_login` alone is resolved to a definite boolean at
- * parse time (blank defaults to "email cell is non-empty") because every
- * downstream decision forks on it. NaN in a birth part means the cell held a
- * non-integer; the planner reports it as INVALID_BIRTH_PART.
+ * "clear this field".
+ *
+ * Exactly two columns escape that scheme and collapse to a definite boolean
+ * at parse time, because every downstream decision forks on them:
+ *   has_login          — blank defaults to "the email cell is non-empty"
+ *   household_primary  — blank defaults to false
+ * Export always writes both explicitly, so the round-trip test cannot
+ * surface the collapse; this list is the only record of it.
+ *
+ * NaN in a birth part means the cell held a non-integer; the planner reports
+ * it as INVALID_BIRTH_PART.
  */
 export interface MemberRow {
   /** 1-based data-row number, matching the file (header excluded). */
@@ -145,7 +152,11 @@ export interface FormatWarning {
   message: string;
 }
 
-export type FormatErrorCode = "EMPTY_FILE" | "ORG_ID_COLUMN" | "MISSING_COLUMN";
+export type FormatErrorCode =
+  | "EMPTY_FILE"
+  | "ORG_ID_COLUMN"
+  | "MISSING_COLUMN"
+  | "UNTERMINATED_QUOTE";
 
 export interface FormatError {
   code: FormatErrorCode;
@@ -218,14 +229,29 @@ const TRUE_WORDS = new Set(["true", "yes", "1"]);
 const FALSE_WORDS = new Set(["false", "no", "0"]);
 
 /**
- * Parse uploaded CSV text into MemberRows. File-level errors (missing
- * required column, org_id column, no data rows) abort the parse; unknown and
- * duplicate headers and unparseable boolean cells degrade to warnings. Cells
- * go through unguardCell then trim().
+ * Parse uploaded CSV text into MemberRows. File-level errors (unterminated
+ * quote, missing required column, org_id column, no data rows) abort the
+ * parse; unknown and duplicate headers, ragged rows, and unparseable boolean
+ * cells degrade to warnings. Cells go through unguardCell then trim().
  */
 export function parseMembers(text: string): ParseMembersResult {
   const warnings: FormatWarning[] = [];
-  const table = parseCsv(text);
+  const { rows: table, unterminatedQuoteLine } = parseCsv(text);
+
+  // Checked before the header: past an unbalanced quote every row boundary is
+  // guesswork, and the truncated remainder parses as a valid short row rather
+  // than failing. Aborting is the only honest outcome.
+  if (unterminatedQuoteLine !== undefined) {
+    return {
+      rows: [],
+      warnings,
+      error: {
+        code: "UNTERMINATED_QUOTE",
+        message: `Unbalanced quote opened on line ${unterminatedQuoteLine} — the rest of the file could not be read. Check for a stray " character.`,
+      },
+    };
+  }
+
   if (table.length === 0) {
     return {
       rows: [],
@@ -287,6 +313,16 @@ export function parseMembers(text: string): ParseMembersResult {
     const line = i; // 1-based data-row number
     const raw = table[i];
     if (raw.every((cell) => cell.trim() === "")) continue;
+
+    // A short row reads every missing column as blank, and blank means "not
+    // provided" — so a hand-edited row that lost its trailing commas plans as
+    // no_change and reports as a success. Say so rather than absorbing it.
+    if (raw.length !== table[0].length) {
+      warnings.push({
+        line,
+        message: `Row has ${raw.length} cells but the header has ${table[0].length}; missing cells were read as blank`,
+      });
+    }
 
     const cell = (column: MemberCsvColumn): string => {
       const index = columnIndex.get(column);
@@ -469,6 +505,11 @@ export function memberRowsFromSnapshot(snapshot: OrgSnapshot): MemberRow[] {
         birth_day: p.birth_day,
         birth_year: p.birth_year,
         relationship: p.relationship,
+        // A profile IS a login holder, even when profiles.email is NULL
+        // (invite-bulk signups can land without one). Projecting such a row
+        // as has_login=false would send it down the family_members path on
+        // re-import and hit HAS_LOGIN_CHANGE; the planner instead reports the
+        // blank-email row as an unmatchable no_change.
         has_login: true,
         role: p.role,
         is_class_member: null,

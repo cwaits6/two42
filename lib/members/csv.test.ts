@@ -10,55 +10,92 @@ import {
   unguardCell,
 } from "@/lib/members/csv";
 
+/** parseCsv's rows, for the cases that are not about the error channel. */
+const rowsOf = (text: string): string[][] => parseCsv(text).rows;
+
 describe("parseCsv", () => {
   it("parses a quoted field containing a comma", () => {
-    expect(parseCsv('a,"b,c",d')).toEqual([["a", "b,c", "d"]]);
+    expect(rowsOf('a,"b,c",d')).toEqual([["a", "b,c", "d"]]);
   });
 
   it("parses a quoted field containing an embedded newline", () => {
-    expect(parseCsv('a,"line1\nline2",b')).toEqual([["a", "line1\nline2", "b"]]);
+    expect(rowsOf('a,"line1\nline2",b')).toEqual([["a", "line1\nline2", "b"]]);
   });
 
   it("parses a quoted field containing an embedded CRLF", () => {
-    expect(parseCsv('a,"x\r\ny"')).toEqual([["a", "x\r\ny"]]);
+    expect(rowsOf('a,"x\r\ny"')).toEqual([["a", "x\r\ny"]]);
   });
 
   it("unescapes doubled quotes inside a quoted field", () => {
-    expect(parseCsv('"say ""hi""",b')).toEqual([['say "hi"', "b"]]);
+    expect(rowsOf('"say ""hi""",b')).toEqual([['say "hi"', "b"]]);
   });
 
   it("treats CRLF and LF row separators identically", () => {
-    expect(parseCsv("a,b\r\nc,d")).toEqual(parseCsv("a,b\nc,d"));
+    expect(rowsOf("a,b\r\nc,d")).toEqual(rowsOf("a,b\nc,d"));
   });
 
   it("handles a lone CR as a row separator", () => {
-    expect(parseCsv("a\rb")).toEqual([["a"], ["b"]]);
+    expect(rowsOf("a\rb")).toEqual([["a"], ["b"]]);
   });
 
   it("strips a single leading BOM", () => {
-    expect(parseCsv("﻿a,b")).toEqual([["a", "b"]]);
+    expect(rowsOf("﻿a,b")).toEqual([["a", "b"]]);
   });
 
   it("does not yield a phantom row for a trailing newline", () => {
-    expect(parseCsv("a,b\r\n")).toEqual([["a", "b"]]);
-    expect(parseCsv("a,b\n")).toEqual([["a", "b"]]);
+    expect(rowsOf("a,b\r\n")).toEqual([["a", "b"]]);
+    expect(rowsOf("a,b\n")).toEqual([["a", "b"]]);
   });
 
   it("preserves an empty trailing cell", () => {
-    expect(parseCsv("a,b,\n")).toEqual([["a", "b", ""]]);
-    expect(parseCsv("a,b,")).toEqual([["a", "b", ""]]);
+    expect(rowsOf("a,b,\n")).toEqual([["a", "b", ""]]);
+    expect(rowsOf("a,b,")).toEqual([["a", "b", ""]]);
   });
 
   it("returns no rows for empty input", () => {
-    expect(parseCsv("")).toEqual([]);
+    expect(rowsOf("")).toEqual([]);
   });
 
   it("returns no rows for a BOM-only file", () => {
-    expect(parseCsv("﻿")).toEqual([]);
+    expect(rowsOf("﻿")).toEqual([]);
   });
 
   it("does not trim cell whitespace (trimming is the format layer's job)", () => {
-    expect(parseCsv(" a , b ")).toEqual([[" a ", " b "]]);
+    expect(rowsOf(" a , b ")).toEqual([[" a ", " b "]]);
+  });
+
+  it("reports no error for well-formed input", () => {
+    expect(parseCsv('a,"b,c"\r\nd,e').unterminatedQuoteLine).toBeUndefined();
+    expect(parseCsv("").unterminatedQuoteLine).toBeUndefined();
+  });
+
+  it("reports an unterminated quote instead of swallowing the rest of the file", () => {
+    // The hazard this exists for: one stray `"` on line 2 absorbs every
+    // remaining line into a single cell, and the truncated result parses as a
+    // well-formed short row — a 3,000-row roster importing as one row and
+    // reporting success. Without the error channel there is nothing to see.
+    const result = parseCsv(
+      [
+        "first_name,last_name,email,has_login",
+        'Ada,"Love,lace,ada@x.com,true',
+        "Bob,Smith,bob@x.com,true",
+        "Cy,Jones,cy@x.com,true",
+      ].join("\r\n")
+    );
+    expect(result.unterminatedQuoteLine).toBe(2);
+    // The truncated rows are still returned, and are still wrong — which is
+    // precisely why the caller must abort on the flag rather than use them.
+    expect(result.rows).toHaveLength(2);
+  });
+
+  it("reports the line the quote was OPENED on, not the last line", () => {
+    const result = parseCsv('a,b\r\nc,d\r\ne,"f\r\ng\r\nh');
+    expect(result.unterminatedQuoteLine).toBe(3);
+  });
+
+  it("counts lines inside a terminated quoted cell so the reported line is physical", () => {
+    const result = parseCsv('a,"multi\r\nline\r\ncell"\r\nb,"oops');
+    expect(result.unterminatedQuoteLine).toBe(4);
   });
 });
 
@@ -118,7 +155,7 @@ describe("serializeCsv / parseCsv round-trip", () => {
       ["with\r\ncrlf", "'=guarded", "", "  padded  "],
       ["=formula", "trailing", "", ""],
     ];
-    expect(parseCsv(serializeCsv(rows))).toEqual(rows);
+    expect(rowsOf(serializeCsv(rows))).toEqual(rows);
   });
 
   it("quotes only cells that need it", () => {

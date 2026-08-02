@@ -14,20 +14,27 @@
  *
  * Atomicity (G7): PostgREST gives no cross-statement transaction. Validation
  * removes every predictable failure, but a concurrent edit between snapshot
- * and apply can still fail mid-run; the response then reports `applied` and
- * `failedAt` so the admin knows exactly where things stand. The follow-up
- * (member_import_runs + a SECURITY DEFINER apply RPC) is named in the PR.
+ * and apply can still fail mid-run; the response then reports the CSV line
+ * the run stopped on and the lines whose every write landed, so the admin
+ * can delete those and safely re-upload the rest. That response is the ONLY
+ * record of the event — member_import_runs (the audit table) is a named
+ * follow-up alongside a SECURITY DEFINER apply RPC.
  */
-import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { requireOrgAdmin } from "@/lib/members/access";
+import { applyWrites } from "@/lib/members/apply";
 import { parseMembers } from "@/lib/members/format";
-import { planImport, type PlannedWrite } from "@/lib/members/import-plan";
+import { planImport } from "@/lib/members/import-plan";
 import { loadOrgSnapshot } from "@/lib/members/snapshot";
-import type { OrgAdminGate } from "@/lib/members/access";
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 const MAX_ROWS = 5000;
+
+// Neither is a CORS "simple" content type, so a cross-origin POST to this
+// state-changing route needs a preflight it will not survive. Deliberately
+// excludes text/plain, which IS simple. Sibling routes get this free by
+// parsing JSON; this one accepts a raw body, so it asks explicitly.
+const CSV_CONTENT_TYPES = ["text/csv", "application/csv"];
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 
@@ -50,7 +57,19 @@ export async function POST(request: Request) {
     return json({ error: "mode must be validate or apply" }, 400);
   }
 
+  // Reject an oversized upload before buffering it, when the client declares
+  // its size. The post-parse checks below stay as the backstop for a chunked
+  // or lying Content-Length; true streaming is not worth the complexity on an
+  // admin-only route.
+  const declaredLength = Number(request.headers.get("content-length") ?? "");
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_BYTES) {
+    return json({ error: "File too large", limit: MAX_BYTES }, 413);
+  }
+
   // Read the body into a string IN MEMORY — never a temp path, never disk.
+  // Every read is guarded: a client disconnect mid-read would otherwise
+  // escape to Next's default 500, which carries no Cache-Control: no-store
+  // and logs nothing under this route's prefix.
   let text: string;
   const contentType = request.headers.get("content-type") ?? "";
   if (contentType.includes("multipart/form-data")) {
@@ -67,9 +86,26 @@ export async function POST(request: Request) {
     if (file.size > MAX_BYTES) {
       return json({ error: "File too large", limit: MAX_BYTES }, 413);
     }
-    text = await file.text();
+    try {
+      text = await file.text();
+    } catch {
+      return json({ error: "Could not read the uploaded file" }, 400);
+    }
   } else {
-    text = await request.text();
+    if (!CSV_CONTENT_TYPES.some((type) => contentType.includes(type))) {
+      return json(
+        {
+          error:
+            "Send the CSV as multipart/form-data, or as a raw body with Content-Type: text/csv",
+        },
+        415
+      );
+    }
+    try {
+      text = await request.text();
+    } catch {
+      return json({ error: "Could not read the request body" }, 400);
+    }
     if (Buffer.byteLength(text, "utf8") > MAX_BYTES) {
       return json({ error: "File too large", limit: MAX_BYTES }, 413);
     }
@@ -89,14 +125,28 @@ export async function POST(request: Request) {
     );
   }
 
-  let plan;
+  // Two try blocks, not one: err carries a table name only because
+  // loadOrgSnapshot throws hand-written errors. Wrapping planImport in the
+  // same block would log a planner crash as "snapshot load failed" — sending
+  // whoever debugs it to the wrong module — with an unbounded message.
+  let snapshot;
   try {
-    const snapshot = await loadOrgSnapshot(gate.supabase);
-    plan = planImport(parsed.rows, snapshot);
+    snapshot = await loadOrgSnapshot(gate.supabase, gate.orgId);
   } catch (err) {
-    // err names a table only (see loadOrgSnapshot) — never row data.
     console.error("members import: snapshot load failed:", err);
     return json({ error: "Failed to load member data" }, 500);
+  }
+
+  let plan;
+  try {
+    plan = planImport(parsed.rows, snapshot);
+  } catch (err) {
+    // The planner is pure and sees member data, so log the error TYPE only.
+    console.error(
+      "members import: planner threw:",
+      err instanceof Error ? err.name : typeof err
+    );
+    return json({ error: "Failed to plan the import" }, 500);
   }
 
   // The brief's contract: validate every row before writing any of them.
@@ -115,13 +165,28 @@ export async function POST(request: Request) {
     );
   }
 
-  const applyResult = await applyWrites(gate, plan.writes);
+  const applyResult = await applyWrites(
+    gate.supabase,
+    gate.user.id,
+    gate.orgId,
+    plan.writes
+  );
   if (!applyResult.ok) {
+    // Line numbers and write kinds are structural metadata, not member data —
+    // exactly what the PII rule at the top of this file prescribes. Without
+    // them `failedAt` is an index into a write list the client never sees.
     return json(
       {
         error: "Import partially applied",
+        message:
+          `The import stopped while writing line ${applyResult.failedAtLine}. ` +
+          `Delete the lines listed in appliedLines from your file before ` +
+          `re-uploading — re-importing them may create duplicate households.`,
         applied: applyResult.applied,
         failedAt: applyResult.failedAt,
+        failedAtLine: applyResult.failedAtLine,
+        failedKind: applyResult.failedKind,
+        appliedLines: applyResult.appliedLines,
       },
       500
     );
@@ -132,6 +197,7 @@ export async function POST(request: Request) {
       mode,
       summary: plan.summary,
       applied: applyResult.applied,
+      appliedLines: applyResult.appliedLines,
       rows: plan.rows,
       warnings: parsed.warnings,
     },
@@ -139,148 +205,3 @@ export async function POST(request: Request) {
   );
 }
 
-type ApplyResult =
-  | { ok: true; applied: number }
-  | { ok: false; applied: number; failedAt: number };
-
-/**
- * Reduce a write failure to the parts that are safe to log. A PostgrestError's
- * `details`/`hint` echo the offending row on a constraint violation — e.g.
- * `Key (email, org_id)=(ada@example.com, …) already exists` — which is member
- * PII. `code` and `message` name the constraint, not the values.
- */
-function redactFailure(failure: unknown): string {
-  if (failure && typeof failure === "object" && "code" in failure) {
-    const e = failure as { code?: unknown; message?: unknown };
-    return `code=${String(e.code ?? "unknown")} message=${String(e.message ?? "")}`;
-  }
-  return failure instanceof Error ? failure.message : "unknown error";
-}
-
-/**
- * Execute planned writes in dependency order. Inserts never include org_id —
- * the column DEFAULT resolves the caller's org — and household inserts feed
- * their new ids to the family_members inserts that reference them by the
- * per-file household key.
- */
-async function applyWrites(
-  gate: Extract<OrgAdminGate, { ok: true }>,
-  writes: PlannedWrite[]
-): Promise<ApplyResult> {
-  const supabase = gate.supabase;
-  const familyIdByKey = new Map<string, string>();
-  let applied = 0;
-
-  for (let i = 0; i < writes.length; i++) {
-    const write = writes[i];
-    let failure: unknown = null;
-
-    switch (write.kind) {
-      case "insert_family_unit": {
-        const { data, error } = await supabase
-          .from("family_units")
-          .insert({ family_name: write.values.family_name })
-          .select("id")
-          .single();
-        if (error || !data) {
-          failure = error ?? new Error("insert returned no row");
-          break;
-        }
-        familyIdByKey.set(write.householdKey, data.id);
-        break;
-      }
-      case "insert_family_member": {
-        const familyId =
-          write.familyId ?? familyIdByKey.get(write.householdKey ?? "");
-        if (!familyId) {
-          failure = new Error("household key resolved no family id");
-          break;
-        }
-        const { error } = await supabase
-          .from("family_members")
-          .insert({ ...write.values, family_id: familyId });
-        failure = error;
-        break;
-      }
-      case "update_family_member": {
-        const { error } = await supabase
-          .from("family_members")
-          .update(write.values)
-          .eq("id", write.id);
-        failure = error;
-        break;
-      }
-      case "update_profile": {
-        const { error } = await supabase
-          .from("profiles")
-          .update(write.values)
-          .eq("id", write.id);
-        failure = error;
-        break;
-      }
-      case "insert_access_request": {
-        // Same shape invite-bulk creates, minus the email send (import must
-        // not become a mass-mail primitive) and minus approved_role — left
-        // NULL so handle_new_user() falls back to 'member'.
-        const signupToken = crypto.randomBytes(32).toString("hex");
-        const tokenExpiresAt = new Date(
-          Date.now() + 14 * 24 * 60 * 60 * 1000
-        ).toISOString();
-        const { error } = await supabase.from("access_requests").insert({
-          email: write.email,
-          name: write.name,
-          status: "approved",
-          reviewed_by: gate.user.id,
-          reviewed_at: new Date().toISOString(),
-          signup_token: signupToken,
-          token_expires_at: tokenExpiresAt,
-        });
-        failure = error;
-        break;
-      }
-      case "insert_profile_group": {
-        const { error } = await supabase.from("profile_groups").insert({
-          profile_id: write.profileId,
-          group_id: write.groupId,
-          is_leader: write.isLeader,
-          assigned_by: gate.user.id,
-        });
-        failure = error;
-        break;
-      }
-      case "update_profile_group": {
-        const { error } = await supabase
-          .from("profile_groups")
-          .update({ is_leader: write.isLeader })
-          .eq("profile_id", write.profileId)
-          .eq("group_id", write.groupId);
-        failure = error;
-        break;
-      }
-      case "delete_profile_group": {
-        const { error } = await supabase
-          .from("profile_groups")
-          .delete()
-          .eq("profile_id", write.profileId)
-          .eq("group_id", write.groupId);
-        failure = error;
-        break;
-      }
-    }
-
-    if (failure) {
-      // Counts, positions, and the constraint identity only — a failed
-      // write's payload (and the driver's echo of it) is member PII.
-      console.error(
-        "members import: apply failed at write %d/%d: %s",
-        i + 1,
-        writes.length,
-        redactFailure(failure)
-      );
-      return { ok: false, applied, failedAt: i + 1 };
-    }
-    applied += 1;
-  }
-
-  return { ok: true, applied };
-}

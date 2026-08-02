@@ -4,10 +4,15 @@ import { fileURLToPath } from "node:url";
 export default defineConfig({
   test: {
     environment: "node",
-    // scripts/ is included because the operator scripts' pure halves
-    // (e.g. scripts/rekeyPlan.mjs) are unit-tested — a test placed there is
-    // otherwise silently never discovered.
-    include: ["lib/**/*.test.ts", "scripts/**/*.test.mjs"],
+    // app/** and scripts/** are included so a test placed there is not
+    // silently collected as zero tests — an omitted glob makes a test file
+    // look green while never running. scripts/ covers the operator scripts'
+    // pure halves (e.g. scripts/rekeyPlan.mjs).
+    include: [
+      "lib/**/*.test.ts",
+      "app/**/*.test.ts",
+      "scripts/**/*.test.mjs",
+    ],
   },
   resolve: {
     // Mirrors tsconfig.json `paths: { "@/*": ["./*"] }`. A plain alias

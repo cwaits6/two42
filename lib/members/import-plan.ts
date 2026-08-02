@@ -13,8 +13,20 @@
  * Write paths (profiles has NO INSERT policy — a CSV row cannot become a
  * profile):
  *   matched profile            → UPDATE profiles
- *   new person, has_login=true → INSERT access_requests (approved invite)
+ *   new person, has_login=true → hard row error (LOGIN_CREATE_UNSUPPORTED)
  *   new person, has_login=false→ INSERT family_members
+ *
+ * Why v1 cannot create logins: the invite row an import would write is an
+ * `access_requests` row with status='approved' and a signup_token, and
+ * access_requests has exactly one INSERT policy — "Anyone can submit access
+ * request" — whose WITH CHECK requires status='pending' and NULL for
+ * reviewed_by, reviewed_at, signup_token, token_expires_at and
+ * approved_role. There is no admin INSERT policy, so every such insert fails
+ * RLS. Planning it as a row error keeps the failure inside "validate
+ * everything before writing anything"; attempting the write instead would
+ * 500 the run *after* households, family members and profile updates had
+ * already landed. An admin-scoped INSERT policy is the follow-up (it also
+ * fixes invite-bulk, which issues the same insert and is broken today).
  */
 import type { HiddenFieldToken, MemberRow } from "@/lib/members/format";
 import { HIDDEN_FIELD_COLUMNS, HIDDEN_FIELD_TOKENS } from "@/lib/members/format";
@@ -26,7 +38,6 @@ import type {
 import type { FamilyMemberRelationship, UserRole } from "@/lib/types";
 
 export type RowAction =
-  | "create_invite"
   | "create_family_member"
   | "update_profile"
   | "update_family_member"
@@ -39,6 +50,7 @@ export type ImportErrorCode =
   | "UNKNOWN_GROUP"
   | "ROLE_ESCALATION"
   | "HAS_LOGIN_CHANGE"
+  | "LOGIN_CREATE_UNSUPPORTED"
   | "MISSING_REQUIRED"
   | "INVALID_EMAIL"
   | "INVALID_DATE"
@@ -66,8 +78,9 @@ export interface RowResult {
 }
 
 /** Profile columns import may update. Deliberately excludes id, org_id,
- *  email (the match key), role escalations (planner-blocked), and every
- *  column outside the v1 contract. */
+ *  email (the match key), and every column outside the v1 contract. `role`
+ *  IS updatable — ordinary transitions flow through here; it is escalation
+ *  into or out of 'admin' that planProfileUpdate blocks, not the column. */
 export interface ProfileUpdateValues {
   first_name?: string;
   last_name?: string;
@@ -142,7 +155,6 @@ export type PlannedWrite =
       values: FamilyMemberUpdateValues;
     }
   | { kind: "update_profile"; line: number; id: string; values: ProfileUpdateValues }
-  | { kind: "insert_access_request"; line: number; email: string; name: string }
   | {
       kind: "insert_profile_group";
       line: number;
@@ -176,8 +188,7 @@ export interface ImportPlan {
     groupAssignments: number;
   };
   /** Ordered, ready to apply: family_units inserts → family_members
-   *  inserts/updates → profiles updates → access_requests inserts →
-   *  profile_groups changes. */
+   *  inserts/updates → profiles updates → profile_groups changes. */
   writes: PlannedWrite[];
 }
 
@@ -282,22 +293,14 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
   };
 
   // ---- step 1: row validation -------------------------------------------
+  //
+  // first_name and email are CREATE preconditions, not row preconditions, so
+  // they are checked in the planning branches below rather than here. Both
+  // profiles.first_name and profiles.email are nullable and genuinely NULL in
+  // the wild, so export writes a blank cell for them — checking them here
+  // made an org's own export unimportable, since one bad row 422s the file.
   const currentYear = new Date().getFullYear();
   for (const row of rows) {
-    if (row.first_name === null) {
-      fail(row, {
-        code: "MISSING_REQUIRED",
-        field: "first_name",
-        message: "first_name is required",
-      });
-    }
-    if (row.has_login && row.email === null) {
-      fail(row, {
-        code: "MISSING_REQUIRED",
-        field: "email",
-        message: "email is required when has_login is true",
-      });
-    }
     if (row.email !== null && !EMAIL.test(row.email)) {
       fail(row, {
         code: "INVALID_EMAIL",
@@ -360,6 +363,19 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
     }
   }
 
+  // Household grouping key. Rows that name the same household mean the same
+  // household even without an explicit household_key — otherwise a
+  // hand-authored file (the primary import use case; only export emits keys)
+  // turns a family of four typed a row at a time into four one-person
+  // households, and that duplicate state is unrecoverable: it makes every
+  // later import of the same file a permanent AMBIGUOUS_HOUSEHOLD and there
+  // is no in-app household merge.
+  const groupKey = (row: MemberRow): string =>
+    row.household_key ??
+    (row.household_name !== null
+      ? `__name-${norm(row.household_name)}`
+      : `__row-${row.line}`);
+
   // ---- step 2: in-file duplicates ---------------------------------------
   const seenEmails = new Set<string>();
   const seenPeople = new Set<string>();
@@ -377,7 +393,7 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
     }
     if (!row.has_login) {
       const key = [
-        row.household_key ?? `__row-${row.line}`,
+        groupKey(row),
         personKey(
           row.first_name,
           row.last_name,
@@ -415,9 +431,7 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
     if (matches.length === 1) matchedProfile.set(row, matches[0]);
   }
 
-  // ---- step 4: household resolution, per household_key group ------------
-  const groupKey = (row: MemberRow): string =>
-    row.household_key ?? `__row-${row.line}`;
+  // ---- step 4: household resolution, per household group ----------------
   const keyGroups = new Map<string, MemberRow[]>();
   for (const row of rows) {
     const key = groupKey(row);
@@ -457,26 +471,31 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
     }
 
     // Household fields come from the household_primary row; if none is
-    // flagged, the first row for the key wins (with a warning when the group
-    // has more than one row — a singleton is the normal case, not a mistake).
+    // flagged, the first row for the group wins (with a warning when the
+    // group has more than one row — a singleton is the normal case, not a
+    // mistake). `group` names the key only when the file supplied one:
+    // groupKey()'s `__name-` synthetic embeds the household name, and a
+    // household name is a member fact.
     const primaryRows = groupRows.filter((row) => row.household_primary);
     const authoritative = primaryRows[0] ?? groupRows[0];
-    if (
-      isFileHouseholdKey(key) &&
-      groupRows.length > 1 &&
-      primaryRows.length === 0
-    ) {
+    const group = isFileHouseholdKey(key)
+      ? `household_key "${key}"`
+      : "the same household_name";
+    if (groupRows.length > 1 && primaryRows.length === 0) {
       resolution.warnings.push(
-        `no row is flagged household_primary for household_key "${key}"; using the first row`
+        `no row is flagged household_primary for ${group}; using the first row`
       );
     }
     const nameConflicts = groupRows.some(
       (row) => norm(row.household_name) !== norm(authoritative.household_name)
     );
     if (nameConflicts) {
-      // Field names only — never the values (they are PII).
+      // Names the disagreeing FIELD, and the admin-chosen household_key when
+      // there is one — never household_name's value, which is a member fact.
+      // The guarantee is scoped to this response body (which import/route.ts
+      // permits to carry member data); do not route these to console.*.
       resolution.warnings.push(
-        `rows sharing household_key "${key}" disagree on: household_name (using the ${
+        `rows sharing ${group} disagree on: household_name (using the ${
           primaryRows.length > 0 ? "household_primary" : "first"
         } row's value)`
       );
@@ -545,16 +564,29 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
   const familyUnitInserts: PlannedWrite[] = [];
   const familyMemberWrites: PlannedWrite[] = [];
   const profileUpdates: PlannedWrite[] = [];
-  const accessRequestInserts: PlannedWrite[] = [];
   const profileGroupWrites: PlannedWrite[] = [];
   const plannedHouseholds = new Set<string>();
+  const plannedHouseholdKeyByName = new Map<string, string>();
   let groupAssignments = 0;
 
   const ensureHouseholdInsert = (
     row: MemberRow,
     resolution: HouseholdResolution
   ): void => {
+    // Two groups that name the same NEW household share one insert, even when
+    // the file gave them distinct household_keys. family_units.family_name has
+    // no unique constraint, so nothing downstream would stop the duplicate —
+    // and a duplicate name is exactly the state that makes name-based
+    // household resolution a permanent AMBIGUOUS_HOUSEHOLD with no in-app
+    // merge to undo it. One run must not manufacture that.
+    const name = norm(resolution.householdName);
+    const existing = plannedHouseholdKeyByName.get(name);
+    if (existing !== undefined) {
+      resolution.pendingKey = existing;
+      return;
+    }
     const key = resolution.pendingKey!;
+    plannedHouseholdKeyByName.set(name, key);
     if (plannedHouseholds.has(key)) return;
     plannedHouseholds.add(key);
     familyUnitInserts.push({
@@ -582,6 +614,19 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
       const profile = matchedProfile.get(row);
       if (profile !== undefined) {
         planProfileUpdate(row, result, profile);
+        continue;
+      }
+
+      // profiles.email is nullable, so export emits has_login=true rows with
+      // a blank email cell. Email is the only match key a login-holder has,
+      // so such a row can neither be matched nor created — but erroring would
+      // 422 the whole file and make the org's own export unimportable. Do
+      // nothing, and say why.
+      if (row.email === null) {
+        result.action = "no_change";
+        result.warnings.push(
+          "no email on this row, so an existing member with a login cannot be matched; edit them on the members page"
+        );
         continue;
       }
 
@@ -618,7 +663,10 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
         }
       }
 
-      if (accessRequestEmails.has(norm(row.email!))) {
+      // Already invited (any access_requests status) — the same dedupe
+      // invite-bulk performs. A no_change rather than the error below,
+      // because the admin's intent is already recorded upstream.
+      if (accessRequestEmails.has(norm(row.email))) {
         result.action = "no_change";
         result.warnings.push(
           "an invite or access request already exists for this email; skipped"
@@ -626,48 +674,36 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
         continue;
       }
 
-      // Role on a create: the invite path cannot set one (approved_role is
-      // never written, so signup lands on 'member').
-      if (row.role === "admin") {
-        fail(row, {
-          code: "ROLE_ESCALATION",
-          field: "role",
-          message:
-            "an import cannot create an admin; invite them and promote in the app",
-        });
-        result.action = "error";
-        continue;
-      }
-      if (row.role !== null && row.role !== "member") {
-        result.warnings.push(
-          `role "${row.role}" is ignored on a new invite; invited members sign up as member`
-        );
-      }
-      if (row.groups.length > 0) {
-        // GROUPS_ON_INVITE: there is no profile to assign until signup (the
-        // profiles INSERT happens in the auth trigger), so assignments drop.
-        result.warnings.push(
-          "groups on a new invite are ignored; assign groups after they sign up"
-        );
-      }
-      if (row.household_key !== null || row.household_name !== null) {
-        result.warnings.push(
-          "household on a new invite is ignored; set their household after they sign up"
-        );
-      }
-      result.action = "create_invite";
-      accessRequestInserts.push({
-        kind: "insert_access_request",
-        line: row.line,
-        email: norm(row.email!),
-        name:
-          [row.first_name, row.last_name].filter(Boolean).join(" ") ||
-          norm(row.email!),
+      // v1 cannot create a login. See the module header: the approved
+      // access_requests row an invite needs violates the table's only INSERT
+      // policy, so attempting it would 500 mid-apply after households,
+      // family members and profile updates had already been written.
+      // Failing here keeps that inside validation, where the contract is
+      // "nothing applies unless everything validates".
+      fail(row, {
+        code: "LOGIN_CREATE_UNSUPPORTED",
+        field: "has_login",
+        message:
+          "import cannot create a new member with a login; invite them from the members page, then re-import to fill in their details",
       });
+      result.action = "error";
       continue;
     }
 
     // ---- has_login=false: family_members paths --------------------------
+    // first_name is required on this path for both create and match:
+    // family_members.first_name is NOT NULL, and a blank one cannot form the
+    // personKey that matches an existing family member either.
+    if (row.first_name === null) {
+      fail(row, {
+        code: "MISSING_REQUIRED",
+        field: "first_name",
+        message: "first_name is required for a member without a login",
+      });
+      result.action = "error";
+      continue;
+    }
+
     if (row.email !== null && (profilesByEmail.get(norm(row.email)) ?? []).length > 0) {
       fail(row, {
         code: "HAS_LOGIN_CHANGE",
@@ -853,6 +889,22 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
 
     // Non-empty hidden_fields is the complete hidden set for this person, so
     // all nine flags are diffed; empty means "not provided".
+    //
+    // The list fields inherit "blank = not provided" from the scalar rule,
+    // but with a sharper consequence: a member's LAST hidden flag and LAST
+    // group cannot be removed by clearing the cell, and bulk privacy
+    // correction is plausibly the main reason to hand-edit this column. That
+    // trade-off stands for v1 (a sentinel for "the empty set" is a contract
+    // decision, not a patch) — but a silent no-op on an explicit edit is the
+    // worst available behavior, so say what was ignored.
+    if (
+      row.hidden_fields.length === 0 &&
+      HIDDEN_FIELD_TOKENS.some((token) => profile[HIDDEN_FIELD_COLUMNS[token]])
+    ) {
+      result.warnings.push(
+        "hidden_fields is blank, which means \"not provided\" — this member's existing hidden fields were left as they are"
+      );
+    }
     if (row.hidden_fields.length > 0) {
       const desired = new Set<HiddenFieldToken>(row.hidden_fields);
       for (const token of HIDDEN_FIELD_TOKENS) {
@@ -864,8 +916,17 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
       }
     }
 
-    // Non-empty groups is the authoritative membership set for this person.
+    // Non-empty groups is the authoritative membership set for this person;
+    // blank is "not provided" — see the hidden_fields note above.
     const groupWrites: PlannedWrite[] = [];
+    if (
+      row.groups.length === 0 &&
+      (membershipsByProfile.get(profile.id)?.size ?? 0) > 0
+    ) {
+      result.warnings.push(
+        'groups is blank, which means "not provided" — this member\'s existing group memberships were left as they are'
+      );
+    }
     if (row.groups.length > 0) {
       const desired = new Map<string, boolean>();
       let unknown = false;
@@ -998,7 +1059,6 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
   for (const result of results) {
     if (result.errors.length > 0) result.action = "error";
     switch (result.action) {
-      case "create_invite":
       case "create_family_member":
         summary.create += 1;
         break;
@@ -1025,14 +1085,15 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
           ...familyUnitInserts,
           ...familyMemberWrites,
           ...profileUpdates,
-          ...accessRequestInserts,
           ...profileGroupWrites,
         ];
 
   return { rows: results, summary, writes };
 }
 
-/** True when the key came from the file, not the per-row synthetic. */
+/** True when the key came from the file's household_key column, not one of
+ *  the synthetics groupKey() derives (`__name-` / `__row-`). Only a real key
+ *  is worth naming back to the admin in a warning. */
 function isFileHouseholdKey(key: string): boolean {
-  return !key.startsWith("__row-");
+  return !key.startsWith("__row-") && !key.startsWith("__name-");
 }

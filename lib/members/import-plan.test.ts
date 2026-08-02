@@ -188,6 +188,24 @@ function makeFixtureSnapshot(): OrgSnapshot {
         first_name: '=Evil, "Name"',
         last_name: null,
       }),
+      // profiles.first_name is nullable and NULL for anyone who signed up
+      // without full_name metadata — every invite-bulk signup lands this way
+      // until they fill in their profile. Export writes a blank cell for it.
+      profile({
+        id: "p5",
+        email: "nameless@example.org",
+        first_name: null,
+        last_name: null,
+      }),
+      // profiles.email is nullable too. Such a row has no match key at all,
+      // so the round-trip proof below is what pins that it plans nothing
+      // rather than 422-ing the file.
+      profile({
+        id: "p6",
+        email: null,
+        first_name: "Nomail",
+        last_name: "Gamma",
+      }),
     ],
     families: [
       { id: "f1", family_name: "Alpha" },
@@ -310,7 +328,9 @@ describe("planImport error codes", () => {
     expect(plan.rows[0].errors[0].code).toBe("ROLE_ESCALATION");
   });
 
-  it("rejects role=admin on a brand-new invite row", () => {
+  it("rejects a brand-new person with a login before role is even considered", () => {
+    // Previously ROLE_ESCALATION. v1 cannot create a login at all, so the row
+    // fails earlier and for a broader reason — role never enters into it.
     const plan = planImport(
       [
         makeRow({
@@ -321,7 +341,7 @@ describe("planImport error codes", () => {
       ],
       makeFixtureSnapshot()
     );
-    expect(plan.rows[0].errors[0].code).toBe("ROLE_ESCALATION");
+    expect(plan.rows[0].errors[0].code).toBe("LOGIN_CREATE_UNSUPPORTED");
   });
 
   it("allows role=admin when it equals the stored role", () => {
@@ -392,7 +412,7 @@ describe("planImport error codes", () => {
     expect(plan.rows[0].errors[0].code).toBe("HAS_LOGIN_CHANGE");
   });
 
-  it("reports MISSING_REQUIRED for a missing first_name", () => {
+  it("reports MISSING_REQUIRED for a missing first_name on a member without a login", () => {
     const plan = planImport(
       [makeRow({ first_name: null, household_name: "X" })],
       emptySnapshot
@@ -403,15 +423,60 @@ describe("planImport error codes", () => {
     });
   });
 
-  it("reports MISSING_REQUIRED for has_login=true without an email", () => {
+  it("does NOT require first_name on a row matched to an existing profile", () => {
+    // profiles.first_name is nullable and genuinely NULL for anyone who
+    // signed up without full_name metadata, so export writes a blank cell.
+    // Requiring it here would 422 the whole file on the org's own export.
+    const snapshot: OrgSnapshot = {
+      ...emptySnapshot,
+      profiles: [
+        profile({ id: "p1", email: "nameless@example.org", first_name: null }),
+      ],
+    };
     const plan = planImport(
-      [makeRow({ has_login: true, email: null })],
+      [
+        makeRow({
+          has_login: true,
+          email: "nameless@example.org",
+          first_name: null,
+          last_name: null,
+        }),
+      ],
+      snapshot
+    );
+    expect(plan.rows[0].errors).toEqual([]);
+    expect(plan.rows[0].action).toBe("no_change");
+    expect(plan.writes).toEqual([]);
+  });
+
+  it("reports LOGIN_CREATE_UNSUPPORTED for a new person with a login", () => {
+    // v1 cannot create a login: the approved access_requests row an invite
+    // needs violates that table's only INSERT policy, so attempting the write
+    // would 500 mid-apply. Failing at validation keeps "nothing applies
+    // unless everything validates" intact.
+    const plan = planImport(
+      [makeRow({ has_login: true, email: "brand-new@example.org", first_name: "Iva" })],
       emptySnapshot
     );
     expect(plan.rows[0].errors[0]).toMatchObject({
-      code: "MISSING_REQUIRED",
-      field: "email",
+      code: "LOGIN_CREATE_UNSUPPORTED",
+      field: "has_login",
     });
+    expect(plan.rows[0].action).toBe("error");
+    expect(plan.writes).toEqual([]);
+  });
+
+  it("never plans a write against access_requests", () => {
+    // The structural half of the rule above: no plan, from any input, may
+    // contain the write kind that cannot pass RLS.
+    const plan = planImport(
+      [
+        makeRow({ has_login: true, email: "al@example.org", first_name: "Al" }),
+        makeRow({ line: 2, first_name: "Kid", household_name: "Alpha" }),
+      ],
+      makeFixtureSnapshot()
+    );
+    expect(JSON.stringify(plan.writes)).not.toContain("access_request");
   });
 
   it("reports INVALID_EMAIL for a malformed address", () => {
@@ -465,12 +530,21 @@ describe("planImport error codes", () => {
   });
 
   it("reports DUPLICATE_IN_FILE on the second row with the same email", () => {
+    const snapshot: OrgSnapshot = {
+      ...emptySnapshot,
+      profiles: [profile({ id: "p1", email: "dup@example.org", first_name: "D" })],
+    };
     const plan = planImport(
       [
-        makeRow({ has_login: true, email: "dup@example.org" }),
-        makeRow({ line: 2, has_login: true, email: "DUP@example.org" }),
+        makeRow({ has_login: true, email: "dup@example.org", first_name: "D" }),
+        makeRow({
+          line: 2,
+          has_login: true,
+          email: "DUP@example.org",
+          first_name: "D",
+        }),
       ],
-      emptySnapshot
+      snapshot
     );
     expect(plan.rows[0].errors).toEqual([]);
     expect(plan.rows[1].errors[0].code).toBe("DUPLICATE_IN_FILE");
@@ -560,12 +634,6 @@ describe("planImport semantics", () => {
           relationship: "child",
           is_class_member: true,
         }),
-        makeRow({
-          line: 3,
-          has_login: true,
-          email: "invitee@example.org",
-          first_name: "Iva",
-        }),
       ],
       makeFixtureSnapshot()
     );
@@ -576,30 +644,25 @@ describe("planImport semantics", () => {
     expect(JSON.stringify(plan.writes)).not.toContain("org_id");
   });
 
-  it("drops group assignments on an invite row with a warning", () => {
+  it("reports a blank-email profile row as an unmatchable no_change, not an error", () => {
+    // profiles.email is nullable, so export emits has_login=true with a blank
+    // email cell. Email is the only match key a login holder has, so the row
+    // can be neither matched nor created — but erroring would 422 the whole
+    // file and make the org's own export unimportable.
+    const snapshot: OrgSnapshot = {
+      ...emptySnapshot,
+      profiles: [profile({ id: "p1", email: null, first_name: "Nomail" })],
+    };
     const plan = planImport(
-      [
-        makeRow({
-          has_login: true,
-          email: "invitee@example.org",
-          first_name: "Iva",
-          groups: ["Worship"],
-        }),
-      ],
-      makeFixtureSnapshot()
+      [makeRow({ has_login: true, email: null, first_name: "Nomail" })],
+      snapshot
     );
-    expect(plan.rows[0].action).toBe("create_invite");
+    expect(plan.rows[0].errors).toEqual([]);
+    expect(plan.rows[0].action).toBe("no_change");
     expect(
-      plan.rows[0].warnings.some((w) => w.includes("groups on a new invite"))
+      plan.rows[0].warnings.some((w) => w.includes("no email on this row"))
     ).toBe(true);
-    expect(plan.writes).toEqual([
-      {
-        kind: "insert_access_request",
-        line: 1,
-        email: "invitee@example.org",
-        name: "Iva Person",
-      },
-    ]);
+    expect(plan.writes).toEqual([]);
   });
 
   it("applies nothing when any row has an error", () => {
@@ -632,6 +695,159 @@ describe("planImport semantics", () => {
     );
     expect(plan.rows[0].action).toBe("no_change");
     expect(plan.writes).toEqual([]);
+  });
+
+  it("puts rows sharing a household_name into ONE new household, not one per row", () => {
+    // Export always emits household_key, so this is about hand-authored
+    // files — the primary import use case. Keying on the row number turned a
+    // family of four typed a row at a time into four one-person households,
+    // and that state is unrecoverable: it makes every later import of the
+    // same file a permanent AMBIGUOUS_HOUSEHOLD, with no in-app merge.
+    const rows = [
+      makeRow({ first_name: "Zeb", last_name: "Zeta", household_name: "Zeta Family" }),
+      makeRow({
+        line: 2,
+        first_name: "Zoe",
+        last_name: "Zeta",
+        household_name: "Zeta Family",
+      }),
+    ];
+    const plan = planImport(rows, emptySnapshot);
+    expect(plan.summary.error).toBe(0);
+    expect(plan.summary.householdsCreate).toBe(1);
+    const unitInserts = plan.writes.filter(
+      (w) => w.kind === "insert_family_unit"
+    );
+    expect(unitInserts).toHaveLength(1);
+    // Both people land in it.
+    const memberInserts = plan.writes.filter(
+      (w) => w.kind === "insert_family_member"
+    );
+    expect(memberInserts).toHaveLength(2);
+    const key = unitInserts[0].kind === "insert_family_unit" && unitInserts[0].householdKey;
+    for (const write of memberInserts) {
+      expect(write.kind === "insert_family_member" && write.householdKey).toBe(key);
+    }
+  });
+
+  it("re-importing the same hand-authored file is a no-op (the property, not the patch)", () => {
+    // The second run must see the household it created and join it, not make
+    // another. This is what distinguishes a real fix from one that only makes
+    // the first run look right.
+    const rows = () => [
+      makeRow({ first_name: "Zeb", last_name: "Zeta", household_name: "Zeta Family" }),
+      makeRow({
+        line: 2,
+        first_name: "Zoe",
+        last_name: "Zeta",
+        household_name: "Zeta Family",
+      }),
+    ];
+    const afterFirstRun: OrgSnapshot = {
+      ...emptySnapshot,
+      families: [{ id: "f9", family_name: "Zeta Family" }],
+      familyMembers: [
+        familyMember({
+          id: "m9",
+          family_id: "f9",
+          first_name: "Zeb",
+          last_name: "Zeta",
+          relationship: "other",
+        }),
+        familyMember({
+          id: "m10",
+          family_id: "f9",
+          first_name: "Zoe",
+          last_name: "Zeta",
+          relationship: "other",
+        }),
+      ],
+    };
+    const plan = planImport(rows(), afterFirstRun);
+    expect(plan.summary.error).toBe(0);
+    expect(plan.writes).toEqual([]);
+  });
+
+  it("does not create two households with the same name from two distinct file keys", () => {
+    // family_units.family_name has no unique constraint, so nothing
+    // downstream would stop the duplicate — and a duplicate name is exactly
+    // what makes name-based resolution a permanent AMBIGUOUS_HOUSEHOLD.
+    const plan = planImport(
+      [
+        makeRow({
+          first_name: "Zeb",
+          household_key: "a",
+          household_name: "Zeta Family",
+        }),
+        makeRow({
+          line: 2,
+          first_name: "Zoe",
+          household_key: "b",
+          household_name: "Zeta Family",
+        }),
+      ],
+      emptySnapshot
+    );
+    expect(plan.summary.householdsCreate).toBe(1);
+    expect(
+      plan.writes.filter((w) => w.kind === "insert_family_member")
+    ).toHaveLength(2);
+  });
+
+  it("keeps keyless rows with no household_name in separate synthetic groups", () => {
+    // The __row- fallback still applies when there is nothing to group on —
+    // two unnamed rows are two different people, not one household.
+    const plan = planImport(
+      [
+        makeRow({ first_name: "A", household_name: null }),
+        makeRow({ line: 2, first_name: "B", household_name: null }),
+      ],
+      emptySnapshot
+    );
+    // Both fail for want of a household, independently.
+    expect(plan.rows.map((r) => r.errors[0]?.code)).toEqual([
+      "MISSING_HOUSEHOLD_NAME",
+      "MISSING_HOUSEHOLD_NAME",
+    ]);
+  });
+
+  it("warns rather than silently ignoring a blank groups cell for a member who has groups", () => {
+    // Blank means "not provided" (the scalar rule), so the membership stays.
+    // A silent no-op on an explicit edit is the worst available behavior.
+    const plan = planImport(
+      [
+        makeRow({
+          email: "al@example.org",
+          has_login: true,
+          first_name: "Al",
+          last_name: "Alpha",
+          groups: [],
+        }),
+      ],
+      makeFixtureSnapshot()
+    );
+    expect(plan.rows[0].action).toBe("no_change");
+    expect(plan.writes).toEqual([]);
+    expect(
+      plan.rows[0].warnings.some((w) => w.includes("groups is blank"))
+    ).toBe(true);
+  });
+
+  it("warns rather than silently ignoring a blank hidden_fields cell for a member who has flags", () => {
+    const plan = planImport(
+      [
+        makeRow({
+          email: "al@example.org",
+          has_login: true,
+          first_name: "Al",
+          hidden_fields: [],
+        }),
+      ],
+      makeFixtureSnapshot()
+    );
+    expect(
+      plan.rows[0].warnings.some((w) => w.includes("hidden_fields is blank"))
+    ).toBe(true);
   });
 
   it("creates a new household then its family member, linked by household key", () => {

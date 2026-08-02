@@ -16,30 +16,45 @@ import type { User, SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 
 export type OrgAdminGate =
-  | { ok: true; user: User; supabase: SupabaseClient<Database> }
+  | { ok: true; user: User; supabase: SupabaseClient<Database>; orgId: string }
   | { ok: false; status: 401 | 403 };
 
 /**
  * 401 when unauthenticated, 403 when not an org admin. On success returns
- * the RLS-scoped client so callers do not build a second one.
+ * the RLS-scoped client so callers do not build a second one, plus the
+ * caller's own org_id — read off their RLS-scoped profile row, which
+ * CLAUDE.md names as an approved tenant anchor. Callers pass it to every
+ * query that takes a client as a parameter (see loadOrgSnapshot).
  */
 export async function requireOrgAdmin(): Promise<OrgAdminGate> {
   const supabase = await createClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
+  if (authError) {
+    // Without this, an auth-service outage is indistinguishable from "not
+    // signed in" in the logs — a 401 storm with no recorded cause.
+    console.error("Org admin check: auth lookup failed; denying:", authError);
+    return { ok: false, status: 401 };
+  }
   if (!user) return { ok: false, status: 401 };
 
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, org_id")
     .eq("id", user.id)
     .single();
   if (error) {
-    console.error("Org admin check failed; denying:", error);
+    // code/message only: a PostgrestError's details/hint echo row content.
+    console.error(
+      "Org admin check failed; denying: code=%s message=%s",
+      error.code,
+      error.message
+    );
     return { ok: false, status: 403 };
   }
   return profile?.role === "admin"
-    ? { ok: true, user, supabase }
+    ? { ok: true, user, supabase, orgId: profile.org_id }
     : { ok: false, status: 403 };
 }

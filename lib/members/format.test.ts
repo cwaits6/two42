@@ -153,6 +153,44 @@ describe("parseMembers file-level errors", () => {
     expect(result.error?.code).toBe("EMPTY_FILE");
   });
 
+  it("aborts on an unterminated quote instead of importing a truncated file", () => {
+    // Without the abort, the stray `"` on line 2 swallows Bob and Cy into
+    // Ada's last_name cell, the short row reads every missing column as blank
+    // — which means "not provided", not an error — and a three-person import
+    // reports success having considered one row.
+    const result = parseMembers(
+      [
+        "first_name,last_name,email,has_login",
+        'Ada,"Love,lace,ada@x.com,true',
+        "Bob,Smith,bob@x.com,true",
+        "Cy,Jones,cy@x.com,true",
+      ].join("\r\n")
+    );
+    expect(result.error?.code).toBe("UNTERMINATED_QUOTE");
+    expect(result.error?.message).toContain("line 2");
+    expect(result.rows).toEqual([]);
+  });
+
+  it("warns on a ragged row rather than reading the missing cells as deliberate blanks", () => {
+    const result = parseMembers(
+      "first_name,last_name,email,has_login\nAda,Lovelace"
+    );
+    expect(result.error).toBeUndefined();
+    expect(
+      result.warnings.some(
+        (w) => w.line === 1 && w.message.includes("2 cells")
+      )
+    ).toBe(true);
+    expect(result.rows).toHaveLength(1);
+  });
+
+  it("does not warn about raggedness on a well-formed file", () => {
+    const result = parseMembers(
+      "first_name,last_name,email,has_login\nAda,Lovelace,a@b.co,true"
+    );
+    expect(result.warnings).toEqual([]);
+  });
+
   it("warns on an unknown column instead of erroring", () => {
     const result = parseMembers(
       "first_name,last_name,email,has_login,favorite_color\nAda,L,a@b.co,true,teal"

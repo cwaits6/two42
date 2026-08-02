@@ -5,11 +5,19 @@
  * importable in vitest's node environment and this file never pulls
  * next/headers into a shared graph.
  *
- * Tenancy: no query here filters on org_id. Every table below carries the
- * restrictive `org isolation` RLS policy, and this client is the cookie-bound
- * request client — RLS already narrows every select to the caller's org.
- * Adding a manual filter would only suggest the filter is the boundary; it
- * is not, RLS is.
+ * Tenancy: RLS is still the boundary — every table below carries the
+ * restrictive `org isolation` policy, and today's two callers both hand in
+ * the cookie-bound request client, which RLS already narrows to the caller's
+ * org. The explicit .eq("org_id", orgId) is not that boundary; it is the
+ * tier-C floor for the caller this signature cannot refuse. A
+ * `SupabaseClient<Database>` PARAMETER is untyped as to privilege: a
+ * service-role client satisfies it identically and carries BYPASSRLS, at
+ * which point all six selects become a full-table read of every org's
+ * roster. Contrast lib/members/access.ts, which makes the same argument
+ * correctly because it CONSTRUCTS its client and can therefore guarantee it.
+ *
+ * `orgId` must come from a validated anchor — requireOrgAdmin() reads it off
+ * the caller's own RLS-scoped profile row. Never off a request body.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
@@ -100,23 +108,45 @@ const FAMILY_MEMBER_COLUMNS =
   "id, family_id, first_name, last_name, preferred_name, birth_month, birth_day, birth_year, relationship, is_class_member";
 
 /**
- * Load the caller's org roster through RLS. Throws on any query error with a
- * message naming the table only — never row content (PII stays out of logs).
+ * Load one org's roster. Throws on any query error with a message naming the
+ * table only — never row content (PII stays out of logs).
  */
 export async function loadOrgSnapshot(
-  supabase: SupabaseClient<Database>
+  supabase: SupabaseClient<Database>,
+  orgId: string
 ): Promise<OrgSnapshot> {
   const [profiles, families, familyMembers, groups, profileGroups, requests] =
     await Promise.all([
-      supabase.from("profiles").select(PROFILE_COLUMNS).order("id"),
-      supabase.from("family_units").select("id, family_name").order("id"),
-      supabase.from("family_members").select(FAMILY_MEMBER_COLUMNS).order("id"),
-      supabase.from("member_groups").select("id, name").order("id"),
+      supabase
+        .from("profiles")
+        .select(PROFILE_COLUMNS)
+        .eq("org_id", orgId)
+        .order("id"),
+      supabase
+        .from("family_units")
+        .select("id, family_name")
+        .eq("org_id", orgId)
+        .order("id"),
+      supabase
+        .from("family_members")
+        .select(FAMILY_MEMBER_COLUMNS)
+        .eq("org_id", orgId)
+        .order("id"),
+      supabase
+        .from("member_groups")
+        .select("id, name")
+        .eq("org_id", orgId)
+        .order("id"),
       supabase
         .from("profile_groups")
         .select("profile_id, group_id, is_leader")
+        .eq("org_id", orgId)
         .order("profile_id"),
-      supabase.from("access_requests").select("email").order("id"),
+      supabase
+        .from("access_requests")
+        .select("email")
+        .eq("org_id", orgId)
+        .order("id"),
     ]);
 
   if (profiles.error) throw new Error("Failed to load profiles");
