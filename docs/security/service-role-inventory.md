@@ -147,6 +147,31 @@ org-owned table touched (`access_requests`) is always filtered
 boundary. The restrictive RLS floor gains no platform-admin escape hatch;
 the cross-org reach lives only in these app-layer sites.
 
+## Serving signup RPC — a definer-function bypass surface (CWA-47 / #313)
+
+The serving signup insert pair (`serving_signups` + `serving_signup_attendees`)
+is written by a `SECURITY DEFINER` function pair
+(`20260803010000_serving_signup_rpc.sql`), not by direct PostgREST inserts —
+the compensating-delete pattern it replaced could orphan a signup row and
+wedge that Sunday behind `unique (group_id, service_date)`:
+
+- `serving_signup_apply(_group_id, _service_date, _actor_id, _attendee_ids)`
+  — the atomic core. EXECUTE: `service_role` only (the signed-link route
+  passes its HMAC-validated profile id as the actor).
+- `serving_signup_create(_group_id, _service_date, _attendee_ids)` — the
+  authenticated entry point; actor from `auth.uid()`, group org pinned
+  against `app_request_org_id()`, RLS INSERT-policy arms re-checked.
+  EXECUTE: `authenticated` + `service_role`. No `anon` grant on either —
+  the signed-link routes run server-side on the service-role client.
+
+`SECURITY DEFINER` bypasses RLS, so **the org resolution and equality checks
+in the function bodies are the tenant boundary; no lint sees them.**
+`schema_tenancy_lint.sql` check 4 only proves the source mentions `org_id`;
+the resolution order (org from the `member_groups` row, never a caller
+parameter; every other row asserted to carry it) is review-enforced. The
+grant matrix and the org checks are pinned by
+`supabase/tests/serving_signup_rpc_suite.sql`.
+
 ## App routes and pages (19 sites)
 
 | File | Why service-role is used | Org derived from | Scoped queries |
@@ -161,7 +186,7 @@ the cross-org reach lives only in these app-layer sites.
 | `app/serving/[groupId]/page.tsx` | Surfaces pending (never-logged-in) spouse profiles that RLS hides from the caller | Caller's own RLS-scoped profile | `profiles` (spouse lookup) |
 | `app/join/family/[token]/page.tsx` | Signed family-invite link resolved before login; no session | `app_request_org_id()` via the cookie-bound request client (`x-two42-org` header for anonymous visitors, own org for signed-in ones); invite lookup filtered on it | `family_invites` |
 | `app/api/serving/signups/route.ts` | Post-delete notification email lookups for affected members | The deleted signup row's own `org_id` (authorised by the RLS-checked delete) | `profile_groups` (leaders), `family_units` (label) |
-| `app/api/serving/link-action/route.ts` | Same HMAC signed-link pattern as `serving/go`; no session | HMAC-validated `member_groups` row; link rejected when `profiles.org_id` disagrees | `serving_team_settings`, `profile_groups`, `serving_signups` (read/insert/delete), `serving_signup_attendees` (insert), `profiles` (spouse), `family_units` (label) |
+| `app/api/serving/link-action/route.ts` | Same HMAC signed-link pattern as `serving/go`; no session | HMAC-validated `member_groups` row; link rejected when `profiles.org_id` disagrees | `serving_team_settings`, `profile_groups`, `serving_signups` (read/delete — cancel path), `rpc(serving_signup_apply)` (the signup + attendee insert pair, one transaction; the function re-derives the org from the `member_groups` row and enforces it internally — CWA-47 / #313), `profiles` (spouse), `family_units` (label) |
 | `app/api/serving/broadcast/route.ts` | Fans out email to all group members regardless of caller's RLS visibility | RLS-scoped `member_groups` row | `profile_groups` (recipients) |
 | `app/api/calendar/feed.ics/route.ts` | Bearer-token calendar subscription; no session | `calendar_subscription_tokens` row (`org_id` stamped at issuance); owner role re-checked | `events`, `serving_signups`, `profiles` (owner), token expiry update |
 | `app/api/auth/consume-token/route.ts` | Pre-login token flow; no session yet | The resolved `access_requests` row (`signup_token` is globally UNIQUE today — scoping is correctness-under-change) | `access_requests` update on `(id, org_id)` |

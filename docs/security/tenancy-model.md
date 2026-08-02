@@ -281,6 +281,16 @@ platform seam).
 
 ## Known limits (accepted, tracked)
 
+- The serving signup write path is a `SECURITY DEFINER` pair
+  (`serving_signup_apply` / `serving_signup_create`,
+  `20260803010000_serving_signup_rpc.sql`) so the signup + attendee inserts
+  commit atomically (CWA-47 / #313). Its org checks — org resolved from the
+  `member_groups` row, every other row asserted to carry it, the
+  authenticated wrapper pinned to `app_request_org_id()` — replace RLS
+  inside the bodies and are review-enforced: lint check 5 below only proves
+  the source mentions `org_id`. Grants and org checks are pinned by
+  `supabase/tests/serving_signup_rpc_suite.sql` and the inventory records
+  the surface ([service-role-inventory.md](service-role-inventory.md)).
 - An authenticated member of org A visiting org B's public page resolves to
   org A and sees nothing (fail-closed, not wrong-tenant). Revisited in
   Phase 5 (#214).

@@ -175,61 +175,53 @@ export async function POST(request: Request) {
       if (spouse) attendees.push(spouse);
     }
 
-    const { data: signup, error: signupError } = await service
-      .from("serving_signups")
-      .insert({
-        group_id: payload.g,
-        service_date: payload.d,
-        family_id: profile.family_id,
-        created_by: profile.id,
-        // Service-role insert: the fail-closed org_id DEFAULT resolves to
-        // NULL without a session, so the org is passed explicitly — derived
-        // from the HMAC-validated group row, which the composite FK
-        // (group_id, org_id) also enforces.
-        org_id: group.org_id,
+    // One RPC, one transaction (CWA-47 / #313): the compensating delete this
+    // replaces could itself fail, wedging the Sunday behind
+    // unique (group_id, service_date). The service-role entry point takes
+    // the actor explicitly — there is no session here — and re-derives
+    // org_id from the group row, re-asserting the profile↔group pairing the
+    // check above already made. `.single()` because `returns table`
+    // surfaces through PostgREST as an array; the explicit row type is
+    // needed because the server clients are created without a <Database>
+    // generic, so `.single()` would otherwise infer `unknown`.
+    const { data: rpc, error: rpcError } = await service
+      .rpc("serving_signup_apply", {
+        _group_id: payload.g,
+        _service_date: payload.d,
+        _actor_id: profile.id,
+        _attendee_ids: attendees.map((a) => a.id),
       })
-      .select()
-      .single();
+      .single<{ signup_id: string; signup_org_id: string; created: boolean }>();
 
-    if (signupError || !signup) {
-      if (signupError?.code === "23505") {
-        return NextResponse.json(
-          { error: "Someone just signed up for that Sunday — thank you anyway!" },
-          { status: 409 }
-        );
+    if (rpcError || !rpc) {
+      switch (rpcError?.code) {
+        case "SV001":
+          return NextResponse.json(
+            { error: "Someone just signed up for that Sunday — thank you anyway!" },
+            { status: 409 }
+          );
+        case "SV002":
+        case "SV003":
+          // Same generic copy as every other invalid-link outcome — a
+          // distinguishing message would be an org-existence oracle.
+          return NextResponse.json(
+            { error: "This link is no longer valid — please use the site instead" },
+            { status: 400 }
+          );
+        case "SV004":
+          return NextResponse.json(
+            { error: "You're no longer on this team — please use the site instead" },
+            { status: 403 }
+          );
       }
-      console.error("Signed-link signup insert failed:", signupError);
-      return NextResponse.json({ error: "Failed to sign up" }, { status: 500 });
-    }
-
-    const { error: attendeeError } = await service
-      .from("serving_signup_attendees")
-      .insert(
-        attendees.map((a) => ({
-          signup_id: signup.id,
-          profile_id: a.id,
-          org_id: group.org_id,
-        }))
-      );
-    if (attendeeError) {
-      console.error("Signed-link attendee insert failed:", attendeeError);
-      const { data: rolledBack, error: rollbackError } = await service
-        .from("serving_signups").delete()
-        .eq("id", signup.id).eq("org_id", group.org_id)
-        .select("id");
-      if (rollbackError || !rolledBack || rolledBack.length === 0) {
-        console.error(
-          "Signed-link rollback failed — orphan signup %s occupies group %s on %s (org=%s):",
-          signup.id, payload.g, payload.d, group.org_id, rollbackError,
-        );
-      }
+      console.error("Signed-link signup rpc failed for group %s:", payload.g, rpcError);
       return NextResponse.json({ error: "Failed to sign up" }, { status: 500 });
     }
 
     if (profile.email) {
       try {
         await sendSignupConfirmation(service, {
-          signupId: signup.id,
+          signupId: rpc.signup_id,
           orgId: group.org_id,
           groupId: payload.g,
           groupName: group.name,
