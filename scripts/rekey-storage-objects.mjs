@@ -8,13 +8,20 @@
 // blob — every public URL derived from the new name would 404. The Storage
 // `move()` API is the only operation that moves both, and it is HTTP-only.
 //
-// Idempotent: keys whose first segment is already a UUID (an org id) are
-// skipped, so re-running after a partial failure is safe. Dry-run by
-// default; pass --apply to mutate.
+// Idempotent: keys already on the org-partitioned layout (a UUID first
+// segment AND a known `<kind>` second segment — see isOrgPartitioned() in
+// ./rekeyPlan.mjs for why the UUID alone is not enough) are skipped, so
+// re-running after a partial failure is safe. Dry-run by default; pass
+// --apply to mutate.
 //
 //   SUPABASE_URL=https://<project>.supabase.co \
 //   SUPABASE_SECRET_KEY=<service key> \
 //   node scripts/rekey-storage-objects.mjs [--apply] [--org <uuid>]
+//                                          [--allow-unrecognized]
+//
+// Exits non-zero on any object it could not fully migrate (destination
+// collision, URL row not updated, unrecognized shape) so a scripted run
+// cannot read a partial migration as success.
 //
 // The service key bypasses RLS (including the new restrictive storage
 // floor) — that is what lets it touch the legacy un-prefixed keys that are
@@ -25,39 +32,7 @@
 // that existed before partitioning.
 
 import { createClient } from "@supabase/supabase-js";
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-// legacy key shape → { kind, urlTable, urlColumn }
-const LEGACY_SHAPES = [
-  {
-    bucket: "avatars",
-    // families/<family_id>/photo.jpg
-    match: (segs) => segs.length === 3 && segs[0] === "families",
-    rekey: (org, segs) => [org, "families", segs[1], segs[2]].join("/"),
-    urlTable: "family_units",
-    urlColumn: "photo_url",
-    entityId: (segs) => segs[1],
-  },
-  {
-    bucket: "avatars",
-    // family-members/<family_member_id>/avatar.jpg
-    match: (segs) => segs.length === 3 && segs[0] === "family-members",
-    rekey: (org, segs) => [org, "family-members", segs[1], segs[2]].join("/"),
-    urlTable: "family_members",
-    urlColumn: "avatar_url",
-    entityId: (segs) => segs[1],
-  },
-  {
-    bucket: "avatars",
-    // <profile_id>/avatar.jpg  (the original un-kinded layout)
-    match: (segs) => segs.length === 2 && UUID_RE.test(segs[0]),
-    rekey: (org, segs) => [org, "profiles", segs[0], segs[1]].join("/"),
-    urlTable: "profiles",
-    urlColumn: "avatar_url",
-    entityId: (segs) => segs[0],
-  },
-];
+import { LEGACY_SHAPES, UUID_RE, classifyObject } from "./rekeyPlan.mjs";
 
 const BUCKETS = ["avatars", "event-images"];
 
@@ -68,6 +43,7 @@ function fail(msg) {
 
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
+const allowUnrecognized = args.includes("--allow-unrecognized");
 const orgFlag = args.indexOf("--org");
 const orgOverride = orgFlag === -1 ? null : args[orgFlag + 1];
 if (orgFlag !== -1 && !UUID_RE.test(orgOverride ?? "")) {
@@ -130,28 +106,87 @@ function publicUrl(bucket, name) {
   return supabase.storage.from(bucket).getPublicUrl(name).data.publicUrl;
 }
 
+// The URL base this script would mint, e.g.
+// `https://<project>.supabase.co/storage/v1/object/public/avatars/`.
+function publicUrlBase(bucket) {
+  const probe = "__rekey_probe__";
+  return publicUrl(bucket, probe).slice(0, -probe.length);
+}
+
+// Does the destination key already hold an object? Probed with list() rather
+// than by matching move()'s error string, which is a third-party contract.
+async function destinationExists(bucket, newName) {
+  const segs = newName.split("/");
+  const file = segs.pop();
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .list(segs.join("/"), { search: file, limit: 1 });
+  if (error) fail(`list ${bucket}/${segs.join("/")}: ${error.message}`);
+  return data.some((entry) => entry.name === file);
+}
+
+// Pre-flight: the URL update below is guarded by `.eq(urlColumn, oldUrl)`,
+// comparing a URL reconstructed from THIS process's SUPABASE_URL against
+// whatever the browser persisted from NEXT_PUBLIC_SUPABASE_URL. Any
+// divergence (custom storage domain, vanity vs. project-ref host, a
+// hand-edited row) makes every move succeed and every update match 0 rows —
+// an estate-wide, irreversible 404 with a zero exit code. One read per shape
+// converts that into a clean abort before anything mutates.
+//
+// Service-role queries: `.eq("org_id", orgId)` is the tenant boundary, and
+// orgId came from the organizations table above, never from input.
+async function preflightUrlBase(orgId) {
+  for (const shape of LEGACY_SHAPES) {
+    const { data, error } = await supabase
+      .from(shape.urlTable)
+      .select(`id, ${shape.urlColumn}`)
+      .eq("org_id", orgId)
+      .not(shape.urlColumn, "is", null)
+      .limit(1);
+    if (error) {
+      fail(`pre-flight read of ${shape.urlTable}.${shape.urlColumn}: ${error.message}`);
+    }
+    if (data.length === 0) continue; // nothing stored yet — nothing to disagree with
+    const stored = data[0][shape.urlColumn];
+    const base = publicUrlBase(shape.bucket);
+    if (!stored.startsWith(base)) {
+      fail(
+        `${shape.urlTable}.${shape.urlColumn} stores URLs under a different base than this ` +
+          `script would mint:\n  stored:   ${stored}\n  expected: ${base}…\n` +
+          "Every move would succeed and every URL update would match 0 rows, 404ing the " +
+          "estate irreversibly. Re-run with SUPABASE_URL set to the host the app writes " +
+          "(NEXT_PUBLIC_SUPABASE_URL).",
+      );
+    }
+  }
+}
+
 const orgId = await resolveOrgId();
 console.log(`${apply ? "APPLY" : "DRY RUN"} — org ${orgId}`);
+await preflightUrlBase(orgId);
 
 let moved = 0;
 let skipped = 0;
+let otherOrg = 0;
 let unrecognized = 0;
+const collided = [];
+const urlMisses = [];
 
 for (const bucket of BUCKETS) {
   const names = await listAllObjects(bucket);
   for (const name of names) {
-    const segs = name.split("/");
-    if (UUID_RE.test(segs[0])) {
-      skipped += 1; // already org-prefixed — idempotency
+    const plan = classifyObject(bucket, name, orgId);
+    if (plan.action === "skip") {
+      if (plan.reason === "other-org") otherOrg += 1;
+      else skipped += 1;
       continue;
     }
-    const shape = LEGACY_SHAPES.find((s) => s.bucket === bucket && s.match(segs));
-    if (!shape) {
+    if (plan.action === "unrecognized") {
       unrecognized += 1;
       console.warn(`SKIP (unrecognized legacy shape): ${bucket}/${name}`);
       continue;
     }
-    const newName = shape.rekey(orgId, segs);
+    const { shape, newName, entityId } = plan;
     const oldUrl = publicUrl(bucket, name);
     const newUrl = publicUrl(bucket, newName);
     console.log(`MOVE ${bucket}/${name}`);
@@ -159,6 +194,19 @@ for (const bucket of BUCKETS) {
     console.log(`  ${shape.urlTable}.${shape.urlColumn}: ${oldUrl} -> ${newUrl}`);
     if (!apply) {
       moved += 1;
+      continue;
+    }
+
+    // A destination that already exists is expected, not hypothetical: this
+    // ships with the call-site rewrite, so from deploy onward the app writes
+    // org-prefixed keys. The newer blob wins; leave the legacy one in place
+    // and keep going rather than aborting the whole run mid-estate.
+    if (await destinationExists(bucket, newName)) {
+      collided.push(`${bucket}/${name} -> ${bucket}/${newName}`);
+      console.warn(
+        `  SKIP (destination already exists — newer blob wins): ${bucket}/${newName}\n` +
+          `       stale legacy object left at ${bucket}/${name} — delete by hand`,
+      );
       continue;
     }
 
@@ -170,20 +218,26 @@ for (const bucket of BUCKETS) {
     const { data: updatedRows, error: updateError } = await supabase
       .from(shape.urlTable)
       .update({ [shape.urlColumn]: newUrl })
-      .eq("id", shape.entityId(segs))
+      .eq("id", entityId)
       .eq("org_id", orgId)
       .eq(shape.urlColumn, oldUrl)
       .select("id");
     if (updateError) {
       fail(
         `object moved but URL update failed for ${shape.urlTable}.${shape.urlColumn} ` +
-          `(entity ${shape.entityId(segs)}): ${updateError.message} — re-run to continue; ` +
+          `(entity ${entityId}): ${updateError.message} — re-run to continue; ` +
           "the moved object is skipped as already-prefixed, fix this row by hand",
       );
     }
     if (updatedRows.length === 0) {
+      // Benign if the row was already updated or the entity was deleted;
+      // damaging if the stored URL simply never matched — the blob has moved
+      // and the row still points at the old key. Collected, not just warned:
+      // a re-run cannot find it again (the object is now org-prefixed).
+      urlMisses.push(`${shape.urlTable}.${shape.urlColumn} id=${entityId} (${bucket}/${newName})`);
       console.warn(
-        `  WARN: no ${shape.urlTable} row carried the old URL (already updated, or the entity was deleted)`,
+        `  WARN: no ${shape.urlTable} row carried the old URL (already updated, the entity ` +
+          "was deleted, or the stored URL never matched — the blob has MOVED regardless)",
       );
     }
     moved += 1;
@@ -191,8 +245,30 @@ for (const bucket of BUCKETS) {
 }
 
 console.log(
-  `${apply ? "moved" : "would move"} ${moved}, already-prefixed ${skipped}, unrecognized ${unrecognized}`,
+  `${apply ? "moved" : "would move"} ${moved}, already-prefixed ${skipped}, ` +
+    `other-org prefix ${otherOrg}, collided ${collided.length}, ` +
+    `url-not-updated ${urlMisses.length}, unrecognized ${unrecognized}`,
 );
 if (!apply && moved > 0) {
   console.log("re-run with --apply to perform the moves");
 }
+
+if (collided.length > 0) {
+  console.error(`\n${collided.length} destination collision(s) — legacy blob left behind:`);
+  for (const line of collided) console.error(`  ${line}`);
+}
+if (urlMisses.length > 0) {
+  console.error(`\n${urlMisses.length} row(s) whose URL column was not updated — verify by hand:`);
+  for (const line of urlMisses) console.error(`  ${line}`);
+}
+if (unrecognized > 0 && !allowUnrecognized) {
+  console.error(
+    `\n${unrecognized} object(s) matched no known legacy shape. They keep un-prefixed keys ` +
+      "and are invisible to every client write path. Re-run with --allow-unrecognized to " +
+      "acknowledge them.",
+  );
+}
+
+const incomplete =
+  collided.length > 0 || urlMisses.length > 0 || (unrecognized > 0 && !allowUnrecognized);
+if (incomplete) process.exit(1);

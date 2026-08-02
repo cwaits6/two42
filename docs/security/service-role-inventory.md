@@ -71,15 +71,9 @@ by CWA-57 / #328 (org-partitioned `storage.objects` policies — see
 tenancy-model.md "Storage tenancy"; reads deliberately stay public under
 ADR-3 there).
 
-One service-key user lives outside the tables below by design:
-`scripts/rekey-storage-objects.mjs` (CWA-57), the one-time operator script
-that moves legacy storage objects onto the org-partitioned key layout. It
-is not app code — it runs from an operator's shell, not in any request
-path, and is not scanned by the guard (which covers `app/` and `lib/`). It
-needs the service key precisely because the legacy un-prefixed keys are
-invisible to every RLS-constrained role; it derives its org id from the
-`organizations` table (refusing to guess when more than one exists) and
-filters its URL-column updates on that org.
+One service-key user lives outside the "App routes and pages" and
+"Lib helpers" tables by design — the one-time storage re-key operator
+script; see the "Operator scripts" section below.
 
 Every app-code site below now derives `org_id` from an anchor it has already
 validated — the calendar subscription-token row, the HMAC-signed link's
@@ -227,3 +221,23 @@ which the composite `(col, org_id)` FKs keep inside the tenant; the one
 |------|--------------------------|-------------------------|------------|
 | `supabase/functions/send-event-reminders/index.ts` | Cron job; reads events/RSVPs and emails attendees with no user session | Reminder fan-out iterates all rows across orgs | **Implemented (Phase 3, #212):** iterates active orgs via `_shared/orgs.ts`, every query filtered on `org_id`, per-org failures isolated so one org cannot suppress another's send. **Branding (CWA-56, #322):** `organizations.branding` rides along on the already-org-anchored `listActiveOrgs()` select — no new service-role call site, no new unscoped query — and is validated by `_shared/branding.ts` (a mirror of `lib/branding.ts` + `lib/email/identity.ts`) before reaching any CSS or RFC 5322 sink |
 | `supabase/functions/send-serving-reminders/index.ts` | Cron job; reads serving signups and emails assignees with no user session | Same as `send-event-reminders` | **Implemented (Phase 3, #212):** same per-org iteration and `org_id` filters; `resolveCanSign` org-scoped; `serving_broadcasts` audit rows stamped with the processed row's org, not a constant. **Branding (CWA-56, #322):** same `listActiveOrgs()` ride-along, validated by `_shared/branding.ts`. **Per-team isolation (CWA-50, #316):** a failing team is recorded in the run summary's `failedItems[]` keyed by `group_id` — ids, never org-defined team names, in operator diagnostics |
+
+## Operator scripts (1 site)
+
+Not app code: this runs from an operator's shell, once per environment, in no
+request path. It reads the service key straight from `process.env`
+(`SUPABASE_SECRET_KEY`, falling back to `SUPABASE_SERVICE_ROLE_KEY`) rather
+than through `createServiceClient()` or `resolveServiceKey()` — a third
+service-key entry point, and the reason `npm run guard:tenancy` cannot see
+it. Like "Edge Functions", this section is prose-and-table only: the guard
+parses the "App routes and pages" and "Lib helpers" sections and cross-checks
+each of their rows against a real `createServiceClient()` call site, so a row
+for a `scripts/` file there would *fail* the guard.
+
+(Section headings are referenced here by name, never as literal `##` markdown
+— the guard locates a section with a plain `indexOf`, so an inline `##` in
+prose above the real heading silently becomes the section it parses.)
+
+| File | Why service-role is used | Tenancy risk | Mitigation |
+|------|--------------------------|--------------|------------|
+| `scripts/rekey-storage-objects.mjs` | One-time re-key of pre-CWA-57 storage objects onto `<org_id>/<kind>/<entity_id>/<file>`. The legacy un-prefixed keys are invisible to every RLS-constrained role by construction — that is exactly what the new restrictive floor on `storage.objects` enforces — so no lesser credential can move them | Un-scoped URL-column updates (`profiles.avatar_url`, `family_units.photo_url`, `family_members.avatar_url`) would rewrite another org's rows; a wrong org prefix would move objects *into* a tenant they do not belong to | The org id is derived from the `organizations` table and never taken from input — with more than one org the script refuses to guess and requires `--org <uuid>`, validated against a real row. Every URL update carries `.eq("org_id", orgId)` alongside `.eq("id", …)`. A pre-flight check aborts before any mutation if the app's stored URL base disagrees with this process's `SUPABASE_URL`; destination collisions and un-updated URL rows are collected and force a non-zero exit rather than reading as success. Classification is unit-tested (`scripts/rekeyPlan.test.mjs`) |

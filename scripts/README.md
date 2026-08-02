@@ -15,13 +15,24 @@ node scripts/rekey-storage-objects.mjs            # dry run — prints the plan
 node scripts/rekey-storage-objects.mjs --apply    # actually moves
 ```
 
+`SUPABASE_SERVICE_ROLE_KEY` is accepted as a fallback for
+`SUPABASE_SECRET_KEY`. `SUPABASE_URL` must be the host the **app** writes
+into its URL columns (`NEXT_PUBLIC_SUPABASE_URL`) — a pre-flight check reads
+one stored URL per table and aborts before mutating anything if the two
+disagree, because every move would otherwise succeed while every URL update
+matched nothing.
+
 It is deliberately **not** a migration: Supabase Storage keys the physical
 blob by `bucket/name`, so a SQL `UPDATE storage.objects SET name = …` would
 rename the DB row, orphan the blob, and 404 every public URL. The Storage
 `move()` API — HTTP-only — is the single operation that moves both.
 
-Idempotent: keys already starting with a UUID are skipped, so a re-run after
-a partial failure continues where it stopped. The org id is derived from the
+Idempotent: keys already on the org-partitioned layout are skipped, so a
+re-run after a partial failure continues where it stopped. "Starts with a
+UUID" is deliberately **not** the test — the original profile-avatar layout
+was `<profile_id>/avatar.jpg`, whose first segment is also a UUID; the check
+requires a known `<kind>` second segment as well (`scripts/rekeyPlan.mjs`,
+unit-tested in `scripts/rekeyPlan.test.mjs`). The org id is derived from the
 `organizations` table; if more than one org exists the script refuses to
 guess and requires `--org <uuid>` (legacy keys carry no org marker — they can
 only have belonged to the org that predates partitioning). Until it runs,

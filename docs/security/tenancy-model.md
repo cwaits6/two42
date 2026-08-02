@@ -192,8 +192,10 @@ The physical re-key of pre-existing (un-prefixed) objects is deferred to
 keys the physical file by `bucket/name`. Until the script runs, legacy
 objects keep rendering (public buckets bypass RLS on the
 `/object/public/*` path) but are invisible to every client write path —
-deleting one is a silent no-op that leaves an orphan blob, which the script
-cleans up.
+deleting one is a silent no-op that leaves an orphan blob. The script moves
+legacy objects onto the partitioned layout, which is what makes them
+deletable again; blobs already orphaned by a delete-then-reupload before it
+runs are not tracked by any row and must be cleaned up by hand.
 
 ## Signup and provisioning contracts
 

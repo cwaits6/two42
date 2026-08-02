@@ -76,6 +76,7 @@ declare
   org_b uuid;
   owner_a uuid := gen_random_uuid();
   owner_b uuid := gen_random_uuid();
+  member_b uuid := gen_random_uuid();
   family_a uuid;
   family_b uuid;
   fm_a uuid;
@@ -95,6 +96,14 @@ begin
   insert into auth.users (id, email) values
     (owner_a, 'owner-a@storage.example.test'),
     (owner_b, 'owner-b@storage.example.test');
+
+  -- A plain (non-admin, household-less) org-B member. The founding owners
+  -- satisfy is_admin()/is_content_editor()/is_member() all at once, so they
+  -- can never make a role predicate fail — an intra-org denial needs a
+  -- principal the permissive arms actually reject.
+  insert into public.access_requests (org_id, name, email, status)
+    values (org_b, 'Storage Plain Member', 'member-b@storage.example.test', 'approved');
+  insert into auth.users (id, email) values (member_b, 'member-b@storage.example.test');
 
   insert into public.family_units (org_id, family_name)
     values (org_a, 'Storage A family') returning id into family_a;
@@ -146,6 +155,7 @@ begin
   perform set_config('storage_suite.org_b', org_b::text, true);
   perform set_config('storage_suite.owner_a', owner_a::text, true);
   perform set_config('storage_suite.owner_b', owner_b::text, true);
+  perform set_config('storage_suite.member_b', member_b::text, true);
   perform set_config('storage_suite.family_a', family_a::text, true);
   perform set_config('storage_suite.family_b', family_b::text, true);
   perform set_config('storage_suite.event_a', event_a::text, true);
@@ -314,6 +324,184 @@ begin
     select is(own_event_delete, 1, 'positive control: org B editor deletes their own org''s event image');
   insert into storage_tenancy_results
     select is(own_family_delete, 1, 'positive control: org B admin deletes their own org''s family photo');
+end $$;
+
+-- ── The WITH CHECK half, via UPDATE ─────────────────────────────────────────
+-- WITH CHECK is otherwise only exercised by INSERT, which leaves the
+-- rename-out-of-org escape untested: a principal updating an object they
+-- legitimately own INTO another org's prefix is the same cross-tenant write,
+-- reached through UPDATE.
+--
+-- Two layers reject the new name and either alone suffices, so no UPDATE can
+-- isolate one: the restrictive floor's WITH CHECK, and the permissive arm's
+-- USING (Postgres reuses USING as WITH CHECK when a policy declares no WITH
+-- CHECK, and every arm carries the org predicate). Verified by mutation —
+-- neutering the floor's WITH CHECK alone leaves this assertion green. That is
+-- the `ORG AND (arms)` factoring working as designed; the assertion pins the
+-- escape being closed, not which layer closes it.
+--
+-- The own-org rename is the non-vacuity pair — without it every `for update`
+-- policy could be dropped from the migration and this suite would stay green,
+-- while every avatar re-upload (upsert: true) broke in production.
+
+do $$
+declare
+  org_a uuid := current_setting('storage_suite.org_a')::uuid;
+  org_b uuid := current_setting('storage_suite.org_b')::uuid;
+  owner_b uuid := current_setting('storage_suite.owner_b')::uuid;
+  family_a uuid := current_setting('storage_suite.family_a')::uuid;
+  rename_out_err text := null;
+  own_rename_count int := -1;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_b)::text, true);
+  perform set_config('request.headers', '{}', true);
+
+  -- Rename an object org B genuinely owns into org A's prefix. USING passes
+  -- (the old row is org B's); WITH CHECK must reject the new name.
+  begin
+    update storage.objects
+      set name = org_a || '/families/' || family_a || '/photo.jpg'
+      where bucket_id = 'avatars'
+        and name = org_b || '/profiles/' || owner_b || '/avatar.jpg';
+  exception when others then
+    rename_out_err := sqlstate;
+  end;
+
+  -- Non-vacuity: the same principal CAN rename it within their own org.
+  begin
+    with u as (
+      update storage.objects
+        set name = org_b || '/profiles/' || owner_b || '/avatar-renamed.jpg'
+        where bucket_id = 'avatars'
+          and name = org_b || '/profiles/' || owner_b || '/avatar.jpg'
+      returning 1
+    ) select count(*) into own_rename_count from u;
+  exception when others then
+    own_rename_count := -2;
+  end;
+
+  reset role;
+
+  insert into storage_tenancy_results
+    select is(rename_out_err, '42501',
+      'UPDATE renaming an own-org object INTO org A''s prefix is rejected on the WITH CHECK path (42501)');
+  insert into storage_tenancy_results
+    select is(own_rename_count, 1,
+      'positive control: the same principal renames their own avatar within their own org');
+end $$;
+
+-- ── Intra-org: the permissive arms are the deciding predicate ───────────────
+-- Every assertion above targets a CROSS-org key, which the restrictive floor
+-- alone denies — so the arms' role, kind, and per-entity EXISTS predicates
+-- are never what decides. Everything below stays inside org B, so the floor
+-- passes and only a permissive arm can deny. Without this block the migration
+-- could be simplified back to `bucket_id AND org AND kind` and the suite would
+-- still pass, silently reintroducing intra-org IDOR.
+
+do $$
+declare
+  org_b uuid := current_setting('storage_suite.org_b')::uuid;
+  owner_b uuid := current_setting('storage_suite.owner_b')::uuid;
+  member_b uuid := current_setting('storage_suite.member_b')::uuid;
+  family_b uuid := current_setting('storage_suite.family_b')::uuid;
+  event_b uuid := current_setting('storage_suite.event_b')::uuid;
+  ghost uuid := gen_random_uuid();
+  wrong_role_err text := null;
+  other_profile_err text := null;
+  own_profile_err text := null;
+  wrong_kind_err text := null;
+  ghost_family_err text := null;
+  ghost_event_err text := null;
+  own_event_err text := null;
+begin
+  -- (a) A plain member, inside their own org.
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', member_b)::text, true);
+  perform set_config('request.headers', '{}', true);
+
+  -- Wrong role: family portraits need is_admin(), which a plain member fails.
+  begin
+    insert into storage.objects (bucket_id, name, owner, owner_id)
+    values ('avatars', org_b || '/families/' || family_b || '/photo.jpg', member_b, member_b);
+  exception when others then
+    wrong_role_err := sqlstate;
+  end;
+
+  -- Another member's avatar in the same org: [3] must equal auth.uid(), and
+  -- the household-leader arm does not apply (no shared family_id).
+  begin
+    insert into storage.objects (bucket_id, name, owner, owner_id)
+    values ('avatars', org_b || '/profiles/' || owner_b || '/avatar.jpg', member_b, member_b);
+  exception when others then
+    other_profile_err := sqlstate;
+  end;
+
+  -- Non-vacuity: the same plain member CAN write their own avatar.
+  begin
+    insert into storage.objects (bucket_id, name, owner, owner_id)
+    values ('avatars', org_b || '/profiles/' || member_b || '/avatar.jpg', member_b, member_b);
+  exception when others then
+    own_profile_err := sqlstate;
+  end;
+
+  -- (b) The org-B founding admin / content editor, inside their own org.
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_b)::text, true);
+
+  -- Unknown <kind> segment: no arm claims it, so nothing grants the write.
+  begin
+    insert into storage.objects (bucket_id, name, owner, owner_id)
+    values ('avatars', org_b || '/bogus/' || family_b || '/photo.jpg', owner_b, owner_b);
+  exception when others then
+    wrong_kind_err := sqlstate;
+  end;
+
+  -- Nonexistent entity ids: the per-entity EXISTS clauses are the only thing
+  -- standing between an admin and an arbitrary key under their own org.
+  begin
+    insert into storage.objects (bucket_id, name, owner, owner_id)
+    values ('avatars', org_b || '/families/' || ghost || '/photo.jpg', owner_b, owner_b);
+  exception when others then
+    ghost_family_err := sqlstate;
+  end;
+  begin
+    insert into storage.objects (bucket_id, name, owner, owner_id)
+    values ('event-images', org_b || '/events/' || ghost || '/cover.jpg', owner_b, owner_b);
+  exception when others then
+    ghost_event_err := sqlstate;
+  end;
+
+  -- Non-vacuity for the EXISTS arms: a real own-org event id is accepted.
+  begin
+    insert into storage.objects (bucket_id, name, owner, owner_id)
+    values ('event-images', org_b || '/events/' || event_b || '/cover2.jpg', owner_b, owner_b);
+  exception when others then
+    own_event_err := sqlstate;
+  end;
+
+  reset role;
+
+  insert into storage_tenancy_results
+    select is(wrong_role_err, '42501',
+      'intra-org: a plain member cannot write a family photo (is_admin arm decides, not the floor)');
+  insert into storage_tenancy_results
+    select is(other_profile_err, '42501',
+      'intra-org: a member cannot write another member''s avatar ([3] = auth.uid() decides)');
+  insert into storage_tenancy_results
+    select is(coalesce(own_profile_err, 'ok'), 'ok',
+      'positive control: the plain member writes their OWN avatar in their own org');
+  insert into storage_tenancy_results
+    select is(wrong_kind_err, '42501',
+      'intra-org: an unknown <kind> segment is denied even for an admin (the [2] predicates decide)');
+  insert into storage_tenancy_results
+    select is(ghost_family_err, '42501',
+      'intra-org: an admin cannot write a family photo for a nonexistent family (per-entity EXISTS decides)');
+  insert into storage_tenancy_results
+    select is(ghost_event_err, '42501',
+      'intra-org: a content editor cannot write an image for a nonexistent event (per-entity EXISTS decides)');
+  insert into storage_tenancy_results
+    select is(coalesce(own_event_err, 'ok'), 'ok',
+      'positive control: the content editor writes an image for a REAL own-org event');
 end $$;
 
 -- ── Fail-closed with no principal and no header ─────────────────────────────

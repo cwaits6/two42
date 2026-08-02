@@ -46,9 +46,12 @@ drop policy if exists "Household leaders can delete household member avatars" on
 --
 -- app_request_org_id() resolves NULL for a principal-less request with no
 -- x-two42-org header; `[1] = NULL::text` is not TRUE, so the floor fails
--- closed. A legacy un-prefixed key ('<uid>/avatar.jpg') has a non-UUID [1]
--- and is likewise invisible to writes/deletes until the re-key script moves
--- it.
+-- closed. A legacy un-prefixed key is likewise invisible to writes/deletes
+-- until the re-key script moves it — 'families/<id>/photo.jpg' because [1]
+-- is a literal, and '<uid>/avatar.jpg' because [1] is the profile's UUID,
+-- never the org's. (That second shape is why the re-key script cannot treat
+-- "starts with a UUID" as "already partitioned"; it checks the <kind>
+-- segment too.)
 
 drop policy if exists "org isolation" on storage.objects;
 create policy "org isolation" on storage.objects
