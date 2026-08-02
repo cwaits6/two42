@@ -14,8 +14,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * header — it only ever selects among already-public content).
  *
  * Single-tenant interim: every host maps to the one deployed org. Phase 5
- * (custom domains, #214) replaces this with real host → org resolution,
- * which is why the host is already part of the signature.
+ * (custom domains, #214) replaces this with real host → org resolution.
  */
 export const DEFAULT_ORG_SLUG = "default";
 
@@ -28,10 +27,11 @@ export const DEFAULT_ORG_SLUG = "default";
  * app_request_org_id(), so a slug that matches nothing makes those flows
  * fail closed rather than fall back to another org.
  *
- * `_host` is unused in the single-tenant interim — it is already in the
- * signature because Phase 5 (custom domains, #214) resolves host → org here.
+ * Takes no host parameter: Phase 5 (custom domains, #214) will reintroduce
+ * one together with the resolution logic that actually reads it. Carrying an
+ * unread parameter until then bought nothing.
  */
-export function resolveOrgSlug(_host?: string | null): string {
+export function resolveOrgSlug(): string {
   return process.env.NEXT_PUBLIC_ORG_SLUG || DEFAULT_ORG_SLUG;
 }
 

@@ -16,11 +16,7 @@ export function createClient(orgSlug?: string) {
       // resolved server-side or the RLS WITH CHECK rejects every submit.
       global: {
         headers: {
-          "x-two42-org":
-            orgSlug ??
-            resolveOrgSlug(
-              typeof window !== "undefined" ? window.location.host : null
-            ),
+          "x-two42-org": orgSlug ?? resolveOrgSlug(),
         },
       },
     }

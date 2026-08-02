@@ -13,7 +13,7 @@
 // so the version must live in the specifier itself. Matches what the app's
 // package-lock.json resolves for ^2.103.3; bump both together (no Renovate
 // rule covers this URL).
-import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.110.9";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.9";
 import {
   formatFromHeader,
   parseAddress,
@@ -33,17 +33,21 @@ import {
   type OrgRunCounts,
 } from "../_shared/orgs.ts";
 
-// What createClient(url, key) actually returns; ReturnType<typeof createClient>
-// resolves the unbound generics to a different, incompatible instantiation.
-// Re-verified against the pinned 2.110.9 (CWA-45): still incompatible
-// (SupabaseClient<unknown, {PostgrestVersion}, never, never, …> vs the real
-// SupabaseClient<any, "public", "public", any, any>), so the pin does not
-// make this alias removable.
-type ServiceClient = SupabaseClient<any, "public", any>;
-
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SECRET_KEY = resolveServiceKey();
+
+// The one place the service client is constructed. ReturnType of this
+// CONCRETE zero-arg factory binds createClient's generics at the real call —
+// unlike ReturnType<typeof createClient> (the unbound generic function),
+// which resolves them to a different, incompatible instantiation; that is why
+// CWA-45 kept a hand-written SupabaseClient<any, "public", any> alias here.
+// Bound through the factory, the type tracks whatever the pinned 2.110.9
+// call actually returns, so a version bump needs no re-verification.
+function createServiceClient() {
+  return createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
+}
+type ServiceClient = ReturnType<typeof createServiceClient>;
 const SITE_URL = Deno.env.get("SITE_URL") || "https://incouragers.org";
 const EMAIL_FROM = Deno.env.get("EMAIL_FROM") || "two42 <noreply@incouragers.org>";
 const APP_NAME = Deno.env.get("APP_NAME") || "two42";
@@ -212,7 +216,7 @@ async function runForOrg(
 
 Deno.serve(async () => {
   try {
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
+    const supabase = createServiceClient();
     // Cast: structurally checking the full SupabaseClient against OrgListClient
     // trips TS2589 (excessively deep instantiation) on current supabase-js.
     // Re-verified at the pinned 2.110.9 (CWA-45): a direct structural

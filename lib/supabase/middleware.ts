@@ -54,7 +54,7 @@ export async function updateSession(request: NextRequest) {
       // paths never depend on which client they happen to use.
       global: {
         headers: {
-          "x-two42-org": resolveOrgSlug(request.headers.get("host")),
+          "x-two42-org": resolveOrgSlug(),
         },
       },
       cookies: {
