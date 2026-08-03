@@ -192,10 +192,15 @@ The physical re-key of pre-existing (un-prefixed) objects is deferred to
 keys the physical file by `bucket/name`. Until the script runs, legacy
 objects keep rendering (public buckets bypass RLS on the
 `/object/public/*` path) but are invisible to every client write path —
-deleting one is a silent no-op that leaves an orphan blob. The script moves
-legacy objects onto the partitioned layout, which is what makes them
-deletable again; blobs already orphaned by a delete-then-reupload before it
-runs are not tracked by any row and must be cleaned up by hand.
+deleting one is a silent no-op: the restrictive floor matches no row, so the
+`storage.objects` row and its blob both survive and the caller still sees
+success. Nothing is orphaned by that path — the residue is the opposite
+shape. A delete-then-reupload leaves the legacy object sitting at its old
+key, still tracked by its own row and still publicly readable, while the
+entity's URL column now points at the new org-partitioned key. The script
+moves legacy objects onto the partitioned layout, which is what makes them
+deletable again; it deletes nothing, so anything already stranded at an old
+key by a delete-then-reupload before it runs must be removed by hand.
 
 ## Signup and provisioning contracts
 
