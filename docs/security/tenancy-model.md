@@ -241,9 +241,12 @@ platform seam).
   `app/api/platform/organizations/[id]/route.ts` a compile-time gate on new
   labels. The scope limit is recorded in `20260731000001_org_helpers.sql`:
   `status` is deliberately **not** consulted by either org helper, so
-  suspending an org does not cut its members' access. Its only effect today
-  is that `listActiveOrgs()` (`supabase/functions/_shared/orgs.ts`) skips
-  suspended orgs — a suspended tenant stops receiving reminder email.
+  suspending an org does not cut its members' access. It gates no access
+  path anywhere: the only behavior it changes is that `listActiveOrgs()`
+  (`supabase/functions/_shared/orgs.ts`) skips suspended orgs, so a
+  suspended tenant stops receiving reminder email. The `/platform` operator
+  surfaces read the column to display it and write it to set it, which is
+  reporting and editing, not enforcement.
   Enforcement of a real access cut belongs to Phase 4's suspend surface;
   don't assume it exists until then. Neither `anon` nor `authenticated` can
   even `select` the column (see the column-grant bullet above).

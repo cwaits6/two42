@@ -195,7 +195,13 @@ Tenant iteration is `listActiveOrgs()` + `forEachOrg()`
 (`supabase/functions/_shared/orgs.ts`). `listActiveOrgs()` filters
 `organizations` on `.eq("status", "active")`, so a **suspended org is
 skipped** — a suspended tenant must not email its members. This is currently
-the *only* place `organizations.status` has any effect (see
+the only place `organizations.status` changes what happens *to a tenant*: it
+gates no access path and no org helper consults it, so suspending an org
+stops its reminder email and nothing else. The platform surfaces in the
+table above do read and write the column — `app/platform/page.tsx` and
+`app/platform/organizations/**` display it, and the platform org route sets
+it — but that is the operator UI reporting and editing the flag, not the
+flag enforcing anything (see
 [`tenancy-model.md`](tenancy-model.md), Known limits).
 
 Audit result (CWA-58): all 12 org-owned query chains across both entry
