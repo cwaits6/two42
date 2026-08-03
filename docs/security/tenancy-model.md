@@ -262,14 +262,20 @@ PostgREST RPC.
 `supabase/tests/schema_tenancy_lint.sql` asserts, each with a negative
 probe:
 
-1. every org-owned table has exactly one restrictive isolation policy
-   referencing `org_id`;
-2. no policy on an org-owned table has a bare `true` predicate;
-3. every FK into an org-owned parent is composite on `org_id`;
-4. every `ON DELETE SET NULL` on an `org_id`-carrying FK names a column
-   list that excludes `org_id`;
-5. every `SECURITY DEFINER` function reading an org-owned table references
-   `org_id`;
+- **check 1** — every org-owned table has exactly one restrictive isolation
+  policy referencing `org_id`;
+- **check 2** — no policy on an org-owned table has a bare `true` predicate;
+- **check 3** — every FK into an org-owned parent is composite on `org_id`;
+- **check 3b** — every `ON DELETE SET NULL` on an `org_id`-carrying FK names
+  a column list that excludes `org_id`;
+- **check 4** — every `SECURITY DEFINER` function reading an org-owned table
+  references `org_id`;
+
+These are the suite's own labels (`-- Phase 2 check N` in
+`schema_tenancy_lint.sql`), not list positions: the `SET NULL` assertion is
+`3b`, so numbering the list 1..5 would cite every rule after it one off —
+which is exactly how the `SECURITY DEFINER` rule came to be cited as
+"check 5" here while the migration and the inventory called it check 4.
 
 plus the Phase 0/1 checks (RLS enabled, `org_id` present, NOT NULL, the
 exact `app_current_org_id()` default). The only remaining allowlist is for
@@ -287,7 +293,7 @@ platform seam).
   commit atomically (CWA-47 / #313). Its org checks — org resolved from the
   `member_groups` row, every other row asserted to carry it, the
   authenticated wrapper pinned to `app_request_org_id()` — replace RLS
-  inside the bodies and are review-enforced: lint check 5 below only proves
+  inside the bodies and are review-enforced: lint check 4 above only proves
   the source mentions `org_id`. Grants and org checks are pinned by
   `supabase/tests/serving_signup_rpc_suite.sql` and the inventory records
   the surface ([service-role-inventory.md](service-role-inventory.md)).
