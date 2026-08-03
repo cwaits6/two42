@@ -560,6 +560,12 @@ begin
       current_setting('svrpc.group_a')::uuid, current_setting('svrpc.sunday4')::date,
       array[current_setting('svrpc.owner_a')::uuid]);
   exception when others then solo_err := sqlstate; end;
+  -- Seeded BEFORE the call, not only after it. If the RPC raises, the
+  -- handler below records add_err but would leave this setting undefined,
+  -- and the single-argument current_setting() that reads it further down
+  -- then raises 42704 — aborting the whole suite instead of printing the
+  -- FAIL line that says what actually broke.
+  perform set_config('svrpc.add_created', 'unset', true);
   begin
     select * into r from public.serving_signup_create(
       current_setting('svrpc.group_a')::uuid, current_setting('svrpc.sunday4')::date,
