@@ -873,14 +873,16 @@ describe("planImport semantics", () => {
       {
         kind: "insert_family_unit",
         line: 1,
-        householdKey: "hh-9",
+        // Namespaced: groupKey() prefixes the file's household_key so it
+        // cannot collide with a __name-/__row- synthetic.
+        householdKey: "__key-hh-9",
         values: { family_name: "Newfam" },
       },
       {
         kind: "insert_family_member",
         line: 1,
         familyId: null,
-        householdKey: "hh-9",
+        householdKey: "__key-hh-9",
         values: {
           first_name: "Newkid",
           last_name: "Person",
@@ -998,5 +1000,134 @@ describe("planImport semantics", () => {
         values: { preferred_name: "Kiddo", is_class_member: false },
       },
     ]);
+  });
+});
+
+describe("planImport — household identity hazards", () => {
+  it("does not merge a file household_key that looks like a synthetic key", () => {
+    // groupKey() derives `__name-<household>` and `__row-<line>` for rows
+    // that supply no key. If a file's own household_key cell contains one of
+    // those strings verbatim, an unnamespaced key would put two unrelated
+    // households in the same group — and the module's own comment calls that
+    // state unrecoverable, because there is no in-app household merge.
+    const plan = planImport(
+      [
+        makeRow({
+          line: 1,
+          has_login: false,
+          first_name: "Ann",
+          last_name: "One",
+          household_key: "__name-shared",
+          household_name: "First House",
+          household_primary: true,
+          relationship: "primary",
+        }),
+        makeRow({
+          line: 2,
+          has_login: false,
+          first_name: "Bob",
+          last_name: "Two",
+          household_key: null,
+          household_name: "Shared",
+          household_primary: true,
+          relationship: "primary",
+        }),
+      ],
+      emptySnapshot
+    );
+
+    expect(plan.rows.every((row) => row.errors.length === 0)).toBe(true);
+    // Two distinct households, not one merged household.
+    expect(plan.summary.householdsCreate).toBe(2);
+    const keys = plan.writes
+      .filter((write) => write.kind === "insert_family_unit")
+      .map((write) => write.kind === "insert_family_unit" && write.householdKey);
+    expect(new Set(keys).size).toBe(2);
+  });
+
+  it("rejects a row that would move an existing person to another household", () => {
+    // Matching only ever looks inside the household the row resolved to, so
+    // without this check the row plans a fresh insert and the person's
+    // original family_members record stays put — one human, two households.
+    const snapshot: OrgSnapshot = {
+      ...emptySnapshot,
+      families: [
+        { id: "f1", family_name: "Origin" },
+        { id: "f2", family_name: "Destination" },
+      ],
+      familyMembers: [
+        familyMember({
+          id: "m1",
+          family_id: "f1",
+          first_name: "Mover",
+          last_name: "Person",
+          birth_month: 3,
+          birth_day: 4,
+          birth_year: 2010,
+        }),
+      ],
+    };
+
+    const plan = planImport(
+      [
+        makeRow({
+          line: 1,
+          has_login: false,
+          first_name: "Mover",
+          last_name: "Person",
+          birth_month: 3,
+          birth_day: 4,
+          birth_year: 2010,
+          household_name: "Destination",
+          relationship: "child",
+        }),
+      ],
+      snapshot
+    );
+
+    expect(plan.rows[0].action).toBe("error");
+    expect(plan.rows[0].errors[0].code).toBe("HOUSEHOLD_MOVE");
+    // The invariant that matters: a rejected row emits no writes at all.
+    expect(plan.writes).toEqual([]);
+  });
+
+  it("still updates in place when the person stays in their household", () => {
+    // The guard must not fire on the ordinary update path.
+    const snapshot: OrgSnapshot = {
+      ...emptySnapshot,
+      families: [{ id: "f1", family_name: "Origin" }],
+      familyMembers: [
+        familyMember({
+          id: "m1",
+          family_id: "f1",
+          first_name: "Stayer",
+          last_name: "Person",
+          birth_month: 3,
+          birth_day: 4,
+          birth_year: 2010,
+          is_class_member: true,
+        }),
+      ],
+    };
+
+    const plan = planImport(
+      [
+        makeRow({
+          line: 1,
+          has_login: false,
+          first_name: "Stayer",
+          last_name: "Person",
+          birth_month: 3,
+          birth_day: 4,
+          birth_year: 2010,
+          household_name: "Origin",
+          relationship: "child",
+          is_class_member: false,
+        }),
+      ],
+      snapshot
+    );
+
+    expect(plan.rows[0].action).toBe("update_family_member");
   });
 });

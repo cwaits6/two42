@@ -75,14 +75,10 @@ Full rationale, the helper inventory, and the deviations register: [`docs/securi
 
 - **Never run `supabase test db` locally.** It resets the database, which violates the shared-stack rules above. CI runs it in the `pgtap` job of `.github/workflows/supabase.yml` against an ephemeral, isolated Postgres.
 - Regenerate DB types after schema changes with `npm run db:types` (read-only against the local stack); CI fails if `lib/supabase/database.types.ts` drifts from the migrations.
-<<<<<<< HEAD
+- Run `npm run guard:tenancy` before pushing anything under `app/` or `lib/` — it is a blocking CI job and takes under a second.
 - Adding a service-role client anywhere? Document it in `docs/security/service-role-inventory.md` in the same PR — every service-role query bypasses RLS and must be justified. All three entry points count: `createServiceClient()` in the app layer, `createClient(SUPABASE_URL, resolveServiceKey())` in the edge functions, and a standalone operator script under `scripts/` reading the service key from `process.env`.
   - **Where in the inventory matters.** `npm run guard:tenancy` parses the `## App routes and pages` and `## Lib helpers` sections and cross-checks every row against an actual `createServiceClient()` call site *and* the site count in the heading — a row there naming anything else fails the build twice over. `## Edge Functions` and `## Operator scripts` are not parsed; document those there, or in prose, and do not "fix" a guard failure by editing the script's exclusion lists.
 - `npm run lint` runs on every PR (the `Lint` job in `.github/workflows/test.yml`) with `--max-warnings=0`, so a warning fails the job. The job is **not** yet in `main`'s branch protection, so a red `Lint` does not physically block a merge — run it locally before pushing. It was broken repo-wide by a brace-expansion/minimatch conflict (#299) until #309 scoped the override by major; any older instruction to skip lint is stale.
-=======
-- Run `npm run guard:tenancy` before pushing anything under `app/` or `lib/` — it is a blocking CI job and takes under a second.
-- Adding a service-role client anywhere? Document it in `docs/security/service-role-inventory.md` in the same PR — every service-role query bypasses RLS and must be justified. Both entry points count: `createServiceClient()` in the app layer, and `createClient(SUPABASE_URL, resolveServiceKey())` in the edge functions.
->>>>>>> 56171de (fix(members): address CRITICAL/HIGH review findings on CSV import/export)
 
 ## Git & PRs
 

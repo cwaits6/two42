@@ -29,6 +29,7 @@ do $$
 declare
   _org uuid;
   _admin uuid := gen_random_uuid();
+  _other uuid := gen_random_uuid();
   _family uuid;
   _group uuid;
   _member uuid;
@@ -41,6 +42,19 @@ begin
   -- landing role = 'admin'.
   insert into auth.users (id, email) values (_admin, 'admin@member-import.example.test');
 
+  -- A SECOND member, in the same org, who is not the admin and shares no
+  -- household with them. The profile-touching assertions below target this
+  -- one, not the admin.
+  --
+  -- Targeting the admin's own profile would prove nothing about the import:
+  -- "Profiles are updatable per access rules" is satisfied by
+  -- `(select auth.uid()) = id` for a self-update, so the assertion passes on
+  -- the self arm and never exercises the `or (select public.is_admin())` arm
+  -- that every real import row depends on. Same for the group assignment.
+  insert into public.access_requests (org_id, name, email, status)
+    values (_org, 'other member', 'other@member-import.example.test', 'approved');
+  insert into auth.users (id, email) values (_other, 'other@member-import.example.test');
+
   insert into public.family_units (org_id, family_name)
     values (_org, 'Import Suite Household') returning id into _family;
   insert into public.family_members (org_id, family_id, first_name, last_name, relationship)
@@ -50,6 +64,7 @@ begin
 
   perform set_config('member_import.org', _org::text, true);
   perform set_config('member_import.admin', _admin::text, true);
+  perform set_config('member_import.other', _other::text, true);
   perform set_config('member_import.family', _family::text, true);
   perform set_config('member_import.group', _group::text, true);
   perform set_config('member_import.member', _member::text, true);
@@ -76,7 +91,8 @@ declare
   _admin uuid := current_setting('member_import.admin')::uuid;
   _group uuid := current_setting('member_import.group')::uuid;
   _member uuid := current_setting('member_import.member')::uuid;
-  _profile uuid := current_setting('member_import.admin')::uuid;
+  -- Deliberately NOT the admin: see the fixture note above.
+  _profile uuid := current_setting('member_import.other')::uuid;
   _new_family uuid;
   _kinds text[] := array[
     'insert_family_unit: an org admin can create a household',
@@ -89,6 +105,7 @@ declare
   ];
   _errs text[] := '{}';
   _err text;
+  _rows int;
   i int;
 begin
   set local role authenticated;
@@ -110,16 +127,25 @@ begin
   end;
   _errs := _errs || _err;
 
+  -- From here down every statement is an UPDATE or DELETE, and for those an
+  -- exception is the WRONG thing to assert on by itself. RLS does not raise
+  -- when it denies a row — it filters it, so a blocked UPDATE affects zero
+  -- rows and reports success. Asserting only `_err is null` would therefore
+  -- pass even if no policy permitted the write at all, which is the same
+  -- false-success this feature's own applyWrites() had to be fixed for.
+  -- Each one records "no error AND it actually touched a row".
   begin
     update public.family_members set relationship = 'sibling' where id = _member;
-    _err := null;
+    get diagnostics _rows = row_count;
+    _err := case when _rows = 0 then 'matched no row (policy filtered it)' end;
   exception when others then _err := sqlerrm;
   end;
   _errs := _errs || _err;
 
   begin
     update public.profiles set city = 'Springfield' where id = _profile;
-    _err := null;
+    get diagnostics _rows = row_count;
+    _err := case when _rows = 0 then 'matched no row (policy filtered it)' end;
   exception when others then _err := sqlerrm;
   end;
   _errs := _errs || _err;
@@ -135,7 +161,8 @@ begin
   begin
     update public.profile_groups set is_leader = true
       where profile_id = _profile and group_id = _group;
-    _err := null;
+    get diagnostics _rows = row_count;
+    _err := case when _rows = 0 then 'matched no row (policy filtered it)' end;
   exception when others then _err := sqlerrm;
   end;
   _errs := _errs || _err;
@@ -143,7 +170,8 @@ begin
   begin
     delete from public.profile_groups
       where profile_id = _profile and group_id = _group;
-    _err := null;
+    get diagnostics _rows = row_count;
+    _err := case when _rows = 0 then 'matched no row (policy filtered it)' end;
   exception when others then _err := sqlerrm;
   end;
   _errs := _errs || _err;

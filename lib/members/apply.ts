@@ -85,6 +85,37 @@ export function redactFailure(failure: unknown): string {
 }
 
 /**
+ * Turn a matched-no-rows UPDATE/DELETE into a failure.
+ *
+ * PostgREST reports "matched nothing" as `error: null` with an empty result
+ * set, so without `.select()` every update and delete here is indistinguishable
+ * from a successful one. That is not a hypothetical: the `.eq("org_id", orgId)`
+ * predicate this module adds is exactly the kind of predicate that silently
+ * matches nothing, so the tenancy fix would otherwise have made the failure
+ * mode WORSE — a row from another tenant (or a row whose org_id disagrees with
+ * the caller's) would be skipped and reported as applied, and the admin's
+ * `appliedLines` would tell them to delete a line from their file that never
+ * actually landed.
+ *
+ * Zero rows is treated as a hard failure for deletes too, not just updates.
+ * "The membership was already gone" is the benign reading, but it is
+ * indistinguishable here from the alarming one — an org_id mismatch, meaning
+ * the snapshot the plan was computed from disagrees with what the database
+ * will let this caller write. Aborting is recoverable (the plan is recomputed
+ * from a fresh snapshot on the next run); a false "applied" is not.
+ */
+function noRowsTouched(
+  data: unknown[] | null,
+  kind: string
+): Error | null {
+  if (data !== null && data.length > 0) return null;
+  return new Error(
+    `${kind} matched no row — the target is missing, or its org_id disagrees ` +
+      "with the caller's; nothing was written"
+  );
+}
+
+/**
  * Execute planned writes in dependency order. Household inserts feed their
  * new ids to the family_members inserts that reference them by the per-file
  * household key, which is why the plan's ordering is load-bearing.
@@ -149,21 +180,23 @@ export async function applyWrites(
           break;
         }
         case "update_family_member": {
-          const { error } = await supabase
+          const { data, error } = await supabase
             .from("family_members")
             .update(write.values)
             .eq("id", write.id)
-            .eq("org_id", orgId);
-          failure = error;
+            .eq("org_id", orgId)
+            .select("id");
+          failure = error ?? noRowsTouched(data, "update_family_member");
           break;
         }
         case "update_profile": {
-          const { error } = await supabase
+          const { data, error } = await supabase
             .from("profiles")
             .update(write.values)
             .eq("id", write.id)
-            .eq("org_id", orgId);
-          failure = error;
+            .eq("org_id", orgId)
+            .select("id");
+          failure = error ?? noRowsTouched(data, "update_profile");
           break;
         }
         case "insert_profile_group": {
@@ -178,23 +211,25 @@ export async function applyWrites(
           break;
         }
         case "update_profile_group": {
-          const { error } = await supabase
+          const { data, error } = await supabase
             .from("profile_groups")
             .update({ is_leader: write.isLeader })
             .eq("profile_id", write.profileId)
             .eq("group_id", write.groupId)
-            .eq("org_id", orgId);
-          failure = error;
+            .eq("org_id", orgId)
+            .select("profile_id");
+          failure = error ?? noRowsTouched(data, "update_profile_group");
           break;
         }
         case "delete_profile_group": {
-          const { error } = await supabase
+          const { data, error } = await supabase
             .from("profile_groups")
             .delete()
             .eq("profile_id", write.profileId)
             .eq("group_id", write.groupId)
-            .eq("org_id", orgId);
-          failure = error;
+            .eq("org_id", orgId)
+            .select("profile_id");
+          failure = error ?? noRowsTouched(data, "delete_profile_group");
           break;
         }
         default: {

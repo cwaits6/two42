@@ -60,7 +60,8 @@ export type ImportErrorCode =
   | "INVALID_RELATIONSHIP"
   | "INVALID_ROLE"
   | "DUPLICATE_IN_FILE"
-  | "MISSING_HOUSEHOLD_NAME";
+  | "MISSING_HOUSEHOLD_NAME"
+  | "HOUSEHOLD_MOVE";
 
 export interface RowError {
   code: ImportErrorCode;
@@ -265,6 +266,24 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
       member,
     ]);
   }
+  // Same members, keyed by identity instead of household, so a row can be
+  // checked against the WHOLE org and not just the household it resolved to.
+  // Without this, moving someone to a different household reads as a brand
+  // new person there (see the HOUSEHOLD_MOVE check).
+  const familyMembersByPerson = new Map<string, SnapshotFamilyMember[]>();
+  for (const member of snapshot.familyMembers) {
+    const key = personKey(
+      member.first_name,
+      member.last_name,
+      member.birth_month,
+      member.birth_day,
+      member.birth_year
+    );
+    familyMembersByPerson.set(key, [
+      ...(familyMembersByPerson.get(key) ?? []),
+      member,
+    ]);
+  }
   const profilesByFamily = new Map<string, SnapshotProfile[]>();
   for (const profile of snapshot.profiles) {
     if (profile.family_id === null) continue;
@@ -372,11 +391,19 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
   // households, and that duplicate state is unrecoverable: it makes every
   // later import of the same file a permanent AMBIGUOUS_HOUSEHOLD and there
   // is no in-app household merge.
+  // Every branch is namespaced, the file-supplied key included. Passing
+  // household_key through verbatim would let a file whose cell literally
+  // reads `__name-smith` or `__row-2` collide with another group's synthetic
+  // key and silently merge two unrelated households — the same unrecoverable
+  // duplicate state described above, arrived at from the other direction.
+  // The prefix is stripped again by fileHouseholdKey() before the key is
+  // ever shown to an admin.
   const groupKey = (row: MemberRow): string =>
-    row.household_key ??
-    (row.household_name !== null
-      ? `__name-${norm(row.household_name)}`
-      : `__row-${row.line}`);
+    row.household_key !== null
+      ? `__key-${row.household_key}`
+      : row.household_name !== null
+        ? `__name-${norm(row.household_name)}`
+        : `__row-${row.line}`;
 
   // ---- step 2: in-file duplicates ---------------------------------------
   const seenEmails = new Set<string>();
@@ -480,9 +507,11 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
     // household name is a member fact.
     const primaryRows = groupRows.filter((row) => row.household_primary);
     const authoritative = primaryRows[0] ?? groupRows[0];
-    const group = isFileHouseholdKey(key)
-      ? `household_key "${key}"`
-      : "the same household_name";
+    const suppliedKey = fileHouseholdKey(key);
+    const group =
+      suppliedKey !== null
+        ? `household_key "${suppliedKey}"`
+        : "the same household_name";
     if (groupRows.length > 1 && primaryRows.length === 0) {
       resolution.warnings.push(
         `no row is flagged household_primary for ${group}; using the first row`
@@ -767,6 +796,41 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
         field: "household_name",
         message:
           "a family member without a login needs a household_name to create or join a household",
+      });
+      result.action = "error";
+      continue;
+    }
+
+    // This row is about to become a NEW family_members record. Matching only
+    // ever looked inside the household the row resolved to, so if the same
+    // person already exists in a DIFFERENT household, that insert duplicates
+    // them across two households and leaves the original behind — the same
+    // unrecoverable state the grouping key goes to such lengths to avoid,
+    // and one an admin would reach just by correcting someone's
+    // household_name.
+    //
+    // Rejected rather than moved. Supporting the move means deciding which
+    // household's fields win, what happens to a household the move empties,
+    // and how it interacts with household_primary — product questions this
+    // module should not answer by guessing. Failing names both households so
+    // the admin can do it deliberately in the app.
+    const existingElsewhere = (
+      familyMembersByPerson.get(
+        personKey(
+          row.first_name,
+          row.last_name,
+          row.birth_month,
+          row.birth_day,
+          row.birth_year
+        )
+      ) ?? []
+    ).filter((member) => member.family_id !== resolution.familyId);
+    if (existingElsewhere.length > 0) {
+      fail(row, {
+        code: "HOUSEHOLD_MOVE",
+        field: "household_name",
+        message:
+          "this person already exists in a different household; an import cannot move someone between households — move them on the members page, then re-import",
       });
       result.action = "error";
       continue;
@@ -1093,9 +1157,14 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
   return { rows: results, summary, writes };
 }
 
-/** True when the key came from the file's household_key column, not one of
- *  the synthetics groupKey() derives (`__name-` / `__row-`). Only a real key
- *  is worth naming back to the admin in a warning. */
-function isFileHouseholdKey(key: string): boolean {
-  return !key.startsWith("__row-") && !key.startsWith("__name-");
+/** The file's own household_key when the group came from one, else null.
+ *
+ *  Tests the `__key-` prefix rather than excluding the other two synthetics:
+ *  a negative test ("not `__name-`, not `__row-`") would classify a file key
+ *  whose value happens to start with one of those prefixes as synthetic and
+ *  suppress it from the warning that names it. Returns the original cell
+ *  value with the prefix stripped — the admin typed that string and has to
+ *  find it in their file. */
+function fileHouseholdKey(key: string): string | null {
+  return key.startsWith("__key-") ? key.slice("__key-".length) : null;
 }

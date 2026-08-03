@@ -36,9 +36,18 @@ function fakeClient(options: {
           seen.push([column, value]);
           return chain;
         },
+        // `in` rather than `?? []`: the stub has to distinguish "this test
+        // said nothing about the table" from "this test explicitly returned
+        // null". Collapsing them with `?? []` means an explicit null is
+        // converted to [] HERE and loadOrgSnapshot never sees one, so the
+        // null-data test below would pass against a snapshot.ts with its
+        // `?? []` fallbacks deleted — the exact regression it exists to catch.
         order: () =>
           Promise.resolve({
-            data: options.data?.[table as TableName] ?? [],
+            data:
+              options.data && (table as TableName) in options.data
+                ? options.data[table as TableName]
+                : [],
             error: options.errors?.[table as TableName] ?? null,
           }),
       };

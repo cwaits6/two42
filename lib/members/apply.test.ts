@@ -5,7 +5,7 @@
 // wrong .eq() here flips is_leader on the wrong row or silently no-ops, and
 // a no-op is indistinguishable from success without these.
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { applyWrites, redactFailure } from "@/lib/members/apply";
 import type { Database } from "@/lib/supabase/database.types";
@@ -21,9 +21,19 @@ interface Call {
 /** Per-table scripted outcome: undefined = success. */
 type Failures = Record<string, unknown>;
 
-function fakeClient(options: { failures?: Failures; insertedId?: string } = {}) {
+function fakeClient(
+  options: {
+    failures?: Failures;
+    insertedId?: string;
+    /** Tables whose UPDATE/DELETE should match zero rows — PostgREST's
+     *  `error: null` + empty set, which is what an org_id mismatch looks
+     *  like from the client side. */
+    matchesNothing?: string[];
+  } = {}
+) {
   const calls: Call[] = [];
   const failures = options.failures ?? {};
+  const matchesNothing = new Set(options.matchesNothing ?? []);
 
   const builder = (table: string, op: Call["op"], payload?: unknown) => {
     const call: Call = { table, op, payload, filters: [] };
@@ -43,9 +53,13 @@ function fakeClient(options: { failures?: Failures; insertedId?: string } = {}) 
           error,
         });
       },
-      // Awaiting the builder without .single() resolves to { error }.
-      then(resolve: (value: { error: unknown }) => unknown) {
-        return Promise.resolve(resolve({ error }));
+      // Awaiting the builder without .single() resolves to { data, error }.
+      // `data` is what applyWrites reads to tell "updated one row" from
+      // "matched nothing"; a bare insert ignores it.
+      then(resolve: (value: { data: unknown[] | null; error: unknown }) => unknown) {
+        const data =
+          error !== null ? null : matchesNothing.has(table) ? [] : [{ id: "row-1" }];
+        return Promise.resolve(resolve({ data, error }));
       },
     };
     return chain;
@@ -288,6 +302,14 @@ describe("applyWrites — write routing", () => {
 });
 
 describe("applyWrites — failure accounting", () => {
+  // Four tests here spy on console.error to keep the suite output clean.
+  // Without this the spies stack across tests, so `spy.mock.calls[0]` in the
+  // redaction test below can read a call recorded by an EARLIER test rather
+  // than its own — a false pass that survives the assertion being wrong.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   const spread: PlannedWrite[] = [
     { kind: "update_profile", line: 1, id: "p1", values: { city: "A" } },
     {
@@ -381,6 +403,63 @@ describe("applyWrites — failure accounting", () => {
     const logged = spy.mock.calls[0].join(" ");
     expect(logged).not.toContain("ada@example.com");
     expect(logged).not.toContain("Springfield");
+  });
+
+  // PostgREST reports "matched no row" as error: null with an empty result
+  // set. Without the .select() these assert, applyWrites cannot tell that
+  // from a successful write — and the .eq("org_id") predicate is exactly the
+  // kind that matches nothing, so a cross-org row would be counted applied.
+  const zeroRowKinds: PlannedWrite[][] = [
+    [{ kind: "update_profile", line: 4, id: "p1", values: { city: "A" } }],
+    [
+      {
+        kind: "update_family_member",
+        line: 4,
+        id: "m1",
+        values: { relationship: "child" },
+      },
+    ],
+    [
+      {
+        kind: "update_profile_group",
+        line: 4,
+        profileId: "p1",
+        groupId: "g1",
+        isLeader: true,
+      },
+    ],
+    [
+      {
+        kind: "delete_profile_group",
+        line: 4,
+        profileId: "p1",
+        groupId: "g1",
+      },
+    ],
+  ];
+
+  it.each(zeroRowKinds)(
+    "fails rather than reporting success when %o matches no row",
+    async (write) => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const { client } = fakeClient({
+        matchesNothing: ["profiles", "family_members", "profile_groups"],
+      });
+      const result = await applyWrites(client, USER, ORG, [write]);
+      expect(result.ok).toBe(false);
+      expect(result.applied).toBe(0);
+      expect(result.ok === false && result.failedKind).toBe(write.kind);
+      expect(result.ok === false && result.appliedLines).toEqual([]);
+    }
+  );
+
+  it("still counts a matched update as applied", async () => {
+    const { client } = fakeClient({});
+    const result = await applyWrites(client, USER, ORG, [
+      { kind: "update_profile", line: 1, id: "p1", values: { city: "A" } },
+    ]);
+    expect(result.ok).toBe(true);
+    expect(result.applied).toBe(1);
   });
 });
 

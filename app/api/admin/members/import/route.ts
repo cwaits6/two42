@@ -72,7 +72,12 @@ export async function POST(request: Request) {
   // escape to Next's default 500, which carries no Cache-Control: no-store
   // and logs nothing under this route's prefix.
   let text: string;
-  const contentType = request.headers.get("content-type") ?? "";
+  // Lowercased once: media type names are case-insensitive per RFC 9110, so
+  // `Multipart/Form-Data` and `TEXT/CSV` are both legal and both would miss
+  // the raw substring checks below and 415 a well-formed request. Only the
+  // type is folded — parameter VALUES (a multipart boundary) are
+  // case-sensitive, and nothing here reads one.
+  const contentType = (request.headers.get("content-type") ?? "").toLowerCase();
   if (contentType.includes("multipart/form-data")) {
     let form: FormData;
     try {
