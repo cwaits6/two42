@@ -5,19 +5,12 @@
     {
       "description": "Production dependencies get their own release-please section and cut a patch release",
       "matchDepTypes": ["dependencies"],
-      "commitMessagePrefix": "deps:",
-      "minimumReleaseAge": "3 days"
+      "commitMessagePrefix": "deps:"
     },
     {
       "description": "Dev dependencies stay out of the release history entirely",
       "matchDepTypes": ["devDependencies"],
-      "commitMessagePrefix": "chore(deps):",
-      "minimumReleaseAge": "3 days"
-    },
-    {
-      "description": "Re-assert the preset's vulnerability fast-track: the rules above match security updates too, and later rules win",
-      "matchUpdateTypes": ["vulnerability"],
-      "minimumReleaseAge": "0 seconds"
+      "commitMessagePrefix": "chore(deps):"
     }
   ]
 }
