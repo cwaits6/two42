@@ -1,53 +1,55 @@
-# [1.4.0](https://github.com/cwaits6/two42/compare/v1.3.1...v1.4.0) (2026-08-02)
+# Changelog
+
+## [0.29.0](https://github.com/cwaits6/two42/compare/v0.28.1...v0.29.0) (2026-08-02)
 
 
 ### Features
 
 * **platform:** /platform operator area + org lifecycle (CWA-11 Phase 4a, stream 1/2) ([#325](https://github.com/cwaits6/two42/issues/325)) ([7fae19f](https://github.com/cwaits6/two42/commit/7fae19fa070c806ca338aa84b922fe062a5aa78f)), closes [#317](https://github.com/cwaits6/two42/issues/317) [#317](https://github.com/cwaits6/two42/issues/317) [#318](https://github.com/cwaits6/two42/issues/318) [#318](https://github.com/cwaits6/two42/issues/318) [#FFFF00](https://github.com/cwaits6/two42/issues/FFFF00) [#FFFFFF](https://github.com/cwaits6/two42/issues/FFFFFF) [#FFFFFF](https://github.com/cwaits6/two42/issues/FFFFFF) [#B85C38](https://github.com/cwaits6/two42/issues/B85C38) [#319](https://github.com/cwaits6/two42/issues/319) [#213](https://github.com/cwaits6/two42/issues/213) [#B85C38](https://github.com/cwaits6/two42/issues/B85C38) [#BF6C4C](https://github.com/cwaits6/two42/issues/BF6C4C) [#BE6B49](https://github.com/cwaits6/two42/issues/BE6B49) [#A65332](https://github.com/cwaits6/two42/issues/A65332) [#326](https://github.com/cwaits6/two42/issues/326)
 
-## [1.3.1](https://github.com/cwaits6/two42/compare/v1.3.0...v1.3.1) (2026-08-02)
+## [0.28.1](https://github.com/cwaits6/two42/compare/v0.28.0...v0.28.1) (2026-08-02)
 
 
 ### Bug Fixes
 
 * **functions:** pin supabase-js, brand cron mail per org, and isolate per-team failures ([#324](https://github.com/cwaits6/two42/issues/324)) ([4449efb](https://github.com/cwaits6/two42/commit/4449efbe6eb705afb67304caff968d2c99821723)), closes [#309](https://github.com/cwaits6/two42/issues/309) [#311](https://github.com/cwaits6/two42/issues/311) [#322](https://github.com/cwaits6/two42/issues/322) [#315](https://github.com/cwaits6/two42/issues/315) [#316](https://github.com/cwaits6/two42/issues/316)
 
-# [1.3.0](https://github.com/cwaits6/two42/compare/v1.2.0...v1.3.0) (2026-08-02)
+## [0.28.0](https://github.com/cwaits6/two42/compare/v0.27.0...v0.28.0) (2026-08-02)
 
 
 ### Features
 
 * **tenancy:** app-layer org resolution + public per-org join route ([#323](https://github.com/cwaits6/two42/issues/323)) ([8566b8f](https://github.com/cwaits6/two42/commit/8566b8f204173a69b78344ce9a413726d0eda9b5)), closes [#314](https://github.com/cwaits6/two42/issues/314) [#213](https://github.com/cwaits6/two42/issues/213)
 
-# [1.2.0](https://github.com/cwaits6/two42/compare/v1.1.1...v1.2.0) (2026-08-02)
+## [0.27.0](https://github.com/cwaits6/two42/compare/v0.26.1...v0.27.0) (2026-08-02)
 
 
 ### Features
 
 * **branding:** org-branded theme and email (CWA-10 Phase 3, stream 3/3) ([#307](https://github.com/cwaits6/two42/issues/307)) ([acb7a58](https://github.com/cwaits6/two42/commit/acb7a588729b2ae5f5c724333a6d38dc82680e15)), closes [#1](https://github.com/cwaits6/two42/issues/1) [#212](https://github.com/cwaits6/two42/issues/212) [#1](https://github.com/cwaits6/two42/issues/1) [#39](https://github.com/cwaits6/two42/issues/39)
 
-## [1.1.1](https://github.com/cwaits6/two42/compare/v1.1.0...v1.1.1) (2026-08-02)
+## [0.26.1](https://github.com/cwaits6/two42/compare/v0.26.0...v0.26.1) (2026-08-02)
 
 
 ### Bug Fixes
 
 * **tenancy:** derive org_id from validated context at every app service-role call site ([#306](https://github.com/cwaits6/two42/issues/306)) ([5e11b44](https://github.com/cwaits6/two42/commit/5e11b443ac38e8bfeba8d78a7efe81826325f0f1))
 
-# [1.1.0](https://github.com/cwaits6/two42/compare/v1.0.1...v1.1.0) (2026-08-02)
+## [0.26.0](https://github.com/cwaits6/two42/compare/v0.25.1...v0.26.0) (2026-08-02)
 
 
 ### Features
 
 * **functions:** iterate organizations in reminder edge functions ([#305](https://github.com/cwaits6/two42/issues/305)) ([5a111a6](https://github.com/cwaits6/two42/commit/5a111a606d53e1480b1e51c2310ceb9f7af08636)), closes [#300](https://github.com/cwaits6/two42/issues/300) [#212](https://github.com/cwaits6/two42/issues/212) [#306](https://github.com/cwaits6/two42/issues/306)
 
-## [1.0.1](https://github.com/cwaits6/two42/compare/v1.0.0...v1.0.1) (2026-08-02)
+## [0.25.1](https://github.com/cwaits6/two42/compare/v0.25.0...v0.25.1) (2026-08-02)
 
 
 ### Bug Fixes
 
 * **functions:** resolve service key from platform-injected env vars ([#300](https://github.com/cwaits6/two42/issues/300)) ([834d76b](https://github.com/cwaits6/two42/commit/834d76b4052c7493e320dd25b922387341856ccb))
 
-# [1.0.0](https://github.com/cwaits6/two42/compare/v0.24.0...v1.0.0) (2026-08-02)
+## [0.25.0](https://github.com/cwaits6/two42/compare/v0.24.0...v0.25.0) (2026-08-02)
 
 
 ### Features
@@ -98,14 +100,14 @@ preserved, and a same-id row in another org is left untouched.
 
 Claude-Session: https://claude.ai/code/session_01CoqgxebFzS3JVQFc4HzStv
 
-# [0.24.0](https://github.com/cwaits6/two42/compare/v0.23.0...v0.24.0) (2026-07-31)
+## [0.24.0](https://github.com/cwaits6/two42/compare/v0.23.0...v0.24.0) (2026-07-31)
 
 
 ### Features
 
 * **tenancy:** Phase 1 org spine — organizations, platform_admins, org_id ([#210](https://github.com/cwaits6/two42/issues/210)) ([#297](https://github.com/cwaits6/two42/issues/297)) ([f486773](https://github.com/cwaits6/two42/commit/f486773d29a2d221dc89d913ab9d1a7f4581d077)), closes [#221](https://github.com/cwaits6/two42/issues/221)
 
-# [0.23.0](https://github.com/cwaits6/two42/compare/v0.22.3...v0.23.0) (2026-07-31)
+## [0.23.0](https://github.com/cwaits6/two42/compare/v0.22.3...v0.23.0) (2026-07-31)
 
 
 ### Features
@@ -133,7 +135,7 @@ Claude-Session: https://claude.ai/code/session_01CoqgxebFzS3JVQFc4HzStv
 
 * redirect signed-in members away from public landing and join pages ([#290](https://github.com/cwaits6/small-group-hub/issues/290)) ([76b6adf](https://github.com/cwaits6/small-group-hub/commit/76b6adf555660588457e52bc267319984185b09d))
 
-# [0.22.0](https://github.com/cwaits6/small-group-hub/compare/v0.21.2...v0.22.0) (2026-07-29)
+## [0.22.0](https://github.com/cwaits6/small-group-hub/compare/v0.21.2...v0.22.0) (2026-07-29)
 
 
 ### Features
@@ -154,7 +156,7 @@ Claude-Session: https://claude.ai/code/session_01CoqgxebFzS3JVQFc4HzStv
 
 * unify page-header and container shell across people surfaces ([#279](https://github.com/cwaits6/small-group-hub/issues/279)) ([d5cbf72](https://github.com/cwaits6/small-group-hub/commit/d5cbf727e797069abf6ceceaf69d92495c82199a)), closes [#253](https://github.com/cwaits6/small-group-hub/issues/253) [#239](https://github.com/cwaits6/small-group-hub/issues/239)
 
-# [0.21.0](https://github.com/cwaits6/small-group-hub/compare/v0.20.10...v0.21.0) (2026-07-27)
+## [0.21.0](https://github.com/cwaits6/small-group-hub/compare/v0.20.10...v0.21.0) (2026-07-27)
 
 
 ### Features
@@ -235,7 +237,7 @@ Claude-Session: https://claude.ai/code/session_01CoqgxebFzS3JVQFc4HzStv
 
 * replace raw hex color literals with brand design tokens ([#252](https://github.com/cwaits6/small-group-hub/issues/252)) ([fc3bda4](https://github.com/cwaits6/small-group-hub/commit/fc3bda49aaf153e217a0bd71fca33b046d5d853b)), closes [#234](https://github.com/cwaits6/small-group-hub/issues/234) [#234](https://github.com/cwaits6/small-group-hub/issues/234) [#e5e7eb](https://github.com/cwaits6/small-group-hub/issues/e5e7eb) [#8a6412](https://github.com/cwaits6/small-group-hub/issues/8a6412)
 
-# [0.20.0](https://github.com/cwaits6/small-group-hub/compare/v0.19.1...v0.20.0) (2026-07-25)
+## [0.20.0](https://github.com/cwaits6/small-group-hub/compare/v0.19.1...v0.20.0) (2026-07-25)
 
 
 ### Bug Fixes
@@ -254,14 +256,14 @@ Claude-Session: https://claude.ai/code/session_01CoqgxebFzS3JVQFc4HzStv
 
 * restore blocknote build (y-prosemirror) and clear Trivy CVEs ([#255](https://github.com/cwaits6/small-group-hub/issues/255)) ([656bf3c](https://github.com/cwaits6/small-group-hub/commit/656bf3c59b330a14095444dad71642bcfa8cb3b8))
 
-# [0.19.0](https://github.com/cwaits6/small-group-hub/compare/v0.18.0...v0.19.0) (2026-07-17)
+## [0.19.0](https://github.com/cwaits6/small-group-hub/compare/v0.18.0...v0.19.0) (2026-07-17)
 
 
 ### Features
 
 * make group roles deployment-configurable ([#222](https://github.com/cwaits6/small-group-hub/issues/222)) ([568f7e4](https://github.com/cwaits6/small-group-hub/commit/568f7e4df32da8fb5f14845c4de3ac4b5a65d2ff))
 
-# [0.18.0](https://github.com/cwaits6/small-group-hub/compare/v0.17.1...v0.18.0) (2026-07-16)
+## [0.18.0](https://github.com/cwaits6/small-group-hub/compare/v0.17.1...v0.18.0) (2026-07-16)
 
 
 ### Features
@@ -275,7 +277,7 @@ Claude-Session: https://claude.ai/code/session_01CoqgxebFzS3JVQFc4HzStv
 
 * **db:** RLS helper perf, index tune-up, FK delete behavior ([#196](https://github.com/cwaits6/small-group-hub/issues/196)) ([fc4a352](https://github.com/cwaits6/small-group-hub/commit/fc4a352fda8d92ea0639679526863bb2227e897a))
 
-# [0.17.0](https://github.com/cwaits6/small-group-hub/compare/v0.16.2...v0.17.0) (2026-07-12)
+## [0.17.0](https://github.com/cwaits6/small-group-hub/compare/v0.16.2...v0.17.0) (2026-07-12)
 
 
 ### Features
@@ -296,28 +298,28 @@ Claude-Session: https://claude.ai/code/session_01CoqgxebFzS3JVQFc4HzStv
 
 * **ui:** consistent button hover + click-off dismissal ([#187](https://github.com/cwaits6/small-group-hub/issues/187)) ([4525c85](https://github.com/cwaits6/small-group-hub/commit/4525c8555c74fad33d182643f22134ae04eb038d))
 
-# [0.16.0](https://github.com/cwaits6/small-group-hub/compare/v0.15.0...v0.16.0) (2026-07-09)
+## [0.16.0](https://github.com/cwaits6/small-group-hub/compare/v0.15.0...v0.16.0) (2026-07-09)
 
 
 ### Features
 
 * **about:** About Our Class page with GUI-editable summary and teachers ([#186](https://github.com/cwaits6/small-group-hub/issues/186)) ([7745a0e](https://github.com/cwaits6/small-group-hub/commit/7745a0e982421a710d9618bdfa56be84b70f0206))
 
-# [0.15.0](https://github.com/cwaits6/small-group-hub/compare/v0.14.0...v0.15.0) (2026-07-09)
+## [0.15.0](https://github.com/cwaits6/small-group-hub/compare/v0.14.0...v0.15.0) (2026-07-09)
 
 
 ### Features
 
 * **events:** time-aware Zoom join button on dashboard and event page ([#185](https://github.com/cwaits6/small-group-hub/issues/185)) ([a3edb51](https://github.com/cwaits6/small-group-hub/commit/a3edb51e9ffa484a815315bca91174ffde34713a))
 
-# [0.14.0](https://github.com/cwaits6/small-group-hub/compare/v0.13.0...v0.14.0) (2026-07-09)
+## [0.14.0](https://github.com/cwaits6/small-group-hub/compare/v0.13.0...v0.14.0) (2026-07-09)
 
 
 ### Features
 
 * **prayer:** prayer wall with audience-scoped requests and synced call sessions ([#184](https://github.com/cwaits6/small-group-hub/issues/184)) ([03b7e7a](https://github.com/cwaits6/small-group-hub/commit/03b7e7a14d2418592af1c049dba80acad50249c3))
 
-# [0.13.0](https://github.com/cwaits6/small-group-hub/compare/v0.12.1...v0.13.0) (2026-07-08)
+## [0.13.0](https://github.com/cwaits6/small-group-hub/compare/v0.12.1...v0.13.0) (2026-07-08)
 
 
 ### Features
@@ -331,7 +333,7 @@ Claude-Session: https://claude.ai/code/session_01CoqgxebFzS3JVQFc4HzStv
 
 * **nav:** mobile access to sidebar nav, admin highlight, pointer cursors ([#182](https://github.com/cwaits6/small-group-hub/issues/182)) ([f8d4e20](https://github.com/cwaits6/small-group-hub/commit/f8d4e20d27d27debb035930322dfd92c0b9a8762))
 
-# [0.12.0](https://github.com/cwaits6/small-group-hub/compare/v0.11.1...v0.12.0) (2026-07-07)
+## [0.12.0](https://github.com/cwaits6/small-group-hub/compare/v0.11.1...v0.12.0) (2026-07-07)
 
 
 ### Features
@@ -345,7 +347,7 @@ Claude-Session: https://claude.ai/code/session_01CoqgxebFzS3JVQFc4HzStv
 
 * **serving:** membership-gated visibility, spouse picker, and broadcast fixes ([#178](https://github.com/cwaits6/small-group-hub/issues/178)) ([dfe6cf0](https://github.com/cwaits6/small-group-hub/commit/dfe6cf0271c90bbc847eb1d3ca095669adcd8a14))
 
-# [0.11.0](https://github.com/cwaits6/small-group-hub/compare/v0.10.1...v0.11.0) (2026-07-05)
+## [0.11.0](https://github.com/cwaits6/small-group-hub/compare/v0.10.1...v0.11.0) (2026-07-05)
 
 
 ### Features
@@ -359,49 +361,49 @@ Claude-Session: https://claude.ai/code/session_01CoqgxebFzS3JVQFc4HzStv
 
 * **directory:** address review findings from directory UX release ([#174](https://github.com/cwaits6/small-group-hub/issues/174)) ([760896b](https://github.com/cwaits6/small-group-hub/commit/760896b3b414c5432fda32f8289563db61b1866a))
 
-# [0.10.0](https://github.com/cwaits6/small-group-hub/compare/v0.9.0...v0.10.0) (2026-07-05)
+## [0.10.0](https://github.com/cwaits6/small-group-hub/compare/v0.9.0...v0.10.0) (2026-07-05)
 
 
 ### Features
 
 * **directory:** directory UX polish — groups view, family photos, printable directory, birthday browsing ([#173](https://github.com/cwaits6/small-group-hub/issues/173)) ([8b7efba](https://github.com/cwaits6/small-group-hub/commit/8b7efbaed7f393a3e85e08c5a901ad77dfc59573))
 
-# [0.9.0](https://github.com/cwaits6/small-group-hub/compare/v0.8.0...v0.9.0) (2026-06-09)
+## [0.9.0](https://github.com/cwaits6/small-group-hub/compare/v0.8.0...v0.9.0) (2026-06-09)
 
 
 ### Features
 
 * **brand:** Morning rebrand across auth, dashboard, events, and lectures ([#141](https://github.com/cwaits6/small-group-hub/issues/141)) ([9779b27](https://github.com/cwaits6/small-group-hub/commit/9779b27a477fb24c929fe3162ec2c006cbbf97f9))
 
-# [0.8.0](https://github.com/cwaits6/small-group-hub/compare/v0.7.0...v0.8.0) (2026-05-17)
+## [0.8.0](https://github.com/cwaits6/small-group-hub/compare/v0.7.0...v0.8.0) (2026-05-17)
 
 
 ### Features
 
 * **directory:** member directory revamp — households, groups, setup wizard, vCard, bulk invite ([#107](https://github.com/cwaits6/small-group-hub/issues/107)) ([c73cc2a](https://github.com/cwaits6/small-group-hub/commit/c73cc2a3e9f2f228041364c63df3c3bcc3b5ad76))
 
-# [0.7.0](https://github.com/cwaits6/small-group-hub/compare/v0.6.0...v0.7.0) (2026-04-21)
+## [0.7.0](https://github.com/cwaits6/small-group-hub/compare/v0.6.0...v0.7.0) (2026-04-21)
 
 
 ### Features
 
 * gate content behind auth, fix ICS subscriptions ([#85](https://github.com/cwaits6/small-group-hub/issues/85)) ([8aab788](https://github.com/cwaits6/small-group-hub/commit/8aab788bf86294bfb7105388fdc3eaac34b7cd53))
 
-# [0.6.0](https://github.com/cwaits6/small-group-hub/compare/v0.5.0...v0.6.0) (2026-04-20)
+## [0.6.0](https://github.com/cwaits6/small-group-hub/compare/v0.5.0...v0.6.0) (2026-04-20)
 
 
 ### Features
 
 * event calendar view with FullCalendar, ICS feeds, recurring events, location autocomplete, and admin-defined calendars ([#76](https://github.com/cwaits6/small-group-hub/issues/76)) ([206f1d7](https://github.com/cwaits6/small-group-hub/commit/206f1d7d95a63cd839514b208c829789d64f222a))
 
-# [0.5.0](https://github.com/cwaits6/small-group-hub/compare/v0.4.0...v0.5.0) (2026-04-11)
+## [0.5.0](https://github.com/cwaits6/small-group-hub/compare/v0.4.0...v0.5.0) (2026-04-11)
 
 
 ### Features
 
 * member directory with family grouping and per-field privacy ([#66](https://github.com/cwaits6/small-group-hub/issues/66)) ([050d3e9](https://github.com/cwaits6/small-group-hub/commit/050d3e922338de5ffe6f7ee9694f62c544b16e67))
 
-# [0.4.0](https://github.com/cwaits6/small-group-hub/compare/v0.3.2...v0.4.0) (2026-04-10)
+## [0.4.0](https://github.com/cwaits6/small-group-hub/compare/v0.3.2...v0.4.0) (2026-04-10)
 
 
 ### Features
@@ -422,14 +424,14 @@ Claude-Session: https://claude.ai/code/session_01CoqgxebFzS3JVQFc4HzStv
 
 * **deps:** update nextjs monorepo to v16.2.3 ([#57](https://github.com/cwaits6/small-group-hub/issues/57)) ([1f94869](https://github.com/cwaits6/small-group-hub/commit/1f948697b4f4c126074431396685f1c16416b810))
 
-# [0.3.0](https://github.com/cwaits6/small-group-hub/compare/v0.2.0...v0.3.0) (2026-04-10)
+## [0.3.0](https://github.com/cwaits6/small-group-hub/compare/v0.2.0...v0.3.0) (2026-04-10)
 
 
 ### Features
 
 * configurable pages and expanded site settings ([#61](https://github.com/cwaits6/small-group-hub/issues/61)) ([d70188b](https://github.com/cwaits6/small-group-hub/commit/d70188bc01d7483f3cbfe15c16379457e21ad2a9))
 
-# [0.2.0](https://github.com/cwaits6/small-group-hub/compare/v0.1.8...v0.2.0) (2026-04-04)
+## [0.2.0](https://github.com/cwaits6/small-group-hub/compare/v0.1.8...v0.2.0) (2026-04-04)
 
 
 ### Features
