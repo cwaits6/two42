@@ -35,7 +35,12 @@ export async function mintSignedUrl(
   if (!url) return null;
   const parsed = parseStoragePublicUrl(url);
   if (!parsed) {
-    console.warn(`mintSignedUrl: unparseable storage URL ${url}`);
+    // Strip the query/fragment before logging: an accidentally re-signed
+    // *signed* URL is rejected here, and its query string carries a bearer
+    // token that must never reach logs.
+    console.warn(
+      `mintSignedUrl: unparseable storage URL ${url.split(/[?#]/)[0]}`,
+    );
     return null;
   }
   const supabase = await createClient();

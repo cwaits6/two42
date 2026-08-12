@@ -210,9 +210,10 @@ render on nearly every page (one mint per page load cycle), and turns a
 leaked URL from a permanent capability into a same-day-dead one. Failure is
 soft per item: a malformed stored value, a transient Storage error, or an
 un-rekeyed legacy object (see ADR-4 below — such a key fails the org floor's
-`[1] = org_id` check for *every* principal, so post-CWA-59 it is unreadable
-app-wide until the rekey script moves it) renders as a missing image, never
-a crashed page.
+`[1] = org_id` check for *every* anon/authenticated RLS-constrained
+principal, so post-CWA-59 no application read can reach it until the rekey
+script — which runs with the service role and bypasses RLS — moves it)
+renders as a missing image, never a crashed page.
 
 The physical re-key of pre-existing (un-prefixed) objects is deferred to
 `scripts/rekey-storage-objects.mjs` (ADR-4, see
@@ -220,11 +221,14 @@ The physical re-key of pre-existing (un-prefixed) objects is deferred to
 `UPDATE storage.objects SET name = …` would orphan blobs, because Storage
 keys the physical file by `bucket/name`. A legacy key's first path segment
 is not an org id, so the restrictive floor matches no row for it under *any*
-principal: it is invisible to every client write path — deleting one is a
+RLS-constrained (anon/authenticated) principal: it is invisible to every
+application client write path — deleting one is a
 silent no-op: the `storage.objects` row and its blob both survive and the
 caller still sees success — and, since CWA-59 made reads RLS-gated as well,
-it is **unreadable app-wide** too (while the buckets were public it kept
-rendering via `/object/public/*`; that path is closed). This is why the
+it is **unreadable to anon/authenticated application callers** too (while
+the buckets were public it kept rendering via `/object/public/*`; that path
+is closed — only service-role access, e.g. the rekey script itself, still
+reaches such a key). This is why the
 script is a hard precondition for the CWA-59 private-bucket deploy, not
 merely cleanup. Nothing is orphaned by the delete path — the residue is the
 opposite shape. A delete-then-reupload leaves the legacy object sitting at

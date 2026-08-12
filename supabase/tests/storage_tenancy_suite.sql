@@ -70,12 +70,19 @@ insert into storage_tenancy_results
 -- SELECT policies gate (see docs/security/tenancy-model.md "Storage
 -- tenancy"). This inverts the previous count-of-2 public assertion; flipping
 -- a bucket back to public must fail CI so the read posture gets revisited
--- deliberately, not drifted past.
+-- deliberately, not drifted past. Assert the row count first so the privacy
+-- check cannot pass vacuously on missing/renamed bucket rows.
 insert into storage_tenancy_results
   select is(
     (select count(*) from storage.buckets
-      where id in ('avatars', 'event-images') and public),
-    0::bigint,
+      where id in ('avatars', 'event-images')),
+    2::bigint,
+    'ADR-3 (revised, CWA-59): both target bucket rows (avatars, event-images) exist');
+insert into storage_tenancy_results
+  select is(
+    (select count(*) from storage.buckets
+      where id in ('avatars', 'event-images') and not public),
+    2::bigint,
     'ADR-3 (revised, CWA-59): avatars and event-images buckets are both public => false (signed-URL reads)');
 
 -- ── Fixtures: two orgs, one object per kind per org ─────────────────────────

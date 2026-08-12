@@ -17,8 +17,28 @@
 --
 -- Sequencing: scripts/rekey-storage-objects.mjs (#334 / CWA-60) must run
 -- against production BEFORE this migration deploys. A legacy un-prefixed key
--- fails the org floor's [1] = org_id check for every principal, so once reads
--- are RLS-gated an un-rekeyed object becomes unreadable app-wide, not just
--- unwritable.
+-- fails the org floor's [1] = org_id check for every anon/authenticated
+-- (RLS-constrained) principal, so once reads are RLS-gated an un-rekeyed
+-- object becomes unreadable to the entire application surface, not just
+-- unwritable. Service-role callers bypass RLS — which is exactly how the
+-- rekey operator can still reach and move such keys.
+
+-- Fail closed on unexpected bucket state: a bare UPDATE would silently
+-- no-op if either bucket row were missing or renamed, deploying a "private
+-- buckets" migration that privatized nothing.
+do $$
+declare
+  bucket_count integer;
+begin
+  select count(*) into bucket_count
+    from storage.buckets
+    where id in ('avatars', 'event-images');
+  if bucket_count <> 2 then
+    raise exception
+      'storage_private_buckets: expected exactly 2 target bucket rows (avatars, event-images), found %',
+      bucket_count;
+  end if;
+end
+$$;
 
 update storage.buckets set public = false where id in ('avatars', 'event-images');
