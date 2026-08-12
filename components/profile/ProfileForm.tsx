@@ -47,13 +47,16 @@ interface ProfileFormProps {
   /** Admin mode allows editing family assignment + ignores privacy enforcement on save */
   isAdmin?: boolean;
   /**
-   * Whether the caller is allowed to write this profile's avatar object.
-   * Only meaningful when isAdmin is true — self- and household-leader edits
-   * always have a matching storage write arm, so this defaults to true and
-   * only the admin route needs to compute and pass a real value. When false
-   * under isAdmin, the photo control is hidden rather than shown and left to
-   * fail (no admin write arm exists for another household's profiles/ path;
-   * see CWA-62 / #337).
+   * Whether the caller is allowed to write this profile's avatar object —
+   * see lib/members/avatar-eligibility.ts for the exact predicate, which
+   * mirrors the storage RLS policy's two write arms (self, and a household
+   * leader with relationship primary/spouse editing another member of the
+   * same household). Only meaningful when isAdmin is true — self- and
+   * household-leader edits always have a matching storage write arm, so
+   * this defaults to true and only the admin route needs to compute and
+   * pass a real value. When false under isAdmin, the photo control is
+   * hidden rather than shown and left to fail (no matching storage write
+   * arm exists; see CWA-62 / #337).
    */
   canManageAvatar?: boolean;
   /**
@@ -450,7 +453,8 @@ export function ProfileForm({
           )}
 
           {/* Photo — hidden for admins editing a profile they have no
-              storage write arm for (not themselves, not their household);
+              storage write arm for: not themselves, and not a household
+              they lead (relationship primary/spouse) with the target;
               see CWA-62 / #337. */}
           {(!isAdmin || canManageAvatar) && (
             <div className="flex items-center gap-5">
