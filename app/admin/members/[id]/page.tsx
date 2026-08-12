@@ -68,17 +68,14 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
         profile={profile}
         families={families || []}
         isAdmin={true}
-        canManageAvatar={
-          !!currentProfile &&
-          canManageAvatar(
-            {
-              id: user.id,
-              family_id: currentProfile.family_id,
-              relationship: currentProfile.relationship,
-            },
-            { id: profile.id, family_id: profile.family_id }
-          )
-        }
+        canManageAvatar={canManageAvatar(
+          {
+            id: user.id,
+            family_id: currentProfile.family_id,
+            relationship: currentProfile.relationship,
+          },
+          { id: profile.id, family_id: profile.family_id }
+        )}
       />
 
       <MemberGroupsSection profileId={profile.id} />
