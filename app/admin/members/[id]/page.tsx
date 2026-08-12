@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { siteConfig } from "@/lib/config";
 import { displayName } from "@/lib/names";
-import { canManageAvatar } from "@/lib/members/avatar-eligibility";
 import type { Profile, FamilyUnit } from "@/lib/types";
 
 export const metadata = { title: `Edit Member | ${siteConfig.name}` };
@@ -68,14 +67,16 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
         profile={profile}
         families={families || []}
         isAdmin={true}
-        canManageAvatar={canManageAvatar(
-          {
-            id: user.id,
-            family_id: currentProfile.family_id,
-            relationship: currentProfile.relationship,
-          },
-          { id: profile.id, family_id: profile.family_id }
-        )}
+        // Caller context (not a precomputed boolean) so the form can
+        // re-derive avatar-write eligibility after it saves a family
+        // reassignment — a boolean computed here from the initial
+        // profile.family_id goes stale the moment the admin moves the
+        // member in or out of their household (CWA-62 / #337).
+        avatarCaller={{
+          id: user.id,
+          family_id: currentProfile.family_id,
+          relationship: currentProfile.relationship,
+        }}
       />
 
       <MemberGroupsSection profileId={profile.id} />

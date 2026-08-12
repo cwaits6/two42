@@ -33,6 +33,10 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import { Camera, Check } from "lucide-react";
+import {
+  canManageAvatar,
+  type AvatarEligibilityCaller,
+} from "@/lib/members/avatar-eligibility";
 import type { Profile, FamilyUnit } from "@/lib/types";
 
 interface ProfileFormProps {
@@ -47,18 +51,21 @@ interface ProfileFormProps {
   /** Admin mode allows editing family assignment + ignores privacy enforcement on save */
   isAdmin?: boolean;
   /**
-   * Whether the caller is allowed to write this profile's avatar object —
-   * see lib/members/avatar-eligibility.ts for the exact predicate, which
+   * Identity + household context of the person editing, used to decide
+   * whether they can write this profile's avatar object — see
+   * lib/members/avatar-eligibility.ts for the exact predicate, which
    * mirrors the storage RLS policy's two write arms (self, and a household
    * leader with relationship primary/spouse editing another member of the
-   * same household). Only meaningful when isAdmin is true — self- and
+   * same household). Only the admin route needs to pass it — self- and
    * household-leader edits always have a matching storage write arm, so
-   * this defaults to true and only the admin route needs to compute and
-   * pass a real value. When false under isAdmin, the photo control is
-   * hidden rather than shown and left to fail (no matching storage write
-   * arm exists; see CWA-62 / #337).
+   * when omitted the photo control is always shown. When provided and the
+   * predicate fails, the control is hidden rather than shown and left to
+   * fail (no matching storage write arm exists; see CWA-62 / #337). The
+   * form re-evaluates the predicate against the last *saved* family
+   * assignment, so reassigning the member's family in this form updates
+   * the control's visibility on save without a page refresh.
    */
-  canManageAvatar?: boolean;
+  avatarCaller?: AvatarEligibilityCaller | null;
   /**
    * When true, skips the birthday and visible-contact requirements.
    * Used when a household primary/spouse edits another member's profile —
@@ -217,11 +224,19 @@ export function ProfileForm({
   family = null,
   isAdmin = false,
   relaxValidation = false,
-  canManageAvatar = true,
+  avatarCaller = null,
   onSaved,
 }: ProfileFormProps) {
   const [state, setState] = useState<FormState>(initialState(profile));
   const [avatarUrl, setAvatarUrl] = useState<string | null>(profile.avatar_url);
+  // The family assignment as last persisted — what the storage RLS policy
+  // actually evaluates on an avatar write. The live state.family_id can
+  // differ while the admin has an unsaved selection in the Family select,
+  // so avatar-write eligibility is derived from this value, updated only
+  // after a successful save (CWA-62 / #337).
+  const [savedFamilyId, setSavedFamilyId] = useState<string | null>(
+    profile.family_id,
+  );
 
   // Family defaults: last name falls back to the family surname and address
   // to the family's home address unless the member marks theirs different.
@@ -432,9 +447,17 @@ export function ProfileForm({
       return;
     }
 
+    if (isAdmin) setSavedFamilyId(state.family_id || null);
     toast.success("Profile saved.");
     onSaved?.();
   };
+
+  // Recomputed per render so a saved family reassignment immediately
+  // shows or hides the photo control. No caller context means a route
+  // whose write arm is guaranteed (self-edit, household-leader edit).
+  const avatarWritable =
+    !avatarCaller ||
+    canManageAvatar(avatarCaller, { id: profile.id, family_id: savedFamilyId });
 
   const initials =
     `${state.first_name.charAt(0)}${state.last_name.charAt(0)}`.toUpperCase() ||
@@ -454,9 +477,11 @@ export function ProfileForm({
 
           {/* Photo — hidden for admins editing a profile they have no
               storage write arm for: not themselves, and not a household
-              they lead (relationship primary/spouse) with the target;
-              see CWA-62 / #337. */}
-          {(!isAdmin || canManageAvatar) && (
+              they lead (relationship primary/spouse) with the target.
+              Follows the last saved family assignment, so reassigning
+              the family in this form updates it on save; see CWA-62 /
+              #337. */}
+          {avatarWritable && (
             <div className="flex items-center gap-5">
               <Avatar className="h-20 w-20 shrink-0">
                 {avatarUrl && <AvatarImage src={avatarUrl} alt="Profile photo" />}
