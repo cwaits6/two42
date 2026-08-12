@@ -2085,6 +2085,31 @@ export type Database = {
         Args: { _name: string; _owner_email: string; _slug: string }
         Returns: string
       }
+      serving_signup_apply: {
+        Args: {
+          _actor_id: string
+          _attendee_ids: string[]
+          _group_id: string
+          _service_date: string
+        }
+        Returns: {
+          created: boolean
+          signup_id: string
+          signup_org_id: string
+        }[]
+      }
+      serving_signup_create: {
+        Args: {
+          _attendee_ids: string[]
+          _group_id: string
+          _service_date: string
+        }
+        Returns: {
+          created: boolean
+          signup_id: string
+          signup_org_id: string
+        }[]
+      }
     }
     Enums: {
       org_status: "active" | "suspended"

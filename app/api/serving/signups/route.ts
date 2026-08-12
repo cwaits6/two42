@@ -108,44 +108,67 @@ export async function POST(request: Request) {
     }
   }
 
-  // Insert the signup — the unique (group_id, service_date) constraint is the
-  // race guard when two members tap "I'll do it" for the same Sunday
-  const { data: signup, error: signupError } = await supabase
-    .from("serving_signups")
-    .insert({
-      group_id: groupId,
-      service_date: serviceDate,
-      family_id: profile.family_id,
-      created_by: user.id,
+  // One RPC, one transaction: the signup row and its attendee rows commit
+  // together or not at all (CWA-47 / #313). The function re-derives org_id
+  // from the group row and re-checks authorization itself — SECURITY DEFINER
+  // bypasses RLS, so its body is the tenant boundary. `.single()` because
+  // `returns table` surfaces through PostgREST as an array; the explicit row
+  // type is needed because the server clients are created without a
+  // <Database> generic, so `.single()` would otherwise infer `unknown`.
+  const { data: rpc, error: rpcError } = await supabase
+    .rpc("serving_signup_create", {
+      _group_id: groupId,
+      _service_date: serviceDate,
+      _attendee_ids: attendeeIds,
     })
-    .select()
-    .single();
+    .single<{ signup_id: string; signup_org_id: string; created: boolean }>();
 
-  if (signupError || !signup) {
-    if (signupError?.code === "23505") {
-      return NextResponse.json(
-        { error: "Someone just signed up for that Sunday — thank you anyway!" },
-        { status: 409 }
+  if (rpcError || !rpc) {
+    // SV001 is an ordinary race — the expected outcome of two members tapping
+    // the same Sunday. Everything else means the app-layer checks above
+    // (group, settings, profile, attendees) and the RPC's own checks
+    // disagreed, or the request org failed to resolve: anomalies that must not
+    // reach the member with no operator signal (CLAUDE.md's app_request_org_id
+    // fail-closed rule requires the NULL case be logged). Logged before the
+    // switch because every mapped case returns from inside it.
+    if (rpcError?.code !== "SV001") {
+      console.error(
+        "Serving signup rpc failed for group %s (user %s, data=%s):",
+        groupId,
+        user.id,
+        rpc === null ? "null" : "present",
+        rpcError
       );
     }
-    console.error("Serving signup insert failed:", signupError);
+    switch (rpcError?.code) {
+      case "SV001":
+        return NextResponse.json(
+          { error: "Someone just signed up for that Sunday — thank you anyway!" },
+          { status: 409 }
+        );
+      case "SV002":
+        return NextResponse.json({ error: "Unknown attendee" }, { status: 400 });
+      case "SV003":
+        return NextResponse.json(
+          { error: "Serving signups are not enabled for this team" },
+          { status: 404 }
+        );
+      case "SV004":
+        return NextResponse.json(
+          { error: "You're not on this team" },
+          { status: 403 }
+        );
+    }
     return NextResponse.json({ error: "Failed to sign up" }, { status: 500 });
   }
 
-  const { error: attendeeError } = await supabase
-    .from("serving_signup_attendees")
-    .insert(attendeeIds.map((id) => ({ signup_id: signup.id, profile_id: id })));
-
-  if (attendeeError) {
-    console.error("Serving attendee insert failed:", attendeeError);
-    await supabase.from("serving_signups").delete().eq("id", signup.id);
-    return NextResponse.json({ error: "Failed to sign up" }, { status: 500 });
-  }
-
-  if (user.email) {
+  // The RPC is additive, so a re-signup succeeds with created = false. Only a
+  // freshly claimed Sunday warrants a confirmation; re-sending on an idempotent
+  // no-op reads as a double booking (and ships a second ICS for one Sunday).
+  if (rpc.created && user.email) {
     try {
       await sendSignupConfirmation(supabase, {
-        signupId: signup.id,
+        signupId: rpc.signup_id,
         orgId: group.org_id,
         groupId,
         groupName: group.name,
@@ -159,7 +182,7 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ signup });
+  return NextResponse.json({ signup: { id: rpc.signup_id } });
 }
 
 export async function DELETE(request: Request) {
