@@ -26,7 +26,7 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
 
   const { data: currentProfile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, family_id")
     .eq("id", user.id)
     .single();
 
@@ -67,6 +67,11 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
         profile={profile}
         families={families || []}
         isAdmin={true}
+        canManageAvatar={
+          profile.id === user.id ||
+          (!!currentProfile?.family_id &&
+            currentProfile.family_id === profile.family_id)
+        }
       />
 
       <MemberGroupsSection profileId={profile.id} />

@@ -47,6 +47,16 @@ interface ProfileFormProps {
   /** Admin mode allows editing family assignment + ignores privacy enforcement on save */
   isAdmin?: boolean;
   /**
+   * Whether the caller is allowed to write this profile's avatar object.
+   * Only meaningful when isAdmin is true — self- and household-leader edits
+   * always have a matching storage write arm, so this defaults to true and
+   * only the admin route needs to compute and pass a real value. When false
+   * under isAdmin, the photo control is hidden rather than shown and left to
+   * fail (no admin write arm exists for another household's profiles/ path;
+   * see CWA-62 / #337).
+   */
+  canManageAvatar?: boolean;
+  /**
    * When true, skips the birthday and visible-contact requirements.
    * Used when a household primary/spouse edits another member's profile —
    * the person being edited may have an incomplete profile that they will
@@ -204,6 +214,7 @@ export function ProfileForm({
   family = null,
   isAdmin = false,
   relaxValidation = false,
+  canManageAvatar = true,
   onSaved,
 }: ProfileFormProps) {
   const [state, setState] = useState<FormState>(initialState(profile));
@@ -438,35 +449,39 @@ export function ProfileForm({
             </p>
           )}
 
-          {/* Photo */}
-          <div className="flex items-center gap-5">
-            <Avatar className="h-20 w-20 shrink-0">
-              {avatarUrl && <AvatarImage src={avatarUrl} alt="Profile photo" />}
-              <AvatarFallback className="bg-brand-primary text-2xl text-white">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingAvatar}
-            >
-              <Camera className="mr-2 h-4 w-4" />
-              {uploadingAvatar
-                ? "Uploading..."
-                : relaxValidation
-                  ? "Change their photo"
-                  : "Change my photo"}
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleAvatarUpload}
-              className="hidden"
-            />
-          </div>
+          {/* Photo — hidden for admins editing a profile they have no
+              storage write arm for (not themselves, not their household);
+              see CWA-62 / #337. */}
+          {(!isAdmin || canManageAvatar) && (
+            <div className="flex items-center gap-5">
+              <Avatar className="h-20 w-20 shrink-0">
+                {avatarUrl && <AvatarImage src={avatarUrl} alt="Profile photo" />}
+                <AvatarFallback className="bg-brand-primary text-2xl text-white">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingAvatar}
+              >
+                <Camera className="mr-2 h-4 w-4" />
+                {uploadingAvatar
+                  ? "Uploading..."
+                  : relaxValidation
+                    ? "Change their photo"
+                    : "Change my photo"}
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarUpload}
+                className="hidden"
+              />
+            </div>
+          )}
 
           {/* Name */}
           <div className={familySurname ? "space-y-2" : "grid gap-4 sm:grid-cols-2"}>
