@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { mintSignedUrl, mintSignedUrls } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
 import { siteConfig } from "@/lib/config";
 import { displayName, initials } from "@/lib/names";
@@ -53,6 +54,18 @@ export default async function PrayerPage() {
     console.error("Failed to fetch prayer call sessions:", sessionsError);
   }
 
+  // Private buckets (CWA-59): exchange stored avatar URLs for signed URLs
+  // before the wall rows and the composer's "me" reach client renders.
+  const wallRows = (requests ?? []) as PrayerWallRow[];
+  const [signedWallAvatars, myAvatarUrl] = await Promise.all([
+    mintSignedUrls(wallRows.map((r) => r.avatar_url)),
+    mintSignedUrl(profile.avatar_url),
+  ]);
+  const signedRequests = wallRows.map((r, i) => ({
+    ...r,
+    avatar_url: signedWallAvatars[i],
+  }));
+
   return (
     <div className="container mx-auto px-4 py-12 max-w-6xl">
       <h1 className="text-3xl md:text-4xl font-bold text-brand-primary mb-2">
@@ -64,13 +77,13 @@ export default async function PrayerPage() {
 
       <div className="mt-10">
         <PrayerBoard
-          initialRequests={(requests ?? []) as PrayerWallRow[]}
+          initialRequests={signedRequests}
           sessions={(sessions ?? []) as PrayerCallSession[]}
           me={{
             id: user.id,
             name: displayName(profile),
             initials: initials(profile),
-            avatarUrl: profile.avatar_url,
+            avatarUrl: myAvatarUrl,
           }}
           isAdmin={isAdmin}
           members={members}

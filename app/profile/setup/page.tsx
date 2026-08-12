@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { mintSignedUrl } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
 import { siteConfig } from "@/lib/config";
 import type { Profile } from "@/lib/types";
@@ -32,6 +33,10 @@ export default async function ProfileSetupPage() {
   if (profile.setup_completed) {
     redirect("/directory");
   }
+
+  // Private buckets (CWA-59): the wizard's avatar preview renders this
+  // value; the wizard itself persists only fresh raw upload URLs.
+  profile.avatar_url = await mintSignedUrl(profile.avatar_url);
 
   return (
     <div className="min-h-dvh bg-background">

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { mintSignedUrl } from "@/lib/storageRead";
 import { displayName } from "@/lib/names";
 import type { DirectoryProfile } from "@/lib/types";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -43,9 +44,17 @@ export async function GET(
     `${p.last_name ?? ""};${p.first_name ?? ""};;;`,
   );
 
-  // PHOTO — embed as URI if avatar_url is set
+  // PHOTO — embed as URI if avatar_url is set. Private buckets (CWA-59):
+  // the stored URL no longer serves, so embed a signed URL at the default
+  // 1h TTL. A contacts app that fetches the photo promptly on import
+  // succeeds; a vCard file saved and re-imported later silently loses the
+  // photo — an accepted trade-off over a bespoke longer TTL for this one
+  // low-severity path.
   if (p.avatar_url) {
-    card.add("photo", p.avatar_url, { value: "uri" });
+    const signedPhoto = await mintSignedUrl(p.avatar_url);
+    if (signedPhoto) {
+      card.add("photo", signedPhoto, { value: "uri" });
+    }
   }
 
   // TEL — phones with type hints

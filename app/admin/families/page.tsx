@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { deleteImage, uploadImage } from "@/lib/uploadImage";
+import { deleteImage, mintSignedUrl, uploadImage } from "@/lib/uploadImage";
 import { relObjectPath } from "@/lib/storagePaths";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -221,7 +221,12 @@ export default function FamiliesPage() {
   function openEdit(family: FamilyUnit) {
     setEditing(family);
     setForm(fromFamily(family));
-    setPhotoUrl(family.photo_url);
+    // The stored value is a private-bucket public URL (CWA-59) — exchange it
+    // for a signed URL before it reaches an <img src>.
+    setPhotoUrl(null);
+    if (family.photo_url) {
+      mintSignedUrl(family.photo_url).then(setPhotoUrl);
+    }
     setShowMemberForm(false);
     setEditingMember(null);
     setMemberForm(EMPTY_MEMBER_FORM);
@@ -329,8 +334,9 @@ export default function FamiliesPage() {
         .update({ photo_url: url })
         .eq("id", editing.id);
       if (error) throw error;
-      // Cache-bust so the new image shows immediately.
-      setPhotoUrl(`${url}?t=${file.lastModified}`);
+      // A freshly minted signed URL is already unique (its token), so the
+      // new image shows immediately — no manual cache-busting needed.
+      setPhotoUrl(await mintSignedUrl(url));
       toast.success("Family photo updated.");
       loadFamilies();
     } catch (err) {

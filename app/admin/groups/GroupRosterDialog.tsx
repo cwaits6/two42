@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { mintSignedUrls } from "@/lib/uploadImage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -79,7 +80,12 @@ export function GroupRosterDialog({
         return;
       }
       const memberRows = (rows || []) as { profile_id: string; is_leader: boolean }[];
-      setProfiles((members || []) as RosterProfile[]);
+      // Private buckets (CWA-59): exchange stored avatar URLs for signed
+      // URLs before they reach the AvatarImage renders below.
+      const profileRows = (members || []) as RosterProfile[];
+      const signed = await mintSignedUrls(profileRows.map((p) => p.avatar_url));
+      if (cancelled) return;
+      setProfiles(profileRows.map((p, i) => ({ ...p, avatar_url: signed[i] })));
       setAssigned(new Set(memberRows.map((r) => r.profile_id)));
       setLeaders(
         new Set(memberRows.filter((r) => r.is_leader).map((r) => r.profile_id)),

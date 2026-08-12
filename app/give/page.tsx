@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { mintSignedUrls } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Plus } from "lucide-react";
@@ -76,7 +77,23 @@ export default async function GivePage() {
       .maybeSingle(),
   ]);
 
-  const funds = (fundRows ?? []) as FundWithStewards[];
+  const rawFunds = (fundRows ?? []) as FundWithStewards[];
+  // Private buckets (CWA-59): exchange steward avatar URLs for signed URLs
+  // before they reach GiveList's renders.
+  const stewardUrls = rawFunds.flatMap((f) => [
+    f.steward?.avatar_url,
+    f.co_steward?.avatar_url,
+  ]);
+  const signedStewards = await mintSignedUrls(stewardUrls);
+  const funds = rawFunds.map((f, i) => ({
+    ...f,
+    steward: f.steward
+      ? { ...f.steward, avatar_url: signedStewards[i * 2] }
+      : f.steward,
+    co_steward: f.co_steward
+      ? { ...f.co_steward, avatar_url: signedStewards[i * 2 + 1] }
+      : f.co_steward,
+  }));
   const stewardsCanManage = (modeRow?.value ?? "stewards") === "stewards";
   const canCreate = isAdmin || stewardsCanManage;
 

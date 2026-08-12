@@ -5,7 +5,15 @@
 -- (an org-B content editor deleting an org-A event image, an org-B admin
 -- deleting an org-A family photo) — while own-org positive controls keep the
 -- suite non-vacuous. Structural assertions pin the policy shape itself, and
--- the ADR-3 decision that both buckets stay public.
+-- the CWA-59 / #333 revisit of ADR-3: both buckets are now private, so the
+-- SELECT policies gate reads for real (they were dormant while
+-- /object/public/* bypassed RLS).
+--
+-- SQL-level limit: this suite proves the `public` flag and the SELECT-policy
+-- shape that authorizes createSignedUrl() minting, but it cannot invoke the
+-- Storage HTTP endpoints (/object/sign/*, /object/public/*) themselves —
+-- that behavior is exercised by loading the app's pages against the local
+-- stack, not by pgTAP.
 --
 -- Run locally (rollback-safe, never mutates the shared local stack):
 --
@@ -57,16 +65,18 @@ insert into storage_tenancy_results
     'org isolation',
     'the restrictive storage floor is named "org isolation"');
 
--- ADR-3 encoded: both buckets deliberately remain public (read posture is
--- unguessable-UUID paths, unchanged by CWA-57 — see
--- docs/security/tenancy-model.md "Storage tenancy"). Flipping this flag must
--- fail CI so the documented decision gets revisited, not drifted past.
+-- ADR-3 revisited (CWA-59 / #333): both buckets are now deliberately
+-- PRIVATE — reads go through signed URLs whose minting the org-scoped
+-- SELECT policies gate (see docs/security/tenancy-model.md "Storage
+-- tenancy"). This inverts the previous count-of-2 public assertion; flipping
+-- a bucket back to public must fail CI so the read posture gets revisited
+-- deliberately, not drifted past.
 insert into storage_tenancy_results
   select is(
     (select count(*) from storage.buckets
       where id in ('avatars', 'event-images') and public),
-    2::bigint,
-    'ADR-3: avatars and event-images buckets are both public => true (documented decision, revisit deliberately)');
+    0::bigint,
+    'ADR-3 (revised, CWA-59): avatars and event-images buckets are both public => false (signed-URL reads)');
 
 -- ── Fixtures: two orgs, one object per kind per org ─────────────────────────
 
@@ -185,10 +195,15 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', owner_b)::text, true);
   perform set_config('request.headers', '{}', true);
 
-  -- Cross-org read: zero org-A objects visible, in any bucket.
+  -- Cross-org read: zero org-A objects visible, in any bucket. Since
+  -- CWA-59 flipped both buckets private, this SELECT path is the actual
+  -- read-authorization gate — createSignedUrl() minting is authorized by
+  -- exactly this row visibility, and /object/public/* no longer bypasses it.
   select count(*) into cross_read from storage.objects
     where name like org_a || '/%';
-  -- Non-vacuity: own-org objects are visible.
+  -- Non-vacuity, and the positive control for the now-load-bearing read
+  -- path: own-org objects are visible, so same-org signed-URL minting keeps
+  -- working after the private flip.
   select count(*) into own_read from storage.objects
     where name like org_b || '/%';
   -- Legacy un-prefixed keys are invisible too (foldername[1] is no org).

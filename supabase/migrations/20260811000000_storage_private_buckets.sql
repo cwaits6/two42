@@ -1,0 +1,24 @@
+-- Storage read posture (CWA-59 / #333): flip both buckets to private, closing
+-- the /object/public/* path that served reads without consulting RLS. This is
+-- the deliberate revisit of ADR-3 (docs/security/tenancy-model.md "Storage
+-- tenancy"): CWA-57 closed cross-org write/delete but left read secrecy
+-- resting on unguessable UUID paths — any leaked, forwarded, or cached object
+-- URL stayed readable cross-tenant forever. Reads now go through signed URLs
+-- (`createSignedUrl(s)` in lib/uploadImage.ts / lib/storageRead.ts), whose
+-- minting is gated by the SELECT policies on storage.objects.
+--
+-- No policy changes accompany the flip on purpose: the org-scoped SELECT
+-- policies from 20260803000000 ("Public can view avatars", "Public can view
+-- event images") already carry the org predicate. They were dormant for the
+-- actual read path while the buckets were public (the /object/public/*
+-- endpoint bypasses RLS entirely) and become load-bearing here — an org-B
+-- principal's attempt to mint a signed URL for an org-A key finds no visible
+-- row and fails.
+--
+-- Sequencing: scripts/rekey-storage-objects.mjs (#334 / CWA-60) must run
+-- against production BEFORE this migration deploys. A legacy un-prefixed key
+-- fails the org floor's [1] = org_id check for every principal, so once reads
+-- are RLS-gated an un-rekeyed object becomes unreadable app-wide, not just
+-- unwritable.
+
+update storage.buckets set public = false where id in ('avatars', 'event-images');

@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { mintSignedUrl, mintSignedUrls } from "@/lib/uploadImage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -109,7 +110,11 @@ export function AboutEditor({ initialBody, initialTeachers }: AboutEditorProps) 
       setAddOpen(false);
       return;
     }
-    setCandidates((data ?? []) as MemberOption[]);
+    // Private buckets (CWA-59): exchange stored avatar URLs for signed URLs
+    // before they reach the candidate-list AvatarImage renders.
+    const rows = (data ?? []) as MemberOption[];
+    const signed = await mintSignedUrls(rows.map((r) => r.avatar_url));
+    setCandidates(rows.map((r, i) => ({ ...r, avatar_url: signed[i] })));
   };
 
   const visibleCandidates = useMemo(() => {
@@ -142,6 +147,15 @@ export function AboutEditor({ initialBody, initialTeachers }: AboutEditorProps) 
       return;
     }
     const added = data as ClassTeacherWithProfile;
+    // The insert re-selects the raw stored URL — re-sign it for display.
+    // The candidate row's avatar_url is already signed, so reuse it first.
+    if (added.profiles) {
+      added.profiles = {
+        ...added.profiles,
+        avatar_url:
+          member.avatar_url ?? (await mintSignedUrl(added.profiles.avatar_url)),
+      };
+    }
     setTeachers((prev) => [...prev, added]);
     setAddOpen(false);
     // Go straight to the bio form so the new entry doesn't sit empty

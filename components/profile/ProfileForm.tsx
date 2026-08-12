@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { uploadImage } from "@/lib/uploadImage";
+import { mintSignedUrl, uploadImage } from "@/lib/uploadImage";
 import { relObjectPath } from "@/lib/storagePaths";
 import {
   titleCaseName,
@@ -242,9 +242,9 @@ export function ProfileForm({
         "avatar",
         relObjectPath("profiles", profile.id, "avatar"),
       );
-      // Cache-bust so the new image shows immediately.
-      const bustedUrl = `${url}?t=${Date.now()}`;
-      setAvatarUrl(bustedUrl);
+      // A freshly minted signed URL is already unique (its token), so the
+      // new image shows immediately — no manual cache-busting needed.
+      setAvatarUrl(await mintSignedUrl(url));
 
       // Persist on the profile so a refresh keeps the change even if the
       // user doesn't save the rest of the form.

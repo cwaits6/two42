@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { mintSignedUrls } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
 import { siteConfig } from "@/lib/config";
 import { AboutEditor } from "./AboutEditor";
@@ -35,10 +36,21 @@ export default async function AdminAboutPage() {
       .order("created_at"),
   ]);
 
+  // Private buckets (CWA-59): exchange stored avatar URLs for signed URLs
+  // before they reach the editor's AvatarImage renders.
+  const teacherRows = (teachers ?? []) as ClassTeacherWithProfile[];
+  const signedAvatars = await mintSignedUrls(
+    teacherRows.map((t) => t.profiles?.avatar_url),
+  );
+  const teacherList = teacherRows.map((t, i) => ({
+    ...t,
+    profiles: t.profiles ? { ...t.profiles, avatar_url: signedAvatars[i] } : t.profiles,
+  }));
+
   return (
     <AboutEditor
       initialBody={(about as AboutPage | null)?.body ?? ""}
-      initialTeachers={(teachers ?? []) as ClassTeacherWithProfile[]}
+      initialTeachers={teacherList}
     />
   );
 }

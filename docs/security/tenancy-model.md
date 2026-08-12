@@ -169,34 +169,66 @@ structurally cannot omit the org. `supabase/tests/storage_tenancy_suite.sql`
 proves the isolation (cross-org read/insert/update/delete all denied, with
 own-org positive controls) and pins the policy shape structurally.
 
-**Decision (ADR-3): both buckets remain `public => true`.** This is a
-deliberate, accepted trade-off, not an oversight, and it is encoded as a
-pgTAP assertion so flipping the flag fails CI until this paragraph is
-revisited. The live vulnerability CWA-57 closed was cross-org **write and
-delete**; the read posture is unchanged. Read secrecy rests on unguessable
-UUID paths — the org prefix adds a second UUID segment, and
-`organizations.id` is anon-readable for the resolved org, so the org segment
-is not itself a secret; the entity UUID is, exactly as before. Going private
-requires minting signed URLs at every render site: `profiles.avatar_url`,
-`family_units.photo_url`, and `family_members.avatar_url` all store durable
-public URLs, and signed URLs expire, so each column would need to become a
-path plus a render-time mint across server and client components. Plainly:
-any object URL that has ever leaked (browser history, a forwarded link, a
-proxy log) remains readable by anyone holding it, across tenants, until the
-private-bucket follow-up lands.
+**Decision (ADR-3, revised by CWA-59 /
+[#333](https://github.com/cwaits6/two42/issues/333)): both buckets are
+`public => false`; reads go through signed URLs.** The original ADR-3
+accepted public buckets as a deliberate trade-off — read secrecy resting on
+unguessable UUID paths, with any ever-leaked URL (browser history, a
+forwarded link, a proxy log) permanently readable across tenants. This is
+the tracked revisit of that trade-off. The `/object/public/*` path no longer
+serves either bucket; every render site exchanges the stored URL for a
+signed URL via `createSignedUrl()`/`createSignedUrls()`, whose minting is
+gated by the same org-scoped SELECT policies CWA-57 introduced (`"Public can
+view avatars"`, `"Public can view event images"`) — dormant for reads while
+the buckets were public, load-bearing now. An org-B principal's mint attempt
+for an org-A key finds no visible row and fails; a leaked signed URL dies at
+its TTL. The pgTAP assertion that previously pinned "both public" now pins
+"both private", so flipping a bucket back fails CI until this paragraph is
+revisited again.
+
+One deliberate deviation from the original ADR-3 prose: **no column-format
+change and no data migration.** The old text assumed going private meant
+"each column would need to become a path". Instead, `profiles.avatar_url`,
+`family_units.photo_url`, and `family_members.avatar_url` keep storing
+exactly the `getPublicUrl()`-shaped string they always have (and that
+`scripts/rekey-storage-objects.mjs` writes back), and a pure parser
+(`parseStoragePublicUrl()` in `lib/storagePaths.ts`) recovers
+`{bucket, path}` at read time. That keeps the write path and the rekey
+script untouched and avoids a backfill over member-PII rows for the same end
+state. The signing helpers come in exactly two flavors, each owning its own
+client construction: `mintSignedUrl(s)` in `lib/uploadImage.ts` (browser
+context) and `lib/storageRead.ts` (server context, cookie-bound
+`createClient()`). Neither accepts a `SupabaseClient` parameter, by design —
+storage signing has no `org_id` predicate a callee could re-validate, so a
+passed-in service client would mint cross-tenant URLs unchecked (the Tier C
+shape).
+
+The TTL is `SIGNED_URL_TTL_SECONDS = 3600` (`lib/storagePaths.ts`): it
+matches the upload path's `cacheControl: "3600"` so signed-URL validity and
+intended cache lifetime agree, keeps re-mint cost tolerable for avatars that
+render on nearly every page (one mint per page load cycle), and turns a
+leaked URL from a permanent capability into a same-day-dead one. Failure is
+soft per item: a malformed stored value, a transient Storage error, or an
+un-rekeyed legacy object (see ADR-4 below — such a key fails the org floor's
+`[1] = org_id` check for *every* principal, so post-CWA-59 it is unreadable
+app-wide until the rekey script moves it) renders as a missing image, never
+a crashed page.
 
 The physical re-key of pre-existing (un-prefixed) objects is deferred to
 `scripts/rekey-storage-objects.mjs` (ADR-4, see
 [`scripts/README.md`](../../scripts/README.md)): a SQL
 `UPDATE storage.objects SET name = …` would orphan blobs, because Storage
-keys the physical file by `bucket/name`. Until the script runs, legacy
-objects keep rendering (public buckets bypass RLS on the
-`/object/public/*` path) but are invisible to every client write path —
-deleting one is a silent no-op: the restrictive floor matches no row, so the
-`storage.objects` row and its blob both survive and the caller still sees
-success. Nothing is orphaned by that path — the residue is the opposite
-shape. A delete-then-reupload leaves the legacy object sitting at its old
-key, still tracked by its own row and still publicly readable, while the
+keys the physical file by `bucket/name`. A legacy key's first path segment
+is not an org id, so the restrictive floor matches no row for it under *any*
+principal: it is invisible to every client write path — deleting one is a
+silent no-op: the `storage.objects` row and its blob both survive and the
+caller still sees success — and, since CWA-59 made reads RLS-gated as well,
+it is **unreadable app-wide** too (while the buckets were public it kept
+rendering via `/object/public/*`; that path is closed). This is why the
+script is a hard precondition for the CWA-59 private-bucket deploy, not
+merely cleanup. Nothing is orphaned by the delete path — the residue is the
+opposite shape. A delete-then-reupload leaves the legacy object sitting at
+its old key, still tracked by its own row, while the
 entity's URL column now points at the new org-partitioned key. The script
 moves legacy objects onto the partitioned layout, which is what makes them
 deletable again; it deletes nothing, so anything already stranded at an old
@@ -304,10 +336,13 @@ platform seam).
   above); signed tokens and the service-role call sites were closed in
   Phase 3 (#212). Group-level scoping of member-facing surfaces: split out
   ahead of Phase 4.
-- Storage **reads**: both buckets remain public (ADR-3 above). Private
-  buckets + signed URLs, and the one-time physical re-key of legacy object
-  keys (`scripts/rekey-storage-objects.mjs`), are tracked as the CWA-57
-  follow-up issue.
+- Storage **reads** are closed too (CWA-59 / #333 — ADR-3 above, as
+  revised): both buckets are private and every read mints a signed URL
+  through the org-scoped SELECT policies. The remaining storage item is the
+  one-time physical re-key of legacy object keys
+  (`scripts/rekey-storage-objects.mjs`, #334 / CWA-60), which must run
+  before the private flip deploys — an un-rekeyed legacy object is
+  unreadable app-wide once reads are RLS-gated.
 - The permissive `organizations` SELECT policy is written whole-row, but the
   column privileges beneath it are not: `20260801000002` revoked the
   table-level grant and re-granted a column list, and `20260802000001`
