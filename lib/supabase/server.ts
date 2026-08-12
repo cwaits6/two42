@@ -1,10 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { resolveOrgSlug } from "@/lib/org";
 
 export async function createClient(orgSlug?: string) {
   const cookieStore = await cookies();
-  const headerStore = await headers();
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,10 +14,10 @@ export async function createClient(orgSlug?: string) {
       // authenticated principal, and only to select among public content.
       // `orgSlug` is the explicit override used by the public per-org routes
       // (app/[orgSlug]/join): there the org is addressed by URL, not by host.
-      // Everything else keeps the host-derived (today: env-pinned) mapping.
+      // Everything else keeps the env-pinned mapping.
       global: {
         headers: {
-          "x-two42-org": orgSlug ?? resolveOrgSlug(headerStore.get("host")),
+          "x-two42-org": orgSlug ?? resolveOrgSlug(),
         },
       },
       cookies: {

@@ -48,7 +48,7 @@ Full rationale, the helper inventory, and the deviations register: [`docs/securi
              supabase/functions/send-serving-reminders/index.ts
   ```
 
-- **The two `index.ts` entry points are not gated on a PR.** They import an unpinned `https://esm.sh/@supabase/supabase-js@2`, so CI type-checks them `continue-on-error` (a PR annotation, not a failure) to avoid failing on CDN drift. The only blocking compile is `supabase functions deploy`, which runs post-merge — and it runs *before* `supabase db push` in the same job, so a broken entry point blocks every migration behind it. Run `deno check` on both files yourself before pushing.
+- **The two `index.ts` entry points are type-checked on every PR** (CWA-45 / #311). Their esm.sh import is pinned to an exact version (`@supabase/supabase-js@2.110.9`) with a `deno.lock` integrity entry, and the `deno-test` job in `.github/workflows/supabase.yml` runs `deno check --frozen` on both files as a failing step (no `continue-on-error`). That job is **not** in `main`'s branch protection, so it reports rather than mechanically blocks a merge. Post-merge, `supabase functions deploy` compiles them again — and it runs *before* `supabase db push` in the same job, so a broken entry point that reached `main` would block every migration behind it. Run `deno check` on both files yourself before pushing.
 - Keep logic that can be unit tested in `_shared/`: the entry points execute `Deno.env.get(...)`, `resolveServiceKey()`, and `Deno.serve()` at module top level, so nothing in them is importable from a test.
 
 ### Testing
@@ -63,6 +63,7 @@ Full rationale, the helper inventory, and the deviations register: [`docs/securi
 - **Never run `supabase test db` locally.** It resets the database, which violates the shared-stack rules above. CI runs it in the `pgtap` job of `.github/workflows/supabase.yml` against an ephemeral, isolated Postgres.
 - Regenerate DB types after schema changes with `npm run db:types` (read-only against the local stack); CI fails if `lib/supabase/database.types.ts` drifts from the migrations.
 - Adding a service-role client anywhere? Document it in `docs/security/service-role-inventory.md` in the same PR — every service-role query bypasses RLS and must be justified. Both entry points count: `createServiceClient()` in the app layer, and `createClient(SUPABASE_URL, resolveServiceKey())` in the edge functions.
+- `npm run lint` runs on every PR (the `Lint` job in `.github/workflows/test.yml`) with `--max-warnings=0`, so a warning fails the job. The job is **not** yet in `main`'s branch protection, so a red `Lint` does not physically block a merge — run it locally before pushing. It was broken repo-wide by a brace-expansion/minimatch conflict (#299) until #309 scoped the override by major; any older instruction to skip lint is stale.
 
 ## Git & PRs
 
@@ -82,4 +83,4 @@ Full rationale, the helper inventory, and the deviations register: [`docs/securi
 - The audience spans adults 18+ through members in their late 80s. Design for the oldest members — large type, high contrast, generous touch targets — without making the UI feel dated to younger ones.
 - Assignment/roster UIs show current members by default with an explicit "add" mode — never render full toggle lists of every person.
 - Base UI `Select` components must receive the `items` prop, or the trigger renders raw values.
-- Per-org branding (`organizations.branding`) is admin-supplied free text reaching CSS and RFC 5322 headers. `HEX` and the control-character strip in `lib/branding.ts`, and `PLAIN_NAME` in `lib/email/identity.ts`, are the injection boundary — not style choices. Do not relax them to support richer names or color formats; add a new validated key instead.
+- Per-org branding (`organizations.branding`) is admin-supplied free text reaching CSS and RFC 5322 headers. `HEX` in `lib/contrast.ts`, the `CONTROL` control-character strip in `lib/branding.ts`, and `PLAIN_NAME` in `lib/email/identity.ts` are the injection boundary — not style choices. Do not relax them to support richer names or color formats; add a new validated key instead. `supabase/functions/_shared/branding.ts` mirrors all three byte-for-byte; a change lands on both sides.

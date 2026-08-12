@@ -40,13 +40,23 @@ Rules that make these safe:
   to Phase 3 and must be gated on `auth.role() = 'service_role'`.
 - Every app Supabase client (server, browser, middleware) sends
   `x-two42-org` from `resolveOrgSlug()` in `lib/org.ts` — a trivial
-  host-independent mapping until Phase 5 custom domains. The one exception:
+  env-pinned mapping taking no host parameter until Phase 5 custom domains
+  (#214) add real host → org resolution. The one exception:
   the public per-org routes (`app/[orgSlug]/join`) pass the URL slug
   explicitly to `createClient(orgSlug)` on **both** the server and browser
   clients. The DB still validates that slug against a real `organizations`
   row and still ignores it for authenticated principals, so the trust model
   is unchanged — the header grants nothing, it only selects which org's
   already-public surface an anonymous request is about.
+- The app-layer complement is **`resolveRequestOrgId()`** (`lib/org.ts`,
+  Phase 4b CWA-48 / #314): the single fail-closed helper that resolves a
+  request's org through `app_request_org_id()` before a page relies on it.
+  It fails closed on both failure modes — an RPC error, and an RPC success
+  returning NULL (a slug matching no organization row) — logging each, so
+  its three callers (`app/join/page.tsx`, `app/join/family/[token]/page.tsx`,
+  `app/[orgSlug]/join/page.tsx`) take their already-unavailable path
+  (redirect, or a "requests unavailable" render) instead of falling back to
+  an org.
 
 Also, `org_id` on every org-owned table is `NOT NULL DEFAULT
 app_current_org_id()`: a write with no session and no explicit org violates
@@ -222,3 +232,33 @@ platform seam).
   Accepted: the slug is already public by construction (it *is* the header
   value), and `reply_to` is an address the org publishes on every outbound
   email.
+- **`organizations.status` does not cut access.** The `public.org_status`
+  enum (CWA-51; `create type public.org_status as enum
+  ('active','suspended')` in `20260802000000_org_status_enum.sql`) has
+  exactly one column using it, `organizations.status`. It is an enum rather
+  than a CHECK constraint so `supabase gen types` emits a union type — that
+  is what makes the `satisfies readonly OrgStatus[]` check in
+  `app/api/platform/organizations/[id]/route.ts` a compile-time gate on new
+  labels. The scope limit is recorded in `20260731000001_org_helpers.sql`:
+  `status` is deliberately **not** consulted by either org helper, so
+  suspending an org does not cut its members' access. It gates no access
+  path anywhere: the only behavior it changes is that `listActiveOrgs()`
+  (`supabase/functions/_shared/orgs.ts`) skips suspended orgs, so a
+  suspended tenant stops receiving reminder email. The `/platform` operator
+  surfaces read the column to display it and write it to set it, which is
+  reporting and editing, not enforcement.
+  Enforcement of a real access cut belongs to Phase 4's suspend surface;
+  don't assume it exists until then. Neither `anon` nor `authenticated` can
+  even `select` the column (see the column-grant bullet above).
+- **Per-org branding is an injection surface with a named boundary.**
+  `organizations.branding` is admin-supplied free text that reaches CSS and
+  RFC 5322 headers. The boundary is `HEX` (`lib/contrast.ts`, strict
+  `^#[0-9a-fA-F]{6}$`), `CONTROL` (`lib/branding.ts`, C0/C1
+  control-character strip), and `PLAIN_NAME` (`lib/email/identity.ts`,
+  unquoted-atom allowlist with an always-safe quoted-string fallback) —
+  validation boundaries, not style choices; do not relax them to support
+  richer names or color formats. `supabase/functions/_shared/branding.ts` is
+  a deliberate **byte-level mirror** of those regexes (edge functions cannot
+  import from `lib/`), so a change must land on both sides. The edge mirror
+  deliberately omits the WCAG 4.5:1 `validateAccent()` contrast gate, which
+  is enforced on the write path only (#319).

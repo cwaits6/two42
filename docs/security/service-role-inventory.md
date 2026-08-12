@@ -1,11 +1,13 @@
 # Service-Role Client Inventory
 
 Every place the app bypasses RLS via `createServiceClient()` (defined in
-`lib/supabase/server.ts`) or the service key directly (Edge Functions). Part of
-CWA-7 Phase 0 (#209): once multi-tenancy lands, a service-role client will NOT
-be constrained by per-org RLS policies, so every site below is a potential
-cross-tenant leak vector and must be re-audited when `org_id` is added to the
-tables it touches.
+`lib/supabase/server.ts`) or the service key directly (Edge Functions).
+`org_id` **is** the enforced tenant boundary (CWA-10 Phase 3, #212 — see
+[`tenancy-model.md`](tenancy-model.md)), and a service-role client is NOT
+constrained by the per-org RLS policies that enforce it. Every site below is
+therefore a potential cross-tenant leak vector, and each row carries the
+explicit mitigation that stands in for RLS on that surface. (This inventory
+began as CWA-7 Phase 0, #209, when the boundary was still a future change.)
 
 **Adding a new `createServiceClient()` call site? Add a row here in the same
 PR, with the justification and the tenancy risk.**
@@ -18,10 +20,14 @@ turns this document's rules into assertions:
 
 - Every service-role query chain in `app/` and `lib/` must carry an `org_id`
   predicate (Tier B), unless it is a documented org anchor — marked in code
-  with a reasoned `// org-anchor: <why>` comment. The anchor chains in the
-  tables below carry that marker; chains in files owned by an in-flight
-  parallel PR sit in the script's `KNOWN_ANCHORS` allowlist until the marker
-  can be added in-file (stale entries fail the guard).
+  with a reasoned `// org-anchor: <why>` comment. Most anchor chains in the
+  tables below carry that marker in-file. Two do not: the `member_groups`
+  (`:50`) and `profiles` (`:80`) chains in
+  `app/api/serving/link-action/route.ts` still sit in the script's
+  `KNOWN_ANCHORS` allowlist. The parallel PRs that owned that file (#306,
+  #323) have landed, so this is now plain outstanding cleanup, not an
+  in-flight accommodation — retiring an allowlist entry requires adding the
+  in-file marker in the same change (stale entries fail the guard).
 - The email fan-out chains (feedback admins, serving broadcast, leader cancel
   notices) are Tier A: they must be scoped and may **not** use the marker —
   an `// org-anchor:` on a fan-out is itself a failure. These surfaces push
@@ -36,7 +42,24 @@ turns this document's rules into assertions:
 
 The guard is static and syntax-only; it proves a predicate is *present*, not
 that its value is correctly derived. The "Org derived from" column below —
-the validated-anchor provenance — remains a review responsibility.
+the validated-anchor provenance — remains a review responsibility. Four
+blind spots matter in practice:
+
+- **`.rpc()` chains are never inspected** — the guard collects on `.from(`
+  exclusively, so `provision_organization()`
+  (`app/api/platform/organizations/route.ts`) has no static guard at all.
+- **The whole `supabase/functions/` tree is out of scope** — the scan set is
+  `git ls-files app lib`. The edge-function service clients and their query
+  chains are covered by review and this document only (the repo-wide
+  seeded-UUID sweep does reach them; nothing else does).
+- **Nested embeds are not parsed** — `.select()` strings are opaque to the
+  guard, so the rule that an embed is safe only when its parent is filtered
+  is unenforced.
+- **The pinned cross-org assertions are substring counts, not reachability
+  analysis** — and two further assertions are unpinned entirely
+  (`app/api/family-invites/claim/route.ts`,
+  `app/api/household/link-member/route.ts`): they can be deleted without
+  failing CI.
 
 ## Phase 3 status (CWA-10 / #212)
 
@@ -152,6 +175,12 @@ column below describes what a regression would cost, not a pending work item.
 |------|--------------------------|--------------|------------|
 | `lib/email/identity.ts` | `resolveEmailBranding(orgId)` reads `organizations.branding` for callers that hold an explicit org id but no request-scoped session (e.g. `lib/serving/server.ts`, invoked from HMAC-signed link flows) | A missing filter would read another org's branding into its email | The `.eq("id", orgId)` filter is the only tenant boundary and is mandatory; the `orgId` is always derived from an already-authorized row (e.g. the validated group). Without an `orgId` the function uses the request-scoped client instead, so RLS applies — but note that resolves to the *request* org, which is host-independent until Phase 5, so any caller holding an authorized `org_id` must pass it. |
 
+`lib/branding.ts` is deliberately **not** a service-role site: `getOrgBranding()`
+uses the request-scoped `createClient()`, so RLS narrows `organizations` to the
+request org and no `.eq()` filter is needed. That contrast is exactly why
+`lib/email/identity.ts` above — which *does* use the service client — must
+carry `.eq("id", orgId)`.
+
 ## Edge Functions (2 sites)
 
 Both are cron-triggered with no session context and resolve the service key
@@ -161,6 +190,25 @@ platform-injected `SUPABASE_SECRET_KEYS` map, then the legacy
 `SUPABASE_SERVICE_ROLE_KEY` (see `resolveServiceKey()` in
 `supabase/functions/_shared/service-key.ts`, shared by both), not
 `createServiceClient()`.
+
+Tenant iteration is `listActiveOrgs()` + `forEachOrg()`
+(`supabase/functions/_shared/orgs.ts`). `listActiveOrgs()` filters
+`organizations` on `.eq("status", "active")`, so a **suspended org is
+skipped** — a suspended tenant must not email its members. This is currently
+the only place `organizations.status` changes what happens *to a tenant*: it
+gates no access path and no org helper consults it, so suspending an org
+stops its reminder email and nothing else. The platform surfaces in the
+table above do read and write the column — `app/platform/page.tsx` and
+`app/platform/organizations/**` display it, and the platform org route sets
+it — but that is the operator UI reporting and editing the flag, not the
+flag enforcing anything (see
+[`tenancy-model.md`](tenancy-model.md), Known limits).
+
+Audit result (CWA-58): all 12 org-owned query chains across both entry
+points carry an explicit `org_id` predicate (or an explicit `org_id` on
+insert); the two nested embeds are FK traversals from org-filtered parents,
+which the composite `(col, org_id)` FKs keep inside the tenant; the one
+`organizations` read is the tenant root, filtered on `status`.
 
 | File | Why service-role is used | Historical tenancy risk | Mitigation |
 |------|--------------------------|-------------------------|------------|
