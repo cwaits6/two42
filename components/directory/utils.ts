@@ -44,6 +44,10 @@ export function resolveAddress(
 }
 
 export function downloadVCard(profileId: string) {
+  // Not a page navigation: the route replies `Content-Disposition: attachment`,
+  // so the browser downloads the .vcf and stays put. Router navigation cannot
+  // trigger a download, so the rule's suggested fix does not apply here.
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
   window.location.href = `/api/members/${profileId}/vcard`;
 }
 
