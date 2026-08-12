@@ -1,0 +1,15 @@
+# renovate.json sets no dependency policy of its own — it only maps dependency
+# types onto commit prefixes so release-please can section them. Everything
+# that governs what gets updated, and when, comes from
+# github>krypsis-io/renovate-config, which sets "minimumReleaseAge": "3 days"
+# at the top level and fast-tracks vulnerability updates past it.
+#
+# Semgrep cannot resolve `extends`, so renovate-missing-minimum-release-age
+# fires on every packageRules entry here regardless. Setting the key locally is
+# worse than leaving it off: these rules match vulnerability updates too, and
+# later rules win, so a local value would silently re-impose the delay on
+# security patches that the preset deliberately exempts.
+#
+# 3 days is the accepted org policy. Revisit if this file ever grows a rule
+# that actually changes update timing.
+renovate.json
