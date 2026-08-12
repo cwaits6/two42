@@ -131,6 +131,77 @@ exemption (`organization_members_profile_id_fkey` in
 of the profile's pinned org — the seam the Phase 4 platform-admin
 authorization contract builds on.
 
+## Storage tenancy
+
+`storage.objects` has no `org_id` column, so the first path segment of the
+object key is its analogue (CWA-57 /
+[#328](https://github.com/cwaits6/two42/issues/328)). Every object key is
+org-partitioned:
+
+```
+avatars/       <org_id>/profiles/<profile_id>/avatar.jpg
+               <org_id>/family-members/<family_member_id>/avatar.jpg
+               <org_id>/families/<family_id>/photo.jpg
+event-images/  <org_id>/events/<event_id>/<name>.jpg
+```
+
+`storage.foldername(name)` returns the folder segments excluding the
+filename, so `(storage.foldername(name))[1]` is the org, `[2]` the kind,
+`[3]` the entity id — and the restrictive floor is the direct translation of
+the table-level one
+(`20260803000000_storage_org_partitioned_policies.sql`):
+
+```sql
+create policy "org isolation" on storage.objects
+  as restrictive for all to anon, authenticated
+  using      ((storage.foldername(name))[1] = (select public.app_request_org_id())::text)
+  with check ((storage.foldername(name))[1] = (select public.app_request_org_id())::text);
+```
+
+The 17 permissive policies are factored `ORG AND (arms)` like every
+org-owned table, and the per-entity arms compare as text
+(`entity.id::text = segment`, never `segment::uuid` — a non-UUID segment
+must deny the row, not raise `22P02`). On the app side, every key is built
+by `lib/storagePaths.ts` and every upload/delete goes through
+`lib/uploadImage.ts`, which resolves the org once per call via
+`resolveRequestOrgId()` and prefixes it — call sites pass relative paths and
+structurally cannot omit the org. `supabase/tests/storage_tenancy_suite.sql`
+proves the isolation (cross-org read/insert/update/delete all denied, with
+own-org positive controls) and pins the policy shape structurally.
+
+**Decision (ADR-3): both buckets remain `public => true`.** This is a
+deliberate, accepted trade-off, not an oversight, and it is encoded as a
+pgTAP assertion so flipping the flag fails CI until this paragraph is
+revisited. The live vulnerability CWA-57 closed was cross-org **write and
+delete**; the read posture is unchanged. Read secrecy rests on unguessable
+UUID paths — the org prefix adds a second UUID segment, and
+`organizations.id` is anon-readable for the resolved org, so the org segment
+is not itself a secret; the entity UUID is, exactly as before. Going private
+requires minting signed URLs at every render site: `profiles.avatar_url`,
+`family_units.photo_url`, and `family_members.avatar_url` all store durable
+public URLs, and signed URLs expire, so each column would need to become a
+path plus a render-time mint across server and client components. Plainly:
+any object URL that has ever leaked (browser history, a forwarded link, a
+proxy log) remains readable by anyone holding it, across tenants, until the
+private-bucket follow-up lands.
+
+The physical re-key of pre-existing (un-prefixed) objects is deferred to
+`scripts/rekey-storage-objects.mjs` (ADR-4, see
+[`scripts/README.md`](../../scripts/README.md)): a SQL
+`UPDATE storage.objects SET name = …` would orphan blobs, because Storage
+keys the physical file by `bucket/name`. Until the script runs, legacy
+objects keep rendering (public buckets bypass RLS on the
+`/object/public/*` path) but are invisible to every client write path —
+deleting one is a silent no-op: the restrictive floor matches no row, so the
+`storage.objects` row and its blob both survive and the caller still sees
+success. Nothing is orphaned by that path — the residue is the opposite
+shape. A delete-then-reupload leaves the legacy object sitting at its old
+key, still tracked by its own row and still publicly readable, while the
+entity's URL column now points at the new org-partitioned key. The script
+moves legacy objects onto the partitioned layout, which is what makes them
+deletable again; it deletes nothing, so anything already stranded at an old
+key by a delete-then-reupload before it runs must be removed by hand.
+
 ## Signup and provisioning contracts
 
 `handle_new_user()` resolves a signup's org **only** from server-owned
@@ -213,9 +284,14 @@ platform seam).
 - An authenticated member of org A visiting org B's public page resolves to
   org A and sees nothing (fail-closed, not wrong-tenant). Revisited in
   Phase 5 (#214).
-- Storage-bucket policies, signed tokens, and the service-role call sites:
+- Storage **writes** are closed (CWA-57 / #328 — see "Storage tenancy"
+  above); signed tokens and the service-role call sites were closed in
   Phase 3 (#212). Group-level scoping of member-facing surfaces: split out
   ahead of Phase 4.
+- Storage **reads**: both buckets remain public (ADR-3 above). Private
+  buckets + signed URLs, and the one-time physical re-key of legacy object
+  keys (`scripts/rekey-storage-objects.mjs`), are tracked as the CWA-57
+  follow-up issue.
 - The permissive `organizations` SELECT policy is written whole-row, but the
   column privileges beneath it are not: `20260801000002` revoked the
   table-level grant and re-granted a column list, and `20260802000001`

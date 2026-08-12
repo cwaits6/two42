@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { Camera } from "lucide-react";
 import { titleCaseName } from "@/lib/sanitize";
 import { uploadImage } from "@/lib/uploadImage";
+import { relObjectPath } from "@/lib/storagePaths";
 import type { FamilyMember, FamilyMemberRelationship, FamilyUnit } from "@/lib/types";
 
 const MONTHS = [
@@ -123,7 +124,11 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
     const previousAvatarUrl = avatarUrl;
     setUploadingAvatar(true);
     try {
-      const url = await uploadImage(file, "avatar", `family-members/${member.id}/avatar`);
+      const url = await uploadImage(
+        file,
+        "avatar",
+        relObjectPath("family-members", member.id, "avatar"),
+      );
       const bustedUrl = `${url}?t=${Date.now()}`;
       setAvatarUrl(bustedUrl);
 

@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { uploadImage } from "@/lib/uploadImage";
+import { relObjectPath } from "@/lib/storagePaths";
 import {
   titleCaseName,
   normalizePhone,
@@ -346,7 +347,11 @@ export function SetupWizard({ profile, userEmail }: SetupWizardProps) {
     if (!file) return;
     setUploadingAvatar(true);
     try {
-      const url = await uploadImage(file, "avatar", `${profile.id}/avatar`);
+      const url = await uploadImage(
+        file,
+        "avatar",
+        relObjectPath("profiles", profile.id, "avatar"),
+      );
       const busted = `${url}?t=${Date.now()}`;
       setAvatarUrl(busted);
       const { error: avatarErr } = await supabase

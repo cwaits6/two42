@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { uploadImage } from "@/lib/uploadImage";
+import { deleteImage, uploadImage } from "@/lib/uploadImage";
+import { relObjectPath } from "@/lib/storagePaths";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -318,7 +319,11 @@ export default function FamiliesPage() {
 
     setUploadingPhoto(true);
     try {
-      const url = await uploadImage(file, "family", `families/${editing.id}/photo`);
+      const url = await uploadImage(
+        file,
+        "family",
+        relObjectPath("families", editing.id, "photo"),
+      );
       const { error } = await supabase
         .from("family_units")
         .update({ photo_url: url })
@@ -342,11 +347,15 @@ export default function FamiliesPage() {
     setRemovingPhoto(true);
     try {
       // Delete the file first — removing a missing object doesn't error, so
-      // a retry after a failed DB update stays safe.
-      const { error: storageError } = await supabase.storage
-        .from("avatars")
-        .remove([`families/${editing.id}/photo.jpg`]);
-      if (storageError) {
+      // a retry after a failed DB update stays safe. That same non-error
+      // also means a legacy photo still keyed at the un-prefixed
+      // `families/<id>/photo.jpg` (pre-CWA-57) is silently left behind as
+      // an orphan blob: RLS filters it from the org-prefixed remove(), the
+      // photo_url update below still clears the UI, and
+      // scripts/rekey-storage-objects.mjs is what re-keys the estate.
+      try {
+        await deleteImage("family", relObjectPath("families", editing.id, "photo"));
+      } catch {
         toast.error("Failed to remove family photo.");
         return;
       }
