@@ -166,10 +166,10 @@ export async function deleteImage(
 // shape in CLAUDE.md / scripts/README.md).
 
 /**
- * Exchanges one stored public-URL string for a signed URL. Fail-soft like
- * deleteImage(): a malformed value, an un-rekeyed legacy object, or a
- * transient Storage error logs a warning and resolves `null` — a broken
- * avatar must not break the page around it.
+ * Exchanges one stored public-URL string for a signed URL. Fail-soft: a
+ * malformed value, an un-rekeyed legacy object, or a transient Storage error
+ * logs a warning and resolves `null` — a broken avatar must not break the
+ * page around it.
  */
 export async function mintSignedUrl(
   url: string | null | undefined,

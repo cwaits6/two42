@@ -4,13 +4,14 @@ import { fileURLToPath } from "node:url";
 export default defineConfig({
   test: {
     environment: "node",
-    // app/** and scripts/** are included so a test placed there is not
-    // silently collected as zero tests — an omitted glob makes a test file
-    // look green while never running. scripts/ covers the operator scripts'
-    // pure halves (e.g. scripts/rekeyPlan.mjs).
+    // app/**, components/**, and scripts/** are included so a test placed
+    // there is not silently collected as zero tests — an omitted glob makes
+    // a test file look green while never running. scripts/ covers the
+    // operator scripts' pure halves (e.g. scripts/rekeyPlan.mjs).
     include: [
       "lib/**/*.test.ts",
       "app/**/*.test.ts",
+      "components/**/*.test.ts",
       "scripts/**/*.test.mjs",
     ],
   },

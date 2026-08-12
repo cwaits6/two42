@@ -225,7 +225,18 @@ export default function FamiliesPage() {
     // for a signed URL before it reaches an <img src>.
     setPhotoUrl(null);
     if (family.photo_url) {
-      mintSignedUrl(family.photo_url).then(setPhotoUrl);
+      mintSignedUrl(family.photo_url)
+        .then((url) => {
+          // Only apply if the dialog hasn't moved on to a different family
+          // (or closed) while the mint was in flight.
+          setEditing((current) => {
+            if (current?.id === family.id) setPhotoUrl(url);
+            return current;
+          });
+        })
+        .catch((err) => {
+          console.error("openEdit: signing family photo failed", err);
+        });
     }
     setShowMemberForm(false);
     setEditingMember(null);

@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import { mintSignedUrls } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Plus } from "lucide-react";
@@ -9,6 +8,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { siteConfig } from "@/lib/config";
 import { displayName, initials } from "@/lib/names";
 import { resolveFundMethods } from "@/lib/giving/methods";
+import { signStewardAvatars } from "@/lib/giving/server";
 import { GiveList, type FundView } from "@/components/giving/GiveList";
 import type { GivingFund, GivingFundMethod } from "@/lib/types";
 
@@ -80,20 +80,7 @@ export default async function GivePage() {
   const rawFunds = (fundRows ?? []) as FundWithStewards[];
   // Private buckets (CWA-59): exchange steward avatar URLs for signed URLs
   // before they reach GiveList's renders.
-  const stewardUrls = rawFunds.flatMap((f) => [
-    f.steward?.avatar_url,
-    f.co_steward?.avatar_url,
-  ]);
-  const signedStewards = await mintSignedUrls(stewardUrls);
-  const funds = rawFunds.map((f, i) => ({
-    ...f,
-    steward: f.steward
-      ? { ...f.steward, avatar_url: signedStewards[i * 2] }
-      : f.steward,
-    co_steward: f.co_steward
-      ? { ...f.co_steward, avatar_url: signedStewards[i * 2 + 1] }
-      : f.co_steward,
-  }));
+  const funds = await signStewardAvatars(rawFunds);
   const stewardsCanManage = (modeRow?.value ?? "stewards") === "stewards";
   const canCreate = isAdmin || stewardsCanManage;
 

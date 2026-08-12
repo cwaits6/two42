@@ -10,8 +10,10 @@ import type { DirectoryProfile, FamilyDirectoryFull } from "@/lib/types";
  * Private buckets (CWA-59): exchange every stored avatar/photo URL in the
  * directory payload for a signed URL in one batch — member avatars, family
  * photos, and the avatars nested in each family's member lists.
+ *
+ * Exported for unit testing only; not part of the hook's public surface.
  */
-async function signDirectoryUrls(
+export async function signDirectoryUrls(
   memberRows: DirectoryProfile[],
   familyRows: FamilyDirectoryFull[],
 ): Promise<{ members: DirectoryProfile[]; families: FamilyDirectoryFull[] }> {
@@ -62,48 +64,54 @@ export function useDirectoryData() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: m, error: mErr }, { data: f, error: fErr }, { data: g, error: gErr }] =
-        await Promise.all([
-          supabase
-            .from("profiles_directory")
-            .select("*")
-            .order("last_name", { ascending: true }),
-          supabase
-            .from("families_directory_full")
-            .select("*")
-            .order("family_name", { ascending: true }),
-          supabase
-            .from("member_groups")
-            .select("id, name, color, icon, description, show_in_directory_filter")
-            .order("display_order"),
-        ]);
+      try {
+        const [{ data: m, error: mErr }, { data: f, error: fErr }, { data: g, error: gErr }] =
+          await Promise.all([
+            supabase
+              .from("profiles_directory")
+              .select("*")
+              .order("last_name", { ascending: true }),
+            supabase
+              .from("families_directory_full")
+              .select("*")
+              .order("family_name", { ascending: true }),
+            supabase
+              .from("member_groups")
+              .select("id, name, color, icon, description, show_in_directory_filter")
+              .order("display_order"),
+          ]);
 
-      if (mErr || fErr || gErr) {
-        const err = mErr ?? fErr ?? gErr;
-        console.error("directory load error:", {
-          source: mErr
-            ? "profiles_directory"
-            : fErr
-              ? "families_directory_full"
-              : "member_groups",
-          message: err?.message,
-          details: err?.details,
-          hint: err?.hint,
-          code: err?.code,
-        });
+        if (mErr || fErr || gErr) {
+          const err = mErr ?? fErr ?? gErr;
+          console.error("directory load error:", {
+            source: mErr
+              ? "profiles_directory"
+              : fErr
+                ? "families_directory_full"
+                : "member_groups",
+            message: err?.message,
+            details: err?.details,
+            hint: err?.hint,
+            code: err?.code,
+          });
+          setError(true);
+          setLoading(false);
+          return;
+        }
+
+        const signed = await signDirectoryUrls(
+          (m || []) as DirectoryProfile[],
+          (f || []) as FamilyDirectoryFull[],
+        );
+        setMembers(signed.members);
+        setFamilies(signed.families);
+        setGroups((g || []) as DirectoryGroup[]);
+        setLoading(false);
+      } catch (err) {
+        console.error("directory load failed:", err);
         setError(true);
         setLoading(false);
-        return;
       }
-
-      const signed = await signDirectoryUrls(
-        (m || []) as DirectoryProfile[],
-        (f || []) as FamilyDirectoryFull[],
-      );
-      setMembers(signed.members);
-      setFamilies(signed.families);
-      setGroups((g || []) as DirectoryGroup[]);
-      setLoading(false);
     }
     load();
   }, [supabase]);

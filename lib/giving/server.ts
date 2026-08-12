@@ -31,6 +31,36 @@ export async function getGivingSettings(supabase: SupabaseClient): Promise<{
   };
 }
 
+type StewardAvatarSource = {
+  steward?: { avatar_url: string | null } | null;
+  co_steward?: { avatar_url: string | null } | null;
+};
+
+/**
+ * Private buckets (CWA-59): flattens each fund's steward + co-steward
+ * avatar URLs into one batch (fixed 2-slot stride per fund), mints signed
+ * URLs, then reassembles them back onto the steward/co_steward objects.
+ * Named and unit tested on its own because the stride arithmetic (`i * 2`,
+ * `i * 2 + 1`) silently misaligns if a third avatar field is ever added
+ * without updating both the flatten and the reassembly in lockstep.
+ */
+export async function signStewardAvatars<T extends StewardAvatarSource>(
+  funds: T[],
+): Promise<T[]> {
+  const urls = funds.flatMap((f) => [
+    f.steward?.avatar_url ?? null,
+    f.co_steward?.avatar_url ?? null,
+  ]);
+  const signed = await mintSignedUrls(urls);
+  return funds.map((f, i) => ({
+    ...f,
+    steward: f.steward ? { ...f.steward, avatar_url: signed[i * 2] } : f.steward,
+    co_steward: f.co_steward
+      ? { ...f.co_steward, avatar_url: signed[i * 2 + 1] }
+      : f.co_steward,
+  }));
+}
+
 /** Member picker options for the fund form */
 export async function loadFundFormData(supabase: SupabaseClient): Promise<{
   members: MemberOption[];
