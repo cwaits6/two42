@@ -116,8 +116,9 @@ different orgs must never be addressable in one request.
 **Keep path-addressed routes.** They are the fallback that works before an org
 has any domain at all — including during provisioning, before DNS propagates,
 and on preview deployments where the host is a Vercel-generated name. The
-canonical URL for an org becomes its verified custom domain if it has one, else
-its platform subdomain; `/[orgSlug]/…` stays reachable and should emit
+canonical URL for an org becomes its custom domain once verified *and*
+attached (§6.3 step 6), else its platform subdomain; `/[orgSlug]/…` stays
+reachable and should emit
 `<link rel="canonical">` at the canonical host.
 
 **Reserved subdomain labels.** `ORG_SLUG_PATTERN` (`lib/org.ts`) and
@@ -162,7 +163,7 @@ as $$
   select o.slug
   from public.org_domains d
   join public.organizations o on o.id = d.org_id
-  where d.domain = lower(trim(both '.' from _host))
+  where d.domain = _host
     and d.status = 'verified'
     and o.status = 'active';
 $$;
@@ -173,6 +174,14 @@ grant execute on function public.app_org_slug_for_host(text) to anon, authentica
 
 Notes on the shape, each one deliberate:
 
+- **No normalization inside the function — canonicalization is middleware's
+  job, once.** Rows are stored canonical (lowercase, punycode, no trailing dot,
+  no port — the §6 CHECK constraint enforces it), and the middleware
+  canonicalizes the request host before calling (§5.2 step 1). Non-canonical
+  input — mixed case, a trailing dot, a port — therefore matches nothing and
+  fails closed, which is exactly what the resolver suite in §13 pins. Two
+  normalization points for the same value would drift; one contract, owned by
+  the caller, asserted by tests on both sides.
 - **Returns a slug, not an org id.** The slug is what `x-two42-org` carries and
   what `app_request_org_id()` already validates. Returning an id would create a
   second, differently-validated path to the same answer; the two would drift.
@@ -208,17 +217,38 @@ it constructs the Supabase client:
 
 1. Read the host from `request.headers.get("host")` (Vercel sets this to the
    request host; `x-forwarded-host` is the fallback). Lowercase, strip port,
-   strip a trailing dot.
-2. If the host ends with the platform apex, take the first label as the slug —
-   pure string work, no lookup. Reject it if it fails `isValidOrgSlug()` or is
-   a reserved label.
-3. Otherwise call `app_org_slug_for_host(host)` through an **anon** Supabase
+   strip a trailing dot. This is the *only* place the host is normalized — the
+   resolver in §5.1 deliberately does none (see its notes).
+2. Classify against the platform apex with an **exact label boundary, never a
+   raw suffix check** — `host === apex` or `host.endsWith("." + apex)`, so that
+   `evil-<apex>` (a registrable name that merely ends with the apex string)
+   can never classify as platform. Three sub-cases:
+   - `host === apex`: the platform host itself. No subdomain slug; only the
+     path-addressed route (#3 in §4) can name an org.
+   - `host.endsWith("." + apex)`: take the prefix before `"." + apex`. It must
+     be **exactly one label** (no dots) that passes `isValidOrgSlug()` and is
+     not reserved — otherwise resolve *no* org. Do **not** fall through to the
+     custom-domain lookup: nothing under the platform apex is claimable as a
+     custom domain, and multi-label hosts like `a.b.<apex>` are outside the
+     wildcard certificate anyway.
+   - Neither: a custom-domain candidate; continue to step 3.
+3. Call `app_org_slug_for_host(host)` through an **anon** Supabase
    client (no cookies needed for this call — it is a pure function of the
    host).
-4. If neither yields a slug, fall back to `resolveOrgSlug()` (the env pin) so
-   local dev, preview deployments, and the self-host single-org case keep
-   working unchanged. This is the one permitted fallback, and it is a fallback
-   to *the configured deployment's own org*, never to another tenant's.
+4. If neither yields a slug, resolve no org — *unless* the host is one the
+   deployment explicitly trusts, in which case fall back to
+   `resolveOrgSlug()` (the env pin). Trusted hosts are a closed, static set:
+   `localhost` / `127.0.0.1` (local dev), the host of `NEXT_PUBLIC_SITE_URL`
+   (the self-host single-org case), and Vercel-generated preview hosts
+   (`*.vercel.app` for this project). This keeps §5.1's fail-closed property
+   intact end-to-end: an unverified or mistyped custom host must render the
+   404 path, never the deployment's own tenant — otherwise any stray DNS name
+   pointed at the deployment serves the env-pinned org's public surface under
+   a domain that org never claimed. The fallback is a *deployment-shape*
+   accommodation, not an unknown-host default. The middleware answers an
+   unresolved untrusted host itself — a 404 rewrite, before any route runs —
+   because the `createClient()` default in §5.3 ends in `resolveOrgSlug()` and
+   must never be reachable on a host that resolved nothing.
 
 The resolved slug then feeds the existing `x-two42-org` header on the
 middleware client, and is forwarded to the rest of the request via a request
@@ -234,8 +264,12 @@ Two hard requirements on that header:
 - **Strip any inbound `x-two42-resolved-org` before setting it.** A client can
   send arbitrary headers; if the middleware does not overwrite unconditionally,
   the header becomes client-controlled and every server component downstream is
-  reading attacker input. Set, never append, and set it on every path through
-  `updateSession()` including the early redirects.
+  reading attacker input. Set, never append, and strip it on every path through
+  `updateSession()` including the early redirects. The header is set **only
+  when steps 2–3 resolved an org from the host itself**; on the trusted-host
+  fallback (step 4) it is stripped and left unset, so downstream code can
+  distinguish "the host names org X" from "the env-pin default applied" — the
+  §5.3 mismatch check depends on that distinction.
 - **Shape-check the slug before it reaches a header value.** Same reason
   `app/[orgSlug]/join/page.tsx` shape-checks its route param: a `%0d%0a`
   payload reaching undici as a raw header value throws a 500 instead of taking
@@ -261,8 +295,19 @@ const resolved = (await headers()).get("x-two42-resolved-org");
 "x-two42-org": orgSlug ?? resolved ?? resolveOrgSlug(),
 ```
 
-The explicit `orgSlug` argument keeps winning, so `app/[orgSlug]/join` is
-unaffected.
+The explicit `orgSlug` argument keeps winning over the *default* — but §4's
+precedence rule ("the host wins and a path slug naming a different org is a
+404") has to be enforced somewhere, and this is where. Middleware cannot do it
+alone: it does not know which path segments are org slugs. So the rule is a
+route-level check, and `app/[orgSlug]/join` is the one route that needs it in
+v1: before creating a client, read `x-two42-resolved-org`; if it is set (the
+host itself resolved an org, per the §5.2 header contract) and the path slug
+names a *different* org, return `notFound()` — never create a client for the
+path slug. On the platform host and trusted hosts the header is unset, and the
+path slug works exactly as today. Any future route
+that takes an org slug as a path param inherits the same check; a small
+`assertPathOrgMatchesHost(orgSlug)` helper next to `createClient()` keeps it
+from being re-derived per route.
 
 `lib/org.ts` must not import `next/headers` to do this. The file's opening
 comment is explicit: it is reachable from the client bundle
@@ -332,6 +377,12 @@ create table public.org_domains (
   -- record. Proves control of the name before it is attached to the project.
   verification_token text not null default encode(gen_random_bytes(16), 'hex'),
   verified_at timestamptz,
+  -- Set by the operator (via /platform) once the domain is attached to the
+  -- Vercel project (§7) and in the auth redirect allowlist (§8). Verification
+  -- proves *ownership*; attachment is what makes the host actually route.
+  -- orgBaseUrl() (§9) requires it before the custom origin goes into any
+  -- emailed link. NULLed whenever status leaves 'verified'.
+  attached_at timestamptz,
   last_checked_at timestamptz,
   created_at timestamptz not null default now(),
   constraint org_domains_domain_shape check (
@@ -439,9 +490,19 @@ predicate.
    org (the `feedback` route's count-in-a-window pattern is the precedent).
 4. **The domain is attached to the Vercel project.** See §7.
 5. **The domain is added to the Supabase auth redirect allowlist.** See §8.
+6. **The operator marks the row attached** from the `/platform` queue, setting
+   `attached_at`. Only then does the domain become the org's canonical origin.
+   Without this gate there is a window — `status = 'verified'` set, Vercel
+   attachment still pending — during which an email built from the custom
+   origin would link to a host that does not route anywhere. `verified` is an
+   ownership fact; `attached_at` is the routing fact, and §9's `orgBaseUrl()`
+   requires both. (The §5.1 resolver gates on `verified` alone, deliberately:
+   a verified-but-unattached host never reaches the middleware, because Vercel
+   will not route it here — and the moment attachment makes it routable, it
+   should resolve.)
 
-Steps 4 and 5 are the ones that are not purely in-app, and they are why **open
-decision D3** exists.
+Steps 4 through 6 are the ones that are not purely in-app, and they are why
+**open decision D3** exists.
 
 ## 7. Attaching the domain to Vercel
 
@@ -466,8 +527,10 @@ app's environment to save an operator two minutes, at one tenant, is a bad
 trade. The `org_domains` row is the source of truth and the record of intent;
 an operator adds the name in the Vercel dashboard when a row reaches
 `verified`. Ship a `/platform` list of verified-but-unattached domains so the
-operator has a queue rather than a Slack message. Revisit when the manual step
-actually hurts, which is a real signal and not one to pre-empt.
+operator has a queue rather than a Slack message; the queue's completion
+action is marking the row attached (§6.3 step 6), which is what flips the
+org's canonical origin. Revisit when the manual step actually hurts, which is
+a real signal and not one to pre-empt.
 
 Note the asymmetry with §9: per-org **sending** domains *can* be fully
 automated, because the app already holds `RESEND_API_KEY` and that key's blast
@@ -532,9 +595,12 @@ require it), so this is a broken-link bug rather than a cross-tenant one — but
 it breaks the entire onboarding funnel for any org with a custom domain.
 
 **Proposed resolver:** `orgBaseUrl(orgId)` in a new `lib/org-urls.ts`,
-returning the org's canonical origin — verified custom domain, else
-`https://<slug>.<platform-apex>`, else `siteConfig.url`. It reads the same
-`org_domains` row the resolver in §5.1 uses. Every call site above takes an
+returning the org's canonical origin — the custom domain if its row is
+`verified` **and** `attached_at` is set (§6.3 step 6; verified alone means
+ownership is proven but the host may not route yet, and an emailed link must
+never point at an unrouted host), else `https://<slug>.<platform-apex>`, else
+`siteConfig.url`. It reads the same `org_domains` row the resolver in §5.1
+uses. Every call site above takes an
 `orgId` it already holds (or can derive from the anchor it already validated),
 so this is a mechanical change, not a re-architecture.
 
@@ -641,21 +707,42 @@ Two rules, both non-negotiable:
 - **The local part is a fixed constant.** `noreply@<verified domain>`. Do not
   let admins choose it in v1. This removes an entire class of input from the
   address and costs nothing anyone has asked for.
-- **The domain is validated by a new named regex** in `lib/email/identity.ts`,
-  alongside `PLAIN_NAME`, with the same standing: a validation boundary, not a
-  style choice. LDH labels, 1–63 chars per label, ≤253 total, at least one dot,
-  no leading/trailing hyphen, no underscore, no trailing dot. It is checked at
-  *send* time against the value read from the DB, not only at write time — the
-  write path already validates, and the read-time check is what makes a
-  compromised or hand-edited row non-exploitable.
+- **The domain is validated by a new named regex** — `SENDING_DOMAIN` in
+  `lib/email/identity.ts`, alongside `PLAIN_NAME`, with the same standing: a
+  validation boundary, not a style choice. The exact, anchored pattern:
+
+  ```ts
+  // PROPOSAL — lib/email/identity.ts
+  const SENDING_DOMAIN =
+    /^(?=.{4,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
+  ```
+
+  It accepts only fully-lowercase LDH labels (1–63 chars each, no leading or
+  trailing hyphen), at least one dot, 4–253 chars total — and by construction
+  rejects underscores, trailing dots, ports, whitespace, CR/LF, `@`, `<`/`>`,
+  and any non-ASCII byte. It performs **no normalization**: the value must
+  already be canonical. IDNs are supported only as punycode A-labels,
+  converted at claim time in the admin route; a non-ASCII value read back from
+  the DB simply fails the regex — v1 does not attempt IDNA mapping at send
+  time. The check runs at *send* time against the value read from the DB, not
+  only at write time — the write path already validates, and the read-time
+  check is what makes a compromised or hand-edited row non-exploitable. On any
+  failure the address is `PLATFORM_ADDRESS` and the fallback is logged; never
+  a "cleaned-up" version of the stored value. (This is the same grammar as the
+  `org_domains_domain_shape` CHECK in §6 — one definition of a valid hostname,
+  wherever it is enforced.)
 - **`status = 'verified'` gates the substitution** in the same expression. An
-  unverified domain falls back to `PLATFORM_ADDRESS`.
+  unverified domain — any of the four non-`verified` statuses — falls back to
+  `PLATFORM_ADDRESS`.
 
 Per CLAUDE.md's UI-conventions rule, `supabase/functions/_shared/branding.ts`
-mirrors `HEX`, `CONTROL`, and `PLAIN_NAME` **byte-for-byte**. The new domain
-regex joins that set: it lands on both sides in the same PR, and the edge
-functions must apply the same verified-status gate before using a per-org
-address.
+mirrors `HEX`, `CONTROL`, and `PLAIN_NAME` **byte-for-byte**. `SENDING_DOMAIN`
+joins that set: it lands on both sides in the same PR, the edge functions
+apply the same regex-plus-verified-status gate before using a per-org address,
+and the PR that ships it adds the constant to CLAUDE.md's named injection
+boundaries (§14). Unit tests on both sides assert the fallback: an invalid
+stored domain and an unverified row each produce `PLATFORM_ADDRESS`, and a
+CR/LF-bearing value can never reach `formatFromHeader()`.
 
 `EmailBranding` gains a `fromAddress: string` field, resolved in
 `resolveEmailBranding(orgId)` from the org's `org_email_domains` row and
@@ -691,7 +778,7 @@ create table public.org_email_usage (
   -- UTC day. A rolling window needs a row per send; a daily bucket needs one
   -- row per org per day and is enough to stop a runaway fan-out.
   usage_date date not null default (now() at time zone 'utc')::date,
-  sent_count integer not null default 0,
+  sent_count integer not null default 0 check (sent_count >= 0),
   primary key (org_id, usage_date)
 );
 
@@ -711,9 +798,20 @@ caller, which is the intended posture. (Adding an admin-facing usage display
 later means adding a permissive SELECT arm; the `organizations` history in
 [`tenancy-model.md`](../security/tenancy-model.md) is the cautionary tale for
 assuming a permissive policy exists.) `org_email_limits` is
-**platform-operator-owned, not org-admin-owned** — an org that can raise its own
-cap does not have a cap. Writes go through the `/platform` surface, gated on
-`requirePlatformAdmin()` like every other cross-org write; the org-side
+**platform-operator-owned, not org-admin-owned** — an org that can raise its
+own cap does not have a cap. Writes go through the `/platform` surface, gated
+on `requirePlatformAdmin()` like every other cross-org write — and, to be
+precise about the mechanism: that gate authorizes, it does not *reach*.
+`requirePlatformAdmin()` runs on the cookie-bound request client, which does
+not bypass RLS, and the restrictive isolation floor deliberately has no
+platform-admin escape hatch. The cap editor therefore follows the existing
+`/platform` write pattern (`app/api/platform/organizations/[id]/route.ts`):
+after the gate, a `createServiceClient()` write with an explicit
+`.eq("org_id", …)` on a target org id first validated against an existing
+`organizations` row. That makes it a new service-role site — it gets a row
+under "App routes and pages" in
+[`service-role-inventory.md`](../security/service-role-inventory.md) in the
+same PR (PR 8 in §12), with the heading's site count updated. The org-side
 permissive policy, if any, is SELECT-only.
 
 ### 11.2 Enforcement must be atomic
@@ -731,15 +829,29 @@ declare
   _cap integer;
   _ok boolean;
 begin
-  select coalesce(l.daily_cap, 2000) into _cap
+  -- A non-positive _n is a caller bug, not a refusable request: raising makes
+  -- the bug loud, and it closes the door on a negative _n walking sent_count
+  -- backwards (the >= 0 CHECK on the table is the second lock on that door).
+  if _org_id is null or _n is null or _n <= 0 then
+    raise exception 'email_quota_consume: _n must be a positive batch size';
+  end if;
+
+  select l.daily_cap into _cap
   from public.org_email_limits l where l.org_id = _org_id;
   _cap := coalesce(_cap, 2000);
 
-  insert into public.org_email_usage (org_id, usage_date, sent_count)
+  -- Bounds the INSERT path: without this, the first reserve of a UTC day is
+  -- unguarded (ON CONFLICT ... WHERE only constrains the UPDATE arm) and a
+  -- fan-out larger than the cap would sail through on a fresh day.
+  if _n > _cap then
+    return false;
+  end if;
+
+  insert into public.org_email_usage as u (org_id, usage_date, sent_count)
   values (_org_id, (now() at time zone 'utc')::date, _n)
   on conflict (org_id, usage_date) do update
-    set sent_count = public.org_email_usage.sent_count + excluded.sent_count
-    where public.org_email_usage.sent_count + excluded.sent_count <= _cap
+    set sent_count = u.sent_count + excluded.sent_count
+    where u.sent_count + excluded.sent_count <= _cap
   returning true into _ok;
 
   return coalesce(_ok, false);
@@ -764,17 +876,43 @@ treatment the serving RPC pair got. If an authenticated entry point is ever
 needed, it gets a separate wrapper that pins the org to
 `app_request_org_id()`, exactly as `serving_signup_create` does.
 
-Note the insert path with `_n` alone cannot exceed the cap on the *first* send
-of a day — `on conflict … where` only guards the update. Add the same bound to
-the insert (a `where` on an `insert … select`, or a pre-check) or a fan-out
-larger than the cap sails through on a fresh day. This is the kind of thing the
-pgTAP suite must assert directly.
+The two guards in the body are load-bearing, not defensive garnish: the
+`_n <= 0` raise is what keeps a buggy caller from decrementing usage, and the
+`_n > _cap` pre-check is the *only* bound on the INSERT arm. Both are the kind
+of thing the pgTAP suite must assert directly — a first-of-day batch larger
+than the cap refused, a zero and a negative `_n` raising, and the `>= 0`
+CHECK rejecting a direct negative write.
 
 **Call sites:** every fan-out reserves before sending and skips (logging, not
 throwing) when refused. That is the Tier A set from the inventory — feedback
 admin notifications, serving broadcast, leader cancel notices — plus both
-reminder edge functions. Reserve per *batch*, with `_n` = recipient count,
-before the first send; a per-recipient reserve is a round trip per member.
+reminder edge functions. Reserve per *batch*, before the first send; a
+per-recipient reserve is a round trip per member.
+
+**Reservation semantics, pinned so the call sites cannot each invent one:**
+
+- **`sent_count` counts *reserved attempts*, not confirmed deliveries.** A
+  reservation is consumed whether or not Resend accepts every message. The
+  counter exists to bound blast radius, so every error it can make must be in
+  the conservative direction: over-counting wastes some of one org's daily
+  budget; under-counting un-bounds the thing the table exists to bound.
+- **`_n` is the size of the final sendable set** — after the null/empty-email
+  filter and dedupe the fan-outs already do (the reminder paths skip profiles
+  without an email), not the raw recipient list. Reserving for rows that were
+  never going to be attempted burns quota for nothing and makes the counter
+  unreadable as a diagnostic.
+- **A quota RPC *error* is a refusal.** Log and skip the send, exactly as a
+  `false` return — never "the quota table was unreachable, send anyway." The
+  cap is a fail-closed control or it is not a control.
+- **A crash between reserve and send leaks the reservation, and v1 accepts
+  that.** Same for a cron retry that re-invokes a fan-out: it re-reserves, and
+  messages already counted may be counted again. Both errors are in the
+  permitted (conservative) direction, both self-heal at the UTC day rollover,
+  and both are bounded by the cap itself. Idempotent reservation keys and
+  reconciliation against Resend's accounting are billing-meter machinery — §3
+  rules them out until there is a meter to be accurate for. If a leaked
+  reservation ever blocks a real send, the operator raises the org's cap for
+  the day via the `/platform` editor; that is the entire recovery procedure.
 
 **Two blind spots to state loudly in the PR description**, because neither is
 caught by CI:
@@ -807,10 +945,12 @@ allowlist. Nothing in §12.2 onward is testable end-to-end without it.
    `x-two42-resolved-org` (stripped and shape-checked), `lib/supabase/server.ts`
    default, the client-side provider, the cookie-scope regression test.
    Behavior is unchanged for the existing deployment because step 4 of §5.2
-   falls back to the env pin. This is the highest-risk PR in the phase: it
-   touches the request path for every route.
+   falls back to the env pin for the deployment's own trusted host. This is
+   the highest-risk PR in the phase: it touches the request path for every
+   route.
 4. **Admin domain UI + verify route** — claim, TXT check, status transition,
-   `/platform` queue of verified-but-unattached domains. Inventory rows.
+   `/platform` queue of verified-but-unattached domains with the attach
+   confirmation (`attached_at`, §6.3 step 6). Inventory rows.
 5. **Per-org base URLs** — `orgBaseUrl()`, every `siteConfig.url` call site
    in §9, the edge-function ride-along mirror, and the
    `resolveEmailBranding()` orgId audit. Ships before any org actually has a
@@ -846,13 +986,23 @@ Beyond the suites each PR obviously needs:
 - **Resolver suite** — `app_org_slug_for_host()` returns NULL for: unknown
   host, `pending` row, `failed` row, verified row in a suspended org (per D4),
   an empty string, a host with a trailing dot, and mixed case. Positive control
-  for a verified row in an active org.
+  for a verified row in an active org. The trailing-dot and mixed-case cases
+  pin the §5.1 no-normalization contract: canonicalization happens in
+  middleware, once, and the resolver rejects non-canonical input by simply not
+  matching it.
 - **Quota suite** — concurrent `email_quota_consume` under a cap (two sessions,
-  one succeeds), the first-send-of-day bound, the day rollover, the grant
-  matrix (`anon`/`authenticated` have no EXECUTE), and a refused reserve
-  leaving `sent_count` unchanged. Assert **row counts**, not just the absence
-  of an error: a filtered write is a silent success in this codebase and has
-  bitten it before.
+  one succeeds), the first-send-of-day bound (`_n > _cap` refused on a fresh
+  day), a zero and a negative `_n` raising, the `sent_count >= 0` CHECK, the
+  day rollover, the grant matrix (`anon`/`authenticated` have no EXECUTE), and
+  a refused reserve leaving `sent_count` unchanged. Assert **row counts**, not
+  just the absence of an error: a filtered write is a silent success in this
+  codebase and has bitten it before.
+- **From-address gate** — unit tests on both sides of the mirror
+  (`lib/email/identity.ts` and `_shared/branding.ts`): an invalid stored
+  domain, each non-`verified` status, and a CR/LF-bearing value all resolve to
+  `PLATFORM_ADDRESS`; a verified canonical domain substitutes.
+- **`orgBaseUrl()` gating** — a `verified` row without `attached_at` never
+  becomes the canonical origin (§6.3 step 6); with it, the custom origin wins.
 - **Header hygiene** — a unit test that an inbound `x-two42-resolved-org` is
   overwritten, and one that a CRLF-bearing host cannot reach a header value.
 - **`npm run guard:tenancy`** before every push, and the inventory rows in the
@@ -870,15 +1020,17 @@ Beyond the suites each PR obviously needs:
 | `tenancy-model.md` — "Known limits" | The org-A-member-on-org-B's-page limit is closed for host-addressed routes (§5.5) | 3 |
 | `tenancy-model.md` — "Known limits" | `organizations.status` now cuts an access path (host resolution) — the current text says it gates nothing | 2 |
 | `tenancy-model.md` — deviations register | The global partial unique on `org_domains.domain` (§6) | 2 |
-| `service-role-inventory.md` | Rows for the domain verify route and the quota RPC; updated site counts; `lib/email/identity.ts` row names both tables | 4, 7, 8 |
+| `service-role-inventory.md` | Rows for the domain verify route, the quota RPC, and the `/platform` cap editor (§11.1); updated site counts; `lib/email/identity.ts` row names both tables | 4, 7, 8 |
 | `CLAUDE.md` | The new `From:`-address regex joins the named injection boundaries and the edge-mirror rule | 7 |
 | A new `docs/security/domains.md` (or a section here) | The redirect allowlist, the operator queue, and the manual Vercel step | 4 |
 
 ## 15. Risks
 
 - **Middleware is the whole request path.** PR 3 (§12) can take down every
-  route for every org. It needs the env-pin fallback to be genuinely
-  unconditional, a canary deploy, and a fast revert path. The negative-result
+  route for every org. It needs the trusted-host fallback (§5.2 step 4) to
+  keep the existing deployment's behavior identical, a canary deploy, and a
+  fast revert path — and the trusted-host set must include the deployment's
+  own host from day one, or the fallback protects nothing. The negative-result
   cache is a DoS surface if it is unbounded.
 - **DNS is not transactional.** A domain can be verified, then have its records
   removed. `status` will read `verified` while the CNAME points nowhere. That
