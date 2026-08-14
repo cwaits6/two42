@@ -26,7 +26,7 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
 
   const { data: currentProfile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, family_id, relationship")
     .eq("id", user.id)
     .single();
 
@@ -67,6 +67,16 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
         profile={profile}
         families={families || []}
         isAdmin={true}
+        // Caller context (not a precomputed boolean) so the form can
+        // re-derive avatar-write eligibility after it saves a family
+        // reassignment — a boolean computed here from the initial
+        // profile.family_id goes stale the moment the admin moves the
+        // member in or out of their household (CWA-62 / #337).
+        avatarCaller={{
+          id: user.id,
+          family_id: currentProfile.family_id,
+          relationship: currentProfile.relationship,
+        }}
       />
 
       <MemberGroupsSection profileId={profile.id} />
