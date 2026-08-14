@@ -1,0 +1,31 @@
+-- Serving attendee INSERT policy narrowed to RPC-only (CWA-61 / #336).
+--
+-- The "Signup owners can add attendees" INSERT policy on
+-- serving_signup_attendees (20260731000008_rls_serving.sql:59-74) let a
+-- signup owner attach ANY same-org profile via direct PostgREST, with no
+-- household predicate — while serving_signup_apply() (20260803010000)
+-- enforces the household rule (attendee must be the actor, or share the
+-- actor's non-null household with relationship primary/spouse, and carry
+-- the group's org_id). Two paths, two different strictness levels — flagged
+-- as deferred follow-up in the RPC's own migration comment.
+--
+-- Investigation for #336 confirmed no live call site does a direct
+-- PostgREST insert into this table: both signup-creation paths — the
+-- authenticated route (app/api/serving/signups/route.ts) and the
+-- signed-link route (app/api/serving/link-action/route.ts) — go
+-- exclusively through serving_signup_create() / serving_signup_apply().
+-- Attendee removal is a cascade off the parent serving_signups delete,
+-- never a direct delete against this table either.
+--
+-- So instead of narrowing the policy to duplicate the RPC's household rule
+-- (which would then need to stay in sync with it forever), the INSERT arm
+-- is dropped entirely: the RPC — SECURITY DEFINER, bypasses RLS — becomes
+-- the only write path. With zero INSERT policies left on the table, RLS
+-- denies every direct authenticated/anon insert by default; the "org
+-- isolation" policy is `as restrictive`, so it can only narrow access, not
+-- grant it, and cannot fill the gap left by the dropped permissive policy.
+--
+-- The DELETE policy ("Signup owners can remove attendees") is untouched —
+-- out of scope for #336, which is specifically the INSERT arm's missing
+-- household predicate.
+drop policy "Signup owners can add attendees" on public.serving_signup_attendees;
