@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { uploadImage } from "@/lib/uploadImage";
+import { mintSignedUrl, uploadImage } from "@/lib/uploadImage";
 import { relObjectPath } from "@/lib/storagePaths";
 import {
   titleCaseName,
@@ -352,8 +352,9 @@ export function SetupWizard({ profile, userEmail }: SetupWizardProps) {
         "avatar",
         relObjectPath("profiles", profile.id, "avatar"),
       );
-      const busted = `${url}?t=${Date.now()}`;
-      setAvatarUrl(busted);
+      // A freshly minted signed URL is already unique (its token), so the
+      // new image shows immediately — no manual cache-busting needed.
+      setAvatarUrl(await mintSignedUrl(url));
       const { error: avatarErr } = await supabase
         .from("profiles")
         .update({ avatar_url: url })

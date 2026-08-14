@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { deleteImage, uploadImage } from "@/lib/uploadImage";
+import { deleteImage, mintSignedUrl, uploadImage } from "@/lib/uploadImage";
 import { relObjectPath } from "@/lib/storagePaths";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -148,6 +148,11 @@ export default function FamiliesPage() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [removingPhoto, setRemovingPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  // Monotonic token for async photo-URL mints: each mint captures the token
+  // at issue time and applies its result only if still current, so a stale
+  // signing request can never overwrite a later family's photo (or a
+  // just-uploaded/removed one).
+  const photoRequestRef = useRef(0);
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -210,6 +215,7 @@ export default function FamiliesPage() {
   function openCreate() {
     setEditing(null);
     setForm(EMPTY_FORM);
+    photoRequestRef.current++; // invalidate any in-flight mint
     setPhotoUrl(null);
     setFamilyMembers([]);
     setShowMemberForm(false);
@@ -221,7 +227,22 @@ export default function FamiliesPage() {
   function openEdit(family: FamilyUnit) {
     setEditing(family);
     setForm(fromFamily(family));
-    setPhotoUrl(family.photo_url);
+    // The stored value is a private-bucket public URL (CWA-59) — exchange it
+    // for a signed URL before it reaches an <img src>.
+    const requestId = ++photoRequestRef.current;
+    setPhotoUrl(null);
+    if (family.photo_url) {
+      mintSignedUrl(family.photo_url)
+        .then((url) => {
+          // Apply only if this is still the newest photo request — the
+          // dialog may have moved to a different family, been closed, or the
+          // photo replaced/removed while the mint was in flight.
+          if (photoRequestRef.current === requestId) setPhotoUrl(url);
+        })
+        .catch((err) => {
+          console.error("openEdit: signing family photo failed", err);
+        });
+    }
     setShowMemberForm(false);
     setEditingMember(null);
     setMemberForm(EMPTY_MEMBER_FORM);
@@ -329,8 +350,11 @@ export default function FamiliesPage() {
         .update({ photo_url: url })
         .eq("id", editing.id);
       if (error) throw error;
-      // Cache-bust so the new image shows immediately.
-      setPhotoUrl(`${url}?t=${file.lastModified}`);
+      // A freshly minted signed URL is already unique (its token), so the
+      // new image shows immediately — no manual cache-busting needed.
+      const requestId = ++photoRequestRef.current;
+      const signed = await mintSignedUrl(url);
+      if (photoRequestRef.current === requestId) setPhotoUrl(signed);
       toast.success("Family photo updated.");
       loadFamilies();
     } catch (err) {
@@ -367,6 +391,7 @@ export default function FamiliesPage() {
         toast.error("Failed to remove family photo.");
         return;
       }
+      photoRequestRef.current++; // invalidate any in-flight mint
       setPhotoUrl(null);
       toast.success("Family photo removed.");
       loadFamilies();

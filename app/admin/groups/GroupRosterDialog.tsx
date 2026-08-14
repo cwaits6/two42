@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { mintSignedUrls } from "@/lib/uploadImage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -59,32 +60,43 @@ export function GroupRosterDialog({
     async function load(groupId: string) {
       setMode("roster");
       setQuery("");
-      const [{ data: members, error: mErr }, { data: rows, error: rErr }] =
-        await Promise.all([
-          supabase
-            .from("profiles")
-            .select("id, first_name, last_name, preferred_name, avatar_url")
-            .in("role", ["member", "content_editor", "admin"])
-            .order("last_name", { ascending: true })
-            .order("first_name", { ascending: true }),
-          supabase
-            .from("profile_groups")
-            .select("profile_id, is_leader")
-            .eq("group_id", groupId),
-        ]);
+      try {
+        const [{ data: members, error: mErr }, { data: rows, error: rErr }] =
+          await Promise.all([
+            supabase
+              .from("profiles")
+              .select("id, first_name, last_name, preferred_name, avatar_url")
+              .in("role", ["member", "content_editor", "admin"])
+              .order("last_name", { ascending: true })
+              .order("first_name", { ascending: true }),
+            supabase
+              .from("profile_groups")
+              .select("profile_id, is_leader")
+              .eq("group_id", groupId),
+          ]);
 
-      if (cancelled) return;
-      if (mErr || rErr) {
+        if (cancelled) return;
+        if (mErr || rErr) {
+          toast.error("Failed to load roster.");
+          return;
+        }
+        const memberRows = (rows || []) as { profile_id: string; is_leader: boolean }[];
+        // Private buckets (CWA-59): exchange stored avatar URLs for signed
+        // URLs before they reach the AvatarImage renders below.
+        const profileRows = (members || []) as RosterProfile[];
+        const signed = await mintSignedUrls(profileRows.map((p) => p.avatar_url));
+        if (cancelled) return;
+        setProfiles(profileRows.map((p, i) => ({ ...p, avatar_url: signed[i] })));
+        setAssigned(new Set(memberRows.map((r) => r.profile_id)));
+        setLeaders(
+          new Set(memberRows.filter((r) => r.is_leader).map((r) => r.profile_id)),
+        );
+        setLoadedGroupId(groupId);
+      } catch (err) {
+        if (cancelled) return;
+        console.error("GroupRosterDialog load failed", err);
         toast.error("Failed to load roster.");
-        return;
       }
-      const memberRows = (rows || []) as { profile_id: string; is_leader: boolean }[];
-      setProfiles((members || []) as RosterProfile[]);
-      setAssigned(new Set(memberRows.map((r) => r.profile_id)));
-      setLeaders(
-        new Set(memberRows.filter((r) => r.is_leader).map((r) => r.profile_id)),
-      );
-      setLoadedGroupId(groupId);
     }
 
     load(groupId);

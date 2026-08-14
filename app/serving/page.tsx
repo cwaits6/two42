@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { mintSignedUrls } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
@@ -70,10 +71,20 @@ export default async function ServingPage() {
     (memberships ?? []).map((m) => [m.group_id, m.is_leader as boolean])
   );
 
+  // Private buckets (CWA-59): exchange stored avatar URLs for signed URLs
+  // before the roster reaches RoleRoster's AvatarImage renders.
+  const rosterList = (rosterRows ?? []) as unknown as RosterRow[];
+  const signedAvatars = await mintSignedUrls(
+    rosterList.map((r) => r.profiles?.avatar_url),
+  );
+  rosterList.forEach((r, i) => {
+    if (r.profiles) r.profiles.avatar_url = signedAvatars[i];
+  });
+
   // Roster per group (RLS already hides unlisted / non-member profiles).
   // Leaders float to the top, then alphabetical by display name.
   const rosters = new Map<string, RosterMember[]>();
-  for (const row of (rosterRows ?? []) as unknown as RosterRow[]) {
+  for (const row of rosterList) {
     // Skip un-onboarded household peers (no name yet, not real roster members).
     if (!row.profiles || row.profiles.role === "pending") continue;
     const list = rosters.get(row.group_id) ?? [];

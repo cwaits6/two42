@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { mintSignedUrl, mintSignedUrls } from "@/lib/uploadImage";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -105,6 +106,28 @@ export function DirectoryPreview() {
         .eq("id", profile.family_id)
         .maybeSingle<FamilyDirectoryFull>();
       familyRow = f ?? null;
+    }
+
+    // Private buckets (CWA-59): exchange stored URLs for signed ones before
+    // they reach the PersonCard/FamilyCard renders.
+    profile.avatar_url = await mintSignedUrl(profile.avatar_url);
+    if (familyRow) {
+      const members = familyRow.members ?? [];
+      const familyMembers = familyRow.family_members_list ?? [];
+      const signed = await mintSignedUrls([
+        familyRow.photo_url,
+        ...members.map((m) => m.avatar_url),
+        ...familyMembers.map((fm) => fm.avatar_url),
+      ]);
+      familyRow = {
+        ...familyRow,
+        photo_url: signed[0],
+        members: members.map((m, i) => ({ ...m, avatar_url: signed[1 + i] })),
+        family_members_list: familyMembers.map((fm, i) => ({
+          ...fm,
+          avatar_url: signed[1 + members.length + i],
+        })),
+      };
     }
 
     setUnlisted(profile.is_unlisted);

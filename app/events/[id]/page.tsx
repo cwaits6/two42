@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { mintSignedUrls } from "@/lib/storageRead";
 import { EventRsvpPanel } from "./_components/EventRsvpPanel";
 import { AddToCalendarButton } from "@/components/events/AddToCalendarButton";
 import { SubscribeToEventButton } from "@/components/events/SubscribeToEventButton";
@@ -133,6 +134,11 @@ export default async function EventDetailPage({
         status: r.status as Attendee["status"],
       };
     });
+
+    // Private buckets (CWA-59): exchange stored avatar URLs for signed URLs
+    // before they reach AttendeeStrip's renders.
+    const signedAvatars = await mintSignedUrls(attendees.map((a) => a.avatar_url));
+    attendees = attendees.map((a, i) => ({ ...a, avatar_url: signedAvatars[i] }));
   }
 
   // Formatting helpers.

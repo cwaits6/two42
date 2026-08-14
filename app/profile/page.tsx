@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { mintSignedUrls } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -85,6 +86,24 @@ export default async function ProfilePage() {
     householdProfiles = othersRes.data ?? [];
     familyMembers = fmsRes.data ?? [];
   }
+
+  // Private buckets (CWA-59): exchange every stored avatar/photo URL for a
+  // signed URL in one batch before the data reaches client renders. The
+  // upload paths keep persisting raw URLs — this only touches what's shown.
+  const signed = await mintSignedUrls([
+    profile.avatar_url,
+    family?.photo_url,
+    ...householdProfiles.map((p) => p.avatar_url),
+    ...familyMembers.map((fm) => fm.avatar_url),
+  ]);
+  profile.avatar_url = signed[0];
+  if (family) family.photo_url = signed[1];
+  householdProfiles.forEach((p, i) => {
+    p.avatar_url = signed[2 + i];
+  });
+  familyMembers.forEach((fm, i) => {
+    fm.avatar_url = signed[2 + householdProfiles.length + i];
+  });
 
   return (
     <PageContainer>

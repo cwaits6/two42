@@ -2,7 +2,12 @@ import imageCompression from "browser-image-compression";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { resolveOrgSlug, resolveRequestOrgId } from "@/lib/org";
-import { orgObjectPath } from "@/lib/storagePaths";
+import {
+  SIGNED_URL_TTL_SECONDS,
+  groupPathsByBucket,
+  orgObjectPath,
+  parseStoragePublicUrl,
+} from "@/lib/storagePaths";
 
 export type ImageUploadType = "avatar" | "event" | "family";
 
@@ -147,4 +152,95 @@ export async function deleteImage(
     );
   }
   return { removed };
+}
+
+// ── Signed reads (CWA-59 / #333) ────────────────────────────────────────────
+// Both buckets are private, so a stored public-URL string no longer serves as
+// an <img src> directly — it must be exchanged for a signed URL whose minting
+// the org-scoped SELECT policies gate. These are the BROWSER-context helpers
+// ("use client" components); server components and API routes use the
+// mirrors in lib/storageRead.ts. Both own their client construction and
+// deliberately never accept a SupabaseClient parameter: storage signing has
+// no org_id predicate for a callee to re-validate, so a passed-in service
+// client would mint cross-tenant URLs with nothing to stop it (the Tier C
+// shape in CLAUDE.md / scripts/README.md).
+
+/**
+ * Exchanges one stored public-URL string for a signed URL. Fail-soft: a
+ * malformed value, an un-rekeyed legacy object, or a transient Storage error
+ * logs a warning and resolves `null` — a broken avatar must not break the
+ * page around it.
+ */
+export async function mintSignedUrl(
+  url: string | null | undefined,
+  ttlSeconds: number = SIGNED_URL_TTL_SECONDS,
+): Promise<string | null> {
+  if (!url) return null;
+  const parsed = parseStoragePublicUrl(url);
+  if (!parsed) {
+    // Strip the query/fragment before logging: an accidentally re-signed
+    // *signed* URL is rejected here, and its query string carries a bearer
+    // token that must never reach logs.
+    console.warn(
+      `mintSignedUrl: unparseable storage URL ${url.split(/[?#]/)[0]}`,
+    );
+    return null;
+  }
+  const supabase = createClient();
+  const { data, error } = await supabase.storage
+    .from(parsed.bucket)
+    .createSignedUrl(parsed.path, ttlSeconds);
+  if (error || !data?.signedUrl) {
+    console.warn(
+      `mintSignedUrl: signing failed for ${parsed.bucket}/${parsed.path} — ` +
+        (error?.message ?? "no signed URL returned"),
+    );
+    return null;
+  }
+  return data.signedUrl;
+}
+
+/**
+ * Batch variant: one `createSignedUrls()` call per bucket, results
+ * reassembled into the input's slots (nulls stay null, per-item failures
+ * become null). Reassembly is keyed by the response's `path` field, never by
+ * array position — the response order is Supabase's, not the caller's.
+ */
+export async function mintSignedUrls(
+  urls: Array<string | null | undefined>,
+  ttlSeconds: number = SIGNED_URL_TTL_SECONDS,
+): Promise<Array<string | null>> {
+  const results: Array<string | null> = urls.map(() => null);
+  const groups = groupPathsByBucket(urls);
+  if (groups.size === 0) return results;
+  const supabase = createClient();
+  await Promise.all(
+    Array.from(groups, async ([bucket, { indices, paths }]) => {
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .createSignedUrls(paths, ttlSeconds);
+      if (error || !data) {
+        console.warn(
+          `mintSignedUrls: batch signing failed for ${bucket} — ` +
+            (error?.message ?? "no data returned"),
+        );
+        return;
+      }
+      const byPath = new Map<string, string>();
+      for (const entry of data) {
+        if (entry.error || !entry.signedUrl) {
+          console.warn(
+            `mintSignedUrls: signing failed for ${bucket}/${entry.path} — ` +
+              (entry.error ?? "no signed URL returned"),
+          );
+          continue;
+        }
+        if (entry.path) byPath.set(entry.path, entry.signedUrl);
+      }
+      indices.forEach((slot, i) => {
+        results[slot] = byPath.get(paths[i]) ?? null;
+      });
+    }),
+  );
+  return results;
 }

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { mintSignedUrls } from "@/lib/storageRead";
 import { NextResponse } from "next/server";
 
 /**
@@ -59,9 +60,15 @@ export async function GET(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Private buckets (CWA-59): the client renders these avatars directly, so
+  // exchange stored URLs for signed URLs in the response.
+  const rows = data ?? [];
+  const signedAvatars = await mintSignedUrls(rows.map((r) => r.avatar_url));
+
   // Mask email for members who have opted out of showing it
-  const results = (data ?? []).map(({ hide_email, email, ...rest }) => ({
+  const results = rows.map(({ hide_email, email, ...rest }, i) => ({
     ...rest,
+    avatar_url: signedAvatars[i],
     email: hide_email ? null : email,
   }));
 

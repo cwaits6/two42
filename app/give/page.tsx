@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { siteConfig } from "@/lib/config";
 import { displayName, initials } from "@/lib/names";
 import { resolveFundMethods } from "@/lib/giving/methods";
+import { signStewardAvatars } from "@/lib/giving/server";
 import { GiveList, type FundView } from "@/components/giving/GiveList";
 import type { GivingFund, GivingFundMethod } from "@/lib/types";
 
@@ -76,7 +77,10 @@ export default async function GivePage() {
       .maybeSingle(),
   ]);
 
-  const funds = (fundRows ?? []) as FundWithStewards[];
+  const rawFunds = (fundRows ?? []) as FundWithStewards[];
+  // Private buckets (CWA-59): exchange steward avatar URLs for signed URLs
+  // before they reach GiveList's renders.
+  const funds = await signStewardAvatars(rawFunds);
   const stewardsCanManage = (modeRow?.value ?? "stewards") === "stewards";
   const canCreate = isAdmin || stewardsCanManage;
 

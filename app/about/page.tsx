@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { mintSignedUrls } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
 import { siteConfig } from "@/lib/config";
 import { displayName, initials } from "@/lib/names";
@@ -43,7 +44,16 @@ export default async function AboutClassPage() {
       return false;
     }
   })();
-  const teacherList = (teachers ?? []) as ClassTeacherWithProfile[];
+  // Private buckets (CWA-59): exchange stored avatar URLs for signed URLs
+  // before they reach the AvatarImage renders below.
+  const teacherRows = (teachers ?? []) as ClassTeacherWithProfile[];
+  const signedAvatars = await mintSignedUrls(
+    teacherRows.map((t) => t.profiles?.avatar_url),
+  );
+  const teacherList = teacherRows.map((t, i) => ({
+    ...t,
+    profiles: t.profiles ? { ...t.profiles, avatar_url: signedAvatars[i] } : t.profiles,
+  }));
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-4xl">

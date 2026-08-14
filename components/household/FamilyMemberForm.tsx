@@ -18,7 +18,7 @@ import {
 import { toast } from "sonner";
 import { Camera } from "lucide-react";
 import { titleCaseName } from "@/lib/sanitize";
-import { uploadImage } from "@/lib/uploadImage";
+import { mintSignedUrl, uploadImage } from "@/lib/uploadImage";
 import { relObjectPath } from "@/lib/storagePaths";
 import type { FamilyMember, FamilyMemberRelationship, FamilyUnit } from "@/lib/types";
 
@@ -129,8 +129,9 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
         "avatar",
         relObjectPath("family-members", member.id, "avatar"),
       );
-      const bustedUrl = `${url}?t=${Date.now()}`;
-      setAvatarUrl(bustedUrl);
+      // A freshly minted signed URL is already unique (its token), so the
+      // new image shows immediately — no manual cache-busting needed.
+      setAvatarUrl(await mintSignedUrl(url));
 
       const res = await fetch(`/api/household/members/${member.id}`, {
         method: "PATCH",
