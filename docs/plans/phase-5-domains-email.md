@@ -519,23 +519,49 @@ Two shapes:
   or issue a certificate. Automating that requires a Vercel API token in the
   app's environment.
 
-**Recommendation for v1: operator-in-the-loop, no Vercel token in the app.**
-The launch is one org. A Vercel API token scoped to the project is a
-deployment-control credential — strictly more powerful than the Supabase
-service key, since it can change where the domain points — and adding it to the
-app's environment to save an operator two minutes, at one tenant, is a bad
-trade. The `org_domains` row is the source of truth and the record of intent;
-an operator adds the name in the Vercel dashboard when a row reaches
-`verified`. Ship a `/platform` list of verified-but-unattached domains so the
-operator has a queue rather than a Slack message; the queue's completion
-action is marking the row attached (§6.3 step 6), which is what flips the
-org's canonical origin. Revisit when the manual step actually hurts, which is
-a real signal and not one to pre-empt.
+**Decided (D3, 2026-08-16): fully self-serve via an isolated attachment
+worker — the app never holds the Vercel token.** The original draft
+recommended operator-in-the-loop to keep the deployment-control credential out
+of the environment entirely; the maintainer chose automation, with the
+credential-isolation concern answered by *where the token lives* rather than
+by a human step. The shape:
 
-Note the asymmetry with §9: per-org **sending** domains *can* be fully
-automated, because the app already holds `RESEND_API_KEY` and that key's blast
-radius is email, which the send caps in §10 already bound. Domain attachment
-and mail-domain verification look like the same problem and are not.
+- The Next.js app — the large, untrusted-input-facing surface — has no Vercel
+  credential. Its only power is flipping an `org_domains` row to `verified`,
+  which it can do only by passing the TXT check.
+- A dedicated attachment worker (a Supabase edge function, matching the
+  existing service-key posture in `supabase/functions/`) holds the Vercel
+  token as a function secret. It does one job: read rows that are `verified`
+  with `attached_at is null`, call `POST /v10/projects/{id}/domains`, stamp
+  `attached_at` on success. Retry on transient failure; surface persistent
+  failures on the `/platform` dashboard rather than silently looping.
+- **Denylist in the worker**: it refuses the platform apex and any of its
+  subdomains outright, so no tenant can attach a name that shadows the
+  platform. This check lives in the worker, not only in the claim UI.
+- **Entitlement hook**: before attaching, the worker consults a per-org
+  entitlement check that is `true` for everyone today and becomes the billing
+  gate when Stripe lands (§3) — verification is free; *attachment* is the
+  paid event. This is the reason automation wins long-term: a paywalled
+  feature with an operator in the loop is a support queue.
+- Defense in depth: Vercel independently challenges domains claimed by
+  another Vercel account, so a bug in the verify route alone cannot hijack a
+  domain Vercel already knows belongs elsewhere.
+
+Residual risk, accepted: Vercel tokens are team-scoped, not finely scoped, so
+a compromised *worker* still holds a deployment-control credential. The
+mitigation is the same as for the service key those functions already hold —
+minimal code in the worker, secrets never in the repo, and review of every
+change to `supabase/functions/` (CLAUDE.md already mandates this).
+
+The `/platform` list of domains and their attachment status stays (§6.3
+step 6) — as observability and a manual retry surface, no longer as the
+mechanism.
+
+Note the asymmetry with §9 still holds, now with a parallel answer: per-org
+**sending** domains are automated through the app-held `RESEND_API_KEY`
+(blast radius: email, already bounded by §10's send caps); domain
+*attachment* is automated through the worker-held Vercel token (blast radius:
+deployment, bounded by isolation and the denylist).
 
 ## 8. Auth redirect allowlist
 
@@ -948,9 +974,12 @@ allowlist. Nothing in §12.2 onward is testable end-to-end without it.
    falls back to the env pin for the deployment's own trusted host. This is
    the highest-risk PR in the phase: it touches the request path for every
    route.
-4. **Admin domain UI + verify route** — claim, TXT check, status transition,
-   `/platform` queue of verified-but-unattached domains with the attach
-   confirmation (`attached_at`, §6.3 step 6). Inventory rows.
+4. **Admin domain UI + verify route + attachment worker** — claim, TXT
+   check, status transition, and the isolated Vercel-attachment edge function
+   (§7: token as a function secret, apex denylist, entitlement hook,
+   `attached_at` stamp). `/platform` shows attachment status and a manual
+   retry, not a required confirmation step. Inventory rows for both the
+   verify route and the worker.
 5. **Per-org base URLs** — `orgBaseUrl()`, every `siteConfig.url` call site
    in §9, the edge-function ride-along mirror, and the
    `resolveEmailBranding()` orgId audit. Ships before any org actually has a
@@ -1053,6 +1082,10 @@ Beyond the suites each PR obviously needs:
 
 ## 16. Open decisions for the maintainer
 
+**All seven resolved by the maintainer, 2026-08-16.** Each entry keeps its
+original framing with the resolution appended; sections the decisions changed
+(§7, §12) have been updated in place.
+
 **D1 — Where does host resolution live?** This spec puts it in a separate
 `app_org_slug_for_host()` called from middleware, leaving
 `app_request_org_id()` untouched (§5.1). The alternative is teaching
@@ -1062,6 +1095,11 @@ of an `org_domains` join in the InitPlan of every RLS policy on every org-owned
 table, and a materially larger security-critical function. **Recommendation:
 separate resolver.** Confirm before PR 2.
 
+> **Resolved: separate resolver.** `app_request_org_id()` stays untouched;
+> `app_org_slug_for_host()` ships as specced in §5.1. Rationale: keep the
+> security-kernel function small and cheap; the drift risk is closed by the
+> single-canonicalization contract and its tests, not by merging the paths.
+
 **D2 — How is `org_domains.status` protected from org admins?** Column-level
 `GRANT` excluding `status`/`verified_at`/`verification_token` from
 `authenticated`, or an admin policy that permits INSERT/DELETE but no UPDATE
@@ -1070,10 +1108,21 @@ matches what `20260802000001` already does on `organizations`; the policy shape 
 simpler to read. Either works; pick one before PR 2 so the pgTAP assertions
 match.
 
+> **Resolved: column-level GRANT**, matching the existing pattern on
+> `organizations` (`20260802000001`). `status`, `verified_at`, and
+> `verification_token` are excluded from `authenticated` writes; only the
+> server-side verify route transitions them. pgTAP asserts the grant matrix.
+
 **D3 — Automate Vercel domain attachment, or operator-in-the-loop?** §7
 recommends operator-in-the-loop for v1 (no Vercel API token in the app
 environment). Confirm — this is a security-posture call, not an engineering
 one, and it determines whether PR 4 ships a queue or an integration.
+
+> **Resolved: automate in v1** via the isolated attachment worker — see the
+> rewritten §7 for the full shape (app never holds the Vercel token; edge
+> function holds it as a secret; apex denylist; entitlement hook as the
+> future billing gate). PR 4 ships the worker; `/platform` becomes
+> observability + manual retry rather than a required queue.
 
 **D4 — Should a suspended org's custom domain stop resolving?** §5.1 gates on
 `o.status = 'active'`, which makes a suspended org's site 404 (or fall through
@@ -1082,9 +1131,16 @@ is unavailable" page, which is friendlier and leaks that the org exists. Note
 that either choice makes `organizations.status` cut an access path for the
 first time, which is a documented change to the tenancy model regardless.
 
+> **Resolved: go dark (404).** Fail closed; a suspended org's custom domain
+> resolves nothing and discloses nothing. The tenancy-model paragraph on
+> `organizations.status` gets updated by the PR that ships §5.1.
+
 **D5 — Re-verify mail domains on a schedule?** §15 argues yes eventually, no in
 v1. If yes, it rides on an existing reminder cron rather than a new one, and it
 must not flip a domain out of `verified` on a single transient DNS failure.
+
+> **Resolved: deferred — not in v1.** Verify once at claim time; revisit
+> scheduled re-verification when more than one org sends on a custom domain.
 
 **D6 — What is the platform apex?** The repo does not pin one:
 `NEXT_PUBLIC_SITE_URL` defaults to `http://localhost:3000` and the default
@@ -1093,8 +1149,22 @@ configuration (`NEXT_PUBLIC_PLATFORM_APEX`, suggested), and the wildcard
 certificate and redirect allowlist entry both depend on the answer. This blocks
 the infrastructure prerequisite in §12.
 
+> **Resolved: the platform apex is `two42.io`.** Org subdomains are
+> `<slug>.two42.io`; the wildcard certificate is `*.two42.io`; the Supabase
+> redirect-allowlist entry is `https://*.two42.io/**`;
+> `NEXT_PUBLIC_PLATFORM_APEX=two42.io`. History note: the platform began as a
+> single-class app on `incouragers.org`; that domain is *not* the platform —
+> it is expected to return later as org #1's own custom domain, making the
+> first org the dogfood tenant for this entire feature. Consequence: the
+> default `From:` of `noreply@incouragers.org` must migrate to a `two42.io`
+> address in this phase (§9/§10 call sites).
+
 **D7 — Default daily cap.** §11.1 proposes 2000/day/org as a placeholder. The
 real number should come from the current Resend plan's limit divided by a
 plausible tenant count, with headroom. It is a one-line default; getting it
 wrong in either direction is cheap to correct, but it should be a decision
 rather than a guess.
+
+> **Resolved: 500/day/org default**, with the per-org override in
+> `org_email_limits` as the escape hatch. Revisit the default against the
+> Resend plan's actual ceiling whenever the tenant count grows.
