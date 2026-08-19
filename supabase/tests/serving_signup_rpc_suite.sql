@@ -649,5 +649,46 @@ select is(current_setting('svrpc.admin_err'), 'no error',
 select is(current_setting('svrpc.nullid_err'), 'SV002',
   'a NULL element in the attendee array raises SV002');
 
+-- ── CWA-61 / #336: INSERT arm dropped — RPC is the only write path ──────────
+-- 20260813000000 dropped the "Signup owners can add attendees" policy, so a
+-- direct PostgREST insert has no permissive INSERT policy to satisfy and RLS
+-- denies it outright. Pin the shape (no INSERT policy exists) and the
+-- behavior (a signup owner cannot attach an arbitrary same-org,
+-- non-household profile directly).
+
+select is(
+  (select count(*) from pg_policies
+    where schemaname = 'public' and tablename = 'serving_signup_attendees' and cmd = 'INSERT'),
+  0::bigint,
+  'serving_signup_attendees has no INSERT policy — direct writes are denied, the RPC is the only path');
+
+do $$
+declare
+  direct_insert_err text := 'no error';
+  probe_signup uuid;
+begin
+  select s.id into probe_signup
+  from public.serving_signups s
+  where s.group_id = current_setting('svrpc.group_a')::uuid
+    and s.service_date = current_setting('svrpc.sunday1')::date;
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', current_setting('svrpc.owner_a'))::text, true);
+  begin
+    insert into public.serving_signup_attendees (org_id, signup_id, profile_id)
+    values (current_setting('svrpc.org_a')::uuid, probe_signup,
+            current_setting('svrpc.outsider_a')::uuid);
+  exception when others then
+    direct_insert_err := sqlstate;
+  end;
+  reset role;
+  perform set_config('request.jwt.claims', '', true);
+  perform set_config('svrpc.direct_insert_err', direct_insert_err, true);
+end $$;
+
+select is(current_setting('svrpc.direct_insert_err'), '42501',
+  'signup owner cannot attach an arbitrary same-org, non-household profile via direct insert (RLS 42501) — CWA-61');
+
 select * from finish();
 rollback;
