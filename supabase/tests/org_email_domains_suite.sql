@@ -137,6 +137,32 @@ select is(
   'org B''s row survives the cross-org DELETE (checked as postgres)'
 );
 
+-- ── Isolation, as org B''s admin (mirrors org A''s block: the policy is
+--    symmetric, so this is completeness, not a distinct code path) ──────────
+do $$
+declare
+  org_b uuid := current_setting('oed.org_b')::uuid;
+  owner_b uuid := current_setting('oed.owner_b')::uuid;
+  n bigint;
+  d text;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_b, 'role', 'authenticated')::text, true);
+
+  select count(*) into n from public.org_email_domains;
+  perform set_config('oed.owner_b_visible', n::text, true);
+
+  select domain into d from public.org_email_domains limit 1;
+  perform set_config('oed.owner_b_domain', coalesce(d, '<none>'), true);
+
+  reset role;
+end $$;
+
+select is(current_setting('oed.owner_b_visible')::bigint, 1::bigint,
+  'org B admin sees exactly one org_email_domains row (their own)');
+select is(current_setting('oed.owner_b_domain'), 'mail.org-b.example.test',
+  'the row org B''s admin sees is org B''s own domain');
+
 -- ── Non-admin isolation, as org A''s plain member ───────────────────────────
 do $$
 declare
@@ -184,6 +210,18 @@ begin
   end;
   perform set_config('oed.admin_self_verify_err', err, true);
 
+  -- A live UPDATE attempt, not just the catalog-privilege checks below: the
+  -- grant matrix (no UPDATE grant on any column) must actually block a
+  -- direct write, not just report that it should.
+  err := 'no error';
+  begin
+    update public.org_email_domains set status = 'verified'
+      where org_id = current_setting('oed.org_a')::uuid;
+  exception when others then
+    err := sqlstate;
+  end;
+  perform set_config('oed.admin_update_err', err, true);
+
   reset role;
 end $$;
 
@@ -195,6 +233,8 @@ select is(current_setting('oed.admin_reclaimed_status'), 'not_started',
   'a re-claimed row starts at status = not_started (server-set default)');
 select is(current_setting('oed.admin_self_verify_err'), '42501',
   'an admin INSERT naming `status` is rejected with insufficient_privilege (no self-verify at claim time)');
+select is(current_setting('oed.admin_update_err'), '42501',
+  'a live UPDATE of `status` by the row''s own org admin is rejected with insufficient_privilege, not just catalog-denied');
 
 -- ── Grant matrix ────────────────────────────────────────────────────────────
 select ok(not has_column_privilege('authenticated', 'public.org_email_domains', 'status', 'update'),

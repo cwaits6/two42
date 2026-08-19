@@ -71,8 +71,9 @@ revoke all on public.org_email_domains from anon, authenticated;
 --              cannot self-verify at claim time either.
 --   DELETE   — unconditional (still bounded by the RLS policies above: same
 --              org, admin only). No external resource depends on this row
---              the way an attached org_domains row depends on Vercel state,
---              so no restrictive delete policy is needed here.
+--              the way an attached org_domains row will depend on Vercel
+--              state (docs/plans/phase-5-domains-email.md §6, not yet
+--              built), so no restrictive delete policy is needed here.
 --   No UPDATE grant at all, on any column. `domain` is immutable after
 --              insert — re-claiming is DELETE + a fresh claim. status,
 --              resend_domain_id, dns_records, verified_at, and

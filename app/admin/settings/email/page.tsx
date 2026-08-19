@@ -19,7 +19,7 @@ type EmailDomainRow = Tables<"org_email_domains">;
  * is optional so a shape change on Resend's side degrades to a partial row,
  * never a crash.
  */
-interface DnsRecord {
+export interface DnsRecord {
   record?: string;
   name?: string;
   type?: string;
@@ -29,14 +29,14 @@ interface DnsRecord {
   status?: string;
 }
 
-function toDnsRecords(value: unknown): DnsRecord[] {
+export function toDnsRecords(value: unknown): DnsRecord[] {
   if (!Array.isArray(value)) return [];
   return value.filter(
     (r): r is DnsRecord => typeof r === "object" && r !== null,
   );
 }
 
-function statusVariant(
+export function statusVariant(
   status: string,
 ): "default" | "secondary" | "destructive" {
   if (status === "verified") return "default";
@@ -50,7 +50,7 @@ function statusVariant(
   return "destructive";
 }
 
-function statusLabel(status: string): string {
+export function statusLabel(status: string): string {
   return status.replace(/_/g, " ");
 }
 
@@ -74,7 +74,12 @@ export default function EmailDomainSettingsPage() {
       .select("*")
       .maybeSingle();
     if (error) {
+      // Return early: a transient read failure must not clear an
+      // already-displayed, already-claimed domain back to "unclaimed".
+      console.error("email-domain load: failed to load sending domain:", error);
       toast.error("Failed to load sending domain.");
+      setLoading(false);
+      return;
     }
     setRow(data ?? null);
     setLoading(false);
@@ -87,51 +92,65 @@ export default function EmailDomainSettingsPage() {
   const handleClaim = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setBusy(true);
-    const res = await fetch("/api/admin/email-domain", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ domain: domainInput }),
-    });
-    setBusy(false);
-    if (!res.ok) {
+    try {
+      const res = await fetch("/api/admin/email-domain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domain: domainInput }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error || "Failed to claim domain.");
+        return;
+      }
       const data = await res.json().catch(() => null);
-      toast.error(data?.error || "Failed to claim domain.");
-      return;
-    }
-    const data = await res.json().catch(() => null);
-    toast.success("Domain claimed. Publish the DNS records below, then verify.");
-    setDomainInput("");
-    if (data?.data) {
-      setRow(data.data as EmailDomainRow);
-    } else {
-      await load();
+      toast.success(
+        "Domain claimed. Publish the DNS records below, then verify.",
+      );
+      setDomainInput("");
+      if (data?.data) {
+        setRow(data.data as EmailDomainRow);
+      } else {
+        await load();
+      }
+    } catch (err) {
+      console.error("email-domain claim: request failed:", err);
+      toast.error("Could not reach the server. Check your connection and try again.");
+    } finally {
+      setBusy(false);
     }
   };
 
   const handleVerify = async () => {
     setBusy(true);
-    const res = await fetch("/api/admin/email-domain/verify", {
-      method: "POST",
-    });
-    setBusy(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      toast.error(data?.error || "Failed to verify domain.");
-      return;
-    }
-    const data = await res.json().catch(() => null);
-    const fresh = (data?.data as EmailDomainRow | undefined) ?? null;
-    if (fresh) {
-      setRow(fresh);
-      if (fresh.status === "verified") {
-        toast.success("Domain verified.");
-      } else {
-        toast.info(
-          `Status: ${statusLabel(fresh.status)}. Check back after DNS propagates.`,
-        );
+    try {
+      const res = await fetch("/api/admin/email-domain/verify", {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error || "Failed to verify domain.");
+        return;
       }
-    } else {
-      await load();
+      const data = await res.json().catch(() => null);
+      const fresh = (data?.data as EmailDomainRow | undefined) ?? null;
+      if (fresh) {
+        setRow(fresh);
+        if (fresh.status === "verified") {
+          toast.success("Domain verified.");
+        } else {
+          toast.info(
+            `Status: ${statusLabel(fresh.status)}. Check back after DNS propagates.`,
+          );
+        }
+      } else {
+        await load();
+      }
+    } catch (err) {
+      console.error("email-domain verify: request failed:", err);
+      toast.error("Could not reach the server. Check your connection and try again.");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -142,15 +161,21 @@ export default function EmailDomainSettingsPage() {
       return;
     }
     setBusy(true);
-    const res = await fetch("/api/admin/email-domain", { method: "DELETE" });
-    setBusy(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      toast.error(data?.error || "Failed to remove domain.");
-      return;
+    try {
+      const res = await fetch("/api/admin/email-domain", { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error || "Failed to remove domain.");
+        return;
+      }
+      toast.success("Domain removed.");
+      setRow(null);
+    } catch (err) {
+      console.error("email-domain remove: request failed:", err);
+      toast.error("Could not reach the server. Check your connection and try again.");
+    } finally {
+      setBusy(false);
     }
-    toast.success("Domain removed.");
-    setRow(null);
   };
 
   if (loading) {
