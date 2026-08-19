@@ -167,6 +167,46 @@ select throws_ok(
   'TN003', null,
   'invalid slug is rejected');
 
+-- Reserved subdomain labels (Phase 5 PR 1, CWA-65 / #358): TN006 fires
+-- after the TN003 shape check, and the whole call rolls back.
+select throws_ok(
+  $$ select public.provision_organization('Reserved Slug Org', 'admin', 'reserved@leak.example.test') $$,
+  'TN006', null,
+  'reserved slug is rejected');
+
+select throws_ok(
+  $$ select public.provision_organization('Reserved Slug Org', 'api', 'reserved@leak.example.test') $$,
+  'TN006', null,
+  'a second reserved slug (api) is rejected');
+
+select ok(
+  not exists (select 1 from public.organizations where slug in ('admin', 'api')),
+  'the TN006-rejected calls left no partial org behind (atomic)');
+
+select ok(
+  not exists (
+    select 1 from public.access_requests
+    where lower(email) = 'reserved@leak.example.test'),
+  'the TN006-rejected calls left no access request behind (atomic)');
+
+do $$
+declare
+  _org_id uuid;
+begin
+  _org_id := public.provision_organization(
+    'Not Reserved Org', 'signup-suite-not-reserved', 'not-reserved@leak.example.test'
+  );
+  perform set_config('su.org_not_reserved', _org_id::text, true);
+end $$;
+
+select ok(
+  exists (
+    select 1 from public.organizations
+    where id = current_setting('su.org_not_reserved')::uuid
+      and slug = 'signup-suite-not-reserved'
+  ),
+  'a normal (non-reserved) slug still provisions');
+
 -- Not callable from PostgREST roles: EXECUTE is revoked.
 do $$
 declare
