@@ -364,7 +364,10 @@ update that paragraph in `tenancy-model.md` rather than leaving it open.
 
 ```sql
 -- PROPOSAL, not a migration.
-create type public.org_domain_status as enum ('pending', 'verified', 'failed');
+-- 'removing' is the detach tombstone (§7.1): the row stays until the worker
+-- has removed the name from Vercel, so external state can never outlive the
+-- row that owns it.
+create type public.org_domain_status as enum ('pending', 'verified', 'failed', 'removing');
 
 create table public.org_domains (
   id uuid primary key default gen_random_uuid(),
@@ -382,7 +385,8 @@ create table public.org_domains (
   -- redirect allowlist (§8). Verification proves *ownership*; attachment is
   -- what makes the host actually route. orgBaseUrl() (§9) requires it before
   -- the custom origin goes into any emailed link. NULLed whenever status
-  -- leaves 'verified'.
+  -- leaves 'verified' — except into 'removing', where it is kept as the
+  -- "Vercel cleanup still owed" marker until the worker detaches (§7.1).
   attached_at timestamptz,
   -- Attachment lease (§7): the worker's single-flight claim. claimed_at
   -- bounds the lease window; claim_token fences the writer — a worker may
@@ -402,9 +406,12 @@ create table public.org_domains (
 -- The DNS namespace is global, so this unique is deliberately NOT per-org.
 -- Partial on verified rows: two orgs may both *claim* a name, only one may
 -- own it. Without the partial predicate, an org could squat every domain it
--- can think of and permanently block the real owner.
+-- can think of and permanently block the real owner. 'removing' tombstones
+-- are included so a name cannot be re-verified (and re-attached) while its
+-- previous owner's Vercel cleanup is still pending (§7.1) — otherwise the
+-- old row's detach would tear the new owner's attachment down.
 create unique index org_domains_verified_domain_key
-  on public.org_domains (domain) where status = 'verified';
+  on public.org_domains (domain) where status in ('verified', 'removing');
 
 -- Cheap dedupe of repeat claims within one org.
 create unique index org_domains_org_domain_key on public.org_domains (org_id, domain);
@@ -443,6 +450,16 @@ create policy "Admins manage org domains" on public.org_domains
   for all to authenticated
   using      (org_id = (select public.app_request_org_id()) and (select public.is_admin()))
   with check (org_id = (select public.app_request_org_id()) and (select public.is_admin()));
+
+-- Direct DELETE is confined to rows that own nothing outside the database.
+-- An attached row (or a tombstone mid-cleanup) is released through the
+-- remove route + worker instead (§7.1), so Vercel state can never be
+-- orphaned by a plain delete. Deliberately does NOT mention org_id: the
+-- isolation floor above already binds the org, and schema_tenancy_lint.sql
+-- counts "exactly one restrictive policy whose qual references org_id".
+create policy "Admins delete unattached org domains" on public.org_domains
+  as restrictive for delete to authenticated
+  using (attached_at is null and status <> 'removing');
 ```
 
 - **No `anon` permissive policy, on purpose.** Anonymous host resolution goes
@@ -463,10 +480,17 @@ create policy "Admins manage org domains" on public.org_domains
   DELETE only, with no UPDATE grant on any column** (**decision D2**: the
   grant, not the policy shape). That makes `domain` immutable after insert
   for every app role (§7 relies on this): changing a domain is DELETE plus a
-  fresh claim. The pgTAP grant-matrix suite must assert each protected
-  column individually — `status`, `verified_at`, `verification_token`,
-  `attached_at`, `attach_claimed_at`, `attach_claim_token`, and the absence
-  of UPDATE on `domain` itself.
+  fresh claim. **The DELETE grant is bounded by the restrictive delete
+  policy above**: it reaches only rows with `attached_at is null` and a
+  status other than `removing` — rows that own nothing in Vercel. Releasing
+  an attached domain goes through the remove route, which flips the row to
+  `removing` for the worker to detach and hard-delete (§7.1); the row is a
+  tombstone until then. The pgTAP grant-matrix suite must assert each
+  protected column individually — `status`, `verified_at`,
+  `verification_token`, `attached_at`, `attach_claimed_at`,
+  `attach_claim_token`, and the absence of UPDATE on `domain` itself — and
+  that a direct DELETE of an attached row affects **zero rows** (assert the
+  count; a filtered delete is a silent success in this codebase).
 
 ### 6.2 Service-role touchpoints and their org anchors
 
@@ -474,19 +498,20 @@ create policy "Admins manage org domains" on public.org_domains
 |---|---|---|---|
 | `app/api/admin/domains/route.ts` (new) — claim a domain | None needed. The insert runs on the cookie-bound request client under the admin policy above | n/a — RLS is the boundary | — |
 | `app/api/admin/domains/[id]/verify/route.ts` (new) — DNS TXT check, then flip `status` | The status transition must not be writable by the admin's own client (§6.1) | The caller's own RLS-scoped `profiles.org_id`, re-read on the request client; the target row is fetched `.eq("id", id).eq("org_id", orgId)` before any write | `org_domains` select + update, both on `(id, org_id)` |
+| `app/api/admin/domains/[id]/route.ts` (new, `DELETE`) — release a domain | An attached row cannot be deleted by the admin's own client (§6.1 delete policy); the route flips it to `removing` (a `status` write) so the worker detaches it first (§7.1). Unattached rows it deletes outright, on the request client | Same as the verify route: the caller's own `profiles.org_id`, target fetched on `(id, org_id)` before any write | `org_domains` select + update, both on `(id, org_id)` |
 | Middleware host resolution | **Not a service-role site.** `app_org_slug_for_host()` is `SECURITY DEFINER` and runs on the anon client | n/a | n/a |
 
-Both new routes need rows in
+All three new routes need rows in
 [`service-role-inventory.md`](../security/service-role-inventory.md) under
 "App routes and pages" **in the same PR**, and the site count in that heading
 must be updated — `npm run guard:tenancy` cross-checks both and fails twice
 over otherwise.
 
-The verify route is a **Tier B** chain rooted at a `createServiceClient()`
-binding, so every chain off it needs an `org_id` predicate. It is not an org
-anchor and must not carry an `// org-anchor:` marker — the org comes from the
-caller's profile, which is a validated anchor the guard can see as a plain
-predicate.
+The verify and remove routes are **Tier B** chains rooted at a
+`createServiceClient()` binding, so every chain off them needs an `org_id`
+predicate. Neither is an org anchor and neither may carry an
+`// org-anchor:` marker — the org comes from the caller's profile, which is a
+validated anchor the guard can see as a plain predicate.
 
 ### 6.3 The CNAME / verification flow
 
@@ -624,6 +649,63 @@ by a human step. The shape:
 - Defense in depth: Vercel independently challenges domains claimed by
   another Vercel account, so a bug in the verify route alone cannot hijack a
   domain Vercel already knows belongs elsewhere.
+
+### 7.1 Releasing a domain — deletion is a workflow, not a row delete
+
+Attachment creates state outside the database (the Vercel project domain,
+and the auth redirect allowlist entry of §8). A plain `DELETE` of the
+`org_domains` row would leave both behind: Vercel keeps routing and renewing
+a certificate for a name no tenant owns, and a stale allowlist entry lets
+whoever later controls that DNS name receive auth redirects. So an attached
+row is never deleted directly — §6.1's restrictive delete policy confines the
+admin `DELETE` grant to rows with `attached_at is null` — and release runs
+as a tracked state machine with the tombstone kept until cleanup is done:
+
+1. **Admin removes** the domain in `/admin/settings/domains`. The remove
+   route (§6.2) fetches the row on `(id, org_id)`. If `attached_at is null`
+   it deletes it on the request client (nothing external to clean up; the
+   worker's compensation rule below covers an in-flight attach). Otherwise it
+   sets `status = 'removing'` — the **only** status transition that keeps
+   `attached_at` — and clears the attachment lease so a pending attach
+   cannot re-stamp it. The row now reads as a tombstone: it is excluded from
+   the resolver (§5.1 gates on `verified`), from `orgBaseUrl()` (§9), and
+   from the admin's DELETE grant.
+2. **The worker detaches.** Its second job: rows with `status = 'removing'`,
+   claimed with the same single-flight lease as attachment. It calls
+   `DELETE /v9/projects/{id}/domains/{domain}`; a **404 is idempotent
+   success** (already gone), any other failure is retried on the next run
+   and surfaced on `/platform` if it persists. On success it **hard-deletes
+   the row** — service-role, `where id = _row_id and org_id = _org_id and
+   status = 'removing' and attach_claim_token = _token` — and only then.
+   Cleanup completing *is* the delete; the tombstone cannot vanish before it.
+3. **The allowlist entry** is removed as part of the same `/platform` queue
+   that added it (§8: remote Supabase config is operator-owned, nothing in
+   the app writes it). The worker's `/platform` view lists every domain it
+   detached and not yet acknowledged so the operator step is a checklist,
+   not a memory.
+
+**Reclaim is blocked until cleanup completes.** The verified-domain partial
+unique (§6) covers `removing` tombstones, so no org — the same one or
+another — can move a fresh claim of that name to `verified` while the old
+attachment is still being torn down. Without this, the new owner's attach
+would return "already exists on this project" (idempotent success, §7),
+stamp `attached_at`, and then the old row's detach would remove the very
+attachment the new row was just stamped for. The claim itself (`pending`)
+is allowed; verification simply fails with the unique violation until the
+tombstone is gone, and the verify route reports that as "domain is being
+released, retry shortly", not as a DNS failure.
+
+**Compensation for a lost stamp.** If the worker's `attached_at` stamp
+affects zero rows *after* Vercel confirmed the attachment, it re-reads the
+row. Row gone (the admin deleted an unattached row mid-flight) → the worker
+detaches the name it just attached, so no Vercel state outlives its row.
+Row present (lease superseded or expired) → leave it; the live claim holder
+will reconcile and stamp. This is the one place the worker undoes its own
+work, and it only ever undoes an attachment it made in that same run.
+
+pgTAP (§13) pins the invariants: an attached row refuses direct DELETE (zero
+rows), an unattached one accepts it, `removing` keeps `attached_at`, and a
+second org's row for a `removing` name cannot become `verified`.
 
 Residual risk, accepted: Vercel tokens are team-scoped, not finely scoped, so
 a compromised *worker* still holds a deployment-control credential. The
@@ -1052,12 +1134,14 @@ allowlist. Nothing in §12.2 onward is testable end-to-end without it.
    falls back to the env pin for the deployment's own trusted host. This is
    the highest-risk PR in the phase: it touches the request path for every
    route.
-4. **Admin domain UI + verify route + attachment worker** — claim, TXT
-   check, status transition, and the isolated Vercel-attachment edge function
-   (§7: token as a function secret, apex denylist, entitlement hook,
-   `attached_at` stamp). `/platform` shows attachment status and a manual
-   retry, not a required confirmation step. Inventory rows for both the
-   verify route and the worker.
+4. **Admin domain UI + verify/remove routes + attachment worker** — claim,
+   TXT check, status transition, the remove route's `removing` transition,
+   and the isolated Vercel-attachment edge function (§7: token as a function
+   secret, apex denylist, entitlement hook, `attached_at` stamp; §7.1: the
+   detach job that hard-deletes tombstones). `/platform` shows attachment
+   status, a manual retry, and the detached-but-not-yet-delisted queue for
+   §8 — not a required confirmation step. Inventory rows for the verify
+   route, the remove route, and the worker.
 5. **Per-org base URLs** — `orgBaseUrl()`, every `siteConfig.url` call site
    in §9, the edge-function ride-along mirror, and the
    `resolveEmailBranding()` orgId audit. Ships before any org actually has a
@@ -1110,6 +1194,14 @@ Beyond the suites each PR obviously needs:
   `PLATFORM_ADDRESS`; a verified canonical domain substitutes.
 - **`orgBaseUrl()` gating** — a `verified` row without `attached_at` never
   becomes the canonical origin (§6.3 step 6); with it, the custom origin wins.
+- **Domain release suite** (§7.1) — as an org admin: `DELETE` on an attached
+  row affects **zero rows** and the row remains; `DELETE` on a `pending`,
+  `failed`, or verified-but-unattached row succeeds (row count 1); a
+  `removing` row refuses direct `DELETE`. Delete-before-reclaim: with org A's
+  row for `example.church` in `removing`, org B's row for the same name can
+  be inserted as `pending` but the transition to `verified` raises the
+  partial-unique violation; once A's tombstone is hard-deleted, B's
+  transition succeeds. The resolver returns NULL for a `removing` row.
 - **Header hygiene** — a unit test that an inbound `x-two42-resolved-org` is
   overwritten, and one that a CRLF-bearing host cannot reach a header value.
 - **`npm run guard:tenancy`** before every push, and the inventory rows in the
@@ -1192,7 +1284,10 @@ match.
 > `attach_claim_token` are excluded from `authenticated` writes; the verify
 > route transitions the verification columns and the attachment worker (§7)
 > alone writes the attachment columns. pgTAP asserts the grant matrix
-> column-by-column.
+> column-by-column. The DELETE half of the grant is bounded by a restrictive
+> policy to rows with `attached_at is null` (§6.1, §7.1): an attached
+> domain is released through the remove route and the worker's detach job,
+> never by a plain row delete, so Vercel state cannot be orphaned.
 
 **D3 — Automate Vercel domain attachment, or operator-in-the-loop?** §7
 recommends operator-in-the-loop for v1 (no Vercel API token in the app
