@@ -459,11 +459,14 @@ create policy "Admins manage org domains" on public.org_domains
   stamp the routing fact without confirmed Vercel state and flip the org's
   canonical origin to an unrouted host (§6.3 step 6, §9). The admin-facing
   write surface must be a route handler that only ever writes `domain` on
-  insert — a column-level `GRANT` excluding `status`/`verified_at`/
-  `verification_token`/`attached_at`/`attach_claimed_at`/`attach_claim_token`
-  from `authenticated` (**decision D2**: the grant, not the policy shape).
-  The pgTAP grant-matrix suite must assert each excluded column individually,
-  including that `authenticated` cannot write `attached_at`.
+  insert — `authenticated` is granted **INSERT (on the claimable columns) and
+  DELETE only, with no UPDATE grant on any column** (**decision D2**: the
+  grant, not the policy shape). That makes `domain` immutable after insert
+  for every app role (§7 relies on this): changing a domain is DELETE plus a
+  fresh claim. The pgTAP grant-matrix suite must assert each protected
+  column individually — `status`, `verified_at`, `verification_token`,
+  `attached_at`, `attach_claimed_at`, `attach_claim_token`, and the absence
+  of UPDATE on `domain` itself.
 
 ### 6.2 Service-role touchpoints and their org anchors
 
@@ -569,14 +572,25 @@ by a human step. The shape:
   The returned token fences the writer, and the final stamp additionally
   requires the lease to still be **live**:
   `update … set attached_at = now() where id = _row_id and attach_claim_token
-  = _token and status = 'verified' and attached_at is null and
+  = _token and domain = _claimed_domain and status = 'verified' and
+  attached_at is null and
   attach_claimed_at > clock_timestamp() - interval '10 minutes'`. The token
   blocks a worker superseded by a newer claim; the live-lease predicate
   blocks the remaining case — a slow worker whose lease expired with no
-  replacement claim, whose Vercel confirmation may be minutes stale. Either
-  way an expired attempt cannot commit; it must re-claim and re-confirm. The
-  lease columns live in the §6 schema (`attach_claimed_at`,
+  replacement claim, whose Vercel confirmation may be minutes stale; and
+  `_claimed_domain` (captured at claim time) is the value the worker actually
+  sent to Vercel, so a row whose domain somehow changed mid-flight can never
+  be stamped for a different name than the one attached. Either way an
+  expired or mismatched attempt cannot commit; it must re-claim and
+  re-confirm. The lease columns live in the §6 schema (`attach_claimed_at`,
   `attach_claim_token`).
+- **`domain` is immutable after insert.** No app role holds an UPDATE grant
+  on it (§6.1 grants `authenticated` INSERT and DELETE only), and no
+  server-side path rewrites it: changing a domain is a DELETE plus a fresh
+  claim, which correctly restarts verification from `pending`. The
+  `_claimed_domain` predicate above is defense-in-depth for the one actor
+  the grants cannot bind — service-role code — so the invariant holds even
+  against a future service-side bug.
 - **The Vercel add-domain call is keyed by the domain name, and its error
   codes are not symmetric.** "Domain already exists **on this project**"
   (Vercel reports this as a 400-class error) is idempotent success — confirm
