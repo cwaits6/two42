@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { EMAIL } from "@/lib/branding";
+import { isReservedOrgSlug } from "@/lib/org";
 import { requirePlatformAdmin } from "@/lib/platform-access";
 import { createServiceClient } from "@/lib/supabase/server";
 
@@ -36,6 +37,12 @@ export async function POST(request: Request) {
   if (!SLUG.test(slug)) {
     return NextResponse.json(
       { error: "Slug must be lowercase letters, numbers, and hyphens." },
+      { status: 400 }
+    );
+  }
+  if (isReservedOrgSlug(slug)) {
+    return NextResponse.json(
+      { error: "That slug is reserved for platform use." },
       { status: 400 }
     );
   }
@@ -81,6 +88,12 @@ export async function POST(request: Request) {
               "That owner email already has an approved request or unclaimed invite elsewhere.",
           },
           { status: 409 }
+        );
+      }
+      if (error.code === "TN006") {
+        return NextResponse.json(
+          { error: "That slug is reserved for platform use." },
+          { status: 400 }
         );
       }
       if (error.code === "23505") {
