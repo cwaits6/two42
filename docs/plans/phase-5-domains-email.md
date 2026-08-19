@@ -818,8 +818,11 @@ the diagnostic to watch during rollout.
 Resend's domains API is the mechanism: `resend.domains.create({ name })`
 returns the DNS records to publish (a DKIM `TXT`, an SPF `TXT`, and a
 `MX` for the return path, depending on region), `resend.domains.verify(id)`
-triggers a re-check, and `resend.domains.get(id)` reports status
-(`not_started` / `pending` / `verified` / `failure` / `temporary_failure`).
+triggers a re-check, and `resend.domains.get(id)` reports status. The shipped
+migration's CHECK widens this to the union of Resend's REST docs
+(`not_started` / `pending` / `verified` / `failure` / `temporary_failure`)
+and the installed SDK's `DomainStatus` type (adding `failed` /
+`partially_verified` / `partially_failed`) — eight values total; see §10.2.
 
 The app already holds `RESEND_API_KEY`, so unlike §7 this can be fully
 automated in-app:
@@ -852,9 +855,14 @@ create table public.org_email_domains (
   -- using it is already authenticated by the platform API key.
   resend_domain_id text,
   -- Mirrors Resend's own status vocabulary rather than inventing one, so a
-  -- status nobody anticipated cannot be silently mapped to 'verified'.
+  -- status nobody anticipated cannot be silently mapped to 'verified'. Shipped
+  -- as the union of Resend's REST docs and the installed SDK's DomainStatus
+  -- type (8 values) — see the migration's own comment for the full list.
   status text not null default 'not_started'
-    check (status in ('not_started','pending','verified','failure','temporary_failure')),
+    check (status in (
+      'not_started', 'pending', 'verified', 'failure', 'temporary_failure',
+      'failed', 'partially_verified', 'partially_failed'
+    )),
   -- The DNS records to publish, as returned by Resend. Public data (a DKIM
   -- public key and an SPF include); rendered to the admin, never to a member.
   dns_records jsonb not null default '[]'::jsonb,
@@ -917,9 +925,12 @@ Two rules, both non-negotiable:
   a "cleaned-up" version of the stored value. (This is the same grammar as the
   `org_domains_domain_shape` CHECK in §6 — one definition of a valid hostname,
   wherever it is enforced.)
-- **`status = 'verified'` gates the substitution** in the same expression. An
-  unverified domain — any of the four non-`verified` statuses — falls back to
-  `PLATFORM_ADDRESS`.
+- **`status = 'verified'` gates the substitution** in the same expression —
+  every other status (currently seven: `not_started`, `pending`, `failure`,
+  `temporary_failure`, `failed`, `partially_verified`, `partially_failed`;
+  see §10.2) falls back to `PLATFORM_ADDRESS`. Gate on equality to
+  `'verified'`, not an enumerated list of fallback values — the vocabulary
+  has already grown once and will again.
 
 Per CLAUDE.md's UI-conventions rule, `supabase/functions/_shared/branding.ts`
 mirrors `HEX`, `CONTROL`, and `PLAIN_NAME` **byte-for-byte**. `SENDING_DOMAIN`
