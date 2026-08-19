@@ -490,8 +490,11 @@ predicate.
    org (the `feedback` route's count-in-a-window pattern is the precedent).
 4. **The domain is attached to the Vercel project.** See §7.
 5. **The domain is added to the Supabase auth redirect allowlist.** See §8.
-6. **The operator marks the row attached** from the `/platform` queue, setting
-   `attached_at`. Only then does the domain become the org's canonical origin.
+6. **The attachment worker marks the row attached** (§7), setting
+   `attached_at` after Vercel confirms the attachment. The worker is the
+   **sole writer** of `attached_at` — the `/platform` surface can trigger a
+   retry but never stamps the column itself. Only after the stamp does the
+   domain become the org's canonical origin.
    Without this gate there is a window — `status = 'verified'` set, Vercel
    attachment still pending — during which an email built from the custom
    origin would link to a host that does not route anywhere. `verified` is an
@@ -533,8 +536,25 @@ by a human step. The shape:
   existing service-key posture in `supabase/functions/`) holds the Vercel
   token as a function secret. It does one job: read rows that are `verified`
   with `attached_at is null`, call `POST /v10/projects/{id}/domains`, stamp
-  `attached_at` on success. Retry on transient failure; surface persistent
+  `attached_at` after Vercel confirms the attachment. Surface persistent
   failures on the `/platform` dashboard rather than silently looping.
+- **Attachment is single-flight and idempotent.** A scheduled worker
+  invocation and a `/platform` manual retry must not race: each attempt
+  first takes a durable claim on the row (`attach_claimed_at` set via a
+  conditional `UPDATE … WHERE attach_claimed_at IS NULL OR
+  attach_claimed_at < now() - interval '10 minutes'` — a lease, so a crashed
+  attempt expires rather than wedging the row). The domain name itself is the
+  stable operation key: the Vercel add-domain call is idempotent per name, and
+  a `409 already exists` (for this project) is treated as success, not error.
+- **Uncertain results reconcile before retrying.** On a timeout or ambiguous
+  response the worker must not blindly re-POST: it first reads the domain
+  back from Vercel (`GET /v9/projects/{id}/domains/{domain}`) and stamps
+  `attached_at` if the attachment in fact happened. `attached_at` is only
+  ever set from a *confirmed* Vercel state — never optimistically — because
+  §9's `orgBaseUrl()` starts emitting the custom origin the moment it is set.
+- **The worker is the sole writer of `attached_at`** (§6.3 step 6). The
+  `/platform` surface requests a retry by clearing the expired claim, never
+  by writing the column.
 - **Denylist in the worker**: it refuses the platform apex and any of its
   subdomains outright, so no tenant can attach a name that shadows the
   platform. This check lives in the worker, not only in the claim UI.
@@ -811,7 +831,7 @@ create table public.org_email_usage (
 create table public.org_email_limits (
   org_id uuid primary key default public.app_current_org_id()
     references public.organizations(id) on delete cascade,
-  daily_cap integer not null default 2000,
+  daily_cap integer not null default 500,
   updated_at timestamptz not null default now(),
   constraint org_email_limits_cap_sane check (daily_cap between 0 and 100000)
 );
@@ -864,7 +884,7 @@ begin
 
   select l.daily_cap into _cap
   from public.org_email_limits l where l.org_id = _org_id;
-  _cap := coalesce(_cap, 2000);
+  _cap := coalesce(_cap, 500);
 
   -- Bounds the INSERT path: without this, the first reserve of a UTC day is
   -- unguarded (ON CONFLICT ... WHERE only constrains the UPDATE arm) and a
