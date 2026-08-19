@@ -172,7 +172,7 @@ parameter; every other row asserted to carry it) is review-enforced. The
 grant matrix and the org checks are pinned by
 `supabase/tests/serving_signup_rpc_suite.sql`.
 
-## App routes and pages (19 sites)
+## App routes and pages (21 sites)
 
 | File | Why service-role is used | Org derived from | Scoped queries |
 |------|--------------------------|------------------|----------------|
@@ -195,6 +195,8 @@ grant matrix and the org checks are pinned by
 | `app/api/household/link-member/route.ts` | Household manager updating another profile's `family_id` (RLS blocks cross-profile writes) | Caller's own RLS-scoped profile; target's org asserted equal | `profiles` update on `(id, org_id, family_id IS NULL)` |
 | `app/api/events/[id]/ics/route.ts` | Bearer-token calendar subscription; no session | `calendar_subscription_tokens` row (`org_id` stamped at issuance) | `events` (404 on cross-org id), `profiles` (owner), token expiry update |
 | `app/api/family-invites/claim/route.ts` | New user claiming an invite while their role is still `pending` | The `family_invites` row; caller's profile org must match (403 otherwise) | `profiles`, `family_members`, `family_invites` updates all on the invite's `org_id` |
+| `app/api/admin/email-domain/route.ts` | POST handler: Resend `domains.create` returns `resend_domain_id`/`status`/`dns_records`, columns the admin's own client has no UPDATE grant on — the write must happen server-side (CWA-70 / #363). The DELETE handler in the same file uses the request client only | The caller's own RLS-scoped `profiles.org_id`, read on the request client; every write is `.eq("id", ...).eq("org_id", orgId)` | `org_email_domains` insert (`org_id`, `domain`) + update (`resend_domain_id`, `status`, `dns_records`) and rollback delete, all on `(id, org_id)` |
+| `app/api/admin/email-domain/verify/route.ts` | POST handler: the `status`/`verified_at`/`last_checked_at` transition must not be writable by the admin's own client (same column grants as above) | The caller's own RLS-scoped `profiles.org_id`, read on the request client; target row fetched `.eq("org_id", orgId)` before any write | `org_email_domains` select `.eq("org_id", orgId)` + update on `(id, org_id)` |
 
 ## Lib helpers (1 site)
 
