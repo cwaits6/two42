@@ -377,12 +377,19 @@ create table public.org_domains (
   -- record. Proves control of the name before it is attached to the project.
   verification_token text not null default encode(gen_random_bytes(16), 'hex'),
   verified_at timestamptz,
-  -- Set by the operator (via /platform) once the domain is attached to the
-  -- Vercel project (§7) and in the auth redirect allowlist (§8). Verification
-  -- proves *ownership*; attachment is what makes the host actually route.
-  -- orgBaseUrl() (§9) requires it before the custom origin goes into any
-  -- emailed link. NULLed whenever status leaves 'verified'.
+  -- Set by the attachment worker (§7) — its SOLE writer — after Vercel
+  -- confirms the domain is attached to the project and it is in the auth
+  -- redirect allowlist (§8). Verification proves *ownership*; attachment is
+  -- what makes the host actually route. orgBaseUrl() (§9) requires it before
+  -- the custom origin goes into any emailed link. NULLed whenever status
+  -- leaves 'verified'.
   attached_at timestamptz,
+  -- Attachment lease (§7): the worker's single-flight claim. claimed_at
+  -- bounds the lease window; claim_token fences the writer — a worker may
+  -- stamp attached_at only with the token its own claim returned, so an
+  -- expired/superseded attempt cannot commit late.
+  attach_claimed_at timestamptz,
+  attach_claim_token uuid,
   last_checked_at timestamptz,
   created_at timestamptz not null default now(),
   constraint org_domains_domain_shape check (
@@ -445,13 +452,18 @@ create policy "Admins manage org domains" on public.org_domains
   `20260801000002` had to fix on `organizations`.
 - Helper calls are wrapped `(select public.helper())` so the planner evaluates
   them once per statement. This repo has regressed on that twice.
-- `status` and `verified_at` are **server-set only**. An org admin who could
-  `update … set status = 'verified'` would bypass DNS verification entirely and
-  attach any name to their org. The admin-facing write surface must be a route
-  handler that only ever writes `domain` on insert and `status` never — either
-  a column-level `GRANT` excluding `status`/`verified_at`/`verification_token`
-  from `authenticated`, or an update policy restricted to no columns plus a
-  service-role-only transition path. **Open decision D2.**
+- `status`, `verified_at`, `attached_at`, and the attachment-lease columns
+  are **server-set only**. An org admin who could
+  `update … set status = 'verified'` would bypass DNS verification entirely
+  and attach any name to their org; one who could set `attached_at` would
+  stamp the routing fact without confirmed Vercel state and flip the org's
+  canonical origin to an unrouted host (§6.3 step 6, §9). The admin-facing
+  write surface must be a route handler that only ever writes `domain` on
+  insert — a column-level `GRANT` excluding `status`/`verified_at`/
+  `verification_token`/`attached_at`/`attach_claimed_at`/`attach_claim_token`
+  from `authenticated` (**decision D2**: the grant, not the policy shape).
+  The pgTAP grant-matrix suite must assert each excluded column individually,
+  including that `authenticated` cannot write `attached_at`.
 
 ### 6.2 Service-role touchpoints and their org anchors
 
@@ -538,14 +550,35 @@ by a human step. The shape:
   with `attached_at is null`, call `POST /v10/projects/{id}/domains`, stamp
   `attached_at` after Vercel confirms the attachment. Surface persistent
   failures on the `/platform` dashboard rather than silently looping.
-- **Attachment is single-flight and idempotent.** A scheduled worker
-  invocation and a `/platform` manual retry must not race: each attempt
-  first takes a durable claim on the row (`attach_claimed_at` set via a
-  conditional `UPDATE … WHERE attach_claimed_at IS NULL OR
-  attach_claimed_at < now() - interval '10 minutes'` — a lease, so a crashed
-  attempt expires rather than wedging the row). The domain name itself is the
-  stable operation key: the Vercel add-domain call is idempotent per name, and
-  a `409 already exists` (for this project) is treated as success, not error.
+- **Attachment is single-flight and fenced.** A scheduled worker invocation
+  and a `/platform` manual retry must not race. Each attempt acquires a
+  durable claim in one atomic statement that also revalidates row state:
+
+  ```sql
+  update public.org_domains
+     set attach_claimed_at = now(), attach_claim_token = gen_random_uuid()
+   where id = _row_id
+     and status = 'verified' and attached_at is null
+     and (attach_claimed_at is null
+          or attach_claimed_at < now() - interval '10 minutes')
+   returning attach_claim_token;
+  ```
+
+  Zero rows back means another attempt holds a live lease *or* the row's
+  state moved (verification revoked, already attached) — either way, stop.
+  The returned token fences the writer: the final stamp is
+  `update … set attached_at = now() where id = _row_id and attach_claim_token
+  = _token and status = 'verified' and attached_at is null`, so a slow worker
+  whose lease expired mid-flight (its token superseded by a newer claim)
+  cannot commit a stale result. The lease columns live in the §6 schema
+  (`attach_claimed_at`, `attach_claim_token`).
+- **The Vercel add-domain call is keyed by the domain name, and its error
+  codes are not symmetric.** "Domain already exists **on this project**"
+  (Vercel reports this as a 400-class error) is idempotent success — confirm
+  via the GET below, then stamp. A **409 conflict means the name is assigned
+  to a *different* Vercel project or account** — that is a hard failure to
+  surface on `/platform`, never a success: stamping it would emit canonical
+  URLs for a host the platform does not route.
 - **Uncertain results reconcile before retrying.** On a timeout or ambiguous
   response the worker must not blindly re-POST: it first reads the domain
   back from Vercel (`GET /v9/projects/{id}/domains/{domain}`) and stamps
@@ -1129,9 +1162,12 @@ simpler to read. Either works; pick one before PR 2 so the pgTAP assertions
 match.
 
 > **Resolved: column-level GRANT**, matching the existing pattern on
-> `organizations` (`20260802000001`). `status`, `verified_at`, and
-> `verification_token` are excluded from `authenticated` writes; only the
-> server-side verify route transitions them. pgTAP asserts the grant matrix.
+> `organizations` (`20260802000001`). `status`, `verified_at`,
+> `verification_token`, `attached_at`, `attach_claimed_at`, and
+> `attach_claim_token` are excluded from `authenticated` writes; the verify
+> route transitions the verification columns and the attachment worker (§7)
+> alone writes the attachment columns. pgTAP asserts the grant matrix
+> column-by-column.
 
 **D3 — Automate Vercel domain attachment, or operator-in-the-loop?** §7
 recommends operator-in-the-loop for v1 (no Vercel API token in the app
