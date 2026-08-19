@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -99,6 +100,17 @@ export default function SettingsPage() {
           <CardTitle className="text-3xl text-brand-primary">Site Settings</CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="mb-8">
+            <Button
+              size="lg"
+              variant="outline"
+              className="text-lg"
+              nativeButton={false}
+              render={<Link href="/admin/settings/email" />}
+            >
+              Email sending domain
+            </Button>
+          </div>
           <form onSubmit={handleSubmit} className="space-y-6">
             {Object.entries(SETTINGS_LABELS).map(([key, label]) => (
               <div key={key} className="space-y-2">

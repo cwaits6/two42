@@ -994,6 +994,50 @@ export type Database = {
           },
         ]
       }
+      org_email_domains: {
+        Row: {
+          created_at: string
+          dns_records: Json
+          domain: string
+          id: string
+          last_checked_at: string | null
+          org_id: string
+          resend_domain_id: string | null
+          status: string
+          verified_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          dns_records?: Json
+          domain: string
+          id?: string
+          last_checked_at?: string | null
+          org_id?: string
+          resend_domain_id?: string | null
+          status?: string
+          verified_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          dns_records?: Json
+          domain?: string
+          id?: string
+          last_checked_at?: string | null
+          org_id?: string
+          resend_domain_id?: string | null
+          status?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_email_domains_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_members: {
         Row: {
           created_at: string
