@@ -2767,12 +2767,6 @@ CREATE POLICY "Series visible to all" ON "public"."lecture_series" FOR SELECT TO
 
 
 
-CREATE POLICY "Signup owners can add attendees" ON "public"."serving_signup_attendees" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (EXISTS ( SELECT 1
-   FROM "public"."serving_signups" "s"
-  WHERE (("s"."id" = "serving_signup_attendees"."signup_id") AND (("s"."created_by" = ( SELECT "auth"."uid"() AS "uid")) OR ( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("s"."group_id")))))));
-
-
-
 CREATE POLICY "Signup owners can remove attendees" ON "public"."serving_signup_attendees" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (EXISTS ( SELECT 1
    FROM "public"."serving_signups" "s"
   WHERE (("s"."id" = "serving_signup_attendees"."signup_id") AND (("s"."created_by" = ( SELECT "auth"."uid"() AS "uid")) OR ( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("s"."group_id")))))));
