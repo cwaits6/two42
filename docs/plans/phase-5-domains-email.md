@@ -566,19 +566,30 @@ by a human step. The shape:
 
   Zero rows back means another attempt holds a live lease *or* the row's
   state moved (verification revoked, already attached) — either way, stop.
-  The returned token fences the writer: the final stamp is
+  The returned token fences the writer, and the final stamp additionally
+  requires the lease to still be **live**:
   `update … set attached_at = now() where id = _row_id and attach_claim_token
-  = _token and status = 'verified' and attached_at is null`, so a slow worker
-  whose lease expired mid-flight (its token superseded by a newer claim)
-  cannot commit a stale result. The lease columns live in the §6 schema
-  (`attach_claimed_at`, `attach_claim_token`).
+  = _token and status = 'verified' and attached_at is null and
+  attach_claimed_at > clock_timestamp() - interval '10 minutes'`. The token
+  blocks a worker superseded by a newer claim; the live-lease predicate
+  blocks the remaining case — a slow worker whose lease expired with no
+  replacement claim, whose Vercel confirmation may be minutes stale. Either
+  way an expired attempt cannot commit; it must re-claim and re-confirm. The
+  lease columns live in the §6 schema (`attach_claimed_at`,
+  `attach_claim_token`).
 - **The Vercel add-domain call is keyed by the domain name, and its error
   codes are not symmetric.** "Domain already exists **on this project**"
   (Vercel reports this as a 400-class error) is idempotent success — confirm
   via the GET below, then stamp. A **409 conflict means the name is assigned
   to a *different* Vercel project or account** — that is a hard failure to
   surface on `/platform`, never a success: stamping it would emit canonical
-  URLs for a host the platform does not route.
+  URLs for a host the platform does not route. A **`forbidden` (403) response
+  is likewise a permanent failure** — no retry, no stamp, surfaced on
+  `/platform` alongside the 409 case. It can mean either that the domain is
+  owned by another Vercel account/team (resolvable only through Vercel's
+  domain-claim flow, outside this worker's job) or that the token lacks
+  domain-management permission (an operator misconfiguration); neither is
+  something a retry loop can fix.
 - **Uncertain results reconcile before retrying.** On a timeout or ambiguous
   response the worker must not blindly re-POST: it first reads the domain
   back from Vercel (`GET /v9/projects/{id}/domains/{domain}`) and stamps
