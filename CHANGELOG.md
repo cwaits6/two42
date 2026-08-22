@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.30.0](https://github.com/cwaits6/two42/compare/v0.29.0...v0.30.0) (2026-08-22)
+
+
+### Features
+
+* **members:** CSV import/export API (CWA-40 / [#289](https://github.com/cwaits6/two42/issues/289), Stream C) ([#335](https://github.com/cwaits6/two42/issues/335)) ([29a30d9](https://github.com/cwaits6/two42/commit/29a30d91d40c98b6b4da47e7875a78300cb83d1f))
+* **observability:** add portable OpenTelemetry instrumentation (CWA-37 / [#276](https://github.com/cwaits6/two42/issues/276)) ([#356](https://github.com/cwaits6/two42/issues/356)) ([6f99b32](https://github.com/cwaits6/two42/commit/6f99b32dc808d11ea16f3b2dae12b9ea1da656e9))
+
+
+### Bug Fixes
+
+* **deps:** bump nanoid to 3.3.18 for CVE-2026-67213 ([#352](https://github.com/cwaits6/two42/issues/352)) ([8bfa0d5](https://github.com/cwaits6/two42/commit/8bfa0d566b4a828fbf5c877363febe3f4ca70178))
+* **profile:** hide admin photo control without a storage write arm ([#337](https://github.com/cwaits6/two42/issues/337)) ([#345](https://github.com/cwaits6/two42/issues/345)) ([b492444](https://github.com/cwaits6/two42/commit/b4924448768c4b6a627b1392d5bef115a516a6f0))
+* **serving:** drop direct-insert RLS policy on serving_signup_attendees ([#336](https://github.com/cwaits6/two42/issues/336)) ([#349](https://github.com/cwaits6/two42/issues/349)) ([f3c9173](https://github.com/cwaits6/two42/commit/f3c91739e8e7b2c28c89e2d858ded270df32d5ef))
+* **serving:** make signup + attendee writes transactional (CWA-47 / [#313](https://github.com/cwaits6/two42/issues/313)) ([#331](https://github.com/cwaits6/two42/issues/331)) ([204506c](https://github.com/cwaits6/two42/commit/204506c0d84c7d75fcbbc11a96a6b786ba1c58ad))
+* **storage:** org-partition storage objects and close the CWA-11 gate (CWA-57) ([#332](https://github.com/cwaits6/two42/issues/332)) ([648f11f](https://github.com/cwaits6/two42/commit/648f11f491d913ff735618d7d7020b9f846edd9d))
+* **storage:** private buckets + signed URL reads (CWA-59 / [#333](https://github.com/cwaits6/two42/issues/333)) ([#347](https://github.com/cwaits6/two42/issues/347)) ([cadb8d3](https://github.com/cwaits6/two42/commit/cadb8d3862f3925cd3c50b212561b1266b2b838d))
+
 ## [0.29.0](https://github.com/cwaits6/two42/compare/v0.28.1...v0.29.0) (2026-08-02)
 
 
