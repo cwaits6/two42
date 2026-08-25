@@ -390,6 +390,22 @@ begin
     raise exception 'invalid organization slug: %', _slug using errcode = 'TN003';
   end if;
 
+  -- Reserved subdomain labels (Phase 5 §4, CWA-65 / #358): slugs become host
+  -- labels once wildcard/custom-domain routing ships, so any of these would
+  -- shadow a platform host. 'default' is deliberately absent — it is the
+  -- slug of the one org that exists today (20260730010000_org_spine.sql);
+  -- add it once that org is renamed or retired. Mirrored in lib/org.ts's
+  -- RESERVED_ORG_SLUGS — keep both lists in sync. _slug is already
+  -- lowercase-only here (the TN003 regex has no case-insensitive flag), so a
+  -- plain equality match is correct.
+  if _slug = any(array[
+    'www', 'app', 'api', 'admin', 'platform', 'auth', 'mail', 'email',
+    'static', 'assets', 'cdn', 'status', 'docs', 'blog', 'help', 'support',
+    'dev', 'staging', 'preview', 'test'
+  ]) then
+    raise exception 'organization slug % is reserved', _slug using errcode = 'TN006';
+  end if;
+
   -- 1. The org itself. branding carries only the tenant-overridable keys
   -- from #221 / docs/design/DESIGN.md: display_name, logo_url, accent,
   -- reply_to.
