@@ -182,9 +182,11 @@ organization is a database insert, not a redeploy.
 Only two environment variables are demoted by this: `NEXT_PUBLIC_APP_NAME` and
 `NEXT_PUBLIC_COLOR_PRIMARY` (see `.env.example`) survive as last-resort fallback
 defaults, used when an org's branding row is empty or unreadable.
-`NEXT_PUBLIC_EMAIL_FROM` is **not** a fallback — the sending address is
-deliberately platform-wide and no branding key can reach it, because SPF/DKIM
-are configured for that domain; branding varies only the display name and
+`NEXT_PUBLIC_EMAIL_FROM` is the platform-wide fallback sending address — an org
+with a **verified** claimed sending domain (`org_email_domains`, admin-managed
+under `/platform`) sends from `noreply@<their-domain>` instead; every other
+org keeps `NEXT_PUBLIC_EMAIL_FROM`, since SPF/DKIM are only configured for
+that domain by default. Branding otherwise varies only the display name and
 Reply-To. The remaining `NEXT_PUBLIC_COLOR_*` vars, `APP_DESCRIPTION`,
 `APP_TAGLINE`, and `LOGO_MONOGRAM` are likewise still platform-wide. Everything
 else — events, announcements, donation links — is managed through the admin

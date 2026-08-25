@@ -391,11 +391,15 @@ platform seam).
   `organizations.branding` is admin-supplied free text that reaches CSS and
   RFC 5322 headers. The boundary is `HEX` (`lib/contrast.ts`, strict
   `^#[0-9a-fA-F]{6}$`), `CONTROL` (`lib/branding.ts`, C0/C1
-  control-character strip), and `PLAIN_NAME` (`lib/email/identity.ts`,
-  unquoted-atom allowlist with an always-safe quoted-string fallback) —
-  validation boundaries, not style choices; do not relax them to support
-  richer names or color formats. `supabase/functions/_shared/branding.ts` is
-  a deliberate **byte-level mirror** of those regexes (edge functions cannot
-  import from `lib/`), so a change must land on both sides. The edge mirror
-  deliberately omits the WCAG 4.5:1 `validateAccent()` contrast gate, which
-  is enforced on the write path only (#319).
+  control-character strip), `PLAIN_NAME` (`lib/email/identity.ts`,
+  unquoted-atom allowlist with an always-safe quoted-string fallback), and
+  `SENDING_DOMAIN` (`lib/email/identity.ts`, the per-org `From:` address
+  gate — it validates `org_email_domains.domain`, a different table than the
+  other three, and is additionally gated on `status = 'verified'`; anything
+  else falls back to the platform address) — validation boundaries, not
+  style choices; do not relax them to support richer names or color formats.
+  `supabase/functions/_shared/branding.ts` is a deliberate **byte-level
+  mirror** of those regexes — all four, since Phase 5 PR 7 — (edge functions
+  cannot import from `lib/`), so a change must land on both sides. The edge
+  mirror deliberately omits the WCAG 4.5:1 `validateAccent()` contrast gate,
+  which is enforced on the write path only (#319).

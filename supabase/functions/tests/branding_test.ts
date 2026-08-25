@@ -15,8 +15,18 @@ import {
   type BrandingDefaults,
 } from "../_shared/branding.ts";
 
-const DEFAULTS: BrandingDefaults = { displayName: "two42", accent: "#B85C38" };
-const FALLBACK = { orgName: "two42", replyTo: null, accent: "#B85C38" };
+const PLATFORM = "noreply@two42.example";
+const DEFAULTS: BrandingDefaults = {
+  displayName: "two42",
+  accent: "#B85C38",
+  platformAddress: PLATFORM,
+};
+const FALLBACK = {
+  orgName: "two42",
+  replyTo: null,
+  accent: "#B85C38",
+  fromAddress: PLATFORM,
+};
 
 // ── resolveEmailBranding: whole-value fallback ───────────────────────────────
 
@@ -37,7 +47,7 @@ Deno.test("resolveEmailBranding falls back per-key for an empty object", () => {
 Deno.test("an invalid accent does not discard a valid display_name", () => {
   assertEquals(
     resolveEmailBranding({ display_name: "Grace Fellowship", accent: "red" }, DEFAULTS),
-    { orgName: "Grace Fellowship", replyTo: null, accent: "#B85C38" },
+    { orgName: "Grace Fellowship", replyTo: null, accent: "#B85C38", fromAddress: PLATFORM },
   );
 });
 
@@ -110,6 +120,81 @@ Deno.test("reply_to rejects malformed or oversized addresses", () => {
   } finally {
     console.warn = originalWarn;
   }
+});
+
+// ── fromAddress: the SENDING_DOMAIN + verified-status gate (CWA-71) ──────────
+
+Deno.test("fromAddress uses noreply@<domain> for a verified row with a valid domain", () => {
+  assertEquals(
+    resolveEmailBranding({}, DEFAULTS, "a", { domain: "grace.church", status: "verified" })
+      .fromAddress,
+    "noreply@grace.church",
+  );
+});
+
+Deno.test("fromAddress falls back independently of the branding fallback", () => {
+  // A non-object branding row falls back entirely — but a verified domain
+  // still substitutes, and vice versa a bad domain must not discard a valid
+  // display_name.
+  assertEquals(
+    resolveEmailBranding(null, DEFAULTS, "a", { domain: "grace.church", status: "verified" }),
+    { orgName: "two42", replyTo: null, accent: "#B85C38", fromAddress: "noreply@grace.church" },
+  );
+});
+
+Deno.test("fromAddress rejects invalid domain shapes even on a verified row", () => {
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    for (
+      const bad of [
+        "Grace.Church", // uppercase — no normalization at send time
+        "-grace.church", // leading hyphen in a label
+        "grace-.church", // trailing hyphen in a label
+        "grace.church.", // trailing dot
+        "grace_hub.church", // underscore
+        "grâce.church", // non-ASCII, no IDNA mapping attempted
+        "church", // no dot
+        "a.b", // under the 4-char floor
+        `${`${"a".repeat(63)}.`.repeat(4)}com`, // over the 253-char cap
+        "grace.church@evil.com", // @ — defense in depth
+        "grace.church>", // angle bracket — defense in depth
+        "grace .church", // whitespace — defense in depth
+        "grace.church\r\nBcc: v@w.x", // CR/LF — defense in depth
+      ]
+    ) {
+      assertEquals(
+        resolveEmailBranding({}, DEFAULTS, "a", { domain: bad, status: "verified" })
+          .fromAddress,
+        PLATFORM,
+        `domain ${JSON.stringify(bad)} must be rejected`,
+      );
+    }
+  } finally {
+    console.error = originalError;
+  }
+});
+
+Deno.test("fromAddress falls back for every non-verified status", () => {
+  // Several distinct statuses, not just one: the gate is equality to
+  // 'verified', so any future addition to the status vocabulary must land on
+  // the fallback side of this same test shape.
+  for (
+    const status of ["not_started", "pending", "failure", "temporary_failure", "failed"]
+  ) {
+    assertEquals(
+      resolveEmailBranding({}, DEFAULTS, "a", { domain: "grace.church", status }).fromAddress,
+      PLATFORM,
+      `status ${status} must not substitute`,
+    );
+  }
+});
+
+Deno.test("fromAddress falls back when the org has no domain row", () => {
+  // undefined is the call shape both reminder entry points produce for an
+  // org with an empty org_email_domains embed (org.org_email_domains[0] ?? null).
+  assertEquals(resolveEmailBranding({}, DEFAULTS, "a").fromAddress, PLATFORM);
+  assertEquals(resolveEmailBranding({}, DEFAULTS, "a", null).fromAddress, PLATFORM);
 });
 
 // ── formatFromHeader: RFC 5322 quoting ───────────────────────────────────────

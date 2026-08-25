@@ -7,7 +7,6 @@ import { siteConfig } from "@/lib/config";
 import { escapeHtml } from "@/lib/email/resend";
 import {
   formatFromHeader,
-  PLATFORM_ADDRESS,
   resolveEmailBranding,
   type EmailBranding,
 } from "@/lib/email/identity";
@@ -48,7 +47,7 @@ export async function sendServingConfirmationEmail(opts: {
   const b = opts.branding ?? (await resolveEmailBranding());
   const dateLabel = formatServiceDateWithYear(opts.serviceDate);
   const { error } = await getResend().emails.send({
-    from: formatFromHeader(b.orgName, PLATFORM_ADDRESS),
+    from: formatFromHeader(b.orgName, b.fromAddress),
     to: opts.to,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
     subject: `You're signed up: ${opts.teamName}, ${dateLabel}`,
@@ -102,7 +101,7 @@ export async function sendServingCancelNoticeEmail(opts: {
   const b = opts.branding ?? (await resolveEmailBranding());
   const dateLabel = formatServiceDateWithYear(opts.serviceDate);
   const { error } = await getResend().emails.send({
-    from: formatFromHeader(b.orgName, PLATFORM_ADDRESS),
+    from: formatFromHeader(b.orgName, b.fromAddress),
     to: opts.to,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
     subject: `${opts.teamName}: ${dateLabel} is open again`,
@@ -155,7 +154,7 @@ export async function sendServingBroadcastEmail(opts: {
     .join("");
 
   const { error } = await getResend().emails.send({
-    from: formatFromHeader(b.orgName, PLATFORM_ADDRESS),
+    from: formatFromHeader(b.orgName, b.fromAddress),
     to: opts.to,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
     subject: `${opts.teamName}: Sundays that still need someone`,

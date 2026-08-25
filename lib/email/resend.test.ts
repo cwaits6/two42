@@ -1,9 +1,38 @@
-// Unit tests for the HTML-escaping boundary in email bodies (CWA-55). Pure
-// units — escapeHtml is a string transform; nothing here touches the Resend
-// client (getResend() is lazy, so importing the module sends nothing).
+// Unit tests for the HTML-escaping boundary in email bodies (CWA-55), and for
+// the per-org From: address wiring at each send call site (Phase 5 PR 7 /
+// CWA-71). escapeHtml is a pure string transform — getResend() is lazy, so
+// importing the module alone sends nothing. The send-site tests below mock
+// the `resend` package and pass an explicit `branding` object, bypassing
+// resolveEmailBranding() entirely — no Supabase mocking needed.
 
-import { describe, expect, it } from "vitest";
-import { escapeHtml } from "@/lib/email/resend";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const send = vi.fn().mockResolvedValue({ data: { id: "test" }, error: null });
+vi.mock("resend", () => ({
+  // A regular function, not an arrow: getResend() calls `new Resend(...)`,
+  // and an arrow-function mock implementation has no [[Construct]] to invoke.
+  Resend: vi.fn().mockImplementation(function () {
+    return { emails: { send } };
+  }),
+}));
+
+const {
+  escapeHtml,
+  sendInviteEmail,
+  sendFamilyInviteEmail,
+  sendFeedbackEmail,
+  sendEventReminderEmail,
+} = await import("@/lib/email/resend");
+
+const BRANDING = {
+  orgName: "Grace Fellowship",
+  replyTo: null,
+  accent: "#B85C38",
+  accentLight: "#c98a68",
+  // Distinctive — never equals the platform default, so a call site that
+  // reverts to PLATFORM_ADDRESS (or never wired b.fromAddress in) fails loud.
+  fromAddress: "noreply@grace.church",
+};
 
 describe("escapeHtml", () => {
   it("escapes all five HTML entities", () => {
@@ -29,5 +58,41 @@ describe("escapeHtml", () => {
 
   it("leaves benign text untouched", () => {
     expect(escapeHtml("Grace Chapel — Sunday 9:30")).toBe("Grace Chapel — Sunday 9:30");
+  });
+});
+
+// ── From: address wiring (CWA-71): every send site must use b.fromAddress ──
+
+describe("send call sites use the resolved branding.fromAddress", () => {
+  beforeEach(() => {
+    send.mockClear();
+  });
+
+  it("sendInviteEmail sends from the resolved branding.fromAddress", async () => {
+    await sendInviteEmail("a@b.org", "Jane", "https://x/y", BRANDING);
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({ from: "Grace Fellowship <noreply@grace.church>" }),
+    );
+  });
+
+  it("sendFamilyInviteEmail sends from the resolved branding.fromAddress", async () => {
+    await sendFamilyInviteEmail("a@b.org", "Jane", "Sam", "https://x/y", BRANDING);
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({ from: "Grace Fellowship <noreply@grace.church>" }),
+    );
+  });
+
+  it("sendFeedbackEmail sends from the resolved branding.fromAddress", async () => {
+    await sendFeedbackEmail(["a@b.org"], "Jane", null, "idea", "hi", BRANDING);
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({ from: "Grace Fellowship <noreply@grace.church>" }),
+    );
+  });
+
+  it("sendEventReminderEmail sends from the resolved branding.fromAddress", async () => {
+    await sendEventReminderEmail("a@b.org", "Jane", "Potluck", "2026-09-06", null, BRANDING);
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({ from: "Grace Fellowship <noreply@grace.church>" }),
+    );
   });
 });

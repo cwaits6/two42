@@ -2,7 +2,6 @@ import { Resend } from "resend";
 import { siteConfig } from "@/lib/config";
 import {
   formatFromHeader,
-  PLATFORM_ADDRESS,
   resolveEmailBranding,
   type EmailBranding,
 } from "@/lib/email/identity";
@@ -21,7 +20,7 @@ export async function sendInviteEmail(
   const safeOrgName = escapeHtml(b.orgName);
   const safeName = escapeHtml(name);
   const { error } = await getResend().emails.send({
-    from: formatFromHeader(b.orgName, PLATFORM_ADDRESS),
+    from: formatFromHeader(b.orgName, b.fromAddress),
     to: email,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
     subject: `You're invited to ${b.orgName}!`,
@@ -100,7 +99,7 @@ export async function sendFamilyInviteEmail(
   const safeJoinLink = sanitizeLink(joinLink);
 
   const { error } = await getResend().emails.send({
-    from: formatFromHeader(b.orgName, PLATFORM_ADDRESS),
+    from: formatFromHeader(b.orgName, b.fromAddress),
     to: email,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
     subject: `${headerText(inviterName)} added you to their household on ${b.orgName}`,
@@ -152,7 +151,7 @@ export async function sendFeedbackEmail(
   const replyTo = senderEmail ?? b.replyTo;
 
   const { error } = await getResend().emails.send({
-    from: formatFromHeader(b.orgName, PLATFORM_ADDRESS),
+    from: formatFromHeader(b.orgName, b.fromAddress),
     to,
     ...(replyTo ? { replyTo } : {}),
     subject: `${b.orgName} feedback from ${headerText(senderName)}: ${kind}`,
@@ -196,7 +195,7 @@ export async function sendEventReminderEmail(
 ) {
   const b = branding ?? (await resolveEmailBranding());
   const { error } = await getResend().emails.send({
-    from: formatFromHeader(b.orgName, PLATFORM_ADDRESS),
+    from: formatFromHeader(b.orgName, b.fromAddress),
     to: email,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
     subject: `Reminder: ${headerText(eventTitle)} is coming up!`,

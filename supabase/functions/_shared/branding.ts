@@ -24,12 +24,18 @@ export interface EmailBranding {
   orgName: string;
   replyTo: string | null;
   accent: string;
+  // The resolved From: address: `noreply@<domain>` when the org holds a
+  // verified org_email_domains row whose domain passes SENDING_DOMAIN,
+  // the platform address in every other case. The local part is a fixed
+  // constant — never admin-choosable.
+  fromAddress: string;
 }
 
 /** Env-derived fallbacks, resolved once by the entry point. */
 export interface BrandingDefaults {
   displayName: string; // APP_NAME env
   accent: string; // BRAND_COLOR env
+  platformAddress: string; // parseAddress(EMAIL_FROM env)
 }
 
 // accent is interpolated into the inline style="" attributes of both
@@ -47,6 +53,24 @@ const CONTROL = /[\u0000-\u001F\u007F-\u009F]/g;
 // yields no Reply-To header, which is the pre-branding behavior and
 // strictly better than a failed send.
 const EMAIL = /^[^\s@<>,;:"\\]+@[^\s@<>,;:"\\]+\.[^\s@<>,;:"\\]+$/;
+
+// The org sending-domain gate (Phase 5 §10.3, CWA-71). A validation boundary
+// with the same standing as PLAIN_NAME, not a style choice: the domain is
+// admin-supplied text on the address side of the `<…>` in From:, which
+// PLAIN_NAME and formatFromHeader()'s CR/LF strip do not cover. Same grammar
+// as the claim-time DOMAIN_SHAPE in app/api/admin/email-domain/route.ts —
+// stricter than the DB's own org_email_domains_domain_shape CHECK (lowercase
+// + length only): lowercase LDH labels (1–63 chars each, no leading/trailing
+// hyphen), at least one dot, 4–253 chars total — rejecting underscores,
+// trailing dots, ports, whitespace, CR/LF, `@`, `<`/`>`, and any non-ASCII
+// byte by construction. It performs no normalization: a non-canonical value
+// fails and the platform address is used, never a "cleaned-up" version. It
+// runs at SEND time on the value read back from the DB — because the DB
+// CHECK alone would let a hand-edited or malformed row through, this is what
+// makes such a row non-exploitable. Mirrored byte-for-byte
+// from lib/email/identity.ts; a change lands on both sides.
+const SENDING_DOMAIN =
+  /^(?=.{4,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 
 // Names of only these characters are emitted unquoted. Deliberately narrower
 // than RFC 5322 permits — and note `.` is NOT atext (RFC 5322 §3.2.3 lists it
@@ -75,9 +99,37 @@ export function parseAddress(from: string): string {
 }
 
 /**
+ * The verified-status gate on the per-org From: address (mirrors
+ * lib/email/identity.ts, which bakes in PLATFORM_ADDRESS where this module
+ * takes the caller's env-derived platformAddress). Gated on equality to
+ * 'verified' — never an enumerated list of fallback statuses; the status
+ * vocabulary has already grown once and will again.
+ */
+function resolveFromAddress(
+  domain: string | null | undefined,
+  status: string | null | undefined,
+  platformAddress: string,
+): string {
+  if (status !== "verified" || !domain) return platformAddress;
+  if (!SENDING_DOMAIN.test(domain)) {
+    console.error(
+      "resolveEmailBranding: verified sending domain failed SENDING_DOMAIN, falling back to platform address:",
+      domain,
+    );
+    return platformAddress;
+  }
+  return `noreply@${domain}`;
+}
+
+/**
  * Merge a raw branding jsonb value onto the env defaults. Falls back
  * per-key — an invalid accent must not discard a valid display_name. A
  * non-object (array, scalar, null) falls back entirely.
+ *
+ * `emailDomain` is the org's org_email_domains row, ridden along on the
+ * listActiveOrgs query (like `raw`, it arrives as a plain parameter — no DB
+ * read here). It only affects fromAddress, which falls back independently:
+ * a bad domain row must not discard a valid display_name, and vice versa.
  *
  * Total by contract: this must never throw, so a malformed branding row
  * degrades to the platform defaults instead of becoming an org-level
@@ -87,11 +139,18 @@ export function resolveEmailBranding(
   raw: unknown,
   defaults: BrandingDefaults,
   orgSlug?: string,
+  emailDomain?: { domain: string; status: string } | null,
 ): EmailBranding {
+  const fromAddress = resolveFromAddress(
+    emailDomain?.domain,
+    emailDomain?.status,
+    defaults.platformAddress,
+  );
   const fallback: EmailBranding = {
     orgName: defaults.displayName,
     replyTo: null,
     accent: defaults.accent,
+    fromAddress,
   };
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     return fallback;
@@ -115,5 +174,6 @@ export function resolveEmailBranding(
     replyTo: replyToValid ? replyTo : null,
     accent:
       typeof b.accent === "string" && HEX.test(b.accent) ? b.accent : defaults.accent,
+    fromAddress,
   };
 }
