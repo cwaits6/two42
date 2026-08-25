@@ -74,14 +74,21 @@ function formatTimestamp(value: string | null): string {
 
 type DomainApiResponse = { error?: string; data?: EmailDomainRow };
 
-/** Fetch + parse-JSON, shared by the claim/verify/remove handlers below. */
+/**
+ * Fetch + parse-JSON, shared by the claim/verify/remove handlers below.
+ * A 2xx whose body fails to parse counts as failure unless the caller opts
+ * in via allowEmptyBody (the DELETE contract carries no envelope worth
+ * requiring) — a truncated or non-JSON success response must not toast
+ * success over stale state.
+ */
 async function requestJson(
   url: string,
   init?: RequestInit,
+  { allowEmptyBody = false }: { allowEmptyBody?: boolean } = {},
 ): Promise<{ ok: boolean; data: DomainApiResponse | null }> {
   const res = await fetch(url, init);
   const data = await res.json().catch(() => null);
-  return { ok: res.ok, data };
+  return { ok: res.ok && (allowEmptyBody || data !== null), data };
 }
 
 export default function EmailDomainSettingsPage() {
@@ -183,9 +190,11 @@ export default function EmailDomainSettingsPage() {
     }
     setBusy(true);
     try {
-      const { ok, data } = await requestJson("/api/admin/email-domain", {
-        method: "DELETE",
-      });
+      const { ok, data } = await requestJson(
+        "/api/admin/email-domain",
+        { method: "DELETE" },
+        { allowEmptyBody: true },
+      );
       if (!ok) {
         toast.error(data?.error || "Failed to remove domain.");
         return;
@@ -214,7 +223,7 @@ export default function EmailDomainSettingsPage() {
     <PageContainer size="narrow">
       <PageHeader
         title="Email sending domain"
-        subtitle="Claim a domain, publish its DNS records, then verify it. Email still sends from the platform address until a later release switches it over."
+        subtitle="Claim a domain, publish its DNS records, then verify it. Email sends from the platform address until the domain is verified, then switches to noreply@ your domain."
         backHref="/admin/settings"
         backLabel="Back to Settings"
       />
