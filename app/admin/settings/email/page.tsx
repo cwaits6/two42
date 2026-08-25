@@ -223,7 +223,7 @@ export default function EmailDomainSettingsPage() {
     <PageContainer size="narrow">
       <PageHeader
         title="Email sending domain"
-        subtitle="Claim a domain, publish its DNS records, then verify it. Email sends from the platform address until the domain is verified, then switches to noreply@ your domain."
+        subtitle="Claim a domain, publish its DNS records, then verify it. Email sends from the platform address until the domain is verified, then switches to a noreply@ address on your domain."
         backHref="/admin/settings"
         backLabel="Back to Settings"
       />
