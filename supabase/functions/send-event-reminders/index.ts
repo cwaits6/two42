@@ -23,6 +23,7 @@ import {
 import { chunk } from "../_shared/chunk.ts";
 import { escapeHtml } from "../_shared/html.ts";
 import { resolveServiceKey } from "../_shared/service-key.ts";
+import { reserveEmailQuota } from "../_shared/quota.ts";
 import {
   forEachOrg,
   listActiveOrgs,
@@ -167,19 +168,38 @@ async function runForOrg(
       profiles.push(...((batch ?? []) as typeof profiles));
     }
 
-    for (const profile of profiles) {
-      // Pending profiles (e.g. spouses who have never logged in) can have no
-      // email — skip, don't throw.
-      if (!profile.email) {
+    // Pending profiles (e.g. spouses who have never logged in) can have no
+    // email — skip, don't throw.
+    const recipients = profiles.filter((p): p is (typeof profiles)[number] & { email: string } => {
+      if (!p.email) {
         console.error(
           "[org %s] skipping reminder: profile %s has no email (event %s)",
           org.slug,
-          profile.id,
+          p.id,
           event.id,
         );
-        continue;
+        return false;
       }
+      return true;
+    });
 
+    // Reserve once per event batch against the org's daily cap (CWA-72),
+    // for the final filtered set only. A cap-hit is a deliberate skip of
+    // this event's batch: logged, not a sendFailure, so it does not change
+    // the 200/500 contract — and reserveEmailQuota never throws, so it adds
+    // no new failure surface to this function's throw-on-query-error flow.
+    const allowed = await reserveEmailQuota(supabase, org.id, recipients.length);
+    if (!allowed) {
+      console.warn(
+        "[org %s] event %s: daily email cap reached, skipping %d reminder(s)",
+        org.slug,
+        event.id,
+        recipients.length,
+      );
+      continue;
+    }
+
+    for (const profile of recipients) {
       const eventDate = new Date(event.start_time).toLocaleDateString("en-US", {
         weekday: "long",
         month: "long",

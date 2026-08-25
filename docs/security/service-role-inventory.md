@@ -172,13 +172,42 @@ parameter; every other row asserted to carry it) is review-enforced. The
 grant matrix and the org checks are pinned by
 `supabase/tests/serving_signup_rpc_suite.sql`.
 
-## App routes and pages (21 sites)
+## Email quota RPC — a definer-function bypass surface (CWA-72 / #365)
+
+The per-org daily send cap (`org_email_usage` + `org_email_limits`) is
+enforced by a `SECURITY DEFINER` function
+(`20260825000000_org_email_send_caps.sql`), because count-then-send races
+under concurrent fan-outs — the reserve must be one atomic
+`INSERT … ON CONFLICT … DO UPDATE … WHERE` statement:
+
+- `email_quota_consume(_org_id, _n)` — reserves `_n` sends against the org's
+  daily cap, returning `false` on refusal. EXECUTE: `service_role` only. The
+  org-never-from-a-caller-parameter rule is resolved the
+  `serving_signup_apply` way: with no `anon`/`authenticated` grant, the only
+  callers are server-side paths that already hold an `orgId` from an anchor
+  they validated (the caller's RLS-scoped profile, the RLS-checked group
+  row, `listActiveOrgs()`'s own enumeration).
+
+Both tables are **service-role-only in v1**: restrictive isolation policy,
+no permissive policy, ALL privileges revoked from `anon`/`authenticated`.
+The grant matrix and the cap boundaries are pinned by
+`supabase/tests/org_email_quota_suite.sql`.
+
+**Guard blind spot, stated deliberately:**
+`scripts/check-service-role-org-scope.mjs` walks `.from()` chains only, so
+the `.rpc("email_quota_consume", …)` calls in `lib/email/quota.ts` and both
+reminder edge functions are invisible to it. The compensating controls are
+the `service_role`-only grant (a browser can never reach the RPC), the
+pgTAP grant matrix, and the unit suites on both sides of the
+`lib/` ⇄ `supabase/functions/_shared/` mirror.
+
+## App routes and pages (22 sites)
 
 | File | Why service-role is used | Org derived from | Scoped queries |
 |------|--------------------------|------------------|----------------|
 | `app/platform/page.tsx` | Platform overview counts every org across tenants; RLS pins a request to one org | Platform-admin authority: `getPlatformAdmin()` via the cookie-bound request client; cross-org by design, confined to `organizations` (tenant root) | `organizations` (id, status — deliberately unfiltered) |
 | `app/platform/organizations/page.tsx` | Org list across tenants — the surface's purpose | Platform-admin authority (as above); confined to `organizations` (tenant root) | `organizations` (deliberately unfiltered list) |
-| `app/platform/organizations/[id]/page.tsx` | Org detail + founding-admin request; both invisible to the caller's own-org RLS | Platform-admin authority; org id from the route param | `organizations` `.eq("id", id)`; `access_requests` `.eq("org_id", id).eq("approved_role", "admin")` |
+| `app/platform/organizations/[id]/page.tsx` | Org detail + founding-admin request + email cap/usage (CWA-72); all invisible to the caller's own-org RLS (the cap tables have no permissive policy at all) | Platform-admin authority; org id from the route param | `organizations` `.eq("id", id)`; `access_requests` `.eq("org_id", id).eq("approved_role", "admin")`; `org_email_limits` `.eq("org_id", id)`; `org_email_usage` `.eq("org_id", id).eq("usage_date", today)` |
 | `app/api/platform/organizations/route.ts` | `provision_organization()` is EXECUTE-granted to `service_role` only | Platform-admin authority; the RPC creates the org and derives everything from it transactionally | `rpc("provision_organization")` only |
 | `app/api/platform/organizations/[id]/route.ts` | Status/branding writes on the tenant root, which has no org-admin write policy | Platform-admin authority; org id from the route param | `organizations` read + update `.eq("id", id)` (branding merged, never replaced) |
 | `app/api/platform/organizations/[id]/invite-owner/route.ts` | Mints the founding admin's `signup_token`; the platform admin's own-org RLS could never reach the new org's request row | Platform-admin authority; org id from the route param | `access_requests` update `.eq("org_id", id).eq("approved_role", "admin").eq("email", ownerEmail)`; rollback update on the same filters + minted token; email branding via `resolveEmailBranding(id)` |
@@ -197,8 +226,9 @@ grant matrix and the org checks are pinned by
 | `app/api/family-invites/claim/route.ts` | New user claiming an invite while their role is still `pending` | The `family_invites` row; caller's profile org must match (403 otherwise) | `profiles`, `family_members`, `family_invites` updates all on the invite's `org_id` |
 | `app/api/admin/email-domain/route.ts` | POST handler: Resend `domains.create` returns `resend_domain_id`/`status`/`dns_records`, columns the admin's own client has no UPDATE grant on — the write must happen server-side (CWA-70 / #363). The DELETE handler in the same file uses the request client only | The caller's own RLS-scoped `profiles.org_id`, read on the request client; the insert carries that `org_id` in its payload, and every subsequent write is predicate-scoped `.eq("id", ...).eq("org_id", orgId)` | `org_email_domains` insert (payload: `org_id`, `domain`) + update (`resend_domain_id`, `status`, `dns_records`) and rollback deletes on `(id, org_id)` |
 | `app/api/admin/email-domain/verify/route.ts` | POST handler: the `status`/`verified_at`/`last_checked_at` transition must not be writable by the admin's own client (same column grants as above) | The caller's own RLS-scoped `profiles.org_id`, read on the request client; target row fetched `.eq("org_id", orgId)` before any write | `org_email_domains` select `.eq("org_id", orgId)` + update on `(id, org_id)` |
+| `app/api/platform/organizations/[id]/email-cap/route.ts` | Daily email cap override (CWA-72): `org_email_limits` is platform-operator-owned with no permissive policy, so only a service-role write can reach it — an org that can raise its own cap does not have a cap | Platform-admin authority; org id from the route param, validated against an existing `organizations` row before the write | `organizations` `.eq("id", id)` (existence check); `org_email_limits` upsert carrying the validated `org_id`, zero-row-checked |
 
-## Lib helpers (1 site)
+## Lib helpers (2 sites)
 
 Unlike the rows above — inherited from Phase 2 with their mitigations still
 outstanding — this site was introduced *during* Phase 3 with its mitigation
@@ -208,6 +238,8 @@ column below describes what a regression would cost, not a pending work item.
 | File | Why service-role is used | Tenancy risk | Mitigation |
 |------|--------------------------|--------------|------------|
 | `lib/email/identity.ts` | `resolveEmailBranding(orgId)` reads `organizations.branding` for callers that hold an explicit org id but no request-scoped session (e.g. `lib/serving/server.ts`, invoked from HMAC-signed link flows), and a second, org-scoped read of `org_email_domains` (Phase 5 PR 7 / CWA-71) to resolve the per-org `From:` address — on both this path and the self-resolving (no-`orgId`) path, where the org id is instead resolved via `resolveRequestOrgId()` on the cookie-bound request client before the same service-role `org_email_domains` read runs | A missing filter on either table would leak another org's branding or sending domain into an email | The `organizations` read's `.eq("id", orgId)` and the `org_email_domains` read's `.eq("org_id", orgId)` are the only tenant boundaries, both mandatory; `orgId` is always either the caller's already-authorized id or the value `resolveRequestOrgId()` resolves for the current request — never a header, never a body field. `SENDING_DOMAIN` additionally gates the stored domain value itself (with `status = 'verified'`) before it can reach a `From:` header — see CLAUDE.md's injection-boundary list. Branding without an `orgId` still comes from the request-scoped client, so RLS applies — but that resolves to the *request* org, which is host-independent until Phase 5, so any caller holding an authorized `org_id` must pass it. |
+
+| `lib/email/quota.ts` | `reserveEmailQuota(orgId, n)` calls `email_quota_consume()` — a `service_role`-only RPC (see the "Email quota RPC" section above), so the service client is the only client that can execute it | The `.rpc()` call is invisible to the guard (it walks `.from()` chains only), so a refactor could silently pass an unvalidated org id | `orgId` must come from an anchor the caller already validated — the caller's RLS-scoped profile (`app/api/feedback`), the RLS-checked group row (`app/api/serving/broadcast`), or the already-authorized `opts.orgId` both `notifyLeadersOfCancel` callers hold — never a header or body field. Fail-closed: any RPC error or throw is a refusal, never "send anyway" |
 
 `lib/branding.ts` is deliberately **not** a service-role site: `getOrgBranding()`
 uses the request-scoped `createClient()`, so RLS narrows `organizations` to the
@@ -243,6 +275,14 @@ points carry an explicit `org_id` predicate (or an explicit `org_id` on
 insert); the two nested embeds are FK traversals from org-filtered parents,
 which the composite `(col, org_id)` FKs keep inside the tenant; the one
 `organizations` read is the tenant root, filtered on `status`.
+
+Both entry points additionally call `email_quota_consume()` per team/event
+batch via `_shared/quota.ts` (CWA-72), passing the org id from the
+`forEachOrg()` iteration — the same already-enumerated anchor every other
+query in the loop uses. `.rpc()` calls are outside
+`check-service-role-org-scope.mjs`'s reach *and* `supabase/functions/` is
+outside its scan set entirely, so these calls are covered by review and by
+`deno test` (`supabase/functions/tests/quota_test.ts`) only.
 
 | File | Why service-role is used | Historical tenancy risk | Mitigation |
 |------|--------------------------|-------------------------|------------|

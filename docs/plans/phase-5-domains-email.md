@@ -967,6 +967,11 @@ reputation. They are not a billing meter (§3).
 
 ### 11.1 Schema
 
+Shipped (PR 8, CWA-72) as `20260825000000_org_email_send_caps.sql`, matching
+the proposal below verbatim, plus the restrictive isolation policy on both
+tables and a full `revoke all` from `anon`/`authenticated` — no permissive
+policy on either table in v1.
+
 ```sql
 -- PROPOSAL, not a migration.
 create table public.org_email_usage (
@@ -1085,6 +1090,15 @@ throwing) when refused. That is the Tier A set from the inventory — feedback
 admin notifications, serving broadcast, leader cancel notices — plus both
 reminder edge functions. Reserve per *batch*, before the first send; a
 per-recipient reserve is a round trip per member.
+
+> Shipped (PR 8): the RPC landed exactly as proposed above. The reserve
+> helpers are `lib/email/quota.ts` and its edge mirror
+> `supabase/functions/_shared/quota.ts`. Batch granularity in the edge
+> functions is per team (serving) / per event (event reminders) — the same
+> granularity as the existing CWA-50 per-team fault isolation, a deliberate
+> choice within this section's "reserve per batch" latitude. The serving
+> broadcast route returns 429 to the leader on refusal; every other site
+> logs and skips.
 
 **Reservation semantics, pinned so the call sites cannot each invent one:**
 

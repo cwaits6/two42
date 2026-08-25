@@ -6,6 +6,7 @@ import { getServingLinkMode } from "@/lib/serving/config";
 import { createServingToken } from "@/lib/serving/links";
 import { upcomingSundays } from "@/lib/serving/sundays";
 import { sendServingBroadcastEmail } from "@/lib/email/serving";
+import { reserveEmailQuota } from "@/lib/email/quota";
 import type { Profile } from "@/lib/types";
 
 /**
@@ -172,6 +173,21 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "No team members with email addresses to send to" },
       { status: 400 }
+    );
+  }
+
+  // Reserve the filtered batch against the org's daily cap before the send
+  // loop (CWA-72). Returns before the serving_broadcasts insert below — a
+  // cap-hit broadcast must not be logged as a 0-recipient broadcast row.
+  const allowed = await reserveEmailQuota(group.org_id, members.length);
+  if (!allowed) {
+    console.warn(
+      "Serving broadcast skipped — org %s hit its daily email cap",
+      group.org_id,
+    );
+    return NextResponse.json(
+      { error: "Your organization has reached its daily email limit. Try again tomorrow." },
+      { status: 429 },
     );
   }
 

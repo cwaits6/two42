@@ -3,8 +3,10 @@ import { getPlatformAdmin } from "@/lib/platform-access";
 import { createServiceClient } from "@/lib/supabase/server";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { DEFAULT_DAILY_EMAIL_CAP } from "@/lib/email/quota";
 import {
   OrganizationDetail,
+  type EmailCapInfo,
   type OrgDetail,
   type OwnerRequest,
 } from "./OrganizationDetail";
@@ -68,6 +70,45 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
     );
   }
 
+  // Email cap + today's usage (Phase 5 PR 8, CWA-72). Both tables are
+  // service-role-only (no permissive policy), so these reads must run here;
+  // .eq("org_id", id) is their tenant boundary on this BYPASSRLS client.
+  // Fail-soft: a failed read renders the card's unavailable state rather
+  // than blocking the rest of the page — the cap editor is not load-bearing
+  // for the branding/lifecycle surfaces.
+  const today = new Date().toISOString().slice(0, 10);
+  const [
+    { data: capRow, error: capError },
+    { data: usageRow, error: usageError },
+  ] = await Promise.all([
+    service
+      .from("org_email_limits")
+      .select("daily_cap")
+      .eq("org_id", id)
+      .maybeSingle(),
+    service
+      .from("org_email_usage")
+      .select("sent_count")
+      .eq("org_id", id)
+      .eq("usage_date", today)
+      .maybeSingle(),
+  ]);
+
+  let emailCap: EmailCapInfo | null = null;
+  if (capError || usageError) {
+    console.error(
+      "Platform email cap read failed for org %s:",
+      id,
+      capError ?? usageError,
+    );
+  } else {
+    emailCap = {
+      dailyCap: capRow?.daily_cap ?? DEFAULT_DAILY_EMAIL_CAP,
+      hasOverride: capRow !== null,
+      usedToday: usageRow?.sent_count ?? 0,
+    };
+  }
+
   const ownerRow = ownerRequests?.[0] ?? null;
   const owner: OwnerRequest | null = ownerRow
     ? {
@@ -104,7 +145,7 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
         backHref="/platform/organizations"
         backLabel="Back to Organizations"
       />
-      <OrganizationDetail org={detail} owner={owner} />
+      <OrganizationDetail org={detail} owner={owner} emailCap={emailCap} />
     </PageContainer>
   );
 }

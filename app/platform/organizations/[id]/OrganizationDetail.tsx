@@ -39,16 +39,30 @@ export interface OwnerRequest {
   tokenExpiresAt: string | null;
 }
 
+export interface EmailCapInfo {
+  // The effective cap: the org_email_limits override, or the platform
+  // default when no override row exists.
+  dailyCap: number;
+  hasOverride: boolean;
+  usedToday: number;
+}
+
 interface OrganizationDetailProps {
   org: OrgDetail;
   owner: OwnerRequest | null;
+  // null = the server read failed; the card renders its unavailable state.
+  emailCap: EmailCapInfo | null;
 }
 
-export function OrganizationDetail({ org, owner }: OrganizationDetailProps) {
+export function OrganizationDetail({ org, owner, emailCap }: OrganizationDetailProps) {
   const router = useRouter();
   const [branding, setBranding] = useState(org.branding);
   const [brandingError, setBrandingError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"branding" | "invite" | "status" | null>(null);
+  const [capInput, setCapInput] = useState(
+    emailCap ? String(emailCap.dailyCap) : ""
+  );
+  const [capError, setCapError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"branding" | "invite" | "status" | "emailCap" | null>(null);
 
   // Display-only readout; the API's validateAccent() is the enforced guard.
   const accentValid = HEX.test(branding.accent);
@@ -97,6 +111,39 @@ export function OrganizationDetail({ org, owner }: OrganizationDetailProps) {
         return;
       }
       toast.success(`Invite sent to ${owner.email}.`);
+      router.refresh();
+    } catch (err) {
+      console.error(err);
+      toast.error("Network error. Please try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleSaveEmailCap() {
+    // Display-side validation only; the API mirrors the DB CHECK and is the
+    // enforced guard.
+    const parsed = Number(capInput);
+    if (capInput.trim() === "" || !Number.isInteger(parsed) || parsed < 0) {
+      setCapError("Enter a whole number of emails per day (0 or more).");
+      return;
+    }
+    setBusy("emailCap");
+    setCapError(null);
+    try {
+      const res = await fetch(`/api/platform/organizations/${org.id}/email-cap`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ daily_cap: parsed }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        const message = data?.error || "Failed to update the email cap.";
+        setCapError(message);
+        toast.error(message);
+        return;
+      }
+      toast.success("Email cap saved.");
       router.refresh();
     } catch (err) {
       console.error(err);
@@ -253,6 +300,55 @@ export function OrganizationDetail({ org, owner }: OrganizationDetailProps) {
           ) : (
             <p className="text-base text-muted-foreground">
               No founding-admin request exists for this organization.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Email caps</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {emailCap ? (
+            <>
+              <p className="text-base">
+                Sent today: <span className="font-semibold">{emailCap.usedToday}</span> of{" "}
+                <span className="font-semibold">{emailCap.dailyCap}</span>
+                {emailCap.hasOverride ? "" : " (platform default)"}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                The daily cap bounds how many emails this organization can send
+                per day across reminders, broadcasts, and notifications. Set 0
+                to stop all sending.
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="email-daily-cap">Daily cap</Label>
+                <Input
+                  id="email-daily-cap"
+                  type="number"
+                  min={0}
+                  value={capInput}
+                  onChange={(e) => setCapInput(e.target.value)}
+                />
+              </div>
+              {capError && (
+                <p className="text-base font-medium text-destructive" role="alert">
+                  {capError}
+                </p>
+              )}
+              <Button
+                size="lg"
+                className="bg-brand-primary hover:bg-brand-primary/90 text-lg"
+                disabled={busy === "emailCap"}
+                onClick={() => void handleSaveEmailCap()}
+              >
+                {busy === "emailCap" ? "Saving..." : "Save email cap"}
+              </Button>
+            </>
+          ) : (
+            <p className="text-base text-muted-foreground">
+              Email cap information could not be loaded. Refresh to try again.
             </p>
           )}
         </CardContent>

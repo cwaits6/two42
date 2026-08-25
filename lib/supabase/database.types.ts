@@ -1088,6 +1088,58 @@ export type Database = {
           },
         ]
       }
+      org_email_limits: {
+        Row: {
+          daily_cap: number
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          daily_cap?: number
+          org_id?: string
+          updated_at?: string
+        }
+        Update: {
+          daily_cap?: number
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_email_limits_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_email_usage: {
+        Row: {
+          org_id: string
+          sent_count: number
+          usage_date: string
+        }
+        Insert: {
+          org_id?: string
+          sent_count?: number
+          usage_date?: string
+        }
+        Update: {
+          org_id?: string
+          sent_count?: number
+          usage_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_email_usage_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_members: {
         Row: {
           created_at: string
@@ -2163,6 +2215,10 @@ export type Database = {
       app_org_slug_for_host: { Args: { _host: string }; Returns: string }
       app_request_org_id: { Args: never; Returns: string }
       current_family_id: { Args: never; Returns: string }
+      email_quota_consume: {
+        Args: { _n: number; _org_id: string }
+        Returns: boolean
+      }
       get_own_email: { Args: never; Returns: string }
       get_own_role: { Args: never; Returns: string }
       get_profile_email: { Args: { profile_id: string }; Returns: string }
