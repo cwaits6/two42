@@ -61,6 +61,7 @@ export async function POST(request: Request) {
 
   const service = await createServiceClient();
   let insertedId: string | null = null;
+  let resendDomainId: string | null = null;
 
   try {
     // Insert first: the unique-per-org index turns a duplicate claim into a
@@ -123,6 +124,8 @@ export async function POST(request: Request) {
         { status: 502 },
       );
     }
+
+    resendDomainId = rd.id;
 
     const { data: saved, error: updateError } = await service
       .from("org_email_domains")
@@ -190,6 +193,32 @@ export async function POST(request: Request) {
       orgId,
       err,
     );
+    if (resendDomainId) {
+      // The Resend domain exists but the DB row recording it may not
+      // survive the rollback below — remove it so the provider side isn't
+      // left orphaned. Nested try/catch: this cleanup call can itself throw
+      // on the same network failure that landed us here.
+      try {
+        const { error: resendCleanupError } = await getResend().domains.remove(
+          resendDomainId,
+        );
+        if (resendCleanupError) {
+          console.error(
+            "email-domain create: Resend cleanup after unexpected error failed (org=%s, resend_domain_id=%s):",
+            orgId,
+            resendDomainId,
+            resendCleanupError,
+          );
+        }
+      } catch (cleanupErr) {
+        console.error(
+          "email-domain create: Resend cleanup after unexpected error threw (org=%s, resend_domain_id=%s):",
+          orgId,
+          resendDomainId,
+          cleanupErr,
+        );
+      }
+    }
     if (insertedId) {
       const { error: rollbackError } = await service
         .from("org_email_domains")

@@ -39,6 +39,7 @@ type EqCall = [string, unknown];
 interface ServiceClientOptions {
   insertResult: { data: { id: string } | null; error: unknown };
   updateResult?: { data: unknown; error: unknown };
+  updateRejects?: Error;
   deleteResult?: { error: unknown };
 }
 
@@ -86,6 +87,16 @@ function makeServiceClient(opts: ServiceClientOptions) {
         },
         update(payload: unknown) {
           calls.updatePayload = payload;
+          if (opts.updateRejects) {
+            // A pre-rejected promise as the chain terminal: eqChain's
+            // single() unwraps it on await, simulating a thrown (network-
+            // level) failure rather than a returned { error }. The noop
+            // catch marks it handled so vitest doesn't flag the rejection
+            // before the route awaits it.
+            const rejection = Promise.reject(opts.updateRejects);
+            rejection.catch(() => {});
+            return eqChain(calls.updateEq, rejection);
+          }
           return eqChain(
             calls.updateEq,
             opts.updateResult ?? { data: null, error: null },
@@ -200,6 +211,50 @@ describe("POST /api/admin/email-domain", () => {
     const res = await POST(claimRequest());
 
     expect(res.status).toBe(500);
+    expect(console.error).toHaveBeenCalled();
+  });
+
+  it("removes the Resend domain and rolls back the insert when the post-create update throws", async () => {
+    const { client, calls } = makeServiceClient({
+      insertResult: { data: { id: "row-1" }, error: null },
+      updateRejects: new Error("network reset"),
+    });
+    createServiceClient.mockResolvedValue(client);
+    domainsCreate.mockResolvedValue({
+      data: { id: "rd-1", status: "pending", records: [] },
+      error: null,
+    });
+    domainsRemove.mockResolvedValue({ error: null });
+
+    const res = await POST(claimRequest());
+
+    expect(res.status).toBe(500);
+    // The catch path must clean up the provider side too: the Resend domain
+    // exists but no DB row will record it after the rollback below.
+    expect(domainsRemove).toHaveBeenCalledWith("rd-1");
+    expect(calls.deleteCount).toBe(1);
+    expect(calls.deleteEq).toEqual([
+      ["id", "row-1"],
+      ["org_id", "org-1"],
+    ]);
+  });
+
+  it("still rolls back the DB row when the catch-path Resend cleanup itself throws", async () => {
+    const { client, calls } = makeServiceClient({
+      insertResult: { data: { id: "row-1" }, error: null },
+      updateRejects: new Error("network reset"),
+    });
+    createServiceClient.mockResolvedValue(client);
+    domainsCreate.mockResolvedValue({
+      data: { id: "rd-1", status: "pending", records: [] },
+      error: null,
+    });
+    domainsRemove.mockRejectedValue(new Error("resend also unreachable"));
+
+    const res = await POST(claimRequest());
+
+    expect(res.status).toBe(500);
+    expect(calls.deleteCount).toBe(1);
     expect(console.error).toHaveBeenCalled();
   });
 

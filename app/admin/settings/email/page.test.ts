@@ -32,6 +32,27 @@ describe("toDnsRecords", () => {
     ]);
   });
 
+  it("drops fields of the wrong runtime type instead of passing them to render", () => {
+    // A numeric status would reach statusLabel(), whose .replace() call
+    // throws on a non-string; object-valued name/value would fail React
+    // rendering. Each field is normalized independently, so one bad field
+    // degrades to a partial row, never a crash.
+    expect(
+      toDnsRecords([
+        { record: "DKIM", status: 123, name: { nested: true }, value: "v=DKIM1" },
+        { record: 42, type: "TXT", ttl: 3600, priority: "10" },
+      ]),
+    ).toEqual([
+      { record: "DKIM", value: "v=DKIM1" },
+      { type: "TXT" },
+    ]);
+  });
+
+  it("keeps a numeric priority and string ttl, the shapes Resend documents", () => {
+    const record = { record: "MX", priority: 10, ttl: "Auto" };
+    expect(toDnsRecords([record])).toEqual([record]);
+  });
+
   it("passes through an empty array unchanged", () => {
     expect(toDnsRecords([])).toEqual([]);
   });

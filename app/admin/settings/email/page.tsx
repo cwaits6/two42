@@ -31,9 +31,22 @@ export interface DnsRecord {
 
 export function toDnsRecords(value: unknown): DnsRecord[] {
   if (!Array.isArray(value)) return [];
-  return value.filter(
-    (r): r is DnsRecord => typeof r === "object" && r !== null,
-  );
+  return value.flatMap((entry): DnsRecord[] => {
+    if (typeof entry !== "object" || entry === null) return [];
+    const record = entry as Record<string, unknown>;
+    return [
+      {
+        record: typeof record.record === "string" ? record.record : undefined,
+        name: typeof record.name === "string" ? record.name : undefined,
+        type: typeof record.type === "string" ? record.type : undefined,
+        value: typeof record.value === "string" ? record.value : undefined,
+        ttl: typeof record.ttl === "string" ? record.ttl : undefined,
+        priority:
+          typeof record.priority === "number" ? record.priority : undefined,
+        status: typeof record.status === "string" ? record.status : undefined,
+      },
+    ];
+  });
 }
 
 export function statusVariant(
