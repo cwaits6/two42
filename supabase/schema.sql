@@ -1192,6 +1192,24 @@ CREATE TABLE IF NOT EXISTS "public"."member_groups" (
 ALTER TABLE "public"."member_groups" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."org_email_domains" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "domain" "text" NOT NULL,
+    "resend_domain_id" "text",
+    "status" "text" DEFAULT 'not_started'::"text" NOT NULL,
+    "dns_records" "jsonb" DEFAULT '[]'::"jsonb" NOT NULL,
+    "verified_at" timestamp with time zone,
+    "last_checked_at" timestamp with time zone,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "org_email_domains_domain_shape" CHECK ((("domain" = "lower"("domain")) AND (("length"("domain") >= 4) AND ("length"("domain") <= 253)))),
+    CONSTRAINT "org_email_domains_status_check" CHECK (("status" = ANY (ARRAY['not_started'::"text", 'pending'::"text", 'verified'::"text", 'failure'::"text", 'temporary_failure'::"text", 'failed'::"text", 'partially_verified'::"text", 'partially_failed'::"text"])))
+);
+
+
+ALTER TABLE "public"."org_email_domains" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."organization_members" (
     "org_id" "uuid" NOT NULL,
     "profile_id" "uuid" NOT NULL,
@@ -1607,6 +1625,11 @@ ALTER TABLE ONLY "public"."member_groups"
 
 
 
+ALTER TABLE ONLY "public"."org_email_domains"
+    ADD CONSTRAINT "org_email_domains_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."organization_members"
     ADD CONSTRAINT "organization_members_pkey" PRIMARY KEY ("org_id", "profile_id");
 
@@ -1801,6 +1824,10 @@ CREATE INDEX "lectures_series_id_idx" ON "public"."lectures" USING "btree" ("ser
 
 
 CREATE INDEX "member_groups_org_id_idx" ON "public"."member_groups" USING "btree" ("org_id");
+
+
+
+CREATE UNIQUE INDEX "org_email_domains_org_key" ON "public"."org_email_domains" USING "btree" ("org_id");
 
 
 
@@ -2180,6 +2207,11 @@ ALTER TABLE ONLY "public"."member_groups"
 
 
 
+ALTER TABLE ONLY "public"."org_email_domains"
+    ADD CONSTRAINT "org_email_domains_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
 ALTER TABLE ONLY "public"."organization_members"
     ADD CONSTRAINT "organization_members_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
 
@@ -2553,6 +2585,10 @@ CREATE POLICY "Admins can view access requests" ON "public"."access_requests" FO
 
 
 
+CREATE POLICY "Admins manage org email domains" ON "public"."org_email_domains" TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin"))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
+
+
+
 CREATE POLICY "Anon can read public settings" ON "public"."site_settings" FOR SELECT TO "authenticated", "anon" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "is_public"));
 
 
@@ -2905,6 +2941,10 @@ CREATE POLICY "org isolation" ON "public"."member_groups" AS RESTRICTIVE TO "aut
 
 
 
+CREATE POLICY "org isolation" ON "public"."org_email_domains" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
 CREATE POLICY "org isolation" ON "public"."organization_members" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
@@ -2963,6 +3003,9 @@ CREATE POLICY "org isolation" ON "public"."site_settings" AS RESTRICTIVE TO "aut
 
 CREATE POLICY "org members can view their orgs" ON "public"."organizations" FOR SELECT USING ("public"."is_org_member"("id"));
 
+
+
+ALTER TABLE "public"."org_email_domains" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."organization_members" ENABLE ROW LEVEL SECURITY;
@@ -3268,6 +3311,15 @@ GRANT ALL ON TABLE "public"."lectures" TO "service_role";
 GRANT ALL ON TABLE "public"."member_groups" TO "anon";
 GRANT ALL ON TABLE "public"."member_groups" TO "authenticated";
 GRANT ALL ON TABLE "public"."member_groups" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."org_email_domains" TO "service_role";
+GRANT SELECT,DELETE ON TABLE "public"."org_email_domains" TO "authenticated";
+
+
+
+GRANT INSERT("domain") ON TABLE "public"."org_email_domains" TO "authenticated";
 
 
 
