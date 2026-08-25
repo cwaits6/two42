@@ -99,7 +99,7 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
     console.error(
       "Platform email cap read failed for org %s:",
       id,
-      capError ?? usageError,
+      { capError, usageError },
     );
   } else {
     emailCap = {
