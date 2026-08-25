@@ -6,8 +6,11 @@ import { classifyHost, isTrustedFallbackHost, normalizeHost } from "@/lib/org";
  * 20260824000000_org_domains.sql) through a bare anon/publishable-key
  * client — no cookies needed, it's a pure function of the host
  * (docs/plans/phase-5-domains-email.md §5.1). NOT a service-role client:
- * scripts/check-service-role-org-scope.mjs only scans createServiceClient()
- * chains, so this call site is correctly outside its scope.
+ * scripts/check-service-role-org-scope.mjs only scans the service-role
+ * client factory's call sites, so this call site is correctly outside its
+ * scope. (Its inventory-sync check is a plain text scan, so even naming
+ * that factory's binding name here would falsely flag this file — say
+ * "service-role client factory" instead if this comment is edited again.)
  */
 export async function lookupCustomDomainViaRpc(
   host: string
