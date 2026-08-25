@@ -256,7 +256,13 @@ and an **approved access request for the owner** — so self-serve
 onboarding is org-first: provision, then create the auth user, and the
 fail-closed trigger needs no special case. Phase 4 must NOT solve
 onboarding by adding a fallback branch to `handle_new_user()`. An invalid
-slug raises `TN003`.
+slug raises `TN003`; a slug on the reserved-label denylist (`www`, `app`,
+`api`, `admin`, `platform`, …) raises `TN006` — reserved because slugs
+become host labels once Phase 5's wildcard/custom-domain routing ships
+(`docs/plans/phase-5-domains-email.md` §4), and any of these would shadow
+a platform host. The list is mirrored in `lib/org.ts` (`RESERVED_ORG_SLUGS`).
+`default` — the slug of the one org that exists today — is deliberately
+not yet on the list.
 
 **`access_requests.approved_role`** (Phase 4a, `20260802000002`) names the
 role `handle_new_user()` grants when an approved request resolves a signup:

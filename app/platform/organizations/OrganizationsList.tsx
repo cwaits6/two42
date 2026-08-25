@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { isReservedOrgSlug } from "@/lib/org";
 import type { Database } from "@/lib/supabase/database.types";
 
 export interface PlatformOrg {
@@ -57,6 +58,10 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
     }
     if (!SLUG.test(slug)) {
       toast.error("Slug must be lowercase letters, numbers, and hyphens.");
+      return;
+    }
+    if (isReservedOrgSlug(slug)) {
+      toast.error("That slug is reserved for platform use.");
       return;
     }
     if (ownerEmail.length > 254 || !EMAIL.test(ownerEmail)) {

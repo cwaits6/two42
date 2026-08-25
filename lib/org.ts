@@ -47,6 +47,27 @@ export function isValidOrgSlug(slug: string): boolean {
 }
 
 /**
+ * Mirrors the denylist provision_organization() enforces (TN006), so the
+ * app can never route to — or offer — a slug the DB would refuse to mint.
+ * Slugs become host labels once Phase 5 routing ships, and any of these
+ * would shadow a platform host. Keep this list in sync with the array in
+ * the TN006 migration (supabase/migrations/20260818000000_reserved_org_slugs.sql).
+ *
+ * 'default' is deliberately NOT here yet: it is the slug of the one org
+ * that exists today (DEFAULT_ORG_SLUG above). Add it once that org is
+ * renamed or retired.
+ */
+export const RESERVED_ORG_SLUGS: ReadonlySet<string> = new Set([
+  "www", "app", "api", "admin", "platform", "auth", "mail", "email",
+  "static", "assets", "cdn", "status", "docs", "blog", "help", "support",
+  "dev", "staging", "preview", "test",
+]);
+
+export function isReservedOrgSlug(slug: string): boolean {
+  return RESERVED_ORG_SLUGS.has(slug);
+}
+
+/**
  * Phase 4b (CWA-48 / #314): the single implementation of the fail-closed
  * org-resolution guard both anonymous entry points (`/join`,
  * `/join/family/[token]`) and the per-org route (`/[orgSlug]/join`) rely on.
