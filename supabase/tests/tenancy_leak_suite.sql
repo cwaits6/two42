@@ -119,6 +119,8 @@ begin
     values (_org, _serving_group, _owner, _tag || ' broadcast');
   insert into public.org_email_domains (org_id, domain, resend_domain_id, status, dns_records)
     values (_org, _tag || '.mail.example.test', _tag || '-resend-id', 'pending', '[]'::jsonb);
+  insert into public.org_domains (org_id, domain, status)
+    values (_org, _tag || '.domains.example.test', 'pending');
 end;
 $$;
 

@@ -44,6 +44,63 @@ function gateError(status: 401 | 403) {
   );
 }
 
+// Deletes the just-inserted row so the unique-per-org index doesn't block a
+// retry. Shared by every failure branch below (Resend create failure,
+// failed follow-up update, and the catch-all) — each supplies its own
+// `context` so the log line still says which branch rolled back.
+async function rollbackInsert(
+  service: Awaited<ReturnType<typeof createServiceClient>>,
+  orgId: string,
+  id: string,
+  context: string,
+) {
+  const { error } = await service
+    .from("org_email_domains")
+    .delete()
+    .eq("id", id)
+    .eq("org_id", orgId);
+  if (error) {
+    console.error(
+      "email-domain create: rollback delete failed (%s) (org=%s, id=%s):",
+      context,
+      orgId,
+      id,
+      error,
+    );
+  }
+}
+
+// Removes a Resend domain created earlier in the same request so it isn't
+// left orphaned when the DB write that was supposed to record it fails.
+// Resend's remove() can itself throw on a network-level failure, same as
+// domains.create() — caught here so callers don't need their own try/catch.
+async function cleanupResendDomain(
+  orgId: string,
+  resendDomainId: string,
+  context: string,
+) {
+  try {
+    const { error } = await getResend().domains.remove(resendDomainId);
+    if (error) {
+      console.error(
+        "email-domain create: Resend cleanup failed (%s) (org=%s, resend_domain_id=%s):",
+        context,
+        orgId,
+        resendDomainId,
+        error,
+      );
+    }
+  } catch (cleanupErr) {
+    console.error(
+      "email-domain create: Resend cleanup threw (%s) (org=%s, resend_domain_id=%s):",
+      context,
+      orgId,
+      resendDomainId,
+      cleanupErr,
+    );
+  }
+}
+
 export async function POST(request: Request) {
   const gate = await requireOrgAdmin();
   if (!gate.ok) return gateError(gate.status);
@@ -106,19 +163,7 @@ export async function POST(request: Request) {
         resendError,
       );
       // Roll back the claim so a retry isn't blocked by the unique index.
-      const { error: rollbackError } = await service
-        .from("org_email_domains")
-        .delete()
-        .eq("id", inserted.id)
-        .eq("org_id", orgId);
-      if (rollbackError) {
-        console.error(
-          "email-domain create: rollback delete failed (org=%s, id=%s):",
-          orgId,
-          inserted.id,
-          rollbackError,
-        );
-      }
+      await rollbackInsert(service, orgId, inserted.id, "create failure");
       return NextResponse.json(
         { error: "Failed to create domain with email provider." },
         { status: 502 },
@@ -150,30 +195,8 @@ export async function POST(request: Request) {
       // Mirror the rollback above: the Resend domain now exists but the DB
       // write that records it didn't, so clean up both sides rather than
       // leave an orphaned Resend domain with no logged trail to find it.
-      const { error: resendCleanupError } = await getResend().domains.remove(
-        rd.id,
-      );
-      if (resendCleanupError) {
-        console.error(
-          "email-domain create: Resend cleanup after failed update also failed (org=%s, resend_domain_id=%s):",
-          orgId,
-          rd.id,
-          resendCleanupError,
-        );
-      }
-      const { error: rollbackError } = await service
-        .from("org_email_domains")
-        .delete()
-        .eq("id", inserted.id)
-        .eq("org_id", orgId);
-      if (rollbackError) {
-        console.error(
-          "email-domain create: rollback delete after failed update also failed (org=%s, id=%s):",
-          orgId,
-          inserted.id,
-          rollbackError,
-        );
-      }
+      await cleanupResendDomain(orgId, rd.id, "after failed update");
+      await rollbackInsert(service, orgId, inserted.id, "after failed update");
       return NextResponse.json(
         { error: "Failed to save domain. Please try again." },
         { status: 500 },
@@ -196,43 +219,11 @@ export async function POST(request: Request) {
     if (resendDomainId) {
       // The Resend domain exists but the DB row recording it may not
       // survive the rollback below — remove it so the provider side isn't
-      // left orphaned. Nested try/catch: this cleanup call can itself throw
-      // on the same network failure that landed us here.
-      try {
-        const { error: resendCleanupError } = await getResend().domains.remove(
-          resendDomainId,
-        );
-        if (resendCleanupError) {
-          console.error(
-            "email-domain create: Resend cleanup after unexpected error failed (org=%s, resend_domain_id=%s):",
-            orgId,
-            resendDomainId,
-            resendCleanupError,
-          );
-        }
-      } catch (cleanupErr) {
-        console.error(
-          "email-domain create: Resend cleanup after unexpected error threw (org=%s, resend_domain_id=%s):",
-          orgId,
-          resendDomainId,
-          cleanupErr,
-        );
-      }
+      // left orphaned.
+      await cleanupResendDomain(orgId, resendDomainId, "after unexpected error");
     }
     if (insertedId) {
-      const { error: rollbackError } = await service
-        .from("org_email_domains")
-        .delete()
-        .eq("id", insertedId)
-        .eq("org_id", orgId);
-      if (rollbackError) {
-        console.error(
-          "email-domain create: rollback after unexpected error also failed (org=%s, id=%s):",
-          orgId,
-          insertedId,
-          rollbackError,
-        );
-      }
+      await rollbackInsert(service, orgId, insertedId, "after unexpected error");
     }
     return NextResponse.json(
       { error: "Failed to claim domain." },

@@ -369,24 +369,42 @@ platform seam).
   Accepted: the slug is already public by construction (it *is* the header
   value), and `reply_to` is an address the org publishes on every outbound
   email.
-- **`organizations.status` does not cut access.** The `public.org_status`
-  enum (CWA-51; `create type public.org_status as enum
-  ('active','suspended')` in `20260802000000_org_status_enum.sql`) has
-  exactly one column using it, `organizations.status`. It is an enum rather
-  than a CHECK constraint so `supabase gen types` emits a union type — that
-  is what makes the `satisfies readonly OrgStatus[]` check in
-  `app/api/platform/organizations/[id]/route.ts` a compile-time gate on new
-  labels. The scope limit is recorded in `20260731000001_org_helpers.sql`:
-  `status` is deliberately **not** consulted by either org helper, so
-  suspending an org does not cut its members' access. It gates no access
-  path anywhere: the only behavior it changes is that `listActiveOrgs()`
-  (`supabase/functions/_shared/orgs.ts`) skips suspended orgs, so a
-  suspended tenant stops receiving reminder email. The `/platform` operator
-  surfaces read the column to display it and write it to set it, which is
-  reporting and editing, not enforcement.
-  Enforcement of a real access cut belongs to Phase 4's suspend surface;
-  don't assume it exists until then. Neither `anon` nor `authenticated` can
-  even `select` the column (see the column-grant bullet above).
+- **`organizations.status` now cuts exactly one access path.**
+  `app_org_slug_for_host()` (`20260824000000_org_domains.sql`, Phase 5 PR 2
+  / CWA-66) is the first place `status` gates anything beyond
+  `listActiveOrgs()`: it requires `o.status = 'active'`, so a suspended
+  org's verified custom domain resolves NULL — the domain goes dark rather
+  than routing (decision D4,
+  [`docs/plans/phase-5-domains-email.md`](../plans/phase-5-domains-email.md)).
+  Nothing calls the resolver yet (PR 3 wires it into middleware), so this
+  has no live effect until then. Everything else about the column is
+  unchanged: the `public.org_status` enum (CWA-51; `create type
+  public.org_status as enum ('active','suspended')` in
+  `20260802000000_org_status_enum.sql`) has exactly one column using it,
+  and is an enum rather than a CHECK constraint so `supabase gen types`
+  emits a union type — that is what makes the `satisfies readonly
+  OrgStatus[]` check in `app/api/platform/organizations/[id]/route.ts` a
+  compile-time gate on new labels. `20260731000001_org_helpers.sql` still
+  records that `status` is deliberately **not** consulted by either org
+  helper, so suspending an org does not cut its members' access;
+  `listActiveOrgs()` (`supabase/functions/_shared/orgs.ts`) still skips
+  suspended orgs, so a suspended tenant stops receiving reminder email; and
+  the `/platform` operator surfaces read the column to display it and write
+  it to set it, which is reporting and editing, not enforcement.
+  Enforcement of a member-facing access cut belongs to Phase 4's suspend
+  surface; don't assume it exists until then. Neither `anon` nor
+  `authenticated` can even `select` the column (see the column-grant bullet
+  above).
+- **The global (non-per-org) unique on `org_domains.domain` is a deliberate
+  deviation from the per-org-unique norm.** Every other org-owned table's
+  uniques are scoped `(org_id, ...)`; DNS names are globally unique
+  regardless of what this schema says, so `org_domains_verified_domain_key`
+  (`20260824000000_org_domains.sql`, verified/removing rows only) is global
+  by necessity — host → org must be a function. The information leak this
+  creates (org A can infer, via a constraint violation on its own claim
+  attempt, that *some* org has verified a given domain) is not a new
+  disclosure: public DNS already answers that question for any domain
+  actually serving traffic.
 - **Per-org branding is an injection surface with a named boundary.**
   `organizations.branding` is admin-supplied free text that reaches CSS and
   RFC 5322 headers. The boundary is `HEX` (`lib/contrast.ts`, strict
