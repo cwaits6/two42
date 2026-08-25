@@ -68,6 +68,68 @@ export function isReservedOrgSlug(slug: string): boolean {
 }
 
 /**
+ * Phase 5 PR 3 (CWA-67 / #360): the single normalization point for a
+ * request host (docs/plans/phase-5-domains-email.md §5.1 — "No
+ * normalization inside the resolver — canonicalization is middleware's
+ * job, once"). Lowercases, strips a port, strips a trailing FQDN dot —
+ * port first, so "example.com.:443" normalizes fully.
+ */
+export function normalizeHost(rawHost: string): string {
+  return rawHost.trim().toLowerCase().replace(/:\d+$/, "").replace(/\.$/, "");
+}
+
+export type HostClassification =
+  | { kind: "apex" }
+  | { kind: "subdomain"; slug: string }
+  | { kind: "invalid-subdomain" }
+  | { kind: "custom-domain-candidate" };
+
+/**
+ * Classifies an already-normalized host against the platform apex
+ * (§5.2 step 2). Exact label boundary — `host === apex` or
+ * `host.endsWith("." + apex)` — never a raw suffix check, so a
+ * registrable name that merely ends with the apex string
+ * ("evil-two42.io") can never classify as platform and always falls to
+ * "custom-domain-candidate" instead.
+ */
+export function classifyHost(host: string, apex: string): HostClassification {
+  if (host === apex) return { kind: "apex" };
+  if (host.endsWith(`.${apex}`)) {
+    const prefix = host.slice(0, host.length - apex.length - 1);
+    if (prefix.length === 0 || prefix.includes(".")) {
+      return { kind: "invalid-subdomain" };
+    }
+    if (!isValidOrgSlug(prefix) || isReservedOrgSlug(prefix)) {
+      return { kind: "invalid-subdomain" };
+    }
+    return { kind: "subdomain", slug: prefix };
+  }
+  return { kind: "custom-domain-candidate" };
+}
+
+/**
+ * §5.2 step 4's closed, static trusted-host set: the deployment's own
+ * host, for which host resolution falls back to the env pin rather than
+ * 404ing. Never widen this dynamically — it exists so the *existing*
+ * deployment's behavior is unchanged by this PR, not as a general escape
+ * hatch.
+ */
+export function isTrustedFallbackHost(
+  host: string,
+  opts: { siteUrl: string }
+): boolean {
+  if (host === "localhost" || host === "127.0.0.1") return true;
+  if (host.endsWith(".vercel.app")) return true;
+  try {
+    const siteHost = normalizeHost(new URL(opts.siteUrl).host);
+    if (siteHost && host === siteHost) return true;
+  } catch {
+    // malformed NEXT_PUBLIC_SITE_URL — not this function's problem to fix
+  }
+  return false;
+}
+
+/**
  * Phase 4b (CWA-48 / #314): the single implementation of the fail-closed
  * org-resolution guard both anonymous entry points (`/join`,
  * `/join/family/[token]`) and the per-org route (`/[orgSlug]/join`) rely on.

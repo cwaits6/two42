@@ -1,8 +1,9 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { siteConfig } from "@/lib/config";
 import { isValidOrgSlug, resolveRequestOrgId } from "@/lib/org";
 import { getOptionalUser } from "@/lib/supabase/current-user";
-import { createClient } from "@/lib/supabase/server";
+import { assertPathOrgMatchesHost, createClient } from "@/lib/supabase/server";
 import { JoinForm } from "@/app/join/JoinForm";
 import { JoinUnavailable } from "@/app/join/JoinUnavailable";
 
@@ -10,7 +11,21 @@ interface PageProps {
   params: Promise<{ orgSlug: string }>;
 }
 
-export const metadata = { title: `Request Access | ${siteConfig.name}` };
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
+  const { orgSlug } = await params;
+  return {
+    title: `Request Access | ${siteConfig.name}`,
+    // Phase 5 §4: /[orgSlug]/join stays reachable, but the canonical URL is
+    // the org's platform subdomain (custom domains land in Phase 5 PR 5,
+    // once orgBaseUrl() exists). Skip the tag entirely for a malformed
+    // slug — it would never be a valid canonical target anyway.
+    alternates: isValidOrgSlug(orgSlug)
+      ? { canonical: `https://${orgSlug}.${siteConfig.platformApex}/join` }
+      : undefined,
+  };
+}
 
 export default async function OrgJoinPage({ params }: PageProps) {
   const { orgSlug } = await params;
@@ -31,6 +46,11 @@ export default async function OrgJoinPage({ params }: PageProps) {
     console.error("Org join page: rejected malformed org slug %s", orgSlug);
     return <JoinUnavailable />;
   }
+
+  // Host-first precedence (Phase 5 §5.3): if the host itself already named
+  // a *different* org, this path slug never gets served — notFound() throws.
+  // Unset host resolution (platform host, trusted fallback) is a no-op.
+  await assertPathOrgMatchesHost(orgSlug);
 
   // The URL slug — not the host/env slug — is the org this request is about.
   // app_request_org_id() validates it against a real organizations row and
