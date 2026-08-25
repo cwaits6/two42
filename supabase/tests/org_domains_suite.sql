@@ -118,6 +118,17 @@ select is(
   1,
   'the permissive policy is admin-only on both USING and WITH CHECK'
 );
+-- The org FK must be ON DELETE RESTRICT: attached rows and 'removing'
+-- tombstones are the §7.1 detach workflow's only record of a Vercel-side
+-- attachment, and FK cascades bypass RLS DELETE policies entirely, so a
+-- cascading org delete would orphan the Vercel project domain untracked.
+select is(
+  (select confdeltype::text from pg_catalog.pg_constraint
+    where conrelid = 'public.org_domains'::regclass
+      and contype = 'f' and conname = 'org_domains_org_id_fkey'),
+  'r',
+  'org_domains.org_id FK is ON DELETE RESTRICT — org deletion waits for domain release'
+);
 
 -- ── Isolation, as org A''s admin ────────────────────────────────────────────
 do $$

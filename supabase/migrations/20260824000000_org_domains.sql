@@ -20,7 +20,11 @@ create table public.org_domains (
   -- Single-column FK: organizations is the tenant root and carries no
   -- org_id of its own (CLAUDE.md's one named exception to composite FKs).
   org_id uuid not null default public.app_current_org_id()
-    references public.organizations(id) on delete cascade,
+    -- RESTRICT, not CASCADE: attached rows and 'removing' tombstones are the
+    -- §7.1 detach workflow's only record of a Vercel-side attachment, and FK
+    -- cascades bypass RLS DELETE policies entirely. Deleting an organization
+    -- must wait until its domains are released (detached and hard-deleted).
+    references public.organizations(id) on delete restrict,
   -- Stored canonical: lowercase, punycode (A-label) for IDNs, no trailing
   -- dot, no port. The resolver does no normalization (§5.1) — the caller
   -- canonicalizes once, and non-canonical input matches nothing.
