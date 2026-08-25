@@ -56,11 +56,15 @@ const EMAIL_FROM = Deno.env.get("EMAIL_FROM") || "two42 <noreply@incouragers.org
 const APP_NAME = Deno.env.get("APP_NAME") || "two42";
 const BRAND_COLOR = Deno.env.get("BRAND_COLOR") || "#B85C38";
 
-// The From: address keeps the platform domain (deliverability: SPF/DKIM are
-// configured for it); only the display name and Reply-To vary per org
-// (CWA-56). Mirrors lib/email/identity.ts.
+// The platform From: address — the fallback for every org without a
+// verified org_email_domains row whose domain passes the SENDING_DOMAIN gate
+// in _shared/branding.ts (CWA-56, CWA-71). Mirrors lib/email/identity.ts.
 const PLATFORM_ADDRESS = parseAddress(EMAIL_FROM);
-const BRANDING_DEFAULTS = { displayName: APP_NAME, accent: BRAND_COLOR };
+const BRANDING_DEFAULTS = {
+  displayName: APP_NAME,
+  accent: BRAND_COLOR,
+  platformAddress: PLATFORM_ADDRESS,
+};
 
 // ── Email ─────────────────────────────────────────────────────────────────────
 
@@ -77,7 +81,7 @@ async function sendEmail(
       // Raw REST call, so the Reply-To field is snake_case `reply_to` — not
       // the camelCase `replyTo` the SDK uses in lib/email/resend.ts.
       body: JSON.stringify({
-        from: formatFromHeader(opts.branding.orgName, PLATFORM_ADDRESS),
+        from: formatFromHeader(opts.branding.orgName, opts.branding.fromAddress),
         to: opts.to,
         subject: opts.subject,
         html: opts.html,
@@ -228,7 +232,11 @@ Deno.serve(async () => {
     const summary = summarize(await forEachOrg(orgs, (org) =>
       // resolveEmailBranding is total (never throws): a malformed branding
       // row degrades to the env defaults, not an org-level failure.
-      runForOrg(supabase, org, resolveEmailBranding(org.branding, BRANDING_DEFAULTS, org.slug))));
+      runForOrg(
+        supabase,
+        org,
+        resolveEmailBranding(org.branding, BRANDING_DEFAULTS, org.slug, org.org_email_domains[0] ?? null),
+      )));
     if (summary.failed.length > 0 || summary.emailsFailed > 0) {
       console.error(
         "run completed with failures: %d/%d orgs failed, %d emails rejected",

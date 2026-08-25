@@ -62,11 +62,15 @@ function createServiceClient() {
 }
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
-// The From: address keeps the platform domain (deliverability: SPF/DKIM are
-// configured for it); only the display name and Reply-To vary per org
-// (CWA-56). Mirrors lib/email/identity.ts.
+// The platform From: address — the fallback for every org without a
+// verified org_email_domains row whose domain passes the SENDING_DOMAIN gate
+// in _shared/branding.ts (CWA-56, CWA-71). Mirrors lib/email/identity.ts.
 const PLATFORM_ADDRESS = parseAddress(EMAIL_FROM);
-const BRANDING_DEFAULTS = { displayName: APP_NAME, accent: BRAND_COLOR };
+const BRANDING_DEFAULTS = {
+  displayName: APP_NAME,
+  accent: BRAND_COLOR,
+  platformAddress: PLATFORM_ADDRESS,
+};
 
 // ── HMAC token (same format as lib/serving/links.ts) ─────────────────────────
 
@@ -144,7 +148,7 @@ async function sendEmail(
       // Raw REST call, so the Reply-To field is snake_case `reply_to` — not
       // the camelCase `replyTo` the SDK uses in lib/email/resend.ts.
       body: JSON.stringify({
-        from: formatFromHeader(opts.branding.orgName, PLATFORM_ADDRESS),
+        from: formatFromHeader(opts.branding.orgName, opts.branding.fromAddress),
         to: opts.to,
         subject: opts.subject,
         html: opts.html,
@@ -537,7 +541,12 @@ Deno.serve(async (req) => {
         const canSign = await resolveCanSign(supabase, org.id);
         // resolveEmailBranding is total (never throws): a malformed branding
         // row degrades to the env defaults, not an org-level failure.
-        const branding = resolveEmailBranding(org.branding, BRANDING_DEFAULTS, org.slug);
+        const branding = resolveEmailBranding(
+          org.branding,
+          BRANDING_DEFAULTS,
+          org.slug,
+          org.org_email_domains[0] ?? null,
+        );
         return mode === "monthly"
           ? await runMonthly(supabase, org.id, canSign, branding)
           : await runDaily(supabase, org.id, canSign, branding);

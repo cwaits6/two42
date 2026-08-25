@@ -23,6 +23,12 @@ export interface Org {
   // shape: _shared/branding.ts is the sole validator of this column, and this
   // module must not grow a second, weaker opinion about it.
   branding: unknown;
+  // The org's single sending-domain row (org_email_domains, Phase 5 PR 6 /
+  // #367), embedded via the FK from organizations — an array by PostgREST
+  // convention even though the unique index on org_id caps it at one row.
+  // Deliberately raw {domain, status}, not pre-validated: _shared/branding.ts
+  // is the sole validator, same reasoning as `branding` above.
+  org_email_domains: Array<{ domain: string; status: string }>;
 }
 
 interface QueryResult<T> {
@@ -49,12 +55,17 @@ export interface OrgListClient {
  * the whole run a no-op.
  *
  * branding rides along on this one query (CWA-56) so per-org email branding
- * costs no extra round trip and no new service-role call site.
+ * costs no extra round trip and no new service-role call site — and the
+ * org_email_domains embed (CWA-71) rides along the same way. The embed is
+ * safe without its own filter because it is reached by FK traversal from an
+ * organizations row this same service-role query already selected — the
+ * embed-from-an-already-filtered-parent exception, not a new unscoped
+ * `.from(` call.
  */
 export async function listActiveOrgs(supabase: OrgListClient): Promise<Org[]> {
   const { data, error } = await supabase
     .from("organizations")
-    .select("id, name, slug, branding")
+    .select("id, name, slug, branding, org_email_domains(domain, status)")
     .eq("status", "active")
     .order("slug");
   if (error) throw new Error(`Failed to list organizations: ${error.message}`);
