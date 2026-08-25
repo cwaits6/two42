@@ -72,6 +72,18 @@ function formatTimestamp(value: string | null): string {
   return new Date(value).toLocaleString();
 }
 
+type DomainApiResponse = { error?: string; data?: EmailDomainRow };
+
+/** Fetch + parse-JSON, shared by the claim/verify/remove handlers below. */
+async function requestJson(
+  url: string,
+  init?: RequestInit,
+): Promise<{ ok: boolean; data: DomainApiResponse | null }> {
+  const res = await fetch(url, init);
+  const data = await res.json().catch(() => null);
+  return { ok: res.ok, data };
+}
+
 export default function EmailDomainSettingsPage() {
   const supabase = useMemo(() => createClient(), []);
   const [loading, setLoading] = useState(true);
@@ -106,23 +118,21 @@ export default function EmailDomainSettingsPage() {
     e.preventDefault();
     setBusy(true);
     try {
-      const res = await fetch("/api/admin/email-domain", {
+      const { ok, data } = await requestJson("/api/admin/email-domain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ domain: domainInput }),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
+      if (!ok) {
         toast.error(data?.error || "Failed to claim domain.");
         return;
       }
-      const data = await res.json().catch(() => null);
       toast.success(
         "Domain claimed. Publish the DNS records below, then verify.",
       );
       setDomainInput("");
       if (data?.data) {
-        setRow(data.data as EmailDomainRow);
+        setRow(data.data);
       } else {
         await load();
       }
@@ -137,16 +147,14 @@ export default function EmailDomainSettingsPage() {
   const handleVerify = async () => {
     setBusy(true);
     try {
-      const res = await fetch("/api/admin/email-domain/verify", {
+      const { ok, data } = await requestJson("/api/admin/email-domain/verify", {
         method: "POST",
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
+      if (!ok) {
         toast.error(data?.error || "Failed to verify domain.");
         return;
       }
-      const data = await res.json().catch(() => null);
-      const fresh = (data?.data as EmailDomainRow | undefined) ?? null;
+      const fresh = data?.data ?? null;
       if (fresh) {
         setRow(fresh);
         if (fresh.status === "verified") {
@@ -175,9 +183,10 @@ export default function EmailDomainSettingsPage() {
     }
     setBusy(true);
     try {
-      const res = await fetch("/api/admin/email-domain", { method: "DELETE" });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
+      const { ok, data } = await requestJson("/api/admin/email-domain", {
+        method: "DELETE",
+      });
+      if (!ok) {
         toast.error(data?.error || "Failed to remove domain.");
         return;
       }
