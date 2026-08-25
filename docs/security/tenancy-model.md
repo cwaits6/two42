@@ -47,8 +47,9 @@ Rules that make these safe:
   (`20260824000000_org_domains.sql` — verified `org_domains` rows for
   active orgs only), and a host that resolves nothing either falls back to
   the env pin (`resolveOrgSlug()` in `lib/org.ts`) if it is in the closed
-  trusted-host set (localhost, `*.vercel.app`, the deployment's own
-  `NEXT_PUBLIC_SITE_URL` host) or gets a 404 with no app response at all.
+  trusted-host set (`localhost`, `127.0.0.1`, `*.vercel.app`, the
+  deployment's own `NEXT_PUBLIC_SITE_URL` host) or gets a 404 with no app
+  response at all.
   When the host itself named the org, middleware stamps
   `x-two42-resolved-org` onto the forwarded request headers (any inbound
   copy is stripped unconditionally — it is never client input);

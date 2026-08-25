@@ -137,7 +137,11 @@ two42 was built to solve exactly that. It has since been open-sourced so other g
    of a real row in `organizations`. Anonymous flows (the `/join` form, public
    content) resolve their org from this slug via `app_request_org_id()`, so a slug
    that matches no organization makes those flows fail closed rather than fall back
-   to another tenant. See
+   to another tenant.
+
+   `NEXT_PUBLIC_PLATFORM_APEX` is optional and defaults to `two42.io` — the
+   platform apex host that `<org-slug>.<apex>` subdomains are resolved
+   against. See
    [`docs/security/tenancy-model.md`](docs/security/tenancy-model.md).
 
 6. **Start the dev server**

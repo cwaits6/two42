@@ -1,8 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
+
+const rpc = vi.fn(async () => ({ data: null as unknown, error: null as unknown }));
+const createSupabaseJsClient = vi.fn(() => ({ rpc }));
+
+// lookupCustomDomainViaRpc is the one function in this file that talks to a
+// real client constructor — resolveHostToOrg's other tests exercise it only
+// through an injected stub, and middleware.test.ts mocks this whole module
+// too, so nothing else in the suite covers the RPC call shape itself.
+vi.mock("@supabase/supabase-js", () => ({
+  // Deferred call (not a direct reference) so the hoisted factory never
+  // touches the const above before it initializes.
+  createClient: () => createSupabaseJsClient(),
+}));
+
+// vi.mock is hoisted, so this import sees the mock above.
+const {
   createHostResolutionCache,
+  lookupCustomDomainViaRpc,
   resolveHostToOrg,
-} from "@/lib/supabase/host-resolution";
+} = await import("@/lib/supabase/host-resolution");
 
 const baseOpts = {
   apex: "two42.io",
@@ -69,6 +85,45 @@ describe("resolveHostToOrg", () => {
       lookupCustomDomain,
     });
     expect(result).toEqual({ orgSlug: null, hostResolvedOrg: false });
+  });
+});
+
+describe("lookupCustomDomainViaRpc", () => {
+  beforeEach(() => {
+    rpc.mockReset();
+    createSupabaseJsClient.mockClear();
+  });
+
+  it("calls the RPC with the given host and returns the resolved slug", async () => {
+    rpc.mockResolvedValueOnce({ data: "grace", error: null });
+    const result = await lookupCustomDomainViaRpc("smallgroup.example.church");
+    expect(rpc).toHaveBeenCalledWith("app_org_slug_for_host", {
+      _host: "smallgroup.example.church",
+    });
+    expect(result).toBe("grace");
+  });
+
+  it("returns null and logs on an RPC error", async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: new Error("boom") });
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await expect(lookupCustomDomainViaRpc("x.example")).resolves.toBeNull();
+    expect(errSpy).toHaveBeenCalled();
+    errSpy.mockRestore();
+  });
+
+  it("returns null for an empty-string result", async () => {
+    rpc.mockResolvedValueOnce({ data: "", error: null });
+    await expect(lookupCustomDomainViaRpc("x.example")).resolves.toBeNull();
+  });
+
+  it("returns null and logs when the client constructor throws synchronously", async () => {
+    createSupabaseJsClient.mockImplementationOnce(() => {
+      throw new Error("missing NEXT_PUBLIC_SUPABASE_URL");
+    });
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await expect(lookupCustomDomainViaRpc("x.example")).resolves.toBeNull();
+    expect(errSpy).toHaveBeenCalled();
+    errSpy.mockRestore();
   });
 });
 

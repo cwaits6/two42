@@ -15,22 +15,36 @@ import { classifyHost, isTrustedFallbackHost, normalizeHost } from "@/lib/org";
 export async function lookupCustomDomainViaRpc(
   host: string
 ): Promise<string | null> {
-  const supabase = createSupabaseJsClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-  );
-  const { data, error } = await supabase.rpc("app_org_slug_for_host", {
-    _host: host,
-  });
-  if (error) {
+  try {
+    const supabase = createSupabaseJsClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+    );
+    const { data, error } = await supabase.rpc("app_org_slug_for_host", {
+      _host: host,
+    });
+    if (error) {
+      console.error(
+        "Host resolution: app_org_slug_for_host failed for host %s:",
+        host,
+        error
+      );
+      return null;
+    }
+    return typeof data === "string" && data.length > 0 ? data : null;
+  } catch (err) {
+    // Constructor throws synchronously on a missing/malformed
+    // NEXT_PUBLIC_SUPABASE_URL / ..._PUBLISHABLE_KEY — without this guard
+    // that would crash updateSession() (the entire middleware body) for
+    // every request on this deploy target, producing a sitewide 500
+    // instead of the intended narrow, fail-closed 404.
     console.error(
-      "Host resolution: app_org_slug_for_host failed for host %s:",
+      "Host resolution: app_org_slug_for_host threw for host %s:",
       host,
-      error
+      err
     );
     return null;
   }
-  return typeof data === "string" && data.length > 0 ? data : null;
 }
 
 /**

@@ -123,8 +123,15 @@ export function isTrustedFallbackHost(
   try {
     const siteHost = normalizeHost(new URL(opts.siteUrl).host);
     if (siteHost && host === siteHost) return true;
-  } catch {
-    // malformed NEXT_PUBLIC_SITE_URL — not this function's problem to fix
+  } catch (err) {
+    // malformed NEXT_PUBLIC_SITE_URL — not this function's problem to fix,
+    // but a malformed value on the deployment's OWN host would otherwise
+    // 404 the entire site with zero operator signal to diagnose from.
+    console.error(
+      "isTrustedFallbackHost: malformed NEXT_PUBLIC_SITE_URL %s:",
+      opts.siteUrl,
+      err
+    );
   }
   return false;
 }
