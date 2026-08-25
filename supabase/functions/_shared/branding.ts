@@ -58,15 +58,16 @@ const EMAIL = /^[^\s@<>,;:"\\]+@[^\s@<>,;:"\\]+\.[^\s@<>,;:"\\]+$/;
 // with the same standing as PLAIN_NAME, not a style choice: the domain is
 // admin-supplied text on the address side of the `<…>` in From:, which
 // PLAIN_NAME and formatFromHeader()'s CR/LF strip do not cover. Same grammar
-// as the org_email_domains_domain_shape CHECK and the claim-time
-// DOMAIN_SHAPE in app/api/admin/email-domain/route.ts: lowercase LDH labels
-// (1–63 chars each, no leading/trailing hyphen), at least one dot, 4–253
-// chars total — rejecting underscores, trailing dots, ports, whitespace,
-// CR/LF, `@`, `<`/`>`, and any non-ASCII byte by construction. It performs
-// no normalization: a non-canonical value fails and the platform address is
-// used, never a "cleaned-up" version. It runs at SEND time on the value read
-// back from the DB — the write path already validates; this is what makes a
-// compromised or hand-edited row non-exploitable. Mirrored byte-for-byte
+// as the claim-time DOMAIN_SHAPE in app/api/admin/email-domain/route.ts —
+// stricter than the DB's own org_email_domains_domain_shape CHECK (lowercase
+// + length only): lowercase LDH labels (1–63 chars each, no leading/trailing
+// hyphen), at least one dot, 4–253 chars total — rejecting underscores,
+// trailing dots, ports, whitespace, CR/LF, `@`, `<`/`>`, and any non-ASCII
+// byte by construction. It performs no normalization: a non-canonical value
+// fails and the platform address is used, never a "cleaned-up" version. It
+// runs at SEND time on the value read back from the DB — because the DB
+// CHECK alone would let a hand-edited or malformed row through, this is what
+// makes such a row non-exploitable. Mirrored byte-for-byte
 // from lib/email/identity.ts; a change lands on both sides.
 const SENDING_DOMAIN =
   /^(?=.{4,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;

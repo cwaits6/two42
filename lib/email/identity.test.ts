@@ -286,4 +286,49 @@ describe("resolveEmailBranding (self-resolving path)", () => {
     // service-role query runs without a resolved org to scope it to.
     expect(createServiceClient).not.toHaveBeenCalled();
   });
+
+  it("falls back to the platform address and logs when the domain query errors", async () => {
+    stubRequestClient({ branding: { display_name: "Request Org" }, rpcOrgId: ORG_ID });
+    stubServiceClient({ domainError: { message: "boom" } });
+    const b = await resolveEmailBranding();
+    expect(b.fromAddress).toBe(PLATFORM_ADDRESS);
+    // The branding read already succeeded — only the From: address degrades.
+    expect(b.orgName).toBe("Request Org");
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("Failed to load sending domain"),
+      ORG_ID,
+      { message: "boom" },
+    );
+  });
+
+  it("falls back to the platform address when the org has no domain row", async () => {
+    stubRequestClient({ branding: { display_name: "Request Org" }, rpcOrgId: ORG_ID });
+    stubServiceClient({ domainRow: null });
+    const b = await resolveEmailBranding();
+    expect(b.fromAddress).toBe(PLATFORM_ADDRESS);
+    expect(b.orgName).toBe("Request Org");
+  });
+
+  it("degrades only the From: address, never the already-resolved branding, when the domain query throws", async () => {
+    // Regression test for the fix isolating the sending-domain lookup in its
+    // own total-by-contract helper: a *thrown* (not returned-`error`)
+    // failure from the org_email_domains query must not wipe the org
+    // name/replyTo/accent that getOrgBranding() already resolved before the
+    // domain lookup even began.
+    stubRequestClient({ branding: { display_name: "Request Org" }, rpcOrgId: ORG_ID });
+    createServiceClient.mockResolvedValue({
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => {
+              throw new Error("boom");
+            },
+          }),
+        }),
+      }),
+    });
+    const b = await resolveEmailBranding();
+    expect(b.fromAddress).toBe(PLATFORM_ADDRESS);
+    expect(b.orgName).toBe("Request Org");
+  });
 });
