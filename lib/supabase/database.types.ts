@@ -994,6 +994,56 @@ export type Database = {
           },
         ]
       }
+      org_domains: {
+        Row: {
+          attach_claim_token: string | null
+          attach_claimed_at: string | null
+          attached_at: string | null
+          created_at: string
+          domain: string
+          id: string
+          last_checked_at: string | null
+          org_id: string
+          status: Database["public"]["Enums"]["org_domain_status"]
+          verification_token: string
+          verified_at: string | null
+        }
+        Insert: {
+          attach_claim_token?: string | null
+          attach_claimed_at?: string | null
+          attached_at?: string | null
+          created_at?: string
+          domain: string
+          id?: string
+          last_checked_at?: string | null
+          org_id?: string
+          status?: Database["public"]["Enums"]["org_domain_status"]
+          verification_token?: string
+          verified_at?: string | null
+        }
+        Update: {
+          attach_claim_token?: string | null
+          attach_claimed_at?: string | null
+          attached_at?: string | null
+          created_at?: string
+          domain?: string
+          id?: string
+          last_checked_at?: string | null
+          org_id?: string
+          status?: Database["public"]["Enums"]["org_domain_status"]
+          verification_token?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_domains_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_email_domains: {
         Row: {
           created_at: string
@@ -2110,6 +2160,7 @@ export type Database = {
     }
     Functions: {
       app_current_org_id: { Args: never; Returns: string }
+      app_org_slug_for_host: { Args: { _host: string }; Returns: string }
       app_request_org_id: { Args: never; Returns: string }
       current_family_id: { Args: never; Returns: string }
       get_own_email: { Args: never; Returns: string }
@@ -2156,6 +2207,7 @@ export type Database = {
       }
     }
     Enums: {
+      org_domain_status: "pending" | "verified" | "failed" | "removing"
       org_status: "active" | "suspended"
     }
     CompositeTypes: {
@@ -2284,6 +2336,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      org_domain_status: ["pending", "verified", "failed", "removing"],
       org_status: ["active", "suspended"],
     },
   },
