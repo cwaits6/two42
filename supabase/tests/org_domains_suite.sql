@@ -14,7 +14,7 @@
 --     attach_claim_token / last_checked_at are server-set-only, and `domain`
 --     is immutable after insert); anon holds no table privilege at all;
 --   * the global (deliberately NOT per-org) partial unique on
---     verified/removing domains, the per-org (org_id, domain) unique, and
+--     verified/removing domains, the partial per-org (org_id, domain) unique, and
 --     the domain_shape CHECK;
 --   * app_org_slug_for_host(): resolves only verified domains of active
 --     orgs, NULL (fail-closed) for everything else, with no normalization.
@@ -407,6 +407,34 @@ select throws_ok(
   '23505',
   null,
   'a repeat claim of the same domain within one org violates org_domains_org_domain_key'
+);
+
+-- The per-org unique is partial (status <> 'removing'): an org's own
+-- 'removing' tombstone must not block its fresh re-claim of the same name
+-- (§7.1 remove-then-re-add). The re-claim inserts as 'pending'; going
+-- 'verified' is what the global partial unique blocks until the tombstone
+-- is hard-deleted.
+do $$
+begin
+  insert into public.org_domains (org_id, domain, status, verified_at, attached_at)
+    values (current_setting('od.org_a')::uuid, 'reclaim.example.test', 'removing', now(), now());
+  insert into public.org_domains (org_id, domain, status)
+    values (current_setting('od.org_a')::uuid, 'reclaim.example.test', 'pending');
+end $$;
+select is(
+  (select count(*) from public.org_domains
+    where org_id = current_setting('od.org_a')::uuid
+      and domain = 'reclaim.example.test'),
+  2::bigint,
+  'a fresh same-org claim coexists with its own removing tombstone (partial per-org unique)'
+);
+select throws_ok(
+  format($q$update public.org_domains set status = 'verified'
+            where org_id = %L and domain = 'reclaim.example.test' and status = 'pending'$q$,
+         current_setting('od.org_a')),
+  '23505',
+  null,
+  'the re-claim cannot go verified while the removing tombstone still holds the global unique'
 );
 
 -- The global partial unique (deliberately NOT per-org — DNS names are

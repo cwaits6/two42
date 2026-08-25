@@ -71,8 +71,14 @@ create table public.org_domains (
 create unique index org_domains_verified_domain_key
   on public.org_domains (domain) where status in ('verified', 'removing');
 
--- Cheap dedupe of repeat claims within one org.
-create unique index org_domains_org_domain_key on public.org_domains (org_id, domain);
+-- Cheap dedupe of repeat claims within one org. Partial: a 'removing'
+-- tombstone must not block the same org's fresh claim of the name (§7.1 —
+-- "the claim itself is allowed; verification simply fails with the unique
+-- violation" while cleanup is pending). Without the predicate, the
+-- remove-then-re-add flow — the only sanctioned way to change a domain —
+-- would collide with the org's own tombstone at INSERT time.
+create unique index org_domains_org_domain_key
+  on public.org_domains (org_id, domain) where status <> 'removing';
 
 -- The resolver's access path.
 create index org_domains_domain_idx on public.org_domains (domain) where status = 'verified';
