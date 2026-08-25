@@ -23,6 +23,17 @@ COMMENT ON SCHEMA "public" IS 'standard public schema';
 
 
 
+CREATE TYPE "public"."org_domain_status" AS ENUM (
+    'pending',
+    'verified',
+    'failed',
+    'removing'
+);
+
+
+ALTER TYPE "public"."org_domain_status" OWNER TO "postgres";
+
+
 CREATE TYPE "public"."org_status" AS ENUM (
     'active',
     'suspended'
@@ -44,6 +55,26 @@ ALTER FUNCTION "public"."app_current_org_id"() OWNER TO "postgres";
 
 
 COMMENT ON FUNCTION "public"."app_current_org_id"() IS 'Org of the calling principal, resolved from their own profiles row only. NULL for anon/service callers — fail-closed by construction. Wrap call sites as (select public.app_current_org_id()) so the planner evaluates it once per statement (InitPlan).';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."app_org_slug_for_host"("_host" "text") RETURNS "text"
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select o.slug
+  from public.org_domains d
+  join public.organizations o on o.id = d.org_id
+  where d.domain = _host
+    and d.status = 'verified'
+    and o.status = 'active';
+$$;
+
+
+ALTER FUNCTION "public"."app_org_slug_for_host"("_host" "text") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."app_org_slug_for_host"("_host" "text") IS 'Resolves a request host to an org slug for host-based routing (Phase 5). Verified/active gating only — no normalization: the caller (middleware) canonicalizes the host once. Returns NULL (fails closed) for any unmatched, unverified, or suspended-org host. Not yet called from application code (PR 3).';
 
 
 
@@ -1192,6 +1223,25 @@ CREATE TABLE IF NOT EXISTS "public"."member_groups" (
 ALTER TABLE "public"."member_groups" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."org_domains" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "domain" "text" NOT NULL,
+    "status" "public"."org_domain_status" DEFAULT 'pending'::"public"."org_domain_status" NOT NULL,
+    "verification_token" "text" DEFAULT "encode"("extensions"."gen_random_bytes"(16), 'hex'::"text") NOT NULL,
+    "verified_at" timestamp with time zone,
+    "attached_at" timestamp with time zone,
+    "attach_claimed_at" timestamp with time zone,
+    "attach_claim_token" "uuid",
+    "last_checked_at" timestamp with time zone,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "org_domains_domain_shape" CHECK ((("domain" = "lower"("domain")) AND (("length"("domain") >= 4) AND ("length"("domain") <= 253)) AND ("domain" ~ '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$'::"text")))
+);
+
+
+ALTER TABLE "public"."org_domains" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."org_email_domains" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
@@ -1625,6 +1675,11 @@ ALTER TABLE ONLY "public"."member_groups"
 
 
 
+ALTER TABLE ONLY "public"."org_domains"
+    ADD CONSTRAINT "org_domains_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."org_email_domains"
     ADD CONSTRAINT "org_email_domains_pkey" PRIMARY KEY ("id");
 
@@ -1824,6 +1879,18 @@ CREATE INDEX "lectures_series_id_idx" ON "public"."lectures" USING "btree" ("ser
 
 
 CREATE INDEX "member_groups_org_id_idx" ON "public"."member_groups" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "org_domains_domain_idx" ON "public"."org_domains" USING "btree" ("domain") WHERE ("status" = 'verified'::"public"."org_domain_status");
+
+
+
+CREATE UNIQUE INDEX "org_domains_org_domain_key" ON "public"."org_domains" USING "btree" ("org_id", "domain") WHERE ("status" <> 'removing'::"public"."org_domain_status");
+
+
+
+CREATE UNIQUE INDEX "org_domains_verified_domain_key" ON "public"."org_domains" USING "btree" ("domain") WHERE ("status" = ANY (ARRAY['verified'::"public"."org_domain_status", 'removing'::"public"."org_domain_status"]));
 
 
 
@@ -2207,6 +2274,11 @@ ALTER TABLE ONLY "public"."member_groups"
 
 
 
+ALTER TABLE ONLY "public"."org_domains"
+    ADD CONSTRAINT "org_domains_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE RESTRICT;
+
+
+
 ALTER TABLE ONLY "public"."org_email_domains"
     ADD CONSTRAINT "org_email_domains_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
 
@@ -2585,6 +2657,14 @@ CREATE POLICY "Admins can view access requests" ON "public"."access_requests" FO
 
 
 
+CREATE POLICY "Admins delete unattached org domains" ON "public"."org_domains" AS RESTRICTIVE FOR DELETE TO "authenticated" USING ((("attached_at" IS NULL) AND ("status" <> 'removing'::"public"."org_domain_status")));
+
+
+
+CREATE POLICY "Admins manage org domains" ON "public"."org_domains" TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin"))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
+
+
+
 CREATE POLICY "Admins manage org email domains" ON "public"."org_email_domains" TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin"))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
 
 
@@ -2941,6 +3021,10 @@ CREATE POLICY "org isolation" ON "public"."member_groups" AS RESTRICTIVE TO "aut
 
 
 
+CREATE POLICY "org isolation" ON "public"."org_domains" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
 CREATE POLICY "org isolation" ON "public"."org_email_domains" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
@@ -3005,6 +3089,9 @@ CREATE POLICY "org members can view their orgs" ON "public"."organizations" FOR 
 
 
 
+ALTER TABLE "public"."org_domains" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."org_email_domains" ENABLE ROW LEVEL SECURITY;
 
 
@@ -3067,6 +3154,13 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 GRANT ALL ON FUNCTION "public"."app_current_org_id"() TO "anon";
 GRANT ALL ON FUNCTION "public"."app_current_org_id"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."app_current_org_id"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."app_org_slug_for_host"("_host" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."app_org_slug_for_host"("_host" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."app_org_slug_for_host"("_host" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."app_org_slug_for_host"("_host" "text") TO "service_role";
 
 
 
@@ -3311,6 +3405,15 @@ GRANT ALL ON TABLE "public"."lectures" TO "service_role";
 GRANT ALL ON TABLE "public"."member_groups" TO "anon";
 GRANT ALL ON TABLE "public"."member_groups" TO "authenticated";
 GRANT ALL ON TABLE "public"."member_groups" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."org_domains" TO "service_role";
+GRANT SELECT,DELETE ON TABLE "public"."org_domains" TO "authenticated";
+
+
+
+GRANT INSERT("domain") ON TABLE "public"."org_domains" TO "authenticated";
 
 
 
