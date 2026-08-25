@@ -10,6 +10,9 @@
 -- PR-4 worker has removed the name from Vercel, so external state can never
 -- outlive the row that owns it. Nothing in this PR sets it — it exists now
 -- so the partial unique below can already cover it.
+-- 'failed' likewise is not set by anything in this PR; PR 4's verify route
+-- will use it to record a DNS TXT check that did not match, leaving the
+-- claim visible to the admin for a retry rather than deleting it.
 create type public.org_domain_status as enum ('pending', 'verified', 'failed', 'removing');
 
 create table public.org_domains (
@@ -41,6 +44,9 @@ create table public.org_domains (
   -- them.
   attach_claimed_at timestamptz,
   attach_claim_token uuid,
+  -- Stamped by PR-4's verify route on every DNS TXT check attempt, used to
+  -- rate-limit repeat verify clicks (§6.1). Not read or written by anything
+  -- in this PR.
   last_checked_at timestamptz,
   created_at timestamptz not null default now(),
   constraint org_domains_domain_shape check (
