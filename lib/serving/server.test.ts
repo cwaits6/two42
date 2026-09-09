@@ -1,5 +1,5 @@
 // Narrow smoke test for the org-base-url wiring in sendSignupConfirmation()
-// and notifyLeadersOfCancel() (Phase 5 PR 5 / CWA-69): both now build
+// and notifyLeadersOfCancel(): both now build
 // cancelUrl/servingUrl from orgBaseUrl(opts.orgId) instead of the
 // deployment's env-pinned siteConfig.url. This mocks every collaborator
 // (same mock-the-collaborator shape as lib/email/resend.test.ts) and asserts

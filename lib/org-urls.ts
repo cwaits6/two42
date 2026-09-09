@@ -39,8 +39,10 @@ export interface OrgDomainRow {
  *
  * If more than one row is verified+attached (nothing forbids it at the
  * schema level, even though the attachment flow is expected to keep it to
- * one), the earliest-attached row wins — deterministic, and stable across
- * repeated calls for the same org state.
+ * one), the earliest-attached row wins, with the lexically smallest domain
+ * breaking an equal-timestamp tie — nothing makes `attached_at` unique, and
+ * the embedded rows arrive unordered, so the result must not depend on row
+ * order.
  */
 export function computeOrgOrigin(
   slug: string | null | undefined,
@@ -48,7 +50,11 @@ export function computeOrgOrigin(
 ): string {
   const attached = (domains ?? [])
     .filter((d) => d.status === "verified" && d.attached_at !== null)
-    .sort((a, b) => (a.attached_at! < b.attached_at! ? -1 : 1))[0];
+    .sort((a, b) =>
+      a.attached_at === b.attached_at
+        ? a.domain < b.domain ? -1 : a.domain > b.domain ? 1 : 0
+        : a.attached_at! < b.attached_at! ? -1 : 1
+    )[0];
   if (attached) {
     if (ORG_DOMAIN_SHAPE.test(attached.domain)) {
       return `https://${attached.domain}`;

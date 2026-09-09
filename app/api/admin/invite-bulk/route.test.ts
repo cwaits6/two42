@@ -1,6 +1,5 @@
-// Unit test for the orgBaseUrl() anchor in the bulk-invite route (Phase 5 PR
-// 5 / CWA-69). This is the highest-risk of the five routes the PR's own
-// review flagged as newly threading a validated org_id into orgBaseUrl():
+// Unit test for the orgBaseUrl() anchor in the bulk-invite route. This is
+// the highest-risk of the five routes review flagged as newly threading a validated org_id into orgBaseUrl():
 // it resolves the CALLER's own profile.org_id rather than a target entity's,
 // so a variable mix-up (e.g. reading a different row's id) is easy to
 // introduce silently and would not fail guard:tenancy or any existing test.

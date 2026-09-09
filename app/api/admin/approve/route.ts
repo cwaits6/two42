@@ -73,12 +73,23 @@ export async function POST(request: Request) {
     } catch (sendError) {
       // Roll the request back to pending so a retry doesn't 404 — mirrors
       // /api/platform/organizations/[id]/invite-owner's rollback-on-send-failure.
-      await supabase
+      const { error: rollbackError } = await supabase
         .from("access_requests")
         .update({ status: "pending", signup_token: null, token_expires_at: null })
         .eq("email", email)
         .eq("signup_token", signupToken);
-      console.error("Invite email send failed; approval rolled back:", sendError);
+      if (rollbackError) {
+        // The row is now stuck approved with a token nobody received. Name it
+        // so an operator can find and repair it without the email error.
+        console.error(
+          "Invite email send failed AND rollback failed; access_requests row for %s (org=%s) is approved with an unsent token:",
+          email,
+          orgId,
+          rollbackError
+        );
+      } else {
+        console.error("Invite email send failed; approval rolled back:", sendError);
+      }
       return NextResponse.json(
         { error: "Failed to send invite email" },
         { status: 500 }

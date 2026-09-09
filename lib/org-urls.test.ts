@@ -74,6 +74,15 @@ describe("computeOrgOrigin", () => {
     expect(computeOrgOrigin("grace", [...rows].reverse())).toBe("https://earlier.church");
   });
 
+  it("breaks an equal attached_at tie by domain so row order never changes the host", () => {
+    const rows = [
+      { domain: "zeta.church", status: "verified", attached_at: "2026-09-01T00:00:00Z" },
+      { domain: "alpha.church", status: "verified", attached_at: "2026-09-01T00:00:00Z" },
+    ];
+    expect(computeOrgOrigin("grace", rows)).toBe("https://alpha.church");
+    expect(computeOrgOrigin("grace", [...rows].reverse())).toBe("https://alpha.church");
+  });
+
   it("falls through and logs when an attached domain fails ORG_DOMAIN_SHAPE", () => {
     const invalid = [
       "Grace.Church", // uppercase — no normalization at use time

@@ -25,7 +25,9 @@ const ORG_DOMAIN_SHAPE =
 /**
  * See lib/org-urls.ts's computeOrgOrigin() for the full contract: a custom
  * domain wins only when its row is `verified` AND `attached_at` is set
- * (ownership plus routing), the earliest-attached row wins if several are,
+ * (ownership plus routing), the earliest-attached row wins if several are
+ * (lexically smallest domain on an equal timestamp, so row order never
+ * matters),
  * a stored domain that fails ORG_DOMAIN_SHAPE falls through with a log, and
  * the fallbacks are `https://<slug>.<platformApex>` then `platformUrl`.
  */
@@ -37,7 +39,11 @@ export function computeOrgOrigin(
 ): string {
   const attached = (domains ?? [])
     .filter((d) => d.status === "verified" && d.attached_at !== null)
-    .sort((a, b) => (a.attached_at! < b.attached_at! ? -1 : 1))[0];
+    .sort((a, b) =>
+      a.attached_at === b.attached_at
+        ? a.domain < b.domain ? -1 : a.domain > b.domain ? 1 : 0
+        : a.attached_at! < b.attached_at! ? -1 : 1
+    )[0];
   if (attached) {
     if (ORG_DOMAIN_SHAPE.test(attached.domain)) {
       return `https://${attached.domain}`;

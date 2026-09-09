@@ -74,6 +74,15 @@ Deno.test("computeOrgOrigin picks the earliest-attached row deterministically", 
   assertEquals(origin("grace", [...rows].reverse()), "https://earlier.church");
 });
 
+Deno.test("computeOrgOrigin breaks an equal attached_at tie by domain regardless of row order", () => {
+  const rows: OrgDomainRow[] = [
+    { domain: "zeta.church", status: "verified", attached_at: "2026-09-01T00:00:00Z" },
+    { domain: "alpha.church", status: "verified", attached_at: "2026-09-01T00:00:00Z" },
+  ];
+  assertEquals(origin("grace", rows), "https://alpha.church");
+  assertEquals(origin("grace", [...rows].reverse()), "https://alpha.church");
+});
+
 Deno.test("computeOrgOrigin falls through when an attached domain fails ORG_DOMAIN_SHAPE", () => {
   const invalid = [
     "Grace.Church", // uppercase — no normalization at use time
