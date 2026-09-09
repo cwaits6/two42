@@ -7,8 +7,10 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { AppShell } from "@/components/layout/AppShell";
 import { SidebarProvider } from "@/components/layout/SidebarContext";
+import { OrgSlugProvider } from "@/components/providers/OrgSlugProvider";
 import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { resolveOrgSlug } from "@/lib/org";
 import { siteConfig } from "@/lib/config";
 import { getOrgBranding } from "@/lib/branding";
 import "./globals.css";
@@ -53,7 +55,12 @@ export default async function RootLayout({
   // This avoids noisy "Invalid Refresh Token" errors for unauthenticated visitors.
   const cookieStore = await cookies();
   // CSP allows inline scripts only with the per-request nonce
-  const nonce = (await headers()).get("x-nonce") ?? undefined;
+  const requestHeaders = await headers();
+  const nonce = requestHeaders.get("x-nonce") ?? undefined;
+  // Host-resolved org for client components via
+  // OrgSlugProvider — same precedence as lib/supabase/server.ts.
+  const orgSlug =
+    requestHeaders.get("x-two42-resolved-org") ?? resolveOrgSlug();
   const hasAuthCookie = cookieStore.getAll().some((c) => c.name.includes("auth-token"));
 
   let profile = null;
@@ -131,14 +138,16 @@ export default async function RootLayout({
         />
       </head>
       <body className={`${cormorant.variable} ${interTight.variable} ${jetbrainsMono.variable} antialiased min-h-screen flex flex-col`}>
-        <SidebarProvider>
-          <Header profile={profile} hasServingAccess={hasServingAccess} isPlatformAdmin={isPlatformAdmin} />
-          <AppShell profile={profile} hasServingAccess={hasServingAccess}>{children}</AppShell>
-        </SidebarProvider>
-        <Footer />
-        <Toaster />
-        <Analytics />
-        <SpeedInsights />
+        <OrgSlugProvider orgSlug={orgSlug}>
+          <SidebarProvider>
+            <Header profile={profile} hasServingAccess={hasServingAccess} isPlatformAdmin={isPlatformAdmin} />
+            <AppShell profile={profile} hasServingAccess={hasServingAccess}>{children}</AppShell>
+          </SidebarProvider>
+          <Footer />
+          <Toaster />
+          <Analytics />
+          <SpeedInsights />
+        </OrgSlugProvider>
       </body>
     </html>
   );

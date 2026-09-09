@@ -1,3 +1,5 @@
+import { normalizeHost } from "@/lib/org";
+
 export const siteConfig = {
   name: process.env.NEXT_PUBLIC_APP_NAME || "two42",
   description:
@@ -8,6 +10,12 @@ export const siteConfig = {
     "To be the body of Christ through fellowship, discipleship and the faithful study of the Word of God.",
   logoMonogram: process.env.NEXT_PUBLIC_LOGO_MONOGRAM || "42",
   url: process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
+  // Platform apex for host → org resolution: subdomains are
+  // <org-slug>.<apex>. Normalized like every
+  // other host value classifyHost() compares against it — an un-normalized
+  // env value (mixed case, trailing dot, padding) would otherwise
+  // misclassify every real subdomain as a custom-domain candidate.
+  platformApex: normalizeHost(process.env.NEXT_PUBLIC_PLATFORM_APEX || "two42.io"),
   email: {
     from:
       process.env.NEXT_PUBLIC_EMAIL_FROM ||

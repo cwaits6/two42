@@ -1,7 +1,13 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isContentEditorAllowed } from "@/lib/admin-access";
-import { resolveOrgSlug } from "@/lib/org";
+import { isValidOrgSlug, resolveOrgSlug } from "@/lib/org";
+import { siteConfig } from "@/lib/config";
+import {
+  createHostResolutionCache,
+  lookupCustomDomainViaRpc,
+  resolveHostToOrg,
+} from "@/lib/supabase/host-resolution";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -17,13 +23,51 @@ const supabaseOrigin = (() => {
   }
 })();
 
+// Module scope: persists for the life of this serverless/edge instance.
+// Best-effort hot-path cache only — see lib/supabase/host-resolution.ts.
+const lookupCustomDomainCached = createHostResolutionCache();
+
 export async function updateSession(request: NextRequest) {
+  // --- Host → org resolution ---
+  // Must run before any request/response header is built below: the
+  // Supabase client's x-two42-org header (further down) depends on it.
+  const rawHost =
+    request.headers.get("host") ?? request.headers.get("x-forwarded-host") ?? "";
+  const { orgSlug: resolvedOrgSlug, hostResolvedOrg } = await resolveHostToOrg(
+    rawHost,
+    {
+      apex: siteConfig.platformApex,
+      siteUrl: siteConfig.url,
+      envSlug: resolveOrgSlug(),
+      lookupCustomDomain: (host) =>
+        lookupCustomDomainCached(host, lookupCustomDomainViaRpc),
+    }
+  );
+
+  if (!resolvedOrgSlug) {
+    // Fail closed: an unresolvable, untrusted host names no
+    // org and gets no app response at all — never the deployment's own
+    // env-pinned tenant. This must be reachable before any route runs.
+    return new NextResponse("Not Found", { status: 404 });
+  }
+
   // Generate a nonce for CSP
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
 
   // Create request headers with nonce for downstream RSC access
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
+
+  // Strip any inbound copy unconditionally — a client can send arbitrary
+  // headers, and this one must never reach a Server Component as
+  // attacker input. Set only when the HOST ITSELF named an org (never on
+  // the trusted-host env-pin fallback), so downstream code can tell "host
+  // X" apart from "the env pin applied" — lib/supabase/server.ts's
+  // assertPathOrgMatchesHost depends on that distinction.
+  requestHeaders.delete("x-two42-resolved-org");
+  if (hostResolvedOrg && isValidOrgSlug(resolvedOrgSlug)) {
+    requestHeaders.set("x-two42-resolved-org", resolvedOrgSlug);
+  }
 
   // Build CSP dynamically with nonce instead of unsafe-inline
   const cspHeader = [
@@ -48,13 +92,14 @@ export async function updateSession(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
-      // Org resolution header (Phase 2, CWA-9) — see lib/org.ts. The
+      // Org resolution header, host-aware — see lib/org.ts and
+      // lib/supabase/host-resolution.ts. The
       // middleware client only serves authenticated auth/role checks, where
       // the principal's org wins, but every client sends the header so anon
       // paths never depend on which client they happen to use.
       global: {
         headers: {
-          "x-two42-org": resolveOrgSlug(),
+          "x-two42-org": resolvedOrgSlug,
         },
       },
       cookies: {
