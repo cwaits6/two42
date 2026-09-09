@@ -11,8 +11,8 @@ export async function createClient(orgSlug?: string) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
-      // Org resolution for anonymous reads (Phase 2 CWA-9, host-aware since
-      // Phase 5 PR 3 CWA-67): the DB's app_request_org_id() reads this
+      // Org resolution for anonymous reads, host-aware: the DB's
+      // app_request_org_id() reads this
       // header only when there is no authenticated principal, and only to
       // select among public content. Precedence: an explicit `orgSlug` wins
       // (the public per-org routes, app/[orgSlug]/join, address the org by
@@ -44,7 +44,7 @@ export async function createClient(orgSlug?: string) {
 }
 
 /**
- * Host-first precedence (Phase 5 PR 3, CWA-67; §5.3): if the host itself
+ * Host-first precedence: if the host itself
  * resolved an org (x-two42-resolved-org is set — see
  * lib/supabase/middleware.ts) and a route's own path slug names a
  * *different* org, 404 rather than silently serving the path slug's org

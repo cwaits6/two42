@@ -28,7 +28,7 @@ const supabaseOrigin = (() => {
 const lookupCustomDomainCached = createHostResolutionCache();
 
 export async function updateSession(request: NextRequest) {
-  // --- Host → org resolution (Phase 5 PR 3, CWA-67 / #360) ---
+  // --- Host → org resolution ---
   // Must run before any request/response header is built below: the
   // Supabase client's x-two42-org header (further down) depends on it.
   const rawHost =
@@ -45,7 +45,7 @@ export async function updateSession(request: NextRequest) {
   );
 
   if (!resolvedOrgSlug) {
-    // Fail closed (§5.2 step 4): an unresolvable, untrusted host names no
+    // Fail closed: an unresolvable, untrusted host names no
     // org and gets no app response at all — never the deployment's own
     // env-pinned tenant. This must be reachable before any route runs.
     return new NextResponse("Not Found", { status: 404 });
@@ -92,8 +92,8 @@ export async function updateSession(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
-      // Org resolution header (Phase 2 CWA-9, host-aware since Phase 5 PR 3
-      // CWA-67) — see lib/org.ts and lib/supabase/host-resolution.ts. The
+      // Org resolution header, host-aware — see lib/org.ts and
+      // lib/supabase/host-resolution.ts. The
       // middleware client only serves authenticated auth/role checks, where
       // the principal's org wins, but every client sends the header so anon
       // paths never depend on which client they happen to use.

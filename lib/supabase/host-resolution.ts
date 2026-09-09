@@ -2,10 +2,10 @@ import { createClient as createSupabaseJsClient } from "@supabase/supabase-js";
 import { classifyHost, isTrustedFallbackHost, normalizeHost } from "@/lib/org";
 
 /**
- * Calls the already-granted app_org_slug_for_host() (Phase 5 PR 2,
- * 20260824000000_org_domains.sql) through a bare anon/publishable-key
- * client — no cookies needed, it's a pure function of the host
- * (docs/plans/phase-5-domains-email.md §5.1). NOT a service-role client:
+ * Calls the already-granted app_org_slug_for_host()
+ * (20260824000000_org_domains.sql) through a bare anon/publishable-key
+ * client — no cookies needed, it's a pure function of the host.
+ * NOT a service-role client:
  * scripts/check-service-role-org-scope.mjs only scans the service-role
  * client factory's call sites, so this call site is correctly outside its
  * scope. (Its inventory-sync check is a plain text scan, so even naming
@@ -49,7 +49,7 @@ export async function lookupCustomDomainViaRpc(
 
 /**
  * A DB round trip per request in middleware is real latency on every
- * page (§5.2 "Caching"). Best-effort, per-instance, module-scope cache —
+ * page. Best-effort, per-instance, module-scope cache —
  * NOT a correctness mechanism: nothing may depend on it being fresh, and
  * a domain that has just been verified may take up to the TTL to route.
  * Negative results are cached too (shorter TTL), or an unknown-host flood
@@ -100,7 +100,7 @@ export interface HostResolutionResult {
 }
 
 /**
- * Phase 5 PR 3 (CWA-67 / #360), §5.2 steps 2-4. `lookupCustomDomain` is
+ * Host → org resolution. `lookupCustomDomain` is
  * injected so this stays unit-testable without mocking Supabase or the
  * cache — pass lookupCustomDomainViaRpc (optionally wrapped by
  * createHostResolutionCache()) in production, a stub in tests.
@@ -124,7 +124,7 @@ export async function resolveHostToOrg(
     slug = await opts.lookupCustomDomain(host);
   }
   // "apex" and "invalid-subdomain" leave slug null — never fall through
-  // to the custom-domain lookup for either (§5.2 step 2).
+  // to the custom-domain lookup for either.
 
   if (slug) {
     return { orgSlug: slug, hostResolvedOrg: true };

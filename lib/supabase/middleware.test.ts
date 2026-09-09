@@ -59,7 +59,7 @@ function forwardedRequestHeader(res: Response, name: string): string | null {
   return res.headers.get(`x-middleware-request-${name}`);
 }
 
-describe("updateSession — host resolution (Phase 5 PR 3, CWA-67)", () => {
+describe("updateSession — host resolution", () => {
   beforeEach(() => {
     createServerClient.mockClear();
     customDomainRpc.mockClear();
@@ -114,7 +114,7 @@ describe("updateSession — host resolution (Phase 5 PR 3, CWA-67)", () => {
     });
     const res = await updateSession(req);
     expect(res.status).not.toBe(404);
-    // Resolved-org header must be ABSENT (trusted fallback), per the §5.2
+    // Resolved-org header must be ABSENT (trusted fallback), per the
     // header contract lib/supabase/server.ts's default depends on.
     expect(forwardedRequestHeader(res, "x-two42-resolved-org")).toBeNull();
     const config = createServerClient.mock.calls[0][2];
@@ -150,7 +150,7 @@ describe("updateSession — host resolution (Phase 5 PR 3, CWA-67)", () => {
   });
 });
 
-describe("cookie scope regression (§5.4)", () => {
+describe("cookie scope regression", () => {
   it("never opts into a cross-host cookie Domain in the Supabase client config", () => {
     // Cheap tripwire, not a behavioral guarantee: catches the common case
     // (someone adding a `cookieOptions: {...}` config key directly) before

@@ -17,8 +17,8 @@ export async function generateMetadata({
   const { orgSlug } = await params;
   return {
     title: `Request Access | ${siteConfig.name}`,
-    // Phase 5 §4: /[orgSlug]/join stays reachable, but the canonical URL is
-    // the org's platform subdomain (custom domains land in Phase 5 PR 5,
+    // /[orgSlug]/join stays reachable, but the canonical URL is
+    // the org's platform subdomain (custom domains will follow
     // once orgBaseUrl() exists). Skip the tag entirely for a malformed
     // slug — it would never be a valid canonical target anyway.
     alternates: isValidOrgSlug(orgSlug)
@@ -47,7 +47,7 @@ export default async function OrgJoinPage({ params }: PageProps) {
     return <JoinUnavailable />;
   }
 
-  // Host-first precedence (Phase 5 §5.3): if the host itself already named
+  // Host-first precedence: if the host itself already named
   // a *different* org, this path slug never gets served — notFound() throws.
   // Unset host resolution (platform host, trusted fallback) is a no-op.
   await assertPathOrgMatchesHost(orgSlug);

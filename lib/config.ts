@@ -10,8 +10,8 @@ export const siteConfig = {
     "To be the body of Christ through fellowship, discipleship and the faithful study of the Word of God.",
   logoMonogram: process.env.NEXT_PUBLIC_LOGO_MONOGRAM || "42",
   url: process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
-  // Platform apex for host → org resolution (Phase 5 PR 3, CWA-67 / #360;
-  // decision D6): subdomains are <org-slug>.<apex>. Normalized like every
+  // Platform apex for host → org resolution: subdomains are
+  // <org-slug>.<apex>. Normalized like every
   // other host value classifyHost() compares against it — an un-normalized
   // env value (mixed case, trailing dot, padding) would otherwise
   // misclassify every real subdomain as a custom-domain candidate.

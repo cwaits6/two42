@@ -68,10 +68,9 @@ export function isReservedOrgSlug(slug: string): boolean {
 }
 
 /**
- * Phase 5 PR 3 (CWA-67 / #360): the single normalization point for a
- * request host (docs/plans/phase-5-domains-email.md §5.1 — "No
+ * The single normalization point for a request host (no
  * normalization inside the resolver — canonicalization is middleware's
- * job, once"). Lowercases, strips a port, strips a trailing FQDN dot —
+ * job, once). Lowercases, strips a port, strips a trailing FQDN dot —
  * port first, so "example.com.:443" normalizes fully.
  */
 export function normalizeHost(rawHost: string): string {
@@ -85,8 +84,8 @@ export type HostClassification =
   | { kind: "custom-domain-candidate" };
 
 /**
- * Classifies an already-normalized host against the platform apex
- * (§5.2 step 2). Exact label boundary — `host === apex` or
+ * Classifies an already-normalized host against the platform apex.
+ * Exact label boundary — `host === apex` or
  * `host.endsWith("." + apex)` — never a raw suffix check, so a
  * registrable name that merely ends with the apex string
  * ("evil-two42.io") can never classify as platform and always falls to
@@ -108,10 +107,10 @@ export function classifyHost(host: string, apex: string): HostClassification {
 }
 
 /**
- * §5.2 step 4's closed, static trusted-host set: the deployment's own
+ * The closed, static trusted-host set: the deployment's own
  * host, for which host resolution falls back to the env pin rather than
  * 404ing. Never widen this dynamically — it exists so the *existing*
- * deployment's behavior is unchanged by this PR, not as a general escape
+ * deployment's behavior is unchanged by host resolution, not as a general escape
  * hatch.
  */
 export function isTrustedFallbackHost(
