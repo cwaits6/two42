@@ -71,6 +71,18 @@ interface OrganizationDetailProps {
   emailDomain: EmailDomainInfo;
 }
 
+function patchSuccessMessage(kind: "branding" | "status" | "customDomain"): string {
+  if (kind === "branding") return "Branding saved.";
+  if (kind === "status") return "Status updated.";
+  return "Custom email domain setting saved.";
+}
+
+function domainStatusVariant(status: string): "secondary" | "destructive" | "outline" {
+  if (status === "verified") return "secondary";
+  if (status === "cleanup_pending") return "destructive";
+  return "outline";
+}
+
 // Explicit locale and time zone — a bare toLocaleString() renders in the
 // server's zone during SSR and the browser's on hydration.
 export function formatUtcTimestamp(value: string): string {
@@ -127,13 +139,7 @@ export function OrganizationDetail({
         toast.error(message);
         return;
       }
-      toast.success(
-        kind === "branding"
-          ? "Branding saved."
-          : kind === "status"
-            ? "Status updated."
-            : "Custom email domain setting saved."
-      );
+      toast.success(patchSuccessMessage(kind));
       router.refresh();
     } catch (err) {
       console.error(err);
@@ -449,13 +455,7 @@ export function OrganizationDetail({
                 Claimed domain:{" "}
                 <span className="font-semibold break-all">{emailDomain.row.domain}</span>{" "}
                 <Badge
-                  variant={
-                    emailDomain.row.status === "verified"
-                      ? "secondary"
-                      : emailDomain.row.status === "cleanup_pending"
-                        ? "destructive"
-                        : "outline"
-                  }
+                  variant={domainStatusVariant(emailDomain.row.status)}
                   className="capitalize"
                 >
                   {emailDomain.row.status.replace(/_/g, " ")}
