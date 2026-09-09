@@ -201,6 +201,31 @@ the `service_role`-only grant (a browser can never reach the RPC), the
 pgTAP grant matrix, and the unit suites on both sides of the
 `lib/` ⇄ `supabase/functions/_shared/` mirror.
 
+## Email domain claim RPC — a definer-function bypass surface
+
+The platform-wide cap on claimed custom sending domains (`ORG_EMAIL_DOMAIN_CAP`,
+`lib/email/domainCap.ts`) is enforced by a `SECURITY DEFINER` function
+(`20260908000001_email_domain_claim_rpc.sql`), because a count-then-insert in
+the route races across tenants: the unique-per-org index only serializes
+claims from the *same* org, so two orgs claiming at once could each observe a
+free slot and each create a Resend domain. The function takes a platform-wide
+transaction-scoped advisory lock, re-checks `custom_email_domain_enabled`,
+counts every org's rows, and inserts — one transaction.
+
+- `org_email_domain_claim(_org_id, _domain, _cap)` — inserts the org's row and
+  returns it, or raises `ED001` (unknown org), `ED002` (custom domains not
+  enabled), `ED003` (cap reached), or `23505` (the org already holds a row).
+  EXECUTE: `service_role` only, the `email_quota_consume` way: with no
+  `anon`/`authenticated` grant, the only caller is `POST
+  /api/admin/email-domain`, which passes the `orgId` from `requireOrgAdmin()`'s
+  RLS-scoped profile.
+
+**Guard blind spot, stated deliberately:** the `.rpc("org_email_domain_claim",
+…)` call is invisible to `scripts/check-service-role-org-scope.mjs`. The
+compensating controls are the `service_role`-only grant, the grant-matrix and
+behaviour assertions in `supabase/tests/org_email_domains_suite.sql`, and the
+route's unit suite.
+
 ## App routes and pages (23 sites)
 
 | File | Why service-role is used | Org derived from | Scoped queries |
@@ -224,7 +249,7 @@ pgTAP grant matrix, and the unit suites on both sides of the
 | `app/api/household/link-member/route.ts` | Household manager updating another profile's `family_id` (RLS blocks cross-profile writes) | Caller's own RLS-scoped profile; target's org asserted equal | `profiles` update on `(id, org_id, family_id IS NULL)` |
 | `app/api/events/[id]/ics/route.ts` | Bearer-token calendar subscription; no session | `calendar_subscription_tokens` row (`org_id` stamped at issuance) | `events` (404 on cross-org id), `profiles` (owner), token expiry update |
 | `app/api/family-invites/claim/route.ts` | New user claiming an invite while their role is still `pending` | The `family_invites` row; caller's profile org must match (403 otherwise) | `profiles`, `family_members`, `family_invites` updates all on the invite's `org_id` |
-| `app/api/admin/email-domain/route.ts` | GET reads `organizations.custom_email_domain_enabled`, a platform-operator column the admin's own client has no SELECT grant on (the row itself is read on the request client). POST gates on that flag and on a platform-wide count of claimed domains (a backstop under Resend's account-level domain limit — the one deliberately unscoped chain, marked `// org-anchor:`; it reads a count, never a row), then Resend `domains.create` returns `resend_domain_id`/`status`/`dns_records`, columns the admin's own client has no UPDATE grant on — the write must happen server-side (CWA-70 / #363); when the follow-up write fails and the Resend removal also fails, the row is kept as `status = 'cleanup_pending'` (server-set-only columns again) rather than deleted. DELETE now removes the Resend domain first and needs the same server-set-only writes when that fails | The caller's own RLS-scoped `profiles.org_id`, read on the request client; the `organizations` reads take `.eq("id", orgId)` (tenant root); the insert carries that `org_id` in its payload, and every subsequent read/write is predicate-scoped `.eq("org_id", orgId)` / `.eq("id", ...).eq("org_id", orgId)` | `organizations` `.eq("id", orgId)` (flag); `org_email_domains` existing-row select `.eq("org_id", orgId)`, unscoped head count (org-anchor), insert (payload: `org_id`, `domain`), update (`resend_domain_id`, `status`, `dns_records`, `cleanup_failed_at`) and rollback/remove deletes on `(id, org_id)` |
+| `app/api/admin/email-domain/route.ts` | GET reads `organizations.custom_email_domain_enabled`, a platform-operator column the admin's own client has no SELECT grant on (the row itself is read on the request client). POST gates on that flag, then claims the row through `org_email_domain_claim()` — the `service_role`-only RPC (see the "Email domain claim RPC" section above) that enforces the platform-wide domain cap atomically, so the route no longer holds an unscoped count read — then Resend `domains.create` returns `resend_domain_id`/`status`/`dns_records`, columns the admin's own client has no UPDATE grant on — the write must happen server-side (CWA-70 / #363); when the follow-up write fails and the Resend removal also fails, the row is kept as `status = 'cleanup_pending'` (server-set-only columns again) rather than deleted. DELETE now removes the Resend domain first and needs the same server-set-only writes when that fails | The caller's own RLS-scoped `profiles.org_id`, read on the request client; the `organizations` reads take `.eq("id", orgId)` (tenant root); the insert carries that `org_id` in its payload, and every subsequent read/write is predicate-scoped `.eq("org_id", orgId)` / `.eq("id", ...).eq("org_id", orgId)` | `organizations` `.eq("id", orgId)` (flag); `org_email_domains` existing-row select `.eq("org_id", orgId)`, unscoped head count (org-anchor), insert (payload: `org_id`, `domain`), update (`resend_domain_id`, `status`, `dns_records`, `cleanup_failed_at`) and rollback/remove deletes on `(id, org_id)` |
 | `app/api/admin/email-domain/verify/route.ts` | POST handler: the `status`/`verified_at`/`last_checked_at` transition must not be writable by the admin's own client (same column grants as above) | The caller's own RLS-scoped `profiles.org_id`, read on the request client; target row fetched `.eq("org_id", orgId)` before any write | `org_email_domains` select `.eq("org_id", orgId)` + update on `(id, org_id)` |
 | `app/api/platform/organizations/[id]/email-cap/route.ts` | Daily email cap override (CWA-72): `org_email_limits` is platform-operator-owned with no permissive policy, so only a service-role write can reach it — an org that can raise its own cap does not have a cap | Platform-admin authority; org id from the route param, validated against an existing `organizations` row before the write | `organizations` `.eq("id", id)` (existence check); `org_email_limits` upsert carrying the validated `org_id`, zero-row-checked |
 | `app/api/platform/organizations/[id]/email-domain-cleanup/route.ts` | Platform-admin retry of a stuck Resend domain removal: the org's `org_email_domains` row is scoped to that org's own admins, so a platform operator finishing the cleanup from `/platform` needs the service client for both the read and the delete; the row's `cleanup_failed_at` is a server-set-only column besides | Platform-admin authority; org id from the route param, validated against an existing `organizations` row before any `org_email_domains` access | `organizations` `.eq("id", id)` (existence check); `org_email_domains` select `.eq("org_id", org.id)` (must be `cleanup_pending` with a `resend_domain_id`), update on `(id, org_id)` on a failed retry, delete on `(id, org_id)` zero-row-checked after Resend confirms removal |

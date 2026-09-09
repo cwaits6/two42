@@ -6,7 +6,8 @@
 // deleted. Also covers the platform-operator gate and the platform-wide
 // cap, both of which must refuse before Resend is touched. Mocks
 // createServiceClient, requireOrgAdmin, and the Resend SDK with a chainable
-// stub for `.from().select()/.insert()/.delete()/.update()` chains.
+// stub for `.from().select()/.delete()/.update()` chains plus the
+// `.rpc("org_email_domain_claim")` call that performs the cap-checked insert.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -51,9 +52,12 @@ interface ServiceClientOptions {
   };
   /** The org's own org_email_domains row. Defaults to none. */
   existingResult?: { data: ExistingRow | null; error: unknown };
-  /** The platform-wide head count of claimed domains. Defaults to 0. */
-  countResult?: { count: number | null; error: unknown };
-  insertResult?: { data: { id: string } | null; error: unknown };
+  /**
+   * The org_email_domain_claim() RPC — the atomic, cap-checked insert.
+   * Defaults to a successful claim of row-1. A refusal surfaces as a
+   * PostgREST error whose `code` is the raised SQLSTATE.
+   */
+  claimResult?: { data: { id: string } | null; error: unknown };
   /**
    * count defaults to 1 (a matched row) when omitted, so existing fixtures
    * that don't care about affected-row count keep behaving as "matched".
@@ -88,16 +92,24 @@ function chain(track: EqCall[], terminal: unknown) {
 
 function makeServiceClient(opts: ServiceClientOptions = {}) {
   const calls = {
-    insertPayload: undefined as unknown,
+    claimArgs: undefined as unknown,
     deleteEq: [] as EqCall[],
     deleteCount: 0,
     updatePayloads: [] as unknown[],
     updateEq: [] as EqCall[],
     selectEq: [] as EqCall[],
-    countQueries: 0,
   };
 
   const client = {
+    rpc(fn: string, args: unknown) {
+      if (fn !== "org_email_domain_claim") {
+        throw new Error(`unexpected rpc: ${fn}`);
+      }
+      calls.claimArgs = args;
+      return Promise.resolve(
+        opts.claimResult ?? { data: { id: "row-1" }, error: null },
+      );
+    },
     from(table: string) {
       if (table === "organizations") {
         return {
@@ -118,25 +130,11 @@ function makeServiceClient(opts: ServiceClientOptions = {}) {
         throw new Error(`unexpected table: ${table}`);
       }
       return {
-        select(_cols: string, options?: { head?: boolean }) {
-          if (options?.head) {
-            calls.countQueries += 1;
-            return chain([], opts.countResult ?? { count: 0, error: null });
-          }
+        select() {
           return chain(
             calls.selectEq,
             opts.existingResult ?? { data: null, error: null },
           );
-        },
-        insert(payload: unknown) {
-          calls.insertPayload = payload;
-          return {
-            select() {
-              return this;
-            },
-            single: async () =>
-              opts.insertResult ?? { data: { id: "row-1" }, error: null },
-          };
         },
         delete() {
           calls.deleteCount += 1;
@@ -221,8 +219,7 @@ describe("POST /api/admin/email-domain — gates", () => {
 
     expect(res.status).toBe(403);
     expect((await res.json()).error).toMatch(/contact support/i);
-    expect(calls.insertPayload).toBeUndefined();
-    expect(calls.countQueries).toBe(0);
+    expect(calls.claimArgs).toBeUndefined();
     expect(domainsCreate).not.toHaveBeenCalled();
   });
 
@@ -235,14 +232,13 @@ describe("POST /api/admin/email-domain — gates", () => {
     const res = await POST(claimRequest());
 
     expect(res.status).toBe(500);
-    expect(calls.insertPayload).toBeUndefined();
+    expect(calls.claimArgs).toBeUndefined();
     expect(domainsCreate).not.toHaveBeenCalled();
   });
 
-  it("403s with a contact-support message when the platform-wide domain cap is reached", async () => {
-    process.env.ORG_EMAIL_DOMAIN_CAP = "3";
-    const { client, calls } = makeServiceClient({
-      countResult: { count: 3, error: null },
+  it("403s with a contact-support message when the claim RPC reports the platform-wide cap reached (ED003)", async () => {
+    const { client } = makeServiceClient({
+      claimResult: { data: null, error: { code: "ED003", message: "cap" } },
     });
     createServiceClient.mockResolvedValue(client);
 
@@ -250,35 +246,50 @@ describe("POST /api/admin/email-domain — gates", () => {
 
     expect(res.status).toBe(403);
     expect((await res.json()).error).toMatch(/contact support/i);
-    expect(calls.insertPayload).toBeUndefined();
     expect(domainsCreate).not.toHaveBeenCalled();
   });
 
-  it("proceeds while the count is below the cap", async () => {
-    process.env.ORG_EMAIL_DOMAIN_CAP = "3";
+  it("403s with a contact-support message when the claim RPC reports the org not enabled (ED002)", async () => {
     const { client } = makeServiceClient({
-      countResult: { count: 2, error: null },
+      claimResult: { data: null, error: { code: "ED002", message: "off" } },
+    });
+    createServiceClient.mockResolvedValue(client);
+
+    const res = await POST(claimRequest());
+
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toMatch(/contact support/i);
+    expect(domainsCreate).not.toHaveBeenCalled();
+  });
+
+  it("passes the env cap, the validated org, and the normalized domain to the claim RPC", async () => {
+    process.env.ORG_EMAIL_DOMAIN_CAP = "3";
+    const { client, calls } = makeServiceClient({
       updateResult: { data: { id: "row-1" }, error: null },
     });
     createServiceClient.mockResolvedValue(client);
     domainsCreate.mockResolvedValue(resendCreated);
 
-    const res = await POST(claimRequest());
+    const res = await POST(claimRequest("  Mail.Example.Church "));
 
     expect(res.status).toBe(200);
+    expect(calls.claimArgs).toEqual({
+      _org_id: "org-1",
+      _domain: "mail.example.church",
+      _cap: 3,
+    });
     expect(domainsCreate).toHaveBeenCalled();
   });
 
-  it("fails closed with a 500 when the cap count cannot be read", async () => {
-    const { client, calls } = makeServiceClient({
-      countResult: { count: null, error: { message: "count failed" } },
+  it("fails closed with a 500 when the claim RPC errors for any other reason", async () => {
+    const { client } = makeServiceClient({
+      claimResult: { data: null, error: { message: "rpc failed" } },
     });
     createServiceClient.mockResolvedValue(client);
 
     const res = await POST(claimRequest());
 
     expect(res.status).toBe(500);
-    expect(calls.insertPayload).toBeUndefined();
     expect(domainsCreate).not.toHaveBeenCalled();
   });
 
@@ -295,19 +306,17 @@ describe("POST /api/admin/email-domain — gates", () => {
 
     expect(res.status).toBe(409);
     expect((await res.json()).error).toMatch(/still completing/i);
-    expect(calls.insertPayload).toBeUndefined();
+    expect(calls.claimArgs).toBeUndefined();
     expect(domainsCreate).not.toHaveBeenCalled();
     expect(domainsRemove).not.toHaveBeenCalled();
   });
 
-  it("409s for the org's own stuck cleanup even when the platform is separately at cap", async () => {
-    process.env.ORG_EMAIL_DOMAIN_CAP = "3";
+  it("409s for the org's own stuck cleanup before the claim RPC is ever called", async () => {
     const { client, calls } = makeServiceClient({
       existingResult: {
         data: { id: "row-0", status: "cleanup_pending", resend_domain_id: "rd-0" },
         error: null,
       },
-      countResult: { count: 3, error: null },
     });
     createServiceClient.mockResolvedValue(client);
 
@@ -315,7 +324,7 @@ describe("POST /api/admin/email-domain — gates", () => {
 
     expect(res.status).toBe(409);
     expect((await res.json()).error).toMatch(/still completing/i);
-    expect(calls.insertPayload).toBeUndefined();
+    expect(calls.claimArgs).toBeUndefined();
     expect(domainsCreate).not.toHaveBeenCalled();
   });
 
@@ -332,13 +341,13 @@ describe("POST /api/admin/email-domain — gates", () => {
 
     expect(res.status).toBe(409);
     expect((await res.json()).error).toMatch(/remove it first/i);
-    expect(calls.insertPayload).toBeUndefined();
+    expect(calls.claimArgs).toBeUndefined();
     expect(domainsCreate).not.toHaveBeenCalled();
   });
 
-  it("409s when the insert loses the race to the unique-per-org index", async () => {
+  it("409s when the claim loses the race to the unique-per-org index", async () => {
     const { client } = makeServiceClient({
-      insertResult: { data: null, error: { code: "23505" } },
+      claimResult: { data: null, error: { code: "23505" } },
     });
     createServiceClient.mockResolvedValue(client);
 
@@ -355,7 +364,7 @@ describe("POST /api/admin/email-domain — gates", () => {
     const res = await POST(claimRequest("not a domain"));
 
     expect(res.status).toBe(400);
-    expect(calls.insertPayload).toBeUndefined();
+    expect(calls.claimArgs).toBeUndefined();
     expect(domainsCreate).not.toHaveBeenCalled();
   });
 });

@@ -2238,6 +2238,21 @@ export type Database = {
       is_member: { Args: never; Returns: boolean }
       is_org_member: { Args: { _org_id: string }; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
+      org_email_domain_claim: {
+        Args: { _cap: number; _domain: string; _org_id: string }
+        Returns: {
+          cleanup_failed_at: string | null
+          created_at: string
+          dns_records: Json
+          domain: string
+          id: string
+          last_checked_at: string | null
+          org_id: string
+          resend_domain_id: string | null
+          status: string
+          verified_at: string | null
+        }
+      }
       provision_organization: {
         Args: { _name: string; _owner_email: string; _slug: string }
         Returns: string

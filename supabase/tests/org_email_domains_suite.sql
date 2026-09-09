@@ -332,5 +332,81 @@ select is(
   'the cleanup_pending status persisted on org A''s row'
 );
 
+
+-- ── Atomic claim RPC ────────────────────────────────────────────────────────
+-- org_email_domain_claim() is the only path that inserts under the
+-- platform-wide cap. Pin its grant matrix (service_role only) and its
+-- behaviour: the enablement flag, the cap, the unique-per-org index, and
+-- that a refused claim inserts nothing.
+select has_function('public', 'org_email_domain_claim', array['uuid', 'text', 'integer'],
+  'org_email_domain_claim(uuid, text, integer) exists');
+select is(
+  (select prosecdef from pg_proc where oid = 'public.org_email_domain_claim(uuid, text, integer)'::regprocedure),
+  true,
+  'org_email_domain_claim is SECURITY DEFINER');
+select ok(
+  (select proconfig @> array['search_path=""'] from pg_proc
+    where oid = 'public.org_email_domain_claim(uuid, text, integer)'::regprocedure),
+  'org_email_domain_claim pins an empty search_path');
+select ok(
+  not has_function_privilege('anon', 'public.org_email_domain_claim(uuid, text, integer)', 'execute'),
+  'anon cannot execute org_email_domain_claim');
+select ok(
+  not has_function_privilege('authenticated', 'public.org_email_domain_claim(uuid, text, integer)', 'execute'),
+  'authenticated cannot execute org_email_domain_claim');
+select ok(
+  has_function_privilege('service_role', 'public.org_email_domain_claim(uuid, text, integer)', 'execute'),
+  'service_role can execute org_email_domain_claim');
+
+-- A third org, enabled and holding no row. Two rows exist at this point
+-- (org A, org B), so a cap of 2 is "full" and a cap of 3 has one free slot.
+do $$
+declare
+  org_c uuid;
+begin
+  org_c := public.provision_organization('Email Domain Suite Org C', 'email-domain-suite-org-c', 'owner-c@emaildomain.example.test');
+  update public.organizations set custom_email_domain_enabled = true where id = org_c;
+  perform set_config('oed.org_c', org_c::text, true);
+end $$;
+
+select is((select count(*)::int from public.org_email_domains), 2,
+  'fixture: two rows exist before the claim assertions');
+
+select throws_ok(
+  $q$select public.org_email_domain_claim(gen_random_uuid(), 'mail.nobody.example.test', 10)$q$,
+  'ED001', null,
+  'claim raises ED001 for an unknown organization');
+select throws_ok(
+  format($q$select public.org_email_domain_claim(%L, 'mail.org-a2.example.test', 10)$q$,
+         current_setting('oed.org_a')),
+  'ED002', null,
+  'claim raises ED002 when custom domains are not enabled for the org');
+select throws_ok(
+  format($q$select public.org_email_domain_claim(%L, 'mail.org-c.example.test', 2)$q$,
+         current_setting('oed.org_c')),
+  'ED003', null,
+  'claim raises ED003 when the platform-wide count is at the cap');
+select is((select count(*)::int from public.org_email_domains), 2,
+  'a refused claim inserts nothing');
+
+select is(
+  (select org_id from public.org_email_domain_claim(current_setting('oed.org_c')::uuid, 'mail.org-c.example.test', 3)),
+  current_setting('oed.org_c')::uuid,
+  'claim below the cap inserts and returns the row for the caller''s org');
+select is(
+  (select status from public.org_email_domains where org_id = current_setting('oed.org_c')::uuid),
+  'not_started',
+  'the claimed row starts in the default status');
+select is((select count(*)::int from public.org_email_domains), 3,
+  'the accepted claim inserted exactly one row');
+
+select throws_ok(
+  format($q$select public.org_email_domain_claim(%L, 'mail.org-c2.example.test', 10)$q$,
+         current_setting('oed.org_c')),
+  '23505', null,
+  'a second claim for the same org raises unique_violation from the unique-per-org index');
+select is((select count(*)::int from public.org_email_domains), 3,
+  'the duplicate claim inserted nothing');
+
 select * from finish();
 rollback;

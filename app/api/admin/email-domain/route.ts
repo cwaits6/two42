@@ -56,6 +56,12 @@ const ROW_COLUMNS =
 
 const CLEANUP_PENDING = "cleanup_pending";
 
+// SQLSTATEs raised by org_email_domain_claim() (see the migration that
+// defines it). PostgREST surfaces a raised exception's SQLSTATE as
+// error.code.
+const CLAIM_NOT_ENABLED = "ED002";
+const CLAIM_CAP_REACHED = "ED003";
+
 function gateError(status: 401 | 403) {
   return NextResponse.json(
     { error: status === 401 ? "Unauthorized" : "Forbidden" },
@@ -328,50 +334,29 @@ export async function POST(request: Request) {
     return conflictResponse(existing.status);
   }
 
-  // org-anchor: a platform-wide backstop across every org's claimed domains,
-  // not a per-org read. Resend's account tier limits total domains regardless
-  // of tenant, so this must reject before ever calling domains.create; the
-  // count is the only thing read, never a row. Rows still awaiting cleanup
-  // count too — their Resend domain still occupies a slot. See
-  // lib/email/domainCap.ts and docs/security/service-role-inventory.md.
-  const { count: totalClaimed, error: capError } = await service
-    .from("org_email_domains")
-    .select("id", { count: "exact", head: true });
-  if (capError) {
-    console.error(
-      "email-domain create: domain cap check failed (org=%s):",
-      orgId,
-      capError,
-    );
-    return NextResponse.json(
-      { error: "Failed to claim domain." },
-      { status: 500 },
-    );
-  }
-  if ((totalClaimed ?? 0) >= getOrgEmailDomainCap()) {
-    return NextResponse.json(
-      {
-        error:
-          "The platform has reached its limit on custom sending domains. Contact support.",
-      },
-      { status: 403 },
-    );
-  }
-
   let insertedId: string | null = null;
   let resendDomainId: string | null = null;
 
   try {
-    // Insert first: the unique-per-org index turns a duplicate claim into a
-    // clean 409 before any Resend resource is created.
-    const { data: inserted, error: insertError } = await service
-      .from("org_email_domains")
-      .insert({ org_id: orgId, domain })
-      .select("id")
-      .single();
+    // Claim atomically. org_email_domain_claim() takes a platform-wide
+    // advisory lock, re-checks the org's enablement flag, counts every
+    // org's rows against the cap, and inserts — all in one transaction, so
+    // two concurrent claims from different orgs cannot both observe a free
+    // slot (the unique-per-org index only serializes claims from the same
+    // org). Resend's account tier limits total domains regardless of
+    // tenant, so the cap must hold before domains.create is ever called.
+    // The insert happens first so a duplicate claim is a clean 409 before
+    // any Resend resource exists. The .rpc() call is invisible to the
+    // service-role guard: orgId is requireOrgAdmin()'s validated anchor,
+    // and the function is service_role-only (see
+    // docs/security/service-role-inventory.md).
+    const { data: inserted, error: claimError } = await service.rpc(
+      "org_email_domain_claim",
+      { _org_id: orgId, _domain: domain, _cap: getOrgEmailDomainCap() },
+    );
 
-    if (insertError || !inserted) {
-      if (insertError?.code === "23505") {
+    if (claimError || !inserted) {
+      if (claimError?.code === "23505") {
         // Lost the race with a concurrent claim (or a cleanup that landed
         // between the check above and this insert): report which.
         const { data: raced, error: racedError } = await service
@@ -388,10 +373,28 @@ export async function POST(request: Request) {
         }
         return conflictResponse(raced?.status);
       }
+      if (claimError?.code === CLAIM_CAP_REACHED) {
+        return NextResponse.json(
+          {
+            error:
+              "The platform has reached its limit on custom sending domains. Contact support.",
+          },
+          { status: 403 },
+        );
+      }
+      if (claimError?.code === CLAIM_NOT_ENABLED) {
+        return NextResponse.json(
+          {
+            error:
+              "Custom sending domains aren't enabled for your organization. Contact support to request access.",
+          },
+          { status: 403 },
+        );
+      }
       console.error(
-        "email-domain create: insert error (org=%s):",
+        "email-domain create: claim error (org=%s):",
         orgId,
-        insertError,
+        claimError,
       );
       return NextResponse.json(
         { error: "Failed to claim domain." },
