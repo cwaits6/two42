@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Mail, Pause, Play } from "lucide-react";
+import { Globe, Mail, Pause, Play, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +24,8 @@ export interface OrgDetail {
   name: string;
   slug: string;
   status: OrgStatus;
+  // Platform-operator gate on custom sending domains.
+  customEmailDomainEnabled: boolean;
   branding: {
     display_name: string;
     logo_url: string;
@@ -47,14 +49,48 @@ export interface EmailCapInfo {
   usedToday: number;
 }
 
+export interface EmailDomainRowInfo {
+  domain: string;
+  status: string;
+  // When the most recent provider-side removal attempt failed; only
+  // meaningful while status is cleanup_pending.
+  cleanupFailedAt: string | null;
+}
+
+// loaded: false = the server read failed; the card renders its unavailable
+// state. row: null = the org has not claimed a domain.
+export type EmailDomainInfo =
+  | { loaded: false }
+  | { loaded: true; row: EmailDomainRowInfo | null };
+
 interface OrganizationDetailProps {
   org: OrgDetail;
   owner: OwnerRequest | null;
   // null = the server read failed; the card renders its unavailable state.
   emailCap: EmailCapInfo | null;
+  emailDomain: EmailDomainInfo;
 }
 
-export function OrganizationDetail({ org, owner, emailCap }: OrganizationDetailProps) {
+// Explicit locale and time zone — a bare toLocaleString() renders in the
+// server's zone during SSR and the browser's on hydration.
+function formatUtcTimestamp(value: string): string {
+  return new Date(value).toLocaleString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "UTC",
+    timeZoneName: "short",
+  });
+}
+
+export function OrganizationDetail({
+  org,
+  owner,
+  emailCap,
+  emailDomain,
+}: OrganizationDetailProps) {
   const router = useRouter();
   const [branding, setBranding] = useState(org.branding);
   const [brandingError, setBrandingError] = useState<string | null>(null);
@@ -62,7 +98,9 @@ export function OrganizationDetail({ org, owner, emailCap }: OrganizationDetailP
     emailCap ? String(emailCap.dailyCap) : ""
   );
   const [capError, setCapError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"branding" | "invite" | "status" | "emailCap" | null>(null);
+  const [busy, setBusy] = useState<
+    "branding" | "invite" | "status" | "emailCap" | "customDomain" | "domainCleanup" | null
+  >(null);
 
   // Display-only readout; the API's validateAccent() is the enforced guard.
   const accentValid = HEX.test(branding.accent);
@@ -70,7 +108,10 @@ export function OrganizationDetail({ org, owner, emailCap }: OrganizationDetailP
     ? contrastRatio(branding.accent, ACCENT_CONTRAST_REFERENCE)
     : null;
 
-  async function patchOrg(body: Record<string, unknown>, kind: "branding" | "status") {
+  async function patchOrg(
+    body: Record<string, unknown>,
+    kind: "branding" | "status" | "customDomain"
+  ) {
     setBusy(kind);
     if (kind === "branding") setBrandingError(null);
     try {
@@ -86,7 +127,13 @@ export function OrganizationDetail({ org, owner, emailCap }: OrganizationDetailP
         toast.error(message);
         return;
       }
-      toast.success(kind === "branding" ? "Branding saved." : "Status updated.");
+      toast.success(
+        kind === "branding"
+          ? "Branding saved."
+          : kind === "status"
+            ? "Status updated."
+            : "Custom email domain setting saved."
+      );
       router.refresh();
     } catch (err) {
       console.error(err);
@@ -144,6 +191,31 @@ export function OrganizationDetail({ org, owner, emailCap }: OrganizationDetailP
         return;
       }
       toast.success("Email cap saved.");
+      router.refresh();
+    } catch (err) {
+      console.error(err);
+      toast.error("Network error. Please try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleRetryDomainCleanup() {
+    setBusy("domainCleanup");
+    try {
+      const res = await fetch(
+        `/api/platform/organizations/${org.id}/email-domain-cleanup`,
+        { method: "POST" }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error || "Failed to retry the domain cleanup.");
+        // The failed attempt is recorded server-side; refresh so the card
+        // shows it.
+        router.refresh();
+        return;
+      }
+      toast.success("Domain cleanup finished.");
       router.refresh();
     } catch (err) {
       console.error(err);
@@ -353,6 +425,107 @@ export function OrganizationDetail({ org, owner, emailCap }: OrganizationDetailP
           )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Custom email domain</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="text-base">Custom sending domains:</span>
+            <Badge variant={org.customEmailDomainEnabled ? "secondary" : "outline"}>
+              {org.customEmailDomainEnabled ? "Enabled" : "Not enabled"}
+            </Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            When enabled, this organization&apos;s admins can claim a sending
+            domain through Resend. Each claimed domain uses one of the
+            platform&apos;s Resend domain slots, so leave this off unless the
+            organization has asked for it.
+          </p>
+          {emailDomain.loaded ? (
+            emailDomain.row ? (
+              <p className="text-base">
+                Claimed domain:{" "}
+                <span className="font-semibold break-all">{emailDomain.row.domain}</span>{" "}
+                <Badge
+                  variant={
+                    emailDomain.row.status === "verified"
+                      ? "secondary"
+                      : emailDomain.row.status === "cleanup_pending"
+                        ? "destructive"
+                        : "outline"
+                  }
+                  className="capitalize"
+                >
+                  {emailDomain.row.status.replace(/_/g, " ")}
+                </Badge>
+              </p>
+            ) : (
+              <p className="text-base text-muted-foreground">No domain claimed.</p>
+            )
+          ) : (
+            <p className="text-base text-muted-foreground">
+              Domain information could not be loaded. Refresh to try again.
+            </p>
+          )}
+          {org.customEmailDomainEnabled ? (
+            <Button
+              size="lg"
+              variant="outline"
+              className="text-lg"
+              disabled={busy === "customDomain"}
+              onClick={() =>
+                void patchOrg({ custom_email_domain_enabled: false }, "customDomain")
+              }
+            >
+              <Globe className="mr-1 h-5 w-5" />
+              {busy === "customDomain" ? "Updating..." : "Disable custom domains"}
+            </Button>
+          ) : (
+            <Button
+              size="lg"
+              className="bg-brand-primary hover:bg-brand-primary/90 text-lg"
+              disabled={busy === "customDomain"}
+              onClick={() =>
+                void patchOrg({ custom_email_domain_enabled: true }, "customDomain")
+              }
+            >
+              <Globe className="mr-1 h-5 w-5" />
+              {busy === "customDomain" ? "Updating..." : "Enable custom domains"}
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      {emailDomain.loaded && emailDomain.row?.status === "cleanup_pending" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Domain cleanup</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-base">
+              Removing{" "}
+              <span className="font-semibold break-all">{emailDomain.row.domain}</span>{" "}
+              from the email provider did not finish
+              {emailDomain.row.cleanupFailedAt
+                ? ` (last tried ${formatUtcTimestamp(emailDomain.row.cleanupFailedAt)})`
+                : ""}
+              . The domain still uses one of the platform&apos;s Resend slots
+              until the cleanup succeeds.
+            </p>
+            <Button
+              size="lg"
+              className="bg-brand-primary hover:bg-brand-primary/90 text-lg"
+              disabled={busy === "domainCleanup"}
+              onClick={() => void handleRetryDomainCleanup()}
+            >
+              <RefreshCw className="mr-1 h-5 w-5" />
+              {busy === "domainCleanup" ? "Retrying..." : "Retry cleanup"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

@@ -8,7 +8,9 @@
 --     `domain` only, DELETE, and UPDATE nothing (status / resend_domain_id /
 --     dns_records / verified_at / last_checked_at are server-set-only, and
 --     `domain` is immutable after insert); anon holds no privilege at all;
---   * the unique-per-org index and the domain_shape CHECK.
+--   * the unique-per-org index, the domain_shape CHECK, and the status
+--     CHECK — including cleanup_pending, the one non-Resend status a row
+--     whose provider-side removal failed is kept in.
 --
 -- Run locally (rollback-safe, never mutates the shared local stack):
 --
@@ -247,6 +249,8 @@ select ok(not has_column_privilege('authenticated', 'public.org_email_domains', 
   'authenticated may not UPDATE org_email_domains.verified_at');
 select ok(not has_column_privilege('authenticated', 'public.org_email_domains', 'last_checked_at', 'update'),
   'authenticated may not UPDATE org_email_domains.last_checked_at');
+select ok(not has_column_privilege('authenticated', 'public.org_email_domains', 'cleanup_failed_at', 'update'),
+  'authenticated may not UPDATE org_email_domains.cleanup_failed_at');
 select ok(not has_column_privilege('authenticated', 'public.org_email_domains', 'domain', 'update'),
   'authenticated may not UPDATE org_email_domains.domain (immutable after insert)');
 select ok(not has_table_privilege('authenticated', 'public.org_email_domains', 'update'),
@@ -264,9 +268,13 @@ select ok(not has_column_privilege('authenticated', 'public.org_email_domains', 
   'authenticated may not INSERT org_email_domains.verified_at');
 select ok(not has_column_privilege('authenticated', 'public.org_email_domains', 'last_checked_at', 'insert'),
   'authenticated may not INSERT org_email_domains.last_checked_at');
+select ok(not has_column_privilege('authenticated', 'public.org_email_domains', 'cleanup_failed_at', 'insert'),
+  'authenticated may not INSERT org_email_domains.cleanup_failed_at');
 
 select ok(has_column_privilege('authenticated', 'public.org_email_domains', 'status', 'select'),
   'authenticated may SELECT org_email_domains.status');
+select ok(has_column_privilege('authenticated', 'public.org_email_domains', 'cleanup_failed_at', 'select'),
+  'authenticated may SELECT org_email_domains.cleanup_failed_at (the settings page shows the stuck state)');
 select ok(has_table_privilege('authenticated', 'public.org_email_domains', 'select'),
   'authenticated may SELECT the whole org_email_domains row');
 select ok(has_table_privilege('authenticated', 'public.org_email_domains', 'delete'),
@@ -309,6 +317,19 @@ select throws_ok(
   '23514',
   null,
   'a status outside Resend''s vocabulary violates the status CHECK'
+);
+-- cleanup_pending is the one status outside Resend's vocabulary: a row whose
+-- provider-side removal failed keeps its resend_domain_id in this state
+-- instead of being deleted, so it must pass the CHECK.
+select lives_ok(
+  format($q$update public.org_email_domains set status = 'cleanup_pending', cleanup_failed_at = now() where org_id = %L$q$,
+         current_setting('oed.org_a')),
+  'cleanup_pending is a valid status value'
+);
+select is(
+  (select status from public.org_email_domains where org_id = current_setting('oed.org_a')::uuid),
+  'cleanup_pending',
+  'the cleanup_pending status persisted on org A''s row'
 );
 
 select * from finish();
