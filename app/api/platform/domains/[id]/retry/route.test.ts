@@ -131,6 +131,15 @@ describe("POST /api/platform/domains/[id]/retry", () => {
     expect(createServiceClient).not.toHaveBeenCalled();
   });
 
+  it("500s when the row lookup itself errors (thrown, caught by the outer catch)", async () => {
+    const { client } = makeServiceClient({ rowResult: { data: null, error: { message: "db down" } } });
+    createServiceClient.mockResolvedValue(client);
+
+    const res = await call();
+
+    expect(res.status).toBe(500);
+  });
+
   it("500s on an update error", async () => {
     const { client } = makeServiceClient({ updateResult: { data: null, error: { message: "boom" } } });
     createServiceClient.mockResolvedValue(client);

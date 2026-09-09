@@ -257,6 +257,41 @@ describe("POST /api/admin/domains/[id]/verify", () => {
     expect(body.error).not.toMatch(/TXT|DNS/);
   });
 
+  it("500s when the row lookup itself errors", async () => {
+    const { client } = makeServiceClient({ rowResult: { data: null, error: { message: "db down" } } });
+    createServiceClient.mockResolvedValue(client);
+
+    const res = await call();
+
+    expect(res.status).toBe(500);
+    expect(resolveTxt).not.toHaveBeenCalled();
+  });
+
+  it("500s when the mismatch-path last_checked_at stamp itself errors", async () => {
+    const { client } = makeServiceClient({
+      rowResult: { data: PENDING_ROW, error: null },
+      updateResult: { data: null, error: { message: "db down" } },
+    });
+    createServiceClient.mockResolvedValue(client);
+    resolveTxt.mockResolvedValue([["wrong-token"]]);
+
+    const res = await call();
+
+    expect(res.status).toBe(500);
+  });
+
+  it("500s via the outer catch on an unexpected exception", async () => {
+    createServiceClient.mockResolvedValue({
+      from() {
+        throw new Error("unexpected");
+      },
+    });
+
+    const res = await call();
+
+    expect(res.status).toBe(500);
+  });
+
   it("404s for a row outside the caller's org (fetch is org-scoped)", async () => {
     const { client } = makeServiceClient({ rowResult: { data: null, error: null } });
     createServiceClient.mockResolvedValue(client);

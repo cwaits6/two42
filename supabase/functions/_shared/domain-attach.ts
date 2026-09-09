@@ -119,6 +119,15 @@ export async function attachDomainsForOrg(
             item: row.id,
             error: `row deleted mid-attach and compensating detach failed: ${removed.detail}`,
           });
+        } else {
+          // Not counted in `sent` (nothing was attached this run) and not a
+          // failure — but it's the worker's only self-rollback path, so it
+          // gets a breadcrumb even though nothing threw.
+          console.log(
+            "attach-org-domains: compensating detach for row %s (deleted mid-attach): %s",
+            row.id,
+            removed.kind,
+          );
         }
       }
     } catch (err) {

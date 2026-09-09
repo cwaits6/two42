@@ -84,8 +84,8 @@ jobs:
   # Edge function unit tests (CWA-10 / #212). Pure units against the
   # _shared/ modules — no network, no database.
   #
-  # The two index.ts entry points are type-checked as a blocking gate
-  # (CWA-45 / #311): their esm.sh supabase-js import is pinned to an exact
+  # The index.ts entry points are type-checked as a blocking gate
+  # (CWA-45 / #311; a third joined at CWA-68): their esm.sh supabase-js import is pinned to an exact
   # version with a matching deno.lock integrity entry, so the check no longer
   # depends on CDN drift — a failure is our code, not a third-party artifact
   # changing under us. A type error now fails the PR here instead of

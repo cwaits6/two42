@@ -206,6 +206,45 @@ describe("DELETE /api/admin/domains/[id]", () => {
     expect(service.calls.updateCount).toBe(0);
   });
 
+  it("500s when the row lookup itself errors", async () => {
+    const service = makeServiceClient({ rowResult: { data: null, error: { message: "db down" } } });
+    createServiceClient.mockResolvedValue(service.client);
+    requireOrgAdmin.mockResolvedValue({ ok: true, orgId: "org-1", supabase: makeRequestClient({ error: null, count: 1 }).client });
+
+    const res = await call();
+
+    expect(res.status).toBe(500);
+  });
+
+  it("500s when the 'removing' transition update itself errors (not just zero rows)", async () => {
+    const service = makeServiceClient({
+      rowResult: {
+        data: { id: "row-1", status: "verified", attached_at: "2026-09-01T00:00:00.000Z" },
+        error: null,
+      },
+      updateResult: { data: null, error: { message: "db down" } },
+    });
+    createServiceClient.mockResolvedValue(service.client);
+    requireOrgAdmin.mockResolvedValue({ ok: true, orgId: "org-1", supabase: makeRequestClient({ error: null, count: 1 }).client });
+
+    const res = await call();
+
+    expect(res.status).toBe(500);
+  });
+
+  it("500s via the outer catch on an unexpected exception", async () => {
+    createServiceClient.mockResolvedValue({
+      from() {
+        throw new Error("unexpected");
+      },
+    });
+    requireOrgAdmin.mockResolvedValue({ ok: true, orgId: "org-1", supabase: makeRequestClient({ error: null, count: 1 }).client });
+
+    const res = await call();
+
+    expect(res.status).toBe(500);
+  });
+
   it("404s for a row outside the caller's org", async () => {
     const service = makeServiceClient({ rowResult: { data: null, error: null } });
     createServiceClient.mockResolvedValue(service.client);

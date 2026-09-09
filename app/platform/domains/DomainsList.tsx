@@ -31,12 +31,18 @@ export type LeaseState =
   | { kind: "live"; expiresAt: Date }
   | { kind: "expired"; claimedAt: Date };
 
-/** Where the worker's single-flight lease on a row stands, relative to `now`. */
+/**
+ * Where the worker's single-flight lease on a row stands, relative to `now`.
+ * The boundary is `>=`, not `>`, to agree with the retry route's own
+ * `.lt("attach_claimed_at", cutoff)` predicate: that route only clears a
+ * claim strictly older than the window, so at the exact millisecond the
+ * lease elapses the row is still "live" from both sides, not just this one.
+ */
 export function leaseState(attachClaimedAt: string | null, now: number): LeaseState {
   if (!attachClaimedAt) return { kind: "none" };
   const claimedAt = new Date(attachClaimedAt);
   const expiresAt = new Date(claimedAt.getTime() + ATTACH_LEASE_WINDOW_MS);
-  return expiresAt.getTime() > now ? { kind: "live", expiresAt } : { kind: "expired", claimedAt };
+  return expiresAt.getTime() >= now ? { kind: "live", expiresAt } : { kind: "expired", claimedAt };
 }
 
 /** Coarse bucket for the list: what the operator needs to do about the row, if anything. */

@@ -298,3 +298,19 @@ Deno.test("detach: hard-delete affecting zero rows is a failure, not a success",
   assertEquals(r.sendFailures, 1);
   assertEquals(r.itemFailures?.[0].error, "tombstone hard-delete affected zero rows");
 });
+
+Deno.test("detach: a thrown lease/Vercel error isolates to the row, and the loop continues", async () => {
+  // Symmetric with the attach-side isolation test above: the try/catch
+  // around detachDomainsForOrg's loop body has the identical shape, and a
+  // future refactor could accidentally break one without the other.
+  const rows: DomainRow[] = [{ id: "bad", domain: "bad.example" }, { id: "good", domain: "good.example" }];
+  const { lease, calls: lc } = fakeLease({ removing: rows });
+  lease.claimDetachLease = (id) => {
+    lc.claimDetach.push(id);
+    return id === "bad" ? Promise.reject(new Error("db down")) : Promise.resolve(TOKEN);
+  };
+  const { vercel } = fakeVercel({ remove: { kind: "removed" } });
+  const r = await detachDomainsForOrg(lease, vercel, ORG, WINDOW);
+  assertEquals(r.sent, 1);
+  assertEquals(r.itemFailures, [{ item: "bad", error: "db down" }]);
+});

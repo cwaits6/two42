@@ -20,7 +20,7 @@ the migration wins.
 | 2 | #211 | `org_id` made the **enforced** boundary: org helpers, restrictive RLS floor, composite FKs, fail-closed `handle_new_user()`, `provision_organization()` | done |
 | 3 | #212 | Service-role call sites, signed tokens, branding → DB, org-branded email | done |
 | 4 | #213 | Onboarding, `/platform` operator surface, public per-org routes, tenant-#2 gate | done |
-| **5 (this spec)** | **#214** | **Wildcard subdomains + custom domains; per-org verified sending domains + send caps** | **not started** |
+| **5 (this spec)** | **#214** | **Wildcard subdomains + custom domains; per-org verified sending domains + send caps** | **in progress — §12 items 1–3, 6–8 shipped, item 4 landing (PR 4/#389), item 5 (CWA-69, per-org base URLs) still open** |
 
 Phase 5 as filed also lists private storage and Stripe billing. Both are
 explicitly **out of scope here** — see §3.
@@ -723,6 +723,25 @@ Note the asymmetry with §9 still holds, now with a parallel answer: per-org
 *attachment* is automated through the worker-held Vercel token (blast radius:
 deployment, bounded by isolation and the denylist).
 
+> Shipped (PR 4, CWA-68): §7 and §7.1 landed close to as proposed, with these
+> deviations. The Vercel classification is finer than sketched above: `add`
+> also distinguishes `payment_required` (402, no payment method) and
+> `ownership_challenge` (a 200 with `verified: false`, Vercel's own
+> cross-account check) as permanent, non-retryable outcomes alongside
+> `conflict`/`forbidden`; `get` has its own `pending_verification` kind so a
+> row held behind that same challenge is never stamped. The compensating
+> detach for a lost stamp (§7.1) now logs its success branch, not just its
+> failure — it's the worker's only self-rollback path and was otherwise
+> invisible in the run summary. The known gaps flagged in the artifact and
+> carried into `docs/security/domains.md` are still open, not fixed by this
+> PR: no persisted permanent-failure record (409/403/402 results live only in
+> function logs and the run response), no detached-but-not-yet-delisted queue
+> for the §8 allowlist step (the tombstone hard-deletes the moment Vercel
+> confirms, so there is no row left to list), and no `pg_cron` schedule (the
+> migration slot is held; the worker is deployed but only runs on manual
+> invocation). A ready-to-review `org_domain_worker_events` follow-up
+> migration is sketched in `docs/security/domains.md` for the first two.
+
 ## 8. Auth redirect allowlist
 
 This is the part that silently breaks if it is skipped, because the failure is
@@ -1148,10 +1167,12 @@ allowlist. Nothing in §12.2 onward is testable end-to-end without it.
 1. **Reserved slug labels** — denylist in `provision_organization()` (new
    `TN00x`) and its mirror in `lib/org.ts`; pgTAP for the raise. No routing
    change yet. Small, independent, and must precede any slug-as-host work.
+   > Shipped (PR 1, CWA-65): #366.
 2. **`org_domains` + `app_org_slug_for_host()`** — table, enum, indexes, RLS,
    resolver function, grants. pgTAP: isolation, the partial unique, the
    resolver's verified/active gating, and a negative probe. No app code reads
    it yet.
+   > Shipped (PR 2): #376.
 3. **Host-aware org resolution** — middleware host parsing + resolver call +
    `x-two42-resolved-org` (stripped and shape-checked), `lib/supabase/server.ts`
    default, the client-side provider, the cookie-scope regression test.
@@ -1159,6 +1180,7 @@ allowlist. Nothing in §12.2 onward is testable end-to-end without it.
    falls back to the env pin for the deployment's own trusted host. This is
    the highest-risk PR in the phase: it touches the request path for every
    route.
+   > Shipped (PR 3): #380.
 4. **Admin domain UI + verify/remove routes + attachment worker** — claim,
    TXT check, status transition, the remove route's `removing` transition,
    and the isolated Vercel-attachment edge function (§7: token as a function
@@ -1167,20 +1189,29 @@ allowlist. Nothing in §12.2 onward is testable end-to-end without it.
    status, a manual retry, and the detached-but-not-yet-delisted queue for
    §8 — not a required confirmation step. Inventory rows for the verify
    route, the remove route, and the worker.
+   > Shipped (PR 4, CWA-68): #389. See the deviations noted at the end of §7.1.
 5. **Per-org base URLs** — `orgBaseUrl()`, every `siteConfig.url` call site
    in §9, the edge-function ride-along mirror, and the
    `resolveEmailBranding()` orgId audit. Ships before any org actually has a
    custom domain, so nothing is broken in transit.
+   > In progress (CWA-69): open on `archon/task-feat-cwa-69-org-base-urls`,
+   > not yet merged to `main`. `orgBaseUrl()` does not exist in the codebase
+   > yet as of PR 4 (#389) — the comments in this PR's own `domain-attach.ts`
+   > / `vercel.ts` that reference it are written against this section's plan,
+   > not against landed code.
 6. **`org_email_domains`** — table, RLS, Resend create/verify routes, admin UI.
    No sending change yet.
+   > Shipped (PR 6, CWA-70): #367.
 7. **Per-org `From:`** — the domain regex in `lib/email/identity.ts` and its
    edge mirror, `EmailBranding.fromAddress`, the verified-status gate, and the
    call-site sweep. Inventory update for the second table in
    `resolveEmailBranding()`.
+   > Shipped (PR 7): #377.
 8. **Send caps** — `org_email_usage`, `org_email_limits`,
    `email_quota_consume()`, grant matrix, call-site reserves in app and edge,
    `/platform` cap editor. pgTAP for the atomicity and the first-send-of-day
    bound.
+   > Shipped (PR 8, CWA-72): #379.
 
 Steps 1–5 and 6–8 are independent of each other and can be worked by different
 people, subject to the one-migration-branch-at-a-time rule.

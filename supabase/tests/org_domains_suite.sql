@@ -695,7 +695,13 @@ begin
     (select (attach_claimed_at is null and attach_claim_token is null)::text
        from public.org_domains where id = row_id), true);
 
-  -- The same transition again → zero rows (the route treats it as idempotent).
+  -- A second requester racing the first: by the time this UPDATE runs the row
+  -- already left 'verified', so it matches zero rows. The route maps that to
+  -- a 409 ("Domain changed while removing it"), not a success — see
+  -- route.test.ts's "409s when the 'removing' transition affects zero rows".
+  -- (A repeat call that *reads* the row as already 'removing' short-circuits
+  -- before ever reaching this UPDATE — that path is idempotent, but it isn't
+  -- this one.)
   with r as (
     update public.org_domains
        set status = 'removing', attach_claimed_at = null, attach_claim_token = null
@@ -802,7 +808,7 @@ select is(current_setting('od.remove_keeps_attached_at'), 'true',
 select is(current_setting('od.remove_clears_lease'), 'true',
   'remove route: the removing transition clears both lease columns');
 select is(current_setting('od.remove_twice')::bigint, 0::bigint,
-  'remove route: repeating the transition on a tombstone affects zero rows (idempotent)');
+  'remove route: a concurrent repeat of the removing transition affects zero rows (409, not success)');
 select is(current_setting('od.attach_claim_on_removing')::bigint, 0::bigint,
   'worker: an attach claim on a removing tombstone affects zero rows');
 select is(current_setting('od.detach_claim')::bigint, 1::bigint,
