@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { requireOrgAdmin } from "@/lib/members/access";
 import { DOMAIN_ROW_COLUMNS, TXT_LABEL } from "@/lib/domains";
+import { redactFailure } from "@/lib/members/apply";
 
 /**
  * POST /api/admin/domains/[id]/verify — prove ownership of a claimed domain
@@ -96,7 +97,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
       .eq("org_id", orgId)
       .gte("last_checked_at", windowStart);
     if (countError) {
-      console.error("domain verify: rate-limit count failed (org=%s):", orgId, countError);
+      console.error("domain verify: rate-limit count failed (org=%s): %s", orgId, redactFailure(countError));
     } else if ((count ?? 0) >= RATE_LIMIT) {
       return NextResponse.json(
         { error: "Too many verification attempts. Try again in a few minutes." },
@@ -111,7 +112,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
       .eq("org_id", orgId)
       .maybeSingle();
     if (rowError) {
-      console.error("domain verify: lookup error (org=%s, id=%s):", orgId, id, rowError);
+      console.error("domain verify: lookup error (org=%s, id=%s): %s", orgId, id, redactFailure(rowError));
       return NextResponse.json({ error: "Failed to verify domain." }, { status: 500 });
     }
     if (!row) {
@@ -156,7 +157,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
         .select(DOMAIN_ROW_COLUMNS)
         .single();
       if (stampError || !stamped) {
-        console.error("domain verify: last_checked_at stamp failed (org=%s, id=%s):", orgId, id, stampError);
+        console.error("domain verify: last_checked_at stamp failed (org=%s, id=%s): %s", orgId, id, redactFailure(stampError));
         return NextResponse.json({ error: "Failed to record the check." }, { status: 500 });
       }
       return NextResponse.json({
@@ -188,7 +189,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
           { status: 409 },
         );
       }
-      console.error("domain verify: scoped update failed (org=%s, id=%s):", orgId, id, updateError);
+      console.error("domain verify: scoped update failed (org=%s, id=%s): %s", orgId, id, redactFailure(updateError));
       return NextResponse.json(
         { error: "Verified but failed to save status." },
         { status: 500 },
@@ -197,7 +198,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
 
     return NextResponse.json({ data: saved, verified: true });
   } catch (err) {
-    console.error("domain verify: unexpected error (org=%s, id=%s):", orgId, id, err);
+    console.error("domain verify: unexpected error (org=%s, id=%s): %s", orgId, id, redactFailure(err));
     return NextResponse.json({ error: "Failed to verify domain." }, { status: 500 });
   }
 }

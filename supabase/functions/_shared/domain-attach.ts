@@ -5,15 +5,17 @@
 // Contract with the run summary (_shared/orgs.ts): `sent` counts domains
 // attached or detached this run; `sendFailures` counts domains that ended
 // the run in a failed state; `itemFailures[].item` is the org_domains.id
-// (never the domain name — ids, not tenant content, in diagnostics). A row
-// skipped because another attempt holds its lease is neither.
+// (never the domain name — ids, not tenant content, in diagnostics; the one
+// exception is a Vercel ownership challenge, whose TXT record name contains
+// the domain and IS the operator's instruction). A row skipped because
+// another attempt holds its lease is neither.
 //
 // attached_at is written by stampAttached() and nowhere else in the system,
 // and only after Vercel has confirmed the attachment — never optimistically,
 // because orgBaseUrl() starts emitting the custom origin the moment it is set.
 
 import type { DomainLeaseClient } from "./domain-lease.ts";
-import type { VercelClient } from "./vercel.ts";
+import type { VercelClient, VercelVerificationRecord } from "./vercel.ts";
 import type { ItemFailure, OrgRunCounts } from "./orgs.ts";
 import { isPlatformApexOrSubdomain } from "./domain-denylist.ts";
 import { isAttachmentEntitled } from "./entitlement.ts";
@@ -28,6 +30,21 @@ function counts(sent: number, itemFailures: ItemFailure[]): OrgRunCounts {
 
 function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * The operator's action item for a Vercel ownership challenge: the record(s)
+ * to publish and the verify call that follows. Deliberately names the domain
+ * — the TXT record name is the instruction.
+ */
+export function describeVerificationChallenge(
+  domain: string,
+  records: VercelVerificationRecord[],
+): string {
+  const publish = records.length
+    ? records.map((r) => `publish ${r.type} ${r.domain} = ${r.value}`).join("; ")
+    : "Vercel returned no verification records; inspect the domain in the Vercel dashboard";
+  return `vercel needs_verification: ${publish}; then POST /v9/projects/{projectId}/domains/${domain}/verify. Retried after the lease window`;
 }
 
 export async function attachDomainsForOrg(
@@ -61,10 +78,20 @@ export async function attachDomainsForOrg(
 
       const add = await vercel.addDomain(row.domain);
       if (add.kind === "permanent") {
-        // 409 / 403 / 402 / ownership challenge: nothing a retry can fix.
-        // No stamp. Surfaced in the run summary; the lease is left in place
-        // so the next attempt waits for the window rather than looping.
+        // 409 / 403 / 402: nothing a retry can fix. No stamp. Surfaced in
+        // the run summary; the lease is left in place so the next attempt
+        // waits for the window rather than looping.
         itemFailures.push({ item: row.id, error: `vercel ${add.reason}: ${add.detail}` });
+        continue;
+      }
+      if (add.kind === "needs_verification") {
+        // Vercel's cross-account ownership challenge: not routed, so no
+        // stamp — but not permanent. Surface the record the operator must
+        // publish; the row is retried once the lease window elapses, exactly
+        // like an ambiguous result.
+        const error = describeVerificationChallenge(row.domain, add.verification);
+        console.warn("attach-org-domains: row %s: %s", row.id, error);
+        itemFailures.push({ item: row.id, error });
         continue;
       }
 
@@ -77,10 +104,10 @@ export async function attachDomainsForOrg(
         if (got.kind === "attached") {
           confirmed = true;
         } else if (got.kind === "pending_verification") {
-          itemFailures.push({
-            item: row.id,
-            error: "vercel ownership_challenge: on the project but held behind Vercel's own domain verification",
-          });
+          // Same challenge, seen on the confirm path; same operator action.
+          const error = describeVerificationChallenge(row.domain, got.verification);
+          console.warn("attach-org-domains: row %s: %s", row.id, error);
+          itemFailures.push({ item: row.id, error });
           continue;
         } else if (got.kind === "not_attached") {
           if (add.kind === "already_exists") {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/platform-access";
 import { createServiceClient } from "@/lib/supabase/server";
 import { ATTACH_LEASE_WINDOW_MS } from "@/lib/domains";
+import { redactFailure } from "@/lib/members/apply";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -70,7 +71,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
         : "Nothing to retry: no expired claim on this domain.",
     });
   } catch (error) {
-    console.error("Domain retry error for row %s:", id, error);
+    console.error("Domain retry error for row %s: %s", id, redactFailure(error));
     return NextResponse.json(
       { error: "Failed to clear the attachment claim" },
       { status: 500 },

@@ -54,9 +54,29 @@ export function statusLabel(row: Pick<DomainRow, "status" | "attached_at">): str
   return "Pending verification";
 }
 
-/** An apex is a registrable name with no subdomain label in front (a two-label heuristic). */
+/**
+ * Public suffixes that take two labels, so a registrable name under them
+ * has three. A short, deliberate list — not the Public Suffix List — because
+ * this only steers which routing record the page suggests; verification and
+ * attachment do not depend on it. Extend it when a real tenant hits one.
+ */
+const TWO_LABEL_PUBLIC_SUFFIXES = new Set([
+  "co.uk", "org.uk", "me.uk", "ac.uk", "gov.uk",
+  "com.au", "net.au", "org.au",
+  "co.nz", "org.nz",
+  "co.za", "com.br", "co.jp", "co.in", "com.mx",
+]);
+
+/**
+ * An apex is a registrable name with no subdomain label in front: two labels
+ * (`example.church`), or three when the last two are a known two-label public
+ * suffix (`example.co.uk`). DNS forbids a CNAME at an apex, so a wrong answer
+ * here would tell the admin to publish a record their provider rejects.
+ */
 export function looksLikeApex(domain: string): boolean {
-  return domain.split(".").length === 2;
+  const labels = domain.split(".");
+  if (labels.length === 2) return true;
+  return labels.length === 3 && TWO_LABEL_PUBLIC_SUFFIXES.has(labels.slice(1).join("."));
 }
 
 function formatTimestamp(value: string | null): string {

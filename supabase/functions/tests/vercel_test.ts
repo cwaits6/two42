@@ -25,14 +25,27 @@ Deno.test("add: 200 without a verified flag is added (shape tolerance)", () => {
   assertEquals(classifyAddResponse(201, null), { kind: "added" });
 });
 
-Deno.test("add: 200 with verified:false is a permanent ownership challenge, not a success", () => {
+Deno.test("add: 200 with verified:false is needs_verification carrying the challenge, not a success", () => {
   const r = classifyAddResponse(200, {
     name: "example.church",
     verified: false,
-    verification: [{ type: "TXT", domain: "_vercel.example.church", value: "vc-domain-verify=..." }],
+    verification: [
+      { type: "TXT", domain: "_vercel.example.church", value: "vc-domain-verify=abc", reason: "pending_domain_verification" },
+    ],
   });
-  assertEquals(r.kind, "permanent");
-  if (r.kind === "permanent") assertEquals(r.reason, "ownership_challenge");
+  assertEquals(r, {
+    kind: "needs_verification",
+    status: 200,
+    verification: [
+      { type: "TXT", domain: "_vercel.example.church", value: "vc-domain-verify=abc", reason: "pending_domain_verification" },
+    ],
+  });
+});
+
+Deno.test("add: verified:false with a missing or malformed verification list still needs verification, with no records", () => {
+  assertEquals(classifyAddResponse(200, { verified: false }), { kind: "needs_verification", status: 200, verification: [] });
+  const r = classifyAddResponse(200, { verified: false, verification: [null, "x", { type: "TXT" }, { type: "TXT", domain: "d", value: 1 }] });
+  assertEquals(r, { kind: "needs_verification", status: 200, verification: [] });
 });
 
 Deno.test("add: 400 'already exists' is idempotent success (already_exists)", () => {
@@ -101,8 +114,21 @@ Deno.test("get: 200 without a verified flag is attached (shape tolerance)", () =
   assertEquals(classifyGetResponse(200, { name: "example.church" }), { kind: "attached" });
 });
 
-Deno.test("get: 200 verified:false is pending_verification — never attached", () => {
-  assertEquals(classifyGetResponse(200, { name: "example.church", verified: false }), { kind: "pending_verification" });
+Deno.test("get: 200 verified:false is pending_verification carrying the challenge — never attached", () => {
+  assertEquals(classifyGetResponse(200, { name: "example.church", verified: false }), {
+    kind: "pending_verification",
+    verification: [],
+  });
+  assertEquals(
+    classifyGetResponse(200, {
+      verified: false,
+      verification: [{ type: "TXT", domain: "_vercel.example.church", value: "vc-domain-verify=abc" }],
+    }),
+    {
+      kind: "pending_verification",
+      verification: [{ type: "TXT", domain: "_vercel.example.church", value: "vc-domain-verify=abc" }],
+    },
+  );
 });
 
 Deno.test("get: 404 is not_attached", () => {

@@ -7,6 +7,7 @@
 
 import { assert, assertEquals, assertRejects, assertStringIncludes } from "jsr:@std/assert@1";
 import {
+  ATTACH_LEASE_WINDOW_MS,
   createDomainLeaseClient,
   type DomainQueryBuilder,
   type DomainQueryResult,
@@ -16,7 +17,7 @@ import {
 const ORG = "11111111-2222-3333-4444-555555555555";
 const ROW = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 const TOKEN = "99999999-8888-7777-6666-555555555555";
-const WINDOW = 10 * 60 * 1000;
+const WINDOW = ATTACH_LEASE_WINDOW_MS;
 
 type Call = [string, ...unknown[]];
 

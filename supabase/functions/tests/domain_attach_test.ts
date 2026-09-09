@@ -4,9 +4,9 @@
 // reconcile-before-re-POST, compensation for a lost stamp, idempotent
 // detach — runs with no network and no database.
 
-import { assertEquals } from "jsr:@std/assert@1";
+import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 import { attachDomainsForOrg, detachDomainsForOrg } from "../_shared/domain-attach.ts";
-import type { DomainLeaseClient, DomainRow } from "../_shared/domain-lease.ts";
+import { ATTACH_LEASE_WINDOW_MS, type DomainLeaseClient, type DomainRow } from "../_shared/domain-lease.ts";
 import type {
   VercelAddResult,
   VercelClient,
@@ -16,7 +16,7 @@ import type {
 
 const ORG = { id: "11111111-2222-3333-4444-555555555555" };
 const APEX = "two42.io";
-const WINDOW = 10 * 60 * 1000;
+const WINDOW = ATTACH_LEASE_WINDOW_MS;
 const TOKEN = "99999999-8888-7777-6666-555555555555";
 const ROW: DomainRow = { id: "row-1", domain: "example.church" };
 
@@ -143,7 +143,7 @@ Deno.test("attach: already_exists but GET finds nothing → no stamp, reported",
   assertEquals(lc.stamp, []);
 });
 
-for (const reason of ["conflict", "forbidden", "payment_required", "ownership_challenge"] as const) {
+for (const reason of ["conflict", "forbidden", "payment_required"] as const) {
   Deno.test(`attach: permanent ${reason} → no GET, no stamp, one item failure`, async () => {
     const { lease, calls: lc } = fakeLease({ verified: [ROW] });
     const { vercel, calls } = fakeVercel({ add: { kind: "permanent", reason, status: 409, detail: "d" } });
@@ -156,6 +156,35 @@ for (const reason of ["conflict", "forbidden", "payment_required", "ownership_ch
     assertEquals(lc.reread, []);
   });
 }
+
+Deno.test("attach: needs_verification → no GET, no stamp, one item failure naming the record to publish", async () => {
+  const { lease, calls: lc } = fakeLease({ verified: [ROW] });
+  const { vercel, calls } = fakeVercel({
+    add: {
+      kind: "needs_verification",
+      status: 200,
+      verification: [{ type: "TXT", domain: "_vercel.example.church", value: "vc-domain-verify=abc" }],
+    },
+  });
+  const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
+  assertEquals(r.sent, 0);
+  assertEquals(r.sendFailures, 1);
+  assertEquals(r.itemFailures?.[0].item, "row-1");
+  assertStringIncludes(r.itemFailures?.[0].error ?? "", "publish TXT _vercel.example.church = vc-domain-verify=abc");
+  assertStringIncludes(r.itemFailures?.[0].error ?? "", "/domains/example.church/verify");
+  assertEquals(calls.get, []);
+  assertEquals(lc.stamp, []);
+  assertEquals(lc.reread, []);
+});
+
+Deno.test("attach: needs_verification with no records still reports, pointing at the dashboard", async () => {
+  const { lease, calls: lc } = fakeLease({ verified: [ROW] });
+  const { vercel } = fakeVercel({ add: { kind: "needs_verification", status: 200, verification: [] } });
+  const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
+  assertEquals(r.sendFailures, 1);
+  assertStringIncludes(r.itemFailures?.[0].error ?? "", "no verification records");
+  assertEquals(lc.stamp, []);
+});
 
 Deno.test("attach: ambiguous → GET-reconcile before anything; attached → stamped, no re-POST", async () => {
   const { lease, calls: lc } = fakeLease({ verified: [ROW] });
@@ -177,11 +206,18 @@ Deno.test("attach: ambiguous → GET says not attached → no stamp, no re-POST,
   assertEquals(lc.stamp, []);
 });
 
-Deno.test("attach: ambiguous → GET says pending_verification → never stamped, reported permanent", async () => {
+Deno.test("attach: ambiguous → GET says pending_verification → never stamped, challenge reported", async () => {
   const { lease, calls: lc } = fakeLease({ verified: [ROW] });
-  const { vercel } = fakeVercel({ add: { kind: "ambiguous", status: 0, detail: "t" }, get: { kind: "pending_verification" } });
+  const { vercel } = fakeVercel({
+    add: { kind: "ambiguous", status: 0, detail: "t" },
+    get: {
+      kind: "pending_verification",
+      verification: [{ type: "TXT", domain: "_vercel.example.church", value: "vc-domain-verify=abc" }],
+    },
+  });
   const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
   assertEquals(r.sendFailures, 1);
+  assertStringIncludes(r.itemFailures?.[0].error ?? "", "publish TXT _vercel.example.church = vc-domain-verify=abc");
   assertEquals(lc.stamp, []);
 });
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { requireOrgAdmin } from "@/lib/members/access";
+import { redactFailure } from "@/lib/members/apply";
 
 /**
  * DELETE /api/admin/domains/[id] — release a claimed domain.
@@ -48,7 +49,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       .eq("org_id", orgId)
       .maybeSingle();
     if (rowError) {
-      console.error("domain remove: lookup error (org=%s, id=%s):", orgId, id, rowError);
+      console.error("domain remove: lookup error (org=%s, id=%s): %s", orgId, id, redactFailure(rowError));
       return NextResponse.json({ error: "Failed to remove domain." }, { status: 500 });
     }
     if (!row) {
@@ -67,7 +68,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
         .eq("id", id)
         .eq("org_id", orgId);
       if (error) {
-        console.error("domain remove: delete error (org=%s, id=%s):", orgId, id, error);
+        console.error("domain remove: delete error (org=%s, id=%s): %s", orgId, id, redactFailure(error));
         return NextResponse.json({ error: "Failed to remove domain." }, { status: 500 });
       }
       // Zero rows after the read above found one: the row changed under us
@@ -94,7 +95,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       .not("attached_at", "is", null)
       .select("id");
     if (updateError) {
-      console.error("domain remove: removing transition failed (org=%s, id=%s):", orgId, id, updateError);
+      console.error("domain remove: removing transition failed (org=%s, id=%s): %s", orgId, id, redactFailure(updateError));
       return NextResponse.json({ error: "Failed to remove domain." }, { status: 500 });
     }
     if (!updated || updated.length !== 1) {
@@ -106,7 +107,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
 
     return NextResponse.json({ success: true, status: "removing" });
   } catch (err) {
-    console.error("domain remove: unexpected error (org=%s, id=%s):", orgId, id, err);
+    console.error("domain remove: unexpected error (org=%s, id=%s): %s", orgId, id, redactFailure(err));
     return NextResponse.json({ error: "Failed to remove domain." }, { status: 500 });
   }
 }

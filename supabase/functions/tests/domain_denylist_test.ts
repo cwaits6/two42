@@ -2,8 +2,12 @@
 // contract of classifyHost() in lib/org.ts (tested in lib/org.test.ts); a
 // change to that rule lands on both sides.
 
-import { assertEquals } from "jsr:@std/assert@1";
-import { isPlatformApexOrSubdomain } from "../_shared/domain-denylist.ts";
+import { assertEquals, assertThrows } from "jsr:@std/assert@1";
+import {
+  DEFAULT_PLATFORM_APEX,
+  isPlatformApexOrSubdomain,
+  resolvePlatformApex,
+} from "../_shared/domain-denylist.ts";
 
 const APEX = "two42.io";
 
@@ -47,4 +51,21 @@ Deno.test("an ordinary custom domain is allowed", () => {
 Deno.test("an empty host or empty apex is never denylisted (nothing to shadow)", () => {
   assertEquals(isPlatformApexOrSubdomain("", APEX), false);
   assertEquals(isPlatformApexOrSubdomain("example.church", ""), false);
+});
+
+// ── resolvePlatformApex (the startup read of the PLATFORM_APEX secret) ──────
+
+Deno.test("resolvePlatformApex: unset or empty means the default", () => {
+  assertEquals(resolvePlatformApex(undefined), DEFAULT_PLATFORM_APEX);
+  assertEquals(resolvePlatformApex(""), DEFAULT_PLATFORM_APEX);
+  assertEquals(resolvePlatformApex(undefined, "example.org"), "example.org");
+});
+
+Deno.test("resolvePlatformApex: a set value is canonicalised", () => {
+  assertEquals(resolvePlatformApex(" Example.ORG. "), "example.org");
+});
+
+Deno.test("resolvePlatformApex: a whitespace-only value throws instead of disabling the denylist", () => {
+  assertThrows(() => resolvePlatformApex("   "), Error, "PLATFORM_APEX is set but blank");
+  assertThrows(() => resolvePlatformApex("\t\n"), Error);
 });

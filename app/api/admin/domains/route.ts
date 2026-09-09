@@ -3,6 +3,7 @@ import { requireOrgAdmin } from "@/lib/members/access";
 import { classifyHost, normalizeHost } from "@/lib/org";
 import { siteConfig } from "@/lib/config";
 import { DOMAIN_ROW_COLUMNS, DOMAIN_SHAPE } from "@/lib/domains";
+import { redactFailure } from "@/lib/members/apply";
 
 /**
  * POST /api/admin/domains — claim a custom domain for the caller's org.
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
         { status: 409 },
       );
     }
-    console.error("domain claim: insert error (org=%s):", orgId, error);
+    console.error("domain claim: insert error (org=%s): %s", orgId, redactFailure(error));
     return NextResponse.json(
       { error: "Failed to claim domain." },
       { status: 500 },

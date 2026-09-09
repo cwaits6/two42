@@ -33,7 +33,12 @@ import {
   type OrgListClient,
   type OrgRunCounts,
 } from "../_shared/orgs.ts";
-import { createDomainLeaseClient, type DomainTableClient } from "../_shared/domain-lease.ts";
+import {
+  ATTACH_LEASE_WINDOW_MS,
+  createDomainLeaseClient,
+  type DomainTableClient,
+} from "../_shared/domain-lease.ts";
+import { resolvePlatformApex } from "../_shared/domain-denylist.ts";
 import { createVercelClient } from "../_shared/vercel.ts";
 import { attachDomainsForOrg, detachDomainsForOrg } from "../_shared/domain-attach.ts";
 
@@ -48,9 +53,9 @@ const VERCEL_API_TOKEN = Deno.env.get("VERCEL_API_TOKEN") ?? "";
 const VERCEL_PROJECT_ID = Deno.env.get("VERCEL_PROJECT_ID") ?? "";
 const VERCEL_TEAM_ID = Deno.env.get("VERCEL_TEAM_ID") || undefined;
 // Mirrors NEXT_PUBLIC_PLATFORM_APEX (Deno cannot read Next's env); the
-// worker's denylist refuses this apex and every subdomain of it.
-const PLATFORM_APEX = Deno.env.get("PLATFORM_APEX") || "two42.io";
-const LEASE_WINDOW_MS = 10 * 60 * 1000;
+// worker's denylist refuses this apex and every subdomain of it. A blank
+// value throws here, at startup, instead of quietly disabling the denylist.
+const PLATFORM_APEX = resolvePlatformApex(Deno.env.get("PLATFORM_APEX"));
 
 // Same concrete factory shape as the reminder functions (see the note in
 // send-event-reminders/index.ts on why ReturnType of this binds the generics).
@@ -86,8 +91,8 @@ Deno.serve(async () => {
 
     const summary = summarize(
       await forEachOrg(orgs, async (org): Promise<OrgRunCounts> => {
-        const attach = await attachDomainsForOrg(lease, vercel, org, PLATFORM_APEX, LEASE_WINDOW_MS);
-        const detach = await detachDomainsForOrg(lease, vercel, org, LEASE_WINDOW_MS);
+        const attach = await attachDomainsForOrg(lease, vercel, org, PLATFORM_APEX, ATTACH_LEASE_WINDOW_MS);
+        const detach = await detachDomainsForOrg(lease, vercel, org, ATTACH_LEASE_WINDOW_MS);
         const itemFailures = [...(attach.itemFailures ?? []), ...(detach.itemFailures ?? [])];
         return {
           sent: attach.sent + detach.sent,

@@ -27,6 +27,30 @@ export function isPlatformApexOrSubdomain(host: string, apex: string): boolean {
   return h === a || h.endsWith(`.${a}`);
 }
 
+/** The apex the worker refuses when PLATFORM_APEX is unset. */
+export const DEFAULT_PLATFORM_APEX = "two42.io";
+
+/**
+ * Resolve the PLATFORM_APEX secret at startup. Unset or empty means the
+ * default; a value that is only whitespace is a misconfiguration and throws,
+ * because canonical() would trim it to "" and isPlatformApexOrSubdomain()
+ * would then refuse nothing — silently letting a tenant attach a name inside
+ * the platform's own namespace.
+ */
+export function resolvePlatformApex(
+  raw: string | undefined,
+  fallback: string = DEFAULT_PLATFORM_APEX,
+): string {
+  if (raw === undefined || raw === "") return fallback;
+  const apex = canonical(raw);
+  if (apex === "") {
+    throw new Error(
+      "PLATFORM_APEX is set but blank; unset it to use the default or set it to the platform apex",
+    );
+  }
+  return apex;
+}
+
 function canonical(value: string): string {
   return value.trim().toLowerCase().replace(/\.$/, "");
 }

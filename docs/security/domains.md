@@ -13,7 +13,7 @@ live in [`../plans/phase-5-domains-email.md`](../plans/phase-5-domains-email.md)
 | Step | Who | Where |
 |------|-----|-------|
 | 1. Claim `example.church` | Org admin | `/admin/settings/domains` → `POST /api/admin/domains` (request client, inserts `domain` only; `status = 'pending'`, server-generated `verification_token`) |
-| 2. Publish two DNS records | Org admin, at their registrar | Shown on the same page: `TXT _two42-verify.<domain> = <token>` and the routing record (`CNAME <domain> → cname.vercel-dns.com`, or for an apex an `A` record to `76.76.21.21`) |
+| 2. Publish two DNS records | Org admin, at their registrar | Shown on the same page: `TXT _two42-verify.<domain> = <token>` and the routing record (a `CNAME` for a subdomain, an `A` record for an apex; targets come from the Vercel project's Domains page, see below) |
 | 3. Verify | Org admin | `POST /api/admin/domains/[id]/verify` — Node-runtime `dns/promises` TXT lookup, compared to the stored token; on match `status = 'verified'`, `verified_at = now()`. Rate-limited per org |
 | 4. Attach to the Vercel project | **Worker** (`supabase/functions/attach-org-domains`) | `POST /v10/projects/{id}/domains`, GET-confirm, then the fenced `attached_at` stamp. Only after the stamp is the domain the org's canonical origin |
 | 5. Add to the Supabase auth redirect allowlist | **Operator, by hand** | Supabase dashboard → Authentication → URL configuration (see below) |
@@ -25,16 +25,30 @@ The app never holds the Vercel token. Its only power is flipping a row to
 `verified`, which it can do only by passing the TXT check. The worker holds
 the token as a function secret and is the sole writer of `attached_at`.
 
-### Apex domains and the DNS record
+### The routing record and where its targets come from
 
 DNS does not allow a CNAME at an apex (`example.church` with nothing in
-front). Vercel's current guidance is an `A` record to `76.76.21.21`; the
-admin UI shows that for two-label names and a CNAME to
-`cname.vercel-dns.com` for everything else, and mentions ALIAS/ANAME /
-"CNAME flattening" as the alternative for registrars that offer one. This is
-the single most common support case for this feature. The two-label
-heuristic is a UI hint only — verification and attachment do not depend on
-it.
+front). The admin UI shows an `A` record for an apex and a `CNAME` for
+everything else, and mentions ALIAS/ANAME / "CNAME flattening" as the
+alternative for registrars that offer one. This is the single most common
+support case for this feature. The apex heuristic — two labels, or three
+under a short list of two-label public suffixes such as `co.uk` — is a UI
+hint only; verification and attachment do not depend on it.
+
+**Vercel requires the exact records shown on the project's Domains page**
+(Vercel dashboard → the two42 project → Settings → Domains), and those can
+differ from Vercel's generic `cname.vercel-dns.com` / `76.76.21.21`. The
+admin page therefore reads its targets from two deployment settings, so a
+project-specific target is configured once rather than worked around by
+every tenant:
+
+| Env var (Next.js, public) | Default | Set from |
+|---|---|---|
+| `NEXT_PUBLIC_VERCEL_CNAME_TARGET` | `cname.vercel-dns.com` | The CNAME value the project's Domains page shows for a subdomain |
+| `NEXT_PUBLIC_VERCEL_APEX_A_RECORD` | `76.76.21.21` | The A value it shows for an apex |
+
+Copy both from that page when the project is first configured, and again if
+Vercel ever changes them. The coded defaults are only a fallback.
 
 ## The auth redirect allowlist — a manual operator step
 
@@ -139,7 +153,7 @@ chains.
 | Vercel says | Worker does |
 |-------------|-------------|
 | 200, `verified: true` | Confirmed — stamp |
-| 200, `verified: false` (Vercel's own cross-account ownership challenge) | Permanent failure, no stamp |
+| 200, `verified: false` with a `verification[]` challenge (the name is registered to another Vercel account) | Needs manual action, no stamp. The run summary and the function log carry the TXT record to publish; the operator publishes it, then calls `POST /v9/projects/{id}/domains/{domain}/verify`. The row is retried after the lease window, like an ambiguous result |
 | 400 "domain already exists on the project" | Idempotent success — GET to confirm, then stamp |
 | 409 (assigned to another project/account), 403, 402 | Permanent failure, no stamp, no retry within the lease window |
 | Timeout, 429, 5xx, any other 400 | Ambiguous — GET first; stamp only if attached, never re-POST blind |

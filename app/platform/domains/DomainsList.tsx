@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -75,11 +75,32 @@ function formatTime(value: Date | string | null): string {
 export function DomainsList({ initialRows }: DomainsListProps) {
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
-  // Sampled once per mount, not per render: lease state is a function of
-  // "now", and a value that moved between renders would flip rows
-  // unpredictably. A refresh (router.refresh() after a retry, or a reload)
-  // re-samples it.
-  const [now] = useState(() => Date.now());
+  // "now" drives lease classification, so it is sampled deliberately, never
+  // per render: null until mount (the server render and the hydration render
+  // would otherwise disagree whenever a lease crossed the boundary between
+  // them), re-sampled when the rows refresh, and re-sampled one millisecond
+  // after the next lease expiry so an idle page offers "Clear expired claim"
+  // the moment it becomes true. (+1 because leaseState treats the exact
+  // boundary as still live.)
+  const [now, setNow] = useState<number | null>(null);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const resample = () => {
+      const current = Date.now();
+      setNow(current);
+      const nextExpiry = initialRows.reduce((earliest, row) => {
+        if (!row.attach_claimed_at) return earliest;
+        const expiresAt = new Date(row.attach_claimed_at).getTime() + ATTACH_LEASE_WINDOW_MS;
+        return expiresAt >= current ? Math.min(earliest, expiresAt) : earliest;
+      }, Infinity);
+      if (Number.isFinite(nextExpiry)) timer = setTimeout(resample, nextExpiry - current + 1);
+    };
+    resample();
+    return () => {
+      if (timer !== undefined) clearTimeout(timer);
+    };
+  }, [initialRows]);
 
   async function handleRetry(row: PlatformDomain) {
     setBusyId(row.id);
@@ -92,6 +113,8 @@ export function DomainsList({ initialRows }: DomainsListProps) {
       }
       if (data?.released) toast.success(data.message);
       else toast.info(data?.message || "Nothing to retry.");
+      // The refresh hands this component a fresh rows array, and the effect
+      // above re-samples "now" on that change.
       router.refresh();
     } catch (err) {
       console.error(err);
@@ -125,9 +148,9 @@ export function DomainsList({ initialRows }: DomainsListProps) {
         <div className="space-y-3">
           {initialRows.map((row) => {
             const state = attachmentState(row);
-            const lease = leaseState(row.attach_claimed_at, now);
+            const lease = now === null ? null : leaseState(row.attach_claimed_at, now);
             const showLease = row.status === "removing" || (row.status === "verified" && !row.attached_at);
-            const canRetry = row.status === "verified" && !row.attached_at && lease.kind === "expired";
+            const canRetry = row.status === "verified" && !row.attached_at && lease?.kind === "expired";
             return (
               <Card key={row.id}>
                 <CardContent className="pt-6">
@@ -155,7 +178,7 @@ export function DomainsList({ initialRows }: DomainsListProps) {
                           <dd className="inline">{formatTime(row.last_checked_at)}</dd>
                         </div>
                       </dl>
-                      {showLease && (
+                      {showLease && lease && (
                         <p className="mt-2 text-sm">
                           {lease.kind === "none" && "Worker claim: not yet claimed."}
                           {lease.kind === "live" && `Worker claim: live, expires ${formatTime(lease.expiresAt)}.`}

@@ -18,6 +18,15 @@
 // that matches nothing is a silent success in PostgREST, and this codebase
 // has shipped that bug before.
 
+/**
+ * The single-flight lease window. Mirrors ATTACH_LEASE_WINDOW_MS in
+ * lib/domains.ts (edge functions cannot import from lib/): the platform
+ * retry route clears only leases older than this, and the /platform UI
+ * reports a lease as expired on the same boundary. A change lands on both
+ * sides, and in the pgTAP suite's interval.
+ */
+export const ATTACH_LEASE_WINDOW_MS = 10 * 60 * 1000;
+
 export interface DomainRow {
   id: string;
   domain: string;

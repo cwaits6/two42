@@ -1,4 +1,4 @@
-// Unit tests for the platform domains list's pure helpers (CWA-68).
+// Unit tests for the platform domains list's pure helpers.
 // leaseState's boundary is load-bearing: it gates the "Clear expired claim"
 // button, and must agree with the retry route's own
 // .lt("attach_claimed_at", cutoff) predicate at the exact millisecond the

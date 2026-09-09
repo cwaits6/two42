@@ -15,6 +15,10 @@
 //          another project/account; 403 when the token lacks access or the
 //          domain belongs to someone else; 402 when the team has no payment
 //          method. The three last are permanent: nothing a retry can fix.
+//          A 200 with `verified: false` carries a `verification[]` TXT
+//          challenge (the name is registered to another Vercel account):
+//          not routed, so never stamped, but not permanent — an operator
+//          publishes the record and calls the verify endpoint.
 //   GET    /v9/projects/{id}/domains/{domain}  confirm — 200 with
 //          `verified: boolean`; 404 when not on the project.
 //   DELETE /v9/projects/{id}/domains/{domain}  detach — 200 on success; 404
@@ -27,25 +31,33 @@
 // confident classification — a wrong "added" would stamp attached_at for a
 // host Vercel does not route, and orgBaseUrl() would start emailing it.
 
-export type VercelPermanentReason =
-  | "conflict"
-  | "forbidden"
-  | "payment_required"
-  | "ownership_challenge";
+export type VercelPermanentReason = "conflict" | "forbidden" | "payment_required";
+
+/** One entry of Vercel's `verification[]` challenge: the record the operator must publish. */
+export interface VercelVerificationRecord {
+  type: string;
+  domain: string;
+  value: string;
+  reason?: string;
+}
 
 export type VercelAddResult =
   | { kind: "added" }
   | { kind: "already_exists" }
+  // On the project, but held behind Vercel's own ownership TXT challenge
+  // (another Vercel account already has the name). Not routed — never stamp
+  // from this state — and not permanent either: once the operator publishes
+  // the challenge and calls Vercel's verify endpoint, the next run's GET
+  // finds it attached.
+  | { kind: "needs_verification"; status: number; verification: VercelVerificationRecord[] }
   | { kind: "permanent"; reason: VercelPermanentReason; status: number; detail: string }
   | { kind: "ambiguous"; status: number; detail: string };
 
 export type VercelGetResult =
   | { kind: "attached" }
   | { kind: "not_attached" }
-  // On the project, but Vercel is holding it behind its own ownership TXT
-  // challenge (another Vercel account already has the name). Not routed —
-  // never stamp from this state.
-  | { kind: "pending_verification" }
+  // The same ownership challenge, seen on the confirm path.
+  | { kind: "pending_verification"; verification: VercelVerificationRecord[] }
   | { kind: "error"; status: number; detail: string };
 
 export type VercelRemoveResult =
@@ -90,6 +102,30 @@ function isUnverified(body: unknown): boolean {
 }
 
 /**
+ * The `verification[]` entries of a 200 add/get body. Tolerant: a missing
+ * list or a malformed entry yields nothing rather than a throw, because the
+ * shape is unconfirmed against the live API and the worker must still
+ * report "needs verification" without the detail.
+ */
+export function verificationRecords(body: unknown): VercelVerificationRecord[] {
+  const raw = (body as { verification?: unknown } | null)?.verification;
+  if (!Array.isArray(raw)) return [];
+  const out: VercelVerificationRecord[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const e = entry as Record<string, unknown>;
+    if (typeof e.type !== "string" || typeof e.domain !== "string" || typeof e.value !== "string") continue;
+    out.push({
+      type: e.type,
+      domain: e.domain,
+      value: e.value,
+      ...(typeof e.reason === "string" ? { reason: e.reason } : {}),
+    });
+  }
+  return out;
+}
+
+/**
  * Narrow match for the one 400 that is idempotent success. 400 is heavily
  * overloaded on this endpoint (invalid domain, conflicting redirect
  * options, ...) and none of the others may be read as "attached".
@@ -103,15 +139,10 @@ function isAlreadyExists(body: unknown): boolean {
 export function classifyAddResponse(status: number, body: unknown): VercelAddResult {
   if (status === 200 || status === 201) {
     // A 200 with verified:false means the name is on the project but held
-    // behind Vercel's cross-account ownership challenge — the same situation
-    // a 409 describes, reported differently. Permanent for this worker.
+    // behind Vercel's cross-account ownership challenge. Carry the challenge
+    // so the operator can act on it; the worker itself never stamps from here.
     if (isUnverified(body)) {
-      return {
-        kind: "permanent",
-        reason: "ownership_challenge",
-        status,
-        detail: "vercel requires its own domain-ownership verification (name registered to another account)",
-      };
+      return { kind: "needs_verification", status, verification: verificationRecords(body) };
     }
     return { kind: "added" };
   }
@@ -124,7 +155,9 @@ export function classifyAddResponse(status: number, body: unknown): VercelAddRes
 
 export function classifyGetResponse(status: number, body: unknown): VercelGetResult {
   if (status === 200) {
-    return isUnverified(body) ? { kind: "pending_verification" } : { kind: "attached" };
+    return isUnverified(body)
+      ? { kind: "pending_verification", verification: verificationRecords(body) }
+      : { kind: "attached" };
   }
   if (status === 404) return { kind: "not_attached" };
   return { kind: "error", status, detail: describe(status, body) };

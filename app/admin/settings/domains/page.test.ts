@@ -1,4 +1,4 @@
-// Unit tests for the admin custom-domains page's pure helpers (CWA-68).
+// Unit tests for the admin custom-domains page's pure helpers.
 // Mirrors app/admin/settings/email/page.test.ts's pattern for the same
 // shape of function on this page's stated sibling.
 
@@ -6,10 +6,12 @@ import { describe, expect, it } from "vitest";
 import { looksLikeApex, statusLabel, statusVariant } from "@/app/admin/settings/domains/page";
 
 describe("looksLikeApex", () => {
-  it.each(["example.church", "two42.io"])("treats %s as an apex", (d) =>
+  it.each(["example.church", "two42.io", "example.co.uk", "example.com.au"])("treats %s as an apex", (d) =>
     expect(looksLikeApex(d)).toBe(true),
   );
-  it.each(["www.example.church", "a.b.example.church"])("treats %s as not an apex", (d) =>
+  it.each(["www.example.church", "a.b.example.church", "www.example.co.uk", "a.b.example.co.uk"])(
+    "treats %s as not an apex",
+    (d) =>
     expect(looksLikeApex(d)).toBe(false),
   );
 });
