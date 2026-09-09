@@ -80,10 +80,11 @@ export async function POST(request: Request) {
         .eq("signup_token", signupToken);
       if (rollbackError) {
         // The row is now stuck approved with a token nobody received. Name it
-        // so an operator can find and repair it without the email error.
+        // by id (never the email — PII stays out of logs) so an operator can
+        // find and repair it.
         console.error(
-          "Invite email send failed AND rollback failed; access_requests row for %s (org=%s) is approved with an unsent token:",
-          email,
+          "Invite email send failed AND rollback failed; access_requests row %s (org=%s) is approved with an unsent token:",
+          updated[0].id,
           orgId,
           rollbackError
         );
