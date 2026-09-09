@@ -30,8 +30,8 @@ describe("reserveEmailQuota", () => {
     expect(createServiceClient).not.toHaveBeenCalled();
   });
 
-  it("short-circuits to true for negative n without touching the RPC", async () => {
-    await expect(reserveEmailQuota(ORG_ID, -3)).resolves.toBe(true);
+  it("refuses (false) for negative n without touching the RPC", async () => {
+    await expect(reserveEmailQuota(ORG_ID, -3)).resolves.toBe(false);
     expect(createServiceClient).not.toHaveBeenCalled();
   });
 

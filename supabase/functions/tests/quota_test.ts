@@ -34,9 +34,9 @@ Deno.test("n = 0 short-circuits to true without calling the RPC", async () => {
   assertEquals(recorded.fn, undefined);
 });
 
-Deno.test("negative n short-circuits to true without calling the RPC", async () => {
+Deno.test("negative n refuses (false) without calling the RPC", async () => {
   const { client, recorded } = makeFakeClient({ data: true, error: null });
-  assertEquals(await reserveEmailQuota(client, ORG_ID, -3), true);
+  assertEquals(await reserveEmailQuota(client, ORG_ID, -3), false);
   assertEquals(recorded.fn, undefined);
 });
 

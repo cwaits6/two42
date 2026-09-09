@@ -72,7 +72,8 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
 
   // Email cap + today's usage (Phase 5 PR 8, CWA-72). Both tables are
   // service-role-only (no permissive policy), so these reads must run here;
-  // .eq("org_id", id) is their tenant boundary on this BYPASSRLS client.
+  // .eq("org_id", org.id) is their tenant boundary on this BYPASSRLS client
+  // — org.id, not the raw route param, so the anchor is the validated row.
   // Fail-soft: a failed read renders the card's unavailable state rather
   // than blocking the rest of the page — the cap editor is not load-bearing
   // for the branding/lifecycle surfaces.
@@ -84,12 +85,12 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
     service
       .from("org_email_limits")
       .select("daily_cap")
-      .eq("org_id", id)
+      .eq("org_id", org.id)
       .maybeSingle(),
     service
       .from("org_email_usage")
       .select("sent_count")
-      .eq("org_id", id)
+      .eq("org_id", org.id)
       .eq("usage_date", today)
       .maybeSingle(),
   ]);

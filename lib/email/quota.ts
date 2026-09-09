@@ -32,7 +32,17 @@ export const MAX_DAILY_EMAIL_CAP = 100000;
 export async function reserveEmailQuota(orgId: string, n: number): Promise<boolean> {
   // An empty (already-filtered) batch needs no reservation — and must not
   // reach the RPC, whose _n <= 0 raise is reserved for caller bugs.
-  if (n <= 0) return true;
+  if (n === 0) return true;
+  // A negative batch IS a caller bug: refuse rather than approve a send the
+  // quota never accounted for (fail closed, same as an RPC error).
+  if (n < 0) {
+    console.error(
+      "Email quota check got a negative batch for org %s (n=%d), refusing send",
+      orgId,
+      n,
+    );
+    return false;
+  }
   try {
     const service = await createServiceClient();
     const { data, error } = await service.rpc("email_quota_consume", {

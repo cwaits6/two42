@@ -31,7 +31,17 @@ export async function reserveEmailQuota(
 ): Promise<boolean> {
   // An empty (already-filtered) batch needs no reservation — and must not
   // reach the RPC, whose _n <= 0 raise is reserved for caller bugs.
-  if (n <= 0) return true;
+  if (n === 0) return true;
+  // A negative batch IS a caller bug: refuse rather than approve a send the
+  // quota never accounted for (fail closed, same as an RPC error).
+  if (n < 0) {
+    console.error(
+      "[org %s] email quota check got a negative batch (n=%d), refusing send",
+      orgId,
+      n,
+    );
+    return false;
+  }
   try {
     const { data, error } = await supabase.rpc("email_quota_consume", {
       _org_id: orgId,
