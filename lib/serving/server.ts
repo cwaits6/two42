@@ -4,7 +4,6 @@
  * must never undo a successful signup or cancel.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { siteConfig } from "@/lib/config";
 import { displayName } from "@/lib/names";
 import { generateServingICS } from "@/lib/ics-utils";
 import { getServingLinkMode } from "@/lib/serving/config";
@@ -16,6 +15,7 @@ import {
 } from "@/lib/email/serving";
 import { resolveEmailBranding } from "@/lib/email/identity";
 import { reserveEmailQuota } from "@/lib/email/quota";
+import { orgBaseUrl } from "@/lib/org-urls";
 
 export interface NamedProfile {
   id: string;
@@ -98,20 +98,23 @@ export async function sendSignupConfirmation(
     opts.orgId
   );
 
-  // resolveEmailBranding never throws — it degrades to platform defaults —
-  // so this needs no guard of its own.
-  const branding = await resolveEmailBranding(opts.orgId);
+  // Neither resolveEmailBranding nor orgBaseUrl throws — both degrade to
+  // platform defaults — so this needs no guard of its own.
+  const [branding, baseUrl] = await Promise.all([
+    resolveEmailBranding(opts.orgId),
+    orgBaseUrl(opts.orgId),
+  ]);
 
   const linkMode = await getServingLinkMode(supabase, opts.orgId);
   const cancelUrl =
     linkMode === "signed"
-      ? `${siteConfig.url}/serving/go?token=${createServingToken({
+      ? `${baseUrl}/serving/go?token=${createServingToken({
           a: "cancel",
           g: opts.groupId,
           d: opts.serviceDate,
           p: opts.recipient.id,
         })}`
-      : `${siteConfig.url}/serving/${opts.groupId}`;
+      : `${baseUrl}/serving/${opts.groupId}`;
 
   await sendServingConfirmationEmail({
     to: opts.recipient.email,
@@ -146,8 +149,12 @@ export async function notifyLeadersOfCancel(
   // takes no arguments and returns NEXT_PUBLIC_ORG_SLUG. That is the right org
   // today only because the deployment is single-tenant, and this function's
   // anonymous signed-link caller has no session to resolve from. Both callers
-  // hold an already-authorized org_id and pass it.
-  const branding = await resolveEmailBranding(opts.orgId);
+  // hold an already-authorized org_id and pass it. The same reasoning makes
+  // the link origin an explicit orgBaseUrl(opts.orgId), not the platform URL.
+  const [branding, baseUrl] = await Promise.all([
+    resolveEmailBranding(opts.orgId),
+    orgBaseUrl(opts.orgId),
+  ]);
 
   // org_id filter is required: this is an email fan-out surface on a
   // service-role client — an unscoped read would mail another org's leaders.
@@ -206,7 +213,7 @@ export async function notifyLeadersOfCancel(
         memberLabel: opts.memberLabel,
         teamName: opts.groupName,
         serviceDate: opts.serviceDate,
-        servingUrl: `${siteConfig.url}/serving/${opts.groupId}`,
+        servingUrl: `${baseUrl}/serving/${opts.groupId}`,
         branding,
       });
     } catch (err) {

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { siteConfig } from "@/lib/config";
+import { orgBaseUrl } from "@/lib/org-urls";
 import { Resend } from "resend";
 import crypto from "crypto";
 
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, org_id")
     .eq("id", user.id)
     .single();
 
@@ -72,7 +73,9 @@ export async function POST(request: Request) {
       .filter(Boolean)
   );
 
-  const signupBaseUrl = `${siteConfig.url}/join`;
+  // The signup link follows the admin's own org host (org_id read under RLS
+  // above), not the deployment's env-pinned platform URL.
+  const signupBaseUrl = `${await orgBaseUrl(profile.org_id)}/join`;
   const resend = getResend();
 
   let sent = 0;

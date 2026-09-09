@@ -29,6 +29,11 @@ export interface Org {
   // Deliberately raw {domain, status}, not pre-validated: _shared/branding.ts
   // is the sole validator, same reasoning as `branding` above.
   org_email_domains: Array<{ domain: string; status: string }>;
+  // The org's custom-domain claims (org_domains), embedded via the FK from
+  // organizations — an array by PostgREST convention. Deliberately raw
+  // {domain, status, attached_at}: _shared/org-urls.ts is the sole
+  // validator, same reasoning as org_email_domains above.
+  org_domains: Array<{ domain: string; status: string; attached_at: string | null }>;
 }
 
 interface QueryResult<T> {
@@ -56,16 +61,19 @@ export interface OrgListClient {
  *
  * branding rides along on this one query (CWA-56) so per-org email branding
  * costs no extra round trip and no new service-role call site — and the
- * org_email_domains embed (CWA-71) rides along the same way. The embed is
- * safe without its own filter because it is reached by FK traversal from an
- * organizations row this same service-role query already selected — the
- * embed-from-an-already-filtered-parent exception, not a new unscoped
- * `.from(` call.
+ * org_email_domains embed rides along the same way — as does the
+ * org_domains embed that feeds the per-org link origin (_shared/org-urls.ts).
+ * The embeds are safe without their own filter because they are reached by
+ * FK traversal from an organizations row this same service-role query
+ * already selected — the embed-from-an-already-filtered-parent exception,
+ * not a new unscoped `.from(` call.
  */
 export async function listActiveOrgs(supabase: OrgListClient): Promise<Org[]> {
   const { data, error } = await supabase
     .from("organizations")
-    .select("id, name, slug, branding, org_email_domains(domain, status)")
+    .select(
+      "id, name, slug, branding, org_email_domains(domain, status), org_domains(domain, status, attached_at)",
+    )
     .eq("status", "active")
     .order("slug");
   if (error) throw new Error(`Failed to list organizations: ${error.message}`);

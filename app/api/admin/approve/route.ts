@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { sendInviteEmail } from "@/lib/email/resend";
+import { resolveEmailBranding } from "@/lib/email/identity";
+import { orgBaseUrl } from "@/lib/org-urls";
 import { NextResponse } from "next/server";
-import { siteConfig } from "@/lib/config";
 import crypto from "crypto";
 
 export async function POST(request: Request) {
@@ -62,9 +63,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Send branded invite email via Resend with signup link
-    const signupLink = `${siteConfig.url}/setup-account?token=${signupToken}`;
-    await sendInviteEmail(email, name, signupLink);
+    // The org comes from the row just updated under RLS — the caller's own
+    // org — so the link and branding follow the recipient's org host, not
+    // the deployment's env-pinned platform URL.
+    const orgId = updated[0].org_id;
+    const signupLink = `${await orgBaseUrl(orgId)}/setup-account?token=${signupToken}`;
+    await sendInviteEmail(email, name, signupLink, await resolveEmailBranding(orgId));
 
     return NextResponse.json({ success: true });
   } catch (error) {
