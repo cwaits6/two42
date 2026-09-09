@@ -8,8 +8,8 @@ interface RouteParams {
 }
 
 /**
- * Platform-admin override of an org's daily email cap (Phase 5 PR 8,
- * CWA-72). org_email_limits is platform-operator-owned, not org-admin-owned
+ * Platform-admin override of an org's daily email cap.
+ * org_email_limits is platform-operator-owned, not org-admin-owned
  * — an org that can raise its own cap does not have a cap — so writes come
  * only through this gate, following the /platform write pattern
  * (app/api/platform/organizations/[id]/route.ts): gate, validate the target
@@ -66,7 +66,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     }
 
     // Upsert: the override row may not exist yet (the 500/day default is a
-    // function default, not a seeded row — decision D7).
+    // function default, not a seeded row).
     const { data: updated, error } = await service
       .from("org_email_limits")
       .upsert(

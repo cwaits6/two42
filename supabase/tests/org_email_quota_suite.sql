@@ -1,4 +1,4 @@
--- Per-org email send cap suite (Phase 5 PR 8, CWA-72 / #365).
+-- Per-org email send cap suite.
 --
 -- Pins email_quota_consume() from 20260825000000: the grant matrix (the
 -- caller discrimination IS the grants, mirroring serving_signup_apply), the
@@ -178,7 +178,7 @@ select is(
   public.email_quota_consume(current_setting('quota.org_a')::uuid, 1),
   false,
   'one past the cap is refused');
--- §13 names this case explicitly: a refused reserve must leave sent_count
+-- A refused reserve must leave sent_count
 -- unchanged — the filtered UPDATE not matching is a silent no-op that still
 -- returns without error, so the boolean alone proves nothing.
 select is(

@@ -1,11 +1,11 @@
 /**
- * Per-org daily email quota reserve (Phase 5 PR 8, CWA-72). Wraps
+ * Per-org daily email quota reserve. Wraps
  * email_quota_consume() — a SECURITY DEFINER RPC with service_role-only
  * EXECUTE; see supabase/migrations/20260825000000_org_email_send_caps.sql
  * for the tenant-anchor contract (`orgId` must come from an anchor the
  * caller already validated, never a request header or body field).
  *
- * Fail-closed by contract (spec §11.2): an RPC error is a refusal, never
+ * Fail-closed by contract: an RPC error is a refusal, never
  * "the quota table was unreachable, send anyway" — the cap is a fail-closed
  * control or it is not a control.
  *
@@ -21,8 +21,8 @@ import { createServiceClient } from "@/lib/supabase/server";
  * The platform default daily cap, for display when an org has no
  * org_email_limits override row. The enforced copy lives in
  * email_quota_consume()'s coalesce(_cap, 500) — that SQL default is
- * authoritative; change both together (decision D7: revisit against the
- * Resend plan's actual ceiling as the tenant count grows).
+ * authoritative; change both together. Revisit the default against the
+ * Resend plan's actual ceiling as the tenant count grows.
  */
 export const DEFAULT_DAILY_EMAIL_CAP = 500;
 

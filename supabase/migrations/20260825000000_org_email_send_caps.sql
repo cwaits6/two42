@@ -1,14 +1,13 @@
--- Per-org email send caps (Phase 5 PR 8, CWA-72 / #365). Bounds the blast
+-- Per-org email send caps. Bounds the blast
 -- radius of a bug or an abusive tenant on the shared Resend account and the
--- shared sending reputation — an abuse control, NOT a billing meter (see
--- docs/plans/phase-5-domains-email.md §3, §11).
+-- shared sending reputation — an abuse control, NOT a billing meter.
 --
 -- org_email_usage:  one row per org per UTC day, the durable reserved-send
 --                   counter. Written only through email_quota_consume().
 -- org_email_limits: per-org daily-cap override, platform-operator-owned —
 --                   an org that can raise its own cap does not have a cap.
 --                   The 500/day default lives in email_quota_consume(), not
---                   a seeded row (decision D7).
+--                   a seeded row.
 --
 -- email_quota_consume() is a SECURITY DEFINER writer of org-owned tables, so
 -- per CLAUDE.md it is a tenant boundary of its own: the org checks in its
@@ -52,7 +51,7 @@ alter table public.org_email_limits enable row level security;
 -- no PostgREST caller, which is the intended v1 posture — both tables are
 -- touched by service-role code only (the RPC below and the /platform cap
 -- editor). An org-facing usage display later means adding a permissive
--- SELECT arm, not relaxing this one (spec §11.1).
+-- SELECT arm, not relaxing this one.
 create policy "org isolation" on public.org_email_usage
   as restrictive for all to anon, authenticated
   using      (org_id = (select public.app_request_org_id()))
@@ -76,7 +75,7 @@ revoke all on public.org_email_limits from anon, authenticated;
 -- one statement, so concurrent callers serialize on the row lock and cannot
 -- jointly exceed the cap. sent_count counts RESERVED ATTEMPTS, not confirmed
 -- deliveries — every error the counter can make must be in the conservative
--- direction (spec §11.2).
+-- direction.
 create or replace function public.email_quota_consume(_org_id uuid, _n integer)
 returns boolean
 language plpgsql security definer set search_path = ''
@@ -94,7 +93,7 @@ begin
 
   select l.daily_cap into _cap
   from public.org_email_limits l where l.org_id = _org_id;
-  -- 500/day default (decision D7, resolved 2026-08-16 as a placeholder).
+  -- 500/day default (a placeholder, not a tuned number).
   -- Revisit this default against the Resend plan's actual ceiling as the
   -- tenant count grows — the per-org override in org_email_limits is the
   -- escape hatch in the meantime.
@@ -127,4 +126,4 @@ grant execute on function public.email_quota_consume(uuid, integer)
   to service_role;
 
 comment on function public.email_quota_consume(uuid, integer) is
-  'Atomic per-org daily email quota reserve (Phase 5 PR 8, CWA-72). Tenant anchor: service_role-only EXECUTE — _org_id must come from an anchor the server-side caller already validated (its RLS-scoped profile, an RLS-checked group row, listActiveOrgs()), never trusted from a request. Returns false when the reservation would exceed the org''s daily cap (org_email_limits.daily_cap, default 500).';
+  'Atomic per-org daily email quota reserve. Tenant anchor: service_role-only EXECUTE — _org_id must come from an anchor the server-side caller already validated (its RLS-scoped profile, an RLS-checked group row, listActiveOrgs()), never trusted from a request. Returns false when the reservation would exceed the org''s daily cap (org_email_limits.daily_cap, default 500).';

@@ -171,7 +171,7 @@ export async function notifyLeadersOfCancel(
   }
 
   // Filter to the final sendable set first, then reserve once for its size
-  // against the org's daily cap (CWA-72) — the same "filter, then reserve
+  // against the org's daily cap — the same "filter, then reserve
   // per batch" ordering as app/api/serving/broadcast/route.ts. A refused
   // reservation is a skip, preserving this function's non-throwing contract
   // (reserveEmailQuota itself never throws).

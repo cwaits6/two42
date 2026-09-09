@@ -269,7 +269,7 @@ async function runDaily(
       }>;
 
       // Filter to the final sendable set first, then reserve once per team
-      // batch against the org's daily cap (CWA-72). A cap-hit is a deliberate
+      // batch against the org's daily cap. A cap-hit is a deliberate
       // skip, not an operational failure: it is logged but NOT pushed to
       // itemFailures and does not increment sendFailures, so it never flips
       // the run's HTTP status to 500.
@@ -424,7 +424,7 @@ async function runMonthly(
       }
 
       // Filter to the final sendable set first, then reserve once per team
-      // batch against the org's daily cap (CWA-72). A cap-hit skips this
+      // batch against the org's daily cap. A cap-hit skips this
       // team's send loop only — logged, NOT an itemFailure, so it never
       // flips the run's HTTP status to 500; teamSent stays 0, so the
       // serving_broadcasts row below records what was actually sent.

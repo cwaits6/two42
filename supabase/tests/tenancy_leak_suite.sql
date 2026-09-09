@@ -121,7 +121,7 @@ begin
     values (_org, _tag || '.mail.example.test', _tag || '-resend-id', 'pending', '[]'::jsonb);
   insert into public.org_domains (org_id, domain, status)
     values (_org, _tag || '.domains.example.test', 'pending');
-  -- Send-cap tables (Phase 5 PR 8, CWA-72). Direct inserts as postgres —
+  -- Send-cap tables. Direct inserts as postgres —
   -- both tables are service-role-only (restrictive policy, no permissive
   -- arm), so the fixture writes them the same way the RPC/cap editor do.
   insert into public.org_email_usage (org_id, usage_date, sent_count)
@@ -286,7 +286,7 @@ begin
     if error_states[i] = '42501'
        and tables[i] in ('org_email_usage', 'org_email_limits') then
       -- Service-role-only tables (restrictive policy, ALL privileges
-      -- revoked — org_email_usage / org_email_limits, CWA-72): a privilege
+      -- revoked — org_email_usage / org_email_limits): a privilege
       -- denial is the intended, stronger-than-row-filtering isolation
       -- outcome, not a broken check. Scoped to exactly those tables so a
       -- normal tenant table losing authenticated read access still fails.

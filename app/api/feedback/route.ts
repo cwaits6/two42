@@ -99,7 +99,7 @@ export async function POST(request: Request) {
       if (emails.length === 0) return;
 
       // Reserve the filtered batch against the org's daily cap before
-      // sending (CWA-72). A refusal is a skip, never an error — the
+      // sending. A refusal is a skip, never an error — the
       // feedback row above is the record either way.
       const allowed = await reserveEmailQuota(profile.org_id, emails.length);
       if (!allowed) {

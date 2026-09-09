@@ -1,4 +1,4 @@
-// Unit test for the serving-broadcast cap-hit path (CWA-72). This is the
+// Unit test for the serving-broadcast cap-hit path. This is the
 // only Tier A quota call site where a refusal changes the HTTP contract
 // (429 + a specific error body) instead of silently skipping-and-logging,
 // and the route's own comment states a cap-hit "must not be logged as a

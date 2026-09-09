@@ -1,8 +1,7 @@
-// Unit tests for the platform email-cap override route (CWA-72). This is
-// the one brand-new /platform write in the PR with a genuinely novel,
-// security-relevant guard (the zero-row-write check on the upsert) and no
-// prior coverage — reuses the chainable-stub pattern established by
-// app/api/admin/email-domain/route.test.ts (CWA-70) for
+// Unit tests for the platform email-cap override route. Its
+// security-relevant guard is the zero-row-write check on the upsert.
+// Reuses the chainable-stub pattern established by
+// app/api/admin/email-domain/route.test.ts for
 // `.from().select().eq().maybeSingle()` / `.from().upsert().select()`
 // chains against a mocked service client.
 

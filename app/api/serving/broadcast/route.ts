@@ -177,7 +177,7 @@ export async function POST(request: Request) {
   }
 
   // Reserve the filtered batch against the org's daily cap before the send
-  // loop (CWA-72). Returns before the serving_broadcasts insert below — a
+  // loop. Returns before the serving_broadcasts insert below — a
   // cap-hit broadcast must not be logged as a 0-recipient broadcast row.
   const allowed = await reserveEmailQuota(group.org_id, members.length);
   if (!allowed) {

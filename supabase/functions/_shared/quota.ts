@@ -1,4 +1,4 @@
-// Per-org daily email quota reserve (Phase 5 PR 8, CWA-72). Wraps
+// Per-org daily email quota reserve. Wraps
 // email_quota_consume() — a SECURITY DEFINER RPC with service_role-only
 // EXECUTE (supabase/migrations/20260825000000_org_email_send_caps.sql).
 // Mirrors lib/email/quota.ts's contract in intent (not byte-for-byte in
@@ -6,7 +6,7 @@
 // error, reserve once per batch for the final filtered recipient set before
 // the first send, never throw — a capped or errored reservation is a skip,
 // not an abort of the caller's per-team/per-event loop or of forEachOrg's
-// org loop (the #315/#316 posture; see _shared/orgs.ts).
+// org loop (see _shared/orgs.ts).
 //
 // Deliberately free of any @supabase/supabase-js import so it can be unit
 // tested offline against the structural type below.

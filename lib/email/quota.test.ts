@@ -1,5 +1,5 @@
-// Unit tests for the fail-closed quota reserve contract (Phase 5 PR 8,
-// CWA-72). Stubbed Supabase client — no network, no database. The edge
+// Unit tests for the fail-closed quota reserve contract. Stubbed
+// Supabase client — no network, no database. The edge
 // mirror (supabase/functions/_shared/quota.ts) carries the same cases in
 // supabase/functions/tests/quota_test.ts; a contract change lands on both.
 

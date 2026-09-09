@@ -183,7 +183,7 @@ async function runForOrg(
       return true;
     });
 
-    // Reserve once per event batch against the org's daily cap (CWA-72),
+    // Reserve once per event batch against the org's daily cap,
     // for the final filtered set only. A cap-hit is a deliberate skip of
     // this event's batch: logged, not a sendFailure, so it does not change
     // the 200/500 contract — and reserveEmailQuota never throws, so it adds

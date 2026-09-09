@@ -70,7 +70,7 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
     );
   }
 
-  // Email cap + today's usage (Phase 5 PR 8, CWA-72). Both tables are
+  // Email cap + today's usage. Both tables are
   // service-role-only (no permissive policy), so these reads must run here;
   // .eq("org_id", org.id) is their tenant boundary on this BYPASSRLS client
   // — org.id, not the raw route param, so the anchor is the validated row.

@@ -1,4 +1,4 @@
-// Unit tests for the edge-side quota reserve (Phase 5 PR 8, CWA-72). Pure
+// Unit tests for the edge-side quota reserve. Pure
 // units: no network, no database — the fakes below satisfy QuotaClient
 // structurally. Mirrors lib/email/quota.test.ts's cases; a contract change
 // lands on both sides.
