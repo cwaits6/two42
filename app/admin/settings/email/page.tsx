@@ -71,6 +71,30 @@ function formatTimestamp(value: string | null): string {
   return new Date(value).toLocaleString();
 }
 
+export type EmailDomainCardState =
+  | "load-failed"
+  | "not-enabled"
+  | "claim-form"
+  | "claimed";
+
+/**
+ * Which of the four mutually exclusive cards to render. A row always wins
+ * (the claimed-domain card), regardless of `enabled` — a platform operator
+ * turning the flag off after a claim must not hide an already-claimed
+ * domain from its own admin. Absent a row, `enabled === null` means the
+ * initial load itself failed (fail closed: never show the claim form
+ * without confirmation the flag is actually on).
+ */
+export function selectEmailDomainCardState(
+  row: EmailDomainRow | null,
+  enabled: boolean | null,
+): EmailDomainCardState {
+  if (row) return "claimed";
+  if (enabled === null) return "load-failed";
+  if (!enabled) return "not-enabled";
+  return "claim-form";
+}
+
 type DomainApiResponse = {
   error?: string;
   data?: EmailDomainRow | null;
@@ -239,6 +263,7 @@ export default function EmailDomainSettingsPage() {
   }
 
   const records = row ? toDnsRecords(row.dns_records) : [];
+  const cardState = selectEmailDomainCardState(row, enabled);
 
   return (
     <PageContainer size="narrow">
@@ -249,7 +274,7 @@ export default function EmailDomainSettingsPage() {
         backLabel="Back to Settings"
       />
 
-      {!row && enabled === null ? (
+      {cardState === "load-failed" ? (
         <Card>
           <CardContent className="pt-6">
             <p className="text-lg text-muted-foreground">
@@ -258,7 +283,7 @@ export default function EmailDomainSettingsPage() {
             </p>
           </CardContent>
         </Card>
-      ) : !row && !enabled ? (
+      ) : cardState === "not-enabled" ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-2xl text-brand-primary">
@@ -272,7 +297,7 @@ export default function EmailDomainSettingsPage() {
             </p>
           </CardContent>
         </Card>
-      ) : !row ? (
+      ) : cardState === "claim-form" ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-2xl text-brand-primary">
@@ -312,7 +337,7 @@ export default function EmailDomainSettingsPage() {
             </form>
           </CardContent>
         </Card>
-      ) : (
+      ) : row ? (
         <Card>
           <CardHeader>
             <CardTitle className="flex flex-wrap items-center gap-3 text-2xl text-brand-primary">
@@ -435,7 +460,7 @@ export default function EmailDomainSettingsPage() {
             </div>
           </CardContent>
         </Card>
-      )}
+      ) : null}
     </PageContainer>
   );
 }

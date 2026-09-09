@@ -6,11 +6,15 @@
 // only in prose.
 
 import { describe, expect, it } from "vitest";
+import type { Tables } from "@/lib/supabase/database.types";
 import {
+  selectEmailDomainCardState,
   statusLabel,
   statusVariant,
   toDnsRecords,
 } from "@/app/admin/settings/email/page";
+
+type EmailDomainRow = Tables<"org_email_domains">;
 
 describe("toDnsRecords", () => {
   it("passes through well-formed records", () => {
@@ -88,5 +92,26 @@ describe("statusLabel", () => {
 
   it("leaves a status with no underscores unchanged", () => {
     expect(statusLabel("verified")).toBe("verified");
+  });
+});
+
+describe("selectEmailDomainCardState", () => {
+  it("shows the load-failure card when enabled is unknown and there's no row", () => {
+    expect(selectEmailDomainCardState(null, null)).toBe("load-failed");
+  });
+
+  it("shows the contact-support card when disabled and unclaimed", () => {
+    expect(selectEmailDomainCardState(null, false)).toBe("not-enabled");
+  });
+
+  it("shows the claim form when enabled and unclaimed", () => {
+    expect(selectEmailDomainCardState(null, true)).toBe("claim-form");
+  });
+
+  it("shows the claimed-domain card whenever a row exists, regardless of enabled", () => {
+    const row = {} as EmailDomainRow;
+    expect(selectEmailDomainCardState(row, false)).toBe("claimed");
+    expect(selectEmailDomainCardState(row, true)).toBe("claimed");
+    expect(selectEmailDomainCardState(row, null)).toBe("claimed");
   });
 });

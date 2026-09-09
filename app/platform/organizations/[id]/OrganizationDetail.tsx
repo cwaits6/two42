@@ -73,7 +73,7 @@ interface OrganizationDetailProps {
 
 // Explicit locale and time zone — a bare toLocaleString() renders in the
 // server's zone during SSR and the browser's on hydration.
-function formatUtcTimestamp(value: string): string {
+export function formatUtcTimestamp(value: string): string {
   return new Date(value).toLocaleString("en-US", {
     month: "long",
     day: "numeric",

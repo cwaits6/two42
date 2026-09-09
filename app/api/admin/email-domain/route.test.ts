@@ -54,7 +54,11 @@ interface ServiceClientOptions {
   /** The platform-wide head count of claimed domains. Defaults to 0. */
   countResult?: { count: number | null; error: unknown };
   insertResult?: { data: { id: string } | null; error: unknown };
-  updateResult?: { data: unknown; error: unknown };
+  /**
+   * count defaults to 1 (a matched row) when omitted, so existing fixtures
+   * that don't care about affected-row count keep behaving as "matched".
+   */
+  updateResult?: { data: unknown; error: unknown; count?: number | null };
   /**
    * Reject the FIRST update only (the post-create write that records
    * Resend's id), so a later cleanup_pending write in the same request can
@@ -155,7 +159,7 @@ function makeServiceClient(opts: ServiceClientOptions = {}) {
           }
           return chain(
             calls.updateEq,
-            opts.updateResult ?? { data: null, error: null },
+            opts.updateResult ?? { data: null, error: null, count: 1 },
           );
         },
       };
@@ -296,6 +300,25 @@ describe("POST /api/admin/email-domain — gates", () => {
     expect(domainsRemove).not.toHaveBeenCalled();
   });
 
+  it("409s for the org's own stuck cleanup even when the platform is separately at cap", async () => {
+    process.env.ORG_EMAIL_DOMAIN_CAP = "3";
+    const { client, calls } = makeServiceClient({
+      existingResult: {
+        data: { id: "row-0", status: "cleanup_pending", resend_domain_id: "rd-0" },
+        error: null,
+      },
+      countResult: { count: 3, error: null },
+    });
+    createServiceClient.mockResolvedValue(client);
+
+    const res = await POST(claimRequest());
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/still completing/i);
+    expect(calls.insertPayload).toBeUndefined();
+    expect(domainsCreate).not.toHaveBeenCalled();
+  });
+
   it("409s on a duplicate claim without touching Resend", async () => {
     const { client, calls } = makeServiceClient({
       existingResult: {
@@ -425,6 +448,28 @@ describe("POST /api/admin/email-domain — claim and rollback", () => {
       ["org_id", "org-1"],
     ]);
     expect(console.error).toHaveBeenCalled();
+  });
+
+  it("logs distinctly when the cleanup_pending marker update affects zero rows (row raced away by a concurrent cleanup)", async () => {
+    const { client } = makeServiceClient({
+      updateResult: { data: null, error: null, count: 0 },
+    });
+    createServiceClient.mockResolvedValue(client);
+    domainsCreate.mockResolvedValue(resendCreated);
+    domainsRemove.mockResolvedValue({
+      error: { name: "application_error", message: "try later" },
+    });
+
+    const res = await POST(claimRequest());
+
+    expect(res.status).toBe(500);
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringMatching(/cleanup_pending/i),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it("treats a not_found from Resend as already cleaned up and rolls the row back", async () => {

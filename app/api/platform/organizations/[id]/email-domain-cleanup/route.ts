@@ -63,9 +63,12 @@ export async function POST(_request: Request, { params }: RouteParams) {
     });
     if (!cleanedUp) {
       // Keep the row; bump the failure time so the card shows this attempt.
-      const { error: markError } = await service
+      const { error: markError, count: markCount } = await service
         .from("org_email_domains")
-        .update({ cleanup_failed_at: new Date().toISOString() })
+        .update(
+          { cleanup_failed_at: new Date().toISOString() },
+          { count: "exact" }
+        )
         .eq("id", row.id)
         .eq("org_id", org.id);
       if (markError) {
@@ -74,6 +77,15 @@ export async function POST(_request: Request, { params }: RouteParams) {
           org.id,
           row.id,
           markError
+        );
+      } else if (!markCount) {
+        // Zero-row writes report success silently — the row disappeared
+        // (e.g. the org admin's own DELETE finished it) between the select
+        // above and this update. Not an error, just worth a log line.
+        console.error(
+          "Email domain cleanup retry: attempt-timestamp write matched no row — likely raced with a concurrent cleanup (org=%s, id=%s):",
+          org.id,
+          row.id
         );
       }
       return NextResponse.json(

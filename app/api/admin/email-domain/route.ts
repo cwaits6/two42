@@ -12,13 +12,16 @@ import { removeResendDomain } from "@/lib/email/resendDomains";
  *          org (a platform-operator flag the admin's own client has no SELECT
  *          grant on, so it is read server-side) plus the org's row, if any.
  *   POST   claim a domain. Gated first on organizations.custom_email_domain_
- *          enabled and on a platform-wide cap on claimed domains (Resend's
- *          account tier caps total domains regardless of tenant), then:
- *          insert the row, create it in Resend, persist Resend's id / status
- *          / DNS records. Service-role for the write of the server-set-only
- *          columns (the admin's own client has no UPDATE grant on them); org
- *          anchored on the caller's own RLS-scoped profile — never a header,
- *          never a body field.
+ *          enabled, then on whether the org already holds a row (409 —
+ *          worded specifically for a stuck cleanup_pending row), then on a
+ *          platform-wide cap on claimed domains (Resend's account tier caps
+ *          total domains regardless of tenant; checked last so a stuck-
+ *          cleanup admin is told to retry, not that the platform is full).
+ *          Only then: insert the row, create it in Resend, persist Resend's
+ *          id / status / DNS records. Service-role for the write of the
+ *          server-set-only columns (the admin's own client has no UPDATE
+ *          grant on them); org anchored on the caller's own RLS-scoped
+ *          profile — never a header, never a body field.
  *   DELETE remove the claim. Removes the Resend domain first and deletes the
  *          row only once that succeeds; when the provider-side removal fails
  *          the row is kept as status = 'cleanup_pending' (resend_domain_id
@@ -61,8 +64,9 @@ function gateError(status: 401 | 403) {
 }
 
 // Deletes the just-inserted row so the unique-per-org index doesn't block a
-// retry. Shared by every failure branch below (Resend create failure,
-// failed follow-up update, and the catch-all) — each supplies its own
+// retry. Called directly on a Resend create() failure (nothing else to
+// clean up), and via finalizeFailedClaim() on the other failure branches
+// when that Resend-side cleanup succeeds. Each caller supplies its own
 // `context` so the log line still says which branch rolled back.
 async function rollbackInsert(
   service: ServiceClient,
@@ -87,9 +91,10 @@ async function rollbackInsert(
 }
 
 // Keeps a row whose Resend cleanup failed, marked so the stuck state is
-// visible and retryable. resend_domain_id is written explicitly on the claim
-// path because the row may never have recorded it (the write that was
-// supposed to is exactly what failed). Never throws: every caller is already
+// visible and retryable. Always writes resend_domain_id explicitly (even
+// when the caller already knows it, as DELETE does) because on the claim
+// path the row may never have recorded it yet — the write that was
+// supposed to is exactly what failed. Never throws: every caller is already
 // on a failure path and must still return its own error response.
 async function markCleanupPending(
   service: ServiceClient,
@@ -99,13 +104,16 @@ async function markCleanupPending(
   context: string,
 ) {
   try {
-    const { error } = await service
+    const { error, count } = await service
       .from("org_email_domains")
-      .update({
-        resend_domain_id: resendDomainId,
-        status: CLEANUP_PENDING,
-        cleanup_failed_at: new Date().toISOString(),
-      })
+      .update(
+        {
+          resend_domain_id: resendDomainId,
+          status: CLEANUP_PENDING,
+          cleanup_failed_at: new Date().toISOString(),
+        },
+        { count: "exact" },
+      )
       .eq("id", id)
       .eq("org_id", orgId);
     if (error) {
@@ -116,6 +124,19 @@ async function markCleanupPending(
         id,
         resendDomainId,
         error,
+      );
+    } else if (!count) {
+      // Supabase/PostgREST reports error: null for an UPDATE...WHERE that
+      // matches zero rows, indistinguishable from success unless the
+      // affected count is checked. Most likely a concurrent request (a
+      // double-submitted Remove, or a racing platform retry) already
+      // resolved this row.
+      console.error(
+        "email-domain %s: cleanup_pending write matched no row — likely raced with a concurrent cleanup (org=%s, id=%s, resend_domain_id=%s)",
+        context,
+        orgId,
+        id,
+        resendDomainId,
       );
     }
   } catch (err) {
@@ -353,11 +374,18 @@ export async function POST(request: Request) {
       if (insertError?.code === "23505") {
         // Lost the race with a concurrent claim (or a cleanup that landed
         // between the check above and this insert): report which.
-        const { data: raced } = await service
+        const { data: raced, error: racedError } = await service
           .from("org_email_domains")
           .select("status")
           .eq("org_id", orgId)
           .maybeSingle();
+        if (racedError) {
+          console.error(
+            "email-domain create: post-conflict status lookup failed (org=%s):",
+            orgId,
+            racedError,
+          );
+        }
         return conflictResponse(raced?.status);
       }
       console.error(

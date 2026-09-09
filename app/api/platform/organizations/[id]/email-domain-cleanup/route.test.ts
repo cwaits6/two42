@@ -38,6 +38,8 @@ interface ServiceClientOptions {
     data: { id: string; resend_domain_id: string | null; status: string } | null;
     error: unknown;
   };
+  /** count defaults to 1 (a matched row) when omitted. */
+  updateResult?: { error: unknown; count?: number | null };
   deleteResult?: { error: unknown; count?: number | null };
 }
 
@@ -91,7 +93,10 @@ function makeServiceClient(opts: ServiceClientOptions = {}) {
           },
           update(payload: unknown) {
             calls.updatePayload = payload;
-            return chain(calls.updateEq, { error: null });
+            return chain(
+              calls.updateEq,
+              opts.updateResult ?? { error: null, count: 1 },
+            );
           },
           delete() {
             calls.deleteCount += 1;
@@ -232,6 +237,25 @@ describe("POST /api/platform/organizations/[id]/email-domain-cleanup", () => {
       ["id", "row-1"],
       ["org_id", "org-1"],
     ]);
+  });
+
+  it("logs distinctly when the attempt-timestamp update affects zero rows (row raced away by a concurrent cleanup)", async () => {
+    const { client } = makeServiceClient({
+      updateResult: { error: null, count: 0 },
+    });
+    createServiceClient.mockResolvedValue(client);
+    domainsRemove.mockResolvedValue({
+      error: { name: "application_error", message: "try later" },
+    });
+
+    const res = await POST(request(), routeParams());
+
+    expect(res.status).toBe(502);
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringMatching(/matched no row/i),
+      "org-1",
+      "row-1",
+    );
   });
 
   it("keeps the row and 502s when the Resend removal throws", async () => {
