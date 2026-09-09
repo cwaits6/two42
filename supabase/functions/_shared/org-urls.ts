@@ -43,7 +43,8 @@ export function computeOrgOrigin(
       return `https://${attached.domain}`;
     }
     console.error(
-      "orgBaseUrl: verified+attached domain failed ORG_DOMAIN_SHAPE, falling back:",
+      "orgBaseUrl: verified+attached domain failed ORG_DOMAIN_SHAPE for org %s, falling back:",
+      slug,
       attached.domain,
     );
   }

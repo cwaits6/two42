@@ -68,7 +68,22 @@ export async function POST(request: Request) {
     // the deployment's env-pinned platform URL.
     const orgId = updated[0].org_id;
     const signupLink = `${await orgBaseUrl(orgId)}/setup-account?token=${signupToken}`;
-    await sendInviteEmail(email, name, signupLink, await resolveEmailBranding(orgId));
+    try {
+      await sendInviteEmail(email, name, signupLink, await resolveEmailBranding(orgId));
+    } catch (sendError) {
+      // Roll the request back to pending so a retry doesn't 404 — mirrors
+      // /api/platform/organizations/[id]/invite-owner's rollback-on-send-failure.
+      await supabase
+        .from("access_requests")
+        .update({ status: "pending", signup_token: null, token_expires_at: null })
+        .eq("email", email)
+        .eq("signup_token", signupToken);
+      console.error("Invite email send failed; approval rolled back:", sendError);
+      return NextResponse.json(
+        { error: "Failed to send invite email" },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

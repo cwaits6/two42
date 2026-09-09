@@ -98,6 +98,7 @@ describe("computeOrgOrigin", () => {
     }
     expect(console.error).toHaveBeenCalledWith(
       expect.stringContaining("failed ORG_DOMAIN_SHAPE"),
+      "grace",
       expect.anything(),
     );
   });
