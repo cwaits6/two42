@@ -121,6 +121,13 @@ begin
     values (_org, _tag || '.mail.example.test', _tag || '-resend-id', 'pending', '[]'::jsonb);
   insert into public.org_domains (org_id, domain, status)
     values (_org, _tag || '.domains.example.test', 'pending');
+  -- Send-cap tables. Direct inserts as postgres —
+  -- both tables are service-role-only (restrictive policy, no permissive
+  -- arm), so the fixture writes them the same way the RPC/cap editor do.
+  insert into public.org_email_usage (org_id, usage_date, sent_count)
+    values (_org, (now() at time zone 'utc')::date, 3);
+  insert into public.org_email_limits (org_id, daily_cap)
+    values (_org, 250);
 end;
 $$;
 
@@ -206,6 +213,7 @@ declare
   own_counts bigint[] := '{}';
   cross_counts bigint[] := '{}';
   errors text[] := '{}';
+  error_states text[] := '{}';
   views text[] := array['profiles_directory', 'families_directory', 'families_directory_full', 'prayer_wall'];
   view_cross bigint[] := '{}';
   view_errors text[] := '{}';
@@ -235,10 +243,12 @@ begin
       own_counts := own_counts || own_c;
       cross_counts := cross_counts || cross_c;
       errors := errors || null::text;
+      error_states := error_states || null::text;
     exception when others then
       own_counts := own_counts || null::bigint;
       cross_counts := cross_counts || null::bigint;
       errors := errors || sqlerrm;
+      error_states := error_states || sqlstate;
     end;
   end loop;
 
@@ -273,7 +283,16 @@ begin
   reset role;
 
   for i in 1 .. array_length(tables, 1) loop
-    if errors[i] is not null then
+    if error_states[i] = '42501'
+       and tables[i] in ('org_email_usage', 'org_email_limits') then
+      -- Service-role-only tables (restrictive policy, ALL privileges
+      -- revoked — org_email_usage / org_email_limits): a privilege
+      -- denial is the intended, stronger-than-row-filtering isolation
+      -- outcome, not a broken check. Scoped to exactly those tables so a
+      -- normal tenant table losing authenticated read access still fails.
+      insert into tenancy_leak_results
+        select ok(true, format('org A member cannot read %s at all (42501 — service-role-only table)', tables[i]));
+    elsif errors[i] is not null then
       insert into tenancy_leak_results
         select fail(format('org A member check errored on %s: %s', tables[i], errors[i]));
     else

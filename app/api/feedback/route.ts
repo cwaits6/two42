@@ -1,5 +1,6 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { sendFeedbackEmail } from "@/lib/email/resend";
+import { reserveEmailQuota } from "@/lib/email/quota";
 import { displayName } from "@/lib/names";
 import { NextResponse, after } from "next/server";
 
@@ -95,15 +96,27 @@ export async function POST(request: Request) {
       const emails = (admins ?? [])
         .map((a) => a.email)
         .filter((e): e is string => Boolean(e));
-      if (emails.length > 0) {
-        await sendFeedbackEmail(
-          emails,
-          displayName(profile),
-          user.email ?? null,
-          type,
-          message,
+      if (emails.length === 0) return;
+
+      // Reserve the filtered batch against the org's daily cap before
+      // sending. A refusal is a skip, never an error — the
+      // feedback row above is the record either way.
+      const allowed = await reserveEmailQuota(profile.org_id, emails.length);
+      if (!allowed) {
+        console.warn(
+          "Feedback admin notification skipped — org %s hit its daily email cap",
+          profile.org_id,
         );
+        return;
       }
+
+      await sendFeedbackEmail(
+        emails,
+        displayName(profile),
+        user.email ?? null,
+        type,
+        message,
+      );
     } catch (error) {
       console.error("Failed to email feedback to admins:", error);
     }

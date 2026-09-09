@@ -15,6 +15,7 @@ import {
   sendServingConfirmationEmail,
 } from "@/lib/email/serving";
 import { resolveEmailBranding } from "@/lib/email/identity";
+import { reserveEmailQuota } from "@/lib/email/quota";
 
 export interface NamedProfile {
   id: string;
@@ -169,11 +170,35 @@ export async function notifyLeadersOfCancel(
     );
   }
 
-  for (const row of leaders ?? []) {
-    const leader = row.profiles as unknown as
-      | (NamedProfile & { email: string | null })
-      | null;
-    if (!leader?.email || leader.id === opts.excludeProfileId) continue;
+  // Filter to the final sendable set first, then reserve once for its size
+  // against the org's daily cap — the same "filter, then reserve
+  // per batch" ordering as app/api/serving/broadcast/route.ts. A refused
+  // reservation is a skip, preserving this function's non-throwing contract
+  // (reserveEmailQuota itself never throws).
+  const recipients = (leaders ?? [])
+    .map(
+      (row) =>
+        row.profiles as unknown as
+          | (NamedProfile & { email: string | null })
+          | null,
+    )
+    .filter(
+      (p): p is NamedProfile & { email: string } =>
+        !!p?.email && p.id !== opts.excludeProfileId,
+    );
+
+  if (recipients.length === 0) return;
+
+  const allowed = await reserveEmailQuota(opts.orgId, recipients.length);
+  if (!allowed) {
+    console.warn(
+      "Serving cancel notice skipped — org %s hit its daily email cap",
+      opts.orgId,
+    );
+    return;
+  }
+
+  for (const leader of recipients) {
     try {
       await sendServingCancelNoticeEmail({
         to: leader.email,

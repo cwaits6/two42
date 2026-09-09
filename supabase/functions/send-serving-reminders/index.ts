@@ -27,6 +27,7 @@ import {
 import { escapeHtml } from "../_shared/html.ts";
 import { nextSunday, upcomingSundays } from "../_shared/sundays.ts";
 import { resolveServiceKey } from "../_shared/service-key.ts";
+import { reserveEmailQuota } from "../_shared/quota.ts";
 import {
   forEachOrg,
   listActiveOrgs,
@@ -267,8 +268,28 @@ async function runDaily(
         profiles: { id: string; first_name: string | null; preferred_name: string | null; email: string | null } | null;
       }>;
 
-      for (const { profiles: p } of attendees) {
-        if (!p?.email) continue;
+      // Filter to the final sendable set first, then reserve once per team
+      // batch against the org's daily cap. A cap-hit is a deliberate
+      // skip, not an operational failure: it is logged but NOT pushed to
+      // itemFailures and does not increment sendFailures, so it never flips
+      // the run's HTTP status to 500.
+      const recipients = attendees
+        .map((a) => a.profiles)
+        .filter((p): p is NonNullable<typeof p> & { email: string } => !!p?.email);
+      if (recipients.length === 0) continue;
+
+      const allowed = await reserveEmailQuota(supabase, orgId, recipients.length);
+      if (!allowed) {
+        console.warn(
+          "[org %s] team %s: daily email cap reached, skipping %d reminder(s)",
+          orgId,
+          group_id,
+          recipients.length,
+        );
+        continue;
+      }
+
+      for (const p of recipients) {
         const name = escapeHtml(p.preferred_name || p.first_name || "Friend");
         const safeTeam = escapeHtml(teamName);
         const dateLabel = escapeHtml(formatDate(sunday));
@@ -402,16 +423,41 @@ async function runMonthly(
         throw new Error(`profile_groups query failed: ${membersError.message}`);
       }
 
-      for (const row of members ?? []) {
-        const m = row.profiles as unknown as {
-          id: string;
-          first_name: string | null;
-          preferred_name: string | null;
-          email: string | null;
-          email_announcements: boolean;
-        } | null;
-        if (!m?.email || m.email_announcements === false) continue;
+      // Filter to the final sendable set first, then reserve once per team
+      // batch against the org's daily cap. A cap-hit skips this
+      // team's send loop only — logged, NOT an itemFailure, so it never
+      // flips the run's HTTP status to 500; teamSent stays 0, so the
+      // serving_broadcasts row below records what was actually sent.
+      const recipients = (members ?? [])
+        .map(
+          (row) =>
+            row.profiles as unknown as {
+              id: string;
+              first_name: string | null;
+              preferred_name: string | null;
+              email: string | null;
+              email_announcements: boolean;
+            } | null,
+        )
+        .filter(
+          (m): m is NonNullable<typeof m> & { email: string } =>
+            !!m?.email && m.email_announcements !== false,
+        );
 
+      // reserveEmailQuota returns true without an RPC round trip for an
+      // empty batch, so no length guard is needed here.
+      const allowed = await reserveEmailQuota(supabase, orgId, recipients.length);
+      if (!allowed) {
+        console.warn(
+          "[org %s] team %s: daily email cap reached, skipping %d broadcast email(s)",
+          orgId,
+          group_id,
+          recipients.length,
+        );
+      }
+      const sendList = allowed ? recipients : [];
+
+      for (const m of sendList) {
         const name = escapeHtml(m.preferred_name || m.first_name || "Friend");
         const safeTeam = escapeHtml(teamName);
 

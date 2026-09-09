@@ -355,6 +355,21 @@ platform seam).
   the source mentions `org_id`. Grants and org checks are pinned by
   `supabase/tests/serving_signup_rpc_suite.sql` and the inventory records
   the surface ([service-role-inventory.md](service-role-inventory.md)).
+- The per-org daily email send cap is enforced by a `SECURITY DEFINER`
+  writer, `email_quota_consume(_org_id, _n)`
+  (`20260825000000_org_email_send_caps.sql`, CWA-72 / #365), so the atomic
+  reserve-and-check can happen in one `INSERT ... ON CONFLICT ... DO UPDATE
+  ... WHERE` statement rather than racing a separate count-then-send.
+  Unlike `serving_signup_apply`, there is no row to resolve `_org_id`
+  against — `_org_id` is a bare parameter, and EXECUTE is granted to
+  `service_role` only (no `anon`/`authenticated` grant), so the only
+  callers are server-side paths that already hold a validated `orgId` from
+  an anchor they verified themselves — never trusted from the parameter
+  alone. `.rpc()` calls are outside `check-service-role-org-scope.mjs`'s
+  reach, so a new caller here is review-enforced only. Grants and
+  cap-boundary behavior are pinned by
+  `supabase/tests/org_email_quota_suite.sql`; the inventory records the
+  call sites ([service-role-inventory.md](service-role-inventory.md)).
 - An authenticated member of org A visiting org B's public page resolves to
   org A and sees nothing (fail-closed, not wrong-tenant). Phase 5 PR 3
   (CWA-67 / #360) closes this for host-addressed routes: session cookies
