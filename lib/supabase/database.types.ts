@@ -2252,6 +2252,12 @@ export type Database = {
           status: string
           verified_at: string | null
         }
+        SetofOptions: {
+          from: "*"
+          to: "org_email_domains"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       provision_organization: {
         Args: { _name: string; _owner_email: string; _slug: string }
