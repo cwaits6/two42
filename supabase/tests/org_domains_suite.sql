@@ -17,7 +17,16 @@
 --     verified/removing domains, the partial per-org (org_id, domain) unique, and
 --     the domain_shape CHECK;
 --   * app_org_slug_for_host(): resolves only verified domains of active
---     orgs, NULL (fail-closed) for everything else, with no normalization.
+--     orgs, NULL (fail-closed) for everything else, with no normalization;
+--   * the attachment worker's SQL (added with the admin UI / worker PR):
+--     the single-flight lease claim (fresh / contended / expired), the
+--     fenced attached_at stamp (wrong token, expired lease, wrong domain,
+--     already attached), the remove route's `removing` transition (keeps
+--     attached_at, clears the lease, idempotent), the detach lease and the
+--     tombstone hard-delete predicate, the /platform "clear expired claim"
+--     predicate, and the cross-org reclaim block until the tombstone is
+--     gone — every write asserted by ROW COUNT, since a filtered write is
+--     a silent success in this codebase.
 --
 -- Run locally (rollback-safe, never mutates the shared local stack):
 --
@@ -515,6 +524,444 @@ select ok(has_function_privilege('authenticated', 'public.app_org_slug_for_host(
   'authenticated may execute app_org_slug_for_host()');
 select ok(has_function_privilege('service_role', 'public.app_org_slug_for_host(text)', 'execute'),
   'service_role may execute app_org_slug_for_host()');
+
+-- ── Attachment worker SQL: lease, fenced stamp, remove/detach (as postgres) ──
+-- The worker runs with the service key (BYPASSRLS), so the statements below
+-- run as postgres: the predicates ARE the boundary, and each one is asserted
+-- by the row count it affects, never by the absence of an error. These are
+-- the exact statements supabase/functions/_shared/domain-lease.ts issues
+-- through PostgREST (pinned there by tests/domain_lease_test.ts); pgTAP has
+-- no Deno runtime, so the SQL is run directly.
+do $$
+declare
+  org_a uuid := current_setting('od.org_a')::uuid;
+  org_b uuid := current_setting('od.org_b')::uuid;
+  row_id uuid;
+  n bigint;
+  tok1 text;
+  tok2 text;
+  tok3 text;
+  kept timestamptz;
+begin
+  insert into public.org_domains (org_id, domain, status, verified_at)
+    values (org_a, 'lease.org-a.example.test', 'verified', now())
+    returning id into row_id;
+  perform set_config('od.lease_row', row_id::text, true);
+
+  -- Fresh claim: free lease, verified, unattached → one row, a token back.
+  with c as (
+    update public.org_domains
+       set attach_claimed_at = now(), attach_claim_token = gen_random_uuid()
+     where id = row_id and org_id = org_a
+       and status = 'verified' and attached_at is null
+       and (attach_claimed_at is null or attach_claimed_at < now() - interval '10 minutes')
+     returning attach_claim_token
+  )
+  select count(*), max(attach_claim_token::text) into n, tok1 from c;
+  perform set_config('od.claim_fresh', n::text, true);
+  perform set_config('od.claim_fresh_token', coalesce(tok1, '<null>'), true);
+
+  -- Contended: the lease is live → zero rows, token unchanged.
+  with c as (
+    update public.org_domains
+       set attach_claimed_at = now(), attach_claim_token = gen_random_uuid()
+     where id = row_id and org_id = org_a
+       and status = 'verified' and attached_at is null
+       and (attach_claimed_at is null or attach_claimed_at < now() - interval '10 minutes')
+     returning attach_claim_token
+  )
+  select count(*) into n from c;
+  perform set_config('od.claim_contended', n::text, true);
+  select attach_claim_token::text into tok2 from public.org_domains where id = row_id;
+  perform set_config('od.claim_contended_same_token', (tok2 = tok1)::text, true);
+
+  -- Cross-org: org B's id on org A's row → zero rows (the org_id predicate).
+  with c as (
+    update public.org_domains
+       set attach_claimed_at = now() - interval '11 minutes', attach_claim_token = gen_random_uuid()
+     where id = row_id and org_id = org_b
+     returning id
+  )
+  select count(*) into n from c;
+  perform set_config('od.claim_cross_org', n::text, true);
+
+  -- Expired: age the lease past the window → a fresh claim succeeds with a NEW token.
+  update public.org_domains set attach_claimed_at = now() - interval '11 minutes' where id = row_id;
+  with c as (
+    update public.org_domains
+       set attach_claimed_at = now(), attach_claim_token = gen_random_uuid()
+     where id = row_id and org_id = org_a
+       and status = 'verified' and attached_at is null
+       and (attach_claimed_at is null or attach_claimed_at < now() - interval '10 minutes')
+     returning attach_claim_token
+  )
+  select count(*), max(attach_claim_token::text) into n, tok2 from c;
+  perform set_config('od.claim_expired', n::text, true);
+  perform set_config('od.claim_expired_new_token', (tok2 is distinct from tok1)::text, true);
+
+  -- Fenced stamp with the SUPERSEDED token (tok1) → zero rows.
+  with st as (
+    update public.org_domains set attached_at = now()
+     where id = row_id and org_id = org_a
+       and attach_claim_token = tok1::uuid and domain = 'lease.org-a.example.test'
+       and status = 'verified' and attached_at is null
+       and attach_claimed_at > clock_timestamp() - interval '10 minutes'
+     returning id
+  )
+  select count(*) into n from st;
+  perform set_config('od.stamp_wrong_token', n::text, true);
+
+  -- Right token but the lease has EXPIRED with no replacement → zero rows.
+  update public.org_domains set attach_claimed_at = now() - interval '11 minutes' where id = row_id;
+  with st as (
+    update public.org_domains set attached_at = now()
+     where id = row_id and org_id = org_a
+       and attach_claim_token = tok2::uuid and domain = 'lease.org-a.example.test'
+       and status = 'verified' and attached_at is null
+       and attach_claimed_at > clock_timestamp() - interval '10 minutes'
+     returning id
+  )
+  select count(*) into n from st;
+  perform set_config('od.stamp_expired_lease', n::text, true);
+  update public.org_domains set attach_claimed_at = now() where id = row_id;
+
+  -- Right token, live lease, WRONG domain → zero rows.
+  with st as (
+    update public.org_domains set attached_at = now()
+     where id = row_id and org_id = org_a
+       and attach_claim_token = tok2::uuid and domain = 'other.org-a.example.test'
+       and status = 'verified' and attached_at is null
+       and attach_claimed_at > clock_timestamp() - interval '10 minutes'
+     returning id
+  )
+  select count(*) into n from st;
+  perform set_config('od.stamp_wrong_domain', n::text, true);
+  perform set_config('od.stamp_still_unattached',
+    (select (attached_at is null)::text from public.org_domains where id = row_id), true);
+
+  -- Right token, live lease, right domain → exactly one row, attached_at set.
+  with st as (
+    update public.org_domains set attached_at = now()
+     where id = row_id and org_id = org_a
+       and attach_claim_token = tok2::uuid and domain = 'lease.org-a.example.test'
+       and status = 'verified' and attached_at is null
+       and attach_claimed_at > clock_timestamp() - interval '10 minutes'
+     returning id
+  )
+  select count(*) into n from st;
+  perform set_config('od.stamp_ok', n::text, true);
+  perform set_config('od.stamp_ok_attached',
+    (select (attached_at is not null)::text from public.org_domains where id = row_id), true);
+
+  -- A second stamp on the now-attached row → zero rows (attached_at is null).
+  with st as (
+    update public.org_domains set attached_at = now()
+     where id = row_id and org_id = org_a
+       and attach_claim_token = tok2::uuid and domain = 'lease.org-a.example.test'
+       and status = 'verified' and attached_at is null
+       and attach_claimed_at > clock_timestamp() - interval '10 minutes'
+     returning id
+  )
+  select count(*) into n from st;
+  perform set_config('od.stamp_twice', n::text, true);
+
+  -- An attach claim on an attached row → zero rows, even with an expired lease.
+  update public.org_domains set attach_claimed_at = now() - interval '11 minutes' where id = row_id;
+  with c as (
+    update public.org_domains
+       set attach_claimed_at = now(), attach_claim_token = gen_random_uuid()
+     where id = row_id and org_id = org_a
+       and status = 'verified' and attached_at is null
+       and (attach_claimed_at is null or attach_claimed_at < now() - interval '10 minutes')
+     returning attach_claim_token
+  )
+  select count(*) into n from c;
+  perform set_config('od.claim_attached', n::text, true);
+
+  -- ── Remove route: verified+attached → 'removing', keeping attached_at ──
+  select attached_at into kept from public.org_domains where id = row_id;
+  with r as (
+    update public.org_domains
+       set status = 'removing', attach_claimed_at = null, attach_claim_token = null
+     where id = row_id and org_id = org_a
+       and status = 'verified' and attached_at is not null
+     returning id
+  )
+  select count(*) into n from r;
+  perform set_config('od.remove_transition', n::text, true);
+  perform set_config('od.remove_keeps_attached_at',
+    (select (attached_at = kept)::text from public.org_domains where id = row_id), true);
+  perform set_config('od.remove_clears_lease',
+    (select (attach_claimed_at is null and attach_claim_token is null)::text
+       from public.org_domains where id = row_id), true);
+
+  -- The same transition again → zero rows (the route treats it as idempotent).
+  with r as (
+    update public.org_domains
+       set status = 'removing', attach_claimed_at = null, attach_claim_token = null
+     where id = row_id and org_id = org_a
+       and status = 'verified' and attached_at is not null
+     returning id
+  )
+  select count(*) into n from r;
+  perform set_config('od.remove_twice', n::text, true);
+
+  -- An ATTACH claim on the tombstone → zero rows (status = 'verified').
+  with c as (
+    update public.org_domains
+       set attach_claimed_at = now(), attach_claim_token = gen_random_uuid()
+     where id = row_id and org_id = org_a
+       and status = 'verified' and attached_at is null
+       and (attach_claimed_at is null or attach_claimed_at < now() - interval '10 minutes')
+     returning attach_claim_token
+  )
+  select count(*) into n from c;
+  perform set_config('od.attach_claim_on_removing', n::text, true);
+
+  -- ── Detach: the same lease on status = 'removing', no attached_at gate ──
+  with c as (
+    update public.org_domains
+       set attach_claimed_at = now(), attach_claim_token = gen_random_uuid()
+     where id = row_id and org_id = org_a
+       and status = 'removing'
+       and (attach_claimed_at is null or attach_claimed_at < now() - interval '10 minutes')
+     returning attach_claim_token
+  )
+  select count(*), max(attach_claim_token::text) into n, tok3 from c;
+  perform set_config('od.detach_claim', n::text, true);
+
+  -- Hard-delete with a STALE token → zero rows, the tombstone survives.
+  with d as (
+    delete from public.org_domains
+     where id = row_id and org_id = org_a and status = 'removing'
+       and attach_claim_token = tok2::uuid
+     returning id
+  )
+  select count(*) into n from d;
+  perform set_config('od.hard_delete_stale', n::text, true);
+
+  -- Hard-delete with the right token but the WRONG org → zero rows.
+  with d as (
+    delete from public.org_domains
+     where id = row_id and org_id = org_b and status = 'removing'
+       and attach_claim_token = tok3::uuid
+     returning id
+  )
+  select count(*) into n from d;
+  perform set_config('od.hard_delete_cross_org', n::text, true);
+  perform set_config('od.tombstone_survives',
+    (select count(*) from public.org_domains where id = row_id)::text, true);
+
+  -- Hard-delete with the full fenced predicate → exactly one row, gone.
+  with d as (
+    delete from public.org_domains
+     where id = row_id and org_id = org_a and status = 'removing'
+       and attach_claim_token = tok3::uuid
+     returning id
+  )
+  select count(*) into n from d;
+  perform set_config('od.hard_delete_ok', n::text, true);
+  perform set_config('od.tombstone_gone',
+    (select count(*) from public.org_domains where id = row_id)::text, true);
+end $$;
+
+select is(current_setting('od.claim_fresh')::bigint, 1::bigint,
+  'worker: a fresh attach claim on a verified, unattached row affects exactly one row');
+select isnt(current_setting('od.claim_fresh_token'), '<null>',
+  'worker: the fresh claim returns a non-null claim token');
+select is(current_setting('od.claim_contended')::bigint, 0::bigint,
+  'worker: a second claim while the lease is live affects zero rows');
+select is(current_setting('od.claim_contended_same_token'), 'true',
+  'worker: the contended claim leaves the live token untouched');
+select is(current_setting('od.claim_cross_org')::bigint, 0::bigint,
+  'worker: a claim carrying another org''s org_id affects zero rows');
+select is(current_setting('od.claim_expired')::bigint, 1::bigint,
+  'worker: once the lease is older than the window a fresh claim succeeds');
+select is(current_setting('od.claim_expired_new_token'), 'true',
+  'worker: the re-claim mints a new token (the old one is superseded)');
+select is(current_setting('od.stamp_wrong_token')::bigint, 0::bigint,
+  'worker: the attached_at stamp with a superseded token affects zero rows');
+select is(current_setting('od.stamp_expired_lease')::bigint, 0::bigint,
+  'worker: the stamp with the right token but an expired lease affects zero rows');
+select is(current_setting('od.stamp_wrong_domain')::bigint, 0::bigint,
+  'worker: the stamp for a different domain than the row''s affects zero rows');
+select is(current_setting('od.stamp_still_unattached'), 'true',
+  'worker: after three refused stamps attached_at is still NULL');
+select is(current_setting('od.stamp_ok')::bigint, 1::bigint,
+  'worker: the stamp with the live token, live lease and claimed domain affects exactly one row');
+select is(current_setting('od.stamp_ok_attached'), 'true',
+  'worker: the accepted stamp sets attached_at');
+select is(current_setting('od.stamp_twice')::bigint, 0::bigint,
+  'worker: a second stamp on an attached row affects zero rows');
+select is(current_setting('od.claim_attached')::bigint, 0::bigint,
+  'worker: an attach claim on an already-attached row affects zero rows');
+select is(current_setting('od.remove_transition')::bigint, 1::bigint,
+  'remove route: verified+attached → removing affects exactly one row');
+select is(current_setting('od.remove_keeps_attached_at'), 'true',
+  'remove route: the removing transition keeps attached_at (the "Vercel cleanup owed" marker)');
+select is(current_setting('od.remove_clears_lease'), 'true',
+  'remove route: the removing transition clears both lease columns');
+select is(current_setting('od.remove_twice')::bigint, 0::bigint,
+  'remove route: repeating the transition on a tombstone affects zero rows (idempotent)');
+select is(current_setting('od.attach_claim_on_removing')::bigint, 0::bigint,
+  'worker: an attach claim on a removing tombstone affects zero rows');
+select is(current_setting('od.detach_claim')::bigint, 1::bigint,
+  'worker: the detach claim on a removing tombstone affects exactly one row (no attached_at gate)');
+select is(current_setting('od.hard_delete_stale')::bigint, 0::bigint,
+  'worker: the tombstone hard-delete with a stale token affects zero rows');
+select is(current_setting('od.hard_delete_cross_org')::bigint, 0::bigint,
+  'worker: the tombstone hard-delete with another org''s org_id affects zero rows');
+select is(current_setting('od.tombstone_survives')::bigint, 1::bigint,
+  'worker: the tombstone survives both refused deletes');
+select is(current_setting('od.hard_delete_ok')::bigint, 1::bigint,
+  'worker: the tombstone hard-delete with (id, org_id, removing, token) affects exactly one row');
+select is(current_setting('od.tombstone_gone')::bigint, 0::bigint,
+  'worker: the tombstone is gone after cleanup completes');
+
+-- ── /platform retry: clears an EXPIRED lease only ───────────────────────────
+do $$
+declare
+  org_a uuid := current_setting('od.org_a')::uuid;
+  row_id uuid;
+  n bigint;
+begin
+  insert into public.org_domains (org_id, domain, status, verified_at, attach_claimed_at, attach_claim_token)
+    values (org_a, 'retry.org-a.example.test', 'verified', now(), now(), gen_random_uuid())
+    returning id into row_id;
+
+  -- Live lease → zero rows, lease intact (would otherwise race the worker).
+  with r as (
+    update public.org_domains set attach_claimed_at = null, attach_claim_token = null
+     where id = row_id and org_id = org_a
+       and status = 'verified' and attached_at is null
+       and attach_claimed_at < now() - interval '10 minutes'
+     returning id
+  )
+  select count(*) into n from r;
+  perform set_config('od.retry_live', n::text, true);
+  perform set_config('od.retry_live_intact',
+    (select (attach_claim_token is not null)::text from public.org_domains where id = row_id), true);
+
+  -- Expired lease → exactly one row, both columns cleared.
+  update public.org_domains set attach_claimed_at = now() - interval '11 minutes' where id = row_id;
+  with r as (
+    update public.org_domains set attach_claimed_at = null, attach_claim_token = null
+     where id = row_id and org_id = org_a
+       and status = 'verified' and attached_at is null
+       and attach_claimed_at < now() - interval '10 minutes'
+     returning id
+  )
+  select count(*) into n from r;
+  perform set_config('od.retry_expired', n::text, true);
+  perform set_config('od.retry_expired_cleared',
+    (select (attach_claimed_at is null and attach_claim_token is null)::text
+       from public.org_domains where id = row_id), true);
+
+  -- No lease at all → zero rows (nothing to clear; NULL < cutoff is not true).
+  with r as (
+    update public.org_domains set attach_claimed_at = null, attach_claim_token = null
+     where id = row_id and org_id = org_a
+       and status = 'verified' and attached_at is null
+       and attach_claimed_at < now() - interval '10 minutes'
+     returning id
+  )
+  select count(*) into n from r;
+  perform set_config('od.retry_none', n::text, true);
+end $$;
+
+select is(current_setting('od.retry_live')::bigint, 0::bigint,
+  'platform retry: a live lease is left alone (zero rows)');
+select is(current_setting('od.retry_live_intact'), 'true',
+  'platform retry: the live claim token survives');
+select is(current_setting('od.retry_expired')::bigint, 1::bigint,
+  'platform retry: an expired lease is cleared (exactly one row)');
+select is(current_setting('od.retry_expired_cleared'), 'true',
+  'platform retry: both lease columns are NULL afterwards');
+select is(current_setting('od.retry_none')::bigint, 0::bigint,
+  'platform retry: a row with no lease affects zero rows');
+
+-- ── Cross-org reclaim block until the tombstone is hard-deleted ─────────────
+-- The same-org case is pinned above; the verify route's 23505 branch depends
+-- on the CROSS-org collision too: org B cannot go verified on a name whose
+-- org A tombstone is still awaiting Vercel cleanup, and can the moment the
+-- worker's hard-delete lands.
+do $$
+declare
+  org_a uuid := current_setting('od.org_a')::uuid;
+  org_b uuid := current_setting('od.org_b')::uuid;
+  a_row uuid;
+  b_row uuid;
+begin
+  insert into public.org_domains (org_id, domain, status, verified_at, attached_at)
+    values (org_a, 'crossreclaim.example.test', 'removing', now(), now())
+    returning id into a_row;
+  insert into public.org_domains (org_id, domain, status)
+    values (org_b, 'crossreclaim.example.test', 'pending')
+    returning id into b_row;
+  perform set_config('od.cross_a', a_row::text, true);
+  perform set_config('od.cross_b', b_row::text, true);
+end $$;
+
+select is(
+  (select count(*) from public.org_domains where domain = 'crossreclaim.example.test'),
+  2::bigint,
+  'reclaim: org B''s pending claim coexists with org A''s removing tombstone'
+);
+select throws_ok(
+  format($q$update public.org_domains set status = 'verified', verified_at = now()
+            where id = %L and org_id = %L$q$,
+         current_setting('od.cross_b'), current_setting('od.org_b')),
+  '23505',
+  null,
+  'reclaim: org B''s verify transition raises 23505 while org A''s tombstone holds the global unique'
+);
+
+do $$
+declare
+  org_a uuid := current_setting('od.org_a')::uuid;
+  org_b uuid := current_setting('od.org_b')::uuid;
+  a_row uuid := current_setting('od.cross_a')::uuid;
+  b_row uuid := current_setting('od.cross_b')::uuid;
+  tok text;
+  n bigint;
+begin
+  -- The worker's detach: claim, then hard-delete with the fenced predicate.
+  with c as (
+    update public.org_domains
+       set attach_claimed_at = now(), attach_claim_token = gen_random_uuid()
+     where id = a_row and org_id = org_a and status = 'removing'
+       and (attach_claimed_at is null or attach_claimed_at < now() - interval '10 minutes')
+     returning attach_claim_token
+  )
+  select max(attach_claim_token::text) into tok from c;
+  with d as (
+    delete from public.org_domains
+     where id = a_row and org_id = org_a and status = 'removing'
+       and attach_claim_token = tok::uuid
+     returning id
+  )
+  select count(*) into n from d;
+  perform set_config('od.cross_tombstone_deleted', n::text, true);
+
+  -- Now org B's verify transition goes through.
+  with v as (
+    update public.org_domains set status = 'verified', verified_at = now()
+     where id = b_row and org_id = org_b
+     returning id
+  )
+  select count(*) into n from v;
+  perform set_config('od.cross_b_verified', n::text, true);
+end $$;
+
+select is(current_setting('od.cross_tombstone_deleted')::bigint, 1::bigint,
+  'reclaim: the worker hard-deletes org A''s tombstone (exactly one row)');
+select is(current_setting('od.cross_b_verified')::bigint, 1::bigint,
+  'reclaim: once the tombstone is gone org B''s verify transition affects exactly one row');
+select is(
+  (select status::text from public.org_domains where id = current_setting('od.cross_b')::uuid),
+  'verified',
+  'reclaim: org B now holds the name verified'
+);
 
 select * from finish();
 rollback;

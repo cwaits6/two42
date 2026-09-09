@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { Building2, LayoutDashboard } from "lucide-react";
+import { Building2, Globe, LayoutDashboard } from "lucide-react";
 
 export interface PlatformNavItem {
   href: string;
@@ -16,4 +16,5 @@ export interface PlatformNavItem {
 export const platformNavItems: PlatformNavItem[] = [
   { href: "/platform", label: "Overview", icon: LayoutDashboard, exact: true },
   { href: "/platform/organizations", label: "Organizations", icon: Building2 },
+  { href: "/platform/domains", label: "Domains", icon: Globe },
 ];
