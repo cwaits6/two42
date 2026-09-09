@@ -116,6 +116,55 @@ $$;
 ALTER FUNCTION "public"."current_family_id"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."email_quota_consume"("_org_id" "uuid", "_n" integer) RETURNS boolean
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _cap integer;
+  _ok boolean;
+begin
+  -- A non-positive _n is a caller bug, not a refusable request: raising makes
+  -- the bug loud, and it closes the door on a negative _n walking sent_count
+  -- backwards (the >= 0 CHECK on the table is the second lock on that door).
+  if _org_id is null or _n is null or _n <= 0 then
+    raise exception 'email_quota_consume: _n must be a positive batch size';
+  end if;
+
+  select l.daily_cap into _cap
+  from public.org_email_limits l where l.org_id = _org_id;
+  -- 500/day default (a placeholder, not a tuned number).
+  -- Revisit this default against the Resend plan's actual ceiling as the
+  -- tenant count grows — the per-org override in org_email_limits is the
+  -- escape hatch in the meantime.
+  _cap := coalesce(_cap, 500);
+
+  -- Bounds the INSERT path: without this, the first reserve of a UTC day is
+  -- unguarded (ON CONFLICT ... WHERE only constrains the UPDATE arm) and a
+  -- fan-out larger than the cap would sail through on a fresh day.
+  if _n > _cap then
+    return false;
+  end if;
+
+  insert into public.org_email_usage as u (org_id, usage_date, sent_count)
+  values (_org_id, (now() at time zone 'utc')::date, _n)
+  on conflict (org_id, usage_date) do update
+    set sent_count = u.sent_count + excluded.sent_count
+    where u.sent_count + excluded.sent_count <= _cap
+  returning true into _ok;
+
+  return coalesce(_ok, false);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."email_quota_consume"("_org_id" "uuid", "_n" integer) OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."email_quota_consume"("_org_id" "uuid", "_n" integer) IS 'Atomic per-org daily email quota reserve. Tenant anchor: service_role-only EXECUTE — _org_id must come from an anchor the server-side caller already validated (its RLS-scoped profile, an RLS-checked group row, listActiveOrgs()), never trusted from a request. Returns false when the reservation would exceed the org''s daily cap (org_email_limits.daily_cap, default 500).';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."get_own_email"() RETURNS "text"
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO ''
@@ -1260,6 +1309,28 @@ CREATE TABLE IF NOT EXISTS "public"."org_email_domains" (
 ALTER TABLE "public"."org_email_domains" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."org_email_limits" (
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "daily_cap" integer DEFAULT 500 NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "org_email_limits_cap_sane" CHECK ((("daily_cap" >= 0) AND ("daily_cap" <= 100000)))
+);
+
+
+ALTER TABLE "public"."org_email_limits" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."org_email_usage" (
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "usage_date" "date" DEFAULT (("now"() AT TIME ZONE 'utc'::"text"))::"date" NOT NULL,
+    "sent_count" integer DEFAULT 0 NOT NULL,
+    CONSTRAINT "org_email_usage_sent_count_check" CHECK (("sent_count" >= 0))
+);
+
+
+ALTER TABLE "public"."org_email_usage" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."organization_members" (
     "org_id" "uuid" NOT NULL,
     "profile_id" "uuid" NOT NULL,
@@ -1682,6 +1753,16 @@ ALTER TABLE ONLY "public"."org_domains"
 
 ALTER TABLE ONLY "public"."org_email_domains"
     ADD CONSTRAINT "org_email_domains_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."org_email_limits"
+    ADD CONSTRAINT "org_email_limits_pkey" PRIMARY KEY ("org_id");
+
+
+
+ALTER TABLE ONLY "public"."org_email_usage"
+    ADD CONSTRAINT "org_email_usage_pkey" PRIMARY KEY ("org_id", "usage_date");
 
 
 
@@ -2281,6 +2362,16 @@ ALTER TABLE ONLY "public"."org_domains"
 
 ALTER TABLE ONLY "public"."org_email_domains"
     ADD CONSTRAINT "org_email_domains_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."org_email_limits"
+    ADD CONSTRAINT "org_email_limits_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."org_email_usage"
+    ADD CONSTRAINT "org_email_usage_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
 
 
 
@@ -3029,6 +3120,14 @@ CREATE POLICY "org isolation" ON "public"."org_email_domains" AS RESTRICTIVE TO 
 
 
 
+CREATE POLICY "org isolation" ON "public"."org_email_limits" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."org_email_usage" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
 CREATE POLICY "org isolation" ON "public"."organization_members" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
@@ -3093,6 +3192,12 @@ ALTER TABLE "public"."org_domains" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."org_email_domains" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."org_email_limits" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."org_email_usage" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."organization_members" ENABLE ROW LEVEL SECURITY;
@@ -3173,6 +3278,11 @@ GRANT ALL ON FUNCTION "public"."app_request_org_id"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."current_family_id"() TO "anon";
 GRANT ALL ON FUNCTION "public"."current_family_id"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."current_family_id"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."email_quota_consume"("_org_id" "uuid", "_n" integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."email_quota_consume"("_org_id" "uuid", "_n" integer) TO "service_role";
 
 
 
@@ -3423,6 +3533,14 @@ GRANT SELECT,DELETE ON TABLE "public"."org_email_domains" TO "authenticated";
 
 
 GRANT INSERT("domain") ON TABLE "public"."org_email_domains" TO "authenticated";
+
+
+
+GRANT ALL ON TABLE "public"."org_email_limits" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."org_email_usage" TO "service_role";
 
 
 
