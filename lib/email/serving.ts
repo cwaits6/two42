@@ -3,11 +3,10 @@
  * message deep-links straight to the action it asks for.
  */
 import { Resend } from "resend";
-import { siteConfig } from "@/lib/config";
 import { escapeHtml } from "@/lib/email/resend";
 import {
   formatFromHeader,
-  resolveEmailBranding,
+  resolveRequestEmailBranding,
   type EmailBranding,
 } from "@/lib/email/identity";
 import { formatServiceDateWithYear } from "@/lib/serving/sundays";
@@ -44,7 +43,7 @@ export async function sendServingConfirmationEmail(opts: {
   icsContent: string;
   branding?: EmailBranding;
 }) {
-  const b = opts.branding ?? (await resolveEmailBranding());
+  const b = opts.branding ?? (await resolveRequestEmailBranding());
   const dateLabel = formatServiceDateWithYear(opts.serviceDate);
   const { error } = await getResend().emails.send({
     from: formatFromHeader(b.orgName, b.fromAddress),
@@ -98,7 +97,7 @@ export async function sendServingCancelNoticeEmail(opts: {
   servingUrl: string;
   branding?: EmailBranding;
 }) {
-  const b = opts.branding ?? (await resolveEmailBranding());
+  const b = opts.branding ?? (await resolveRequestEmailBranding());
   const dateLabel = formatServiceDateWithYear(opts.serviceDate);
   const { error } = await getResend().emails.send({
     from: formatFromHeader(b.orgName, b.fromAddress),
@@ -133,7 +132,7 @@ export async function sendServingBroadcastEmail(opts: {
   openDates: { date: string; url: string }[];
   branding?: EmailBranding;
 }) {
-  const b = opts.branding ?? (await resolveEmailBranding());
+  const b = opts.branding ?? (await resolveRequestEmailBranding());
   const rows = opts.openDates
     .map(
       ({ date, url }) => `
@@ -169,7 +168,7 @@ export async function sendServingBroadcastEmail(opts: {
       ${rows}
       <p style="${footer}">
         Already spoken for? You can always see who&rsquo;s covering each week at
-        <a href="${siteConfig.url}/serving" style="color: ${b.accentLight};">${siteConfig.url}/serving</a>.
+        <a href="${b.baseUrl}/serving" style="color: ${b.accentLight};">${b.baseUrl}/serving</a>.
       </p>
     `, b.orgName),
   });

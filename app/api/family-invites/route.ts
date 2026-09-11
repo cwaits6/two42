@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { sendFamilyInviteEmail } from "@/lib/email/resend";
+import { resolveEmailBranding } from "@/lib/email/identity";
+import { orgBaseUrl } from "@/lib/org-urls";
 import { NextResponse } from "next/server";
-import { siteConfig } from "@/lib/config";
 
 /**
  * POST /api/family-invites
@@ -125,7 +126,7 @@ export async function POST(request: Request) {
       sent_at: new Date().toISOString(),
       created_by: user.id,
     })
-    .select("token")
+    .select("token, org_id")
     .single();
 
   if (insertError || !invite) {
@@ -136,8 +137,10 @@ export async function POST(request: Request) {
     );
   }
 
-  // Build the join link
-  const joinLink = `${siteConfig.url}/join/family/${invite.token}`;
+  // Build the join link on the org's own host. org_id comes from the invite
+  // row just inserted under RLS (the caller's org), so the link — and the
+  // branding below — follow the recipient's org, not the platform URL.
+  const joinLink = `${await orgBaseUrl(invite.org_id)}/join/family/${invite.token}`;
 
   // Build the inviter's display name
   const inviterName =
@@ -154,7 +157,13 @@ export async function POST(request: Request) {
     .join(" ");
 
   try {
-    await sendFamilyInviteEmail(invite_email, inviterName, memberName, joinLink);
+    await sendFamilyInviteEmail(
+      invite_email,
+      inviterName,
+      memberName,
+      joinLink,
+      await resolveEmailBranding(invite.org_id),
+    );
   } catch (emailError) {
     console.error("Failed to send family invite email:", emailError);
     // Return success anyway — the invite row was created, they can resend

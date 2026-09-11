@@ -19,7 +19,7 @@ export const siteConfig = {
   email: {
     from:
       process.env.NEXT_PUBLIC_EMAIL_FROM ||
-      "two42 <noreply@incouragers.org>",
+      "two42 <noreply@two42.io>",
   },
   colors: {
     primary: process.env.NEXT_PUBLIC_COLOR_PRIMARY || "#B85C38",

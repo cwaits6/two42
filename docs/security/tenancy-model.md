@@ -469,7 +469,25 @@ platform seam).
   else falls back to the platform address) — validation boundaries, not
   style choices; do not relax them to support richer names or color formats.
   `supabase/functions/_shared/branding.ts` is a deliberate **byte-level
-  mirror** of those regexes — all four, since Phase 5 PR 7 — (edge functions
-  cannot import from `lib/`), so a change must land on both sides. The edge
-  mirror deliberately omits the WCAG 4.5:1 `validateAccent()` contrast gate,
-  which is enforced on the write path only (#319).
+  mirror** of those four `organizations.branding` regexes, since Phase 5
+  PR 7 (edge functions cannot import from `lib/`), so a change must land on
+  both sides. (`ORG_DOMAIN_SHAPE`, a fifth boundary on a different column,
+  is mirrored separately — see the next bullet.) The edge mirror
+  deliberately omits the WCAG 4.5:1 `validateAccent()` contrast gate, which
+  is enforced on the write path only (#319).
+- **Emailed-link origin is a second, separate per-org injection boundary —
+  not the same gate as branding.** `orgBaseUrl(orgId)` (`lib/org-urls.ts`,
+  Phase 5 PR 5 / CWA-69) resolves the canonical origin for every link the
+  platform mails. A custom domain is used only when its `org_domains` row is
+  `verified` **and** `attached_at` is set (ownership plus routing, not
+  ownership alone); the stored `domain` value is re-validated against
+  `ORG_DOMAIN_SHAPE` at read time regardless (the DB's
+  `org_domains_domain_shape` CHECK runs only at INSERT, so a hand-edited row
+  could otherwise reach a link unvalidated). A domain that fails either gate
+  falls through to `https://<slug>.<platformApex>`, then to `siteConfig.url`
+  — fail-soft, never throws, so a broken lookup degrades a link rather than
+  blocking the email. `supabase/functions/_shared/org-urls.ts` is a
+  byte-for-byte mirror of `computeOrgOrigin()` and `ORG_DOMAIN_SHAPE` for the
+  cron edge functions, which take the platform apex and platform URL as
+  parameters (env-derived, no `siteConfig` import) rather than reading them
+  directly.

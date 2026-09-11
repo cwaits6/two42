@@ -1,8 +1,7 @@
 import { Resend } from "resend";
-import { siteConfig } from "@/lib/config";
 import {
   formatFromHeader,
-  resolveEmailBranding,
+  resolveRequestEmailBranding,
   type EmailBranding,
 } from "@/lib/email/identity";
 
@@ -16,7 +15,7 @@ export async function sendInviteEmail(
   magicLink: string,
   branding?: EmailBranding
 ) {
-  const b = branding ?? (await resolveEmailBranding());
+  const b = branding ?? (await resolveRequestEmailBranding());
   const safeOrgName = escapeHtml(b.orgName);
   const safeName = escapeHtml(name);
   const { error } = await getResend().emails.send({
@@ -92,7 +91,7 @@ export async function sendFamilyInviteEmail(
   joinLink: string,
   branding?: EmailBranding
 ) {
-  const b = branding ?? (await resolveEmailBranding());
+  const b = branding ?? (await resolveRequestEmailBranding());
   const safeOrgName = escapeHtml(b.orgName);
   const safeInviterName = escapeHtml(inviterName);
   const safeFamilyMemberName = escapeHtml(familyMemberName);
@@ -142,7 +141,7 @@ export async function sendFeedbackEmail(
   message: string,
   branding?: EmailBranding
 ) {
-  const b = branding ?? (await resolveEmailBranding());
+  const b = branding ?? (await resolveRequestEmailBranding());
   const kind = type === "problem" ? "Something's broken" : "An idea";
   const safeSenderName = escapeHtml(senderName);
   const safeMessage = escapeHtml(message).replace(/\n/g, "<br />");
@@ -193,7 +192,7 @@ export async function sendEventReminderEmail(
   eventLocation: string | null,
   branding?: EmailBranding
 ) {
-  const b = branding ?? (await resolveEmailBranding());
+  const b = branding ?? (await resolveRequestEmailBranding());
   const { error } = await getResend().emails.send({
     from: formatFromHeader(b.orgName, b.fromAddress),
     to: email,
@@ -211,7 +210,7 @@ export async function sendEventReminderEmail(
           </p>
           ${eventLocation ? `<p style="font-size: 18px; margin: 8px 0 0; color: #44403c;"><strong>Where:</strong> ${eventLocation}</p>` : ""}
         </div>
-        <a href="${siteConfig.url}/events"
+        <a href="${b.baseUrl}/events"
            style="display: inline-block; background-color: ${b.accent}; color: white; padding: 16px 32px; text-decoration: none; border-radius: 8px; font-size: 18px; margin-top: 20px;">
           View Event
         </a>

@@ -1,6 +1,7 @@
-// Unit tests for the RFC 5322 From: construction boundary (CWA-55) and the
-// per-org From: address gate (Phase 5 PR 7 / CWA-71). formatFromHeader and
-// parseAddress stay pure units; resolveEmailBranding runs against stubbed
+// Unit tests for the RFC 5322 From: construction boundary, the per-org
+// From: address gate, and the per-org link origin wiring. formatFromHeader
+// and parseAddress stay pure units;
+// resolveEmailBranding / resolveRequestEmailBranding run against stubbed
 // Supabase clients — no network, no database, no request context.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,8 +13,14 @@ vi.mock("@/lib/supabase/server", () => ({
   createServiceClient: () => createServiceClient(),
 }));
 
-const { formatFromHeader, parseAddress, resolveEmailBranding, PLATFORM_ADDRESS } =
-  await import("@/lib/email/identity");
+const {
+  formatFromHeader,
+  parseAddress,
+  resolveEmailBranding,
+  resolveRequestEmailBranding,
+  PLATFORM_ADDRESS,
+} = await import("@/lib/email/identity");
+const { siteConfig } = await import("@/lib/config");
 
 const ADDRESS = "noreply@example.org";
 
@@ -98,8 +105,16 @@ describe("parseAddress", () => {
 
 const ORG_ID = "11111111-2222-3333-4444-555555555555";
 
+interface OrgDomainFixture {
+  domain: string;
+  status: string;
+  attached_at: string | null;
+}
+
 interface ServiceStub {
-  org?: { branding: unknown } | null;
+  // The organizations row as resolveEmailBranding (and orgBaseUrl) select it:
+  // branding plus the slug / org_domains embed the link origin rides on.
+  org?: { branding: unknown; slug?: string; org_domains?: OrgDomainFixture[] } | null;
   orgError?: { message: string } | null;
   domainRow?: { domain: string; status: string } | null;
   domainError?: { message: string } | null;
@@ -160,15 +175,24 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
-describe("resolveEmailBranding (orgId path)", () => {
+describe("resolveEmailBranding", () => {
   it("uses noreply@<domain> for a verified row with a valid domain", async () => {
     const { filters } = stubServiceClient({
-      org: { branding: { display_name: "Grace Fellowship" } },
+      org: {
+        branding: { display_name: "Grace Fellowship" },
+        slug: "grace",
+        org_domains: [
+          { domain: "grace.church", status: "verified", attached_at: "2026-09-01T00:00:00Z" },
+        ],
+      },
       domainRow: { domain: "grace.church", status: "verified" },
     });
     const b = await resolveEmailBranding(ORG_ID);
     expect(b.fromAddress).toBe("noreply@grace.church");
     expect(b.orgName).toBe("Grace Fellowship");
+    // The link origin rides along on the same organizations read — the
+    // branching itself is lib/org-urls.test.ts's job; this pins the wiring.
+    expect(b.baseUrl).toBe("https://grace.church");
     // Both reads carry their tenant filter — the only boundary on a
     // service-role client.
     expect(filters).toContainEqual({ table: "organizations", column: "id", value: ORG_ID });
@@ -247,50 +271,77 @@ describe("resolveEmailBranding (orgId path)", () => {
     );
   });
 
-  it("keeps the platform address on branding fallback branches", async () => {
+  it("keeps the platform address and URL on branding fallback branches", async () => {
     stubServiceClient({ orgError: { message: "down" } });
     const b = await resolveEmailBranding(ORG_ID);
     expect(b.fromAddress).toBe(PLATFORM_ADDRESS);
+    expect(b.baseUrl).toBe(siteConfig.url);
+  });
+
+  it("uses the org subdomain as baseUrl when no custom domain is attached", async () => {
+    stubServiceClient({
+      org: {
+        branding: {},
+        slug: "grace",
+        // verified but unattached: ownership proven, host not routing yet.
+        org_domains: [{ domain: "grace.church", status: "verified", attached_at: null }],
+      },
+    });
+    const b = await resolveEmailBranding(ORG_ID);
+    expect(b.baseUrl).toBe(`https://grace.${siteConfig.platformApex}`);
   });
 });
 
-describe("resolveEmailBranding (self-resolving path)", () => {
+describe("resolveRequestEmailBranding", () => {
   it("reaches the same gate once the request org resolves", async () => {
     stubRequestClient({ branding: { display_name: "Request Org" }, rpcOrgId: ORG_ID });
     const { filters } = stubServiceClient({
+      org: {
+        branding: {},
+        slug: "grace",
+        org_domains: [
+          { domain: "grace.church", status: "verified", attached_at: "2026-09-01T00:00:00Z" },
+        ],
+      },
       domainRow: { domain: "grace.church", status: "verified" },
     });
-    const b = await resolveEmailBranding();
+    const b = await resolveRequestEmailBranding();
     expect(b.fromAddress).toBe("noreply@grace.church");
     expect(b.orgName).toBe("Request Org");
+    // The link origin comes from orgBaseUrl() for the same resolved org.
+    expect(b.baseUrl).toBe("https://grace.church");
+    // Both service-role reads carry the resolved org as their tenant filter.
     expect(filters).toContainEqual({
       table: "org_email_domains",
       column: "org_id",
       value: ORG_ID,
     });
+    expect(filters).toContainEqual({ table: "organizations", column: "id", value: ORG_ID });
   });
 
   it("applies the verified gate on this path too", async () => {
     stubRequestClient({ branding: {}, rpcOrgId: ORG_ID });
     stubServiceClient({ domainRow: { domain: "grace.church", status: "pending" } });
-    const b = await resolveEmailBranding();
+    const b = await resolveRequestEmailBranding();
     expect(b.fromAddress).toBe(PLATFORM_ADDRESS);
   });
 
-  it("still returns branding with the platform address when no org resolves", async () => {
+  it("still returns branding with the platform address and URL when no org resolves", async () => {
     stubRequestClient({ branding: { display_name: "Request Org" }, rpcOrgId: null });
-    const b = await resolveEmailBranding();
+    const b = await resolveRequestEmailBranding();
     expect(b.fromAddress).toBe(PLATFORM_ADDRESS);
+    expect(b.baseUrl).toBe(siteConfig.url);
     expect(b.orgName).toBe("Request Org");
     // Fail-closed to the platform address, never a blocked email — and no
-    // service-role query runs without a resolved org to scope it to.
+    // service-role query (sending domain or link origin) runs without a
+    // resolved org to scope it to.
     expect(createServiceClient).not.toHaveBeenCalled();
   });
 
   it("falls back to the platform address and logs when the domain query errors", async () => {
     stubRequestClient({ branding: { display_name: "Request Org" }, rpcOrgId: ORG_ID });
     stubServiceClient({ domainError: { message: "boom" } });
-    const b = await resolveEmailBranding();
+    const b = await resolveRequestEmailBranding();
     expect(b.fromAddress).toBe(PLATFORM_ADDRESS);
     // The branding read already succeeded — only the From: address degrades.
     expect(b.orgName).toBe("Request Org");
@@ -304,7 +355,7 @@ describe("resolveEmailBranding (self-resolving path)", () => {
   it("falls back to the platform address when the org has no domain row", async () => {
     stubRequestClient({ branding: { display_name: "Request Org" }, rpcOrgId: ORG_ID });
     stubServiceClient({ domainRow: null });
-    const b = await resolveEmailBranding();
+    const b = await resolveRequestEmailBranding();
     expect(b.fromAddress).toBe(PLATFORM_ADDRESS);
     expect(b.orgName).toBe("Request Org");
   });
@@ -327,8 +378,11 @@ describe("resolveEmailBranding (self-resolving path)", () => {
         }),
       }),
     });
-    const b = await resolveEmailBranding();
+    const b = await resolveRequestEmailBranding();
     expect(b.fromAddress).toBe(PLATFORM_ADDRESS);
+    // orgBaseUrl() is total by the same contract, so the link origin
+    // degrades to the platform URL rather than taking the branding with it.
+    expect(b.baseUrl).toBe(siteConfig.url);
     expect(b.orgName).toBe("Request Org");
   });
 });
