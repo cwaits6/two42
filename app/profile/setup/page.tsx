@@ -34,7 +34,7 @@ export default async function ProfileSetupPage() {
     redirect("/directory");
   }
 
-  // Private buckets (CWA-59): the wizard's avatar preview renders this
+  // Private buckets: the wizard's avatar preview renders this
   // value; the wizard itself persists only fresh raw upload URLs.
   profile.avatar_url = await mintSignedUrl(profile.avatar_url);
 

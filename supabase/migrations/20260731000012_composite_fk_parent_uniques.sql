@@ -1,5 +1,5 @@
--- Phase 2 tenancy (CWA-9 / #211), Task 6: parent-side unique keys for the
--- composite foreign keys (§3.3). A child row referencing its parent by bare
+-- Parent-side unique keys for the
+-- composite foreign keys. A child row referencing its parent by bare
 -- UUID has nothing forcing both into the same tenant; the composite FKs in
 -- the next migration make that structural, and they need a (id, org_id)
 -- unique on every referenced parent to point at.

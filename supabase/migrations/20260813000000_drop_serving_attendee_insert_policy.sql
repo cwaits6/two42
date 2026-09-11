@@ -1,4 +1,4 @@
--- Serving attendee INSERT policy narrowed to RPC-only (CWA-61 / #336).
+-- Serving attendee INSERT policy narrowed to RPC-only.
 --
 -- The "Signup owners can add attendees" INSERT policy on
 -- serving_signup_attendees (20260731000008_rls_serving.sql:59-74) let a
@@ -9,7 +9,7 @@
 -- the group's org_id). Two paths, two different strictness levels — flagged
 -- as deferred follow-up in the RPC's own migration comment.
 --
--- Investigation for #336 confirmed no live call site does a direct
+-- Investigation confirmed no live call site does a direct
 -- PostgREST insert into this table: both signup-creation paths — the
 -- authenticated route (app/api/serving/signups/route.ts) and the
 -- signed-link route (app/api/serving/link-action/route.ts) — go
@@ -26,6 +26,6 @@
 -- grant it, and cannot fill the gap left by the dropped permissive policy.
 --
 -- The DELETE policy ("Signup owners can remove attendees") is untouched —
--- out of scope for #336, which is specifically the INSERT arm's missing
+-- out of scope here, which is specifically the INSERT arm's missing
 -- household predicate.
 drop policy "Signup owners can add attendees" on public.serving_signup_attendees;

@@ -37,8 +37,8 @@ export async function POST(request: Request) {
   const service = await createServiceClient();
 
   // The group is fetched first: its org_id is the org anchor for every read
-  // and write below (Phase 3, CWA-10 — the surface stays on the service-role
-  // key, so the org filter is what confines it to one tenant). The profiles
+  // and write below (the surface stays on the service-role key, so the org
+  // filter is what confines it to one tenant). The profiles
   // read below is a deliberate exception — it stays unscoped so a cross-org
   // pairing is detected and rejected by the explicit check further down,
   // instead of silently matching zero rows.
@@ -175,7 +175,7 @@ export async function POST(request: Request) {
       if (spouse) attendees.push(spouse);
     }
 
-    // One RPC, one transaction (CWA-47 / #313): the compensating delete this
+    // One RPC, one transaction: the compensating delete this
     // replaces could itself fail, wedging the Sunday behind
     // unique (group_id, service_date). The service-role entry point takes
     // the actor explicitly — there is no session here — and re-derives

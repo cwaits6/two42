@@ -1,9 +1,9 @@
--- Phase 2 tenancy (CWA-9 / #211), Task 4g: permissive rewrite — settings &
+-- Permissive rewrite — settings &
 -- access (site_settings, access_requests, feedback).
 
 -- site_settings --------------------------------------------------------------
 -- Two SELECT arms as before: members read everything in their org, anon
--- reads only rows flagged is_public (per #215), now org-resolved.
+-- reads only rows flagged is_public, now org-resolved.
 
 drop policy "Members can read settings" on public.site_settings;
 create policy "Members can read settings" on public.site_settings

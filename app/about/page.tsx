@@ -44,7 +44,7 @@ export default async function AboutClassPage() {
       return false;
     }
   })();
-  // Private buckets (CWA-59): exchange stored avatar URLs for signed URLs
+  // Private buckets: exchange stored avatar URLs for signed URLs
   // before they reach the AvatarImage renders below.
   const teacherRows = (teachers ?? []) as ClassTeacherWithProfile[];
   const signedAvatars = await mintSignedUrls(

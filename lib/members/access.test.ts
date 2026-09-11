@@ -1,4 +1,4 @@
-// Unit tests for the org-admin gate (CWA-40). Every branch here is a
+// Unit tests for the org-admin gate. Every branch here is a
 // security decision, and the fail-closed one is what a refactor is most
 // likely to invert — turning a transient DB blip into an unauthenticated
 // roster export.

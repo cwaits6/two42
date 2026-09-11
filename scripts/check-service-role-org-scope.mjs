@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * CWA-44: static tenancy guard for service-role Supabase queries.
+ * Static tenancy guard for service-role Supabase queries.
  *
  * Service-role clients carry BYPASSRLS, so the .eq("org_id", ...) filters on
  * their query chains ARE the tenant boundary — and nothing else in CI reads
@@ -23,7 +23,7 @@
  *
  * Plus three non-AST checks (one command, one CI job):
  *   - inventory sync against docs/security/service-role-inventory.md
- *   - pins on the mirrored cross-org assertions from #306 (M12)
+ *   - pins on the mirrored cross-org assertions
  *   - a repo-wide sweep for the retired hardcoded seed-org UUID
  *
  * Run: npm run guard:tenancy      (see scripts/README.md)
@@ -45,7 +45,7 @@ const SCAN_EXCLUDE = new Set(["lib/supabase/server.ts"]);
 
 // Chains that are legitimate org anchors but live in a file owned by a
 // parallel run, so the in-file `// org-anchor:` marker cannot be added yet.
-// TODO(CWA-44): delete both entries and add in-file markers once the parallel
+// TODO: delete both entries and add in-file markers once the parallel
 // run touching app/api/serving/link-action/route.ts lands.
 // Stale entries fail loudly (see the check below) rather than silently
 // widening the guard.
@@ -69,7 +69,7 @@ const KNOWN_ANCHORS = [
 // inserts. Scoping them explicitly needs an orgId signature change plumbed
 // through their callers — a behavior change tracked as follow-up work, not
 // part of the CI-only PR that introduced this guard.
-// TODO(CWA-44): thread orgId through these helpers and delete the entries.
+// TODO: thread orgId through these helpers and delete the entries.
 // Stale entries fail loudly (see the check below).
 const TIER_C_EXEMPT = new Set(["lib/giving/server.ts", "lib/prayerCalls.ts"]);
 
@@ -88,7 +88,7 @@ const SEEDED_ORG_UUID = ["00000000", "0000", "0000", "0000", "000000000001"].joi
 
 // Named, commented exclusions for the seeded-UUID sweep. The default is
 // in-scope: a new root-level file is swept unless someone writes down here
-// why it is not. (This inversion IS the fix for #306's Level-4 gap, where a
+// why it is not. (This inversion IS the fix for the earlier gap, where a
 // hardcoded `app/ lib/ docs/` walk let a root README.md finding through.)
 const UUID_SWEEP_EXCLUDE = [
   "supabase/migrations/", // backfill DDL legitimately names the seeded org
@@ -624,7 +624,7 @@ if (!appSection || !libSection) {
   }
 }
 
-// ── #306 M12: pin the mirrored cross-org assertions ─────────────────────────
+// ── Pin the mirrored cross-org assertions ───────────────────────────────────
 // The HMAC signed-link surfaces read the profile row unscoped ON PURPOSE so a
 // cross-org pairing can be rejected explicitly. That only stays safe while
 // the explicit rejection exists — pin it, and its distinctive denial log.
@@ -667,7 +667,7 @@ for (const pin of PINS) {
   }
 }
 
-// ── #306 Level 4: repo-wide sweep for the retired seed-org constant ─────────
+// ── Repo-wide sweep for the retired seed-org constant ───────────────────────
 
 const sweepFiles = gitLsFiles().filter(
   (f) => !UUID_SWEEP_EXCLUDE.some((ex) => (ex.endsWith("/") ? f.startsWith(ex) : f === ex))

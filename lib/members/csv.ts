@@ -1,6 +1,6 @@
 /**
- * RFC 4180 CSV codec plus the OWASP spreadsheet formula-injection guard
- * (CWA-40). Pure string→string functions with zero dependencies — no IO, no
+ * RFC 4180 CSV codec plus the OWASP spreadsheet formula-injection guard.
+ * Pure string→string functions with zero dependencies — no IO, no
  * framework imports — so vitest can exercise every hazard in a plain node
  * environment. The higher-level column contract lives in lib/members/format.ts;
  * this module knows nothing about members, only about cells.

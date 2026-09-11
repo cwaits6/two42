@@ -1,4 +1,4 @@
-// Unit tests for the admin avatar-write eligibility gate (CWA-62 / #337).
+// Unit tests for the admin avatar-write eligibility gate.
 // Every branch here is a security decision, and the fail-closed ones (null
 // family_id, non-leader relationship) are what a refactor is most likely to
 // invert — reopening the "Failed to upload photo" bug this predicate exists

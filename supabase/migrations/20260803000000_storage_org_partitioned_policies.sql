@@ -1,4 +1,4 @@
--- Storage tenancy (CWA-57 / #328): every storage.objects policy predated the
+-- Storage tenancy: every storage.objects policy predated the
 -- org spine and none mentioned org_id — "Editors can update event images" let
 -- any org's content editor overwrite every event image on the platform, and
 -- "Admins can delete family photos" let any org's admin destroy any other
@@ -272,8 +272,8 @@ create policy "Admins can delete family photos"
   );
 
 -- Event images: <org>/events/<event_id>/…. The per-event EXISTS is new — the
--- legacy policies were platform-wide for any content editor (the exact CVE
--- in CWA-57). The app currently has no event-image writer (harden, don't
+-- legacy policies were platform-wide for any content editor (the exact
+-- cross-org hole this migration closes). The app currently has no event-image writer (harden, don't
 -- drop — the bucket and the uploadImage "event" config exist for a planned
 -- feature).
 create policy "Editors can upload event images"

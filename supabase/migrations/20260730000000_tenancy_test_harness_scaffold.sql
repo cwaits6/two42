@@ -1,9 +1,9 @@
--- Phase 0 tenancy test harness scaffold (CWA-7 / #209).
+-- Tenancy test harness scaffold.
 -- Minimal organizations/organization_members tables + a stub
 -- provision_organization() — just enough to seed two fixture orgs for the
 -- pgTAP leak-suite. NOT production tenant provisioning: no caller
 -- authorization, no default-data seeding, not called from any app route.
--- Later CWA-7 phases will harden this and add org_id to real tables.
+-- Later migrations harden this and add org_id to real tables.
 
 create extension if not exists pgtap with schema extensions;
 
@@ -44,7 +44,7 @@ create policy "members can view their own org memberships" on public.organizatio
   for select using (profile_id = auth.uid());
 
 -- Stub only: no INSERT policies exist on either table by design — direct
--- self-service org creation is out of scope for Phase 0, so this security
+-- self-service org creation is out of scope for this scaffold, so this security
 -- definer function is the sole write path, called from test/seed SQL only.
 create or replace function public.provision_organization(_name text, _owner_id uuid)
 returns uuid

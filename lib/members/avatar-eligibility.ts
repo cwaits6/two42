@@ -5,7 +5,7 @@
  * a caller writing their own avatar, and a household leader (relationship
  * `primary` or `spouse`) writing another enrolled member of the *same*
  * household. Used by the admin member-edit page to decide whether to show
- * the photo control at all (CWA-62 / #337) — without this check, an admin
+ * the photo control at all — without this check, an admin
  * editing a profile with no matching storage write arm sees the control,
  * then hits "Failed to upload photo" on save.
  *

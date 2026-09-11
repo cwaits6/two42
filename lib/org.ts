@@ -8,13 +8,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * Phase 2 (CWA-9 / #211): slug sent as the `x-two42-org` header on every
+ * The slug is sent as the `x-two42-org` header on every
  * Supabase client, so anonymous requests resolve an org via
  * app_request_org_id() (authenticated principals always win over the
  * header — it only ever selects among already-public content).
  *
- * Single-tenant interim: every host maps to the one deployed org. Phase 5
- * (custom domains, #214) replaces this with real host → org resolution.
+ * Single-tenant interim: every host maps to the one deployed org.
+ * Custom-domain routing replaces this with real host → org resolution.
  */
 export const DEFAULT_ORG_SLUG = "default";
 
@@ -27,7 +27,7 @@ export const DEFAULT_ORG_SLUG = "default";
  * app_request_org_id(), so a slug that matches nothing makes those flows
  * fail closed rather than fall back to another org.
  *
- * Takes no host parameter: Phase 5 (custom domains, #214) will reintroduce
+ * Takes no host parameter: custom-domain routing will reintroduce
  * one together with the resolution logic that actually reads it. Carrying an
  * unread parameter until then bought nothing.
  */
@@ -49,7 +49,7 @@ export function isValidOrgSlug(slug: string): boolean {
 /**
  * Mirrors the denylist provision_organization() enforces (TN006), so the
  * app can never route to — or offer — a slug the DB would refuse to mint.
- * Slugs become host labels once Phase 5 routing ships, and any of these
+ * Slugs become host labels once custom-domain routing ships, and any of these
  * would shadow a platform host. Keep this list in sync with the array in
  * the TN006 migration (supabase/migrations/20260818000000_reserved_org_slugs.sql).
  *
@@ -136,7 +136,7 @@ export function isTrustedFallbackHost(
 }
 
 /**
- * Phase 4b (CWA-48 / #314): the single implementation of the fail-closed
+ * The single implementation of the fail-closed
  * org-resolution guard both anonymous entry points (`/join`,
  * `/join/family/[token]`) and the per-org route (`/[orgSlug]/join`) rely on.
  * Resolves the request's org via app_request_org_id() — the same value the

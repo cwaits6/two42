@@ -60,7 +60,7 @@ interface ProfileFormProps {
    * household-leader edits always have a matching storage write arm, so
    * when omitted the photo control is always shown. When provided and the
    * predicate fails, the control is hidden rather than shown and left to
-   * fail (no matching storage write arm exists; see CWA-62 / #337). The
+   * fail (no matching storage write arm exists). The
    * form re-evaluates the predicate against the last *saved* family
    * assignment, so reassigning the member's family in this form updates
    * the control's visibility on save without a page refresh.
@@ -233,7 +233,7 @@ export function ProfileForm({
   // actually evaluates on an avatar write. The live state.family_id can
   // differ while the admin has an unsaved selection in the Family select,
   // so avatar-write eligibility is derived from this value, updated only
-  // after a successful save (CWA-62 / #337).
+  // after a successful save.
   const [savedFamilyId, setSavedFamilyId] = useState<string | null>(
     profile.family_id,
   );
@@ -479,8 +479,7 @@ export function ProfileForm({
               storage write arm for: not themselves, and not a household
               they lead (relationship primary/spouse) with the target.
               Follows the last saved family assignment, so reassigning
-              the family in this form updates it on save; see CWA-62 /
-              #337. */}
+              the family in this form updates it on save. */}
           {avatarWritable && (
             <div className="flex items-center gap-5">
               <Avatar className="h-20 w-20 shrink-0">

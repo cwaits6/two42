@@ -1,4 +1,4 @@
--- Transactional serving signup RPC (CWA-47 / #313).
+-- Transactional serving signup RPC.
 --
 -- Serving signup wrote its two rows — serving_signups, then
 -- serving_signup_attendees — as two separate PostgREST statements from the

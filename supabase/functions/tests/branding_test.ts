@@ -1,4 +1,4 @@
-// Locks the injection boundary of _shared/branding.ts (CWA-56): the accent
+// Locks the injection boundary of _shared/branding.ts: the accent
 // hex gate (CSS injection), the display_name control-character strip and
 // RFC 5322 quoting (header injection), and the reply_to address gate. These
 // mirror lib/branding.ts + lib/email/identity.ts — a change on either side
@@ -122,7 +122,7 @@ Deno.test("reply_to rejects malformed or oversized addresses", () => {
   }
 });
 
-// ── fromAddress: the SENDING_DOMAIN + verified-status gate (CWA-71) ──────────
+// ── fromAddress: the SENDING_DOMAIN + verified-status gate ───────────────────
 
 Deno.test("fromAddress uses noreply@<domain> for a verified row with a valid domain", () => {
   assertEquals(

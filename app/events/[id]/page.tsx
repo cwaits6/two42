@@ -135,7 +135,7 @@ export default async function EventDetailPage({
       };
     });
 
-    // Private buckets (CWA-59): exchange stored avatar URLs for signed URLs
+    // Private buckets: exchange stored avatar URLs for signed URLs
     // before they reach AttendeeStrip's renders.
     const signedAvatars = await mintSignedUrls(attendees.map((a) => a.avatar_url));
     attendees = attendees.map((a, i) => ({ ...a, avatar_url: signedAvatars[i] }));

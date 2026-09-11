@@ -17,7 +17,7 @@ describe("isReservedOrgSlug", () => {
     }
   });
 
-  it("rejects the platform hosts named in Phase 5 §4", () => {
+  it("rejects the platform hosts", () => {
     for (const slug of ["www", "app", "api", "admin", "platform"]) {
       expect(isReservedOrgSlug(slug)).toBe(true);
     }

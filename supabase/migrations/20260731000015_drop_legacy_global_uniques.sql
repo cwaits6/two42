@@ -1,7 +1,7 @@
--- Phase 2 tenancy (CWA-9 / #211), Task 9: drop the Phase-1 legacy global
--- uniques (§3.5). Phase 1 kept single-column uniques on the four re-scoped
+-- Drop the legacy global uniques. The org spine migration kept
+-- single-column uniques on the four re-scoped
 -- tables so existing app onConflict targets kept working while only one org
--- existed. Phase 2's own gate makes deferring this impossible:
+-- existed. The RLS rewrite's own gate makes deferring this impossible:
 -- provision_organization() seeds settings and an about page for a second
 -- org, and a global unique on site_settings.key means that seed fails.
 --

@@ -1,4 +1,4 @@
-// Unit tests for the branding injection boundary (CWA-55). Pure units: no
+// Unit tests for the branding injection boundary. Pure units: no
 // network, no database — resolveBranding is a pure merge over untrusted jsonb.
 // HEX and the control-character strip are the CSS / RFC 5322 injection guards
 // (see CLAUDE.md "UI conventions"); these tests pin them.

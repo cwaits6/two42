@@ -5,8 +5,7 @@ import { requireOrgAdmin } from "@/lib/members/access";
 
 /**
  * POST /api/admin/email-domain/verify — ask Resend to re-check the org's
- * claimed sending domain and persist the fresh status (Phase 5 PR 6,
- * CWA-70 / #363).
+ * claimed sending domain and persist the fresh status.
  *
  * Service-role because status / dns_records / verified_at / last_checked_at
  * are server-set-only columns the admin's own client cannot UPDATE. Org
@@ -15,7 +14,7 @@ import { requireOrgAdmin } from "@/lib/members/access";
  * on `(id, org_id)`.
  *
  * Verify is a manual button only — no cron, no page-load re-check
- * (docs/plans/phase-5-domains-email.md decision D5: deferred, not in v1).
+ * (deferred, not in v1).
  */
 
 function getResend() {

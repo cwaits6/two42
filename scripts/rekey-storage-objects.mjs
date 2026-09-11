@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Re-key legacy storage objects onto the org-partitioned layout
-// (CWA-57 / #328): `<org_id>/<kind>/<entity_id>/<file>`.
+// Re-key legacy storage objects onto the org-partitioned layout:
+// `<org_id>/<kind>/<entity_id>/<file>`.
 //
 // This is deliberately an OPERATOR SCRIPT, not a migration: Supabase Storage
 // keys the physical blob by bucket/name, so a SQL
@@ -27,7 +27,7 @@
 // floor) — that is what lets it touch the legacy un-prefixed keys that are
 // invisible to every anon/authenticated principal. The org id is DERIVED
 // from the organizations table, never hardcoded; with more than one org the
-// script refuses to guess and requires --org, because legacy (pre-CWA-57)
+// script refuses to guess and requires --org, because legacy (un-prefixed)
 // keys carry no org marker and can only have belonged to the single org
 // that existed before partitioning.
 

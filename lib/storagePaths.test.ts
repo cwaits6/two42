@@ -1,4 +1,4 @@
-// Unit tests for the org-partitioned storage key convention (CWA-57).
+// Unit tests for the org-partitioned storage key convention.
 // Pure units: no network, no database — the builders are string assembly
 // with loud failure on malformed segments, mirroring lib/branding.test.ts.
 

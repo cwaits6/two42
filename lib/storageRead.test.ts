@@ -1,4 +1,4 @@
-// Unit tests for the server-context signing helpers (CWA-59 / #333). The
+// Unit tests for the server-context signing helpers. The
 // mocking pattern mirrors lib/members/access.test.ts: stub
 // @/lib/supabase/server's createClient and hand back a minimal client whose
 // storage API returns canned responses. What matters here is reassembly —

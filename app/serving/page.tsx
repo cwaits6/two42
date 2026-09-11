@@ -71,7 +71,7 @@ export default async function ServingPage() {
     (memberships ?? []).map((m) => [m.group_id, m.is_leader as boolean])
   );
 
-  // Private buckets (CWA-59): exchange stored avatar URLs for signed URLs
+  // Private buckets: exchange stored avatar URLs for signed URLs
   // before the roster reaches RoleRoster's AvatarImage renders.
   const rosterList = (rosterRows ?? []) as unknown as RosterRow[];
   const signedAvatars = await mintSignedUrls(

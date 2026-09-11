@@ -101,7 +101,7 @@ describe("parseAddress", () => {
   });
 });
 
-// ── resolveEmailBranding: the per-org From: address gate (CWA-71) ────────────
+// ── resolveEmailBranding: the per-org From: address gate ─────────────────────
 
 const ORG_ID = "11111111-2222-3333-4444-555555555555";
 

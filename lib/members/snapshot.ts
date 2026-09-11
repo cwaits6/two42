@@ -1,5 +1,5 @@
 /**
- * Org roster snapshot (CWA-40). The ONLY module under lib/members/ that
+ * Org roster snapshot. The ONLY module under lib/members/ that
  * touches IO. It takes the cookie-bound request client as a parameter and
  * never constructs one, so the pure modules (csv/format/import-plan) stay
  * importable in vitest's node environment and this file never pulls

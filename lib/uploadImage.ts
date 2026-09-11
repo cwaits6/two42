@@ -43,7 +43,7 @@ const CONFIG: Record<ImageUploadType, UploadConfig> = {
   },
 };
 
-// Every object key is org-partitioned (CWA-57): the caller passes a key
+// Every object key is org-partitioned: the caller passes a key
 // relative to the org prefix and this resolves `<orgId>/` in front of it.
 // Resolved per call, never cached in module scope — a stale org id would
 // survive a logout/login into a different org. resolveRequestOrgId()
@@ -119,10 +119,10 @@ export async function uploadImage(
  *   RLS floor filtered out is indistinguishable from one that was never
  *   there: both resolve successfully with an empty array. Callers that need
  *   "the blob is gone" rather than "nothing addressable remains" must check
- *   this. Deliberately not a throw: a legacy pre-CWA-57 key is an accepted
+ *   this. Deliberately not a throw: a legacy un-prefixed key is an accepted
  *   no-op (see app/admin/families/page.tsx and the re-key deferral in
  *   docs/security/tenancy-model.md), and throwing would regress every
- *   pre-CWA-57 photo removal during exactly the window this PR opens.
+ *   legacy photo removal during exactly the window this change opens.
  */
 export async function deleteImage(
   type: ImageUploadType,
@@ -154,7 +154,7 @@ export async function deleteImage(
   return { removed };
 }
 
-// ── Signed reads (CWA-59 / #333) ────────────────────────────────────────────
+// ── Signed reads ────────────────────────────────────────────────────────────
 // Both buckets are private, so a stored public-URL string no longer serves as
 // an <img src> directly — it must be exchanged for a signed URL whose minting
 // the org-scoped SELECT policies gate. These are the BROWSER-context helpers

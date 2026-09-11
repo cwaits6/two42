@@ -36,7 +36,7 @@ export default async function AdminAboutPage() {
       .order("created_at"),
   ]);
 
-  // Private buckets (CWA-59): exchange stored avatar URLs for signed URLs
+  // Private buckets: exchange stored avatar URLs for signed URLs
   // before they reach the editor's AvatarImage renders.
   const teacherRows = (teachers ?? []) as ClassTeacherWithProfile[];
   const signedAvatars = await mintSignedUrls(

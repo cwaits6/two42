@@ -1,4 +1,4 @@
--- Org branding backfill + read unblock (CWA-10 Phase 3, #212, stream 3/3).
+-- Org branding backfill + read unblock.
 -- organizations.branding has existed since 20260730010000_org_spine.sql, but
 -- org #1 was seeded '{}' while provision_organization() gives new orgs the
 -- canonical shape — the seeded org could never be branded. Worse, the seeded
@@ -84,7 +84,7 @@ begin
   end if;
 
   -- 1. The org itself. branding carries only the tenant-overridable keys
-  -- from #221 / docs/design/DESIGN.md: display_name, logo_url, accent,
+  -- from docs/design/DESIGN.md: display_name, logo_url, accent,
   -- reply_to.
   insert into public.organizations (name, slug, branding, status)
   values (
@@ -106,7 +106,7 @@ begin
   -- 3. Settings defaults — the full key list in one auditable place.
   -- serving_link_mode's deploy default is applied at read time by
   -- getServingLinkMode() (SERVING_LINK_MODE env); the seed row here matches
-  -- the migration-seeded default. Only site_name is anon-readable (#215).
+  -- the migration-seeded default. Only site_name is anon-readable.
   insert into public.site_settings (org_id, key, value, is_public)
   values
     (_org_id, 'site_name',               '',            true),
@@ -133,7 +133,7 @@ begin
   -- above holds no profiles yet, so ANY existing profile with this email
   -- necessarily belongs to another org — and a profile is never moved
   -- between orgs. An unscoped `update profiles set org_id = _org_id where
-  -- email = ...` would be a cross-tenant write: once Phase 4 exposes a
+  -- email = ...` would be a cross-tenant write: once self-serve signup exposes a
   -- caller, passing a competing org's admin email would re-pin that admin
   -- into the caller's org — an account-takeover primitive that a "who may
   -- provision" guard does not address. Raise instead, matching
@@ -182,7 +182,7 @@ revoke execute on function public.provision_organization(text, text, text)
   from public, anon, authenticated;
 
 -- service_role keeps EXECUTE. Supabase's default privileges already grant it;
--- stating it explicitly means the Phase 4 server-side caller does not depend
+-- stating it explicitly means the server-side caller does not depend
 -- on those defaults. service_role is never reachable from clients, so this
 -- does not re-open PostgREST RPC.
 grant execute on function public.provision_organization(text, text, text)

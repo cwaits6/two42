@@ -1,8 +1,7 @@
--- Reserved org slug labels (Phase 5 PR 1, CWA-65 / #358).
+-- Reserved org slug labels.
 --
--- Slugs become host labels (`<slug>.<platform-apex>`) once Phase 5's
--- wildcard/custom-domain routing ships (docs/plans/phase-5-domains-email.md
--- §4, §12 step 1). Any org minted today with slug `app`, `api`, `www`,
+-- Slugs become host labels (`<slug>.<platform-apex>`) once
+-- wildcard/custom-domain routing ships. Any org minted today with slug `app`, `api`, `www`,
 -- `admin`, ... would shadow a platform host then, and a slug cannot be
 -- reclaimed from a live org without a support incident. So the denylist
 -- lands now, before any slug-as-host routing exists. No routing change here.
@@ -27,7 +26,7 @@ begin
     raise exception 'invalid organization slug: %', _slug using errcode = 'TN003';
   end if;
 
-  -- Reserved subdomain labels (Phase 5 §4, CWA-65 / #358): slugs become host
+  -- Reserved subdomain labels: slugs become host
   -- labels once wildcard/custom-domain routing ships, so any of these would
   -- shadow a platform host. 'default' is deliberately absent — it is the
   -- slug of the one org that exists today (20260730010000_org_spine.sql);
@@ -44,7 +43,7 @@ begin
   end if;
 
   -- 1. The org itself. branding carries only the tenant-overridable keys
-  -- from #221 / docs/design/DESIGN.md: display_name, logo_url, accent,
+  -- from docs/design/DESIGN.md: display_name, logo_url, accent,
   -- reply_to.
   insert into public.organizations (name, slug, branding, status)
   values (
@@ -66,7 +65,7 @@ begin
   -- 3. Settings defaults — the full key list in one auditable place.
   -- serving_link_mode's deploy default is applied at read time by
   -- getServingLinkMode() (SERVING_LINK_MODE env); the seed row here matches
-  -- the migration-seeded default. Only site_name is anon-readable (#215).
+  -- the migration-seeded default. Only site_name is anon-readable.
   insert into public.site_settings (org_id, key, value, is_public)
   values
     (_org_id, 'site_name',               '',            true),
@@ -86,7 +85,7 @@ begin
 
   -- 5. Approved access request for the owner, so their signup resolves
   -- under handle_new_user()'s fail-closed rules. approved_role = 'admin'
-  -- is what makes the owner the founding admin (CWA-11): handle_new_user()
+  -- is what makes the owner the founding admin: handle_new_user()
   -- reads it at signup time, so the org never exists without an admin path.
   insert into public.access_requests (org_id, name, email, status, reviewed_at, approved_role)
   values (_org_id, _name || ' owner', _owner_email, 'approved', now(), 'admin');
@@ -95,7 +94,7 @@ begin
   -- above holds no profiles yet, so ANY existing profile with this email
   -- necessarily belongs to another org — and a profile is never moved
   -- between orgs. An unscoped `update profiles set org_id = _org_id where
-  -- email = ...` would be a cross-tenant write: once Phase 4 exposes a
+  -- email = ...` would be a cross-tenant write: once self-serve signup exposes a
   -- caller, passing a competing org's admin email would re-pin that admin
   -- into the caller's org — an account-takeover primitive that a "who may
   -- provision" guard does not address. Raise instead, matching
@@ -147,7 +146,7 @@ revoke execute on function public.provision_organization(text, text, text)
   from public, anon, authenticated;
 
 -- service_role keeps EXECUTE. Supabase's default privileges already grant it;
--- stating it explicitly means the Phase 4 server-side caller does not depend
+-- stating it explicitly means the server-side caller does not depend
 -- on those defaults. service_role is never reachable from clients, so this
 -- does not re-open PostgREST RPC.
 grant execute on function public.provision_organization(text, text, text)

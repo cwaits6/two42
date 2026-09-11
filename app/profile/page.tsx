@@ -87,7 +87,7 @@ export default async function ProfilePage() {
     familyMembers = fmsRes.data ?? [];
   }
 
-  // Private buckets (CWA-59): exchange every stored avatar/photo URL for a
+  // Private buckets: exchange every stored avatar/photo URL for a
   // signed URL in one batch before the data reaches client renders. The
   // upload paths keep persisting raw URLs — this only touches what's shown.
   const signed = await mintSignedUrls([

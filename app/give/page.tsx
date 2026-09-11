@@ -78,7 +78,7 @@ export default async function GivePage() {
   ]);
 
   const rawFunds = (fundRows ?? []) as FundWithStewards[];
-  // Private buckets (CWA-59): exchange steward avatar URLs for signed URLs
+  // Private buckets: exchange steward avatar URLs for signed URLs
   // before they reach GiveList's renders.
   const funds = await signStewardAvatars(rawFunds);
   const stewardsCanManage = (modeRow?.value ?? "stewards") === "stewards";

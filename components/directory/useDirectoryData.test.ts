@@ -1,4 +1,4 @@
-// Unit tests for signDirectoryUrls (CWA-59 / #333) — the highest-risk
+// Unit tests for signDirectoryUrls — the highest-risk
 // "flatten avatar URLs into one array, mint, then re-index into nested
 // objects" instance this PR introduces: member avatars, each family's own
 // photo_url, and two nested per-family lists (members, family_members_list)

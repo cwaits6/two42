@@ -1,9 +1,9 @@
--- Phase 2 tenancy (CWA-9 / #211), Task 4d: permissive rewrite — prayer
+-- Permissive rewrite — prayer
 -- (prayer_requests, prayer_responses, prayer_call_sessions).
 --
 -- Group-level scoping of the prayer wall (whether it shows one group's
--- requests or the whole org's) is deliberately NOT Phase 2 — it needs a
--- group_id column and a product decision (§3.4); member-facing prayer
+-- requests or the whole org's) is deliberately NOT done here — it needs a
+-- group_id column and a product decision; member-facing prayer
 -- surfaces stay org-scoped here.
 
 -- prayer_requests ------------------------------------------------------------

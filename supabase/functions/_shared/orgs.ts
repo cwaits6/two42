@@ -1,7 +1,7 @@
 // Shared org-iteration primitive for the cron-triggered Edge Functions.
 //
 // Both reminder functions run with the service key, which carries BYPASSRLS —
-// the Phase 2 org isolation policies do not constrain them. Tenant isolation
+// the org isolation policies do not constrain them. Tenant isolation
 // therefore has to live in the query text: enumerate orgs here, then filter
 // every downstream query on org_id explicitly.
 //
@@ -23,8 +23,8 @@ export interface Org {
   // shape: _shared/branding.ts is the sole validator of this column, and this
   // module must not grow a second, weaker opinion about it.
   branding: unknown;
-  // The org's single sending-domain row (org_email_domains, Phase 5 PR 6 /
-  // #367), embedded via the FK from organizations — an array by PostgREST
+  // The org's single sending-domain row (org_email_domains), embedded via
+  // the FK from organizations — an array by PostgREST
   // convention even though the unique index on org_id caps it at one row.
   // Deliberately raw {domain, status}, not pre-validated: _shared/branding.ts
   // is the sole validator, same reasoning as `branding` above.
@@ -59,7 +59,7 @@ export interface OrgListClient {
  * indistinguishable from "no orgs" at the call site, and would silently make
  * the whole run a no-op.
  *
- * branding rides along on this one query (CWA-56) so per-org email branding
+ * branding rides along on this one query so per-org email branding
  * costs no extra round trip and no new service-role call site — and the
  * org_email_domains embed rides along the same way — as does the
  * org_domains embed that feeds the per-org link origin (_shared/org-urls.ts).
@@ -81,8 +81,8 @@ export async function listActiveOrgs(supabase: OrgListClient): Promise<Org[]> {
 }
 
 /**
- * A failure isolated below the org level — one team, one event, one row
- * (CWA-50). `item` is an id (e.g. a group_id), never an org-defined name:
+ * A failure isolated below the org level — one team, one event, one row.
+ * `item` is an id (e.g. a group_id), never an org-defined name:
  * names are tenant content and fragile as diagnostic keys.
  */
 export interface ItemFailure {
@@ -95,7 +95,7 @@ export interface ItemFailure {
  * refused or that never left the function — without it, a run in which every
  * send failed is byte-identical to a legitimately quiet day, because a failed
  * send throws nothing and so never reaches `failed[]`. `itemFailures` is the
- * sub-org failure channel (CWA-50): optional, so a runner with no inner loop
+ * sub-org failure channel: optional, so a runner with no inner loop
  * (send-event-reminders) is unchanged.
  */
 export interface OrgRunCounts {
@@ -115,10 +115,10 @@ export interface OrgRunResult extends OrgRunCounts {
  * abort mid-run but has already sent some emails. Without this, a mid-loop
  * throw after N successful sends would still be recorded by forEachOrg as
  * `{ sent: 0, sendFailures: 0 }` — indistinguishable from an org that failed
- * before sending anything (CWA-49). Callers should accumulate `sent` /
+ * before sending anything. Callers should accumulate `sent` /
  * `sendFailures` locally and throw this instead of a plain `Error` once any
- * email has gone out. Carries `itemFailures` for the same reason (CWA-49 ∩
- * CWA-50): an org that aborts mid-run must still report the teams that had
+ * email has gone out. Carries `itemFailures` for the same reason: an org
+ * that aborts mid-run must still report the teams that had
  * already failed before the abort.
  */
 export class OrgRunError extends Error {

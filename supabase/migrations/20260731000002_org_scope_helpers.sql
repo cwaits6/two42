@@ -1,5 +1,5 @@
--- Phase 2 tenancy (CWA-9 / #211), Task 2: org-scope every SECURITY DEFINER
--- helper (§4.1). SECURITY DEFINER reads bypass RLS, so an id-taking helper
+-- Org-scope every SECURITY DEFINER
+-- helper. SECURITY DEFINER reads bypass RLS, so an id-taking helper
 -- trusting its argument would resolve rows from another org; each one now
 -- carries its own org check instead of trusting the caller. The self-scoped
 -- helpers (they read only the caller's own profiles row, which defines the
@@ -7,7 +7,7 @@
 -- greppable — the schema lint asserts every SECURITY DEFINER function that
 -- reads an org-owned table references org_id.
 --
--- Also fixes the one DB-layer bare-key settings read named in #211:
+-- Also fixes the one DB-layer bare-key settings read:
 -- giving_stewards_can_manage() filtered site_settings on key alone, which
 -- at two orgs matches two rows and raises SQLSTATE 21000 in every giving
 -- policy that calls it.
@@ -138,7 +138,7 @@ as $$
   );
 $$;
 
--- Bare-key settings read (#211): scalar subquery over site_settings filtered
+-- Bare-key settings read: scalar subquery over site_settings filtered
 -- only on key raises 21000 the moment two orgs both hold the row. The org
 -- filter also makes each org's own giving_manage_mode value authoritative.
 create or replace function public.giving_stewards_can_manage() returns boolean

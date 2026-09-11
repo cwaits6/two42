@@ -1,4 +1,4 @@
-// Regression lock on the hardened service-key precedence (#300 / 834d76b)
+// Regression lock on the hardened service-key precedence (commit 834d76b)
 // across the move to _shared/service-key.ts. Requires --allow-env.
 
 import { assertEquals, assertThrows } from "jsr:@std/assert@1";

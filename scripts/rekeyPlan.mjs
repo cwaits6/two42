@@ -1,4 +1,4 @@
-// Pure classification half of scripts/rekey-storage-objects.mjs (CWA-57).
+// Pure classification half of scripts/rekey-storage-objects.mjs.
 //
 // Split out deliberately: the entry point executes `process.env` reads and
 // `createClient()` at module top level, so nothing in it is importable from a
@@ -20,7 +20,7 @@ export const ORG_KINDS = new Set([
   "events",
 ]);
 
-// Legacy (pre-CWA-57) key shapes. Each entry:
+// Legacy (pre-org-partitioning) key shapes. Each entry:
 //   bucket    — the storage bucket the shape can appear in
 //   match     — (segs) => boolean, tested against the "/"-split key
 //   rekey     — (orgId, segs) => the org-partitioned key to move to

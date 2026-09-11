@@ -1,11 +1,11 @@
--- Phase 1 tenancy org spine (CWA-8 / #210, decisions amended by #221;
--- design pinned by .agents/plans/phase-2-rls-rewrite.md's Task 0 gate).
+-- Tenancy org spine.
 -- Adds organizations columns + platform_admins, tags all 28 tenant tables
 -- with org_id (fail-closed default, backfilled to one synthetic org),
 -- re-scopes 4 tables' PK/uniques, re-adds member_groups.functional_role.
 -- No real church/member data is seeded — the default org below is
--- synthetic per #221. Production behavior is unchanged: existing RLS
--- policies are not modified in this phase (that's Phase 2).
+-- synthetic. Production behavior is unchanged: existing RLS
+-- policies are not modified by this migration; the RLS rewrite that
+-- follows owns that.
 
 -- app_current_org_id() below reads profiles.org_id, a column this same
 -- migration adds later (the function must exist first so the org_id
@@ -14,7 +14,7 @@
 -- fail-closed smoke check.
 set check_function_bodies = off;
 
--- 1. Extend the Phase 0 organizations table (do NOT re-create it).
+-- 1. Extend the scaffold's organizations table (do NOT re-create it).
 alter table public.organizations
   add column slug text,
   add column branding jsonb not null default '{}'::jsonb,
@@ -27,7 +27,7 @@ update public.organizations set slug = 'default' where slug is null;
 alter table public.organizations alter column slug set not null;
 alter table public.organizations add constraint organizations_slug_key unique (slug);
 
--- Synthetic default org. NEVER a real church/member identity (#221).
+-- Synthetic default org. NEVER a real church/member identity.
 -- Constant id referenced by every table's backfill below.
 insert into public.organizations (id, slug, name, branding, status)
 values ('00000000-0000-0000-0000-000000000001', 'default', 'Default Organization', '{}'::jsonb, 'active')
@@ -55,10 +55,10 @@ create policy "platform admins can view platform admins" on public.platform_admi
   for select using (( select public.is_platform_admin() ));
 -- No insert/update/delete policy: bootstrapping a platform admin is a
 -- migration/service-role-only operation, same treatment as
--- provision_organization() in the Phase 0 scaffold.
+-- provision_organization() in the test harness scaffold.
 
--- 3. app_current_org_id(): resolves via profiles.org_id (per the Phase 2
--- plan's §3.1 — NOT organization_members). NULL when the caller has no
+-- 3. app_current_org_id(): resolves via profiles.org_id (NOT
+-- organization_members). NULL when the caller has no
 -- profile row (service-role, or the instant before handle_new_user()'s
 -- own insert completes), which is exactly what makes
 -- org_id NOT NULL DEFAULT this function fail-closed.
@@ -245,7 +245,7 @@ create index profiles_org_id_last_first_idx on public.profiles (org_id, last_nam
 
 -- 5. PK/unique re-scoping. Each keeps a temporary legacy global unique so
 -- current app onConflict targets keep working while only one org exists;
--- Phase 2 (§3.5 / Task 9) drops them alongside the app upsert updates.
+-- the RLS rewrite drops them alongside the app upsert updates.
 
 -- page_content: PK slug → (org_id, slug).
 alter table public.page_content add column org_id uuid;
@@ -256,9 +256,10 @@ alter table public.page_content add constraint page_content_org_id_fkey foreign 
 
 alter table public.page_content drop constraint page_content_pkey;
 alter table public.page_content add constraint page_content_pkey primary key (org_id, slug);
--- Temporary: preserves the pre-Phase-1 single-column uniqueness so any
+-- Temporary: preserves the pre-tenancy single-column uniqueness so any
 -- code relying on slug alone being unique keeps working. Only one org
--- exists today, so this is not yet a real restriction. Phase 2 drops it.
+-- exists today, so this is not yet a real restriction. The RLS rewrite
+-- drops it.
 alter table public.page_content add constraint page_content_slug_legacy_key unique (slug);
 -- No standalone org_id index: page_content_pkey (org_id, slug) already
 -- serves org_id-only lookups via the leftmost-prefix rule (same treatment
@@ -301,7 +302,8 @@ alter table public.about_page add constraint about_page_org_id_fkey foreign key 
 alter table public.about_page drop constraint about_page_pkey;
 alter table public.about_page add constraint about_page_pkey primary key (org_id, id);
 -- Legacy: id stays boolean CHECKed true, so this trivially still means
--- "at most one about_page row in the whole table" until Phase 2 drops it.
+-- "at most one about_page row in the whole table" until the RLS rewrite
+-- drops it.
 alter table public.about_page add constraint about_page_id_legacy_key unique (id);
 -- No standalone org_id index: about_page_pkey (org_id, id) already serves
 -- org_id-only lookups via the leftmost-prefix rule.
@@ -315,29 +317,30 @@ alter table public.member_groups add constraint member_groups_org_id_fkey foreig
 
 create index member_groups_org_id_idx on public.member_groups (org_id);
 
--- Re-added per .agents/plans/phase-2-rls-rewrite.md §6.2 — Phase 2's
--- provision_organization() looks up specific groups by this key. No
+-- Re-added because the real provision_organization() looks up specific
+-- groups by this key. No
 -- CHECK enum: the actual role names (prayer_warriors/serving_team/
 -- leaders proposed) are an open item for the maintainer, not decided
--- here. Left NULL on all existing rows — assigning values is Phase 2's job.
+-- here. Left NULL on all existing rows — assigning values is the real
+-- provisioning migration's job.
 alter table public.member_groups add column functional_role text;
 
 create unique index member_groups_org_id_functional_role_key
   on public.member_groups (org_id, functional_role)
   where functional_role is not null;
 
--- 6. provision_organization(): the Phase 0 stub inserts organizations
+-- 6. provision_organization(): the scaffold stub inserts organizations
 -- rows with only a name, which now violates slug's NOT NULL. Still a
--- test/seed-only stub (EXECUTE stays revoked from anon/authenticated per
--- Phase 0); Phase 2 replaces it with real provisioning. Slug is derived
--- from the name with a random suffix — fixture orgs only, never a real
--- identity (#221).
+-- test/seed-only stub (EXECUTE stays revoked from anon/authenticated as
+-- in the scaffold); a later migration replaces it with real provisioning.
+-- Slug is derived from the name with a random suffix — fixture orgs only,
+-- never a real identity.
 -- Known limitation, intentional: this stub does NOT re-pin the owner's
 -- profiles.org_id, so app_current_org_id() for the owner keeps resolving
 -- to the org handle_new_user() stamped (the default org) — the leak suite
 -- asserts exactly that. Fixture org membership flows through
 -- organization_members / is_org_member() instead. Owner pinning belongs
--- to Phase 2's real provisioning (CWA-9 §provision_organization).
+-- to the real provisioning migration.
 create or replace function public.provision_organization(_name text, _owner_id uuid)
 returns uuid
 language plpgsql security definer set search_path = ''
@@ -360,7 +363,7 @@ $$;
 -- 7. handle_new_user(): stamp new signups into the default org explicitly.
 -- The explicit org_id on the profiles INSERT bypasses the column DEFAULT,
 -- breaking the app_current_org_id() chicken-and-egg for a user's own first
--- profile row. Interim, Phase-1-only version — Phase 2 (§5) replaces it
+-- profile row. Interim version — the RLS rewrite replaces it
 -- with a fail-closed version that resolves org from approved
 -- access_requests/family_invites.
 create or replace function public.handle_new_user() returns trigger

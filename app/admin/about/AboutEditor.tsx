@@ -110,7 +110,7 @@ export function AboutEditor({ initialBody, initialTeachers }: AboutEditorProps) 
       setAddOpen(false);
       return;
     }
-    // Private buckets (CWA-59): exchange stored avatar URLs for signed URLs
+    // Private buckets: exchange stored avatar URLs for signed URLs
     // before they reach the candidate-list AvatarImage renders.
     const rows = (data ?? []) as MemberOption[];
     const signed = await mintSignedUrls(rows.map((r) => r.avatar_url));

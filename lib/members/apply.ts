@@ -1,5 +1,5 @@
 /**
- * Executes a validated ImportPlan (CWA-40). Lives here rather than in the
+ * Executes a validated ImportPlan. Lives here rather than in the
  * route so it is reachable from a test: it already took the Supabase client
  * as a parameter, so moving it costs an import and puts it on the correct
  * side of the pure/IO line the rest of lib/members/ commits to. A wrong

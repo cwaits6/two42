@@ -10,9 +10,9 @@
 //
 // Runs with the service key (BYPASSRLS), so tenant isolation lives in the
 // query text: iterates every active organization and filters each query on
-// org_id explicitly (CWA-10 Phase 3, #212).
+// org_id explicitly.
 
-// Pinned exactly (CWA-45): deno.lock's integrity entry only governs CI, while
+// Pinned exactly: deno.lock's integrity entry only governs CI, while
 // `supabase functions deploy` re-resolves this URL through its own bundler —
 // so the version must live in the specifier itself. Matches what the app's
 // package-lock.json resolves for ^2.103.3; bump both together (no Renovate
@@ -57,7 +57,7 @@ const SERVING_LINK_MODE = Deno.env.get("SERVING_LINK_MODE") || "signed";
 // CONCRETE zero-arg factory binds createClient's generics at the real call —
 // unlike ReturnType<typeof createClient> (the unbound generic function),
 // which resolves them to a different, incompatible instantiation; that is why
-// CWA-45 kept a hand-written SupabaseClient<any, "public", any> alias here.
+// this file once kept a hand-written SupabaseClient<any, "public", any> alias.
 // Bound through the factory, the type tracks whatever the pinned 2.110.9
 // call actually returns, so a version bump no longer needs the ALIAS
 // re-derived — but the OrgListClient cast in Deno.serve still does (see its
@@ -70,7 +70,7 @@ type ServiceClient = ReturnType<typeof createServiceClient>;
 
 // The platform From: address — the fallback for every org without a
 // verified org_email_domains row whose domain passes the SENDING_DOMAIN gate
-// in _shared/branding.ts (CWA-56, CWA-71). Mirrors lib/email/identity.ts.
+// in _shared/branding.ts. Mirrors lib/email/identity.ts.
 const PLATFORM_ADDRESS = parseAddress(EMAIL_FROM);
 const BRANDING_DEFAULTS = {
   displayName: APP_NAME,
@@ -230,7 +230,7 @@ async function runDaily(
   }
   if (!teamSettings?.length) return { sent, sendFailures, itemFailures };
 
-  // Per-team fault isolation (CWA-50): each team's body runs inside a try so
+  // Per-team fault isolation: each team's body runs inside a try so
   // one team's failure is recorded in itemFailures and the org's remaining
   // teams still run. Query failures inside the loop throw plain Errors (not
   // OrgRunError) so the catch records them per-team instead of aborting the
@@ -378,7 +378,7 @@ async function runMonthly(
   }
   if (!teamSettings?.length) return { sent, sendFailures, itemFailures };
 
-  // Per-team fault isolation (CWA-50): each team's body runs inside a try so
+  // Per-team fault isolation: each team's body runs inside a try so
   // one team's failure is recorded in itemFailures and the org's remaining
   // teams still run. Query failures inside the loop throw plain Errors (not
   // OrgRunError) so the catch records them per-team instead of aborting the
@@ -517,8 +517,8 @@ async function runMonthly(
       // org_id comes from the row context being processed, not a constant).
       // Recorded, not thrown, on failure — the emails have already gone out,
       // so this must not read as a failed team send; it reaches the summary's
-      // failedItems[] directly (CWA-50 retired the old "log line is the only
-      // record" caveat).
+      // failedItems[] directly (the old "log line is the only record" caveat
+      // no longer applies).
       const { error: broadcastError } = await supabase.from("serving_broadcasts").insert({
         group_id,
         sent_by: null,
@@ -584,7 +584,7 @@ Deno.serve(async (req) => {
     const supabase = createServiceClient();
     // Cast: structurally checking the full SupabaseClient against OrgListClient
     // trips TS2589 (excessively deep instantiation) on current supabase-js.
-    // Re-verified at the pinned 2.110.9 (CWA-45): a direct structural
+    // Re-verified at the pinned 2.110.9: a direct structural
     // assignment still trips TS2589, so the pin does not remove this cast.
     const orgs = await listActiveOrgs(supabase as unknown as OrgListClient);
     const summary = summarize(

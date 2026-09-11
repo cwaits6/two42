@@ -1,4 +1,4 @@
--- access_requests.approved_role: founding-admin handoff (CWA-11 / #213, Phase 4a).
+-- access_requests.approved_role: founding-admin handoff.
 --
 -- The epic's onboarding contract (stated in 20260731000014) is org-first:
 -- provision_organization() creates the org AND an approved access_requests
@@ -97,8 +97,8 @@ begin
 
   _org_id := _org_ids[1];
 
-  -- Approval logic (CWA-11): an approved access request grants its
-  -- approved_role, with NULL preserving the pre-Phase-4 behavior ('member').
+  -- Approval logic: an approved access request grants its
+  -- approved_role, with NULL preserving the previous behavior ('member').
   -- The order by makes a non-NULL approved_role win deterministically if an
   -- org somehow holds two approved requests for the same email. _role stays
   -- NULL — hence 'pending' — when the match came only from family_invites
@@ -153,7 +153,7 @@ begin
   end if;
 
   -- 1. The org itself. branding carries only the tenant-overridable keys
-  -- from #221 / docs/design/DESIGN.md: display_name, logo_url, accent,
+  -- from docs/design/DESIGN.md: display_name, logo_url, accent,
   -- reply_to.
   insert into public.organizations (name, slug, branding, status)
   values (
@@ -175,7 +175,7 @@ begin
   -- 3. Settings defaults — the full key list in one auditable place.
   -- serving_link_mode's deploy default is applied at read time by
   -- getServingLinkMode() (SERVING_LINK_MODE env); the seed row here matches
-  -- the migration-seeded default. Only site_name is anon-readable (#215).
+  -- the migration-seeded default. Only site_name is anon-readable.
   insert into public.site_settings (org_id, key, value, is_public)
   values
     (_org_id, 'site_name',               '',            true),
@@ -195,7 +195,7 @@ begin
 
   -- 5. Approved access request for the owner, so their signup resolves
   -- under handle_new_user()'s fail-closed rules. approved_role = 'admin'
-  -- is what makes the owner the founding admin (CWA-11): handle_new_user()
+  -- is what makes the owner the founding admin: handle_new_user()
   -- reads it at signup time, so the org never exists without an admin path.
   insert into public.access_requests (org_id, name, email, status, reviewed_at, approved_role)
   values (_org_id, _name || ' owner', _owner_email, 'approved', now(), 'admin');
@@ -204,7 +204,7 @@ begin
   -- above holds no profiles yet, so ANY existing profile with this email
   -- necessarily belongs to another org — and a profile is never moved
   -- between orgs. An unscoped `update profiles set org_id = _org_id where
-  -- email = ...` would be a cross-tenant write: once Phase 4 exposes a
+  -- email = ...` would be a cross-tenant write: once self-serve signup exposes a
   -- caller, passing a competing org's admin email would re-pin that admin
   -- into the caller's org — an account-takeover primitive that a "who may
   -- provision" guard does not address. Raise instead, matching
@@ -256,7 +256,7 @@ revoke execute on function public.provision_organization(text, text, text)
   from public, anon, authenticated;
 
 -- service_role keeps EXECUTE. Supabase's default privileges already grant it;
--- stating it explicitly means the Phase 4 server-side caller does not depend
+-- stating it explicitly means the server-side caller does not depend
 -- on those defaults. service_role is never reachable from clients, so this
 -- does not re-open PostgREST RPC.
 grant execute on function public.provision_organization(text, text, text)

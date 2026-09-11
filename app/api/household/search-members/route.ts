@@ -60,7 +60,7 @@ export async function GET(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Private buckets (CWA-59): the client renders these avatars directly, so
+  // Private buckets: the client renders these avatars directly, so
   // exchange stored URLs for signed URLs in the response.
   const rows = data ?? [];
   const signedAvatars = await mintSignedUrls(rows.map((r) => r.avatar_url));
