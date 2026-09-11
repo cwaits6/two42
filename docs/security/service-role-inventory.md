@@ -213,8 +213,8 @@ transaction-scoped advisory lock, re-checks `custom_email_domain_enabled`,
 counts every org's rows, and inserts — one transaction.
 
 - `org_email_domain_claim(_org_id, _domain, _cap)` — inserts the org's row and
-  returns it, or raises `ED001` (unknown org), `ED002` (custom domains not
-  enabled), `ED003` (cap reached), or `23505` (the org already holds a row).
+  returns it, or raises `SD001` (unknown org), `SD002` (custom domains not
+  enabled), `SD003` (cap reached), or `23505` (the org already holds a row).
   EXECUTE: `service_role` only, the `email_quota_consume` way: with no
   `anon`/`authenticated` grant, the only caller is `POST
   /api/admin/email-domain`, which passes the `orgId` from `requireOrgAdmin()`'s

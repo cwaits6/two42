@@ -236,9 +236,9 @@ describe("POST /api/admin/email-domain — gates", () => {
     expect(domainsCreate).not.toHaveBeenCalled();
   });
 
-  it("403s with a contact-support message when the claim RPC reports the platform-wide cap reached (ED003)", async () => {
+  it("403s with a contact-support message when the claim RPC reports the platform-wide cap reached (SD003)", async () => {
     const { client } = makeServiceClient({
-      claimResult: { data: null, error: { code: "ED003", message: "cap" } },
+      claimResult: { data: null, error: { code: "SD003", message: "cap" } },
     });
     createServiceClient.mockResolvedValue(client);
 
@@ -249,9 +249,9 @@ describe("POST /api/admin/email-domain — gates", () => {
     expect(domainsCreate).not.toHaveBeenCalled();
   });
 
-  it("403s with a contact-support message when the claim RPC reports the org not enabled (ED002)", async () => {
+  it("403s with a contact-support message when the claim RPC reports the org not enabled (SD002)", async () => {
     const { client } = makeServiceClient({
-      claimResult: { data: null, error: { code: "ED002", message: "off" } },
+      claimResult: { data: null, error: { code: "SD002", message: "off" } },
     });
     createServiceClient.mockResolvedValue(client);
 

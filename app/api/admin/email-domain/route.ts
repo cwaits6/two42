@@ -59,8 +59,8 @@ const CLEANUP_PENDING = "cleanup_pending";
 // SQLSTATEs raised by org_email_domain_claim() (see the migration that
 // defines it). PostgREST surfaces a raised exception's SQLSTATE as
 // error.code.
-const CLAIM_NOT_ENABLED = "ED002";
-const CLAIM_CAP_REACHED = "ED003";
+const CLAIM_NOT_ENABLED = "SD002";
+const CLAIM_CAP_REACHED = "SD003";
 
 function gateError(status: 401 | 403) {
   return NextResponse.json(

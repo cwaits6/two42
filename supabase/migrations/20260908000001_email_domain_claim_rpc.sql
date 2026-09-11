@@ -39,11 +39,11 @@ begin
   from public.organizations o where o.id = _org_id;
   if _enabled is null then
     raise exception 'org_email_domain_claim: unknown organization'
-      using errcode = 'ED001';
+      using errcode = 'SD001';
   end if;
   if not _enabled then
     raise exception 'org_email_domain_claim: custom sending domains are not enabled for this organization'
-      using errcode = 'ED002';
+      using errcode = 'SD002';
   end if;
 
   -- Rows still awaiting provider-side cleanup count too: their Resend
@@ -51,7 +51,7 @@ begin
   select count(*) into _claimed from public.org_email_domains;
   if _claimed >= _cap then
     raise exception 'org_email_domain_claim: platform domain cap reached'
-      using errcode = 'ED003';
+      using errcode = 'SD003';
   end if;
 
   -- A duplicate claim for the same org raises unique_violation (23505) from
@@ -70,4 +70,4 @@ grant execute on function public.org_email_domain_claim(uuid, text, integer)
   to service_role;
 
 comment on function public.org_email_domain_claim(uuid, text, integer) is
-  'Atomic claim of an org''s custom sending domain under a platform-wide cap. Tenant anchor: service_role-only EXECUTE — _org_id must come from an anchor the server-side caller already validated (the admin''s RLS-scoped profile), never from a request. Raises ED001 (unknown org), ED002 (custom domains not enabled), ED003 (cap reached), or 23505 (org already holds a row).';
+  'Atomic claim of an org''s custom sending domain under a platform-wide cap. Tenant anchor: service_role-only EXECUTE — _org_id must come from an anchor the server-side caller already validated (the admin''s RLS-scoped profile), never from a request. Raises SD001 (unknown org), SD002 (custom domains not enabled), SD003 (cap reached), or 23505 (org already holds a row).';

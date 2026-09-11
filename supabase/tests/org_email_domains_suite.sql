@@ -374,18 +374,18 @@ select is((select count(*)::int from public.org_email_domains), 2,
 
 select throws_ok(
   $q$select public.org_email_domain_claim(gen_random_uuid(), 'mail.nobody.example.test', 10)$q$,
-  'ED001', null,
-  'claim raises ED001 for an unknown organization');
+  'SD001', null,
+  'claim raises SD001 for an unknown organization');
 select throws_ok(
   format($q$select public.org_email_domain_claim(%L, 'mail.org-a2.example.test', 10)$q$,
          current_setting('oed.org_a')),
-  'ED002', null,
-  'claim raises ED002 when custom domains are not enabled for the org');
+  'SD002', null,
+  'claim raises SD002 when custom domains are not enabled for the org');
 select throws_ok(
   format($q$select public.org_email_domain_claim(%L, 'mail.org-c.example.test', 2)$q$,
          current_setting('oed.org_c')),
-  'ED003', null,
-  'claim raises ED003 when the platform-wide count is at the cap');
+  'SD003', null,
+  'claim raises SD003 when the platform-wide count is at the cap');
 select is((select count(*)::int from public.org_email_domains), 2,
   'a refused claim inserts nothing');
 
