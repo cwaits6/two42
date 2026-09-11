@@ -23,6 +23,20 @@ vi.mock("@/lib/email/quota", () => ({
   reserveEmailQuota: (...args: unknown[]) => reserveEmailQuota(...args),
 }));
 
+// Mocked directly (rather than left to run for real against the loosely
+// shaped service-client stub below) so the org-id anchor threaded into these
+// two tenancy-sensitive service-role reads is actually pinned by an
+// assertion, not just silently degraded to a platform default.
+const orgBaseUrl = vi.fn();
+vi.mock("@/lib/org-urls", () => ({
+  orgBaseUrl: (...args: unknown[]) => orgBaseUrl(...args),
+}));
+
+const resolveEmailBranding = vi.fn();
+vi.mock("@/lib/email/identity", () => ({
+  resolveEmailBranding: (...args: unknown[]) => resolveEmailBranding(...args),
+}));
+
 const { POST } = await import("@/app/api/serving/broadcast/route");
 
 // A chainable query-builder stub: .eq()/.gte()/.lte()/.select() all return
@@ -92,6 +106,15 @@ beforeEach(() => {
   createClient.mockReset();
   createServiceClient.mockReset();
   reserveEmailQuota.mockReset();
+  orgBaseUrl.mockReset().mockResolvedValue("https://grace.church");
+  resolveEmailBranding.mockReset().mockResolvedValue({
+    orgName: "Grace Fellowship",
+    fromAddress: "noreply@grace.church",
+    baseUrl: "https://grace.church",
+    accent: "#B85C38",
+    accentLight: "#c98a68",
+    replyTo: null,
+  });
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -122,5 +145,35 @@ describe("POST /api/serving/broadcast — cap hit", () => {
       error: "Your organization has reached its daily email limit. Try again tomorrow.",
     });
     expect(insertSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/serving/broadcast — link origin", () => {
+  it("resolves baseUrl and branding for the group's own org, not a default", async () => {
+    const insertSpy = vi.fn(() => ({ data: null, error: null }));
+    createClient.mockResolvedValue(makeCookieClient(insertSpy));
+    createServiceClient.mockResolvedValue(
+      makeServiceClient([
+        {
+          id: "member-1",
+          first_name: "Sam",
+          last_name: "Lee",
+          preferred_name: null,
+          email: "sam@example.com",
+          role: "member",
+          email_announcements: true,
+        },
+      ])
+    );
+    // Cap hit short-circuits before the send loop but after both calls
+    // below, so this test doesn't need to also stub sendServingBroadcastEmail.
+    reserveEmailQuota.mockResolvedValue(false);
+
+    await POST(broadcastRequest());
+
+    // member_groups in makeCookieClient's stub carries org_id: "org-1" — the
+    // anchor these two calls must be threaded from, not a sibling row's id.
+    expect(orgBaseUrl).toHaveBeenCalledWith("org-1");
+    expect(resolveEmailBranding).toHaveBeenCalledWith("org-1");
   });
 });

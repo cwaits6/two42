@@ -1,5 +1,6 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { sendFeedbackEmail } from "@/lib/email/resend";
+import { resolveEmailBranding } from "@/lib/email/identity";
 import { reserveEmailQuota } from "@/lib/email/quota";
 import { displayName } from "@/lib/names";
 import { NextResponse, after } from "next/server";
@@ -110,12 +111,15 @@ export async function POST(request: Request) {
         return;
       }
 
+      // Branding for the sender's own org (the RLS-scoped profile above) —
+      // never the request org, which on a custom domain could differ.
       await sendFeedbackEmail(
         emails,
         displayName(profile),
         user.email ?? null,
         type,
         message,
+        await resolveEmailBranding(profile.org_id),
       );
     } catch (error) {
       console.error("Failed to email feedback to admins:", error);

@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { sendInviteEmail } from "@/lib/email/resend";
+import { resolveEmailBranding } from "@/lib/email/identity";
+import { orgBaseUrl } from "@/lib/org-urls";
 import { NextResponse } from "next/server";
-import { siteConfig } from "@/lib/config";
 import crypto from "crypto";
 
 export async function POST(request: Request) {
@@ -62,9 +63,39 @@ export async function POST(request: Request) {
       );
     }
 
-    // Send branded invite email via Resend with signup link
-    const signupLink = `${siteConfig.url}/setup-account?token=${signupToken}`;
-    await sendInviteEmail(email, name, signupLink);
+    // The org comes from the row just updated under RLS — the caller's own
+    // org — so the link and branding follow the recipient's org host, not
+    // the deployment's env-pinned platform URL.
+    const orgId = updated[0].org_id;
+    const signupLink = `${await orgBaseUrl(orgId)}/setup-account?token=${signupToken}`;
+    try {
+      await sendInviteEmail(email, name, signupLink, await resolveEmailBranding(orgId));
+    } catch (sendError) {
+      // Roll the request back to pending so a retry doesn't 404 — mirrors
+      // /api/platform/organizations/[id]/invite-owner's rollback-on-send-failure.
+      const { error: rollbackError } = await supabase
+        .from("access_requests")
+        .update({ status: "pending", signup_token: null, token_expires_at: null })
+        .eq("email", email)
+        .eq("signup_token", signupToken);
+      if (rollbackError) {
+        // The row is now stuck approved with a token nobody received. Name it
+        // by id (never the email — PII stays out of logs) so an operator can
+        // find and repair it.
+        console.error(
+          "Invite email send failed AND rollback failed; access_requests row %s (org=%s) is approved with an unsent token:",
+          updated[0].id,
+          orgId,
+          rollbackError
+        );
+      } else {
+        console.error("Invite email send failed; approval rolled back:", sendError);
+      }
+      return NextResponse.json(
+        { error: "Failed to send invite email" },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { siteConfig } from "@/lib/config";
 import { displayName } from "@/lib/names";
+import { resolveEmailBranding } from "@/lib/email/identity";
+import { orgBaseUrl } from "@/lib/org-urls";
 import { getServingLinkMode } from "@/lib/serving/config";
 import { createServingToken } from "@/lib/serving/links";
 import { upcomingSundays } from "@/lib/serving/sundays";
@@ -130,6 +131,12 @@ export async function POST(request: Request) {
 
   const service = await createServiceClient();
   const linkMode = await getServingLinkMode(supabase, group.org_id);
+  // Resolved once per broadcast, not per member: both are org-level facts
+  // anchored on the RLS-checked group row, and each is a service-role read.
+  const [baseUrl, branding] = await Promise.all([
+    orgBaseUrl(group.org_id),
+    resolveEmailBranding(group.org_id),
+  ]);
 
   // org_id filter is required: the recipient list is the email fan-out
   // surface, so an unscoped service-role read here mails another org's members.
@@ -198,13 +205,13 @@ export async function POST(request: Request) {
       date,
       url:
         linkMode === "signed"
-          ? `${siteConfig.url}/serving/go?token=${createServingToken({
+          ? `${baseUrl}/serving/go?token=${createServingToken({
               a: "signup",
               g: groupId,
               d: date,
               p: member.id,
             })}`
-          : `${siteConfig.url}/serving/${groupId}`,
+          : `${baseUrl}/serving/${groupId}`,
     }));
 
     try {
@@ -215,6 +222,7 @@ export async function POST(request: Request) {
         fromName,
         message,
         openDates: dates,
+        branding,
       });
       sent++;
     } catch (err) {

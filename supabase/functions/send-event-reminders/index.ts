@@ -22,6 +22,7 @@ import {
 } from "../_shared/branding.ts";
 import { chunk } from "../_shared/chunk.ts";
 import { escapeHtml } from "../_shared/html.ts";
+import { computeOrgOrigin } from "../_shared/org-urls.ts";
 import { resolveServiceKey } from "../_shared/service-key.ts";
 import { reserveEmailQuota } from "../_shared/quota.ts";
 import {
@@ -53,7 +54,11 @@ function createServiceClient() {
 }
 type ServiceClient = ReturnType<typeof createServiceClient>;
 const SITE_URL = Deno.env.get("SITE_URL") || "https://incouragers.org";
-const EMAIL_FROM = Deno.env.get("EMAIL_FROM") || "two42 <noreply@incouragers.org>";
+// The platform apex for per-org link origins (<slug>.<apex>) — the
+// non-prefixed twin of NEXT_PUBLIC_PLATFORM_APEX, same fallback. SITE_URL
+// above is only the last-resort origin behind it; see _shared/org-urls.ts.
+const PLATFORM_APEX = Deno.env.get("PLATFORM_APEX") || "two42.io";
+const EMAIL_FROM = Deno.env.get("EMAIL_FROM") || "two42 <noreply@two42.io>";
 const APP_NAME = Deno.env.get("APP_NAME") || "two42";
 const BRAND_COLOR = Deno.env.get("BRAND_COLOR") || "#B85C38";
 
@@ -113,6 +118,11 @@ async function runForOrg(
 ): Promise<OrgRunCounts> {
   const now = new Date();
   const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+  // Every link in this org's mail points at the org's own host — the
+  // org_domains embed rode along on the listActiveOrgs() row, so this is a
+  // pure computation, not a query.
+  const baseUrl = computeOrgOrigin(org.slug, org.org_domains, PLATFORM_APEX, SITE_URL);
 
   let sent = 0;
   let sendFailures = 0;
@@ -225,7 +235,7 @@ async function runForOrg(
                 </p>
                 ${event.location ? `<p style="font-size: 18px; margin: 8px 0 0; color: #44403c;"><strong>Where:</strong> ${escapeHtml(event.location)}</p>` : ""}
               </div>
-              <a href="${SITE_URL}/events"
+              <a href="${baseUrl}/events"
                  style="display: inline-block; background-color: ${branding.accent}; color: white; padding: 16px 32px; text-decoration: none; border-radius: 8px; font-size: 18px; margin-top: 20px;">
                 View Event
               </a>

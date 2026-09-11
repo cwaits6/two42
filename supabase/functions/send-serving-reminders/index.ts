@@ -25,6 +25,7 @@ import {
   type EmailBranding,
 } from "../_shared/branding.ts";
 import { escapeHtml } from "../_shared/html.ts";
+import { computeOrgOrigin } from "../_shared/org-urls.ts";
 import { nextSunday, upcomingSundays } from "../_shared/sundays.ts";
 import { resolveServiceKey } from "../_shared/service-key.ts";
 import { reserveEmailQuota } from "../_shared/quota.ts";
@@ -42,7 +43,11 @@ const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SECRET_KEY = resolveServiceKey();
 const SITE_URL = Deno.env.get("SITE_URL") || "https://incouragers.org";
-const EMAIL_FROM = Deno.env.get("EMAIL_FROM") || "two42 <noreply@incouragers.org>";
+// The platform apex for per-org link origins (<slug>.<apex>) — the
+// non-prefixed twin of NEXT_PUBLIC_PLATFORM_APEX, same fallback. SITE_URL
+// above is only the last-resort origin behind it; see _shared/org-urls.ts.
+const PLATFORM_APEX = Deno.env.get("PLATFORM_APEX") || "two42.io";
+const EMAIL_FROM = Deno.env.get("EMAIL_FROM") || "two42 <noreply@two42.io>";
 const APP_NAME = Deno.env.get("APP_NAME") || "two42";
 const BRAND_COLOR = Deno.env.get("BRAND_COLOR") || "#B85C38";
 const SERVING_LINK_SECRET = Deno.env.get("SERVING_LINK_SECRET");
@@ -201,7 +206,8 @@ async function runDaily(
   supabase: ServiceClient,
   orgId: string,
   canSign: boolean,
-  branding: EmailBranding
+  branding: EmailBranding,
+  baseUrl: string
 ): Promise<OrgRunCounts> {
   const todayDow = new Date().getDay();
 
@@ -294,9 +300,9 @@ async function runDaily(
         const safeTeam = escapeHtml(teamName);
         const dateLabel = escapeHtml(formatDate(sunday));
 
-        let cancelUrl = `${SITE_URL}/serving/${group_id}`;
+        let cancelUrl = `${baseUrl}/serving/${group_id}`;
         if (canSign) {
-          cancelUrl = `${SITE_URL}/serving/go?token=${await createToken(
+          cancelUrl = `${baseUrl}/serving/go?token=${await createToken(
             { a: "cancel", g: group_id, d: sunday, p: p.id },
             SERVING_LINK_SECRET!
           )}`;
@@ -352,7 +358,8 @@ async function runMonthly(
   supabase: ServiceClient,
   orgId: string,
   canSign: boolean,
-  branding: EmailBranding
+  branding: EmailBranding,
+  baseUrl: string
 ): Promise<OrgRunCounts> {
   let sent = 0;
   let sendFailures = 0;
@@ -463,9 +470,9 @@ async function runMonthly(
 
         const rows = await Promise.all(
           openDates.map(async (date) => {
-            let signupUrl = `${SITE_URL}/serving/${group_id}`;
+            let signupUrl = `${baseUrl}/serving/${group_id}`;
             if (canSign) {
-              signupUrl = `${SITE_URL}/serving/go?token=${await createToken(
+              signupUrl = `${baseUrl}/serving/go?token=${await createToken(
                 { a: "signup", g: group_id, d: date, p: m.id },
                 SERVING_LINK_SECRET!
               )}`;
@@ -499,7 +506,7 @@ async function runMonthly(
           ${rows.join("")}
           <p style="font-size:14px;color:#78716c;margin-top:24px;">
             Want to see the full schedule?
-            <a href="${SITE_URL}/serving/${group_id}" style="color:${branding.accent};">View the team page</a>
+            <a href="${baseUrl}/serving/${group_id}" style="color:${branding.accent};">View the team page</a>
           </p>
         `, branding.orgName),
         })) { sent++; teamSent++; }
@@ -593,9 +600,13 @@ Deno.serve(async (req) => {
           org.slug,
           org.org_email_domains[0] ?? null,
         );
+        // Every link in this org's mail points at the org's own host — the
+        // org_domains embed rode along on the listActiveOrgs() row, so this
+        // is a pure computation, not a query.
+        const baseUrl = computeOrgOrigin(org.slug, org.org_domains, PLATFORM_APEX, SITE_URL);
         return mode === "monthly"
-          ? await runMonthly(supabase, org.id, canSign, branding)
-          : await runDaily(supabase, org.id, canSign, branding);
+          ? await runMonthly(supabase, org.id, canSign, branding, baseUrl)
+          : await runDaily(supabase, org.id, canSign, branding, baseUrl);
       }),
     );
 
