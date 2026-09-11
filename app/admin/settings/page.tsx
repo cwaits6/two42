@@ -100,7 +100,7 @@ export default function SettingsPage() {
           <CardTitle className="text-3xl text-brand-primary">Site Settings</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="mb-8">
+          <div className="mb-8 flex flex-col gap-3 sm:flex-row">
             <Button
               size="lg"
               variant="outline"
@@ -109,6 +109,15 @@ export default function SettingsPage() {
               render={<Link href="/admin/settings/email" />}
             >
               Email sending domain
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="text-lg"
+              nativeButton={false}
+              render={<Link href="/admin/settings/domains" />}
+            >
+              Custom domains
             </Button>
           </div>
           <form onSubmit={handleSubmit} className="space-y-6">

@@ -201,7 +201,7 @@ the `service_role`-only grant (a browser can never reach the RPC), the
 pgTAP grant matrix, and the unit suites on both sides of the
 `lib/` ⇄ `supabase/functions/_shared/` mirror.
 
-## App routes and pages (22 sites)
+## App routes and pages (26 sites)
 
 | File | Why service-role is used | Org derived from | Scoped queries |
 |------|--------------------------|------------------|----------------|
@@ -227,6 +227,10 @@ pgTAP grant matrix, and the unit suites on both sides of the
 | `app/api/admin/email-domain/route.ts` | POST handler: Resend `domains.create` returns `resend_domain_id`/`status`/`dns_records`, columns the admin's own client has no UPDATE grant on — the write must happen server-side (CWA-70 / #363). The DELETE handler in the same file uses the request client only | The caller's own RLS-scoped `profiles.org_id`, read on the request client; the insert carries that `org_id` in its payload, and every subsequent write is predicate-scoped `.eq("id", ...).eq("org_id", orgId)` | `org_email_domains` insert (payload: `org_id`, `domain`) + update (`resend_domain_id`, `status`, `dns_records`) and rollback deletes on `(id, org_id)` |
 | `app/api/admin/email-domain/verify/route.ts` | POST handler: the `status`/`verified_at`/`last_checked_at` transition must not be writable by the admin's own client (same column grants as above) | The caller's own RLS-scoped `profiles.org_id`, read on the request client; target row fetched `.eq("org_id", orgId)` before any write | `org_email_domains` select `.eq("org_id", orgId)` + update on `(id, org_id)` |
 | `app/api/platform/organizations/[id]/email-cap/route.ts` | Daily email cap override (CWA-72): `org_email_limits` is platform-operator-owned with no permissive policy, so only a service-role write can reach it — an org that can raise its own cap does not have a cap | Platform-admin authority; org id from the route param, validated against an existing `organizations` row before the write | `organizations` `.eq("id", id)` (existence check); `org_email_limits` upsert carrying the validated `org_id`, zero-row-checked |
+| `app/api/admin/domains/[id]/verify/route.ts` | POST handler: the DNS TXT ownership check flips `status` to `verified` and stamps `verified_at` / `last_checked_at` — server-set-only columns the admin's own client has no UPDATE grant on (decision D2). The per-org verify throttle is a count on the same table. Never touches the attachment columns: `attached_at` is written only by the `attach-org-domains` edge function | The caller's own RLS-scoped `profiles.org_id`, read on the request client; the throttle count is `.eq("org_id", orgId)` and the target row is fetched `.eq("id", id).eq("org_id", orgId)` before any write | `org_domains` count `.eq("org_id", orgId)`; select + both updates (`last_checked_at` stamp on a mismatch, `status`/`verified_at`/`last_checked_at` on a match) on `(id, org_id)`. A `23505` on the match update is the global verified/removing partial unique — reported as "being released, retry shortly", never as a DNS failure |
+| `app/api/admin/domains/[id]/route.ts` | DELETE handler: an attached row cannot be deleted by the admin's own client (the restrictive delete policy confines the DELETE grant to `attached_at IS NULL`), so the route flips it to `removing` — the only transition that keeps `attached_at` — and clears the attachment lease for the worker to detach first. The unattached branch deletes on the **request client** (RLS + grant are the boundary there); the service client is used only for the pre-write read and the `removing` transition | Same as the verify route: the caller's own `profiles.org_id`, target fetched on `(id, org_id)` before any write | `org_domains` select on `(id, org_id)`; update to `removing` on `(id, org_id, status = 'verified', attached_at IS NOT NULL)`, row-count-checked; the unattached delete runs on the request client with `{ count: "exact" }` and is likewise row-count-checked |
+| `app/platform/domains/page.tsx` | Cross-tenant attachment status for every claimed custom domain — the operator's observability surface for the `attach-org-domains` worker (awaiting-attach rows and their lease state, `removing` tombstones awaiting detach) | Platform-admin authority: `getPlatformAdmin()` via the cookie-bound request client; cross-org by design (`// org-anchor:` marked). The `organizations(name, slug)` embed is an FK traversal from each `org_domains` row to the tenant root | `org_domains` (deliberately unfiltered list, read-only) |
+| `app/api/platform/domains/[id]/retry/route.ts` | Manual retry for a stuck attachment: clears an **expired** lease (`attach_claimed_at` older than the worker's window) on a verified, unattached row so the worker re-claims it on its next run. Never writes `attached_at` — the worker is that column's sole writer — and never clears a live lease | Platform-admin authority; the row id from the route param resolves the row's own `org_id` via an `// org-anchor:` marked read (the platform admin holds no org of their own), and the write carries that resolved `org_id` | `org_domains` select `.eq("id", id)` (the anchor read); update `.eq("id", …).eq("org_id", row.org_id).eq("status", "verified").is("attached_at", null).lt("attach_claimed_at", cutoff)`, row-count-checked (zero rows is the normal "nothing to retry" answer) |
 
 ## Lib helpers (3 sites)
 
@@ -247,15 +251,16 @@ request org and no `.eq()` filter is needed. That contrast is exactly why
 `lib/email/identity.ts` above — which *does* use the service client — must
 carry `.eq("id", orgId)`.
 
-## Edge Functions (2 sites)
+## Edge Functions (3 sites)
 
-Both are cron-triggered with no session context and resolve the service key
+All three run with no session context and resolve the service key
 from configured environment variables: a manual `SUPABASE_SECRET_KEY` override
 (local/self-host only — the hosted platform reserves the prefix), then the
 platform-injected `SUPABASE_SECRET_KEYS` map, then the legacy
 `SUPABASE_SERVICE_ROLE_KEY` (see `resolveServiceKey()` in
-`supabase/functions/_shared/service-key.ts`, shared by both), not
-`createServiceClient()`.
+`supabase/functions/_shared/service-key.ts`, shared by all three), not
+`createServiceClient()`. The two reminder functions are cron-triggered;
+`attach-org-domains` has no schedule yet (see below).
 
 Tenant iteration is `listActiveOrgs()` + `forEachOrg()`
 (`supabase/functions/_shared/orgs.ts`). `listActiveOrgs()` filters
@@ -284,10 +289,42 @@ query in the loop uses. `.rpc()` calls are outside
 outside its scan set entirely, so these calls are covered by review and by
 `deno test` (`supabase/functions/tests/quota_test.ts`) only.
 
+**`attach-org-domains` (the custom-domain attachment worker) is the third
+entry point and the only component in the system holding a second secret
+beyond the service key: `VERCEL_API_TOKEN`, a function secret
+(`supabase secrets set`), never a Next.js env var (decision D3 in
+`docs/plans/phase-5-domains-email.md`: the app can only ever prove DNS
+ownership; attaching a name to the Vercel project is a deployment-control
+action and lives here). It iterates tenants with the same
+`listActiveOrgs()` + `forEachOrg()` and, per org, runs the attach and detach
+loops in `supabase/functions/_shared/domain-attach.ts` over the lease client
+in `supabase/functions/_shared/domain-lease.ts`. Every `org_domains` chain
+there carries an explicit `.eq("org_id", org.id)` — the two listings, both
+lease claims, the fenced `attached_at` stamp, the compensation re-read, and
+the tombstone hard-delete — and every write's success is judged by an
+affected-row signal (a `RETURNING` row via `maybeSingle()`, or
+`{ count: "exact" }`), never by the absence of an error. The worker is the
+**sole writer of `attached_at`**, and only from a Vercel-confirmed state;
+the `/platform` retry route clears an expired lease and nothing else. The
+predicates are pinned two ways: `supabase/functions/tests/domain_lease_test.ts`
+records the exact chain each method issues (including the `org_id`
+predicate), and `supabase/tests/org_domains_suite.sql` runs the same SQL
+against a real table asserting row counts. Neither
+`check-service-role-org-scope.mjs` (which never scans `supabase/functions/`)
+nor `schema_tenancy_lint.sql` (which never sees TypeScript) can catch a
+dropped filter here — review every `.from(` in `_shared/domain-lease.ts`
+when it changes. **No pg_cron schedule exists yet** (the migration slot was
+held when the worker shipped); until a follow-up migration adds one, the
+function is deployed but only runs when invoked by hand. Operational
+details, the secrets it needs, and the two observability gaps that need
+new schema: [`domains.md`](domains.md).
+
+
 | File | Why service-role is used | Historical tenancy risk | Mitigation |
 |------|--------------------------|-------------------------|------------|
 | `supabase/functions/send-event-reminders/index.ts` | Cron job; reads events/RSVPs and emails attendees with no user session | Reminder fan-out iterates all rows across orgs | **Implemented (Phase 3, #212):** iterates active orgs via `_shared/orgs.ts`, every query filtered on `org_id`, per-org failures isolated so one org cannot suppress another's send. **Branding (CWA-56, #322):** `organizations.branding` rides along on the already-org-anchored `listActiveOrgs()` select — no new service-role call site, no new unscoped query — and is validated by `_shared/branding.ts` (a mirror of `lib/branding.ts` + `lib/email/identity.ts`) before reaching any CSS or RFC 5322 sink. **Link origin (CWA-69):** the `org_domains(domain, status, attached_at)` embed rides along on the same select and `_shared/org-urls.ts` (a mirror of `lib/org-urls.ts`) turns it into the per-org host every link is built from — again no new query and no new service-role site |
 | `supabase/functions/send-serving-reminders/index.ts` | Cron job; reads serving signups and emails assignees with no user session | Same as `send-event-reminders` | **Implemented (Phase 3, #212):** same per-org iteration and `org_id` filters; `resolveCanSign` org-scoped; `serving_broadcasts` audit rows stamped with the processed row's org, not a constant. **Branding (CWA-56, #322):** same `listActiveOrgs()` ride-along, validated by `_shared/branding.ts`. **Link origin (CWA-69):** same `org_domains` ride-along, resolved once per org by `_shared/org-urls.ts` and threaded into every cancel/signup/team-page link. **Per-team isolation (CWA-50, #316):** a failing team is recorded in the run summary's `failedItems[]` keyed by `group_id` — ids, never org-defined team names, in operator diagnostics |
+| `supabase/functions/attach-org-domains/index.ts` | The custom-domain attachment worker: attaches verified `org_domains` rows to the Vercel project and stamps `attached_at`; detaches `removing` tombstones and hard-deletes them. Holds `VERCEL_API_TOKEN` as a function secret in addition to the service key; no user session | A dropped `org_id` predicate would let one org's lease claim, stamp, or tombstone delete land on another org's row — and a wrong stamp flips an org's canonical origin to a host Vercel does not route | Every `org_domains` chain in `_shared/domain-lease.ts` is `.eq("org_id", …)`-scoped and row-count-checked; the `attached_at` stamp is additionally fenced on the claim token, a live lease, the claimed domain, `status = 'verified'` and `attached_at IS NULL`; the apex denylist (`_shared/domain-denylist.ts`) refuses the platform apex and its subdomains before any lease is taken; predicates pinned by `tests/domain_lease_test.ts` and `supabase/tests/org_domains_suite.sql`; orchestration pinned by `tests/domain_attach_test.ts` against fake Vercel/lease clients (the Vercel token does not exist yet, so nothing here has run end to end) |
 
 ## Operator scripts (1 site)
 

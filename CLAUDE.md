@@ -58,10 +58,11 @@ Full rationale, the helper inventory, and the deviations register: [`docs/securi
   deno check supabase/functions/_shared/*.ts
   deno test --allow-env supabase/functions/tests/
   deno check supabase/functions/send-event-reminders/index.ts \
-             supabase/functions/send-serving-reminders/index.ts
+             supabase/functions/send-serving-reminders/index.ts \
+             supabase/functions/attach-org-domains/index.ts
   ```
 
-- **The two `index.ts` entry points are type-checked on every PR** (CWA-45 / #311). Their esm.sh import is pinned to an exact version (`@supabase/supabase-js@2.110.9`) with a `deno.lock` integrity entry, and the `deno-test` job in `.github/workflows/supabase.yml` runs `deno check --frozen` on both files as a failing step (no `continue-on-error`). That job is **not** in `main`'s branch protection, so it reports rather than mechanically blocks a merge. Post-merge, `supabase functions deploy` compiles them again — and it runs *before* `supabase db push` in the same job, so a broken entry point that reached `main` would block every migration behind it. Run `deno check` on both files yourself before pushing.
+- **Every `index.ts` entry point is type-checked on every PR** (CWA-45 / #311; a third, `attach-org-domains/index.ts`, joined at CWA-68). Their esm.sh import is pinned to an exact version (`@supabase/supabase-js@2.110.9`) with a `deno.lock` integrity entry, and the `deno-test` job in `.github/workflows/supabase.yml` runs `deno check --frozen` on all of them as a failing step (no `continue-on-error`). That job is **not** in `main`'s branch protection, so it reports rather than mechanically blocks a merge. Post-merge, `supabase functions deploy` compiles them again — and it runs *before* `supabase db push` in the same job, so a broken entry point that reached `main` would block every migration behind it. Run `deno check` on all of them yourself before pushing.
 - Keep logic that can be unit tested in `_shared/`: the entry points execute `Deno.env.get(...)`, `resolveServiceKey()`, and `Deno.serve()` at module top level, so nothing in them is importable from a test.
 
 ### Testing
