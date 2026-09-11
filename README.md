@@ -187,10 +187,14 @@ Only two environment variables are demoted by this: `NEXT_PUBLIC_APP_NAME` and
 `NEXT_PUBLIC_COLOR_PRIMARY` (see `.env.example`) survive as last-resort fallback
 defaults, used when an org's branding row is empty or unreadable.
 `NEXT_PUBLIC_EMAIL_FROM` is the platform-wide fallback sending address — an org
-with a **verified** claimed sending domain (`org_email_domains`, admin-managed
-under `/platform`) sends from `noreply@<their-domain>` instead; every other
-org keeps `NEXT_PUBLIC_EMAIL_FROM`, since SPF/DKIM are only configured for
-that domain by default. Branding otherwise varies only the display name and
+with custom sending domains enabled by a platform operator (`/platform` →
+organization detail) and a **verified** claimed sending domain
+(`org_email_domains`, claimed by the org's own admin under
+`/admin/settings/email`) sends from `noreply@<their-domain>` instead; every
+other org keeps `NEXT_PUBLIC_EMAIL_FROM`, since SPF/DKIM are only configured
+for that domain by default, and Resend's account-level domain limit
+(`ORG_EMAIL_DOMAIN_CAP` in `.env.example`) means it's opt-in per org rather
+than open to everyone. Branding otherwise varies only the display name and
 Reply-To. The remaining `NEXT_PUBLIC_COLOR_*` vars, `APP_DESCRIPTION`,
 `APP_TAGLINE`, and `LOGO_MONOGRAM` are likewise still platform-wide. Everything
 else — events, announcements, donation links — is managed through the admin

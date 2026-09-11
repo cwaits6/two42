@@ -1046,6 +1046,7 @@ export type Database = {
       }
       org_email_domains: {
         Row: {
+          cleanup_failed_at: string | null
           created_at: string
           dns_records: Json
           domain: string
@@ -1057,6 +1058,7 @@ export type Database = {
           verified_at: string | null
         }
         Insert: {
+          cleanup_failed_at?: string | null
           created_at?: string
           dns_records?: Json
           domain: string
@@ -1068,6 +1070,7 @@ export type Database = {
           verified_at?: string | null
         }
         Update: {
+          cleanup_failed_at?: string | null
           created_at?: string
           dns_records?: Json
           domain?: string
@@ -1184,6 +1187,7 @@ export type Database = {
         Row: {
           branding: Json
           created_at: string
+          custom_email_domain_enabled: boolean
           id: string
           name: string
           slug: string
@@ -1192,6 +1196,7 @@ export type Database = {
         Insert: {
           branding?: Json
           created_at?: string
+          custom_email_domain_enabled?: boolean
           id?: string
           name: string
           slug: string
@@ -1200,6 +1205,7 @@ export type Database = {
         Update: {
           branding?: Json
           created_at?: string
+          custom_email_domain_enabled?: boolean
           id?: string
           name?: string
           slug?: string
@@ -2232,6 +2238,27 @@ export type Database = {
       is_member: { Args: never; Returns: boolean }
       is_org_member: { Args: { _org_id: string }; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
+      org_email_domain_claim: {
+        Args: { _cap: number; _domain: string; _org_id: string }
+        Returns: {
+          cleanup_failed_at: string | null
+          created_at: string
+          dns_records: Json
+          domain: string
+          id: string
+          last_checked_at: string | null
+          org_id: string
+          resend_domain_id: string | null
+          status: string
+          verified_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "org_email_domains"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       provision_organization: {
         Args: { _name: string; _owner_email: string; _slug: string }
         Returns: string

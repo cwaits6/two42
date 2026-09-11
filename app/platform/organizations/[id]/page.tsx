@@ -7,6 +7,7 @@ import { DEFAULT_DAILY_EMAIL_CAP } from "@/lib/email/quota";
 import {
   OrganizationDetail,
   type EmailCapInfo,
+  type EmailDomainInfo,
   type OrgDetail,
   type OwnerRequest,
 } from "./OrganizationDetail";
@@ -28,7 +29,7 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
   const service = await createServiceClient();
   const { data: org, error: orgError } = await service
     .from("organizations")
-    .select("id, name, slug, status, created_at, branding")
+    .select("id, name, slug, status, created_at, branding, custom_email_domain_enabled")
     .eq("id", id)
     .maybeSingle();
 
@@ -70,17 +71,19 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
     );
   }
 
-  // Email cap + today's usage. Both tables are
-  // service-role-only (no permissive policy), so these reads must run here;
+  // Email cap + today's usage + the org's sending-domain row. The cap tables
+  // are service-role-only (no permissive policy) and the domain row is
+  // scoped to the org's own admins, so these reads must run here;
   // .eq("org_id", org.id) is their tenant boundary on this BYPASSRLS client
   // — org.id, not the raw route param, so the anchor is the validated row.
   // Fail-soft: a failed read renders the card's unavailable state rather
-  // than blocking the rest of the page — the cap editor is not load-bearing
-  // for the branding/lifecycle surfaces.
+  // than blocking the rest of the page — neither card is load-bearing for
+  // the branding/lifecycle surfaces.
   const today = new Date().toISOString().slice(0, 10);
   const [
     { data: capRow, error: capError },
     { data: usageRow, error: usageError },
+    { data: domainRow, error: domainError },
   ] = await Promise.all([
     service
       .from("org_email_limits")
@@ -92,6 +95,11 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
       .select("sent_count")
       .eq("org_id", org.id)
       .eq("usage_date", today)
+      .maybeSingle(),
+    service
+      .from("org_email_domains")
+      .select("domain, status, cleanup_failed_at")
+      .eq("org_id", org.id)
       .maybeSingle(),
   ]);
 
@@ -107,6 +115,23 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
       dailyCap: capRow?.daily_cap ?? DEFAULT_DAILY_EMAIL_CAP,
       hasOverride: capRow !== null,
       usedToday: usageRow?.sent_count ?? 0,
+    };
+  }
+
+  let emailDomain: EmailDomainInfo;
+  if (domainError) {
+    console.error("Platform email domain read failed for org %s:", id, domainError);
+    emailDomain = { loaded: false };
+  } else {
+    emailDomain = {
+      loaded: true,
+      row: domainRow
+        ? {
+            domain: domainRow.domain,
+            status: domainRow.status,
+            cleanupFailedAt: domainRow.cleanup_failed_at,
+          }
+        : null,
     };
   }
 
@@ -130,6 +155,7 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
     name: org.name,
     slug: org.slug,
     status: org.status,
+    customEmailDomainEnabled: org.custom_email_domain_enabled,
     branding: {
       display_name: typeof branding.display_name === "string" ? branding.display_name : "",
       logo_url: typeof branding.logo_url === "string" ? branding.logo_url : "",
@@ -146,7 +172,12 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
         backHref="/platform/organizations"
         backLabel="Back to Organizations"
       />
-      <OrganizationDetail org={detail} owner={owner} emailCap={emailCap} />
+      <OrganizationDetail
+        org={detail}
+        owner={owner}
+        emailCap={emailCap}
+        emailDomain={emailDomain}
+      />
     </PageContainer>
   );
 }

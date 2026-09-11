@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -72,10 +71,38 @@ function formatTimestamp(value: string | null): string {
   return new Date(value).toLocaleString();
 }
 
-type DomainApiResponse = { error?: string; data?: EmailDomainRow };
+export type EmailDomainCardState =
+  | "load-failed"
+  | "not-enabled"
+  | "claim-form"
+  | "claimed";
 
 /**
- * Fetch + parse-JSON, shared by the claim/verify/remove handlers below.
+ * Which of the four mutually exclusive cards to render. A row always wins
+ * (the claimed-domain card), regardless of `enabled` — a platform operator
+ * turning the flag off after a claim must not hide an already-claimed
+ * domain from its own admin. Absent a row, `enabled === null` means the
+ * initial load itself failed (fail closed: never show the claim form
+ * without confirmation the flag is actually on).
+ */
+export function selectEmailDomainCardState(
+  row: EmailDomainRow | null,
+  enabled: boolean | null,
+): EmailDomainCardState {
+  if (row) return "claimed";
+  if (enabled === null) return "load-failed";
+  if (!enabled) return "not-enabled";
+  return "claim-form";
+}
+
+type DomainApiResponse = {
+  error?: string;
+  data?: EmailDomainRow | null;
+  enabled?: boolean;
+};
+
+/**
+ * Fetch + parse-JSON, shared by the load/claim/verify/remove handlers below.
  * A 2xx whose body fails to parse counts as failure unless the caller opts
  * in via allowEmptyBody (the DELETE contract carries no envelope worth
  * requiring) — a truncated or non-JSON success response must not toast
@@ -92,30 +119,39 @@ async function requestJson(
 }
 
 export default function EmailDomainSettingsPage() {
-  const supabase = useMemo(() => createClient(), []);
   const [loading, setLoading] = useState(true);
+  // null = not loaded (or the load failed). Fail closed: no claim form until
+  // the server has said custom domains are enabled for this org.
+  const [enabled, setEnabled] = useState<boolean | null>(null);
   const [row, setRow] = useState<EmailDomainRow | null>(null);
   const [domainInput, setDomainInput] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    // Plain RLS-scoped read on the request client: an admin sees exactly
-    // their own org's row (or none). SELECT is granted on the whole row.
-    const { data, error } = await supabase
-      .from("org_email_domains")
-      .select("*")
-      .maybeSingle();
-    if (error) {
-      // Return early: a transient read failure must not clear an
-      // already-displayed, already-claimed domain back to "unclaimed".
-      console.error("email-domain load: failed to load sending domain:", error);
-      toast.error("Failed to load sending domain.");
+    // One request for both the row and the enablement flag: the flag is a
+    // platform-operator column the admin's own client cannot read, so the
+    // route reads it server-side and returns it alongside the row.
+    try {
+      const { ok, data } = await requestJson("/api/admin/email-domain");
+      if (!ok || typeof data?.enabled !== "boolean") {
+        // Return early: a transient read failure must not clear an
+        // already-displayed, already-claimed domain back to "unclaimed".
+        console.error(
+          "email-domain load: failed to load sending domain:",
+          data?.error,
+        );
+        toast.error("Failed to load sending domain settings.");
+        return;
+      }
+      setEnabled(data.enabled);
+      setRow(data.data ?? null);
+    } catch (err) {
+      console.error("email-domain load: request failed:", err);
+      toast.error("Could not reach the server. Check your connection and try again.");
+    } finally {
       setLoading(false);
-      return;
     }
-    setRow(data ?? null);
-    setLoading(false);
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -182,9 +218,15 @@ export default function EmailDomainSettingsPage() {
     }
   };
 
+  const cleanupPending = row?.status === "cleanup_pending";
+
   const handleRemove = async () => {
     if (
-      !confirm("Remove this sending domain? You can claim a new one afterward.")
+      !confirm(
+        cleanupPending
+          ? "Retry removing this sending domain?"
+          : "Remove this sending domain? You can claim a new one afterward.",
+      )
     ) {
       return;
     }
@@ -197,6 +239,9 @@ export default function EmailDomainSettingsPage() {
       );
       if (!ok) {
         toast.error(data?.error || "Failed to remove domain.");
+        // A failed provider-side removal leaves the row marked as still
+        // cleaning up — reload so the card shows that state.
+        await load();
         return;
       }
       toast.success("Domain removed.");
@@ -218,6 +263,7 @@ export default function EmailDomainSettingsPage() {
   }
 
   const records = row ? toDnsRecords(row.dns_records) : [];
+  const cardState = selectEmailDomainCardState(row, enabled);
 
   return (
     <PageContainer size="narrow">
@@ -228,7 +274,30 @@ export default function EmailDomainSettingsPage() {
         backLabel="Back to Settings"
       />
 
-      {!row ? (
+      {cardState === "load-failed" ? (
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-lg text-muted-foreground">
+              Failed to load your sending domain settings. Refresh to try
+              again.
+            </p>
+          </CardContent>
+        </Card>
+      ) : cardState === "not-enabled" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl text-brand-primary">
+              Custom sending domain
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-lg">
+              Custom sending domains aren&apos;t available for your
+              organization yet. Contact support to request access.
+            </p>
+          </CardContent>
+        </Card>
+      ) : cardState === "claim-form" ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-2xl text-brand-primary">
@@ -268,7 +337,7 @@ export default function EmailDomainSettingsPage() {
             </form>
           </CardContent>
         </Card>
-      ) : (
+      ) : row ? (
         <Card>
           <CardHeader>
             <CardTitle className="flex flex-wrap items-center gap-3 text-2xl text-brand-primary">
@@ -282,86 +351,102 @@ export default function EmailDomainSettingsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <dl className="grid grid-cols-1 gap-2 text-lg sm:grid-cols-2">
-              <div>
-                <dt className="text-muted-foreground">Verified</dt>
-                <dd>{formatTimestamp(row.verified_at)}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Last checked</dt>
-                <dd>{formatTimestamp(row.last_checked_at)}</dd>
-              </div>
-            </dl>
+            {cleanupPending ? (
+              <p className="text-lg" role="status">
+                This domain&apos;s removal didn&apos;t finish with the email
+                provider
+                {row.cleanup_failed_at
+                  ? ` (last tried ${formatTimestamp(row.cleanup_failed_at)})`
+                  : ""}
+                . Click Remove to retry. Email keeps sending from the platform
+                address in the meantime.
+              </p>
+            ) : (
+              <dl className="grid grid-cols-1 gap-2 text-lg sm:grid-cols-2">
+                <div>
+                  <dt className="text-muted-foreground">Verified</dt>
+                  <dd>{formatTimestamp(row.verified_at)}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Last checked</dt>
+                  <dd>{formatTimestamp(row.last_checked_at)}</dd>
+                </div>
+              </dl>
+            )}
 
-            <section className="space-y-3">
-              <h2 className="text-xl font-semibold">DNS records to publish</h2>
-              {records.length === 0 ? (
-                <p className="text-lg text-muted-foreground">
-                  No records returned yet. Try Verify to refresh.
-                </p>
-              ) : (
-                <ul className="space-y-3">
-                  {records.map((r, i) => (
-                    <li
-                      key={`${r.record ?? "record"}-${r.name ?? i}`}
-                      className="rounded-md border border-border p-4 text-base"
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold">
-                          {r.record ?? "Record"}
-                        </span>
-                        {r.type && <Badge variant="outline">{r.type}</Badge>}
-                        {r.status && (
-                          <Badge
-                            variant={statusVariant(r.status)}
-                            className="capitalize"
-                          >
-                            {statusLabel(r.status)}
-                          </Badge>
-                        )}
-                      </div>
-                      <dl className="mt-2 grid grid-cols-1 gap-1">
-                        <div>
-                          <dt className="text-muted-foreground">Name</dt>
-                          <dd className="break-all font-mono">
-                            {r.name ?? "—"}
-                          </dd>
+            {!cleanupPending && (
+              <section className="space-y-3">
+                <h2 className="text-xl font-semibold">DNS records to publish</h2>
+                {records.length === 0 ? (
+                  <p className="text-lg text-muted-foreground">
+                    No records returned yet. Try Verify to refresh.
+                  </p>
+                ) : (
+                  <ul className="space-y-3">
+                    {records.map((r, i) => (
+                      <li
+                        key={`${r.record ?? "record"}-${r.name ?? i}`}
+                        className="rounded-md border border-border p-4 text-base"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold">
+                            {r.record ?? "Record"}
+                          </span>
+                          {r.type && <Badge variant="outline">{r.type}</Badge>}
+                          {r.status && (
+                            <Badge
+                              variant={statusVariant(r.status)}
+                              className="capitalize"
+                            >
+                              {statusLabel(r.status)}
+                            </Badge>
+                          )}
                         </div>
-                        <div>
-                          <dt className="text-muted-foreground">Value</dt>
-                          <dd className="break-all font-mono">
-                            {r.value ?? "—"}
-                          </dd>
-                        </div>
-                        {r.priority !== undefined && (
+                        <dl className="mt-2 grid grid-cols-1 gap-1">
                           <div>
-                            <dt className="text-muted-foreground">Priority</dt>
-                            <dd className="font-mono">{r.priority}</dd>
+                            <dt className="text-muted-foreground">Name</dt>
+                            <dd className="break-all font-mono">
+                              {r.name ?? "—"}
+                            </dd>
                           </div>
-                        )}
-                        {r.ttl && (
                           <div>
-                            <dt className="text-muted-foreground">TTL</dt>
-                            <dd className="font-mono">{r.ttl}</dd>
+                            <dt className="text-muted-foreground">Value</dt>
+                            <dd className="break-all font-mono">
+                              {r.value ?? "—"}
+                            </dd>
                           </div>
-                        )}
-                      </dl>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
+                          {r.priority !== undefined && (
+                            <div>
+                              <dt className="text-muted-foreground">Priority</dt>
+                              <dd className="font-mono">{r.priority}</dd>
+                            </div>
+                          )}
+                          {r.ttl && (
+                            <div>
+                              <dt className="text-muted-foreground">TTL</dt>
+                              <dd className="font-mono">{r.ttl}</dd>
+                            </div>
+                          )}
+                        </dl>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            )}
 
             <div className="flex flex-col gap-3 sm:flex-row">
-              <Button
-                type="button"
-                size="lg"
-                className="flex-1 text-lg py-6 bg-brand-primary hover:bg-brand-primary/90 text-white"
-                onClick={handleVerify}
-                disabled={busy}
-              >
-                {busy ? "Working..." : "Verify"}
-              </Button>
+              {!cleanupPending && (
+                <Button
+                  type="button"
+                  size="lg"
+                  className="flex-1 text-lg py-6 bg-brand-primary hover:bg-brand-primary/90 text-white"
+                  onClick={handleVerify}
+                  disabled={busy}
+                >
+                  {busy ? "Working..." : "Verify"}
+                </Button>
+              )}
               <Button
                 type="button"
                 size="lg"
@@ -370,12 +455,12 @@ export default function EmailDomainSettingsPage() {
                 onClick={handleRemove}
                 disabled={busy}
               >
-                Remove
+                {busy ? "Working..." : cleanupPending ? "Retry removal" : "Remove"}
               </Button>
             </div>
           </CardContent>
         </Card>
-      )}
+      ) : null}
     </PageContainer>
   );
 }

@@ -100,6 +100,33 @@ select ok(
   not has_column_privilege('authenticated', 'public.organizations', 'status', 'select'),
   'authenticated may not read organizations.status'
 );
+-- The custom-sending-domain gate is platform-operator-only: an org's own
+-- admin learns its effect through the claim route's 403, never by reading
+-- (or flipping) the column from their own client.
+select ok(
+  not has_column_privilege('anon', 'public.organizations', 'custom_email_domain_enabled', 'select'),
+  'anon may not read organizations.custom_email_domain_enabled'
+);
+select ok(
+  not has_column_privilege('authenticated', 'public.organizations', 'custom_email_domain_enabled', 'select'),
+  'authenticated may not read organizations.custom_email_domain_enabled'
+);
+-- The write side is enforced by RLS, not grants: Supabase's default
+-- table-level UPDATE grant on organizations still stands, but no permissive
+-- write policy exists, so the only write path is the service-role platform
+-- route. Pin that absence — a future permissive UPDATE arm would hand the
+-- flag to the org's own admin.
+select is(
+  (select count(*) from pg_policies
+     where schemaname = 'public' and tablename = 'organizations'
+       and permissive = 'PERMISSIVE' and cmd in ('INSERT', 'UPDATE', 'DELETE', 'ALL')),
+  0::bigint,
+  'no permissive write policy on organizations: custom_email_domain_enabled is writable only via the service-role platform route'
+);
+select col_not_null('public', 'organizations', 'custom_email_domain_enabled',
+  'organizations.custom_email_domain_enabled is NOT NULL');
+select col_default_is('public', 'organizations', 'custom_email_domain_enabled', 'false',
+  'organizations.custom_email_domain_enabled defaults to false (no org gets custom domains until an operator flips it)');
 
 -- anon resolving the org via the x-two42-org header reads exactly 1 row.
 set local role anon;

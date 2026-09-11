@@ -101,14 +101,18 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
   const { id } = await params;
 
-  let body: { status?: unknown; branding?: unknown };
+  let body: { status?: unknown; branding?: unknown; custom_email_domain_enabled?: unknown };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const update: { status?: OrgStatus; branding?: Record<string, unknown> } = {};
+  const update: {
+    status?: OrgStatus;
+    branding?: Record<string, unknown>;
+    custom_email_domain_enabled?: boolean;
+  } = {};
 
   if ("status" in body) {
     if (!isOrgStatus(body.status)) {
@@ -118,6 +122,19 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       );
     }
     update.status = body.status;
+  }
+
+  // Platform-operator-only gate on custom sending domains: a plain boolean
+  // pass-through here is the only write path for it (the column has no
+  // grant to the org's own admin).
+  if ("custom_email_domain_enabled" in body) {
+    if (typeof body.custom_email_domain_enabled !== "boolean") {
+      return NextResponse.json(
+        { error: "custom_email_domain_enabled must be true or false" },
+        { status: 400 }
+      );
+    }
+    update.custom_email_domain_enabled = body.custom_email_domain_enabled;
   }
 
   let brandingPatch: Record<string, string | null> | null = null;
@@ -132,7 +149,11 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     brandingPatch = result.branding;
   }
 
-  if (update.status === undefined && brandingPatch === null) {
+  if (
+    update.status === undefined &&
+    update.custom_email_domain_enabled === undefined &&
+    brandingPatch === null
+  ) {
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
   }
 

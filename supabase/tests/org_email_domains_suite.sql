@@ -8,7 +8,9 @@
 --     `domain` only, DELETE, and UPDATE nothing (status / resend_domain_id /
 --     dns_records / verified_at / last_checked_at are server-set-only, and
 --     `domain` is immutable after insert); anon holds no privilege at all;
---   * the unique-per-org index and the domain_shape CHECK.
+--   * the unique-per-org index, the domain_shape CHECK, and the status
+--     CHECK — including cleanup_pending, the one non-Resend status a row
+--     whose provider-side removal failed is kept in.
 --
 -- Run locally (rollback-safe, never mutates the shared local stack):
 --
@@ -247,6 +249,8 @@ select ok(not has_column_privilege('authenticated', 'public.org_email_domains', 
   'authenticated may not UPDATE org_email_domains.verified_at');
 select ok(not has_column_privilege('authenticated', 'public.org_email_domains', 'last_checked_at', 'update'),
   'authenticated may not UPDATE org_email_domains.last_checked_at');
+select ok(not has_column_privilege('authenticated', 'public.org_email_domains', 'cleanup_failed_at', 'update'),
+  'authenticated may not UPDATE org_email_domains.cleanup_failed_at');
 select ok(not has_column_privilege('authenticated', 'public.org_email_domains', 'domain', 'update'),
   'authenticated may not UPDATE org_email_domains.domain (immutable after insert)');
 select ok(not has_table_privilege('authenticated', 'public.org_email_domains', 'update'),
@@ -264,9 +268,13 @@ select ok(not has_column_privilege('authenticated', 'public.org_email_domains', 
   'authenticated may not INSERT org_email_domains.verified_at');
 select ok(not has_column_privilege('authenticated', 'public.org_email_domains', 'last_checked_at', 'insert'),
   'authenticated may not INSERT org_email_domains.last_checked_at');
+select ok(not has_column_privilege('authenticated', 'public.org_email_domains', 'cleanup_failed_at', 'insert'),
+  'authenticated may not INSERT org_email_domains.cleanup_failed_at');
 
 select ok(has_column_privilege('authenticated', 'public.org_email_domains', 'status', 'select'),
   'authenticated may SELECT org_email_domains.status');
+select ok(has_column_privilege('authenticated', 'public.org_email_domains', 'cleanup_failed_at', 'select'),
+  'authenticated may SELECT org_email_domains.cleanup_failed_at (the settings page shows the stuck state)');
 select ok(has_table_privilege('authenticated', 'public.org_email_domains', 'select'),
   'authenticated may SELECT the whole org_email_domains row');
 select ok(has_table_privilege('authenticated', 'public.org_email_domains', 'delete'),
@@ -310,6 +318,95 @@ select throws_ok(
   null,
   'a status outside Resend''s vocabulary violates the status CHECK'
 );
+-- cleanup_pending is the one status outside Resend's vocabulary: a row whose
+-- provider-side removal failed keeps its resend_domain_id in this state
+-- instead of being deleted, so it must pass the CHECK.
+select lives_ok(
+  format($q$update public.org_email_domains set status = 'cleanup_pending', cleanup_failed_at = now() where org_id = %L$q$,
+         current_setting('oed.org_a')),
+  'cleanup_pending is a valid status value'
+);
+select is(
+  (select status from public.org_email_domains where org_id = current_setting('oed.org_a')::uuid),
+  'cleanup_pending',
+  'the cleanup_pending status persisted on org A''s row'
+);
+
+
+-- ── Atomic claim RPC ────────────────────────────────────────────────────────
+-- org_email_domain_claim() is the only path that inserts under the
+-- platform-wide cap. Pin its grant matrix (service_role only) and its
+-- behaviour: the enablement flag, the cap, the unique-per-org index, and
+-- that a refused claim inserts nothing.
+select has_function('public', 'org_email_domain_claim', array['uuid', 'text', 'integer'],
+  'org_email_domain_claim(uuid, text, integer) exists');
+select is(
+  (select prosecdef from pg_proc where oid = 'public.org_email_domain_claim(uuid, text, integer)'::regprocedure),
+  true,
+  'org_email_domain_claim is SECURITY DEFINER');
+select ok(
+  (select proconfig @> array['search_path=""'] from pg_proc
+    where oid = 'public.org_email_domain_claim(uuid, text, integer)'::regprocedure),
+  'org_email_domain_claim pins an empty search_path');
+select ok(
+  not has_function_privilege('anon', 'public.org_email_domain_claim(uuid, text, integer)', 'execute'),
+  'anon cannot execute org_email_domain_claim');
+select ok(
+  not has_function_privilege('authenticated', 'public.org_email_domain_claim(uuid, text, integer)', 'execute'),
+  'authenticated cannot execute org_email_domain_claim');
+select ok(
+  has_function_privilege('service_role', 'public.org_email_domain_claim(uuid, text, integer)', 'execute'),
+  'service_role can execute org_email_domain_claim');
+
+-- A third org, enabled and holding no row. Two rows exist at this point
+-- (org A, org B), so a cap of 2 is "full" and a cap of 3 has one free slot.
+do $$
+declare
+  org_c uuid;
+begin
+  org_c := public.provision_organization('Email Domain Suite Org C', 'email-domain-suite-org-c', 'owner-c@emaildomain.example.test');
+  update public.organizations set custom_email_domain_enabled = true where id = org_c;
+  perform set_config('oed.org_c', org_c::text, true);
+end $$;
+
+select is((select count(*)::int from public.org_email_domains), 2,
+  'fixture: two rows exist before the claim assertions');
+
+select throws_ok(
+  $q$select public.org_email_domain_claim(gen_random_uuid(), 'mail.nobody.example.test', 10)$q$,
+  'SD001', null,
+  'claim raises SD001 for an unknown organization');
+select throws_ok(
+  format($q$select public.org_email_domain_claim(%L, 'mail.org-a2.example.test', 10)$q$,
+         current_setting('oed.org_a')),
+  'SD002', null,
+  'claim raises SD002 when custom domains are not enabled for the org');
+select throws_ok(
+  format($q$select public.org_email_domain_claim(%L, 'mail.org-c.example.test', 2)$q$,
+         current_setting('oed.org_c')),
+  'SD003', null,
+  'claim raises SD003 when the platform-wide count is at the cap');
+select is((select count(*)::int from public.org_email_domains), 2,
+  'a refused claim inserts nothing');
+
+select is(
+  (select org_id from public.org_email_domain_claim(current_setting('oed.org_c')::uuid, 'mail.org-c.example.test', 3)),
+  current_setting('oed.org_c')::uuid,
+  'claim below the cap inserts and returns the row for the caller''s org');
+select is(
+  (select status from public.org_email_domains where org_id = current_setting('oed.org_c')::uuid),
+  'not_started',
+  'the claimed row starts in the default status');
+select is((select count(*)::int from public.org_email_domains), 3,
+  'the accepted claim inserted exactly one row');
+
+select throws_ok(
+  format($q$select public.org_email_domain_claim(%L, 'mail.org-c2.example.test', 10)$q$,
+         current_setting('oed.org_c')),
+  '23505', null,
+  'a second claim for the same org raises unique_violation from the unique-per-org index');
+select is((select count(*)::int from public.org_email_domains), 3,
+  'the duplicate claim inserted nothing');
 
 select * from finish();
 rollback;
