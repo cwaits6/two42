@@ -457,6 +457,87 @@ $$;
 
 ALTER FUNCTION "public"."is_platform_admin"() OWNER TO "postgres";
 
+SET default_tablespace = '';
+
+SET default_table_access_method = "heap";
+
+
+CREATE TABLE IF NOT EXISTS "public"."org_email_domains" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "domain" "text" NOT NULL,
+    "resend_domain_id" "text",
+    "status" "text" DEFAULT 'not_started'::"text" NOT NULL,
+    "dns_records" "jsonb" DEFAULT '[]'::"jsonb" NOT NULL,
+    "verified_at" timestamp with time zone,
+    "last_checked_at" timestamp with time zone,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "cleanup_failed_at" timestamp with time zone,
+    CONSTRAINT "org_email_domains_domain_shape" CHECK ((("domain" = "lower"("domain")) AND (("length"("domain") >= 4) AND ("length"("domain") <= 253)))),
+    CONSTRAINT "org_email_domains_status_check" CHECK (("status" = ANY (ARRAY['not_started'::"text", 'pending'::"text", 'verified'::"text", 'failure'::"text", 'temporary_failure'::"text", 'failed'::"text", 'partially_verified'::"text", 'partially_failed'::"text", 'cleanup_pending'::"text"])))
+);
+
+
+ALTER TABLE "public"."org_email_domains" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."org_email_domains"."cleanup_failed_at" IS 'Set when a Resend domains.remove attempt failed and the row was kept as cleanup_pending. Cleared by deleting the row once cleanup succeeds.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."org_email_domain_claim"("_org_id" "uuid", "_domain" "text", "_cap" integer) RETURNS "public"."org_email_domains"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _enabled boolean;
+  _claimed integer;
+  _row public.org_email_domains;
+begin
+  if _org_id is null or _domain is null or _cap is null or _cap < 0 then
+    raise exception 'org_email_domain_claim: _org_id, _domain and a non-negative _cap are required';
+  end if;
+
+  -- One claim at a time, platform-wide. Transaction-scoped so it releases
+  -- on commit or rollback; the key is arbitrary but stable.
+  perform pg_advisory_xact_lock(hashtext('public.org_email_domains:claim'));
+
+  select o.custom_email_domain_enabled into _enabled
+  from public.organizations o where o.id = _org_id;
+  if _enabled is null then
+    raise exception 'org_email_domain_claim: unknown organization'
+      using errcode = 'SD001';
+  end if;
+  if not _enabled then
+    raise exception 'org_email_domain_claim: custom sending domains are not enabled for this organization'
+      using errcode = 'SD002';
+  end if;
+
+  -- Rows still awaiting provider-side cleanup count too: their Resend
+  -- domain still occupies a slot.
+  select count(*) into _claimed from public.org_email_domains;
+  if _claimed >= _cap then
+    raise exception 'org_email_domain_claim: platform domain cap reached'
+      using errcode = 'SD003';
+  end if;
+
+  -- A duplicate claim for the same org raises unique_violation (23505) from
+  -- the unique-per-org index, exactly as a direct insert would.
+  insert into public.org_email_domains (org_id, domain)
+  values (_org_id, _domain)
+  returning * into _row;
+
+  return _row;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."org_email_domain_claim"("_org_id" "uuid", "_domain" "text", "_cap" integer) OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."org_email_domain_claim"("_org_id" "uuid", "_domain" "text", "_cap" integer) IS 'Atomic claim of an org''s custom sending domain under a platform-wide cap. Tenant anchor: service_role-only EXECUTE — _org_id must come from an anchor the server-side caller already validated (the admin''s RLS-scoped profile), never from a request. Raises SD001 (unknown org), SD002 (custom domains not enabled), SD003 (cap reached), or 23505 (org already holds a row).';
+
+
 
 CREATE OR REPLACE FUNCTION "public"."provision_organization"("_name" "text", "_slug" "text", "_owner_email" "text") RETURNS "uuid"
     LANGUAGE "plpgsql" SECURITY DEFINER
@@ -817,10 +898,6 @@ $$;
 
 
 ALTER FUNCTION "public"."touch_updated_at"() OWNER TO "postgres";
-
-SET default_tablespace = '';
-
-SET default_table_access_method = "heap";
 
 
 CREATE TABLE IF NOT EXISTS "public"."about_page" (
@@ -1291,24 +1368,6 @@ CREATE TABLE IF NOT EXISTS "public"."org_domains" (
 ALTER TABLE "public"."org_domains" OWNER TO "postgres";
 
 
-CREATE TABLE IF NOT EXISTS "public"."org_email_domains" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
-    "domain" "text" NOT NULL,
-    "resend_domain_id" "text",
-    "status" "text" DEFAULT 'not_started'::"text" NOT NULL,
-    "dns_records" "jsonb" DEFAULT '[]'::"jsonb" NOT NULL,
-    "verified_at" timestamp with time zone,
-    "last_checked_at" timestamp with time zone,
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    CONSTRAINT "org_email_domains_domain_shape" CHECK ((("domain" = "lower"("domain")) AND (("length"("domain") >= 4) AND ("length"("domain") <= 253)))),
-    CONSTRAINT "org_email_domains_status_check" CHECK (("status" = ANY (ARRAY['not_started'::"text", 'pending'::"text", 'verified'::"text", 'failure'::"text", 'temporary_failure'::"text", 'failed'::"text", 'partially_verified'::"text", 'partially_failed'::"text"])))
-);
-
-
-ALTER TABLE "public"."org_email_domains" OWNER TO "postgres";
-
-
 CREATE TABLE IF NOT EXISTS "public"."org_email_limits" (
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
     "daily_cap" integer DEFAULT 500 NOT NULL,
@@ -1347,11 +1406,16 @@ CREATE TABLE IF NOT EXISTS "public"."organizations" (
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "slug" "text" NOT NULL,
     "branding" "jsonb" DEFAULT '{}'::"jsonb" NOT NULL,
-    "status" "public"."org_status" DEFAULT 'active'::"public"."org_status" NOT NULL
+    "status" "public"."org_status" DEFAULT 'active'::"public"."org_status" NOT NULL,
+    "custom_email_domain_enabled" boolean DEFAULT false NOT NULL
 );
 
 
 ALTER TABLE "public"."organizations" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."organizations"."custom_email_domain_enabled" IS 'Platform-operator-only gate on custom sending-domain claims. Flippable only from /platform (app/api/platform/organizations/[id]/route.ts); never exposed to the org''s own admin.';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."page_content" (
@@ -3376,6 +3440,20 @@ GRANT ALL ON FUNCTION "public"."is_platform_admin"() TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."org_email_domains" TO "service_role";
+GRANT SELECT,DELETE ON TABLE "public"."org_email_domains" TO "authenticated";
+
+
+
+GRANT INSERT("domain") ON TABLE "public"."org_email_domains" TO "authenticated";
+
+
+
+REVOKE ALL ON FUNCTION "public"."org_email_domain_claim"("_org_id" "uuid", "_domain" "text", "_cap" integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."org_email_domain_claim"("_org_id" "uuid", "_domain" "text", "_cap" integer) TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."provision_organization"("_name" "text", "_slug" "text", "_owner_email" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."provision_organization"("_name" "text", "_slug" "text", "_owner_email" "text") TO "service_role";
 
@@ -3524,15 +3602,6 @@ GRANT SELECT,DELETE ON TABLE "public"."org_domains" TO "authenticated";
 
 
 GRANT INSERT("domain") ON TABLE "public"."org_domains" TO "authenticated";
-
-
-
-GRANT ALL ON TABLE "public"."org_email_domains" TO "service_role";
-GRANT SELECT,DELETE ON TABLE "public"."org_email_domains" TO "authenticated";
-
-
-
-GRANT INSERT("domain") ON TABLE "public"."org_email_domains" TO "authenticated";
 
 
 
