@@ -4,7 +4,7 @@ import { requirePlatformAdmin } from "@/lib/platform-access";
 import { createServiceClient } from "@/lib/supabase/server";
 import { resolveEmailBranding } from "@/lib/email/identity";
 import { sendInviteEmail } from "@/lib/email/resend";
-import { siteConfig } from "@/lib/config";
+import { orgBaseUrl } from "@/lib/org-urls";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -67,7 +67,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const signupLink = `${siteConfig.url}/setup-account?token=${signupToken}`;
+    const signupLink = `${await orgBaseUrl(id)}/setup-account?token=${signupToken}`;
     try {
       await sendInviteEmail(
         ownerEmail,

@@ -32,6 +32,9 @@ const BRANDING = {
   // Distinctive — never equals the platform default, so a call site that
   // reverts to PLATFORM_ADDRESS (or never wired b.fromAddress in) fails loud.
   fromAddress: "noreply@grace.church",
+  // Same idea for links: never equals siteConfig.url, so a body builder that
+  // still reads the platform constant fails loud.
+  baseUrl: "https://grace.church",
 };
 
 describe("escapeHtml", () => {
@@ -94,5 +97,20 @@ describe("send call sites use the resolved branding.fromAddress", () => {
     expect(send).toHaveBeenCalledWith(
       expect.objectContaining({ from: "Grace Fellowship <noreply@grace.church>" }),
     );
+  });
+});
+
+// ── Link origin: every in-body link must use b.baseUrl, never siteConfig.url ─
+
+describe("send call sites build links from the resolved branding.baseUrl", () => {
+  beforeEach(() => {
+    send.mockClear();
+  });
+
+  it("sendEventReminderEmail links to /events on the org's own host", async () => {
+    await sendEventReminderEmail("a@b.org", "Jane", "Potluck", "2026-09-06", null, BRANDING);
+    const { html } = send.mock.calls[0][0];
+    expect(html).toContain('href="https://grace.church/events"');
+    expect(html).not.toContain("localhost:3000");
   });
 });

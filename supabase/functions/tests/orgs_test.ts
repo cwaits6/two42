@@ -52,13 +52,16 @@ function makeFakeClient(result: {
 // object, one null — listActiveOrgs and forEachOrg must not care which.
 // org_email_domains is carried the same way: one populated embed, two empty
 // (PostgREST returns [] for an org with no claimed domain) — interpretation
-// is _shared/branding.ts's job, tested in branding_test.ts.
+// is _shared/branding.ts's job, tested in branding_test.ts. org_domains
+// likewise: one populated embed, two empty — _shared/org-urls.ts interprets
+// it, tested in org-urls_test.ts.
 const orgA: Org = {
   id: "a-id",
   name: "Org A",
   slug: "a",
   branding: { display_name: "Org A Fellowship", accent: "#2E6F5E" },
   org_email_domains: [{ domain: "org-a.example", status: "verified" }],
+  org_domains: [{ domain: "org-a.example", status: "verified", attached_at: "2026-09-01T00:00:00Z" }],
 };
 const orgB: Org = {
   id: "b-id",
@@ -66,6 +69,7 @@ const orgB: Org = {
   slug: "b",
   branding: {},
   org_email_domains: [],
+  org_domains: [],
 };
 const orgC: Org = {
   id: "c-id",
@@ -73,13 +77,17 @@ const orgC: Org = {
   slug: "c",
   branding: null,
   org_email_domains: [],
+  org_domains: [],
 };
 
 Deno.test("listActiveOrgs filters on status = active and orders by slug", async () => {
   const { client, recorded } = makeFakeClient({ data: [orgA, orgB], error: null });
   const orgs = await listActiveOrgs(client);
   assertEquals(recorded.from, "organizations");
-  assertEquals(recorded.select, "id, name, slug, branding, org_email_domains(domain, status)");
+  assertEquals(
+    recorded.select,
+    "id, name, slug, branding, org_email_domains(domain, status), org_domains(domain, status, attached_at)",
+  );
   assertEquals(recorded.eq, ["status", "active"]);
   assertEquals(recorded.order, "slug");
   assertEquals(orgs, [orgA, orgB]);
