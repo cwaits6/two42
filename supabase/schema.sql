@@ -74,7 +74,7 @@ $$;
 ALTER FUNCTION "public"."app_org_slug_for_host"("_host" "text") OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."app_org_slug_for_host"("_host" "text") IS 'Resolves a request host to an org slug for host-based routing (Phase 5). Verified/active gating only — no normalization: the caller (middleware) canonicalizes the host once. Returns NULL (fails closed) for any unmatched, unverified, or suspended-org host. Not yet called from application code (PR 3).';
+COMMENT ON FUNCTION "public"."app_org_slug_for_host"("_host" "text") IS 'Resolves a request host to an org slug for host-based routing. Verified/active gating only — no normalization: the caller (middleware) canonicalizes the host once. Returns NULL (fails closed) for any unmatched, unverified, or suspended-org host. Called by lib/supabase/host-resolution.ts.';
 
 
 
@@ -551,7 +551,7 @@ begin
     raise exception 'invalid organization slug: %', _slug using errcode = 'TN003';
   end if;
 
-  -- Reserved subdomain labels (Phase 5 §4, CWA-65 / #358): slugs become host
+  -- Reserved subdomain labels: slugs become host
   -- labels once wildcard/custom-domain routing ships, so any of these would
   -- shadow a platform host. 'default' is deliberately absent — it is the
   -- slug of the one org that exists today (20260730010000_org_spine.sql);
@@ -568,7 +568,7 @@ begin
   end if;
 
   -- 1. The org itself. branding carries only the tenant-overridable keys
-  -- from #221 / docs/design/DESIGN.md: display_name, logo_url, accent,
+  -- from docs/design/DESIGN.md: display_name, logo_url, accent,
   -- reply_to.
   insert into public.organizations (name, slug, branding, status)
   values (
@@ -590,10 +590,10 @@ begin
   -- 3. Settings defaults — the full key list in one auditable place.
   -- serving_link_mode's deploy default is applied at read time by
   -- getServingLinkMode() (SERVING_LINK_MODE env); the seed row here matches
-  -- the migration-seeded default. Only site_name is anon-readable (#215).
+  -- the migration-seeded default. No seeded setting is anon-readable: the
+  -- org's public name lives in organizations.branding.display_name.
   insert into public.site_settings (org_id, key, value, is_public)
   values
-    (_org_id, 'site_name',               '',            true),
     (_org_id, 'directory_app_url',       '',            false),
     (_org_id, 'weekly_zoom_url',         '',            false),
     (_org_id, 'zoom_meeting_time',       '',            false),
@@ -610,7 +610,7 @@ begin
 
   -- 5. Approved access request for the owner, so their signup resolves
   -- under handle_new_user()'s fail-closed rules. approved_role = 'admin'
-  -- is what makes the owner the founding admin (CWA-11): handle_new_user()
+  -- is what makes the owner the founding admin: handle_new_user()
   -- reads it at signup time, so the org never exists without an admin path.
   insert into public.access_requests (org_id, name, email, status, reviewed_at, approved_role)
   values (_org_id, _name || ' owner', _owner_email, 'approved', now(), 'admin');
@@ -619,7 +619,7 @@ begin
   -- above holds no profiles yet, so ANY existing profile with this email
   -- necessarily belongs to another org — and a profile is never moved
   -- between orgs. An unscoped `update profiles set org_id = _org_id where
-  -- email = ...` would be a cross-tenant write: once Phase 4 exposes a
+  -- email = ...` would be a cross-tenant write: once self-serve signup exposes a
   -- caller, passing a competing org's admin email would re-pin that admin
   -- into the caller's org — an account-takeover primitive that a "who may
   -- provision" guard does not address. Raise instead, matching
@@ -830,7 +830,7 @@ $$;
 ALTER FUNCTION "public"."serving_signup_apply"("_group_id" "uuid", "_service_date" "date", "_actor_id" "uuid", "_attendee_ids" "uuid"[]) OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."serving_signup_apply"("_group_id" "uuid", "_service_date" "date", "_actor_id" "uuid", "_attendee_ids" "uuid"[]) IS 'Atomic serving signup + attendee insert pair (CWA-47 / #313). Tenant anchor: org_id resolved from the member_groups row named by _group_id, never a caller parameter; every other row is asserted to carry it. service_role only — the HMAC signed-link route passes its validated profile id as _actor_id.';
+COMMENT ON FUNCTION "public"."serving_signup_apply"("_group_id" "uuid", "_service_date" "date", "_actor_id" "uuid", "_attendee_ids" "uuid"[]) IS 'Atomic serving signup + attendee insert pair. Tenant anchor: org_id resolved from the member_groups row named by _group_id, never a caller parameter; every other row is asserted to carry it. service_role only — the HMAC signed-link route passes its validated profile id as _actor_id.';
 
 
 
@@ -883,7 +883,7 @@ $$;
 ALTER FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_date" "date", "_attendee_ids" "uuid"[]) OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_date" "date", "_attendee_ids" "uuid"[]) IS 'Authenticated serving signup entry point (CWA-47 / #313). Actor from auth.uid(); tenant anchor: the group''s org pinned against app_request_org_id(), fail-closed on NULL; the RLS INSERT-policy arms are re-checked before delegating to serving_signup_apply().';
+COMMENT ON FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_date" "date", "_attendee_ids" "uuid"[]) IS 'Authenticated serving signup entry point. Actor from auth.uid(); tenant anchor: the group''s org pinned against app_request_org_id(), fail-closed on NULL; the RLS INSERT-policy arms are re-checked before delegating to serving_signup_apply().';
 
 
 
@@ -1349,6 +1349,25 @@ CREATE TABLE IF NOT EXISTS "public"."member_groups" (
 ALTER TABLE "public"."member_groups" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."org_domain_worker_events" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "domain" "text" NOT NULL,
+    "event" "text" NOT NULL,
+    "detail" "text",
+    "acknowledged_at" timestamp with time zone,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "org_domain_worker_events_event_check" CHECK (("event" = ANY (ARRAY['attach_permanent_failure'::"text", 'detached'::"text"])))
+);
+
+
+ALTER TABLE "public"."org_domain_worker_events" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."org_domain_worker_events" IS 'Append-only outcome log written by the attach-org-domains worker (service role, explicit org_id on every insert) and acknowledged from /platform/domains. attach_permanent_failure: a Vercel 409/403/402 — the row is skipped until acknowledged. detached: the tombstone was hard-deleted after Vercel confirmed removal — the operator''s cue to delist the name from the auth redirect allowlist.';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."org_domains" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
@@ -1810,6 +1829,11 @@ ALTER TABLE ONLY "public"."member_groups"
 
 
 
+ALTER TABLE ONLY "public"."org_domain_worker_events"
+    ADD CONSTRAINT "org_domain_worker_events_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."org_domains"
     ADD CONSTRAINT "org_domains_pkey" PRIMARY KEY ("id");
 
@@ -2024,6 +2048,10 @@ CREATE INDEX "lectures_series_id_idx" ON "public"."lectures" USING "btree" ("ser
 
 
 CREATE INDEX "member_groups_org_id_idx" ON "public"."member_groups" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "org_domain_worker_events_unacknowledged_idx" ON "public"."org_domain_worker_events" USING "btree" ("org_id", "domain") WHERE ("acknowledged_at" IS NULL);
 
 
 
@@ -2416,6 +2444,11 @@ ALTER TABLE ONLY "public"."member_groups"
 
 ALTER TABLE ONLY "public"."member_groups"
     ADD CONSTRAINT "member_groups_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."org_domain_worker_events"
+    ADD CONSTRAINT "org_domain_worker_events_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE RESTRICT;
 
 
 
@@ -3176,6 +3209,10 @@ CREATE POLICY "org isolation" ON "public"."member_groups" AS RESTRICTIVE TO "aut
 
 
 
+CREATE POLICY "org isolation" ON "public"."org_domain_worker_events" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
 CREATE POLICY "org isolation" ON "public"."org_domains" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
@@ -3250,6 +3287,9 @@ CREATE POLICY "org isolation" ON "public"."site_settings" AS RESTRICTIVE TO "aut
 
 CREATE POLICY "org members can view their orgs" ON "public"."organizations" FOR SELECT USING ("public"."is_org_member"("id"));
 
+
+
+ALTER TABLE "public"."org_domain_worker_events" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."org_domains" ENABLE ROW LEVEL SECURITY;
@@ -3593,6 +3633,10 @@ GRANT ALL ON TABLE "public"."lectures" TO "service_role";
 GRANT ALL ON TABLE "public"."member_groups" TO "anon";
 GRANT ALL ON TABLE "public"."member_groups" TO "authenticated";
 GRANT ALL ON TABLE "public"."member_groups" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."org_domain_worker_events" TO "service_role";
 
 
 
