@@ -37,7 +37,7 @@ export default async function AdminGivingPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, org_id")
     .eq("id", user.id)
     .single();
   if (profile?.role !== "admin") redirect("/dashboard");
@@ -52,7 +52,7 @@ export default async function AdminGivingPage() {
         .order("is_active", { ascending: false })
         .order("created_at", { ascending: false }),
       supabase.from("giving_fund_methods").select("fund_id, method"),
-      getGivingSettings(supabase),
+      getGivingSettings(supabase, profile.org_id),
     ]);
 
   const funds = (fundRows ?? []) as FundRow[];

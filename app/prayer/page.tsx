@@ -18,7 +18,7 @@ export default async function PrayerPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, first_name, last_name, preferred_name, avatar_url")
+    .select("role, org_id, first_name, last_name, preferred_name, avatar_url")
     .eq("id", user.id)
     .single();
   if (!profile || profile.role === "pending") redirect("/dashboard");
@@ -39,7 +39,7 @@ export default async function PrayerPage() {
       .select("*")
       .order("display_order")
       .order("created_at"),
-    loadFundFormData(supabase),
+    loadFundFormData(supabase, profile.org_id),
     supabase
       .from("site_settings")
       .select("value")
@@ -88,6 +88,7 @@ export default async function PrayerPage() {
           isAdmin={isAdmin}
           members={members}
           prayerCalendarId={calSetting?.value ?? null}
+          orgId={profile.org_id}
         />
       </div>
     </div>

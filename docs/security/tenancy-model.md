@@ -365,8 +365,9 @@ platform seam).
   `service_role` only (no `anon`/`authenticated` grant), so the only
   callers are server-side paths that already hold a validated `orgId` from
   an anchor they verified themselves — never trusted from the parameter
-  alone. `.rpc()` calls are outside `check-service-role-org-scope.mjs`'s
-  reach, so a new caller here is review-enforced only. Grants and
+  alone. `check-service-role-org-scope.mjs` requires the `_org_id`
+  argument on every service-rooted `.rpc()` call; where that value comes
+  from is review-enforced. Grants and
   cap-boundary behavior are pinned by
   `supabase/tests/org_email_quota_suite.sql`; the inventory records the
   call sites ([service-role-inventory.md](service-role-inventory.md)).

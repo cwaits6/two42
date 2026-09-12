@@ -18,16 +18,16 @@ export default async function NewFundPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, org_id")
     .eq("id", user.id)
     .single();
   if (!profile || profile.role === "pending") redirect("/dashboard");
   const isAdmin = profile.role === "admin";
 
-  const stewardsCanManage = await givingStewardsCanManage(supabase);
+  const stewardsCanManage = await givingStewardsCanManage(supabase, profile.org_id);
   if (!isAdmin && !stewardsCanManage) redirect("/give");
 
-  const { members } = await loadFundFormData(supabase);
+  const { members } = await loadFundFormData(supabase, profile.org_id);
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-5xl">

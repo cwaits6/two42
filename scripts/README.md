@@ -56,10 +56,12 @@ locally:
 npm run guard:tenancy
 ```
 
-It parses every `.ts`/`.tsx` file under `app/` and `lib/` with the TypeScript
-compiler API (syntax-only — no type-checker, well under a second) and walks
-each `supabase.from("table")…` chain to its root to decide which client it
-runs on. Name-matching is deliberately avoided: `supabase` is a service-role
+It parses every `.ts`/`.tsx` file under `app/` and `lib/`, and every `.ts`
+file under `supabase/functions/` (entry points and `_shared/`, not the Deno
+tests), with the TypeScript compiler API (syntax-only — no type-checker, well
+under a second) and walks each `supabase.from("table")…` and
+`supabase.rpc("name", …)…` chain to its root to decide which client it runs
+on. Name-matching is deliberately avoided: `supabase` is a service-role
 binding in some files and an authenticated one in others.
 
 ### The tiers
@@ -68,11 +70,26 @@ binding in some files and an authenticated one in others.
 |------|------------|--------------|
 | A | The email fan-out chains (feedback admins, serving broadcast, leader cancel notices), pinned by file + table in `FANOUTS` | **None** — see below |
 | B | Every other chain rooted at a `createServiceClient()` binding | `// org-anchor: <reason>` |
-| C | Chains rooted at a `SupabaseClient`-typed parameter of an exported `lib/` function | None (pre-existing modules are named in `TIER_C_EXEMPT` with reasons) |
+| C | Chains rooted at a `SupabaseClient`-typed parameter of an exported `lib/` function | None for `.from()` chains; an `.rpc()` call that *is* the org resolver may carry `// org-anchor: <reason>` |
+| edge | Every chain in `supabase/functions/` (entry points and `_shared/`), whatever its root | `// org-anchor: <reason>`; the `organizations` tenant root is exempt |
 
 Tier C is a deliberate over-approximation: a `lib/` helper that *can* receive
 a service client must scope unconditionally, which is what lets the guard
-avoid call-graph analysis.
+avoid call-graph analysis. A `.from()` chain there can always take an
+`orgId` from its caller, so it gets no escape hatch. An `.rpc()` call whose
+contract has no org parameter — `app_request_org_id()` in `lib/org.ts`, which
+derives the org from the principal or the validated host header — has nothing
+to scope on, so the marker is the only truthful mechanism for it.
+
+The edge functions run on the service key by construction, so there is no
+authenticated client to distinguish from: every chain under
+`supabase/functions/` is collected regardless of its root and must carry an
+explicit `.eq("org_id", …)` (bound from the `listActiveOrgs()` /
+`forEachOrg()` iteration), an explicit `org_id` on insert, or an
+`org_id`/`_org_id` argument on an `.rpc()` call. The one exemption is the
+tenant root: `organizations` has no `org_id` column, and `listActiveOrgs()`'s
+enumeration of it is the deliberate full-tenant read. There is no allowlist
+on any tier — every exception is named in the file it excuses.
 
 ### Why Tier A has no escape hatch
 
@@ -105,10 +122,30 @@ query to the resolved row's `org_id`, and have a row in
 (the guard separately keeps that inventory in sync with the actual
 `createServiceClient()` call sites, including the counts in its headings).
 
-Chains that need a marker but live in a file owned by another in-flight PR go
-in the script's `KNOWN_ANCHORS` allowlist instead, with a `TODO` to move them
-in-file once that PR lands. Stale entries — in `KNOWN_ANCHORS` or
-`TIER_C_EXEMPT` — fail the guard rather than silently widening it.
+The analyzers are exported and unit-tested with fixture sources in
+`scripts/check-service-role-org-scope.test.mjs` (each check has a passing and
+a failing fixture); the scan itself only runs when the script is the entry
+point.
+
+### `.rpc()` calls and nested embeds
+
+`.rpc("name", args)` calls are collected and classified exactly like
+`.from()` chains. The predicate for an RPC is an `org_id` or `_org_id`
+property on its args object (the repo's SQL-function argument convention —
+`email_quota_consume(_org_id, _n)`, `org_email_domain_claim(_org_id, …)`). A
+call with no such property needs a reasoned marker, as
+`provision_organization()` (which creates the org) and `serving_signup_apply()`
+(which re-derives the org from the `member_groups` row) carry. Only plain and
+shorthand properties are recognised — a spread or a computed key is not seen
+through, which fails toward reporting rather than silence.
+
+`.select()` strings are checked for PostgREST embed syntax
+(`relation(cols)`, with an optional `alias:` and `!fk_hint`). An embed is
+only as safe as its parent's own scoping, so a chain that embeds a nested
+relation and carries no org predicate or marker fails with a message naming
+the embed. It is the same requirement as any other chain on that tier, worded
+so the reviewer sees why the embed specifically is implicated; a scoped
+parent passes as before.
 
 ### The non-AST checks
 
@@ -116,8 +153,10 @@ The same command also enforces:
 
 - **Cross-org assertion pins** — the two signed-link surfaces read the
   profile row unscoped *on purpose* so a cross-org pairing is rejected
-  explicitly; the guard pins that `profile.org_id !== group.org_id` rejection
-  (and its denial log) to exactly one occurrence per file.
+  explicitly, and the family-invite claim and household link-member routes
+  compare the caller's org to the target row's as defence in depth; the guard
+  pins each rejection (and its distinctive denial log) to exactly one
+  occurrence per file, so deleting one fails CI.
 - **Seeded-UUID sweep** — no tracked file outside a named, commented
   exclusion list may hardcode the retired default-org UUID. The default is
   in-scope: new files are swept unless the list says why not.

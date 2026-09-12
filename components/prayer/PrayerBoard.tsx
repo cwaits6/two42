@@ -54,6 +54,7 @@ export function PrayerBoard({
   isAdmin,
   members,
   prayerCalendarId,
+  orgId,
 }: {
   initialRequests: PrayerWallRow[];
   sessions: PrayerCallSession[];
@@ -61,6 +62,8 @@ export function PrayerBoard({
   isAdmin: boolean;
   members: MemberOption[];
   prayerCalendarId: string | null;
+  /** Resolved server-side from the caller's own profile; scopes the session writes. */
+  orgId: string;
 }) {
   const [requests, setRequests] = useState(initialRequests);
   const [status, setStatus] = useState<StatusFilter>("All");
@@ -315,6 +318,7 @@ export function PrayerBoard({
           isAdmin={isAdmin}
           members={members}
           prayerCalendarId={prayerCalendarId}
+          orgId={orgId}
         />
       </div>
     </div>
