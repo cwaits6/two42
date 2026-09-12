@@ -69,6 +69,11 @@ describe("givingStewardsCanManage", () => {
     const { client } = fakeClient();
     expect(await givingStewardsCanManage(client, ORG)).toBe(true);
   });
+
+  it("returns true for an explicit stewards row", async () => {
+    const { client } = fakeClient({ site_settings: [{ value: "stewards" }] });
+    expect(await givingStewardsCanManage(client, ORG)).toBe(true);
+  });
 });
 
 describe("getGivingSettings", () => {

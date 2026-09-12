@@ -5,7 +5,7 @@
 // client is untyped as to privilege, so a missing predicate here would be a
 // silent cross-tenant write under a service-role caller.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { savePrayerCallSessions, type SessionDraft } from "@/lib/prayerCalls";
 import type { PrayerCallSession } from "@/lib/types";
@@ -23,11 +23,14 @@ function fakeClient(
     rows?: Record<string, { id: string } | null>;
     /** Tables whose awaited UPDATE should match zero rows. */
     matchesNothing?: string[];
+    /** Tables whose awaited UPDATE should resolve with an error instead. */
+    errors?: string[];
   } = {}
 ) {
   const calls: Call[] = [];
   const rows = options.rows ?? {};
   const matchesNothing = new Set(options.matchesNothing ?? []);
+  const errors = new Set(options.errors ?? []);
 
   const builder = (table: string, op: Call["op"], payload?: unknown) => {
     const call: Call = { table, op, payload, filters: [] };
@@ -47,7 +50,10 @@ function fakeClient(
       maybeSingle() {
         return Promise.resolve({ data: rows[key] ?? null, error: null });
       },
-      then(resolve: (value: { data: unknown[]; error: null }) => unknown) {
+      then(resolve: (value: { data: unknown[] | null; error: { message: string } | null }) => unknown) {
+        if (errors.has(table)) {
+          return Promise.resolve(resolve({ data: null, error: { message: "boom" } }));
+        }
         const data = matchesNothing.has(table) ? [] : [{ id: "row-1" }];
         return Promise.resolve(resolve({ data, error: null }));
       },
@@ -133,6 +139,25 @@ describe("savePrayerCallSessions — calendar resolution", () => {
       ["org_id", ORG],
     ]);
   });
+
+  it("logs but does not fail the save when the site_settings repoint errors", async () => {
+    // The calendar itself was created successfully (created.id is used
+    // directly below), so a repoint failure shouldn't fail the request — but
+    // it should leave an operator-visible signal instead of vanishing.
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { client } = fakeClient({
+      rows: { "event_calendars:insert": { id: "cal-new" } },
+      errors: ["site_settings"],
+    });
+    const result = await savePrayerCallSessions(client, ORG, [], [], "someone-elses-calendar");
+    expect(result).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith(
+      "ensurePrayerCalendar: failed to repoint prayer_calendar_id for org %s:",
+      ORG,
+      { message: "boom" }
+    );
+    errorSpy.mockRestore();
+  });
 });
 
 describe("savePrayerCallSessions — removed sessions", () => {
@@ -202,5 +227,21 @@ describe("savePrayerCallSessions — kept drafts", () => {
     const [eventInsert] = byTable(calls, "events", "insert");
     expect(eventInsert.payload).toMatchObject({ org_id: ORG });
     expect(d.event_id).toBe("e-new");
+  });
+
+  it("does not silently succeed when the scoped session update matches nothing", async () => {
+    // A stale or cross-org draft.id now matches zero rows under the
+    // newly-added org_id predicate — the update must not report success
+    // without persisting anything, unlike the event update above it there is
+    // no independent recreate path for a session.
+    const { client, calls } = fakeClient({
+      rows: { "event_calendars:select": { id: CAL } },
+      matchesNothing: ["prayer_call_sessions"],
+    });
+    const d = draft({ id: "s-stale", event_id: "e-1" });
+    const result = await savePrayerCallSessions(client, ORG, [d], [], CAL);
+    expect(result).toBe("Couldn't save the call details. Please try again.");
+    expect(byTable(calls, "prayer_call_sessions", "update")).toHaveLength(1);
+    expect(byTable(calls, "prayer_call_sessions", "insert")).toHaveLength(0);
   });
 });

@@ -53,11 +53,14 @@ async function ensurePrayerCalendar(
     .select("id")
     .single();
   if (error || !created) return null;
-  await supabase
+  const { error: repointError } = await supabase
     .from("site_settings")
     .update({ value: created.id })
     .eq("key", "prayer_calendar_id")
     .eq("org_id", orgId);
+  if (repointError) {
+    console.error("ensurePrayerCalendar: failed to repoint prayer_calendar_id for org %s:", orgId, repointError);
+  }
   return created.id;
 }
 
@@ -181,12 +184,19 @@ export async function savePrayerCallSessions(
       display_order: draft.display_order,
     };
     if (draft.id) {
-      const { error } = await supabase
+      // Mirrors the events update above: an error-free update that matches
+      // zero rows (a stale or cross-org draft.id) must not report success —
+      // there is no independent recreate path for a session, so surface an
+      // explicit error instead of silently dropping the edit.
+      const { data, error } = await supabase
         .from("prayer_call_sessions")
         .update(row)
         .eq("id", draft.id)
-        .eq("org_id", orgId);
-      if (error) return "Couldn't save the call details. Please try again.";
+        .eq("org_id", orgId)
+        .select("id");
+      if (error || !data || data.length === 0) {
+        return "Couldn't save the call details. Please try again.";
+      }
     } else {
       const { data, error } = await supabase
         .from("prayer_call_sessions")
