@@ -2,10 +2,12 @@
 // satisfy DomainLeaseClient and VercelClient structurally, so every branch
 // of the attach and detach loops — lease races, permanent failures,
 // reconcile-before-re-POST, compensation for a lost stamp, idempotent
-// detach — runs with no network and no database.
+// detach, the permanent-failure skip and the two event writes — runs with
+// no network and no database.
 
 import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 import { attachDomainsForOrg, detachDomainsForOrg } from "../_shared/domain-attach.ts";
+import type { DomainEventsClient } from "../_shared/domain-events.ts";
 import { ATTACH_LEASE_WINDOW_MS, type DomainLeaseClient, type DomainRow } from "../_shared/domain-lease.ts";
 import type {
   VercelAddResult,
@@ -94,20 +96,49 @@ function fakeVercel(opts: {
   return { vercel, calls };
 }
 
+interface EventCalls {
+  lookups: Array<{ orgId: string; domain: string }>;
+  permanent: Array<{ orgId: string; domain: string; detail: string }>;
+  detached: Array<{ orgId: string; domain: string }>;
+}
+
+function fakeEvents(opts: {
+  parked?: boolean;
+}): { events: DomainEventsClient; calls: EventCalls } {
+  const calls: EventCalls = { lookups: [], permanent: [], detached: [] };
+  const events: DomainEventsClient = {
+    hasUnacknowledgedPermanentFailure(orgId, domain) {
+      calls.lookups.push({ orgId, domain });
+      return Promise.resolve(opts.parked ?? false);
+    },
+    recordPermanentFailure(orgId, domain, detail) {
+      calls.permanent.push({ orgId, domain, detail });
+      return Promise.resolve();
+    },
+    recordDetached(orgId, domain) {
+      calls.detached.push({ orgId, domain });
+      return Promise.resolve();
+    },
+  };
+  return { events, calls };
+}
+
 // ── attach ──────────────────────────────────────────────────────────────────
 
 Deno.test("attach: no verified-unattached rows is a clean no-op", async () => {
+  const { events } = fakeEvents({});
   const { lease } = fakeLease({});
   const { vercel, calls } = fakeVercel({});
-  const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
   assertEquals(r, { sent: 0, sendFailures: 0 });
   assertEquals(calls.add, []);
 });
 
 Deno.test("attach: lease lost — zero Vercel calls, zero stamps, not a failure", async () => {
+  const { events } = fakeEvents({});
   const { lease, calls: lc } = fakeLease({ verified: [ROW], claimAttach: null });
   const { vercel, calls } = fakeVercel({});
-  const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
   assertEquals(r, { sent: 0, sendFailures: 0 });
   assertEquals(lc.claimAttach, ["row-1"]);
   assertEquals(calls.add, []);
@@ -115,9 +146,10 @@ Deno.test("attach: lease lost — zero Vercel calls, zero stamps, not a failure"
 });
 
 Deno.test("attach: clean add → stamp with the claim token and the claimed domain → sent = 1", async () => {
+  const { events } = fakeEvents({});
   const { lease, calls: lc } = fakeLease({ verified: [ROW] });
   const { vercel, calls } = fakeVercel({ add: { kind: "added" } });
-  const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
   assertEquals(r, { sent: 1, sendFailures: 0 });
   assertEquals(calls.add, ["example.church"]);
   assertEquals(calls.get, []);
@@ -125,18 +157,20 @@ Deno.test("attach: clean add → stamp with the claim token and the claimed doma
 });
 
 Deno.test("attach: already_exists → GET confirms attached → stamped", async () => {
+  const { events } = fakeEvents({});
   const { lease, calls: lc } = fakeLease({ verified: [ROW] });
   const { vercel, calls } = fakeVercel({ add: { kind: "already_exists" }, get: { kind: "attached" } });
-  const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
   assertEquals(r, { sent: 1, sendFailures: 0 });
   assertEquals(calls.get, ["example.church"]);
   assertEquals(lc.stamp.length, 1);
 });
 
 Deno.test("attach: already_exists but GET finds nothing → no stamp, reported", async () => {
+  const { events } = fakeEvents({});
   const { lease, calls: lc } = fakeLease({ verified: [ROW] });
   const { vercel } = fakeVercel({ add: { kind: "already_exists" }, get: { kind: "not_attached" } });
-  const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
   assertEquals(r.sent, 0);
   assertEquals(r.sendFailures, 1);
   assertEquals(r.itemFailures?.[0].item, "row-1");
@@ -144,20 +178,24 @@ Deno.test("attach: already_exists but GET finds nothing → no stamp, reported",
 });
 
 for (const reason of ["conflict", "forbidden", "payment_required"] as const) {
-  Deno.test(`attach: permanent ${reason} → no GET, no stamp, one item failure`, async () => {
+  Deno.test(`attach: permanent ${reason} → no GET, no stamp, one item failure, one event with the org id, domain and reason`, async () => {
+    const { events, calls: ec } = fakeEvents({});
     const { lease, calls: lc } = fakeLease({ verified: [ROW] });
     const { vercel, calls } = fakeVercel({ add: { kind: "permanent", reason, status: 409, detail: "d" } });
-    const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
+    const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
     assertEquals(r.sent, 0);
     assertEquals(r.sendFailures, 1);
     assertEquals(r.itemFailures, [{ item: "row-1", error: `vercel ${reason}: d` }]);
     assertEquals(calls.get, []);
     assertEquals(lc.stamp, []);
     assertEquals(lc.reread, []);
+    assertEquals(ec.permanent, [{ orgId: ORG.id, domain: "example.church", detail: `vercel ${reason}: d` }]);
+    assertEquals(ec.detached, []);
   });
 }
 
 Deno.test("attach: needs_verification → no GET, no stamp, one item failure naming the record to publish", async () => {
+  const { events } = fakeEvents({});
   const { lease, calls: lc } = fakeLease({ verified: [ROW] });
   const { vercel, calls } = fakeVercel({
     add: {
@@ -166,7 +204,7 @@ Deno.test("attach: needs_verification → no GET, no stamp, one item failure nam
       verification: [{ type: "TXT", domain: "_vercel.example.church", value: "vc-domain-verify=abc" }],
     },
   });
-  const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
   assertEquals(r.sent, 0);
   assertEquals(r.sendFailures, 1);
   assertEquals(r.itemFailures?.[0].item, "row-1");
@@ -178,18 +216,20 @@ Deno.test("attach: needs_verification → no GET, no stamp, one item failure nam
 });
 
 Deno.test("attach: needs_verification with no records still reports, pointing at the dashboard", async () => {
+  const { events } = fakeEvents({});
   const { lease, calls: lc } = fakeLease({ verified: [ROW] });
   const { vercel } = fakeVercel({ add: { kind: "needs_verification", status: 200, verification: [] } });
-  const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
   assertEquals(r.sendFailures, 1);
   assertStringIncludes(r.itemFailures?.[0].error ?? "", "no verification records");
   assertEquals(lc.stamp, []);
 });
 
 Deno.test("attach: ambiguous → GET-reconcile before anything; attached → stamped, no re-POST", async () => {
+  const { events } = fakeEvents({});
   const { lease, calls: lc } = fakeLease({ verified: [ROW] });
   const { vercel, calls } = fakeVercel({ add: { kind: "ambiguous", status: 0, detail: "timeout" }, get: { kind: "attached" } });
-  const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
   assertEquals(r, { sent: 1, sendFailures: 0 });
   assertEquals(calls.add, ["example.church"]);
   assertEquals(calls.get, ["example.church"]);
@@ -197,9 +237,10 @@ Deno.test("attach: ambiguous → GET-reconcile before anything; attached → sta
 });
 
 Deno.test("attach: ambiguous → GET says not attached → no stamp, no re-POST, reported for the next run", async () => {
+  const { events } = fakeEvents({});
   const { lease, calls: lc } = fakeLease({ verified: [ROW] });
   const { vercel, calls } = fakeVercel({ add: { kind: "ambiguous", status: 502, detail: "status 502" }, get: { kind: "not_attached" } });
-  const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
   assertEquals(r.sent, 0);
   assertEquals(r.sendFailures, 1);
   assertEquals(calls.add.length, 1);
@@ -207,6 +248,7 @@ Deno.test("attach: ambiguous → GET says not attached → no stamp, no re-POST,
 });
 
 Deno.test("attach: ambiguous → GET says pending_verification → never stamped, challenge reported", async () => {
+  const { events } = fakeEvents({});
   const { lease, calls: lc } = fakeLease({ verified: [ROW] });
   const { vercel } = fakeVercel({
     add: { kind: "ambiguous", status: 0, detail: "t" },
@@ -215,46 +257,51 @@ Deno.test("attach: ambiguous → GET says pending_verification → never stamped
       verification: [{ type: "TXT", domain: "_vercel.example.church", value: "vc-domain-verify=abc" }],
     },
   });
-  const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
   assertEquals(r.sendFailures, 1);
   assertStringIncludes(r.itemFailures?.[0].error ?? "", "publish TXT _vercel.example.church = vc-domain-verify=abc");
   assertEquals(lc.stamp, []);
 });
 
 Deno.test("attach: ambiguous → GET errors → no stamp, reported", async () => {
+  const { events } = fakeEvents({});
   const { lease, calls: lc } = fakeLease({ verified: [ROW] });
   const { vercel } = fakeVercel({ add: { kind: "ambiguous", status: 429, detail: "rate" }, get: { kind: "error", status: 429, detail: "rate" } });
-  const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
   assertEquals(r.sendFailures, 1);
   assertEquals(lc.stamp, []);
 });
 
 Deno.test("attach: compensation — stamp lost AND row gone → detach the name just attached", async () => {
+  const { events } = fakeEvents({});
   const { lease, calls: lc } = fakeLease({ verified: [ROW], stamp: false, exists: false });
   const { vercel, calls } = fakeVercel({ add: { kind: "added" }, remove: { kind: "removed" } });
-  const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
   assertEquals(r, { sent: 0, sendFailures: 0 });
   assertEquals(lc.reread, ["row-1"]);
   assertEquals(calls.remove, ["example.church"]);
 });
 
 Deno.test("attach: compensation — stamp lost but row present → leave it, no detach", async () => {
+  const { events } = fakeEvents({});
   const { lease, calls: lc } = fakeLease({ verified: [ROW], stamp: false, exists: true });
   const { vercel, calls } = fakeVercel({ add: { kind: "added" } });
-  const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
   assertEquals(r, { sent: 0, sendFailures: 0 });
   assertEquals(lc.reread, ["row-1"]);
   assertEquals(calls.remove, []);
 });
 
 Deno.test("attach: compensation detach that itself fails is reported", async () => {
+  const { events } = fakeEvents({});
   const { lease } = fakeLease({ verified: [ROW], stamp: false, exists: false });
   const { vercel } = fakeVercel({ add: { kind: "added" }, remove: { kind: "error", status: 500, detail: "s" } });
-  const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
   assertEquals(r.sendFailures, 1);
 });
 
 Deno.test("attach: denylisted apex/subdomain is refused before any lease or Vercel call", async () => {
+  const { events } = fakeEvents({});
   const rows: DomainRow[] = [
     { id: "apex", domain: "two42.io" },
     { id: "sub", domain: "grace.two42.io" },
@@ -262,7 +309,7 @@ Deno.test("attach: denylisted apex/subdomain is refused before any lease or Verc
   ];
   const { lease, calls: lc } = fakeLease({ verified: rows });
   const { vercel, calls } = fakeVercel({});
-  const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
   assertEquals(r.sent, 1);
   assertEquals(r.sendFailures, 2);
   assertEquals(r.itemFailures?.map((f) => f.item), ["apex", "sub"]);
@@ -271,6 +318,7 @@ Deno.test("attach: denylisted apex/subdomain is refused before any lease or Verc
 });
 
 Deno.test("attach: a thrown lease/Vercel error isolates to the row, and the loop continues", async () => {
+  const { events } = fakeEvents({});
   const rows: DomainRow[] = [{ id: "bad", domain: "bad.example" }, { id: "good", domain: "good.example" }];
   const { lease, calls: lc } = fakeLease({ verified: rows });
   lease.claimAttachLease = (id) => {
@@ -278,64 +326,75 @@ Deno.test("attach: a thrown lease/Vercel error isolates to the row, and the loop
     return id === "bad" ? Promise.reject(new Error("db down")) : Promise.resolve(TOKEN);
   };
   const { vercel } = fakeVercel({});
-  const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
   assertEquals(r.sent, 1);
   assertEquals(r.itemFailures, [{ item: "bad", error: "db down" }]);
 });
 
 Deno.test("attach: itemFailures name the row id, never the domain", async () => {
+  const { events } = fakeEvents({});
   const { lease } = fakeLease({ verified: [ROW] });
   const { vercel } = fakeVercel({ add: { kind: "permanent", reason: "conflict", status: 409, detail: "d" } });
-  const r = await attachDomainsForOrg(lease, vercel, ORG, APEX, WINDOW);
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
   assertEquals(r.itemFailures?.[0].item, "row-1");
 });
 
 // ── detach ──────────────────────────────────────────────────────────────────
 
-Deno.test("detach: removed → hard-delete with the claim token → sent = 1", async () => {
+Deno.test("detach: removed → hard-delete with the claim token → sent = 1, one detached event with the org id and domain", async () => {
+  const { events, calls: ec } = fakeEvents({});
   const { lease, calls: lc } = fakeLease({ removing: [ROW] });
   const { vercel, calls } = fakeVercel({ remove: { kind: "removed" } });
-  const r = await detachDomainsForOrg(lease, vercel, ORG, WINDOW);
+  const r = await detachDomainsForOrg(lease, vercel, events, ORG, WINDOW);
   assertEquals(r, { sent: 1, sendFailures: 0 });
   assertEquals(calls.remove, ["example.church"]);
   assertEquals(lc.hardDelete, [{ id: "row-1", token: TOKEN }]);
+  assertEquals(ec.detached, [{ orgId: ORG.id, domain: "example.church" }]);
+  assertEquals(ec.permanent, []);
 });
 
 Deno.test("detach: not_found is idempotent success → hard-delete still runs", async () => {
+  const { events } = fakeEvents({});
   const { lease, calls: lc } = fakeLease({ removing: [ROW] });
   const { vercel } = fakeVercel({ remove: { kind: "not_found" } });
-  const r = await detachDomainsForOrg(lease, vercel, ORG, WINDOW);
+  const r = await detachDomainsForOrg(lease, vercel, events, ORG, WINDOW);
   assertEquals(r, { sent: 1, sendFailures: 0 });
   assertEquals(lc.hardDelete.length, 1);
 });
 
-Deno.test("detach: Vercel error → tombstone kept (no hard-delete), reported", async () => {
+Deno.test("detach: Vercel error → tombstone kept (no hard-delete), reported, no detached event", async () => {
+  const { events, calls: ec } = fakeEvents({});
   const { lease, calls: lc } = fakeLease({ removing: [ROW] });
   const { vercel } = fakeVercel({ remove: { kind: "error", status: 409, detail: "transferring" } });
-  const r = await detachDomainsForOrg(lease, vercel, ORG, WINDOW);
+  const r = await detachDomainsForOrg(lease, vercel, events, ORG, WINDOW);
   assertEquals(r.sent, 0);
   assertEquals(r.sendFailures, 1);
   assertEquals(lc.hardDelete, []);
+  assertEquals(ec.detached, []);
 });
 
 Deno.test("detach: lease lost → no Vercel call", async () => {
+  const { events } = fakeEvents({});
   const { lease } = fakeLease({ removing: [ROW], claimDetach: null });
   const { vercel, calls } = fakeVercel({});
-  const r = await detachDomainsForOrg(lease, vercel, ORG, WINDOW);
+  const r = await detachDomainsForOrg(lease, vercel, events, ORG, WINDOW);
   assertEquals(r, { sent: 0, sendFailures: 0 });
   assertEquals(calls.remove, []);
 });
 
-Deno.test("detach: hard-delete affecting zero rows is a failure, not a success", async () => {
+Deno.test("detach: hard-delete affecting zero rows is a failure, not a success, and records NO detached event", async () => {
+  const { events, calls: ec } = fakeEvents({});
   const { lease } = fakeLease({ removing: [ROW], hardDelete: false });
   const { vercel } = fakeVercel({ remove: { kind: "removed" } });
-  const r = await detachDomainsForOrg(lease, vercel, ORG, WINDOW);
+  const r = await detachDomainsForOrg(lease, vercel, events, ORG, WINDOW);
   assertEquals(r.sent, 0);
   assertEquals(r.sendFailures, 1);
   assertEquals(r.itemFailures?.[0].error, "tombstone hard-delete affected zero rows");
+  assertEquals(ec.detached, []);
 });
 
 Deno.test("detach: a thrown lease/Vercel error isolates to the row, and the loop continues", async () => {
+  const { events } = fakeEvents({});
   // Symmetric with the attach-side isolation test above: the try/catch
   // around detachDomainsForOrg's loop body has the identical shape, and a
   // future refactor could accidentally break one without the other.
@@ -346,7 +405,126 @@ Deno.test("detach: a thrown lease/Vercel error isolates to the row, and the loop
     return id === "bad" ? Promise.reject(new Error("db down")) : Promise.resolve(TOKEN);
   };
   const { vercel } = fakeVercel({ remove: { kind: "removed" } });
-  const r = await detachDomainsForOrg(lease, vercel, ORG, WINDOW);
+  const r = await detachDomainsForOrg(lease, vercel, events, ORG, WINDOW);
   assertEquals(r.sent, 1);
   assertEquals(r.itemFailures, [{ item: "bad", error: "db down" }]);
+});
+
+// ── events ──────────────────────────────────────────────────────────────────
+
+Deno.test("attach: an unacknowledged permanent-failure event parks the row — no lease, no Vercel call, not a failure", async () => {
+  const { events, calls: ec } = fakeEvents({ parked: true });
+  const { lease, calls: lc } = fakeLease({ verified: [ROW] });
+  const { vercel, calls } = fakeVercel({});
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
+  assertEquals(r, { sent: 0, sendFailures: 0 });
+  assertEquals(ec.lookups, [{ orgId: ORG.id, domain: "example.church" }]);
+  assertEquals(lc.claimAttach, []);
+  assertEquals(calls.add, []);
+  assertEquals(lc.stamp, []);
+  assertEquals(ec.permanent, []);
+});
+
+Deno.test("attach: the skip check is per (org, domain) and runs after the denylist, before the lease", async () => {
+  const rows: DomainRow[] = [
+    { id: "apex", domain: "two42.io" },
+    { id: "ok", domain: "example.church" },
+  ];
+  const { events, calls: ec } = fakeEvents({});
+  const { lease, calls: lc } = fakeLease({ verified: rows });
+  const { vercel } = fakeVercel({});
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
+  assertEquals(r.sent, 1);
+  // The denylisted row never reaches the lookup; the clean row does, once.
+  assertEquals(ec.lookups, [{ orgId: ORG.id, domain: "example.church" }]);
+  assertEquals(lc.claimAttach, ["ok"]);
+});
+
+Deno.test("attach: a clean add records no event at all", async () => {
+  const { events, calls: ec } = fakeEvents({});
+  const { lease } = fakeLease({ verified: [ROW] });
+  const { vercel } = fakeVercel({ add: { kind: "added" } });
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
+  assertEquals(r, { sent: 1, sendFailures: 0 });
+  assertEquals(ec.permanent, []);
+  assertEquals(ec.detached, []);
+});
+
+Deno.test("attach: needs_verification and ambiguous outcomes are retried, so they record no permanent-failure event", async () => {
+  const retried: VercelAddResult[] = [
+    { kind: "needs_verification", status: 200, verification: [] },
+    { kind: "ambiguous", status: 502, detail: "status 502" },
+  ];
+  for (const add of retried) {
+    const { events, calls: ec } = fakeEvents({});
+    const { lease } = fakeLease({ verified: [ROW] });
+    const { vercel } = fakeVercel({ add, get: { kind: "not_attached" } });
+    const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
+    assertEquals(r.sendFailures, 1);
+    assertEquals(ec.permanent, []);
+  }
+});
+
+Deno.test("attach: a permanent-failure insert that throws still reports the row, and the loop continues", async () => {
+  const rows: DomainRow[] = [{ id: "bad", domain: "bad.example" }, { id: "good", domain: "good.example" }];
+  const { events } = fakeEvents({});
+  events.recordPermanentFailure = () => Promise.reject(new Error("insert failed"));
+  const { lease } = fakeLease({ verified: rows });
+  const { vercel } = fakeVercel({});
+  vercel.addDomain = (domain) =>
+    Promise.resolve(
+      domain === "bad.example"
+        ? { kind: "permanent", reason: "conflict", status: 409, detail: "d" }
+        : { kind: "added" },
+    );
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
+  assertEquals(r.sent, 1);
+  assertEquals(r.itemFailures, [{ item: "bad", error: "insert failed" }]);
+});
+
+Deno.test("attach: a skip-check lookup that throws is a row failure, not a silent skip and not a retry", async () => {
+  const { events } = fakeEvents({});
+  events.hasUnacknowledgedPermanentFailure = () => Promise.reject(new Error("lookup failed"));
+  const { lease, calls: lc } = fakeLease({ verified: [ROW] });
+  const { vercel, calls } = fakeVercel({});
+  const r = await attachDomainsForOrg(lease, vercel, events, ORG, APEX, WINDOW);
+  assertEquals(r.sent, 0);
+  assertEquals(r.itemFailures, [{ item: "row-1", error: "lookup failed" }]);
+  assertEquals(lc.claimAttach, []);
+  assertEquals(calls.add, []);
+});
+
+Deno.test("detach: not_found (already gone on Vercel) still records the detached event once the row is deleted", async () => {
+  const { events, calls: ec } = fakeEvents({});
+  const { lease } = fakeLease({ removing: [ROW] });
+  const { vercel } = fakeVercel({ remove: { kind: "not_found" } });
+  const r = await detachDomainsForOrg(lease, vercel, events, ORG, WINDOW);
+  assertEquals(r, { sent: 1, sendFailures: 0 });
+  assertEquals(ec.detached, [{ orgId: ORG.id, domain: "example.church" }]);
+});
+
+Deno.test("detach: a detached-event insert that throws still counts as sent — the delete already succeeded and the row is gone", async () => {
+  const { events } = fakeEvents({});
+  events.recordDetached = () => Promise.reject(new Error("insert failed"));
+  const { lease, calls: lc } = fakeLease({ removing: [ROW] });
+  const { vercel } = fakeVercel({ remove: { kind: "removed" } });
+  const originalError = console.error;
+  const loggedArgs: unknown[][] = [];
+  console.error = (...args: unknown[]) => {
+    loggedArgs.push(args);
+  };
+  let r;
+  try {
+    r = await detachDomainsForOrg(lease, vercel, events, ORG, WINDOW);
+  } finally {
+    console.error = originalError;
+  }
+  assertEquals(lc.hardDelete.length, 1);
+  assertEquals(r, { sent: 1, sendFailures: 0 });
+  // The insert failure is logged with the domain name (row.id is stale by
+  // this point — the tombstone is already deleted), not surfaced as an
+  // itemFailure that would point the operator at a row that no longer exists.
+  assertEquals(loggedArgs.length, 1);
+  assertEquals(loggedArgs[0].includes("example.church"), true);
+  assertEquals(loggedArgs[0].includes(ORG.id), true);
 });

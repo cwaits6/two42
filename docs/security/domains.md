@@ -105,16 +105,22 @@ response shapes it classifies are listed in `_shared/vercel.ts`'s header.
 Every unrecognised status degrades to "ambiguous" (GET-reconcile), never to
 a confident success.
 
-### No schedule yet — manual invocation
+### Schedule
 
-The reminder functions are driven by pg_cron via
-`supabase/migrations/20260729000000_reminder_cron_schedules.sql`. The
-migration adding this worker's schedule could not ship on the same branch
-(the migration slot was held), so **nothing invokes the worker
-automatically** until a follow-up migration lands. The `/platform` retry
-button clears an expired lease; it does not trigger a run.
+pg_cron invokes the worker every 10 minutes: the `attach-org-domains` job
+in `cron.job`, created by
+`supabase/migrations/20260911000000_attach_org_domains_schedule_and_events.sql`
+through `private.schedule_edge_reminder()` — the same helper and the same
+vault-held URL and bearer as the reminder jobs in
+`20260729000000_reminder_cron_schedules.sql`. The cadence is the lease
+window: a run more often than that only finds rows it cannot claim. The
+`/platform` retry button clears an expired lease; it does not trigger a
+run — the next scheduled one picks the row up.
+`supabase/tests/domain_worker_events_suite.sql` pins the job's name,
+schedule and target path.
 
-Until then, run it by hand against the hosted project:
+For debugging, a run can still be triggered by hand against the hosted
+project:
 
 ```bash
 supabase functions invoke attach-org-domains --project-ref <ref>
@@ -127,11 +133,6 @@ The response is the run summary: `domainsChanged`, `domainsFailed`,
 `failed[]` (orgs whose loop threw) and `failedItems[]` (per-row failures,
 keyed by `org_domains.id`). HTTP 500 when anything failed, 200 only for a
 clean run — the same contract as the reminder functions.
-
-The follow-up schedule should reuse `private.schedule_reminder_job()` from
-the cron migration with a short interval (every 5–10 minutes is plenty; the
-lease window is 10 minutes, so a run more often than that only finds rows
-it cannot claim).
 
 ### Single-flight lease and the fenced stamp
 
@@ -155,9 +156,9 @@ chains.
 | 200, `verified: true` | Confirmed — stamp |
 | 200, `verified: false` with a `verification[]` challenge (the name is registered to another Vercel account) | Needs manual action, no stamp. The run summary and the function log carry the TXT record to publish; the operator publishes it, then calls `POST /v9/projects/{id}/domains/{domain}/verify`. The row is retried after the lease window, like an ambiguous result |
 | 400 "domain already exists on the project" | Idempotent success — GET to confirm, then stamp |
-| 409 (assigned to another project/account), 403, 402 | Permanent failure, no stamp, no retry within the lease window |
+| 409 (assigned to another project/account), 403, 402 | Permanent failure, no stamp. An `attach_permanent_failure` event is recorded and the row is skipped on every later run until the event is acknowledged on `/platform/domains` |
 | Timeout, 429, 5xx, any other 400 | Ambiguous — GET first; stamp only if attached, never re-POST blind |
-| DELETE 200 / 404 | Detached (404 = already gone) — hard-delete the tombstone |
+| DELETE 200 / 404 | Detached (404 = already gone) — hard-delete the tombstone, then record a `detached` event |
 | DELETE 409 (project being transferred) or other error | Transient — tombstone kept, retried next run |
 
 Compensation for a lost stamp: if Vercel confirmed the attachment but the
@@ -165,55 +166,55 @@ fenced stamp matched zero rows, the worker re-reads the row. Row gone (the
 admin deleted an unattached row mid-flight) → detach the name just attached.
 Row present → leave it for the live lease holder.
 
-## What `/platform/domains` shows, and what it cannot
+## What `/platform/domains` shows
 
 The page lists every claimed domain across tenants with its state
 (**Unverified**, **Awaiting attach** with the lease state, **Attached**,
 **Detach pending**) and offers **Clear expired claim** on an
 awaiting-attach row whose lease has expired.
 
-Two things the plan asks this surface to show **cannot be built durably
-from the existing columns**, and this branch could add no migration:
+Above that list it shows the worker's **unacknowledged events** — the two
+outcomes the run summary alone could not carry past the run, read from
+`org_domain_worker_events` (created by
+`20260911000000_attach_org_domains_schedule_and_events.sql`, written through
+`supabase/functions/_shared/domain-events.ts`):
 
-1. **A persisted permanent-failure list.** A 409/403/402 from Vercel is
-   reported in the run's HTTP response and the function logs, and nowhere
-   else. The row stays `verified` + unattached and looks like any other row
-   awaiting attach; once its lease expires the next run tries again and
-   fails the same way. Reusing `status = 'failed'` for this was rejected —
-   it already means "DNS check did not match" to the admin UI.
-2. **The detached-but-not-yet-delisted queue** for the allowlist step above.
-   Cleanup completing *is* the delete: the tombstone is hard-deleted the
-   moment Vercel confirms, so there is no row left to list as "detached,
-   awaiting operator ack". Today the operator watches `removing` rows
-   disappear from the list, and the worker's run summary names each
-   detached row by id.
+1. **Attach failed** (`attach_permanent_failure`). A 409/403/402 from
+   Vercel. The row stays `verified` + unattached, but the worker skips it
+   on every later run — its skip check reads "any unacknowledged
+   permanent-failure event for this `(org_id, domain)`", so "no retry" is
+   literal rather than "retry every lease window". Keyed on the domain
+   name, not the row id, so a name deleted and re-claimed under a fresh id
+   stays parked. Reusing `status = 'failed'` for this was rejected — it
+   already means "DNS check did not match" to the admin UI.
+2. **Detached** (`detached`). Cleanup completing *is* the tombstone's
+   hard-delete, so this event is the durable trace that the name still has a
+   redirect-allowlist entry to remove (step 8 of the flow). It is recorded
+   only after the delete affected exactly one row. If the insert itself
+   fails after that delete — a transient DB error, nothing left to retry
+   against — the domain is still logged as a `console.error` (with the
+   domain name, since the row is already gone) and the run counts it as
+   sent rather than failed, but no `/platform/domains` entry is created for
+   it in that case.
 
-Recommended follow-up, for the next available migration slot — an
-append-only event log the worker writes and `/platform` reads and
-acknowledges:
+**Acknowledge** (`POST /api/platform/domain-events/[id]/acknowledge`)
+stamps `acknowledged_at` on the row's own `org_id`, row-count-checked; a
+second click is a zero-row no-op. For a permanent failure, acknowledging is
+the operator saying "the cause is fixed, retry" — the next run claims the
+row again. For a detach it records that the allowlist entry is gone.
 
-```sql
--- Recommended follow-up (NOT part of the branch that introduced the worker).
-create table public.org_domain_worker_events (
-  id uuid primary key default gen_random_uuid(),
-  org_id uuid not null default public.app_current_org_id()
-    references public.organizations(id) on delete restrict,
-  domain text not null,
-  event text not null check (event in ('attach_permanent_failure', 'detached')),
-  detail text,
-  acknowledged_at timestamptz,
-  created_at timestamptz not null default now()
-);
--- Service-role-only: restrictive isolation policy, no permissive policy,
--- all privileges revoked from anon/authenticated. The worker inserts with
--- an explicit org_id; /platform lists rows where acknowledged_at is null
--- and stamps it from the operator's checklist.
-```
+The table is service-role-only: the restrictive isolation policy is its
+only policy, every privilege is revoked from `anon` and `authenticated`,
+and the worker's inserts carry an explicit `org_id` (it runs with
+`BYPASSRLS`). `supabase/functions/tests/domain_events_test.ts` pins the
+worker's predicates, `supabase/functions/tests/domain_attach_test.ts` the
+skip and the two writes, and `supabase/tests/domain_worker_events_suite.sql`
+the lockdown and the acknowledge UPDATE's row counts.
 
-With that table, the worker records each permanent failure (and can skip
-rows that already have an unacknowledged one, making "no retry" literal
-rather than "retry every lease window"), and each detach becomes an
-allowlist to-do that survives the row delete.
+What it still cannot show: a Vercel ownership challenge
+(`needs_verification`) is not persisted — it is retried after the lease
+window like an ambiguous result, and the TXT record to publish is in the
+run summary and function log only.
 
 ## Invariants worth re-checking on any change here
 
@@ -222,9 +223,10 @@ allowlist to-do that survives the row delete.
   `supabase/functions/` after any change.
 - `removing` is the only status transition that keeps `attached_at`; the
   remove route's update names `status` and the two lease columns only.
-- Every `org_domains` chain in the worker carries `.eq("org_id", …)`. No
-  lint sees `supabase/functions/`; the recording test and the pgTAP suite
-  are the pins.
+- Every `org_domains` chain in the worker carries `.eq("org_id", …)`, and
+  every `org_domain_worker_events` read carries it and every insert names
+  it. No lint sees `supabase/functions/`; the recording tests and the pgTAP
+  suites are the pins.
 - The claim route's apex check (`classifyHost()` in `lib/org.ts`) and the
   worker's (`_shared/domain-denylist.ts`) are two implementations of one
   rule. A change lands on both sides.

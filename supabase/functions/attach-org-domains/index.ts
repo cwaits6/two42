@@ -11,16 +11,16 @@
 // The orchestration lives in _shared/domain-attach.ts and is unit-tested
 // against fakes; this file only wires real clients and the HTTP contract.
 //
-// NO SCHEDULE YET. The reminder functions are driven by pg_cron via
-// supabase/migrations/20260729000000_reminder_cron_schedules.sql; the
-// migration adding this function's schedule is deferred to a later branch
-// (the migration slot was held when this shipped). Until it lands, nothing
-// invokes this function automatically — see docs/security/domains.md for
-// the manual invocation and the secrets it needs.
+// Driven by pg_cron every 10 minutes (the lease window) via
+// supabase/migrations/20260911000000_attach_org_domains_schedule_and_events.sql,
+// the same helper the reminder functions use. See docs/security/domains.md
+// for the secrets it needs and the manual invocation for debugging.
 //
 // Runs with the service key (BYPASSRLS), so tenant isolation lives in the
-// query text: iterates every active organization and every org_domains
-// query in _shared/domain-lease.ts carries an explicit org_id predicate.
+// query text: iterates every active organization, every org_domains query
+// in _shared/domain-lease.ts carries an explicit org_id predicate, and
+// every org_domain_worker_events read and insert in _shared/domain-events.ts
+// carries an explicit org_id.
 
 // Pinned exactly, matching the two reminder functions — deno.lock's
 // integrity entry covers this URL; bump all three together.
@@ -38,6 +38,7 @@ import {
   createDomainLeaseClient,
   type DomainTableClient,
 } from "../_shared/domain-lease.ts";
+import { createDomainEventsClient, type DomainEventsTableClient } from "../_shared/domain-events.ts";
 import { resolvePlatformApex } from "../_shared/domain-denylist.ts";
 import { createVercelClient } from "../_shared/vercel.ts";
 import { attachDomainsForOrg, detachDomainsForOrg } from "../_shared/domain-attach.ts";
@@ -83,6 +84,7 @@ Deno.serve(async () => {
     // supabase-js — the same cast the reminder functions carry.
     const orgs = await listActiveOrgs(supabase as unknown as OrgListClient);
     const lease = createDomainLeaseClient(supabase as unknown as DomainTableClient);
+    const events = createDomainEventsClient(supabase as unknown as DomainEventsTableClient);
     const vercel = createVercelClient({
       token: VERCEL_API_TOKEN,
       projectId: VERCEL_PROJECT_ID,
@@ -91,8 +93,8 @@ Deno.serve(async () => {
 
     const summary = summarize(
       await forEachOrg(orgs, async (org): Promise<OrgRunCounts> => {
-        const attach = await attachDomainsForOrg(lease, vercel, org, PLATFORM_APEX, ATTACH_LEASE_WINDOW_MS);
-        const detach = await detachDomainsForOrg(lease, vercel, org, ATTACH_LEASE_WINDOW_MS);
+        const attach = await attachDomainsForOrg(lease, vercel, events, org, PLATFORM_APEX, ATTACH_LEASE_WINDOW_MS);
+        const detach = await detachDomainsForOrg(lease, vercel, events, org, ATTACH_LEASE_WINDOW_MS);
         const itemFailures = [...(attach.itemFailures ?? []), ...(detach.itemFailures ?? [])];
         return {
           sent: attach.sent + detach.sent,

@@ -26,7 +26,6 @@ const SERVING_LINK_MODE_OPTIONS = [
 ];
 
 const SETTINGS_LABELS: Record<string, string> = {
-  site_name: "Site Name",
   directory_app_url: "Directory App URL",
   weekly_zoom_url: "Weekly Zoom URL",
   zoom_meeting_time: "Zoom Meeting Time",
