@@ -741,6 +741,17 @@ deployment, bounded by isolation and the denylist).
 > migration slot is held; the worker is deployed but only runs on manual
 > invocation). A ready-to-review `org_domain_worker_events` follow-up
 > migration is sketched in `docs/security/domains.md` for the first two.
+>
+> Shipped (PR 4 follow-up): #394. The three gaps above are closed.
+> `org_domain_worker_events` exists as sketched (RESTRICT instead of the
+> sketch's unspecified delete behavior, service-role-only via a restrictive-
+> only policy), the worker records an `attach_permanent_failure` on
+> 409/403/402 and a `detached` event after each tombstone's hard-delete, and
+> `pg_cron` invokes the worker every 10 minutes via
+> `private.schedule_edge_reminder()` (the same helper the reminder jobs use).
+> `/platform/domains` lists unacknowledged events and acknowledging one is
+> the operator's "cause fixed, retry" / "allowlist entry removed" signal.
+> Current state: `docs/security/domains.md`.
 
 ## 8. Auth redirect allowlist
 

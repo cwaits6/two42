@@ -41,8 +41,13 @@ export default async function PlatformDomainsPage() {
     .is("acknowledged_at", null)
     .order("created_at");
 
+  if (error) {
+    console.error("Platform domains list read failed (org_domains)", error);
+  }
+  if (eventsError) {
+    console.error("Platform domains list read failed (org_domain_worker_events)", eventsError);
+  }
   if (error || eventsError) {
-    console.error("Platform domains list read failed", error ?? eventsError);
     return (
       <PageContainer size="wide">
         <PageHeader title="Domains" />

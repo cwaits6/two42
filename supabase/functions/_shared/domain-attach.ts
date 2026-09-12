@@ -219,7 +219,22 @@ export async function detachDomainsForOrg(
         // still has a redirect-allowlist entry to remove. Only on the
         // success branch: a zero-row delete keeps the tombstone, and a
         // detached event for a row that is still there would be a lie.
-        await events.recordDetached(org.id, row.domain);
+        try {
+          await events.recordDetached(org.id, row.domain);
+        } catch (eventErr) {
+          // The detach itself succeeded — Vercel confirmed removal and the
+          // tombstone is gone. Only the durable to-do record failed to write.
+          // Log the domain (row.id is meaningless now; the row is deleted) so
+          // the allowlist cleanup isn't silently lost, and count it as sent —
+          // reporting a row failure here would point the operator at a row
+          // that no longer exists.
+          console.error(
+            "attach-org-domains: detached event insert failed for domain %s (org %s): %s",
+            row.domain,
+            org.id,
+            message(eventErr),
+          );
+        }
         sent++;
       } else {
         itemFailures.push({ item: row.id, error: "tombstone hard-delete affected zero rows" });

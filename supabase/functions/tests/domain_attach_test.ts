@@ -503,13 +503,28 @@ Deno.test("detach: not_found (already gone on Vercel) still records the detached
   assertEquals(ec.detached, [{ orgId: ORG.id, domain: "example.church" }]);
 });
 
-Deno.test("detach: a detached-event insert that throws is reported as the row's failure, not counted as sent", async () => {
+Deno.test("detach: a detached-event insert that throws still counts as sent — the delete already succeeded and the row is gone", async () => {
   const { events } = fakeEvents({});
   events.recordDetached = () => Promise.reject(new Error("insert failed"));
   const { lease, calls: lc } = fakeLease({ removing: [ROW] });
   const { vercel } = fakeVercel({ remove: { kind: "removed" } });
-  const r = await detachDomainsForOrg(lease, vercel, events, ORG, WINDOW);
+  const originalError = console.error;
+  const loggedArgs: unknown[][] = [];
+  console.error = (...args: unknown[]) => {
+    loggedArgs.push(args);
+  };
+  let r;
+  try {
+    r = await detachDomainsForOrg(lease, vercel, events, ORG, WINDOW);
+  } finally {
+    console.error = originalError;
+  }
   assertEquals(lc.hardDelete.length, 1);
-  assertEquals(r.sent, 0);
-  assertEquals(r.itemFailures, [{ item: "row-1", error: "insert failed" }]);
+  assertEquals(r, { sent: 1, sendFailures: 0 });
+  // The insert failure is logged with the domain name (row.id is stale by
+  // this point — the tombstone is already deleted), not surfaced as an
+  // itemFailure that would point the operator at a row that no longer exists.
+  assertEquals(loggedArgs.length, 1);
+  assertEquals(loggedArgs[0].includes("example.church"), true);
+  assertEquals(loggedArgs[0].includes(ORG.id), true);
 });

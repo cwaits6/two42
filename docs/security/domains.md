@@ -188,9 +188,14 @@ outcomes the run summary alone could not carry past the run, read from
    stays parked. Reusing `status = 'failed'` for this was rejected — it
    already means "DNS check did not match" to the admin UI.
 2. **Detached** (`detached`). Cleanup completing *is* the tombstone's
-   hard-delete, so this event is the only trace that the name still has a
+   hard-delete, so this event is the durable trace that the name still has a
    redirect-allowlist entry to remove (step 8 of the flow). It is recorded
-   only after the delete affected exactly one row.
+   only after the delete affected exactly one row. If the insert itself
+   fails after that delete — a transient DB error, nothing left to retry
+   against — the domain is still logged as a `console.error` (with the
+   domain name, since the row is already gone) and the run counts it as
+   sent rather than failed, but no `/platform/domains` entry is created for
+   it in that case.
 
 **Acknowledge** (`POST /api/platform/domain-events/[id]/acknowledge`)
 stamps `acknowledged_at` on the row's own `org_id`, row-count-checked; a
