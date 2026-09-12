@@ -61,6 +61,8 @@ export async function POST(request: Request) {
     // platform-admin gate above is the authorization decision. The RPC is
     // transactional — any raise rolls the whole provisioning back.
     const service = await createServiceClient();
+    // org-anchor: this RPC creates the organization and derives its org_id
+    // transactionally — there is no existing org_id to filter on
     const { data: orgId, error } = await service.rpc("provision_organization", {
       _name: name,
       _slug: slug,

@@ -346,9 +346,9 @@ export async function POST(request: Request) {
     // org). Resend's account tier limits total domains regardless of
     // tenant, so the cap must hold before domains.create is ever called.
     // The insert happens first so a duplicate claim is a clean 409 before
-    // any Resend resource exists. The .rpc() call is invisible to the
-    // service-role guard: orgId is requireOrgAdmin()'s validated anchor,
-    // and the function is service_role-only (see
+    // any Resend resource exists. The service-role guard checks this .rpc()
+    // call for its _org_id argument; orgId is requireOrgAdmin()'s validated
+    // anchor, and the function is service_role-only (see
     // docs/security/service-role-inventory.md).
     const { data: inserted, error: claimError } = await service.rpc(
       "org_email_domain_claim",

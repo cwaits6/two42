@@ -36,6 +36,7 @@ export async function POST(request: Request) {
 
   const service = await createServiceClient();
 
+  // org-anchor: the HMAC-validated group row is the org anchor for the signed link
   // The group is fetched first: its org_id is the org anchor for every read
   // and write below (the surface stays on the service-role key, so the org
   // filter is what confines it to one tenant). The profiles
@@ -76,6 +77,7 @@ export async function POST(request: Request) {
     { data: profile, error: profileError },
     { data: settings, error: settingsError },
   ] = await Promise.all([
+    // org-anchor: profile org read unscoped so the cross-org pairing check can reject it explicitly
     service
       .from("profiles")
       .select("id, org_id, first_name, last_name, preferred_name, family_id, email, role")
@@ -184,6 +186,8 @@ export async function POST(request: Request) {
     // surfaces through PostgREST as an array; the explicit row type is
     // needed because the server clients are created without a <Database>
     // generic, so `.single()` would otherwise infer `unknown`.
+    // org-anchor: org_id is re-derived and enforced by the RPC itself from the
+    // already-validated member_groups row fetched above
     const { data: rpc, error: rpcError } = await service
       .rpc("serving_signup_apply", {
         _group_id: payload.g,

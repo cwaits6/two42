@@ -1,3 +1,14 @@
+/**
+ * Server-side giving helpers.
+ *
+ * Tenancy: every helper that takes a Supabase client also takes `orgId` and
+ * scopes each chain on it. A `SupabaseClient` PARAMETER is untyped as to
+ * privilege — a service-role client satisfies it identically and carries
+ * BYPASSRLS — so from inside lib/ this code cannot know whether RLS is
+ * running, and the explicit predicate is the only tenant boundary it can
+ * guarantee. `orgId` must come from a validated anchor: the caller's own
+ * RLS-scoped profile row, never a request body.
+ */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { displayName, initials } from "@/lib/names";
 import { mintSignedUrls } from "@/lib/storageRead";
@@ -5,24 +16,30 @@ import type { MemberOption } from "@/components/giving/FundForm";
 
 /** Whether members may put up and manage their own giving links */
 export async function givingStewardsCanManage(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  orgId: string
 ): Promise<boolean> {
   const { data } = await supabase
     .from("site_settings")
     .select("value")
+    .eq("org_id", orgId)
     .eq("key", "giving_manage_mode")
     .maybeSingle();
   return (data?.value ?? "stewards") === "stewards";
 }
 
 /** Both giving settings in one query, for the admin page */
-export async function getGivingSettings(supabase: SupabaseClient): Promise<{
+export async function getGivingSettings(
+  supabase: SupabaseClient,
+  orgId: string
+): Promise<{
   stewardsCanManage: boolean;
   dashboardTile: boolean;
 }> {
   const { data } = await supabase
     .from("site_settings")
     .select("key, value")
+    .eq("org_id", orgId)
     .in("key", ["giving_manage_mode", "giving_dashboard_tile"]);
   const map = new Map((data ?? []).map((s) => [s.key, s.value]));
   return {
@@ -62,12 +79,16 @@ export async function signStewardAvatars<T extends StewardAvatarSource>(
 }
 
 /** Member picker options for the fund form */
-export async function loadFundFormData(supabase: SupabaseClient): Promise<{
+export async function loadFundFormData(
+  supabase: SupabaseClient,
+  orgId: string
+): Promise<{
   members: MemberOption[];
 }> {
   const { data: memberRows } = await supabase
     .from("profiles_directory")
     .select("id, first_name, last_name, preferred_name, avatar_url")
+    .eq("org_id", orgId)
     .order("last_name")
     .order("first_name");
 

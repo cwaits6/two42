@@ -24,7 +24,7 @@ export default async function EditFundPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, org_id")
     .eq("id", user.id)
     .single();
   if (!profile || profile.role === "pending") redirect("/dashboard");
@@ -38,7 +38,7 @@ export default async function EditFundPage({
         .eq("id", fundId)
         .maybeSingle<GivingFund>(),
       supabase.from("giving_fund_methods").select("*").eq("fund_id", fundId),
-      givingStewardsCanManage(supabase),
+      givingStewardsCanManage(supabase, profile.org_id),
     ]);
 
   if (!fund) notFound();
@@ -46,7 +46,7 @@ export default async function EditFundPage({
     isAdmin || (stewardsCanManage && fund.steward_id === user.id);
   if (!canManage) redirect("/give");
 
-  const { members } = await loadFundFormData(supabase);
+  const { members } = await loadFundFormData(supabase, profile.org_id);
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-5xl">

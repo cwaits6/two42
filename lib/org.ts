@@ -148,6 +148,9 @@ export async function resolveRequestOrgId(
   client: SupabaseClient,
   opts: { label: string; orgSlug: string }
 ): Promise<string | null> {
+  // org-anchor: app_request_org_id() IS the org resolver — it derives the org
+  // from the principal or the validated host header, so there is no org_id to
+  // pass in; callers scope everything after this on the value it returns
   const { data, error } = await client.rpc("app_request_org_id");
   // The generated type claims Returns: string, but the SQL function
   // returns NULL whenever neither a principal nor the header resolves.

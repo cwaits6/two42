@@ -78,6 +78,13 @@ export async function POST(request: Request) {
   // permissive policy. Reuse the not-found response: a distinguishing message
   // would be a cross-org existence oracle.
   if (target.org_id !== currentProfile.org_id) {
+    console.error(
+      "household/link-member: caller org %s does not match target org %s (user=%s, target=%s)",
+      currentProfile.org_id,
+      target.org_id,
+      user.id,
+      target.id,
+    );
     return NextResponse.json({ error: "Member not found." }, { status: 404 });
   }
 

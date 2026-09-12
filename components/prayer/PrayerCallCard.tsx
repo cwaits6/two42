@@ -77,11 +77,15 @@ export function PrayerCallCard({
   isAdmin,
   members,
   prayerCalendarId,
+  orgId,
 }: {
   initialSessions: PrayerCallSession[];
   isAdmin: boolean;
   members: MemberOption[];
   prayerCalendarId: string | null;
+  /** Resolved server-side from the caller's own profile, never derived here:
+   *  the browser client cannot read a cookie-bound org anchor. */
+  orgId: string;
 }) {
   const [sessions, setSessions] = useState(initialSessions);
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
@@ -133,6 +137,7 @@ export function PrayerCallCard({
 
     const errMsg = await savePrayerCallSessions(
       supabase,
+      orgId,
       sessionDrafts,
       removed,
       prayerCalendarId

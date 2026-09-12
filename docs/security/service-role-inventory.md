@@ -18,23 +18,22 @@ The blocking `Service-role org_id guard` CI job runs
 [`scripts/check-service-role-org-scope.mjs`](../../scripts/README.md), which
 turns this document's rules into assertions:
 
-- Every service-role query chain in `app/` and `lib/` must carry an `org_id`
-  predicate (Tier B), unless it is a documented org anchor — marked in code
-  with a reasoned `// org-anchor: <why>` comment. Most anchor chains in the
-  tables below carry that marker in-file. Two do not: the `member_groups`
-  (`:50`) and `profiles` (`:80`) chains in
-  `app/api/serving/link-action/route.ts` still sit in the script's
-  `KNOWN_ANCHORS` allowlist. The parallel PRs that owned that file (#306,
-  #323) have landed, so this is now plain outstanding cleanup, not an
-  in-flight accommodation — retiring an allowlist entry requires adding the
-  in-file marker in the same change (stale entries fail the guard).
+- Every service-role query chain in `app/` and `lib/` — `.from()` and
+  `.rpc()` alike — must carry an `org_id` predicate (Tier B), unless it is a
+  documented org anchor — marked in code with a reasoned
+  `// org-anchor: <why>` comment. Every anchor chain in the tables below
+  carries that marker in-file; the script has no allowlist.
 - The email fan-out chains (feedback admins, serving broadcast, leader cancel
   notices) are Tier A: they must be scoped and may **not** use the marker —
   an `// org-anchor:` on a fan-out is itself a failure. These surfaces push
   one org's data to third parties and email cannot be recalled.
 - Exported `lib/` helpers taking a `SupabaseClient` parameter must scope the
   chains rooted at it (Tier C — a helper that *can* receive a service client
-  must scope unconditionally).
+  must scope unconditionally). No module is exempt.
+- Every chain under `supabase/functions/` (entry points and `_shared/`) must
+  carry an explicit `org_id` predicate, an explicit `org_id` on insert, or an
+  `org_id`/`_org_id` RPC argument, or a reasoned marker; only the
+  `organizations` tenant root is exempt.
 - **This file itself is kept in sync**: every `app/`/`lib/` file calling
   `createServiceClient()` must have a row in the tables below, every row must
   name a real call site, and the site counts in the two section headings must
@@ -42,24 +41,29 @@ turns this document's rules into assertions:
 
 The guard is static and syntax-only; it proves a predicate is *present*, not
 that its value is correctly derived. The "Org derived from" column below —
-the validated-anchor provenance — remains a review responsibility. Four
-blind spots matter in practice:
+the validated-anchor provenance — remains a review responsibility. What it
+does and does not see, stated precisely:
 
-- **`.rpc()` chains are never inspected** — the guard collects on `.from(`
-  exclusively, so `provision_organization()`
-  (`app/api/platform/organizations/route.ts`) has no static guard at all.
-- **The whole `supabase/functions/` tree is out of scope** — the scan set is
-  `git ls-files app lib`. The edge-function service clients and their query
-  chains are covered by review and this document only (the repo-wide
-  seeded-UUID sweep does reach them; nothing else does).
-- **Nested embeds are not parsed** — `.select()` strings are opaque to the
-  guard, so the rule that an embed is safe only when its parent is filtered
-  is unenforced.
+- **`.rpc()` calls are inspected** the same way as `.from()` chains: an
+  `org_id`/`_org_id` argument property is the predicate, and a call without
+  one needs a reasoned marker (`provision_organization()` in
+  `app/api/platform/organizations/route.ts` and `serving_signup_apply()` in
+  `app/api/serving/link-action/route.ts` carry one). Whether the argument's
+  value is the right org is still review.
+- **`supabase/functions/` is scanned**, with every chain collected regardless
+  of its root. Neither the value bound by `forEachOrg()` nor the
+  correctness of the tenant iteration itself is proved — only that each
+  chain names `org_id`.
+- **Nested embeds are explicitly asserted on the parent** — a chain whose
+  `.select()` embeds a relation and carries no org predicate or marker fails
+  with a message naming the embed. This is a heuristic on the select string,
+  not a PostgREST parser, and it sharpens the message rather than adding a
+  second gate: a scoped parent passes as before.
 - **The pinned cross-org assertions are substring counts, not reachability
-  analysis** — and two further assertions are unpinned entirely
-  (`app/api/family-invites/claim/route.ts`,
-  `app/api/household/link-member/route.ts`): they can be deleted without
-  failing CI.
+  analysis.** All four hand-written checks are pinned (the two signed-link
+  surfaces, `app/api/family-invites/claim/route.ts`,
+  `app/api/household/link-member/route.ts`); the pin proves the comparison
+  and its denial log exist, not that the code path is reached.
 
 ## Phase 3 status (CWA-10 / #212)
 
@@ -193,10 +197,11 @@ no permissive policy, ALL privileges revoked from `anon`/`authenticated`.
 The grant matrix and the cap boundaries are pinned by
 `supabase/tests/org_email_quota_suite.sql`.
 
-**Guard blind spot, stated deliberately:**
-`scripts/check-service-role-org-scope.mjs` walks `.from()` chains only, so
-the `.rpc("email_quota_consume", …)` calls in `lib/email/quota.ts` and both
-reminder edge functions are invisible to it. The compensating controls are
+**Guard coverage, stated precisely:**
+`scripts/check-service-role-org-scope.mjs` checks the
+`.rpc("email_quota_consume", …)` calls in `lib/email/quota.ts` and
+`supabase/functions/_shared/quota.ts` for their `_org_id` argument; it does
+not prove the value passed is the right org. The compensating controls are
 the `service_role`-only grant (a browser can never reach the RPC), the
 pgTAP grant matrix, and the unit suites on both sides of the
 `lib/` ⇄ `supabase/functions/_shared/` mirror.
@@ -220,11 +225,11 @@ counts every org's rows, and inserts — one transaction.
   /api/admin/email-domain`, which passes the `orgId` from `requireOrgAdmin()`'s
   RLS-scoped profile.
 
-**Guard blind spot, stated deliberately:** the `.rpc("org_email_domain_claim",
-…)` call is invisible to `scripts/check-service-role-org-scope.mjs`. The
-compensating controls are the `service_role`-only grant, the grant-matrix and
-behaviour assertions in `supabase/tests/org_email_domains_suite.sql`, and the
-route's unit suite.
+**Guard coverage, stated precisely:** `scripts/check-service-role-org-scope.mjs`
+checks the `.rpc("org_email_domain_claim", …)` call for its `_org_id`
+argument, not for where that value came from. The compensating controls are
+the `service_role`-only grant, the grant-matrix and behaviour assertions in
+`supabase/tests/org_email_domains_suite.sql`, and the route's unit suite.
 
 ## App routes and pages (28 sites)
 
