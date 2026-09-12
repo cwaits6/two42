@@ -117,8 +117,14 @@ select ok(not has_table_privilege('authenticated', 'public.org_domain_worker_eve
   'authenticated has no UPDATE on org_domain_worker_events');
 select ok(not has_table_privilege('authenticated', 'public.org_domain_worker_events', 'delete'),
   'authenticated has no DELETE on org_domain_worker_events');
-select ok(has_table_privilege('service_role', 'public.org_domain_worker_events', 'select, insert, update'),
-  'service_role reads, inserts and updates (the worker and the acknowledge route)');
+-- One privilege per call: a comma-separated list makes has_table_privilege()
+-- true when ANY listed privilege is held, which would pass on select alone.
+select ok(has_table_privilege('service_role', 'public.org_domain_worker_events', 'select'),
+  'service_role has SELECT (the worker''s skip check and the /platform list)');
+select ok(has_table_privilege('service_role', 'public.org_domain_worker_events', 'insert'),
+  'service_role has INSERT (the worker''s event writes)');
+select ok(has_table_privilege('service_role', 'public.org_domain_worker_events', 'update'),
+  'service_role has UPDATE (the acknowledge route)');
 
 -- Live probe: the lockdown holds at execution time, not just in the ACL.
 do $$
