@@ -516,8 +516,9 @@ async function runMonthly(
       // Log broadcast (service key bypasses RLS; sent_by = null marks automated;
       // org_id comes from the row context being processed, not a constant).
       // Recorded, not thrown, on failure — the emails have already gone out,
-      // so this must not read as a failed team send; it reaches the summary's
-      // failedItems[] directly (the old "log line is the only record" caveat
+      // so this must not read as a failed team send. It is pushed onto this
+      // org's itemFailures[], which summarize() flattens into the run
+      // summary's failedItems[] (the old "log line is the only record" caveat
       // no longer applies).
       const { error: broadcastError } = await supabase.from("serving_broadcasts").insert({
         group_id,
