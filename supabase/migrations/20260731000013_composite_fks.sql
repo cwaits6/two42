@@ -1,4 +1,4 @@
--- Phase 2 tenancy (CWA-9 / #211), Task 7: composite foreign keys (§3.3).
+-- Composite foreign keys.
 -- Every FK whose parent is an org-owned table becomes (fk_col, org_id) →
 -- parent (id, org_id), so a child can never reference a parent in another
 -- org — the database enforces same-tenant referential integrity instead of
@@ -27,7 +27,7 @@
 -- org_id → organizations FKs themselves; organization_members.profile_id →
 -- profiles (the membership org is deliberately independent of the profile's
 -- pinned org — that independence is the platform-admin / multi-org seam
--- Phase 4 builds on, and the Phase 0 fixture stub depends on it today).
+-- platform-admin work builds on, and the fixture stub depends on it today).
 
 -- ── Cascade set ─────────────────────────────────────────────────────────────
 
@@ -136,7 +136,7 @@ alter table public.serving_team_settings
   add constraint serving_team_settings_group_id_fkey
     foreign key (group_id, org_id) references public.member_groups (id, org_id) on delete cascade;
 
--- ── The 7 capability/entity ON DELETE SET NULL references (§3.3) ────────────
+-- ── The 7 capability/entity ON DELETE SET NULL references ───────────────────
 -- These are the SET NULL relations tenancy_fk_suite.sql exercises one by
 -- one; the 8 attribution ones further down use the same column-list form
 -- but have no runtime test.

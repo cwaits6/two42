@@ -1,5 +1,5 @@
--- Phase 2 tenancy (CWA-9 / #211), Task 8: fail-closed handle_new_user() (§5).
--- Replaces the Phase-1 interim version that stamped every signup into the
+-- Fail-closed handle_new_user().
+-- Replaces the interim version that stamped every signup into the
 -- hardcoded default org. Org resolution now comes only from server-owned
 -- rows; a signup that matches no approved invitation in exactly one org is
 -- rejected, never guessed.
@@ -9,7 +9,7 @@
 --   2. unclaimed family_invites matching the new user's email
 --   3. exactly one distinct org across 1–2 → use it
 --   4. zero → raise TN001; more than one → raise TN002 (with org-pinned
---      identity per #221 one login belongs to one org, so ambiguity is a
+--      identity one login belongs to one org, so ambiguity is a
 --      real conflict, not a case to guess at)
 --
 -- raw_app_meta_data ->> 'org_id' may DISAMBIGUATE (it must intersect the
@@ -17,12 +17,12 @@
 -- raw_user_meta_data is client-supplied at signup and is NEVER consulted
 -- for org selection. That distinction is the whole security argument.
 --
--- Phase 4 onboarding contract, stated here so nobody "fixes" this later: an
+-- Onboarding contract, stated here so nobody "fixes" this later: an
 -- org's first owner has no access request, so self-serve signup must be
 -- org-first — provision_organization() creates the org AND an approved
 -- access_requests row for the owner's email, and only then is the auth user
--- created. With that ordering this trigger needs no special case. Phase 4
--- must NOT solve onboarding by adding a fallback branch here.
+-- created. With that ordering this trigger needs no special case. Self-serve
+-- onboarding must NOT be solved by adding a fallback branch here.
 
 create or replace function public.handle_new_user() returns trigger
   language plpgsql security definer set search_path = ''

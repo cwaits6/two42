@@ -1,5 +1,5 @@
--- Phase 2 tenancy (CWA-9 / #211), Task 3: the AS RESTRICTIVE isolation floor
--- (§3.2). Postgres ANDs restrictive policies with the OR-combined permissive
+-- The AS RESTRICTIVE isolation floor.
+-- Postgres ANDs restrictive policies with the OR-combined permissive
 -- ones, so cross-tenant isolation holds even if a permissive policy — today's
 -- or any future one — forgets its org predicate. This is the enforcement
 -- floor; the per-domain permissive rewrites that follow are for semantic
@@ -9,9 +9,9 @@
 -- re-tagging an existing row's org_id.
 --
 -- Deliberately NO platform-admin escape hatch (`or is_platform_admin()`)
--- here: that would punch a hole through the one invariant this phase exists
--- to establish. Platform admins get their cross-org path in Phase 4, with
--- its own tests.
+-- here: that would punch a hole through the one invariant this migration
+-- exists to establish. Platform admins get their cross-org path in a later
+-- migration, with its own tests.
 --
 -- service_role and postgres bypass RLS entirely (BYPASSRLS), so migrations,
 -- seeds, and the service-role surface inventoried in

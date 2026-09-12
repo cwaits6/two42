@@ -1,4 +1,4 @@
--- Phase 2 tenancy (CWA-9 / #211), Task 4f: permissive rewrite — giving
+-- Permissive rewrite — giving
 -- (giving_funds, giving_fund_methods).
 --
 -- giving_stewards_can_manage() is org-scoped since Task 2 (it was the

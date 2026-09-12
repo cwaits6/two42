@@ -1,5 +1,5 @@
 -- Anon-readable site_settings exposed weekly_zoom_url / weekly_prayer_call_url /
--- call times to unauthenticated REST clients (issue #215 / CWA-13). Add a
+-- call times to unauthenticated REST clients. Add a
 -- per-row visibility flag so only rows explicitly marked public are
 -- anon-readable; logged-in members keep full read access as before.
 -- Future migrations seeding a setting meant to be public-by-design must

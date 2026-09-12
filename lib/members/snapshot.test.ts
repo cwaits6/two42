@@ -1,4 +1,4 @@
-// Unit tests for the roster snapshot loader (CWA-40). Two things here are
+// Unit tests for the roster snapshot loader. Two things here are
 // invisible to a reader and to CI's SQL lint: that every one of the six
 // selects carries the org_id filter (the tier-C floor — a SupabaseClient
 // PARAMETER is untyped as to privilege), and that a null-data/null-error

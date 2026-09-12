@@ -1,8 +1,8 @@
--- Narrow the anon column grant on organizations (CWA-52 / #318, Phase 4a).
+-- Narrow the anon column grant on organizations.
 --
 -- 20260801000002_org_branding_backfill.sql:64-66 already revoked table-level
 -- SELECT and re-granted the four-column list (id, name, slug, branding) to
--- BOTH anon and authenticated. The remaining delta for #318 is dropping
+-- BOTH anon and authenticated. The remaining delta is dropping
 -- `name` from anon alone; authenticated keeps it.
 --
 -- Verified safe: the only two app reads of organizations are

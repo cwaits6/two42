@@ -1,5 +1,5 @@
 /**
- * Import planner (CWA-40). planImport() is a PURE function from parsed rows
+ * Import planner. planImport() is a PURE function from parsed rows
  * plus an org snapshot to a validated ImportPlan — no IO, no await, no
  * client. All matching, ambiguity detection, role-escalation blocking, and
  * household resolution happen here, which makes "validate every row before

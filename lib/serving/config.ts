@@ -11,7 +11,7 @@ export async function getServingLinkMode(
   supabase: SupabaseClient,
   orgId: string
 ): Promise<ServingLinkMode> {
-  // org_id filter is required (Phase 2, CWA-9): on a service-role client a
+  // org_id filter is required: on a service-role client a
   // key-only read matches every org's row the moment a second org exists,
   // making maybeSingle() error and silently fall back to the env default.
   const { data, error } = await supabase

@@ -44,7 +44,7 @@ export async function GET(
     `${p.last_name ?? ""};${p.first_name ?? ""};;;`,
   );
 
-  // PHOTO — embed as URI if avatar_url is set. Private buckets (CWA-59):
+  // PHOTO — embed as URI if avatar_url is set. Private buckets:
   // the stored URL no longer serves, so embed a signed URL at the default
   // 1h TTL. A contacts app that fetches the photo promptly on import
   // succeeds; a vCard file saved and re-imported later silently loses the

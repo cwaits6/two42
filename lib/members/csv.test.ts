@@ -1,4 +1,4 @@
-// Unit tests for the RFC 4180 codec and formula-injection guard (CWA-40).
+// Unit tests for the RFC 4180 codec and formula-injection guard.
 // Pure units: parseCsv/serializeCsv/guardCell/unguardCell take strings to
 // strings — no network, no database, no request context.
 

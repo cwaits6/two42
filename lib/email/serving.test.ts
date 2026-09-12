@@ -1,5 +1,5 @@
-// Unit tests for the per-org From: address wiring (Phase 5 PR 7 / CWA-71) at
-// the serving-signup email send sites. Same shape as resend.test.ts: mock
+// Unit tests for the per-org From: address wiring at the serving-signup
+// email send sites. Same shape as resend.test.ts: mock
 // the `resend` package, pass an explicit `branding` object so
 // resolveEmailBranding() (and its Supabase calls) never run.
 

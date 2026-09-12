@@ -109,7 +109,7 @@ export async function POST(request: Request) {
   }
 
   // One RPC, one transaction: the signup row and its attendee rows commit
-  // together or not at all (CWA-47 / #313). The function re-derives org_id
+  // together or not at all. The function re-derives org_id
   // from the group row and re-checks authorization itself — SECURITY DEFINER
   // bypasses RLS, so its body is the tenant boundary. `.single()` because
   // `returns table` surfaces through PostgREST as an array; the explicit row

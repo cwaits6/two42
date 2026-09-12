@@ -1,4 +1,4 @@
--- Phase 2 tenancy (CWA-9 / #211), Task 4c: permissive rewrite — events &
+-- Permissive rewrite — events &
 -- calendars (events, event_calendars, rsvps, calendar_subscription_tokens).
 --
 -- event_calendars was the remaining blanket USING (true) read; it becomes

@@ -58,8 +58,8 @@ export default async function ServingLinkPage({
   // org-anchor: the HMAC-validated group row is the org anchor for this
   // signed link.
   // The group is fetched first: its org_id is the org anchor for every read
-  // below (Phase 3, CWA-10 — the surface stays on the service-role key, so
-  // the org filter is what confines it to one tenant). The profiles read
+  // below (the surface stays on the service-role key, so the org filter is
+  // what confines it to one tenant). The profiles read
   // below is a deliberate exception — it stays unscoped so a cross-org
   // pairing is detected and rejected by the explicit check further down,
   // instead of silently matching zero rows.

@@ -37,7 +37,7 @@ type StewardAvatarSource = {
 };
 
 /**
- * Private buckets (CWA-59): flattens each fund's steward + co-steward
+ * Private buckets: flattens each fund's steward + co-steward
  * avatar URLs into one batch (fixed 2-slot stride per fund), mints signed
  * URLs, then reassembles them back onto the steward/co_steward objects.
  * Named and unit tested on its own because the stride arithmetic (`i * 2`,
@@ -71,7 +71,7 @@ export async function loadFundFormData(supabase: SupabaseClient): Promise<{
     .order("last_name")
     .order("first_name");
 
-  // Private buckets (CWA-59): exchange stored avatar URLs for signed URLs
+  // Private buckets: exchange stored avatar URLs for signed URLs
   // before they reach the member-picker renders. Signing goes through
   // lib/storageRead's own cookie-bound client, never the caller's `supabase`
   // parameter — a passed-in client is untyped as to privilege (Tier C).

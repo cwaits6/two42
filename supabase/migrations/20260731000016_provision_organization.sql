@@ -1,9 +1,9 @@
--- Phase 2 tenancy (CWA-9 / #211), Task 10: real provision_organization() (§6).
--- Replaces the Phase 0/1 fixture stub (_name, _owner_id) with provisioning
+-- Real provision_organization().
+-- Replaces the fixture stub (_name, _owner_id) with provisioning
 -- that builds a complete, usable org in one transaction — everything or
 -- nothing.
 --
--- Groups (maintainer decision, 2026-08-01, resolving plan §12 open item 1):
+-- Groups (maintainer decision, 2026-08-01):
 -- provisioning seeds NO groups. Groups are org-defined: admins create them
 -- in /admin/groups and designate capabilities per group
 -- (is_serving_role — grants_prayer_access is dropped in 20260801000001) and
@@ -12,7 +12,7 @@
 -- to exist — an org with zero groups simply has no prayer roster or serving
 -- teams yet. See 20260801000000_drop_functional_role.sql.
 --
--- Owner flow (§5 contract): provisioning creates the org AND an approved
+-- Owner flow (the handle_new_user() contract): provisioning creates the org AND an approved
 -- access_requests row for the owner's email BEFORE any auth user exists, so
 -- the owner's subsequent signup resolves fail-closed through
 -- handle_new_user(). A profile with that email that already belongs to
@@ -21,9 +21,9 @@
 -- another org is also rejected (TN005) — see step 7.
 --
 -- Authorization: SECURITY DEFINER + search_path = '' + REVOKE from
--- public/anon/authenticated is the WHOLE story. In Phase 2 the only callers
+-- public/anon/authenticated is the WHOLE story. Today the only callers
 -- are migrations, seeds, and pgTAP (all run as postgres, which bypasses
--- ACLs). Phase 4 adds the guarded self-serve entry point. Adding a GRANT
+-- ACLs). Self-serve signup adds the guarded entry point later. Adding a GRANT
 -- without a caller check re-opens PostgREST RPC to this function.
 
 drop function public.provision_organization(text, uuid);
@@ -44,7 +44,7 @@ begin
   end if;
 
   -- 1. The org itself. branding carries only the tenant-overridable keys
-  -- from #221 / docs/design/DESIGN.md: display_name, logo_url, accent.
+  -- from docs/design/DESIGN.md: display_name, logo_url, accent.
   insert into public.organizations (name, slug, branding, status)
   values (
     _name,
@@ -65,7 +65,7 @@ begin
   -- 3. Settings defaults — the full key list in one auditable place.
   -- serving_link_mode's deploy default is applied at read time by
   -- getServingLinkMode() (SERVING_LINK_MODE env); the seed row here matches
-  -- the migration-seeded default. Only site_name is anon-readable (#215).
+  -- the migration-seeded default. Only site_name is anon-readable.
   insert into public.site_settings (org_id, key, value, is_public)
   values
     (_org_id, 'site_name',               '',            true),
@@ -92,7 +92,7 @@ begin
   -- above holds no profiles yet, so ANY existing profile with this email
   -- necessarily belongs to another org — and a profile is never moved
   -- between orgs. An unscoped `update profiles set org_id = _org_id where
-  -- email = ...` would be a cross-tenant write: once Phase 4 exposes a
+  -- email = ...` would be a cross-tenant write: once self-serve signup exposes a
   -- caller, passing a competing org's admin email would re-pin that admin
   -- into the caller's org — an account-takeover primitive that a "who may
   -- provision" guard does not address. Raise instead, matching
@@ -141,7 +141,7 @@ revoke execute on function public.provision_organization(text, text, text)
   from public, anon, authenticated;
 
 -- service_role keeps EXECUTE. Supabase's default privileges already grant it;
--- stating it explicitly means the Phase 4 server-side caller does not depend
+-- stating it explicitly means the server-side caller does not depend
 -- on those defaults. service_role is never reachable from clients, so this
 -- does not re-open PostgREST RPC.
 grant execute on function public.provision_organization(text, text, text)

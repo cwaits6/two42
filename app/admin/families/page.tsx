@@ -227,7 +227,7 @@ export default function FamiliesPage() {
   function openEdit(family: FamilyUnit) {
     setEditing(family);
     setForm(fromFamily(family));
-    // The stored value is a private-bucket public URL (CWA-59) — exchange it
+    // The stored value is a private-bucket public URL — exchange it
     // for a signed URL before it reaches an <img src>.
     const requestId = ++photoRequestRef.current;
     setPhotoUrl(null);
@@ -373,7 +373,7 @@ export default function FamiliesPage() {
       // Delete the file first — removing a missing object doesn't error, so
       // a retry after a failed DB update stays safe. That same non-error
       // also means a legacy photo still keyed at the un-prefixed
-      // `families/<id>/photo.jpg` (pre-CWA-57) is silently left behind as
+      // `families/<id>/photo.jpg` (pre-org-partitioning) is silently left behind as
       // an orphan blob: RLS filters it from the org-prefixed remove(), the
       // photo_url update below still clears the UI, and
       // scripts/rekey-storage-objects.mjs is what re-keys the estate.

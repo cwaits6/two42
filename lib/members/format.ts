@@ -1,5 +1,5 @@
 /**
- * The v1 member CSV column contract (CWA-40). Pure: strings and plain data
+ * The v1 member CSV column contract. Pure: strings and plain data
  * in, strings and plain data out — no IO, no framework imports. MemberRow is
  * the WIRE type, deliberately separate from Profile in lib/types.ts: it
  * describes one row of the file, not one row of a table (one person may live

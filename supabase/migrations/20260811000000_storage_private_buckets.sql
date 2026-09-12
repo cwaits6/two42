@@ -1,7 +1,7 @@
--- Storage read posture (CWA-59 / #333): flip both buckets to private, closing
+-- Storage read posture: flip both buckets to private, closing
 -- the /object/public/* path that served reads without consulting RLS. This is
 -- the deliberate revisit of ADR-3 (docs/security/tenancy-model.md "Storage
--- tenancy"): CWA-57 closed cross-org write/delete but left read secrecy
+-- tenancy"): org-partitioned keys closed cross-org write/delete but left read secrecy
 -- resting on unguessable UUID paths — any leaked, forwarded, or cached object
 -- URL stayed readable cross-tenant forever. Reads now go through signed URLs
 -- (`createSignedUrl(s)` in lib/uploadImage.ts / lib/storageRead.ts), whose
@@ -15,7 +15,7 @@
 -- principal's attempt to mint a signed URL for an org-A key finds no visible
 -- row and fails.
 --
--- Sequencing: scripts/rekey-storage-objects.mjs (#334 / CWA-60) must run
+-- Sequencing: scripts/rekey-storage-objects.mjs must run
 -- against production BEFORE this migration deploys. A legacy un-prefixed key
 -- fails the org floor's [1] = org_id check for every anon/authenticated
 -- (RLS-constrained) principal, so once reads are RLS-gated an un-rekeyed

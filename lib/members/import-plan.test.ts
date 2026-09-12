@@ -1,4 +1,4 @@
-// Unit tests for the import planner (CWA-40). Pure units: planImport takes
+// Unit tests for the import planner. Pure units: planImport takes
 // parsed rows plus a plain-data snapshot to a plan — no network, no
 // database, no request context. The round-trip test here is the brief's
 // no-op proof: exporting an org and re-importing the file must plan zero

@@ -164,7 +164,7 @@ Deno.test("forEachOrg continues after one org throws", async () => {
   }
 });
 
-// CWA-49: a mid-run throw after partial sends must not be reported as
+// A mid-run throw after partial sends must not be reported as
 // "nothing sent" — OrgRunError carries the counts accumulated before the
 // abort, and forEachOrg must use them instead of zeroing.
 Deno.test("forEachOrg uses the accumulated counts from an OrgRunError instead of zeroing them", async () => {
@@ -266,7 +266,7 @@ Deno.test("summarize returns zeroed totals for no orgs", () => {
   });
 });
 
-// ── CWA-50: the sub-org failure channel ──────────────────────────────────────
+// ── The sub-org failure channel ──────────────────────────────────────────────
 
 Deno.test("forEachOrg propagates itemFailures from a successful return", async () => {
   const failures = [{ item: "team-1", error: "team 1 exploded" }];
@@ -285,7 +285,7 @@ Deno.test("forEachOrg omits itemFailures when a runner returns an empty list", a
   assertEquals(results, [{ orgId: "a-id", slug: "a", sent: 2, sendFailures: 0 }]);
 });
 
-// CWA-49 ∩ CWA-50: an org that aborts mid-run must still report both its
+// Both channels together: an org that aborts mid-run must still report both its
 // partial counts AND the teams that had already failed before the abort.
 Deno.test("forEachOrg propagates itemFailures carried by an OrgRunError", async () => {
   const originalError = console.error;

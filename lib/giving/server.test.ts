@@ -1,4 +1,4 @@
-// Unit tests for signStewardAvatars (CWA-59 / #333). Unlike the named-slot
+// Unit tests for signStewardAvatars. Unlike the named-slot
 // reassembly in components/directory/useDirectoryData.ts, this helper uses
 // fixed 2-slot stride arithmetic (i * 2 / i * 2 + 1) — the risk being
 // guarded against is that stride drifts out of sync with the flatten if a

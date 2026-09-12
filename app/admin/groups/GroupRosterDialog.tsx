@@ -81,7 +81,7 @@ export function GroupRosterDialog({
           return;
         }
         const memberRows = (rows || []) as { profile_id: string; is_leader: boolean }[];
-        // Private buckets (CWA-59): exchange stored avatar URLs for signed
+        // Private buckets: exchange stored avatar URLs for signed
         // URLs before they reach the AvatarImage renders below.
         const profileRows = (members || []) as RosterProfile[];
         const signed = await mintSignedUrls(profileRows.map((p) => p.avatar_url));

@@ -1,4 +1,4 @@
--- Phase 2 tenancy (CWA-9 / #211), Task 4e: permissive rewrite — serving
+-- Permissive rewrite — serving
 -- (serving_signups, serving_signup_attendees, serving_broadcasts,
 -- serving_team_settings).
 --

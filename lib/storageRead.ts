@@ -1,4 +1,4 @@
-// Server-context signed reads (CWA-59 / #333). Both storage buckets are
+// Server-context signed reads. Both storage buckets are
 // private, so stored public-URL strings (profiles.avatar_url,
 // family_units.photo_url, family_members.avatar_url) must be exchanged for
 // signed URLs before they reach an <img src> or an API response; minting is

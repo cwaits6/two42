@@ -1,7 +1,6 @@
--- org_email_domains (Phase 5 PR 6, CWA-70 / #363). Per-org sending domain
+-- org_email_domains. Per-org sending domain
 -- claimed and verified through Resend. One row per org (v1); no sending
--- change ships in this migration — see docs/plans/phase-5-domains-email.md
--- §10 and CLAUDE.md's tenancy rules.
+-- change ships in this migration — see CLAUDE.md's tenancy rules.
 
 create table public.org_email_domains (
   id uuid primary key default gen_random_uuid(),
@@ -36,7 +35,7 @@ create table public.org_email_domains (
   )
 );
 
--- One sending domain per org for v1 (deliberate — see spec §10.2).
+-- One sending domain per org for v1 (deliberate).
 create unique index org_email_domains_org_key on public.org_email_domains (org_id);
 
 alter table public.org_email_domains enable row level security;
@@ -72,8 +71,7 @@ revoke all on public.org_email_domains from anon, authenticated;
 --   DELETE   — unconditional (still bounded by the RLS policies above: same
 --              org, admin only). No external resource depends on this row
 --              the way an attached org_domains row will depend on Vercel
---              state (docs/plans/phase-5-domains-email.md §6, not yet
---              built), so no restrictive delete policy is needed here.
+--              state, so no restrictive delete policy is needed here.
 --   No UPDATE grant at all, on any column. `domain` is immutable after
 --              insert — re-claiming is DELETE + a fresh claim. status,
 --              resend_domain_id, dns_records, verified_at, and

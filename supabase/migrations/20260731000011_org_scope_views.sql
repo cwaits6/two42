@@ -1,4 +1,4 @@
--- Phase 2 tenancy (CWA-9 / #211), Task 5: org-scope the four views.
+-- Org-scope the four views.
 --
 -- All four are security_invoker (restated explicitly below), so the base
 -- tables' RLS — including the restrictive org floor — already applies to

@@ -1,4 +1,4 @@
-// Unit tests for the admin email-settings page's pure helpers (CWA-70).
+// Unit tests for the admin email-settings page's pure helpers.
 // toDnsRecords is the boundary between an untyped `Json` DB column
 // (ultimately sourced from Resend's API) and rendered HTML — its own doc
 // comment claims a shape change on Resend's side degrades to a partial row,

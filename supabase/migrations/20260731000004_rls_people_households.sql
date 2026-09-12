@@ -1,13 +1,13 @@
--- Phase 2 tenancy (CWA-9 / #211), Task 4a: permissive rewrite — people &
+-- Permissive rewrite — people &
 -- households (profiles, family_units, family_members, family_invites,
 -- member_groups, profile_groups).
 --
--- Template (§4): every policy is ORG AND (role arms), with ORG factored out
+-- Template: every policy is ORG AND (role arms), with ORG factored out
 -- front exactly once — never `(ORG AND arm1) OR arm2`, which is how an org
 -- predicate goes missing on one arm. The restrictive "org isolation" floor
 -- already enforces isolation; this rewrite makes the org predicate visible
 -- where a reader looks and fixes the arms that are semantically wrong at two
--- orgs (the profiles directory arm is the one #211 calls the
+-- orgs (the profiles directory arm is the one known as the
 -- directory-view leak: "any member" is its predicate, so without ORG it is
 -- org-blind by construction).
 --

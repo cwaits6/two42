@@ -6,9 +6,9 @@
 //
 // Runs with the service key (BYPASSRLS), so tenant isolation lives in the
 // query text: iterates every active organization and filters each query on
-// org_id explicitly (CWA-10 Phase 3, #212).
+// org_id explicitly.
 
-// Pinned exactly (CWA-45): deno.lock's integrity entry only governs CI, while
+// Pinned exactly: deno.lock's integrity entry only governs CI, while
 // `supabase functions deploy` re-resolves this URL through its own bundler —
 // so the version must live in the specifier itself. Matches what the app's
 // package-lock.json resolves for ^2.103.3; bump both together (no Renovate
@@ -43,7 +43,7 @@ const SUPABASE_SECRET_KEY = resolveServiceKey();
 // CONCRETE zero-arg factory binds createClient's generics at the real call —
 // unlike ReturnType<typeof createClient> (the unbound generic function),
 // which resolves them to a different, incompatible instantiation; that is why
-// CWA-45 kept a hand-written SupabaseClient<any, "public", any> alias here.
+// this file once kept a hand-written SupabaseClient<any, "public", any> alias.
 // Bound through the factory, the type tracks whatever the pinned 2.110.9
 // call actually returns, so a version bump no longer needs the ALIAS
 // re-derived — but the OrgListClient cast in Deno.serve still does (see its
@@ -64,7 +64,7 @@ const BRAND_COLOR = Deno.env.get("BRAND_COLOR") || "#B85C38";
 
 // The platform From: address — the fallback for every org without a
 // verified org_email_domains row whose domain passes the SENDING_DOMAIN gate
-// in _shared/branding.ts (CWA-56, CWA-71). Mirrors lib/email/identity.ts.
+// in _shared/branding.ts. Mirrors lib/email/identity.ts.
 const PLATFORM_ADDRESS = parseAddress(EMAIL_FROM);
 const BRANDING_DEFAULTS = {
   displayName: APP_NAME,
@@ -256,7 +256,7 @@ Deno.serve(async () => {
     const supabase = createServiceClient();
     // Cast: structurally checking the full SupabaseClient against OrgListClient
     // trips TS2589 (excessively deep instantiation) on current supabase-js.
-    // Re-verified at the pinned 2.110.9 (CWA-45): a direct structural
+    // Re-verified at the pinned 2.110.9: a direct structural
     // assignment still trips TS2589, so the pin does not remove this cast.
     const orgs = await listActiveOrgs(supabase as unknown as OrgListClient);
     const summary = summarize(await forEachOrg(orgs, (org) =>

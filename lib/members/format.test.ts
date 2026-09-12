@@ -1,4 +1,4 @@
-// Unit tests for the v1 member CSV wire contract (CWA-40). Pure units:
+// Unit tests for the v1 member CSV wire contract. Pure units:
 // serializeMembers/parseMembers/memberRowsFromSnapshot take plain data to
 // plain data — no network, no database, no request context.
 

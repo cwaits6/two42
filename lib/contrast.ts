@@ -1,6 +1,6 @@
 /**
- * Pure WCAG contrast math and the branding.accent write-path guard
- * (CWA-53 / #319). Client-safe on purpose: lib/branding.ts (which re-exports
+ * Pure WCAG contrast math and the branding.accent write-path guard.
+ * Client-safe on purpose: lib/branding.ts (which re-exports
  * this module's API) imports @/lib/supabase/server and so can never reach a
  * "use client" component — the /platform branding form imports its live
  * contrast readout from here instead. Keep this module free of server
@@ -14,7 +14,7 @@
 export const HEX = /^#[0-9a-fA-F]{6}$/;
 
 /**
- * WCAG 4.5:1 is enforced on the WRITE path only (#319). accent is rendered as
+ * WCAG 4.5:1 is enforced on the WRITE path only. accent is rendered as
  * a button BACKGROUND carrying the hardcoded --primary-foreground: #FFFFFF
  * (app/globals.css:68-69), so white is the reference — and by symmetry the
  * same ratio covers accent-as-link-text on white. It is deliberately NOT

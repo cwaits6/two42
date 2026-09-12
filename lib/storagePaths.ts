@@ -1,4 +1,4 @@
-// Storage object-key convention (CWA-57 / #328). Every object key is
+// Storage object-key convention. Every object key is
 // org-partitioned: `<org_id>/<kind>/<entity_id>/<file>` — the first path
 // segment is what the restrictive "org isolation" policy on storage.objects
 // checks against app_request_org_id() (see
@@ -13,7 +13,7 @@ export type StorageKind = "profiles" | "family-members" | "families" | "events";
 export type StorageBucket = "avatars" | "event-images";
 
 /**
- * Signed-URL lifetime (CWA-59 / #333). One hour matches the upload path's
+ * Signed-URL lifetime. One hour matches the upload path's
  * `cacheControl: "3600"` (lib/uploadImage.ts), so a signed URL never outlives
  * the cache freshness it promises and vice versa. Avatars render on nearly
  * every page, so re-mint cost matters: 1h means a typical session mints once
@@ -67,7 +67,7 @@ const PUBLIC_URL_RE =
 
 /**
  * Recovers `{bucket, path}` from a stored public-URL string so the signing
- * helpers can mint an RLS-gated signed URL for it (CWA-59 / #333). Returns
+ * helpers can mint an RLS-gated signed URL for it. Returns
  * `null` — never throws — for a malformed or foreign value: this parses DB
  * data this module didn't produce, and one bad row must degrade to a missing
  * image, not crash a page render.

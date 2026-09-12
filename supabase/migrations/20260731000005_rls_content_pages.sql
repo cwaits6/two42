@@ -1,4 +1,4 @@
--- Phase 2 tenancy (CWA-9 / #211), Task 4b: permissive rewrite — content &
+-- Permissive rewrite — content &
 -- pages (page_content, about_page, class_teachers, lectures, lecture_series,
 -- announcements).
 --
@@ -166,7 +166,7 @@ create policy "Admins can delete series" on public.lecture_series
 
 -- announcements --------------------------------------------------------------
 -- Published/member OR arm: written as ORG AND (member OR published), never
--- with ORG missing from either side of the OR (§4 composition rule). Anon
+-- with ORG missing from either side of the OR (the composition rule). Anon
 -- keeps read access to published announcements, now org-resolved.
 
 drop policy "Members and published announcements are visible" on public.announcements;

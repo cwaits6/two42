@@ -1,5 +1,5 @@
 /**
- * GET /api/admin/members/export (CWA-40) — the org roster as CSV.
+ * GET /api/admin/members/export — the org roster as CSV.
  *
  * Admin-gated through requireOrgAdmin(); every read goes through the
  * cookie-bound client, so RLS scopes the snapshot to the caller's org. The

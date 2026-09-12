@@ -100,3 +100,7 @@ Full rationale, the helper inventory, and the deviations register: [`docs/securi
 - Assignment/roster UIs show current members by default with an explicit "add" mode — never render full toggle lists of every person.
 - Base UI `Select` components must receive the `items` prop, or the trigger renders raw values.
 - Per-org branding (`organizations.branding`) is admin-supplied free text reaching CSS and RFC 5322 headers. `HEX` in `lib/contrast.ts`, the `CONTROL` control-character strip in `lib/branding.ts`, `PLAIN_NAME` in `lib/email/identity.ts`, `SENDING_DOMAIN` in `lib/email/identity.ts` (the `org_email_domains.domain` gate on the `From:` address, verified-status-gated), and `ORG_DOMAIN_SHAPE` in `lib/org-urls.ts` (the `org_domains.domain` gate on every emailed link's origin, verified-*and*-attached-gated) are the injection boundary — not style choices. Do not relax them to support richer names or color formats; add a new validated key instead. `supabase/functions/_shared/branding.ts` mirrors the first four byte-for-byte and `supabase/functions/_shared/org-urls.ts` mirrors the fifth; a change lands on both sides.
+
+## Code comments
+
+- Code comments and test titles must not carry planning/tracking tags — `Phase N`, `PR N`, `CWA-NN`, `#NNN`, `decision Dn`, `§n` — keep the explanation, drop the tag. Tracking context belongs in commit messages and PR bodies, not in code that outlives the ticket.

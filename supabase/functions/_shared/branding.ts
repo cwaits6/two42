@@ -1,4 +1,4 @@
-// Per-org email branding for the cron Edge Functions (CWA-56).
+// Per-org email branding for the cron Edge Functions.
 //
 // A DELIBERATE MIRROR of lib/branding.ts + lib/email/identity.ts. Edge
 // functions cannot import from lib/ (Next.js "@/" path aliases, react's
@@ -54,7 +54,7 @@ const CONTROL = /[\u0000-\u001F\u007F-\u009F]/g;
 // strictly better than a failed send.
 const EMAIL = /^[^\s@<>,;:"\\]+@[^\s@<>,;:"\\]+\.[^\s@<>,;:"\\]+$/;
 
-// The org sending-domain gate (Phase 5 §10.3, CWA-71). A validation boundary
+// The org sending-domain gate. A validation boundary
 // with the same standing as PLAIN_NAME, not a style choice: the domain is
 // admin-supplied text on the address side of the `<…>` in From:, which
 // PLAIN_NAME and formatFromHeader()'s CR/LF strip do not cover. Same grammar
@@ -73,7 +73,7 @@ const SENDING_DOMAIN =
   /^(?=.{4,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 
 // Names of only these characters are emitted unquoted. Deliberately narrower
-// than RFC 5322 permits — and note `.` is NOT atext (RFC 5322 §3.2.3 lists it
+// than RFC 5322 permits — and note `.` is NOT atext (RFC 5322 section 3.2.3 lists it
 // under specials; an unquoted "Dr. Smith" is legal only via the obsolete
 // obs-phrase production, which every mainstream MTA still accepts).
 // Everything outside this set takes the quoted-string branch below, which is
@@ -81,7 +81,7 @@ const SENDING_DOMAIN =
 const PLAIN_NAME = /^[A-Za-z0-9 ._-]+$/;
 
 /**
- * RFC 5322 §3.4 From: header. Org display names are admin-supplied free
+ * RFC 5322 section 3.4 From: header. Org display names are admin-supplied free
  * text: names outside the plain subset become a quoted-string with `\` and
  * `"` escaped, and CR/LF is stripped unconditionally (header injection).
  */

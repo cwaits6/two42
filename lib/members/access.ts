@@ -1,5 +1,5 @@
 /**
- * The org-admin gate for the member import/export routes (CWA-40), mirroring
+ * The org-admin gate for the member import/export routes, mirroring
  * lib/platform-access.ts. Resolved through the COOKIE-BOUND request client —
  * never the service client — so the role check and every query the caller
  * makes afterwards run under RLS, which is the tenant boundary here. Fails

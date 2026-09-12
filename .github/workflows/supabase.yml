@@ -44,7 +44,7 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
-  # Tenancy test harness (CWA-7 / #209). Runs entirely against an ephemeral
+  # Tenancy test harness. Runs entirely against an ephemeral
   # local Supabase stack: no `supabase link`, no Supabase secrets in env, so
   # it is safe for fork PRs and can never touch the remote project.
   pgtap:
@@ -81,7 +81,7 @@ jobs:
           npm run db:types
           git diff --exit-code lib/supabase/database.types.ts
 
-  # Edge function unit tests (CWA-10 / #212). Pure units against the
+  # Edge function unit tests. Pure units against the
   # _shared/ modules — no network, no database.
   #
   # All three index.ts entry points are type-checked as a blocking gate:
@@ -115,7 +115,7 @@ jobs:
       - name: Run edge function unit tests
         run: deno test --allow-env supabase/functions/tests/
 
-      # Blocking since CWA-45: the import is pinned, so a failure here is our
+      # Blocking: the import is pinned, so a failure here is our
       # code (or an esm.sh outage) — see the note above the job.
       # --frozen makes the pin load-bearing: without it Deno silently rewrites
       # an outdated deno.lock in CI, so the committed integrity entry would

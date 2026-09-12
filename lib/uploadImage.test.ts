@@ -1,4 +1,4 @@
-// Unit tests for the browser-context signing helpers (CWA-59 / #333):
+// Unit tests for the browser-context signing helpers:
 // mintSignedUrl/mintSignedUrls. This is a hand-duplicated mirror of
 // lib/storageRead.ts's server-context versions (same fail-soft handling,
 // same per-item/per-batch error handling, same reassembly-by-path) — these

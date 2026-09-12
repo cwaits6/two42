@@ -1,5 +1,5 @@
 /**
- * POST /api/admin/members/import?mode=validate|apply (CWA-40).
+ * POST /api/admin/members/import?mode=validate|apply.
  *
  * Accepts the export CSV shape back (multipart `file` field, or a raw
  * text/csv body), validates EVERY row before writing any of them, and — in

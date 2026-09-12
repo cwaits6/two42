@@ -1,4 +1,4 @@
-// Unit tests for the write executor (CWA-40). applyWrites already took the
+// Unit tests for the write executor. applyWrites already took the
 // Supabase client as a parameter, so a recording fake is enough to assert the
 // thing a reviewer cannot see by reading: which table each write kind hits,
 // which columns it filters on, and what the failure accounting reports. A

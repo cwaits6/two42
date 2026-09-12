@@ -1,5 +1,5 @@
 // Hardened service-key resolution, moved verbatim from the two reminder
-// functions (#300 / 834d76b). Do not simplify or reorder the precedence.
+// functions (commit 834d76b). Do not simplify or reorder the precedence.
 
 // Service key resolution. The platform reserves the SUPABASE_ prefix for
 // its own injected vars, so SUPABASE_SECRET_KEY can never be set manually

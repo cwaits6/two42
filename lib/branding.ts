@@ -1,5 +1,5 @@
 /**
- * Per-org branding (CWA-10 Phase 3, #212). The source of truth is
+ * Per-org branding. The source of truth is
  * organizations.branding (jsonb); the NEXT_PUBLIC_* env values in
  * lib/config.ts survive only as last-resort fallback defaults so
  * self-hosters keep working with an empty branding row.
@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { siteConfig } from "@/lib/config";
 import { HEX } from "@/lib/contrast";
 
-// The contrast math and the write-path accent guard (#319) live in
+// The contrast math and the write-path accent guard live in
 // lib/contrast.ts so the client-side branding form can share them; this
 // module stays their canonical server-side import site.
 export {

@@ -1,6 +1,6 @@
-// Unit tests for the HTML-escaping boundary in email bodies (CWA-55), and for
-// the per-org From: address wiring at each send call site (Phase 5 PR 7 /
-// CWA-71). escapeHtml is a pure string transform — getResend() is lazy, so
+// Unit tests for the HTML-escaping boundary in email bodies, and for the
+// per-org From: address wiring at each send call site. escapeHtml is a pure
+// string transform — getResend() is lazy, so
 // importing the module alone sends nothing. The send-site tests below mock
 // the `resend` package and pass an explicit `branding` object, bypassing
 // resolveEmailBranding() entirely — no Supabase mocking needed.
@@ -64,7 +64,7 @@ describe("escapeHtml", () => {
   });
 });
 
-// ── From: address wiring (CWA-71): every send site must use b.fromAddress ──
+// ── From: address wiring: every send site must use b.fromAddress ───────────
 
 describe("send call sites use the resolved branding.fromAddress", () => {
   beforeEach(() => {

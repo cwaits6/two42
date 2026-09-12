@@ -1,6 +1,6 @@
--- org_status enum (CWA-51 / #317, Phase 4a).
+-- org_status enum.
 --
--- The DB half of #317 already shipped: 20260730010000_org_spine.sql:24 added
+-- The DB half already shipped: 20260730010000_org_spine.sql:24 added
 -- the CHECK constraint pinning organizations.status to 'active'/'suspended'.
 -- What never shipped is the issue's actual ask — the 'active' | 'suspended'
 -- union reaching lib/supabase/database.types.ts. `supabase gen types` emits

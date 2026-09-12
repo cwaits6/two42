@@ -71,7 +71,7 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
         // re-derive avatar-write eligibility after it saves a family
         // reassignment — a boolean computed here from the initial
         // profile.family_id goes stale the moment the admin moves the
-        // member in or out of their household (CWA-62 / #337).
+        // member in or out of their household.
         avatarCaller={{
           id: user.id,
           family_id: currentProfile.family_id,

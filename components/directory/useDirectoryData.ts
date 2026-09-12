@@ -7,7 +7,7 @@ import type { DirectoryGroup } from "@/components/directory/types";
 import type { DirectoryProfile, FamilyDirectoryFull } from "@/lib/types";
 
 /**
- * Private buckets (CWA-59): exchange every stored avatar/photo URL in the
+ * Private buckets: exchange every stored avatar/photo URL in the
  * directory payload for a signed URL in one batch — member avatars, family
  * photos, and the avatars nested in each family's member lists.
  *

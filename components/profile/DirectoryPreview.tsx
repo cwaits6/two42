@@ -108,7 +108,7 @@ export function DirectoryPreview() {
       familyRow = f ?? null;
     }
 
-    // Private buckets (CWA-59): exchange stored URLs for signed ones before
+    // Private buckets: exchange stored URLs for signed ones before
     // they reach the PersonCard/FamilyCard renders.
     profile.avatar_url = await mintSignedUrl(profile.avatar_url);
     if (familyRow) {

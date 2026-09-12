@@ -1,14 +1,14 @@
--- Phase 2 tenancy (CWA-9 / #211), Task 1: the two org-resolution helpers.
--- app_current_org_id() shipped in Phase 1 (20260730010000_org_spine.sql) as
+-- The two org-resolution helpers.
+-- app_current_org_id() shipped in 20260730010000_org_spine.sql as
 -- the fail-closed column DEFAULT; it is re-stated here unchanged so both
 -- helpers and their grants/comments live together as the single reference
--- point for Phase 2's RLS rewrite.
+-- point for the RLS rewrite.
 
 -- Authoritative org of the calling principal. Derived only from server-owned
 -- state (the caller's own profiles row). Never from a claim, header, or GUC
 -- the client can influence — any role can set_config() an arbitrary GUC, so
 -- GUC-first resolution would hand every member a tenant switch (a trusted
--- service-role override, if ever needed, is Phase 3's and must be gated on
+-- service-role override, if ever needed, is future work and must be gated on
 -- auth.role() = 'service_role'). NULL when there is no authenticated
 -- principal, which fails closed everywhere it is consumed: NULL org_id
 -- default violates NOT NULL on write, and `org_id = NULL` is not TRUE so
@@ -38,7 +38,7 @@ comment on function public.app_current_org_id() is
 --
 -- organizations.status is deliberately NOT consulted here: neither helper
 -- cuts access for a 'suspended' org, so suspension currently does nothing.
--- Enforcement belongs to Phase 4 (#213), which owns the /platform
+-- Enforcement belongs to the platform-admin work, which owns the /platform
 -- suspend surface and must decide the cut point (helper predicate vs.
 -- middleware) together with its UX — don't assume it's enforced until then.
 create or replace function public.app_request_org_id() returns uuid

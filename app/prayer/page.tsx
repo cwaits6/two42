@@ -54,7 +54,7 @@ export default async function PrayerPage() {
     console.error("Failed to fetch prayer call sessions:", sessionsError);
   }
 
-  // Private buckets (CWA-59): exchange stored avatar URLs for signed URLs
+  // Private buckets: exchange stored avatar URLs for signed URLs
   // before the wall rows and the composer's "me" reach client renders.
   const wallRows = (requests ?? []) as PrayerWallRow[];
   const [signedWallAvatars, myAvatarUrl] = await Promise.all([

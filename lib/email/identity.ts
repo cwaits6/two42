@@ -1,6 +1,6 @@
 /**
- * Org-branded email identity (CWA-10 Phase 3, #212; Phase 5 PR 7 / CWA-71).
- * The display name and Reply-To vary per org, and — once the org has a
+ * Org-branded email identity. The display name and Reply-To vary per org,
+ * and — once the org has a
  * `status = 'verified'` org_email_domains row whose domain passes
  * SENDING_DOMAIN — so does the From: address (`noreply@<domain>`). Every
  * other org keeps PLATFORM_ADDRESS (deliverability: SPF/DKIM are configured
@@ -38,14 +38,14 @@ export type EmailBranding = {
 };
 
 // Names of only these characters are emitted unquoted. Deliberately narrower
-// than RFC 5322 permits — and note `.` is NOT atext (RFC 5322 §3.2.3 lists it
+// than RFC 5322 permits — and note `.` is NOT atext (RFC 5322 section 3.2.3 lists it
 // under specials; an unquoted "Dr. Smith" is legal only via the obsolete
 // obs-phrase production, which every mainstream MTA still accepts).
 // Everything outside this set takes the quoted-string branch below, which is
 // always safe. Widening this set is never necessary; do not.
 const PLAIN_NAME = /^[A-Za-z0-9 ._-]+$/;
 
-// The org sending-domain gate (Phase 5 §10.3, CWA-71). A validation boundary
+// The org sending-domain gate. A validation boundary
 // with the same standing as PLAIN_NAME, not a style choice: the domain is
 // admin-supplied text on the address side of the `<…>` in From:, which
 // PLAIN_NAME and formatFromHeader()'s CR/LF strip do not cover. Same grammar
@@ -64,7 +64,7 @@ const SENDING_DOMAIN =
   /^(?=.{4,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 
 /**
- * RFC 5322 §3.4 From: header. Org display names are admin-supplied free
+ * RFC 5322 section 3.4 From: header. Org display names are admin-supplied free
  * text: names outside the plain subset become a quoted-string with `\` and
  * `"` escaped, and CR/LF is stripped unconditionally (header injection).
  */
