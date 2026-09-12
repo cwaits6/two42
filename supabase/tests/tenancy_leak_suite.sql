@@ -128,6 +128,10 @@ begin
     values (_org, (now() at time zone 'utc')::date, 3);
   insert into public.org_email_limits (org_id, daily_cap)
     values (_org, 250);
+  -- Domain worker outcome log: service-role-only the same way; the worker
+  -- inserts with an explicit org_id, as here.
+  insert into public.org_domain_worker_events (org_id, domain, event)
+    values (_org, _tag || '.domains.example.test', 'detached');
 end;
 $$;
 
@@ -150,6 +154,12 @@ begin
 
   perform pg_temp.seed_org_fixture(org_a, owner_a, 'org-a');
   perform pg_temp.seed_org_fixture(org_b, owner_b, 'org-b');
+
+  -- Provisioning seeds no anon-readable setting any more, so the
+  -- public-settings leak checks below need one per org to be meaningful.
+  insert into public.site_settings (org_id, key, value, is_public) values
+    (org_a, 'leak_suite_public', 'org-a', true),
+    (org_b, 'leak_suite_public', 'org-b', true);
 
   perform set_config('leak_suite.org_a', org_a::text, true);
   perform set_config('leak_suite.org_b', org_b::text, true);
@@ -284,12 +294,13 @@ begin
 
   for i in 1 .. array_length(tables, 1) loop
     if error_states[i] = '42501'
-       and tables[i] in ('org_email_usage', 'org_email_limits') then
+       and tables[i] in ('org_email_usage', 'org_email_limits', 'org_domain_worker_events') then
       -- Service-role-only tables (restrictive policy, ALL privileges
-      -- revoked — org_email_usage / org_email_limits): a privilege
-      -- denial is the intended, stronger-than-row-filtering isolation
-      -- outcome, not a broken check. Scoped to exactly those tables so a
-      -- normal tenant table losing authenticated read access still fails.
+      -- revoked — org_email_usage / org_email_limits /
+      -- org_domain_worker_events): a privilege denial is the intended,
+      -- stronger-than-row-filtering isolation outcome, not a broken check.
+      -- Scoped to exactly those tables so a normal tenant table losing
+      -- authenticated read access still fails.
       insert into tenancy_leak_results
         select ok(true, format('org A member cannot read %s at all (42501 — service-role-only table)', tables[i]));
     elsif errors[i] is not null then
@@ -376,7 +387,7 @@ begin
   reset role;
 
   insert into tenancy_leak_results
-    select ok(anon_a_settings >= 1, 'anon with org A header reads org A public settings (site_name)');
+    select ok(anon_a_settings >= 1, 'anon with org A header reads org A public settings');
   insert into tenancy_leak_results
     select ok(anon_a_wrong_org = 0, 'anon with org A header reads zero org B settings');
   insert into tenancy_leak_results

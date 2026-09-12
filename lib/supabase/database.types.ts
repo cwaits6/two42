@@ -994,6 +994,44 @@ export type Database = {
           },
         ]
       }
+      org_domain_worker_events: {
+        Row: {
+          acknowledged_at: string | null
+          created_at: string
+          detail: string | null
+          domain: string
+          event: string
+          id: string
+          org_id: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          created_at?: string
+          detail?: string | null
+          domain: string
+          event: string
+          id?: string
+          org_id?: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          created_at?: string
+          detail?: string | null
+          domain?: string
+          event?: string
+          id?: string
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_domain_worker_events_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_domains: {
         Row: {
           attach_claim_token: string | null

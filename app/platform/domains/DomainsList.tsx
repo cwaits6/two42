@@ -133,8 +133,8 @@ export function DomainsList({ initialRows }: DomainsListProps) {
         <h2 className="text-xl font-semibold">Work queue</h2>
         <p className="text-base text-muted-foreground">
           {awaiting.length} awaiting attach, {removing.length} awaiting detach. A
-          permanent Vercel refusal (409, 403, 402) is reported in the worker&apos;s
-          run output and function logs; it is not yet recorded on the row.
+          permanent Vercel refusal (409, 403, 402) is recorded as a worker event
+          above, and the row is skipped until that event is acknowledged.
         </p>
       </section>
 

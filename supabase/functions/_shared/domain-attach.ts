@@ -8,13 +8,22 @@
 // (never the domain name — ids, not tenant content, in diagnostics; the one
 // exception is a Vercel ownership challenge, whose TXT record name contains
 // the domain and IS the operator's instruction). A row skipped because
-// another attempt holds its lease is neither.
+// another attempt holds its lease is neither, and neither is a row parked
+// behind an unacknowledged permanent-failure event.
+//
+// Two outcomes are also written to org_domain_worker_events through the
+// DomainEventsClient, because the run summary does not outlive the run: a
+// permanent Vercel refusal (so the next run skips the row — "no retry" is
+// literal, until /platform acknowledges it) and a completed detach (the
+// operator's allowlist to-do, which the tombstone's hard-delete would
+// otherwise erase). Those rows carry the domain by design.
 //
 // attached_at is written by stampAttached() and nowhere else in the system,
 // and only after Vercel has confirmed the attachment — never optimistically,
 // because orgBaseUrl() starts emitting the custom origin the moment it is set.
 
 import type { DomainLeaseClient } from "./domain-lease.ts";
+import type { DomainEventsClient } from "./domain-events.ts";
 import type { VercelClient, VercelVerificationRecord } from "./vercel.ts";
 import type { ItemFailure, OrgRunCounts } from "./orgs.ts";
 import { isPlatformApexOrSubdomain } from "./domain-denylist.ts";
@@ -50,6 +59,7 @@ export function describeVerificationChallenge(
 export async function attachDomainsForOrg(
   client: DomainLeaseClient,
   vercel: VercelClient,
+  events: DomainEventsClient,
   org: { id: string },
   apex: string,
   leaseWindowMs: number,
@@ -72,16 +82,27 @@ export async function attachDomainsForOrg(
     }
 
     try {
+      // A permanent Vercel refusal recorded by an earlier run and not yet
+      // acknowledged on /platform: nothing has changed, so nothing is
+      // retried — no lease, no Vercel call, not a failure. Keyed on the
+      // domain, not the row id, so a name deleted and re-claimed under a
+      // fresh id stays parked until the operator clears it.
+      if (await events.hasUnacknowledgedPermanentFailure(org.id, row.domain)) continue;
+
       const token = await client.claimAttachLease(row.id, org.id, leaseWindowMs);
       // Zero rows: a live lease elsewhere, or the row moved on. Stop.
       if (!token) continue;
 
       const add = await vercel.addDomain(row.domain);
       if (add.kind === "permanent") {
-        // 409 / 403 / 402: nothing a retry can fix. No stamp. Surfaced in
-        // the run summary; the lease is left in place so the next attempt
-        // waits for the window rather than looping.
-        itemFailures.push({ item: row.id, error: `vercel ${add.reason}: ${add.detail}` });
+        // 409 / 403 / 402: nothing a retry can fix. No stamp. Recorded
+        // durably first — the event is what /platform shows and what makes
+        // every later run skip this row until it is acknowledged — then
+        // surfaced in the run summary. An insert that throws lands in the
+        // per-row catch, so the row is still reported either way.
+        const error = `vercel ${add.reason}: ${add.detail}`;
+        await events.recordPermanentFailure(org.id, row.domain, error);
+        itemFailures.push({ item: row.id, error });
         continue;
       }
       if (add.kind === "needs_verification") {
@@ -168,6 +189,7 @@ export async function attachDomainsForOrg(
 export async function detachDomainsForOrg(
   client: DomainLeaseClient,
   vercel: VercelClient,
+  events: DomainEventsClient,
   org: { id: string },
   leaseWindowMs: number,
 ): Promise<OrgRunCounts> {
@@ -193,6 +215,11 @@ export async function detachDomainsForOrg(
       // tombstone go, and only with the full fenced predicate.
       const deleted = await client.hardDeleteRemoved(row.id, org.id, token);
       if (deleted) {
+        // The row is gone, so this event is the only trace that the name
+        // still has a redirect-allowlist entry to remove. Only on the
+        // success branch: a zero-row delete keeps the tombstone, and a
+        // detached event for a row that is still there would be a lie.
+        await events.recordDetached(org.id, row.domain);
         sent++;
       } else {
         itemFailures.push({ item: row.id, error: "tombstone hard-delete affected zero rows" });

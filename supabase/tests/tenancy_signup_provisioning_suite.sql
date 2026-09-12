@@ -57,12 +57,21 @@ select is(
 select is(
   (select count(*)::int from public.site_settings
     where org_id = current_setting('su.org_a')::uuid),
-  10, 'provisioning seeds the full settings-key list');
+  9, 'provisioning seeds the full settings-key list');
 
+-- site_name was the only is_public seed and nothing read it (the public
+-- name is organizations.branding.display_name); its absence is asserted so
+-- a re-added seed row fails loudly here rather than quietly widening the
+-- anon-readable surface.
 select is(
   (select count(*)::int from public.site_settings
     where org_id = current_setting('su.org_a')::uuid and is_public),
-  1, 'only site_name is anon-readable among provisioned settings');
+  0, 'no provisioned setting is anon-readable now that site_name is gone');
+
+select is(
+  (select count(*)::int from public.site_settings
+    where org_id = current_setting('su.org_a')::uuid and key = 'site_name'),
+  0, 'provisioning no longer seeds site_name');
 
 select ok(
   exists (select 1 from public.about_page
