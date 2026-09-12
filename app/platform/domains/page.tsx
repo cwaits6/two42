@@ -56,21 +56,17 @@ export default async function PlatformDomainsPage() {
     );
   }
 
-  // The organizations embed is many-to-one (org_domains.org_id → the tenant
+  // The organizations embed is many-to-one (the row's org_id → the tenant
   // root's PK), but the generated types cannot see the FK direction and
   // shape it as an array. Normalise to the single row the FK guarantees.
-  const domains: PlatformDomain[] = (rows ?? []).map((row) => {
-    const org = Array.isArray(row.organizations)
-      ? (row.organizations[0] ?? null)
-      : (row.organizations as PlatformDomain["organizations"]);
-    return { ...row, organizations: org };
-  });
-  const events: PlatformDomainEvent[] = (eventRows ?? []).map((row) => {
-    const org = Array.isArray(row.organizations)
-      ? (row.organizations[0] ?? null)
-      : (row.organizations as PlatformDomainEvent["organizations"]);
-    return { ...row, organizations: org };
-  });
+  function withSingleOrg<T extends { organizations: unknown }>(
+    row: T,
+  ): T & { organizations: { name: string; slug: string } | null } {
+    const org = Array.isArray(row.organizations) ? (row.organizations[0] ?? null) : row.organizations;
+    return { ...row, organizations: org as { name: string; slug: string } | null };
+  }
+  const domains: PlatformDomain[] = (rows ?? []).map(withSingleOrg);
+  const events: PlatformDomainEvent[] = (eventRows ?? []).map(withSingleOrg);
 
   return (
     <PageContainer size="wide">
