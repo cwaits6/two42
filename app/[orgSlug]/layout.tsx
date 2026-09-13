@@ -32,7 +32,9 @@ export default async function OrgSlugLayout({
 
   // These override the root layout's :root values for everything under this
   // subtree; the shadcn tokens are runtime custom properties, so nested
-  // overrides inherit without touching the root <style> block.
+  // overrides inherit without touching the root <style> block. Header/Footer
+  // render outside {children} (in the root layout), so they keep the
+  // platform's colors here, not the org's.
   return (
     <div
       style={

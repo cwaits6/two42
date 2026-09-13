@@ -148,6 +148,10 @@ function mockOrganizationsRow(branding: unknown) {
 }
 
 describe("getRequestBranding (root layout gate)", () => {
+  // mockReset() clears call history AND queued resolved/rejected values;
+  // the afterEach(vi.restoreAllMocks) above only restores spied real
+  // implementations, so a vi.fn() mock's queued resolution from one test
+  // would otherwise leak into the next.
   beforeEach(() => {
     vi.mocked(getOptionalUser).mockReset();
     vi.mocked(createClient).mockReset();
@@ -168,9 +172,19 @@ describe("getRequestBranding (root layout gate)", () => {
     // No explicit slug: the org comes from the session, never the URL.
     expect(createClient).toHaveBeenCalledWith(undefined);
   });
+
+  it("falls back to platform defaults if getOptionalUser rejects, instead of throwing", async () => {
+    // getOptionalUser only swallows AuthError internally; anything else
+    // (auth-service outage, network blip) rejects, and the root layout
+    // wraps every route — this must degrade, not 500 the whole app.
+    vi.mocked(getOptionalUser).mockRejectedValue(new Error("network blip"));
+    await expect(getRequestBranding()).resolves.toEqual(BRANDING_DEFAULTS);
+    expect(createClient).not.toHaveBeenCalled();
+  });
 });
 
 describe("getOrgBranding(orgSlug)", () => {
+  // Same mockReset() rationale as the describe block above.
   beforeEach(() => {
     vi.mocked(createClient).mockReset();
   });
@@ -180,5 +194,41 @@ describe("getOrgBranding(orgSlug)", () => {
     const result = await getOrgBranding("acme");
     expect(createClient).toHaveBeenCalledWith("acme");
     expect(result.accent).toBe("#654321");
+  });
+
+  it("falls back to defaults and logs when the query reports an error", async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: { message: "boom" } });
+    const select = vi.fn().mockReturnValue({ maybeSingle });
+    const from = vi.fn().mockReturnValue({ select });
+    vi.mocked(createClient).mockResolvedValue({ from } as never);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await getOrgBranding("acme");
+
+    expect(result).toEqual(BRANDING_DEFAULTS);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to defaults and warns when no organization row is visible", async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+    const select = vi.fn().mockReturnValue({ maybeSingle });
+    const from = vi.fn().mockReturnValue({ select });
+    vi.mocked(createClient).mockResolvedValue({ from } as never);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = await getOrgBranding("acme");
+
+    expect(result).toEqual(BRANDING_DEFAULTS);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to defaults and logs when createClient rejects", async () => {
+    vi.mocked(createClient).mockRejectedValue(new Error("connection refused"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await getOrgBranding("acme");
+
+    expect(result).toEqual(BRANDING_DEFAULTS);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 });
