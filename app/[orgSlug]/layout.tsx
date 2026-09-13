@@ -1,6 +1,38 @@
+import type { Metadata } from "next";
 import { isValidOrgSlug } from "@/lib/org";
 import { assertPathOrgMatchesHost } from "@/lib/supabase/server";
 import { getOrgBranding } from "@/lib/branding";
+
+interface OrgSlugLayoutProps {
+  params: Promise<{ orgSlug: string }>;
+}
+
+// Slug-aware title for every /[orgSlug]/** route. The root layout's title has
+// no org in it — it never resolves one for an anonymous request — so without
+// this, every page under this subtree would inherit that generic title
+// regardless of which org's join page it is. A child page sets a plain
+// string title (e.g. "Request Access") and this template appends the org's
+// name; a child with no title of its own falls back to `default`.
+export async function generateMetadata({
+  params,
+}: OrgSlugLayoutProps): Promise<Metadata> {
+  const { orgSlug } = await params;
+
+  if (!isValidOrgSlug(orgSlug)) {
+    return {};
+  }
+
+  await assertPathOrgMatchesHost(orgSlug);
+
+  const branding = await getOrgBranding(orgSlug);
+
+  return {
+    title: {
+      template: `%s | ${branding.display_name}`,
+      default: branding.display_name,
+    },
+  };
+}
 
 // Org-scoped subtree branding. The root layout (app/layout.tsx) never
 // resolves a specific org's branding for an anonymous request — this layout

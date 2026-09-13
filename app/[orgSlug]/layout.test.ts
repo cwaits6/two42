@@ -18,7 +18,7 @@ vi.mock("@/lib/supabase/server", () => ({
 const getOrgBranding = vi.fn();
 vi.mock("@/lib/branding", () => ({ getOrgBranding: (orgSlug: string) => getOrgBranding(orgSlug) }));
 
-const { default: OrgSlugLayout } = await import("./layout");
+const { default: OrgSlugLayout, generateMetadata } = await import("./layout");
 
 beforeEach(() => {
   isValidOrgSlug.mockReset();
@@ -74,5 +74,49 @@ describe("OrgSlugLayout", () => {
     const hostCallOrder = assertPathOrgMatchesHost.mock.invocationCallOrder[0];
     const brandingCallOrder = getOrgBranding.mock.invocationCallOrder[0];
     expect(hostCallOrder).toBeLessThan(brandingCallOrder);
+  });
+});
+
+describe("OrgSlugLayout generateMetadata", () => {
+  it("returns no title override when the slug shape check fails", async () => {
+    isValidOrgSlug.mockReturnValue(false);
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ orgSlug: "../etc" }),
+    });
+
+    expect(metadata).toEqual({});
+    expect(assertPathOrgMatchesHost).not.toHaveBeenCalled();
+    expect(getOrgBranding).not.toHaveBeenCalled();
+  });
+
+  it("propagates the host guard's 404 instead of falling back to a default title", async () => {
+    isValidOrgSlug.mockReturnValue(true);
+    assertPathOrgMatchesHost.mockRejectedValue(new Error("NEXT_NOT_FOUND"));
+
+    await expect(
+      generateMetadata({ params: Promise.resolve({ orgSlug: "other-org" }) })
+    ).rejects.toThrow("NEXT_NOT_FOUND");
+
+    expect(getOrgBranding).not.toHaveBeenCalled();
+  });
+
+  it("builds a title template from the org's display name", async () => {
+    isValidOrgSlug.mockReturnValue(true);
+    assertPathOrgMatchesHost.mockResolvedValue(undefined);
+    getOrgBranding.mockResolvedValue({
+      display_name: "Acme",
+      logo_url: null,
+      accent: "#123abc",
+      reply_to: null,
+    });
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ orgSlug: "acme" }),
+    });
+
+    expect(metadata).toEqual({
+      title: { template: "%s | Acme", default: "Acme" },
+    });
   });
 });
