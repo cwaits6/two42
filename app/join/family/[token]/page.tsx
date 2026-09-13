@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import { siteConfig } from "@/lib/config";
+import { orgBaseUrl } from "@/lib/org-urls";
 import { AuthShell } from "@/app/(auth)/_components/AuthShell";
 
 interface PageProps {
@@ -12,15 +13,20 @@ interface PageProps {
 
 export const metadata = { title: `Join Your Household | ${siteConfig.name}` };
 
-// Path-based link into the org's own join page. The org comes from the
-// invite row itself (see the lookup below), never from the request host, so
-// this link is correct no matter what host or path served this page.
-export function buildFamilyInviteJoinUrl(
+// Link into the org's own join page, anchored to the invite's own org. The
+// org comes from the invite row itself (see the lookup below), never from
+// the request host — but a relative path is still resolved against whatever
+// host served *this* page, which may not be the invite org's host. Using
+// orgBaseUrl(orgId) makes the destination absolute and correct regardless of
+// where the invite link was opened.
+export async function buildFamilyInviteJoinUrl(
+  orgId: string,
   orgSlug: string,
   token: string,
   email: string,
-): string {
-  return `/${orgSlug}/join?invite_token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+): Promise<string> {
+  const origin = await orgBaseUrl(orgId);
+  return `${origin}/${orgSlug}/join?invite_token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
 }
 
 function ErrorCard({
@@ -177,7 +183,12 @@ export default async function FamilyJoinPage({ params }: PageProps) {
 
   // Pass invite_token so the access-request form can store it, and pre-fill
   // email.
-  const joinUrl = buildFamilyInviteJoinUrl(org.slug, token, invite.invite_email);
+  const joinUrl = await buildFamilyInviteJoinUrl(
+    invite.org_id,
+    org.slug,
+    token,
+    invite.invite_email,
+  );
 
   return (
     <AuthShell

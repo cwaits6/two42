@@ -1,26 +1,55 @@
 // Unit tests for the family-invite page's pure link builder. The page itself
-// is not rendered here; only the helper that turns an invite row's org slug
-// into a path-based join link is exercised.
+// is not rendered here; only the helper that turns an invite row into an
+// absolute, org-anchored join link is exercised.
 
-import { describe, expect, it } from "vitest";
-import { buildFamilyInviteJoinUrl } from "@/app/join/family/[token]/page";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const orgBaseUrl = vi.fn();
+vi.mock("@/lib/org-urls", () => ({ orgBaseUrl: (orgId: string) => orgBaseUrl(orgId) }));
+
+const { buildFamilyInviteJoinUrl } = await import("./page");
+
+beforeEach(() => {
+  orgBaseUrl.mockReset();
+});
 
 describe("buildFamilyInviteJoinUrl", () => {
-  it("builds a path-scoped join link from the invite's org slug", () => {
-    expect(buildFamilyInviteJoinUrl("grace", "abc-123", "a@b.com")).toBe(
-      "/grace/join?invite_token=abc-123&email=a%40b.com",
+  it("builds a join link anchored to the invite org's own origin", async () => {
+    orgBaseUrl.mockResolvedValue("https://grace.two42.io");
+
+    await expect(
+      buildFamilyInviteJoinUrl("org-1", "grace", "abc-123", "a@b.com"),
+    ).resolves.toBe(
+      "https://grace.two42.io/grace/join?invite_token=abc-123&email=a%40b.com",
+    );
+    expect(orgBaseUrl).toHaveBeenCalledWith("org-1");
+  });
+
+  it("encodes special characters in the token and email", async () => {
+    orgBaseUrl.mockResolvedValue("https://grace.two42.io");
+
+    await expect(
+      buildFamilyInviteJoinUrl("org-1", "grace", "a b", "a+b@c.com"),
+    ).resolves.toBe(
+      "https://grace.two42.io/grace/join?invite_token=a%20b&email=a%2Bb%40c.com",
     );
   });
 
-  it("encodes special characters in the token and email", () => {
-    expect(buildFamilyInviteJoinUrl("grace", "a b", "a+b@c.com")).toBe(
-      "/grace/join?invite_token=a%20b&email=a%2Bb%40c.com",
+  it("encodes query-delimiter characters in the email", async () => {
+    orgBaseUrl.mockResolvedValue("https://grace.two42.io");
+
+    await expect(
+      buildFamilyInviteJoinUrl("org-1", "grace", "abc-123", "a&b=c@d.com"),
+    ).resolves.toBe(
+      "https://grace.two42.io/grace/join?invite_token=abc-123&email=a%26b%3Dc%40d.com",
     );
   });
 
-  it("encodes query-delimiter characters in the email", () => {
-    expect(buildFamilyInviteJoinUrl("grace", "abc-123", "a&b=c@d.com")).toBe(
-      "/grace/join?invite_token=abc-123&email=a%26b%3Dc%40d.com",
-    );
+  it("uses whatever origin orgBaseUrl resolves, even when it falls back off the invite's own host", async () => {
+    orgBaseUrl.mockResolvedValue("https://two42.io");
+
+    await expect(
+      buildFamilyInviteJoinUrl("org-1", "grace", "abc-123", "a@b.com"),
+    ).resolves.toBe("https://two42.io/grace/join?invite_token=abc-123&email=a%40b.com");
   });
 });

@@ -106,8 +106,12 @@ The plain `/join` route is retired; every link into the join flow targets
 `/[orgSlug]/join` directly. `app/join/family/[token]/page.tsx` no longer
 calls `resolveRequestOrgId()` at all — like the `signup_token` lookup below,
 its `family_invites` row is looked up by token alone and is itself the org
-anchor, so an invite for org A resolves correctly regardless of what host
-or path served the request.
+anchor, so an invite for org A resolves the correct org regardless of what
+host or path served the request. The generated join link is anchored the
+same way: it points at `orgBaseUrl(invite.org_id)` rather than a path
+relative to whatever host served the invite page, so opening an org A
+invite from a different host still lands on org A's own join page instead
+of failing the destination's host/path check.
 
 One lookup is deliberately unscoped: the initial `signup_token` read in
 `app/api/auth/consume-token/route.ts` and `app/api/auth/verify-token/route.ts`,
