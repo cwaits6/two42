@@ -23,6 +23,28 @@ export function buildFamilyInviteJoinUrl(
   return `/${orgSlug}/join?invite_token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
 }
 
+function ErrorCard({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="container mx-auto px-4 py-20 max-w-lg">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-2xl text-brand-primary">{title}</CardTitle>
+          <CardDescription className="text-base">{description}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">{children}</CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default async function FamilyJoinPage({ params }: PageProps) {
   const { token } = await params;
 
@@ -66,24 +88,15 @@ export default async function FamilyJoinPage({ params }: PageProps) {
   if (inviteError) {
     console.error("Family join page: invite lookup failed:", inviteError);
     return (
-      <div className="container mx-auto px-4 py-20 max-w-lg">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-2xl text-brand-primary">
-              Something Went Wrong
-            </CardTitle>
-            <CardDescription className="text-base">
-              We couldn&apos;t load this invite right now.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-muted-foreground">
-              Please try the link again in a moment. If it still
-              doesn&apos;t work, contact your group admin.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <ErrorCard
+        title="Something Went Wrong"
+        description="We couldn't load this invite right now."
+      >
+        <p className="text-muted-foreground">
+          Please try the link again in a moment. If it still doesn&apos;t
+          work, contact your group admin.
+        </p>
+      </ErrorCard>
     );
   }
 
@@ -105,24 +118,15 @@ export default async function FamilyJoinPage({ params }: PageProps) {
   // tokens exist.
   if (!invite || !org?.slug) {
     return (
-      <div className="container mx-auto px-4 py-20 max-w-lg">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-2xl text-brand-primary">
-              Invite Not Found
-            </CardTitle>
-            <CardDescription className="text-base">
-              This invite link is invalid or has expired.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-muted-foreground">
-              Please check the link or contact your group admin for a new
-              invite.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <ErrorCard
+        title="Invite Not Found"
+        description="This invite link is invalid or has expired."
+      >
+        <p className="text-muted-foreground">
+          Please check the link or contact your group admin for a new
+          invite.
+        </p>
+      </ErrorCard>
     );
   }
 
