@@ -3,8 +3,21 @@
 // HEX and the control-character strip are the CSS / RFC 5322 injection guards
 // (see CLAUDE.md "UI conventions"); these tests pin them.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { BRANDING_DEFAULTS, resolveBranding } from "@/lib/branding";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// getRequestBranding / getOrgBranding are the only non-pure exports; their
+// collaborators are mocked so the gate itself is what gets tested.
+vi.mock("@/lib/supabase/current-user", () => ({ getOptionalUser: vi.fn() }));
+vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+
+import { getOptionalUser } from "@/lib/supabase/current-user";
+import { createClient } from "@/lib/supabase/server";
+import {
+  BRANDING_DEFAULTS,
+  getOrgBranding,
+  getRequestBranding,
+  resolveBranding,
+} from "@/lib/branding";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -123,5 +136,49 @@ describe("resolveBranding", () => {
       "https://x.test/l.png"
     );
     expect(resolveBranding({ logo_url: 42 }).logo_url).toBeNull();
+  });
+});
+
+function mockOrganizationsRow(branding: unknown) {
+  const maybeSingle = vi.fn().mockResolvedValue({ data: { branding }, error: null });
+  const select = vi.fn().mockReturnValue({ maybeSingle });
+  const from = vi.fn().mockReturnValue({ select });
+  vi.mocked(createClient).mockResolvedValue({ from } as never);
+  return from;
+}
+
+describe("getRequestBranding (root layout gate)", () => {
+  beforeEach(() => {
+    vi.mocked(getOptionalUser).mockReset();
+    vi.mocked(createClient).mockReset();
+  });
+
+  it("returns platform defaults for an anonymous request without querying the database", async () => {
+    vi.mocked(getOptionalUser).mockResolvedValue(null);
+    const result = await getRequestBranding();
+    expect(result).toEqual(BRANDING_DEFAULTS);
+    expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it("resolves the signed-in user's own org branding for an authenticated request", async () => {
+    vi.mocked(getOptionalUser).mockResolvedValue({ id: "u1" } as never);
+    mockOrganizationsRow({ accent: "#123abc" });
+    const result = await getRequestBranding();
+    expect(result.accent).toBe("#123abc");
+    // No explicit slug: the org comes from the session, never the URL.
+    expect(createClient).toHaveBeenCalledWith(undefined);
+  });
+});
+
+describe("getOrgBranding(orgSlug)", () => {
+  beforeEach(() => {
+    vi.mocked(createClient).mockReset();
+  });
+
+  it("threads an explicit orgSlug into createClient", async () => {
+    mockOrganizationsRow({ accent: "#654321" });
+    const result = await getOrgBranding("acme");
+    expect(createClient).toHaveBeenCalledWith("acme");
+    expect(result.accent).toBe("#654321");
   });
 });

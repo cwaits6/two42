@@ -6,6 +6,7 @@
  */
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 import { siteConfig } from "@/lib/config";
 import { HEX } from "@/lib/contrast";
 
@@ -86,12 +87,18 @@ export function resolveBranding(raw: unknown): OrgBranding {
  * explicit org filter is needed — but only because this uses createClient();
  * a service-role client would bypass RLS and require one.
  *
+ * Pass `orgSlug` when the URL itself names the org (the /[orgSlug]/** routes):
+ * it becomes the x-two42-org header that app_request_org_id() resolves for an
+ * anonymous caller. Without it the client falls back to the host-resolved
+ * slug, which is only legitimate when the caller is authenticated (the header
+ * is ignored and the org comes from the profile) — see getRequestBranding().
+ *
  * Never throws: branding must not be able to 500 a page. Any error or
  * missing row degrades to BRANDING_DEFAULTS.
  */
-export const getOrgBranding = cache(async (): Promise<OrgBranding> => {
+export const getOrgBranding = cache(async (orgSlug?: string): Promise<OrgBranding> => {
   try {
-    const supabase = await createClient();
+    const supabase = await createClient(orgSlug);
     const { data, error } = await supabase
       .from("organizations")
       .select("branding")
@@ -116,4 +123,26 @@ export const getOrgBranding = cache(async (): Promise<OrgBranding> => {
     console.error("Failed to load org branding, using defaults:", err);
     return BRANDING_DEFAULTS;
   }
+});
+
+/**
+ * Branding for the root layout, which has no legitimate anonymous org
+ * context of its own — it wraps every route, including generic pages
+ * (/, /login, /forgot-password, /setup-account) that carry no org
+ * identifier. An authenticated request resolves its own org from
+ * profiles.org_id (app_current_org_id()), which is host-independent and
+ * safe to render; an anonymous request here must NOT fall back to
+ * app_request_org_id()'s host-header resolution, or it leaks whichever
+ * org the request host happens to map to. Org-scoped subtrees
+ * (/[orgSlug]/**) call getOrgBranding(orgSlug) directly instead of this.
+ *
+ * Memoized per request with cache() — generateMetadata() and the layout
+ * body both call this once per render, same rationale as getOrgBranding().
+ */
+export const getRequestBranding = cache(async (): Promise<OrgBranding> => {
+  const user = await getOptionalUser();
+  if (!user) {
+    return BRANDING_DEFAULTS;
+  }
+  return getOrgBranding();
 });
