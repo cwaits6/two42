@@ -96,7 +96,7 @@ describe("POST /api/admin/invite-bulk", () => {
     // The signup link mailed out is built from the resolved org origin, not
     // the deployment's env-pinned platform URL.
     const sentHtml = send.mock.calls[0][0].html as string;
-    expect(sentHtml).toContain("https://grace.church/join?token=");
+    expect(sentHtml).toContain("https://grace.church/setup-account?token=");
   });
 
   it("uses a different admin's own org, not a hardcoded/default id", async () => {

@@ -69,10 +69,12 @@ Rules that make these safe:
   request's org through `app_request_org_id()` before a page relies on it.
   It fails closed on both failure modes — an RPC error, and an RPC success
   returning NULL (a slug matching no organization row) — logging each, so
-  its three callers (`app/join/page.tsx`, `app/join/family/[token]/page.tsx`,
-  `app/[orgSlug]/join/page.tsx`) take their already-unavailable path
-  (redirect, or a "requests unavailable" render) instead of falling back to
-  an org.
+  its one remaining caller (`app/[orgSlug]/join/page.tsx`, with the URL
+  slug overriding the header) takes its already-unavailable path (a
+  "requests unavailable" render) instead of falling back to an org. The
+  plain `/join` route is retired, and `app/join/family/[token]/page.tsx`
+  resolves its org from the `family_invites` token row instead, never from
+  the request host.
 
 Also, `org_id` on every org-owned table is `NOT NULL DEFAULT
 app_current_org_id()`: a write with no session and no explicit org violates

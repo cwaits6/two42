@@ -1,10 +1,10 @@
 import { Card, CardContent } from "@/components/ui/card";
 
 /**
- * The fail-closed render for both `/join` and `/[orgSlug]/join`. It is
- * deliberately identical for "org exists but is unresolvable" and "slug
- * matches no org" — a distinguishing message would be an org-existence
- * oracle (same reasoning as app/serving/go/page.tsx).
+ * The fail-closed render for `/[orgSlug]/join`. It is deliberately
+ * identical for "org exists but is unresolvable" and "slug matches no
+ * org" — a distinguishing message would be an org-existence oracle (same
+ * reasoning as app/serving/go/page.tsx).
  */
 export function JoinUnavailable() {
   return (

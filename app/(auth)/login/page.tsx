@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { AuthShell } from "../_components/AuthShell";
 import { siteConfig } from "@/lib/config";
+import { resolveOrgSlug } from "@/lib/org";
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
@@ -65,7 +66,7 @@ export default function LoginPage() {
       kicker="Sign in to see what's happening, who's coming, and what we're studying."
       altPrompt="New here?"
       altLabel="Request to join →"
-      altHref="/join"
+      altHref={`/${resolveOrgSlug()}/join`}
     >
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-1.5">
