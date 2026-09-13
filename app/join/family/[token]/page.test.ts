@@ -17,4 +17,10 @@ describe("buildFamilyInviteJoinUrl", () => {
       "/grace/join?invite_token=a%20b&email=a%2Bb%40c.com",
     );
   });
+
+  it("encodes query-delimiter characters in the email", () => {
+    expect(buildFamilyInviteJoinUrl("grace", "abc-123", "a&b=c@d.com")).toBe(
+      "/grace/join?invite_token=abc-123&email=a%26b%3Dc%40d.com",
+    );
+  });
 });

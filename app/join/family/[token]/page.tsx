@@ -59,17 +59,51 @@ export default async function FamilyJoinPage({ params }: PageProps) {
     .eq("token", token)
     .maybeSingle();
 
+  // A genuine lookup failure is distinct from an invalid token: it carries
+  // no information about which tokens exist, so unlike the fail-closed case
+  // below it can safely say "something went wrong" and point at retrying
+  // instead of implying the invite itself is dead.
   if (inviteError) {
     console.error("Family join page: invite lookup failed:", inviteError);
+    return (
+      <div className="container mx-auto px-4 py-20 max-w-lg">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl text-brand-primary">
+              Something Went Wrong
+            </CardTitle>
+            <CardDescription className="text-base">
+              We couldn&apos;t load this invite right now.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-muted-foreground">
+              Please try the link again in a moment. If it still
+              doesn&apos;t work, contact your group admin.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   const org = invite?.organizations as unknown as { slug: string } | null;
 
-  // Invalid token, a lookup error, or (never expected under the org_id FK)
-  // a row with no resolvable org — fail closed with an inline message. The
-  // message is the same for every cause on purpose: distinguishing them
-  // would leak which tokens exist.
-  if (inviteError || !invite || !org?.slug) {
+  if (invite && !org?.slug) {
+    // Should be structurally impossible under the org_id FK — log it so an
+    // invariant violation is diagnosable if it ever occurs.
+    console.error(
+      "Family join page: invite row has no resolvable org:",
+      invite.id,
+      invite.org_id,
+    );
+  }
+
+  // Invalid token, or (never expected under the org_id FK) a row with no
+  // resolvable org — fail closed with an inline message. The message is the
+  // same for both causes on purpose: distinguishing them would leak which
+  // tokens exist.
+  if (!invite || !org?.slug) {
     return (
       <div className="container mx-auto px-4 py-20 max-w-lg">
         <Card>

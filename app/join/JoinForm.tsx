@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { useSearchParams } from "next/navigation";
 import { AuthShell } from "@/app/(auth)/_components/AuthShell";
 
-function JoinFormFields({ orgId, orgSlug }: { orgId: string; orgSlug?: string }) {
+function JoinFormFields({ orgId, orgSlug }: { orgId: string; orgSlug: string }) {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const supabase = createClient(orgSlug);
@@ -145,7 +145,7 @@ function JoinFormFields({ orgId, orgSlug }: { orgId: string; orgSlug?: string })
   );
 }
 
-export function JoinForm({ orgId, orgSlug }: { orgId: string; orgSlug?: string }) {
+export function JoinForm({ orgId, orgSlug }: { orgId: string; orgSlug: string }) {
   return (
     <Suspense fallback={
       <div className="container mx-auto px-4 py-12 max-w-lg">
