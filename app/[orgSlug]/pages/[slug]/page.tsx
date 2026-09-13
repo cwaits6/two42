@@ -19,6 +19,12 @@ export async function generateMetadata({ params }: Props) {
     return { title: "Page Not Found" };
   }
 
+  // Same host-first precedence as the page body below: without this, a
+  // request whose host already names a different org could still pull this
+  // org's page title into the response metadata before the body's own guard
+  // ever runs.
+  await assertPathOrgMatchesHost(orgSlug);
+
   const supabase = await createClient(orgSlug);
   const { data } = await supabase
     .from("page_content")
