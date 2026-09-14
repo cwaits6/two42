@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import { Christicon } from "@christicons/react";
 import { siteConfig } from "@/lib/config";
+import { resolveOrgSlug } from "@/lib/org";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 
 export default async function HomePage() {
@@ -39,7 +40,7 @@ export default async function HomePage() {
                 size="lg"
                 className="text-base px-8 py-6 font-semibold shadow-sm hover:shadow-md transition-all bg-brand-primary hover:bg-brand-primary/90 text-white"
                 nativeButton={false}
-                render={<Link href="/join" />}
+                render={<Link href={`/${resolveOrgSlug()}/join`} />}
               >
                 Request to Join
                 <ArrowRight className="ml-2 h-5 w-5" />

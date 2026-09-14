@@ -1,11 +1,10 @@
-import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
+import { createServiceClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import { siteConfig } from "@/lib/config";
-import { resolveOrgSlug, resolveRequestOrgId } from "@/lib/org";
+import { orgBaseUrl } from "@/lib/org-urls";
 import { AuthShell } from "@/app/(auth)/_components/AuthShell";
 
 interface PageProps {
@@ -14,34 +13,55 @@ interface PageProps {
 
 export const metadata = { title: `Join Your Household | ${siteConfig.name}` };
 
+// Link into the org's own join page, anchored to the invite's own org. The
+// org comes from the invite row itself (see the lookup below), never from
+// the request host — but a relative path is still resolved against whatever
+// host served *this* page, which may not be the invite org's host. Using
+// orgBaseUrl(orgId) makes the destination absolute and correct regardless of
+// where the invite link was opened.
+export async function buildFamilyInviteJoinUrl(
+  orgId: string,
+  orgSlug: string,
+  token: string,
+  email: string,
+): Promise<string> {
+  const origin = await orgBaseUrl(orgId);
+  return `${origin}/${orgSlug}/join?invite_token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+}
+
+function ErrorCard({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="container mx-auto px-4 py-20 max-w-lg">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-2xl text-brand-primary">{title}</CardTitle>
+          <CardDescription className="text-base">{description}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">{children}</CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default async function FamilyJoinPage({ params }: PageProps) {
   const { token } = await params;
-
-  // Resolve the request's org through the request-scoped server client. It is
-  // cookie-bound, not anonymous: for a signed-in visitor app_request_org_id()
-  // returns their own org and ignores x-two42-org; for the anonymous
-  // invite-link case (the common one) it resolves the header's slug. Either
-  // way it is the same value the downstream access_requests RLS WITH CHECK
-  // compares against, and NULL fails closed below.
-  const requestClient = await createClient();
-  const requestOrgId = await resolveRequestOrgId(requestClient, {
-    label: "Family join page",
-    orgSlug: resolveOrgSlug(),
-  });
-
-  // Fail closed — same destination the invalid-token branch uses.
-  if (!requestOrgId) {
-    redirect("/join");
-  }
 
   // Public page — uses service client to bypass RLS for token validation
   const supabase = await createServiceClient();
 
-  // Validate the token. The org filter matters because the downstream
-  // access_requests(invite_token, org_id) → family_invites(token, org_id)
-  // composite FK means an invite from a different org than the host resolves
-  // would fail with an opaque FK violation partway through signup — catching
-  // it here turns that into the existing invalid-token → /join path.
+  // org-anchor: the invite row resolves the org for every step below. This
+  // page is reached before login, from any host, so the token is the only
+  // thing that can name the org. Embedding organizations(slug) in the same
+  // query gives the link below a path-based destination without a second
+  // round trip.
   const { data: invite, error: inviteError } = await supabase
     .from("family_invites")
     .select(
@@ -58,20 +78,62 @@ export default async function FamilyJoinPage({ params }: PageProps) {
       ),
       family_units!family_invites_family_id_fkey (
         family_name
+      ),
+      organizations!family_invites_org_id_fkey (
+        slug
       )
     `,
     )
     .eq("token", token)
-    .eq("org_id", requestOrgId)
     .maybeSingle();
 
+  // A genuine lookup failure is distinct from an invalid token: it carries
+  // no information about which tokens exist, so unlike the fail-closed case
+  // below it can safely say "something went wrong" and point at retrying
+  // instead of implying the invite itself is dead.
   if (inviteError) {
     console.error("Family join page: invite lookup failed:", inviteError);
+    return (
+      <ErrorCard
+        title="Something Went Wrong"
+        description="We couldn't load this invite right now."
+      >
+        <p className="text-muted-foreground">
+          Please try the link again in a moment. If it still doesn&apos;t
+          work, contact your group admin.
+        </p>
+      </ErrorCard>
+    );
   }
 
-  // Invalid token → redirect to regular join page
-  if (!invite) {
-    redirect("/join");
+  const org = invite?.organizations as unknown as { slug: string } | null;
+
+  if (invite && !org?.slug) {
+    // Should be structurally impossible under the org_id FK — log it so an
+    // invariant violation is diagnosable if it ever occurs.
+    console.error(
+      "Family join page: invite row has no resolvable org:",
+      invite.id,
+      invite.org_id,
+    );
+  }
+
+  // Invalid token, or (never expected under the org_id FK) a row with no
+  // resolvable org — fail closed with an inline message. The message is the
+  // same for both causes on purpose: distinguishing them would leak which
+  // tokens exist.
+  if (!invite || !org?.slug) {
+    return (
+      <ErrorCard
+        title="Invite Not Found"
+        description="This invite link is invalid or has expired."
+      >
+        <p className="text-muted-foreground">
+          Please check the link or contact your group admin for a new
+          invite.
+        </p>
+      </ErrorCard>
+    );
   }
 
   // Already accepted → redirect with message
@@ -119,9 +181,14 @@ export default async function FamilyJoinPage({ params }: PageProps) {
         .join(" ")
     : "you";
 
-  // The join page URL — pass invite_token so the access-request form can
-  // store it, and pre-fill email.
-  const joinUrl = `/join?invite_token=${encodeURIComponent(token)}&email=${encodeURIComponent(invite.invite_email)}`;
+  // Pass invite_token so the access-request form can store it, and pre-fill
+  // email.
+  const joinUrl = await buildFamilyInviteJoinUrl(
+    invite.org_id,
+    org.slug,
+    token,
+    invite.invite_email,
+  );
 
   return (
     <AuthShell

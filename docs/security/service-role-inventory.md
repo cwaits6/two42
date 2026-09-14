@@ -86,22 +86,32 @@ group row, the family-invite row, the caller's own RLS-scoped profile, or
 and filters every subsequent service-role query on that value. The interim
 default-org UUID constant is deleted from `lib/org.ts`.
 
-`app_request_org_id()` is the anchor for the two anonymous entry points, the
-join form and `app/join/family/[token]/page.tsx`. It returns a signed-in
-caller's own org and ignores `x-two42-org`; only a genuinely anonymous
-request resolves the header's slug, and only to a real `organizations` row.
-It is the same value the `access_requests` RLS `WITH CHECK` evaluates, so
-the two cannot drift. Both sites fail closed on both failure modes — an RPC
-error and a NULL result (a slug matching no organization row) are each
-logged, then the family-invite page redirects to `/join` and the join form
-renders a "Join requests unavailable" notice instead of a form whose every
-submission would die on a bare `42501`. Neither falls back to an org.
-Since Phase 4b (CWA-48 / #314) that fail-closed resolution is the single
-`resolveRequestOrgId()` in `lib/org.ts` — the RPC call, the NULL narrowing,
-and the dual fail-closed logging live in one place. The public per-org route
-`app/[orgSlug]/join` uses the same helper (with the URL slug overriding the
-`x-two42-org` header on both the request and browser clients) and adds
-**no** service-role client, so it needs no row in the tables below.
+`app_request_org_id()` is the anchor for the one anonymous entry point that
+still resolves its org through it: the join form at `app/[orgSlug]/join`,
+which passes the URL slug as an explicit override rather than relying on the
+host-resolved header. It returns a signed-in caller's own org and ignores
+`x-two42-org`; only a genuinely anonymous request resolves the slug, and only
+to a real `organizations` row. It is the same value the `access_requests` RLS
+`WITH CHECK` evaluates, so the two cannot drift. The page fails closed on
+both failure modes — an RPC error and a NULL result (a slug matching no
+organization row) are each logged, then it renders a "Join requests
+unavailable" notice instead of a form whose every submission would die on a
+bare `42501`. It never falls back to an org. Since Phase 4b (CWA-48 / #314)
+that fail-closed resolution is the single `resolveRequestOrgId()` in
+`lib/org.ts` — the RPC call, the NULL narrowing, and the dual fail-closed
+logging live in one place. The route adds **no** service-role client, so it
+needs no row in the tables below.
+
+The plain `/join` route is retired; every link into the join flow targets
+`/[orgSlug]/join` directly. `app/join/family/[token]/page.tsx` no longer
+calls `resolveRequestOrgId()` at all — like the `signup_token` lookup below,
+its `family_invites` row is looked up by token alone and is itself the org
+anchor, so an invite for org A resolves the correct org regardless of what
+host or path served the request. The generated join link is anchored the
+same way: it points at `orgBaseUrl(invite.org_id)` rather than a path
+relative to whatever host served the invite page, so opening an org A
+invite from a different host still lands on org A's own join page instead
+of failing the destination's host/path check.
 
 One lookup is deliberately unscoped: the initial `signup_token` read in
 `app/api/auth/consume-token/route.ts` and `app/api/auth/verify-token/route.ts`,
@@ -243,7 +253,7 @@ the `service_role`-only grant, the grant-matrix and behaviour assertions in
 | `app/api/platform/organizations/[id]/invite-owner/route.ts` | Mints the founding admin's `signup_token`; the platform admin's own-org RLS could never reach the new org's request row | Platform-admin authority; org id from the route param | `access_requests` update `.eq("org_id", id).eq("approved_role", "admin").eq("email", ownerEmail)`; rollback update on the same filters + minted token; email branding via `resolveEmailBranding(id)` |
 | `app/serving/go/page.tsx` | Unauthenticated, HMAC-signed serving link; no session exists to satisfy RLS | HMAC-validated `member_groups` row; link rejected when `profiles.org_id` disagrees | `serving_team_settings`, `profile_groups`, `serving_signups`, `profiles` (spouse), `family_units` (label) |
 | `app/serving/[groupId]/page.tsx` | Surfaces pending (never-logged-in) spouse profiles that RLS hides from the caller | Caller's own RLS-scoped profile | `profiles` (spouse lookup) |
-| `app/join/family/[token]/page.tsx` | Signed family-invite link resolved before login; no session | `app_request_org_id()` via the cookie-bound request client (`x-two42-org` header for anonymous visitors, own org for signed-in ones); invite lookup filtered on it | `family_invites` |
+| `app/join/family/[token]/page.tsx` | Signed family-invite link resolved before login; no session | The `family_invites` row itself: looked up by `token` alone (unscoped by org — the row is what resolves it), `org_id` and the org's `slug` taken from that row | `family_invites`, `organizations` (`slug`, embedded via the `org_id` FK, for the link into `/[orgSlug]/join`) |
 | `app/api/serving/signups/route.ts` | Post-delete notification email lookups for affected members | The deleted signup row's own `org_id` (authorised by the RLS-checked delete) | `profile_groups` (leaders), `family_units` (label) |
 | `app/api/serving/link-action/route.ts` | Same HMAC signed-link pattern as `serving/go`; no session | HMAC-validated `member_groups` row; link rejected when `profiles.org_id` disagrees | `serving_team_settings`, `profile_groups`, `serving_signups` (read/delete — cancel path), `rpc(serving_signup_apply)` (the signup + attendee insert pair, one transaction; the function re-derives the org from the `member_groups` row and enforces it internally — CWA-47 / #313), `profiles` (spouse), `family_units` (label) |
 | `app/api/serving/broadcast/route.ts` | Fans out email to all group members regardless of caller's RLS visibility | RLS-scoped `member_groups` row | `profile_groups` (recipients) |

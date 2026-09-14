@@ -74,8 +74,10 @@ export async function POST(request: Request) {
   );
 
   // The signup link follows the admin's own org host (org_id read under RLS
-  // above), not the deployment's env-pinned platform URL.
-  const signupBaseUrl = `${await orgBaseUrl(profile.org_id)}/join`;
+  // above), not the deployment's env-pinned platform URL. It lands on
+  // /setup-account, which is what verifies and consumes the signup token
+  // minted below — the same destination the approve route sends to.
+  const signupBaseUrl = `${await orgBaseUrl(profile.org_id)}/setup-account`;
   const resend = getResend();
 
   let sent = 0;

@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { useSearchParams } from "next/navigation";
 import { AuthShell } from "@/app/(auth)/_components/AuthShell";
 
-function JoinFormFields({ orgId, orgSlug }: { orgId: string; orgSlug?: string }) {
+function JoinFormFields({ orgId, orgSlug }: { orgId: string; orgSlug: string }) {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const supabase = createClient(orgSlug);
@@ -38,10 +38,9 @@ function JoinFormFields({ orgId, orgSlug }: { orgId: string; orgSlug?: string })
         // Anon insert: the fail-closed org_id DEFAULT resolves to NULL
         // without a session, so the org is passed explicitly — resolved
         // server-side from the same app_request_org_id() the RLS WITH CHECK
-        // evaluates (see app/join/page.tsx). The browser client above sends
-        // the same x-two42-org the page resolved from, so this org_id and
-        // the WITH CHECK cannot disagree — on /join that's the env slug, on
-        // /[orgSlug]/join the URL slug.
+        // evaluates (see app/[orgSlug]/join/page.tsx). The browser client
+        // above sends the same x-two42-org the page resolved from — the URL
+        // slug — so this org_id and the WITH CHECK cannot disagree.
         org_id: orgId,
         // Store the family invite token on the access request so that when
         // the user creates their account the family link can be established.
@@ -146,7 +145,7 @@ function JoinFormFields({ orgId, orgSlug }: { orgId: string; orgSlug?: string })
   );
 }
 
-export function JoinForm({ orgId, orgSlug }: { orgId: string; orgSlug?: string }) {
+export function JoinForm({ orgId, orgSlug }: { orgId: string; orgSlug: string }) {
   return (
     <Suspense fallback={
       <div className="container mx-auto px-4 py-12 max-w-lg">
