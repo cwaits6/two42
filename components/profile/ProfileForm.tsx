@@ -946,12 +946,12 @@ export function ProfileForm({
                 </Select>
                 <p className="text-sm text-muted-foreground">
                   Manage families on the{" "}
-                  <a
+                  <Link
                     href="/admin/families"
                     className="text-brand-primary underline"
                   >
                     Families page
-                  </a>
+                  </Link>
                   .
                 </p>
               </div>
