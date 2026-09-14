@@ -281,7 +281,11 @@ column below describes what a regression would cost, not a pending work item.
 uses the request-scoped `createClient()`, so RLS narrows `organizations` to the
 request org and no `.eq()` filter is needed. That contrast is exactly why
 `lib/email/identity.ts` above — which *does* use the service client — must
-carry `.eq("id", orgId)`.
+carry `.eq("id", orgId)`. `getOrgBranding()` takes an optional `orgSlug`,
+threaded into `createClient(orgSlug)` as the `x-two42-org` header for the
+public `/[orgSlug]/**` routes; `getRequestBranding()` is the root layout's
+wrapper around it, gating on an authenticated session before ever calling
+`getOrgBranding()` so an anonymous request never resolves a host-based org.
 
 ## Edge Functions (3 sites)
 

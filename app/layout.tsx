@@ -12,7 +12,7 @@ import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { resolveOrgSlug } from "@/lib/org";
 import { siteConfig } from "@/lib/config";
-import { getOrgBranding } from "@/lib/branding";
+import { getRequestBranding } from "@/lib/branding";
 import "./globals.css";
 
 const cormorant = Cormorant_Garamond({
@@ -37,7 +37,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export async function generateMetadata(): Promise<Metadata> {
-  const b = await getOrgBranding();
+  const b = await getRequestBranding();
   return {
     // No title.template: 25 pages already hardcode "| siteConfig.name" in
     // their static titles, and a template would double the suffix.
@@ -100,9 +100,12 @@ export default async function RootLayout({
   }
 
   // Free on every path: generateMetadata() above already awaited this, and
-  // cache() memoizes it for the request. Single-row read — RLS supplies the
-  // id predicate, so there is deliberately no .eq() here (lib/branding.ts).
-  const b = await getOrgBranding();
+  // cache() memoizes it for the request. Anonymous requests never resolve an
+  // org here — that would leak whichever org the host maps to — so this
+  // renders the platform default unless the request is authenticated
+  // (lib/branding.ts). Org-scoped routes apply their own org's branding in
+  // app/[orgSlug]/layout.tsx.
+  const b = await getRequestBranding();
 
   return (
     // suppressHydrationWarning: the head script sets data-textsize on <html>

@@ -16,7 +16,10 @@ export async function generateMetadata({
 }: PageProps): Promise<Metadata> {
   const { orgSlug } = await params;
   return {
-    title: `Request Access | ${siteConfig.name}`,
+    // A plain string composes with the org-scoped layout's title template
+    // (app/[orgSlug]/layout.tsx), so this renders as "Request Access | <org
+    // name>" rather than the platform's generic name.
+    title: "Request Access",
     // /[orgSlug]/join stays reachable, but the canonical URL is
     // the org's platform subdomain (custom domains will follow
     // once orgBaseUrl() exists). Skip the tag entirely for a malformed

@@ -56,10 +56,14 @@ Rules that make these safe:
   `lib/supabase/server.ts`'s `createClient()` precedence is explicit
   `orgSlug` argument, then `x-two42-resolved-org`, then the env pin. The
   explicit-argument exception is the public per-org routes
-  (`app/[orgSlug]/join`), which pass the URL slug to `createClient(orgSlug)`
-  on **both** the server and browser clients — but host-first precedence
-  applies there too: `assertPathOrgMatchesHost()` 404s the page when the
-  host already resolved a *different* org. The DB still validates every
+  (`app/[orgSlug]/join`, `app/[orgSlug]/layout.tsx`), which pass the URL slug
+  to `createClient(orgSlug)` on **both** the server and browser clients — but
+  host-first precedence applies there too: `assertPathOrgMatchesHost()` 404s
+  the page when the host already resolved a *different* org.
+  `app/[orgSlug]/layout.tsx` threads the slug through `getOrgBranding(orgSlug)`
+  (`lib/branding.ts`) to theme every route in that subtree, and — like
+  `app/[orgSlug]/join` — calls `assertPathOrgMatchesHost()` before the slug
+  reaches that fetch, not just before render. The DB still validates every
   slug against a real `organizations` row and still ignores the header for
   authenticated principals, so the trust model is unchanged — the header
   grants nothing, it only selects which org's already-public surface an
