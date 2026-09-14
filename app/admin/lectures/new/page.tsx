@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, Suspense } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -93,12 +94,12 @@ function NewLecturePage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="series_id" className="text-lg">Series</Label>
-                <a
+                <Link
                   href="/admin/lectures/series/new"
                   className="text-sm font-medium text-brand-primary hover:opacity-80"
                 >
                   + Create new series
-                </a>
+                </Link>
               </div>
               <Select
                 items={seriesOptions}

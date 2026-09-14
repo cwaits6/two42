@@ -5,7 +5,7 @@ import { siteConfig } from "@/lib/config";
 import { displayName, initials } from "@/lib/names";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
-import { PageRenderer } from "@/app/pages/[slug]/PageRenderer";
+import { PageRenderer } from "@/app/[orgSlug]/pages/[slug]/PageRenderer";
 import type { AboutPage, ClassTeacherWithProfile } from "@/lib/types";
 
 export const metadata = { title: `About Our Class | ${siteConfig.name}` };

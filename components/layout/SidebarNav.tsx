@@ -21,6 +21,7 @@ import {
 import { Fragment, useState, useEffect, type ComponentType } from "react";
 import type { PageContent, Profile } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
+import { useOrgSlug } from "@/components/providers/OrgSlugProvider";
 
 type PageLink = Pick<PageContent, "slug" | "title">;
 
@@ -86,6 +87,7 @@ export function SidebarNav({
   onNavigate,
 }: SidebarNavProps) {
   const pathname = usePathname();
+  const orgSlug = useOrgSlug();
   const [pages, setPages] = useState<PageLink[]>([]);
   const isEditor = profile.role === "admin" || profile.role === "content_editor";
 
@@ -236,7 +238,7 @@ export function SidebarNav({
             )}
             {collapsed && <div className="border-t border-border my-2" role="separator" />}
             {pages.map((page) => {
-              const href = `/pages/${page.slug}`;
+              const href = `/${orgSlug}/pages/${page.slug}`;
               const active = isActive(href);
               return (
                 <Link
