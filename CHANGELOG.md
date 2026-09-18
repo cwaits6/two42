@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.30.1](https://github.com/cwaits6/two42/compare/v0.30.0...v0.30.1) (2026-09-18)
+
+
+### Bug Fixes
+
+* **branding:** stop resolving anonymous branding from the request host ([#402](https://github.com/cwaits6/two42/issues/402)) ([d95e2e9](https://github.com/cwaits6/two42/commit/d95e2e9f993a35f01595dc4a91ad6a907df06bdc))
+* consolidate anonymous join flow onto path-based org resolution ([#403](https://github.com/cwaits6/two42/issues/403)) ([10551c8](https://github.com/cwaits6/two42/commit/10551c8d550a2fd00e56a94f7cea9ced3bd8b4aa))
+* **tenancy:** org-scope the public content pages route ([#401](https://github.com/cwaits6/two42/issues/401)) ([c39ae4c](https://github.com/cwaits6/two42/commit/c39ae4c3c69192e985122f533e1e2ada4c2a7b6f))
+
 ## [0.30.0](https://github.com/cwaits6/two42/compare/v0.29.0...v0.30.0) (2026-09-12)
 
 
