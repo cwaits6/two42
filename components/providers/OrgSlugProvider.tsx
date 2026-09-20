@@ -5,9 +5,9 @@ import { createContext, useContext } from "react";
 const OrgSlugContext = createContext<string | null>(null);
 
 /**
- * Makes the server-resolved org slug (the env pin — the same value
- * lib/supabase/server.ts's createClient() defaults to) available to client
- * components, so they never derive one of their own from window.location.
+ * Makes the server-resolved org slug — a signed-in member's own org, or the
+ * env pin for anonymous requests — available to client components, so they
+ * never derive one of their own from window.location.
  */
 export function OrgSlugProvider({
   orgSlug,

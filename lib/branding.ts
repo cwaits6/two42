@@ -130,10 +130,10 @@ export const getOrgBranding = cache(async (orgSlug?: string): Promise<OrgBrandin
  * context of its own — it wraps every route, including generic pages
  * (/, /login, /forgot-password, /setup-account) that carry no org
  * identifier. An authenticated request resolves its own org from
- * profiles.org_id (app_current_org_id()), which is host-independent and
- * safe to render; an anonymous request here must NOT fall back to
- * app_request_org_id()'s host-header resolution, or it leaks whichever
- * org the request host happens to map to. Org-scoped subtrees
+ * profiles.org_id (app_current_org_id()), which is theirs to see; an
+ * anonymous request here must NOT fall back to app_request_org_id(),
+ * whose x-two42-org header would carry the env-pinned slug and brand
+ * every generic page as that one tenant. Org-scoped subtrees
  * (/[orgSlug]/**) call getOrgBranding(orgSlug) directly instead of this.
  *
  * Memoized per request with cache() — generateMetadata() and the layout
