@@ -139,10 +139,10 @@ two42 was built to solve exactly that. It has since been open-sourced so other g
    that matches no organization makes those flows fail closed rather than fall back
    to another tenant.
 
-   `NEXT_PUBLIC_PLATFORM_APEX` is optional and defaults to `two42.io` — the
-   platform apex host that `<org-slug>.<apex>` subdomains are resolved
-   against. See
-   [`docs/security/tenancy-model.md`](docs/security/tenancy-model.md).
+   `NEXT_PUBLIC_SITE_URL` is also the app's one canonical host: a request
+   whose `Host` is anything else (other than `localhost`, `127.0.0.1` or a
+   `*.vercel.app` preview) gets a 404. See
+   [`docs/security/domains.md`](docs/security/domains.md).
 
 6. **Start the dev server**
    ```bash

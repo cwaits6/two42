@@ -38,33 +38,26 @@ Rules that make these safe:
 - **Deliberately no GUC override.** Any role can `set_config()` an
   arbitrary GUC; a trusted service-role override, if ever needed, belongs
   to Phase 3 and must be gated on `auth.role() = 'service_role'`.
+- **The app serves one canonical host, and the host never names an org.**
+  `lib/supabase/middleware.ts` runs a single expected-host check
+  (`isExpectedHost()` in `lib/org.ts`) before any client is built: the
+  `NEXT_PUBLIC_SITE_URL` host, plus the closed static set a deployment is
+  also reached on (`localhost`, `127.0.0.1`, `*.vercel.app`). Any other
+  `Host` — an org subdomain, an unrelated domain — gets a 404 with no app
+  response at all. There is no host → org mapping anywhere: no subdomain
+  classification, no custom-domain registry, no resolver RPC.
 - Every app Supabase client (server, browser, middleware) sends
-  `x-two42-org`, resolved **host-first** since Phase 5 PR 3 (CWA-67 /
-  #360). `lib/supabase/middleware.ts` classifies the request host before
-  any client is built: a `<label>.<platform-apex>` subdomain resolves the
-  label (rejecting reserved and malformed labels), any other host is looked
-  up through `app_org_slug_for_host()`
-  (`20260824000000_org_domains.sql` — verified `org_domains` rows for
-  active orgs only), and a host that resolves nothing either falls back to
-  the env pin (`resolveOrgSlug()` in `lib/org.ts`) if it is in the closed
-  trusted-host set (`localhost`, `127.0.0.1`, `*.vercel.app`, the
-  deployment's own `NEXT_PUBLIC_SITE_URL` host) or gets a 404 with no app
-  response at all.
-  When the host itself named the org, middleware stamps
-  `x-two42-resolved-org` onto the forwarded request headers (any inbound
-  copy is stripped unconditionally — it is never client input);
-  `lib/supabase/server.ts`'s `createClient()` precedence is explicit
-  `orgSlug` argument, then `x-two42-resolved-org`, then the env pin. The
-  explicit-argument exception is the public per-org routes
-  (`app/[orgSlug]/join`, `app/[orgSlug]/layout.tsx`), which pass the URL slug
-  to `createClient(orgSlug)` on **both** the server and browser clients — but
-  host-first precedence applies there too: `assertPathOrgMatchesHost()` 404s
-  the page when the host already resolved a *different* org.
-  `app/[orgSlug]/layout.tsx` threads the slug through `getOrgBranding(orgSlug)`
-  (`lib/branding.ts`) to theme every route in that subtree, and — like
-  `app/[orgSlug]/join` — calls `assertPathOrgMatchesHost()` before the slug
-  reaches that fetch, not just before render. The DB still validates every
-  slug against a real `organizations` row and still ignores the header for
+  `x-two42-org`. `lib/supabase/server.ts`'s `createClient()` precedence is
+  the explicit `orgSlug` argument, then the env pin (`resolveOrgSlug()` in
+  `lib/org.ts`); no request header contributes. The explicit argument is how
+  an anonymous request names its org: the public per-org routes
+  (`app/[orgSlug]/join`, `app/[orgSlug]/pages/[slug]`,
+  `app/[orgSlug]/layout.tsx`) pass the URL path slug to
+  `createClient(orgSlug)` on **both** the server and browser clients, after
+  shape-checking it with `isValidOrgSlug()`. `app/[orgSlug]/layout.tsx`
+  threads the slug through `getOrgBranding(orgSlug)` (`lib/branding.ts`) to
+  theme every route in that subtree. The DB still validates every slug
+  against a real `organizations` row and still ignores the header for
   authenticated principals, so the trust model is unchanged — the header
   grants nothing, it only selects which org's already-public surface an
   anonymous request is about.
@@ -279,10 +272,9 @@ onboarding is org-first: provision, then create the auth user, and the
 fail-closed trigger needs no special case. Phase 4 must NOT solve
 onboarding by adding a fallback branch to `handle_new_user()`. An invalid
 slug raises `TN003`; a slug on the reserved-label denylist (`www`, `app`,
-`api`, `admin`, `platform`, …) raises `TN006` — reserved because slugs
-become host labels once Phase 5's wildcard/custom-domain routing ships
-(`docs/plans/phase-5-domains-email.md` §4), and any of these would shadow
-a platform host. The list is mirrored in `lib/org.ts` (`RESERVED_ORG_SLUGS`).
+`api`, `admin`, `platform`, …) raises `TN006`. The list was introduced when
+slugs were going to become host labels; host routing is retired, but the DB
+rule and its `lib/org.ts` mirror (`RESERVED_ORG_SLUGS`) are unchanged.
 `default` — the slug of the one org that exists today — is deliberately
 not yet on the list.
 
@@ -378,14 +370,13 @@ platform seam).
   `supabase/tests/org_email_quota_suite.sql`; the inventory records the
   call sites ([service-role-inventory.md](service-role-inventory.md)).
 - An authenticated member of org A visiting org B's public page resolves to
-  org A and sees nothing (fail-closed, not wrong-tenant). Phase 5 PR 3
-  (CWA-67 / #360) closes this for host-addressed routes: session cookies
-  are host-scoped (no `Domain=` widening anywhere in
-  `lib/supabase/{server,client,middleware}.ts`, pinned by a regression
-  test), so a session on org A's subdomain or custom domain never rides
-  along to org B's host at all. The residual case is the path-addressed
-  route on a shared host (`/[orgSlug]/join`), which already redirects a
-  signed-in user to `/dashboard` before any org resolution happens.
+  org A and sees nothing (fail-closed, not wrong-tenant). Every org shares
+  the one canonical host, so this is the path-addressed case:
+  `/[orgSlug]/join` redirects a signed-in user to `/dashboard` before any
+  org resolution happens. Session cookies stay host-scoped (no `Domain=`
+  widening anywhere in `lib/supabase/{server,client,middleware}.ts`, pinned
+  by a regression test), so they are never sent to a subdomain of the
+  canonical host.
 - Storage **writes** are closed (CWA-57 / #328 — see "Storage tenancy"
   above); signed tokens and the service-role call sites were closed in
   Phase 3 (#212). Group-level scoping of member-facing surfaces: split out
@@ -413,17 +404,9 @@ platform seam).
   Accepted: the slug is already public by construction (it *is* the header
   value), and `reply_to` is an address the org publishes on every outbound
   email.
-- **`organizations.status` now cuts exactly one access path.**
-  `app_org_slug_for_host()` (`20260824000000_org_domains.sql`, Phase 5 PR 2
-  / CWA-66) is the first place `status` gates anything beyond
-  `listActiveOrgs()`: it requires `o.status = 'active'`, so a suspended
-  org's verified custom domain resolves NULL — the domain goes dark rather
-  than routing (decision D4,
-  [`docs/plans/phase-5-domains-email.md`](../plans/phase-5-domains-email.md)).
-  Since Phase 5 PR 3 (CWA-67 / #360) wired the resolver into
-  `lib/supabase/middleware.ts` (via `lib/supabase/host-resolution.ts`),
-  this is live: suspending an org cuts its custom-domain routing on the
-  next uncached request. Everything else about the column is
+- **`organizations.status` cuts no access path.** The one place it ever
+  gated routing — the custom-domain host resolver — is retired along with
+  host routing. What remains is
   unchanged: the `public.org_status` enum (CWA-51; `create type
   public.org_status as enum ('active','suspended')` in
   `20260802000000_org_status_enum.sql`) has exactly one column using it,
@@ -441,29 +424,17 @@ platform seam).
   surface; don't assume it exists until then. Neither `anon` nor
   `authenticated` can even `select` the column (see the column-grant bullet
   above).
-- **Supabase Auth's redirect allowlist must cover every org host.** Auth
+- **Supabase Auth's redirect allowlist names the one canonical host.** Auth
   flows (magic links, password resets) redirect through Supabase's
-  configured allowlist, which today names only the platform host; for
-  subdomains to complete those flows it must include
-  `https://*.<platform-apex>/**`. That allowlist is remote Supabase project
-  configuration owned by the operator/CI per this repo's hard database
-  rule — the app never writes it. As defense in depth on the app side, the
-  `next` param in `app/api/auth/callback/route.ts` is hardened (Phase 5 PR
-  3, CWA-67 / #360): a sentinel-origin check accepts only single-leading-`/`
+  configured allowlist: `https://<canonical host>/**` plus the localhost dev
+  entry, with no wildcard-subdomain or custom-domain entries. That allowlist
+  is remote Supabase project configuration owned by the operator/CI per this
+  repo's hard database rule — the app never writes it. As defense in depth
+  on the app side, the `next` param in `app/api/auth/callback/route.ts` is
+  hardened: a sentinel-origin check accepts only single-leading-`/`
   same-origin paths, rejecting `//host`, backslash variants, and any
   scheme-ish prefix (`app/api/auth/callback/sanitize-next.ts`, same
-  technique as the login page's `redirect` param). The fuller custom-domain
-  auth write-up (`docs/security/domains.md`) is Phase 5 PR 4's deliverable.
-- **The global (non-per-org) unique on `org_domains.domain` is a deliberate
-  deviation from the per-org-unique norm.** Every other org-owned table's
-  uniques are scoped `(org_id, ...)`; DNS names are globally unique
-  regardless of what this schema says, so `org_domains_verified_domain_key`
-  (`20260824000000_org_domains.sql`, verified/removing rows only) is global
-  by necessity — host → org must be a function. The information leak this
-  creates (org A can infer, via a constraint violation on its own claim
-  attempt, that *some* org has verified a given domain) is not a new
-  disclosure: public DNS already answers that question for any domain
-  actually serving traffic.
+  technique as the login page's `redirect` param).
 - **Per-org branding is an injection surface with a named boundary.**
   `organizations.branding` is admin-supplied free text that reaches CSS and
   RFC 5322 headers. The boundary is `HEX` (`lib/contrast.ts`, strict
@@ -478,23 +449,14 @@ platform seam).
   `supabase/functions/_shared/branding.ts` is a deliberate **byte-level
   mirror** of those four `organizations.branding` regexes, since Phase 5
   PR 7 (edge functions cannot import from `lib/`), so a change must land on
-  both sides. (`ORG_DOMAIN_SHAPE`, a fifth boundary on a different column,
-  is mirrored separately — see the next bullet.) The edge mirror
+  both sides. The edge mirror
   deliberately omits the WCAG 4.5:1 `validateAccent()` contrast gate, which
   is enforced on the write path only (#319).
-- **Emailed-link origin is a second, separate per-org injection boundary —
-  not the same gate as branding.** `orgBaseUrl(orgId)` (`lib/org-urls.ts`,
-  Phase 5 PR 5 / CWA-69) resolves the canonical origin for every link the
-  platform mails. A custom domain is used only when its `org_domains` row is
-  `verified` **and** `attached_at` is set (ownership plus routing, not
-  ownership alone); the stored `domain` value is re-validated against
-  `ORG_DOMAIN_SHAPE` at read time regardless (the DB's
-  `org_domains_domain_shape` CHECK runs only at INSERT, so a hand-edited row
-  could otherwise reach a link unvalidated). A domain that fails either gate
-  falls through to `https://<slug>.<platformApex>`, then to `siteConfig.url`
-  — fail-soft, never throws, so a broken lookup degrades a link rather than
-  blocking the email. `supabase/functions/_shared/org-urls.ts` is a
-  byte-for-byte mirror of `computeOrgOrigin()` and `ORG_DOMAIN_SHAPE` for the
-  cron edge functions, which take the platform apex and platform URL as
-  parameters (env-derived, no `siteConfig` import) rather than reading them
-  directly.
+- **Emailed-link origin is a constant, not per-org data.** Every link the
+  platform mails is built on the one canonical host — `siteConfig.url` in
+  the app, the `SITE_URL` function secret in the cron edge functions — so no
+  admin-supplied value reaches a link origin. Each target route resolves its
+  org without the host: `/setup-account` and `/join/family/[token]` from the
+  token's row, `/serving/go` from the HMAC-validated token, `/serving/**` and
+  `/events` from the signed-in session, `/[orgSlug]/join` from its path
+  segment.
