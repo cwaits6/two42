@@ -117,7 +117,7 @@ export async function GET() {
     const c = only(
       EDGE,
       `export async function claim(supabase: Client) {
-  let q = supabase.from("org_domains").update({ a: 1 }).eq("id", "x");
+  let q = supabase.from("org_email_domains").update({ a: 1 }).eq("id", "x");
   q = q.eq("org_id", "o");
   await q;
 }
@@ -239,7 +239,7 @@ describe("chainHasEmbed", () => {
   const embed = (select) => chainHasEmbed(only(APP, appSource(`await service.from("t").select(${select});`)));
 
   it("detects a nested relation, an aliased one, and an FK-hinted one", () => {
-    expect(embed(`"id, org_domains(domain, status)"`)).toBe(true);
+    expect(embed(`"id, org_email_domains(domain, status)"`)).toBe(true);
     expect(embed(`"*, steward:profiles!giving_funds_steward_id_fkey(first_name)"`)).toBe(true);
     expect(embed(`"id, serving_signup_attendees(profiles(id, first_name))"`)).toBe(true);
   });
@@ -269,12 +269,12 @@ describe("chainFinding — tier B (service-role chains)", () => {
   });
 
   it("names the embed when an unscoped chain selects a nested relation", () => {
-    const f = chainFinding(only(APP, appSource(`await service.from("t").select("id, org_domains(domain)");`)));
+    const f = chainFinding(only(APP, appSource(`await service.from("t").select("id, org_email_domains(domain)");`)));
     expect(f.message).toMatch(/nested embed/);
   });
 
   it("does not fail an embedding chain whose parent is scoped", () => {
-    const c = only(APP, appSource(`await service.from("t").select("id, org_domains(domain)").eq("org_id", o);`));
+    const c = only(APP, appSource(`await service.from("t").select("id, org_email_domains(domain)").eq("org_id", o);`));
     expect(chainHasEmbed(c)).toBe(true);
     expect(chainFinding(c)).toBeNull();
   });
@@ -337,12 +337,12 @@ describe("chainFinding — supabase/functions/ (edge mode)", () => {
 
   it("exempts the tenant root, which has no org_id column", () => {
     expect(
-      chainFinding(edgeChain(`await supabase.from("organizations").select("id, org_domains(domain)").eq("status", "active");`))
+      chainFinding(edgeChain(`await supabase.from("organizations").select("id, org_email_domains(domain)").eq("status", "active");`))
     ).toBeNull();
   });
 
   it("does not extend the tenant-root exemption to any other table", () => {
-    expect(chainFinding(edgeChain(`await supabase.from("org_domains").select("id").eq("status", "verified");`))).not.toBeNull();
+    expect(chainFinding(edgeChain(`await supabase.from("org_email_domains").select("id").eq("status", "verified");`))).not.toBeNull();
   });
 
   it("names the embed when an unscoped parent selects a nested relation", () => {

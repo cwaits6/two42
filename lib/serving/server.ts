@@ -15,7 +15,7 @@ import {
 } from "@/lib/email/serving";
 import { resolveEmailBranding } from "@/lib/email/identity";
 import { reserveEmailQuota } from "@/lib/email/quota";
-import { orgBaseUrl } from "@/lib/org-urls";
+import { siteConfig } from "@/lib/config";
 
 export interface NamedProfile {
   id: string;
@@ -98,12 +98,10 @@ export async function sendSignupConfirmation(
     opts.orgId
   );
 
-  // Neither resolveEmailBranding nor orgBaseUrl throws — both degrade to
-  // platform defaults — so this needs no guard of its own.
-  const [branding, baseUrl] = await Promise.all([
-    resolveEmailBranding(opts.orgId),
-    orgBaseUrl(opts.orgId),
-  ]);
+  // resolveEmailBranding never throws — it degrades to platform defaults —
+  // so this needs no guard of its own.
+  const branding = await resolveEmailBranding(opts.orgId);
+  const baseUrl = siteConfig.url;
 
   const linkMode = await getServingLinkMode(supabase, opts.orgId);
   const cancelUrl =
@@ -149,8 +147,7 @@ export async function notifyLeadersOfCancel(
   // takes no arguments and returns NEXT_PUBLIC_ORG_SLUG. That is the right org
   // today only because the deployment is single-tenant, and this function's
   // anonymous signed-link caller has no session to resolve from. Both callers
-  // hold an already-authorized org_id and pass it. The same reasoning makes
-  // the link origin an explicit orgBaseUrl(opts.orgId), not the platform URL.
+  // hold an already-authorized org_id and pass it.
 
   // org_id filter is required: this is an email fan-out surface on a
   // service-role client — an unscoped read would mail another org's leaders.
@@ -192,12 +189,10 @@ export async function notifyLeadersOfCancel(
 
   if (recipients.length === 0) return;
 
-  // Resolved only once there is someone to mail — both are service-role
-  // organizations reads, wasted when the team has no sendable leaders.
-  const [branding, baseUrl] = await Promise.all([
-    resolveEmailBranding(opts.orgId),
-    orgBaseUrl(opts.orgId),
-  ]);
+  // Resolved only once there is someone to mail — a service-role
+  // organizations read, wasted when the team has no sendable leaders.
+  const branding = await resolveEmailBranding(opts.orgId);
+  const baseUrl = siteConfig.url;
 
   const allowed = await reserveEmailQuota(opts.orgId, recipients.length);
   if (!allowed) {

@@ -109,15 +109,6 @@ export default function SettingsPage() {
             >
               Email sending domain
             </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="text-lg"
-              nativeButton={false}
-              render={<Link href="/admin/settings/domains" />}
-            >
-              Custom domains
-            </Button>
           </div>
           <form onSubmit={handleSubmit} className="space-y-6">
             {Object.entries(SETTINGS_LABELS).map(([key, label]) => (

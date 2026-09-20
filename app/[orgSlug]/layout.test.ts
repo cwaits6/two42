@@ -1,19 +1,11 @@
-// Pins the ordering this PR exists to protect: assertPathOrgMatchesHost()
-// must run — and be allowed to 404 — before getOrgBranding() ever reaches a
-// Supabase client. Neither schema_tenancy_lint.sql nor guard:tenancy can see
-// this; it's an in-process call-order question in a React server component.
-// Follows the direct-import-and-invoke-with-mocked-collaborators shape from
+// Pins that a malformed path slug never reaches getOrgBranding() — and
+// through it an HTTP header on a Supabase client. Follows the direct-import-and-invoke-with-mocked-collaborators shape from
 // app/api/platform/organizations/[id]/route.test.ts.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const isValidOrgSlug = vi.fn();
 vi.mock("@/lib/org", () => ({ isValidOrgSlug: (slug: string) => isValidOrgSlug(slug) }));
-
-const assertPathOrgMatchesHost = vi.fn();
-vi.mock("@/lib/supabase/server", () => ({
-  assertPathOrgMatchesHost: (orgSlug: string) => assertPathOrgMatchesHost(orgSlug),
-}));
 
 const getOrgBranding = vi.fn();
 vi.mock("@/lib/branding", () => ({ getOrgBranding: (orgSlug: string) => getOrgBranding(orgSlug) }));
@@ -22,7 +14,6 @@ const { default: OrgSlugLayout, generateMetadata } = await import("./layout");
 
 beforeEach(() => {
   isValidOrgSlug.mockReset();
-  assertPathOrgMatchesHost.mockReset();
   getOrgBranding.mockReset();
 });
 
@@ -35,29 +26,11 @@ describe("OrgSlugLayout", () => {
       params: Promise.resolve({ orgSlug: "../etc" }),
     });
 
-    expect(assertPathOrgMatchesHost).not.toHaveBeenCalled();
     expect(getOrgBranding).not.toHaveBeenCalled();
   });
 
-  it("never calls getOrgBranding when the host guard rejects the slug", async () => {
+  it("resolves branding for the path slug when it is valid", async () => {
     isValidOrgSlug.mockReturnValue(true);
-    // assertPathOrgMatchesHost() 404s via next/navigation's notFound(),
-    // which throws — the layout must not swallow that and fall through.
-    assertPathOrgMatchesHost.mockRejectedValue(new Error("NEXT_NOT_FOUND"));
-
-    await expect(
-      OrgSlugLayout({
-        children: "child",
-        params: Promise.resolve({ orgSlug: "other-org" }),
-      })
-    ).rejects.toThrow("NEXT_NOT_FOUND");
-
-    expect(getOrgBranding).not.toHaveBeenCalled();
-  });
-
-  it("calls assertPathOrgMatchesHost before getOrgBranding when the slug is valid", async () => {
-    isValidOrgSlug.mockReturnValue(true);
-    assertPathOrgMatchesHost.mockResolvedValue(undefined);
     getOrgBranding.mockResolvedValue({
       display_name: "Acme",
       logo_url: null,
@@ -71,9 +44,6 @@ describe("OrgSlugLayout", () => {
     });
 
     expect(getOrgBranding).toHaveBeenCalledWith("acme");
-    const hostCallOrder = assertPathOrgMatchesHost.mock.invocationCallOrder[0];
-    const brandingCallOrder = getOrgBranding.mock.invocationCallOrder[0];
-    expect(hostCallOrder).toBeLessThan(brandingCallOrder);
   });
 });
 
@@ -86,24 +56,11 @@ describe("OrgSlugLayout generateMetadata", () => {
     });
 
     expect(metadata).toEqual({});
-    expect(assertPathOrgMatchesHost).not.toHaveBeenCalled();
-    expect(getOrgBranding).not.toHaveBeenCalled();
-  });
-
-  it("propagates the host guard's 404 instead of falling back to a default title", async () => {
-    isValidOrgSlug.mockReturnValue(true);
-    assertPathOrgMatchesHost.mockRejectedValue(new Error("NEXT_NOT_FOUND"));
-
-    await expect(
-      generateMetadata({ params: Promise.resolve({ orgSlug: "other-org" }) })
-    ).rejects.toThrow("NEXT_NOT_FOUND");
-
     expect(getOrgBranding).not.toHaveBeenCalled();
   });
 
   it("builds a title template from the org's display name", async () => {
     isValidOrgSlug.mockReturnValue(true);
-    assertPathOrgMatchesHost.mockResolvedValue(undefined);
     getOrgBranding.mockResolvedValue({
       display_name: "Acme",
       logo_url: null,

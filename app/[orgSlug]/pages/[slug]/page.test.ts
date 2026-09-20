@@ -1,7 +1,5 @@
-// Pins the ordering this file exists to protect: assertPathOrgMatchesHost()
-// must run before generateMetadata() ever queries page_content, the same
-// property app/[orgSlug]/layout.test.ts pins for the org-scoped layout.
-// Follows the direct-import-and-invoke-with-mocked-collaborators shape from
+// Pins that generateMetadata() never queries page_content for a malformed
+// path slug, and queries it as the path slug's org otherwise. Follows the direct-import-and-invoke-with-mocked-collaborators shape from
 // app/api/platform/organizations/[id]/route.test.ts.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,11 +10,9 @@ vi.mock("@/lib/org", async (importOriginal) => ({
   isValidOrgSlug: (slug: string) => isValidOrgSlug(slug),
 }));
 
-const assertPathOrgMatchesHost = vi.fn();
 const single = vi.fn();
 const createClient = vi.fn();
 vi.mock("@/lib/supabase/server", () => ({
-  assertPathOrgMatchesHost: (orgSlug: string) => assertPathOrgMatchesHost(orgSlug),
   createClient: (orgSlug: string) => createClient(orgSlug),
 }));
 
@@ -24,7 +20,6 @@ const { generateMetadata } = await import("./page");
 
 beforeEach(() => {
   isValidOrgSlug.mockReset();
-  assertPathOrgMatchesHost.mockReset();
   createClient.mockReset();
   single.mockReset();
   createClient.mockReturnValue({
@@ -45,24 +40,11 @@ describe("generateMetadata", () => {
     });
 
     expect(metadata).toEqual({ title: "Page Not Found" });
-    expect(assertPathOrgMatchesHost).not.toHaveBeenCalled();
     expect(createClient).not.toHaveBeenCalled();
   });
 
-  it("propagates the host guard's 404 instead of returning page metadata", async () => {
+  it("queries page_content through a client scoped to the path slug", async () => {
     isValidOrgSlug.mockReturnValue(true);
-    assertPathOrgMatchesHost.mockRejectedValue(new Error("NEXT_NOT_FOUND"));
-
-    await expect(
-      generateMetadata({ params: Promise.resolve({ orgSlug: "other-org", slug: "about" }) })
-    ).rejects.toThrow("NEXT_NOT_FOUND");
-
-    expect(createClient).not.toHaveBeenCalled();
-  });
-
-  it("calls assertPathOrgMatchesHost before querying page_content", async () => {
-    isValidOrgSlug.mockReturnValue(true);
-    assertPathOrgMatchesHost.mockResolvedValue(undefined);
     single.mockResolvedValue({ data: { title: "About Us" } });
 
     const metadata = await generateMetadata({
@@ -70,8 +52,6 @@ describe("generateMetadata", () => {
     });
 
     expect(metadata.title).toContain("About Us");
-    const hostCallOrder = assertPathOrgMatchesHost.mock.invocationCallOrder[0];
-    const clientCallOrder = createClient.mock.invocationCallOrder[0];
-    expect(hostCallOrder).toBeLessThan(clientCallOrder);
+    expect(createClient).toHaveBeenCalledWith("acme");
   });
 });

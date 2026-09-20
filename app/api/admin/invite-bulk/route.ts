@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { siteConfig } from "@/lib/config";
-import { orgBaseUrl } from "@/lib/org-urls";
 import { Resend } from "resend";
 import crypto from "crypto";
 
@@ -23,7 +22,7 @@ export async function POST(request: Request) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, org_id")
+    .select("role")
     .eq("id", user.id)
     .single();
 
@@ -73,11 +72,10 @@ export async function POST(request: Request) {
       .filter(Boolean)
   );
 
-  // The signup link follows the admin's own org host (org_id read under RLS
-  // above), not the deployment's env-pinned platform URL. It lands on
-  // /setup-account, which is what verifies and consumes the signup token
-  // minted below — the same destination the approve route sends to.
-  const signupBaseUrl = `${await orgBaseUrl(profile.org_id)}/setup-account`;
+  // The signup link lands on /setup-account, which verifies and consumes the
+  // signup token minted below — and resolves the org from that token's row.
+  // The same destination the approve route sends to.
+  const signupBaseUrl = `${siteConfig.url}/setup-account`;
   const resend = getResend();
 
   let sent = 0;

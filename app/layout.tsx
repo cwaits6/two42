@@ -57,10 +57,7 @@ export default async function RootLayout({
   // CSP allows inline scripts only with the per-request nonce
   const requestHeaders = await headers();
   const nonce = requestHeaders.get("x-nonce") ?? undefined;
-  // Host-resolved org for client components via
-  // OrgSlugProvider — same precedence as lib/supabase/server.ts.
-  const orgSlug =
-    requestHeaders.get("x-two42-resolved-org") ?? resolveOrgSlug();
+  const orgSlug = resolveOrgSlug();
   const hasAuthCookie = cookieStore.getAll().some((c) => c.name.includes("auth-token"));
 
   let profile = null;

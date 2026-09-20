@@ -1,10 +1,7 @@
-// Unit test for the orgBaseUrl() anchor in the bulk-invite route. This is
-// the highest-risk of the five routes review flagged as newly threading a validated org_id into orgBaseUrl():
-// it resolves the CALLER's own profile.org_id rather than a target entity's,
-// so a variable mix-up (e.g. reading a different row's id) is easy to
-// introduce silently and would not fail guard:tenancy or any existing test.
-// Mocks createClient and @/lib/org-urls directly; the Resend SDK is mocked
-// the same way app/api/admin/email-domain/route.test.ts mocks it.
+// Unit test for the signup link the bulk-invite route mails out: it must
+// land on the app's one canonical origin, whichever org the admin belongs
+// to. Mocks createClient directly; the Resend SDK is mocked the same way
+// app/api/admin/email-domain/route.test.ts mocks it.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,10 +10,10 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: () => createClient(),
 }));
 
-const orgBaseUrl = vi.fn();
-vi.mock("@/lib/org-urls", () => ({
-  orgBaseUrl: (...args: unknown[]) => orgBaseUrl(...args),
-}));
+vi.mock("@/lib/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/config")>();
+  return { siteConfig: { ...actual.siteConfig, url: "https://two42.io" } };
+});
 
 const send = vi.fn();
 vi.mock("resend", () => ({
@@ -39,7 +36,7 @@ function chain(terminal: { data: unknown; error: unknown }) {
   return obj;
 }
 
-function makeClient(opts: { profileOrgId: string; insertError?: unknown }) {
+function makeClient(opts: { insertError?: unknown } = {}) {
   return {
     auth: {
       getUser: async () => ({ data: { user: { id: "admin-1" } } }),
@@ -47,13 +44,13 @@ function makeClient(opts: { profileOrgId: string; insertError?: unknown }) {
     from(table: string) {
       if (table === "profiles") {
         return {
-          // The admin-lookup select ("role, org_id") returns a single row;
-          // the existing-members select ("email") returns an array — same
+          // The admin-lookup select ("role") returns a single row; the
+          // existing-members select ("email") returns an array — same
           // table, two different result shapes, distinguished by the
           // requested columns the way PostgREST actually would be.
           select: (cols: string) =>
-            cols.includes("org_id")
-              ? chain({ data: { role: "admin", org_id: opts.profileOrgId }, error: null })
+            cols.includes("role")
+              ? chain({ data: { role: "admin" }, error: null })
               : chain({ data: [], error: null }),
         };
       }
@@ -79,31 +76,18 @@ function bulkRequest(emails: string[]) {
 
 beforeEach(() => {
   createClient.mockReset();
-  orgBaseUrl.mockReset().mockResolvedValue("https://grace.church");
   send.mockReset().mockResolvedValue({ data: { id: "email-1" }, error: null });
 });
 
 describe("POST /api/admin/invite-bulk", () => {
-  it("resolves orgBaseUrl from the admin's own profile.org_id, not a target row's id", async () => {
-    createClient.mockResolvedValue(makeClient({ profileOrgId: "org-1" }));
+  it("mails a signup link on the canonical origin", async () => {
+    createClient.mockResolvedValue(makeClient());
 
     const res = await POST(bulkRequest(["new-member@example.com"]));
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ sent: 1, skipped: 0, errors: [] });
-    expect(orgBaseUrl).toHaveBeenCalledWith("org-1");
-    expect(orgBaseUrl).toHaveBeenCalledTimes(1);
-    // The signup link mailed out is built from the resolved org origin, not
-    // the deployment's env-pinned platform URL.
     const sentHtml = send.mock.calls[0][0].html as string;
-    expect(sentHtml).toContain("https://grace.church/setup-account?token=");
-  });
-
-  it("uses a different admin's own org, not a hardcoded/default id", async () => {
-    createClient.mockResolvedValue(makeClient({ profileOrgId: "org-2" }));
-
-    await POST(bulkRequest(["another@example.com"]));
-
-    expect(orgBaseUrl).toHaveBeenCalledWith("org-2");
+    expect(sentHtml).toContain("https://two42.io/setup-account?token=");
   });
 });

@@ -12,15 +12,6 @@ vi.mock("next/headers", () => ({
   cookies: () => cookiesMock(),
 }));
 
-// notFound() throws in the real Next.js runtime — mirror that so tests can
-// distinguish "threw" from "returned" rather than needing App Router
-// internals.
-vi.mock("next/navigation", () => ({
-  notFound: () => {
-    throw new Error("NEXT_NOT_FOUND");
-  },
-}));
-
 const createServerClient = vi.fn<
   (
     url: string,
@@ -41,38 +32,7 @@ vi.mock("@supabase/ssr", () => ({
 }));
 
 // vi.mock is hoisted, so this import sees the mocks above.
-const { assertPathOrgMatchesHost, createClient } = await import(
-  "@/lib/supabase/server"
-);
-
-function headersWith(resolvedOrg: string | null) {
-  return {
-    get: (name: string) => (name === "x-two42-resolved-org" ? resolvedOrg : null),
-  };
-}
-
-describe("assertPathOrgMatchesHost", () => {
-  beforeEach(() => {
-    headersMock.mockReset();
-  });
-
-  it("404s when the host resolved a different org than the path slug", async () => {
-    headersMock.mockReturnValue(headersWith("grace"));
-    await expect(assertPathOrgMatchesHost("hope")).rejects.toThrow(
-      "NEXT_NOT_FOUND"
-    );
-  });
-
-  it("passes through when the host resolved the same org as the path slug", async () => {
-    headersMock.mockReturnValue(headersWith("grace"));
-    await expect(assertPathOrgMatchesHost("grace")).resolves.toBeUndefined();
-  });
-
-  it("is a no-op when the host resolved no org (platform host / trusted fallback)", async () => {
-    headersMock.mockReturnValue(headersWith(null));
-    await expect(assertPathOrgMatchesHost("grace")).resolves.toBeUndefined();
-  });
-});
+const { createClient } = await import("@/lib/supabase/server");
 
 describe("createClient — x-two42-org precedence", () => {
   beforeEach(() => {
@@ -81,23 +41,25 @@ describe("createClient — x-two42-org precedence", () => {
     delete process.env.NEXT_PUBLIC_ORG_SLUG;
   });
 
-  it("uses the explicit orgSlug argument over the resolved header", async () => {
-    headersMock.mockReturnValue(headersWith("grace"));
+  it("uses the explicit orgSlug argument over the env pin", async () => {
+    process.env.NEXT_PUBLIC_ORG_SLUG = "default";
     await createClient("hope");
     const config = createServerClient.mock.calls[0][2];
     expect(config.global.headers["x-two42-org"]).toBe("hope");
   });
 
-  it("uses the resolved header when no explicit orgSlug is passed", async () => {
-    headersMock.mockReturnValue(headersWith("grace"));
+  it("falls back to the env pin when no orgSlug is passed", async () => {
+    process.env.NEXT_PUBLIC_ORG_SLUG = "default";
     await createClient();
     const config = createServerClient.mock.calls[0][2];
-    expect(config.global.headers["x-two42-org"]).toBe("grace");
+    expect(config.global.headers["x-two42-org"]).toBe("default");
   });
 
-  it("falls back to the env pin when neither an argument nor a resolved header exists", async () => {
+  it("never takes the org from a request header", async () => {
     process.env.NEXT_PUBLIC_ORG_SLUG = "default";
-    headersMock.mockReturnValue(headersWith(null));
+    headersMock.mockReturnValue({
+      get: (name: string) => (name === "x-two42-org" ? "grace" : null),
+    });
     await createClient();
     const config = createServerClient.mock.calls[0][2];
     expect(config.global.headers["x-two42-org"]).toBe("default");

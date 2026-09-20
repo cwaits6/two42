@@ -89,7 +89,7 @@ export function resolveBranding(raw: unknown): OrgBranding {
  *
  * Pass `orgSlug` when the URL itself names the org (the /[orgSlug]/** routes):
  * it becomes the x-two42-org header that app_request_org_id() resolves for an
- * anonymous caller. Without it the client falls back to the host-resolved
+ * anonymous caller. Without it the client falls back to the env-pinned
  * slug, which is only legitimate when the caller is authenticated (the header
  * is ignored and the org comes from the profile) — see getRequestBranding().
  *

@@ -1,12 +1,9 @@
-// Narrow smoke test for the org-base-url wiring in sendSignupConfirmation()
-// and notifyLeadersOfCancel(): both now build
-// cancelUrl/servingUrl from orgBaseUrl(opts.orgId) instead of the
-// deployment's env-pinned siteConfig.url. This mocks every collaborator
-// (same mock-the-collaborator shape as lib/email/resend.test.ts) and asserts
-// only the delta this PR introduces — the built URL starts with the
-// resolved org host — not the file's broader pre-existing behavior (quota
-// reservation, resolveCanSign interaction), which has no coverage before or
-// after this PR and is out of scope here.
+// Narrow smoke test for the link origin in sendSignupConfirmation() and
+// notifyLeadersOfCancel(): both build cancelUrl/servingUrl on the app's one
+// canonical origin, with branding resolved for opts.orgId. This mocks every
+// collaborator (same mock-the-collaborator shape as
+// lib/email/resend.test.ts) and asserts only that — not the file's broader
+// behavior (quota reservation, resolveCanSign interaction).
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -15,10 +12,10 @@ vi.mock("@/lib/email/identity", () => ({
   resolveEmailBranding: (...args: unknown[]) => resolveEmailBranding(...args),
 }));
 
-const orgBaseUrl = vi.fn();
-vi.mock("@/lib/org-urls", () => ({
-  orgBaseUrl: (...args: unknown[]) => orgBaseUrl(...args),
-}));
+vi.mock("@/lib/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/config")>();
+  return { siteConfig: { ...actual.siteConfig, url: "https://two42.io" } };
+});
 
 const getServingLinkMode = vi.fn();
 vi.mock("@/lib/serving/config", () => ({
@@ -87,7 +84,6 @@ function stubClient(rows: Record<string, { data: unknown; error: unknown }> = {}
 
 beforeEach(() => {
   resolveEmailBranding.mockReset().mockResolvedValue(BRANDING);
-  orgBaseUrl.mockReset().mockResolvedValue("https://grace.church");
   getServingLinkMode.mockReset();
   createServingToken.mockReset().mockReturnValue("signed-token");
   reserveEmailQuota.mockReset().mockResolvedValue(true);
@@ -109,24 +105,23 @@ describe("sendSignupConfirmation", () => {
     recipient: { id: "member-1", email: "sam@example.com", name: "Sam" },
   };
 
-  it("builds cancelUrl from orgBaseUrl(opts.orgId), not siteConfig.url, in signed mode", async () => {
+  it("builds cancelUrl on the canonical origin in signed mode", async () => {
     getServingLinkMode.mockResolvedValue("signed");
 
     await sendSignupConfirmation(stubClient(), baseOpts);
 
-    expect(orgBaseUrl).toHaveBeenCalledWith("org-1");
     expect(resolveEmailBranding).toHaveBeenCalledWith("org-1");
     const call = sendServingConfirmationEmail.mock.calls[0][0];
-    expect(call.cancelUrl).toMatch(/^https:\/\/grace\.church\/serving\/go\?token=/);
+    expect(call.cancelUrl).toMatch(/^https:\/\/two42\.io\/serving\/go\?token=/);
   });
 
-  it("builds cancelUrl from orgBaseUrl(opts.orgId) in login mode", async () => {
+  it("builds cancelUrl on the canonical origin in login mode", async () => {
     getServingLinkMode.mockResolvedValue("login");
 
     await sendSignupConfirmation(stubClient(), baseOpts);
 
     const call = sendServingConfirmationEmail.mock.calls[0][0];
-    expect(call.cancelUrl).toBe("https://grace.church/serving/group-1");
+    expect(call.cancelUrl).toBe("https://two42.io/serving/group-1");
   });
 });
 
@@ -139,7 +134,7 @@ describe("notifyLeadersOfCancel", () => {
     memberLabel: "Sam",
   };
 
-  it("builds servingUrl from orgBaseUrl(opts.orgId), not siteConfig.url", async () => {
+  it("builds servingUrl on the canonical origin", async () => {
     const service = stubClient({
       profile_groups: {
         data: [
@@ -159,9 +154,8 @@ describe("notifyLeadersOfCancel", () => {
 
     await notifyLeadersOfCancel(service, baseOpts);
 
-    expect(orgBaseUrl).toHaveBeenCalledWith("org-1");
     expect(resolveEmailBranding).toHaveBeenCalledWith("org-1");
     const call = sendServingCancelNoticeEmail.mock.calls[0][0];
-    expect(call.servingUrl).toBe("https://grace.church/serving/group-1");
+    expect(call.servingUrl).toBe("https://two42.io/serving/group-1");
   });
 });

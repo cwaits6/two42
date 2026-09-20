@@ -88,7 +88,7 @@ describe("sendServingBroadcastEmail builds its footer link from branding.baseUrl
     send.mockClear();
   });
 
-  it("links to /serving on the org's own host, in both the href and the visible text", async () => {
+  it("links to /serving on branding.baseUrl, in both the href and the visible text", async () => {
     await sendServingBroadcastEmail({
       to: "a@b.org",
       name: "Jane",

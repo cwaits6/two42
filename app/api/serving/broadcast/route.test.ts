@@ -27,11 +27,6 @@ vi.mock("@/lib/email/quota", () => ({
 // shaped service-client stub below) so the org-id anchor threaded into these
 // two tenancy-sensitive service-role reads is actually pinned by an
 // assertion, not just silently degraded to a platform default.
-const orgBaseUrl = vi.fn();
-vi.mock("@/lib/org-urls", () => ({
-  orgBaseUrl: (...args: unknown[]) => orgBaseUrl(...args),
-}));
-
 const resolveEmailBranding = vi.fn();
 vi.mock("@/lib/email/identity", () => ({
   resolveEmailBranding: (...args: unknown[]) => resolveEmailBranding(...args),
@@ -106,7 +101,6 @@ beforeEach(() => {
   createClient.mockReset();
   createServiceClient.mockReset();
   reserveEmailQuota.mockReset();
-  orgBaseUrl.mockReset().mockResolvedValue("https://grace.church");
   resolveEmailBranding.mockReset().mockResolvedValue({
     orgName: "Grace Fellowship",
     fromAddress: "noreply@grace.church",
@@ -148,8 +142,8 @@ describe("POST /api/serving/broadcast — cap hit", () => {
   });
 });
 
-describe("POST /api/serving/broadcast — link origin", () => {
-  it("resolves baseUrl and branding for the group's own org, not a default", async () => {
+describe("POST /api/serving/broadcast — email branding", () => {
+  it("resolves branding for the group's own org, not a default", async () => {
     const insertSpy = vi.fn(() => ({ data: null, error: null }));
     createClient.mockResolvedValue(makeCookieClient(insertSpy));
     createServiceClient.mockResolvedValue(
@@ -165,15 +159,14 @@ describe("POST /api/serving/broadcast — link origin", () => {
         },
       ])
     );
-    // Cap hit short-circuits before the send loop but after both calls
+    // Cap hit short-circuits before the send loop but after the call
     // below, so this test doesn't need to also stub sendServingBroadcastEmail.
     reserveEmailQuota.mockResolvedValue(false);
 
     await POST(broadcastRequest());
 
     // member_groups in makeCookieClient's stub carries org_id: "org-1" — the
-    // anchor these two calls must be threaded from, not a sibling row's id.
-    expect(orgBaseUrl).toHaveBeenCalledWith("org-1");
+    // anchor this call must be threaded from, not a sibling row's id.
     expect(resolveEmailBranding).toHaveBeenCalledWith("org-1");
   });
 });

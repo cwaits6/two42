@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { isValidOrgSlug } from "@/lib/org";
-import { assertPathOrgMatchesHost } from "@/lib/supabase/server";
 import { getOrgBranding } from "@/lib/branding";
 
 interface OrgSlugLayoutProps {
@@ -21,8 +20,6 @@ export async function generateMetadata({
   if (!isValidOrgSlug(orgSlug)) {
     return {};
   }
-
-  await assertPathOrgMatchesHost(orgSlug);
 
   const branding = await getOrgBranding(orgSlug);
 
@@ -55,10 +52,6 @@ export default async function OrgSlugLayout({
   if (!isValidOrgSlug(orgSlug)) {
     return <>{children}</>;
   }
-
-  // Host-first precedence, same guard the org join page already applies —
-  // defense in depth so a future /[orgSlug]/** route can't skip it.
-  await assertPathOrgMatchesHost(orgSlug);
 
   const branding = await getOrgBranding(orgSlug);
 
