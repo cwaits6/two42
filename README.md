@@ -132,12 +132,13 @@ two42 was built to solve exactly that. It has since been open-sourced so other g
    ```
 
    `NEXT_PUBLIC_ORG_SLUG` is optional and defaults to `default`, which matches the
-   organization the migrations seed. It is sent as the `x-two42-org` header so
-   anonymous visitors resolve the right tenant — if you set it, it must be the slug
-   of a real row in `organizations`. Anonymous flows (the `/[orgSlug]/join` form, public
-   content) resolve their org from this slug via `app_request_org_id()`, so a slug
-   that matches no organization makes those flows fail closed rather than fall back
-   to another tenant.
+   organization the migrations seed. It is sent as the `x-two42-org` header for
+   anonymous requests that carry no org path segment — if you set it, it must be
+   the slug of a real row in `organizations`. Routes that do carry an explicit org
+   slug (the `/[orgSlug]/join` form, public content) pass that path slug straight
+   to `createClient(orgSlug)` instead of the env pin, so a slug that matches no
+   organization makes those flows fail closed rather than fall back to another
+   tenant.
 
    `NEXT_PUBLIC_SITE_URL` is also the app's one canonical host: a request
    whose `Host` is anything else (other than `localhost`, `127.0.0.1` or a

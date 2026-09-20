@@ -20,10 +20,10 @@ begin
 end
 $$;
 
-drop function if exists public.app_org_slug_for_host(text);
-
--- Dropping a table takes its indexes, policies and grants with it.
-drop table if exists public.org_domain_worker_events;
-drop table if exists public.org_domains;
-
-drop type if exists public.org_domain_status;
+-- The RPC, tables and type stay for now. Dropping them in the same step that
+-- retires the app code and edge function using them risks an old warm
+-- instance (Vercel's rollout and Supabase's migration push are not atomic)
+-- hitting a missing relation or function mid-deploy. A follow-up cleanup
+-- migration drops app_org_slug_for_host(), org_domain_worker_events,
+-- org_domains and org_domain_status once this one is confirmed live and
+-- nothing older is still serving traffic.

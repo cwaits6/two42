@@ -994,6 +994,94 @@ export type Database = {
           },
         ]
       }
+      org_domain_worker_events: {
+        Row: {
+          acknowledged_at: string | null
+          created_at: string
+          detail: string | null
+          domain: string
+          event: string
+          id: string
+          org_id: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          created_at?: string
+          detail?: string | null
+          domain: string
+          event: string
+          id?: string
+          org_id?: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          created_at?: string
+          detail?: string | null
+          domain?: string
+          event?: string
+          id?: string
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_domain_worker_events_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_domains: {
+        Row: {
+          attach_claim_token: string | null
+          attach_claimed_at: string | null
+          attached_at: string | null
+          created_at: string
+          domain: string
+          id: string
+          last_checked_at: string | null
+          org_id: string
+          status: Database["public"]["Enums"]["org_domain_status"]
+          verification_token: string
+          verified_at: string | null
+        }
+        Insert: {
+          attach_claim_token?: string | null
+          attach_claimed_at?: string | null
+          attached_at?: string | null
+          created_at?: string
+          domain: string
+          id?: string
+          last_checked_at?: string | null
+          org_id?: string
+          status?: Database["public"]["Enums"]["org_domain_status"]
+          verification_token?: string
+          verified_at?: string | null
+        }
+        Update: {
+          attach_claim_token?: string | null
+          attach_claimed_at?: string | null
+          attached_at?: string | null
+          created_at?: string
+          domain?: string
+          id?: string
+          last_checked_at?: string | null
+          org_id?: string
+          status?: Database["public"]["Enums"]["org_domain_status"]
+          verification_token?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_domains_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_email_domains: {
         Row: {
           cleanup_failed_at: string | null
@@ -2168,6 +2256,7 @@ export type Database = {
     }
     Functions: {
       app_current_org_id: { Args: never; Returns: string }
+      app_org_slug_for_host: { Args: { _host: string }; Returns: string }
       app_request_org_id: { Args: never; Returns: string }
       current_family_id: { Args: never; Returns: string }
       email_quota_consume: {
@@ -2239,6 +2328,7 @@ export type Database = {
       }
     }
     Enums: {
+      org_domain_status: "pending" | "verified" | "failed" | "removing"
       org_status: "active" | "suspended"
     }
     CompositeTypes: {
@@ -2367,6 +2457,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      org_domain_status: ["pending", "verified", "failed", "removing"],
       org_status: ["active", "suspended"],
     },
   },

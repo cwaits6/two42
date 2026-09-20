@@ -370,8 +370,11 @@ platform seam).
   `supabase/tests/org_email_quota_suite.sql`; the inventory records the
   call sites ([service-role-inventory.md](service-role-inventory.md)).
 - An authenticated member of org A visiting org B's public page resolves to
-  org A and sees nothing (fail-closed, not wrong-tenant). Every org shares
-  the one canonical host, so this is the path-addressed case:
+  org A, not org B (fail-closed, not wrong-tenant): the principal's own org
+  overrides the path org, so the request returns org A's own content at that
+  slug if org A happens to have a matching page, or no row if it does not —
+  never org B's. Every org shares the one canonical host, so this is the
+  path-addressed case:
   `/[orgSlug]/join` redirects a signed-in user to `/dashboard` before any
   org resolution happens. Session cookies stay host-scoped (no `Domain=`
   widening anywhere in `lib/supabase/{server,client,middleware}.ts`, pinned
