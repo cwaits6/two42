@@ -119,6 +119,11 @@ begin
     values (_org, _serving_group, _owner, _tag || ' broadcast');
   insert into public.org_email_domains (org_id, domain, resend_domain_id, status, dns_records)
     values (_org, _tag || '.mail.example.test', _tag || '-resend-id', 'pending', '[]'::jsonb);
+  -- org_domains and org_domain_worker_events are retired but still present
+  -- until the cleanup migration drops them; the suite discovers every
+  -- org-owned table dynamically, so each still needs a fixture row here.
+  insert into public.org_domains (org_id, domain, status)
+    values (_org, _tag || '.domains.example.test', 'pending');
   -- Send-cap tables. Direct inserts as postgres —
   -- both tables are service-role-only (restrictive policy, no permissive
   -- arm), so the fixture writes them the same way the RPC/cap editor do.
@@ -126,6 +131,9 @@ begin
     values (_org, (now() at time zone 'utc')::date, 3);
   insert into public.org_email_limits (org_id, daily_cap)
     values (_org, 250);
+  -- Service-role-only the same way; the retired worker's outcome log.
+  insert into public.org_domain_worker_events (org_id, domain, event)
+    values (_org, _tag || '.domains.example.test', 'detached');
 end;
 $$;
 
@@ -288,9 +296,10 @@ begin
 
   for i in 1 .. array_length(tables, 1) loop
     if error_states[i] = '42501'
-       and tables[i] in ('org_email_usage', 'org_email_limits') then
+       and tables[i] in ('org_email_usage', 'org_email_limits', 'org_domain_worker_events') then
       -- Service-role-only tables (restrictive policy, ALL privileges
-      -- revoked — org_email_usage / org_email_limits): a privilege denial is the intended,
+      -- revoked — org_email_usage / org_email_limits /
+      -- org_domain_worker_events): a privilege denial is the intended,
       -- stronger-than-row-filtering isolation outcome, not a broken check.
       -- Scoped to exactly those tables so a normal tenant table losing
       -- authenticated read access still fails.
