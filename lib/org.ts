@@ -13,8 +13,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * app_request_org_id() (authenticated principals always win over the
  * header — it only ever selects among already-public content).
  *
- * Single-tenant interim: every host maps to the one deployed org.
- * Custom-domain routing replaces this with real host → org resolution.
+ * The request host never names an org: a public per-org route passes its
+ * own path slug to createClient(), and everything else gets this pin.
  */
 export const DEFAULT_ORG_SLUG = "default";
 
@@ -26,10 +26,6 @@ export const DEFAULT_ORG_SLUG = "default";
  * (the join form, public content) resolve their org from this slug via
  * app_request_org_id(), so a slug that matches nothing makes those flows
  * fail closed rather than fall back to another org.
- *
- * Takes no host parameter: custom-domain routing will reintroduce
- * one together with the resolution logic that actually reads it. Carrying an
- * unread parameter until then bought nothing.
  */
 export function resolveOrgSlug(): string {
   return process.env.NEXT_PUBLIC_ORG_SLUG || DEFAULT_ORG_SLUG;
@@ -49,8 +45,7 @@ export function isValidOrgSlug(slug: string): boolean {
 /**
  * Mirrors the denylist provision_organization() enforces (TN006), so the
  * app can never route to — or offer — a slug the DB would refuse to mint.
- * Slugs become host labels once custom-domain routing ships, and any of these
- * would shadow a platform host. Keep this list in sync with the array in
+ * Keep this list in sync with the array in
  * the TN006 migration (supabase/migrations/20260818000000_reserved_org_slugs.sql).
  *
  * 'default' is deliberately NOT here yet: it is the slug of the one org
@@ -68,52 +63,22 @@ export function isReservedOrgSlug(slug: string): boolean {
 }
 
 /**
- * The single normalization point for a request host (no
- * normalization inside the resolver — canonicalization is middleware's
- * job, once). Lowercases, strips a port, strips a trailing FQDN dot —
- * port first, so "example.com.:443" normalizes fully.
+ * The single normalization point for a request host. Lowercases, strips a
+ * port, strips a trailing FQDN dot — port first, so "example.com.:443"
+ * normalizes fully.
  */
 export function normalizeHost(rawHost: string): string {
   return rawHost.trim().toLowerCase().replace(/:\d+$/, "").replace(/\.$/, "");
 }
 
-export type HostClassification =
-  | { kind: "apex" }
-  | { kind: "subdomain"; slug: string }
-  | { kind: "invalid-subdomain" }
-  | { kind: "custom-domain-candidate" };
-
 /**
- * Classifies an already-normalized host against the platform apex.
- * Exact label boundary — `host === apex` or
- * `host.endsWith("." + apex)` — never a raw suffix check, so a
- * registrable name that merely ends with the apex string
- * ("evil-two42.io") can never classify as platform and always falls to
- * "custom-domain-candidate" instead.
+ * The app serves one canonical host: the `NEXT_PUBLIC_SITE_URL` host. True
+ * for it and for the closed, static set a deployment is also legitimately
+ * reached on — local dev and Vercel preview URLs. The host never names an
+ * org, so this is a yes/no gate and nothing more; never widen it
+ * dynamically. Takes an already-normalized host.
  */
-export function classifyHost(host: string, apex: string): HostClassification {
-  if (host === apex) return { kind: "apex" };
-  if (host.endsWith(`.${apex}`)) {
-    const prefix = host.slice(0, host.length - apex.length - 1);
-    if (prefix.length === 0 || prefix.includes(".")) {
-      return { kind: "invalid-subdomain" };
-    }
-    if (!isValidOrgSlug(prefix) || isReservedOrgSlug(prefix)) {
-      return { kind: "invalid-subdomain" };
-    }
-    return { kind: "subdomain", slug: prefix };
-  }
-  return { kind: "custom-domain-candidate" };
-}
-
-/**
- * The closed, static trusted-host set: the deployment's own
- * host, for which host resolution falls back to the env pin rather than
- * 404ing. Never widen this dynamically — it exists so the *existing*
- * deployment's behavior is unchanged by host resolution, not as a general escape
- * hatch.
- */
-export function isTrustedFallbackHost(
+export function isExpectedHost(
   host: string,
   opts: { siteUrl: string }
 ): boolean {
@@ -123,11 +88,10 @@ export function isTrustedFallbackHost(
     const siteHost = normalizeHost(new URL(opts.siteUrl).host);
     if (siteHost && host === siteHost) return true;
   } catch (err) {
-    // malformed NEXT_PUBLIC_SITE_URL — not this function's problem to fix,
-    // but a malformed value on the deployment's OWN host would otherwise
-    // 404 the entire site with zero operator signal to diagnose from.
+    // A malformed value on the deployment's own host 404s the entire site;
+    // without this log that happens with zero operator signal.
     console.error(
-      "isTrustedFallbackHost: malformed NEXT_PUBLIC_SITE_URL %s:",
+      "isExpectedHost: malformed NEXT_PUBLIC_SITE_URL %s:",
       opts.siteUrl,
       err
     );
@@ -149,7 +113,7 @@ export async function resolveRequestOrgId(
   opts: { label: string; orgSlug: string }
 ): Promise<string | null> {
   // org-anchor: app_request_org_id() IS the org resolver — it derives the org
-  // from the principal or the validated host header, so there is no org_id to
+  // from the principal or the x-two42-org header, so there is no org_id to
   // pass in; callers scope everything after this on the value it returns
   const { data, error } = await client.rpc("app_request_org_id");
   // The generated type claims Returns: string, but the SQL function

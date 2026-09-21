@@ -119,6 +119,9 @@ begin
     values (_org, _serving_group, _owner, _tag || ' broadcast');
   insert into public.org_email_domains (org_id, domain, resend_domain_id, status, dns_records)
     values (_org, _tag || '.mail.example.test', _tag || '-resend-id', 'pending', '[]'::jsonb);
+  -- org_domains and org_domain_worker_events are retired but still present
+  -- until the cleanup migration drops them; the suite discovers every
+  -- org-owned table dynamically, so each still needs a fixture row here.
   insert into public.org_domains (org_id, domain, status)
     values (_org, _tag || '.domains.example.test', 'pending');
   -- Send-cap tables. Direct inserts as postgres —
@@ -128,8 +131,7 @@ begin
     values (_org, (now() at time zone 'utc')::date, 3);
   insert into public.org_email_limits (org_id, daily_cap)
     values (_org, 250);
-  -- Domain worker outcome log: service-role-only the same way; the worker
-  -- inserts with an explicit org_id, as here.
+  -- Service-role-only the same way; the retired worker's outcome log.
   insert into public.org_domain_worker_events (org_id, domain, event)
     values (_org, _tag || '.domains.example.test', 'detached');
 end;

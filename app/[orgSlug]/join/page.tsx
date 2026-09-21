@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { siteConfig } from "@/lib/config";
 import { isValidOrgSlug, resolveRequestOrgId } from "@/lib/org";
 import { getOptionalUser } from "@/lib/supabase/current-user";
-import { assertPathOrgMatchesHost, createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import { JoinForm } from "@/app/join/JoinForm";
 import { JoinUnavailable } from "@/app/join/JoinUnavailable";
 
@@ -20,12 +20,10 @@ export async function generateMetadata({
     // (app/[orgSlug]/layout.tsx), so this renders as "Request Access | <org
     // name>" rather than the platform's generic name.
     title: "Request Access",
-    // /[orgSlug]/join stays reachable, but the canonical URL is
-    // the org's platform subdomain (custom domains will follow
-    // once orgBaseUrl() exists). Skip the tag entirely for a malformed
-    // slug — it would never be a valid canonical target anyway.
+    // Skip the tag entirely for a malformed slug — it would never be a
+    // valid canonical target anyway.
     alternates: isValidOrgSlug(orgSlug)
-      ? { canonical: `https://${orgSlug}.${siteConfig.platformApex}/join` }
+      ? { canonical: `${siteConfig.url}/${orgSlug}/join` }
       : undefined,
   };
 }
@@ -50,12 +48,7 @@ export default async function OrgJoinPage({ params }: PageProps) {
     return <JoinUnavailable />;
   }
 
-  // Host-first precedence: if the host itself already named
-  // a *different* org, this path slug never gets served — notFound() throws.
-  // Unset host resolution (platform host, trusted fallback) is a no-op.
-  await assertPathOrgMatchesHost(orgSlug);
-
-  // The URL slug — not the host/env slug — is the org this request is about.
+  // The URL slug — not the env slug — is the org this request is about.
   // app_request_org_id() validates it against a real organizations row and
   // returns NULL otherwise, which is the fail-closed path below. It grants
   // nothing: the header only ever selects among orgs' already-public content.

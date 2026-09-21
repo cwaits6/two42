@@ -1,13 +1,9 @@
-// Unit test for the approve route's rollback-on-send-failure path (added
-// alongside this PR's orgBaseUrl()/resolveEmailBranding() wiring — see
-// error-handling review Finding 1). Mirrors
+// Unit test for the approve route's rollback-on-send-failure path. Mirrors
 // /api/platform/organizations/[id]/invite-owner's rollback: on a
 // sendInviteEmail failure, the access_requests row must go back to
 // `pending` with the token nulled out so a retry doesn't 404, rather than
 // leaving the row silently `approved` with an unsent token. Mocks
-// createClient, sendInviteEmail, orgBaseUrl, and resolveEmailBranding
-// directly — same mock-the-collaborator shape as the other route tests in
-// this PR.
+// createClient, sendInviteEmail, and resolveEmailBranding directly.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -19,11 +15,6 @@ vi.mock("@/lib/supabase/server", () => ({
 const sendInviteEmail = vi.fn();
 vi.mock("@/lib/email/resend", () => ({
   sendInviteEmail: (...args: unknown[]) => sendInviteEmail(...args),
-}));
-
-const orgBaseUrl = vi.fn();
-vi.mock("@/lib/org-urls", () => ({
-  orgBaseUrl: (...args: unknown[]) => orgBaseUrl(...args),
 }));
 
 const resolveEmailBranding = vi.fn();
@@ -97,7 +88,6 @@ function approveRequest(email = "invitee@example.com", name = "Invitee") {
 beforeEach(() => {
   createClient.mockReset();
   sendInviteEmail.mockReset();
-  orgBaseUrl.mockReset().mockResolvedValue("https://grace.church");
   resolveEmailBranding.mockReset().mockResolvedValue({
     orgName: "Grace Fellowship",
     fromAddress: "noreply@grace.church",
@@ -118,7 +108,6 @@ describe("POST /api/admin/approve", () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ success: true });
-    expect(orgBaseUrl).toHaveBeenCalledWith("org-1");
     expect(resolveEmailBranding).toHaveBeenCalledWith("org-1");
   });
 

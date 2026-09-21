@@ -25,7 +25,6 @@ import {
   type EmailBranding,
 } from "../_shared/branding.ts";
 import { escapeHtml } from "../_shared/html.ts";
-import { computeOrgOrigin } from "../_shared/org-urls.ts";
 import { nextSunday, upcomingSundays } from "../_shared/sundays.ts";
 import { resolveServiceKey } from "../_shared/service-key.ts";
 import { reserveEmailQuota } from "../_shared/quota.ts";
@@ -42,11 +41,9 @@ import {
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SECRET_KEY = resolveServiceKey();
-const SITE_URL = Deno.env.get("SITE_URL") || "https://incouragers.org";
-// The platform apex for per-org link origins (<slug>.<apex>) — the
-// non-prefixed twin of NEXT_PUBLIC_PLATFORM_APEX, same fallback. SITE_URL
-// above is only the last-resort origin behind it; see _shared/org-urls.ts.
-const PLATFORM_APEX = Deno.env.get("PLATFORM_APEX") || "two42.io";
+// The app's one canonical host — the origin of every link in this mail. The
+// non-prefixed twin of NEXT_PUBLIC_SITE_URL (Deno cannot read Next's env).
+const SITE_URL = Deno.env.get("SITE_URL") || "https://two42.io";
 const EMAIL_FROM = Deno.env.get("EMAIL_FROM") || "two42 <noreply@two42.io>";
 const APP_NAME = Deno.env.get("APP_NAME") || "two42";
 const BRAND_COLOR = Deno.env.get("BRAND_COLOR") || "#B85C38";
@@ -601,13 +598,9 @@ Deno.serve(async (req) => {
           org.slug,
           org.org_email_domains[0] ?? null,
         );
-        // Every link in this org's mail points at the org's own host — the
-        // org_domains embed rode along on the listActiveOrgs() row, so this
-        // is a pure computation, not a query.
-        const baseUrl = computeOrgOrigin(org.slug, org.org_domains, PLATFORM_APEX, SITE_URL);
         return mode === "monthly"
-          ? await runMonthly(supabase, org.id, canSign, branding, baseUrl)
-          : await runDaily(supabase, org.id, canSign, branding, baseUrl);
+          ? await runMonthly(supabase, org.id, canSign, branding, SITE_URL)
+          : await runDaily(supabase, org.id, canSign, branding, SITE_URL);
       }),
     );
 

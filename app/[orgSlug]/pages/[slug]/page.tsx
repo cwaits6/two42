@@ -2,7 +2,6 @@ import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { siteConfig } from "@/lib/config";
 import { isValidOrgSlug } from "@/lib/org";
-import { assertPathOrgMatchesHost } from "@/lib/supabase/server";
 import { PageRenderer } from "./PageRenderer";
 
 interface Props {
@@ -18,12 +17,6 @@ export async function generateMetadata({ params }: Props) {
   if (!isValidOrgSlug(orgSlug)) {
     return { title: "Page Not Found" };
   }
-
-  // Same host-first precedence as the page body below: without this, a
-  // request whose host already names a different org could still pull this
-  // org's page title into the response metadata before the body's own guard
-  // ever runs.
-  await assertPathOrgMatchesHost(orgSlug);
 
   const supabase = await createClient(orgSlug);
   const { data } = await supabase
@@ -44,11 +37,7 @@ export default async function PublicPage({ params }: Props) {
     notFound();
   }
 
-  // Host-first precedence: if the host itself already named a *different*
-  // org, this path slug never gets served.
-  await assertPathOrgMatchesHost(orgSlug);
-
-  // The URL slug — not the host/env slug — is the org this request is
+  // The URL slug — not the env slug — is the org this request is
   // about, same as app/[orgSlug]/join/page.tsx.
   const supabase = await createClient(orgSlug);
   const { data: page } = await supabase

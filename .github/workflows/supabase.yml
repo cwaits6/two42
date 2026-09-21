@@ -123,8 +123,7 @@ jobs:
       - name: Type-check edge function entry points
         run: |
           deno check --frozen supabase/functions/send-event-reminders/index.ts \
-                              supabase/functions/send-serving-reminders/index.ts \
-                              supabase/functions/attach-org-domains/index.ts
+                              supabase/functions/send-serving-reminders/index.ts
 
   migrate:
     name: Push migrations & dump schema
@@ -160,7 +159,7 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Deploy edge functions
-        run: supabase functions deploy send-event-reminders send-serving-reminders attach-org-domains
+        run: supabase functions deploy send-event-reminders send-serving-reminders
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 

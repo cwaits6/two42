@@ -1,8 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { sendFamilyInviteEmail } from "@/lib/email/resend";
 import { resolveEmailBranding } from "@/lib/email/identity";
-import { orgBaseUrl } from "@/lib/org-urls";
 import { NextResponse } from "next/server";
+import { siteConfig } from "@/lib/config";
 
 /**
  * POST /api/family-invites
@@ -137,10 +137,10 @@ export async function POST(request: Request) {
     );
   }
 
-  // Build the join link on the org's own host. org_id comes from the invite
-  // row just inserted under RLS (the caller's org), so the link — and the
-  // branding below — follow the recipient's org, not the platform URL.
-  const joinLink = `${await orgBaseUrl(invite.org_id)}/join/family/${invite.token}`;
+  // org_id comes from the invite row just inserted under RLS (the caller's
+  // org), so the branding below follows the recipient's org. The link needs
+  // no org: /join/family/[token] resolves it from the invite token's row.
+  const joinLink = `${siteConfig.url}/join/family/${invite.token}`;
 
   // Build the inviter's display name
   const inviterName =

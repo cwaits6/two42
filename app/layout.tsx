@@ -57,10 +57,7 @@ export default async function RootLayout({
   // CSP allows inline scripts only with the per-request nonce
   const requestHeaders = await headers();
   const nonce = requestHeaders.get("x-nonce") ?? undefined;
-  // Host-resolved org for client components via
-  // OrgSlugProvider — same precedence as lib/supabase/server.ts.
-  const orgSlug =
-    requestHeaders.get("x-two42-resolved-org") ?? resolveOrgSlug();
+  let orgSlug = resolveOrgSlug();
   const hasAuthCookie = cookieStore.getAll().some((c) => c.name.includes("auth-token"));
 
   let profile = null;
@@ -86,24 +83,43 @@ export default async function RootLayout({
       if (groupError) console.error("Layout: failed to load profile groups:", groupError);
       profile = data;
 
-      if (profile?.role === "admin") {
-        hasServingAccess = true;
-      } else if (groupData?.length) {
+      const loadServingAccess = async () => {
+        if (data?.role === "admin") return true;
+        if (!groupData?.length) return false;
         const { count } = await supabase
           .from("serving_team_settings")
           .select("group_id", { count: "exact", head: true })
           .eq("enabled", true)
           .in("group_id", groupData.map((g) => g.group_id as string));
-        hasServingAccess = (count ?? 0) > 0;
-      }
+        return (count ?? 0) > 0;
+      };
+      // The sidebar builds /<slug>/pages/** links to the member's own org,
+      // which the env pin only names for the pinned org's members. A failed
+      // lookup keeps the pin: those links still render the member's pages,
+      // because an authenticated principal's org overrides the path slug.
+      const loadMemberOrgSlug = async (orgId: string) => {
+        const { data: org, error: orgError } = await supabase
+          .from("organizations")
+          .select("slug")
+          .eq("id", orgId)
+          .maybeSingle();
+        if (orgError) console.error("Layout: failed to load org slug:", orgError);
+        return org?.slug;
+      };
+      const [servingAccess, memberOrgSlug] = await Promise.all([
+        loadServingAccess(),
+        data ? loadMemberOrgSlug(data.org_id) : undefined,
+      ]);
+      hasServingAccess = servingAccess;
+      if (memberOrgSlug) orgSlug = memberOrgSlug;
     }
   }
 
   // Free on every path: generateMetadata() above already awaited this, and
   // cache() memoizes it for the request. Anonymous requests never resolve an
-  // org here — that would leak whichever org the host maps to — so this
-  // renders the platform default unless the request is authenticated
-  // (lib/branding.ts). Org-scoped routes apply their own org's branding in
+  // org here — the root layout's routes carry no org identifier, and the
+  // env pin would brand them as one tenant — so this renders the platform
+  // default unless the request is authenticated (lib/branding.ts). Org-scoped routes apply their own org's branding in
   // app/[orgSlug]/layout.tsx.
   const b = await getRequestBranding();
 

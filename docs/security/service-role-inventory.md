@@ -88,8 +88,8 @@ default-org UUID constant is deleted from `lib/org.ts`.
 
 `app_request_org_id()` is the anchor for the one anonymous entry point that
 still resolves its org through it: the join form at `app/[orgSlug]/join`,
-which passes the URL slug as an explicit override rather than relying on the
-host-resolved header. It returns a signed-in caller's own org and ignores
+which passes the URL slug as an explicit override of the env-pinned slug.
+It returns a signed-in caller's own org and ignores
 `x-two42-org`; only a genuinely anonymous request resolves the slug, and only
 to a real `organizations` row. It is the same value the `access_requests` RLS
 `WITH CHECK` evaluates, so the two cannot drift. The page fails closed on
@@ -107,11 +107,8 @@ The plain `/join` route is retired; every link into the join flow targets
 calls `resolveRequestOrgId()` at all — like the `signup_token` lookup below,
 its `family_invites` row is looked up by token alone and is itself the org
 anchor, so an invite for org A resolves the correct org regardless of what
-host or path served the request. The generated join link is anchored the
-same way: it points at `orgBaseUrl(invite.org_id)` rather than a path
-relative to whatever host served the invite page, so opening an org A
-invite from a different host still lands on org A's own join page instead
-of failing the destination's host/path check.
+path served the request. The generated join link names that org as a path
+segment (`/<org slug>/join`), so it lands on org A's own join page.
 
 One lookup is deliberately unscoped: the initial `signup_token` read in
 `app/api/auth/consume-token/route.ts` and `app/api/auth/verify-token/route.ts`,
@@ -241,7 +238,7 @@ argument, not for where that value came from. The compensating controls are
 the `service_role`-only grant, the grant-matrix and behaviour assertions in
 `supabase/tests/org_email_domains_suite.sql`, and the route's unit suite.
 
-## App routes and pages (28 sites)
+## App routes and pages (23 sites)
 
 | File | Why service-role is used | Org derived from | Scoped queries |
 |------|--------------------------|------------------|----------------|
@@ -268,13 +265,8 @@ the `service_role`-only grant, the grant-matrix and behaviour assertions in
 | `app/api/admin/email-domain/verify/route.ts` | POST handler: the `status`/`verified_at`/`last_checked_at` transition must not be writable by the admin's own client (same column grants as above) | The caller's own RLS-scoped `profiles.org_id`, read on the request client; target row fetched `.eq("org_id", orgId)` before any write | `org_email_domains` select `.eq("org_id", orgId)` + update on `(id, org_id)` |
 | `app/api/platform/organizations/[id]/email-cap/route.ts` | Daily email cap override (CWA-72): `org_email_limits` is platform-operator-owned with no permissive policy, so only a service-role write can reach it — an org that can raise its own cap does not have a cap | Platform-admin authority; org id from the route param, validated against an existing `organizations` row before the write | `organizations` `.eq("id", id)` (existence check); `org_email_limits` upsert carrying the validated `org_id`, zero-row-checked |
 | `app/api/platform/organizations/[id]/email-domain-cleanup/route.ts` | Platform-admin retry of a stuck Resend domain removal: the org's `org_email_domains` row is scoped to that org's own admins, so a platform operator finishing the cleanup from `/platform` needs the service client for both the read and the delete; the row's `cleanup_failed_at` is a server-set-only column besides | Platform-admin authority; org id from the route param, validated against an existing `organizations` row before any `org_email_domains` access | `organizations` `.eq("id", id)` (existence check); `org_email_domains` select `.eq("org_id", org.id)` (must be `cleanup_pending` with a `resend_domain_id`), update on `(id, org_id)` on a failed retry, delete on `(id, org_id)` zero-row-checked after Resend confirms removal |
-| `app/api/admin/domains/[id]/verify/route.ts` | POST handler: the DNS TXT ownership check flips `status` to `verified` and stamps `verified_at` / `last_checked_at` — server-set-only columns the admin's own client has no UPDATE grant on (decision D2). The per-org verify throttle is a count on the same table. Never touches the attachment columns: `attached_at` is written only by the `attach-org-domains` edge function | The caller's own RLS-scoped `profiles.org_id`, read on the request client; the throttle count is `.eq("org_id", orgId)` and the target row is fetched `.eq("id", id).eq("org_id", orgId)` before any write | `org_domains` count `.eq("org_id", orgId)`; select + both updates (`last_checked_at` stamp on a mismatch, `status`/`verified_at`/`last_checked_at` on a match) on `(id, org_id)`. A `23505` on the match update is the global verified/removing partial unique — reported as "being released, retry shortly", never as a DNS failure |
-| `app/api/admin/domains/[id]/route.ts` | DELETE handler: an attached row cannot be deleted by the admin's own client (the restrictive delete policy confines the DELETE grant to `attached_at IS NULL`), so the route flips it to `removing` — the only transition that keeps `attached_at` — and clears the attachment lease for the worker to detach first. The unattached branch deletes on the **request client** (RLS + grant are the boundary there); the service client is used only for the pre-write read and the `removing` transition | Same as the verify route: the caller's own `profiles.org_id`, target fetched on `(id, org_id)` before any write | `org_domains` select on `(id, org_id)`; update to `removing` on `(id, org_id, status = 'verified', attached_at IS NOT NULL)`, row-count-checked; the unattached delete runs on the request client with `{ count: "exact" }` and is likewise row-count-checked |
-| `app/platform/domains/page.tsx` | Cross-tenant attachment status for every claimed custom domain — the operator's observability surface for the `attach-org-domains` worker (awaiting-attach rows and their lease state, `removing` tombstones awaiting detach) — and the worker's unacknowledged `org_domain_worker_events` (permanent Vercel refusals, completed detaches awaiting allowlist removal) | Platform-admin authority: `getPlatformAdmin()` via the cookie-bound request client; cross-org by design (both reads `// org-anchor:` marked). Each `organizations(name, slug)` embed is an FK traversal from the listed row to the tenant root | `org_domains` (deliberately unfiltered list, read-only); `org_domain_worker_events` `.is("acknowledged_at", null)` (deliberately unfiltered by org, read-only) |
-| `app/api/platform/domains/[id]/retry/route.ts` | Manual retry for a stuck attachment: clears an **expired** lease (`attach_claimed_at` older than the worker's window) on a verified, unattached row so the worker re-claims it on its next run. Never writes `attached_at` — the worker is that column's sole writer — and never clears a live lease | Platform-admin authority; the row id from the route param resolves the row's own `org_id` via an `// org-anchor:` marked read (the platform admin holds no org of their own), and the write carries that resolved `org_id` | `org_domains` select `.eq("id", id)` (the anchor read); update `.eq("id", …).eq("org_id", row.org_id).eq("status", "verified").is("attached_at", null).lt("attach_claimed_at", cutoff)`, row-count-checked (zero rows is the normal "nothing to retry" answer) |
-| `app/api/platform/domain-events/[id]/acknowledge/route.ts` | Stamps `acknowledged_at` on one `org_domain_worker_events` row — takes it off the `/platform/domains` list and, for an `attach_permanent_failure`, lets the worker retry the domain (its skip check reads `acknowledged_at IS NULL` on the same `(org_id, domain)`). The table is service-role-only (restrictive-only policy, no grants), so no request client can reach it | Platform-admin authority; the event id from the route param resolves the row's own `org_id` via an `// org-anchor:` marked read, and the write carries that resolved `org_id` | `org_domain_worker_events` select `.eq("id", id)` (the anchor read); update `.eq("id", …).eq("org_id", row.org_id).is("acknowledged_at", null)`, row-count-checked (zero rows is "already acknowledged", never a re-stamp) |
 
-## Lib helpers (3 sites)
+## Lib helpers (2 sites)
 
 Unlike the rows above — inherited from Phase 2 with their mitigations still
 outstanding — this site was introduced *during* Phase 3 with its mitigation
@@ -283,8 +275,7 @@ column below describes what a regression would cost, not a pending work item.
 
 | File | Why service-role is used | Tenancy risk | Mitigation |
 |------|--------------------------|--------------|------------|
-| `lib/email/identity.ts` | `resolveEmailBranding(orgId)` — `orgId` is **required** (Phase 5 PR 5 / CWA-69) — reads `organizations.branding` plus the `slug` and an `org_domains(domain, status, attached_at)` embed on the same row (the per-org link origin, `EmailBranding.baseUrl`, rides along with no extra query) for callers that hold an explicit org id but no request-scoped session (e.g. `lib/serving/server.ts`, invoked from HMAC-signed link flows), and a second, org-scoped read of `org_email_domains` (Phase 5 PR 7 / CWA-71) to resolve the per-org `From:` address. The genuinely request-scoped case is the separately named `resolveRequestEmailBranding()`: it resolves the org id via `resolveRequestOrgId()` on the cookie-bound request client, then runs the same service-role `org_email_domains` read and `orgBaseUrl()` for it — it has no live caller today and exists so that path must be typed out, never reached by omitting an argument | A missing filter on either table would leak another org's branding, sending domain, or link host into an email | The `organizations` read's `.eq("id", orgId)` and the `org_email_domains` read's `.eq("org_id", orgId)` are the only tenant boundaries, both mandatory; `orgId` is always either the caller's already-authorized id or the value `resolveRequestOrgId()` resolves for the current request — never a header, never a body field. `SENDING_DOMAIN` additionally gates the stored domain value itself (with `status = 'verified'`) before it can reach a `From:` header, and `ORG_DOMAIN_SHAPE` (in `lib/org-urls.ts`) gates the embedded `org_domains.domain` before it can reach a link — see CLAUDE.md's injection-boundary list. Branding on the request-scoped path still comes from the request-scoped client, so RLS applies — but that resolves to the *request* org, which on a custom domain can differ from the row's org, so any caller holding an authorized `org_id` must pass it. |
-| `lib/org-urls.ts` | `orgBaseUrl(orgId)` reads `organizations.slug` plus the `org_domains(domain, status, attached_at)` embed to resolve the org's canonical origin for every emailed link (Phase 5 PR 5 / CWA-69) — the same access pattern `resolveEmailBranding()` established — for callers that hold an explicit org id: `app/api/admin/approve` (the `access_requests` row's `org_id`), `app/api/admin/invite-bulk` (the caller's RLS-scoped profile), `app/api/family-invites` (the inserted `family_invites` row), `app/api/platform/organizations/[id]/invite-owner` (the platform-admin-gated route param), `app/api/serving/broadcast` (the RLS-checked group row), and `lib/serving/server.ts` (the already-authorized `opts.orgId`) | A missing filter would leak another org's custom-domain host into an emailed link — a member would be sent to a different tenant's site | The `.eq("id", orgId)` filter is the only tenant boundary; `orgId` is always the caller's already-authorized id, never a header or body field. The custom domain is used only when its row is `verified` **and** `attached_at` is set (ownership plus routing), and `ORG_DOMAIN_SHAPE` re-validates the stored value at use time before it can reach a link — see CLAUDE.md's injection-boundary list. Fail-soft: any error or missing row degrades to `siteConfig.url`, never throws. |
+| `lib/email/identity.ts` | `resolveEmailBranding(orgId)` — `orgId` is **required** — reads `organizations.branding` for callers that hold an explicit org id but no request-scoped session (e.g. `lib/serving/server.ts`, invoked from HMAC-signed link flows), and a second, org-scoped read of `org_email_domains` to resolve the per-org `From:` address. The link origin (`EmailBranding.baseUrl`) is the app's one canonical host, `siteConfig.url`, and needs no read. The genuinely request-scoped case is the separately named `resolveRequestEmailBranding()`: it resolves the org id via `resolveRequestOrgId()` on the cookie-bound request client, then runs the same service-role `org_email_domains` read for it — it has no live caller today and exists so that path must be typed out, never reached by omitting an argument | A missing filter on either table would leak another org's branding or sending domain into an email | The `organizations` read's `.eq("id", orgId)` and the `org_email_domains` read's `.eq("org_id", orgId)` are the only tenant boundaries, both mandatory; `orgId` is always either the caller's already-authorized id or the value `resolveRequestOrgId()` resolves for the current request — never a header, never a body field. `SENDING_DOMAIN` additionally gates the stored domain value itself (with `status = 'verified'`) before it can reach a `From:` header — see CLAUDE.md's injection-boundary list. Branding on the request-scoped path still comes from the request-scoped client, so RLS applies — but that resolves to the *request* org, which can differ from the row's org, so any caller holding an authorized `org_id` must pass it. |
 | `lib/email/quota.ts` | `reserveEmailQuota(orgId, n)` calls `email_quota_consume()` — a `service_role`-only RPC (see the "Email quota RPC" section above), so the service client is the only client that can execute it | The `.rpc()` call is invisible to the guard (it walks `.from()` chains only), so a refactor could silently pass an unvalidated org id | `orgId` must come from an anchor the caller already validated — the caller's RLS-scoped profile (`app/api/feedback`), the RLS-checked group row (`app/api/serving/broadcast`), or the already-authorized `opts.orgId` both `notifyLeadersOfCancel` callers hold — never a header or body field. Fail-closed: any RPC error or throw is a refusal, never "send anyway" |
 
 `lib/branding.ts` is deliberately **not** a service-role site: `getOrgBranding()`
@@ -295,17 +286,18 @@ carry `.eq("id", orgId)`. `getOrgBranding()` takes an optional `orgSlug`,
 threaded into `createClient(orgSlug)` as the `x-two42-org` header for the
 public `/[orgSlug]/**` routes; `getRequestBranding()` is the root layout's
 wrapper around it, gating on an authenticated session before ever calling
-`getOrgBranding()` so an anonymous request never resolves a host-based org.
+`getOrgBranding()` so an anonymous request never resolves an org it did not
+name in its path.
 
-## Edge Functions (3 sites)
+## Edge Functions (2 sites)
 
-All three run with no session context and resolve the service key
+Both run with no session context and resolve the service key
 from configured environment variables: a manual `SUPABASE_SECRET_KEY` override
 (local/self-host only — the hosted platform reserves the prefix), then the
 platform-injected `SUPABASE_SECRET_KEYS` map, then the legacy
 `SUPABASE_SERVICE_ROLE_KEY` (see `resolveServiceKey()` in
-`supabase/functions/_shared/service-key.ts`, shared by all three), not
-`createServiceClient()`. All three are cron-triggered.
+`supabase/functions/_shared/service-key.ts`, shared by both), not
+`createServiceClient()`. Both are cron-triggered.
 
 Tenant iteration is `listActiveOrgs()` + `forEachOrg()`
 (`supabase/functions/_shared/orgs.ts`). `listActiveOrgs()` filters
@@ -334,49 +326,10 @@ query in the loop uses. `.rpc()` calls are outside
 outside its scan set entirely, so these calls are covered by review and by
 `deno test` (`supabase/functions/tests/quota_test.ts`) only.
 
-**`attach-org-domains` (the custom-domain attachment worker) is the third
-entry point and the only component in the system holding a second secret
-beyond the service key: `VERCEL_API_TOKEN`, a function secret
-(`supabase secrets set`), never a Next.js env var (decision D3 in
-`docs/plans/phase-5-domains-email.md`: the app can only ever prove DNS
-ownership; attaching a name to the Vercel project is a deployment-control
-action and lives here). It iterates tenants with the same
-`listActiveOrgs()` + `forEachOrg()` and, per org, runs the attach and detach
-loops in `supabase/functions/_shared/domain-attach.ts` over the lease client
-in `supabase/functions/_shared/domain-lease.ts`. Every `org_domains` chain
-there carries an explicit `.eq("org_id", org.id)` — the two listings, both
-lease claims, the fenced `attached_at` stamp, the compensation re-read, and
-the tombstone hard-delete — and every write's success is judged by an
-affected-row signal (a `RETURNING` row via `maybeSingle()`, or
-`{ count: "exact" }`), never by the absence of an error. The worker is the
-**sole writer of `attached_at`**, and only from a Vercel-confirmed state;
-the `/platform` retry route clears an expired lease and nothing else. The
-predicates are pinned two ways: `supabase/functions/tests/domain_lease_test.ts`
-records the exact chain each method issues (including the `org_id`
-predicate), and `supabase/tests/org_domains_suite.sql` runs the same SQL
-against a real table asserting row counts. Neither
-`check-service-role-org-scope.mjs` (which never scans `supabase/functions/`)
-nor `schema_tenancy_lint.sql` (which never sees TypeScript) can catch a
-dropped filter here — review every `.from(` in `_shared/domain-lease.ts`
-and `_shared/domain-events.ts` when it changes. The worker also writes
-`org_domain_worker_events` through `_shared/domain-events.ts`: an
-`attach_permanent_failure` on a Vercel 409/403/402 and a `detached` after a
-tombstone hard-delete that affected exactly one row, each insert carrying
-the same already-enumerated `org.id`, and the per-row skip check (an
-unacknowledged permanent failure parks the domain) reads
-`.eq("org_id", org.id)` — pinned by `tests/domain_events_test.ts`
-(predicates), `tests/domain_attach_test.ts` (when each write happens) and
-`supabase/tests/domain_worker_events_suite.sql` (the table's
-service-role-only lockdown). pg_cron runs it every 10 minutes (the lease
-window) via `20260911000000_attach_org_domains_schedule_and_events.sql`.
-Operational details and the secrets it needs: [`domains.md`](domains.md).
-
-
 | File | Why service-role is used | Historical tenancy risk | Mitigation |
 |------|--------------------------|-------------------------|------------|
-| `supabase/functions/send-event-reminders/index.ts` | Cron job; reads events/RSVPs and emails attendees with no user session | Reminder fan-out iterates all rows across orgs | **Implemented (Phase 3, #212):** iterates active orgs via `_shared/orgs.ts`, every query filtered on `org_id`, per-org failures isolated so one org cannot suppress another's send. **Branding (CWA-56, #322):** `organizations.branding` rides along on the already-org-anchored `listActiveOrgs()` select — no new service-role call site, no new unscoped query — and is validated by `_shared/branding.ts` (a mirror of `lib/branding.ts` + `lib/email/identity.ts`) before reaching any CSS or RFC 5322 sink. **Link origin (CWA-69):** the `org_domains(domain, status, attached_at)` embed rides along on the same select and `_shared/org-urls.ts` (a mirror of `lib/org-urls.ts`) turns it into the per-org host every link is built from — again no new query and no new service-role site |
-| `supabase/functions/send-serving-reminders/index.ts` | Cron job; reads serving signups and emails assignees with no user session | Same as `send-event-reminders` | **Implemented (Phase 3, #212):** same per-org iteration and `org_id` filters; `resolveCanSign` org-scoped; `serving_broadcasts` audit rows stamped with the processed row's org, not a constant. **Branding (CWA-56, #322):** same `listActiveOrgs()` ride-along, validated by `_shared/branding.ts`. **Link origin (CWA-69):** same `org_domains` ride-along, resolved once per org by `_shared/org-urls.ts` and threaded into every cancel/signup/team-page link. **Per-team isolation (CWA-50, #316):** a failing team is recorded in the run summary's `failedItems[]` keyed by `group_id` — ids, never org-defined team names, in operator diagnostics |
-| `supabase/functions/attach-org-domains/index.ts` | The custom-domain attachment worker (cron, every 10 minutes): attaches verified `org_domains` rows to the Vercel project and stamps `attached_at`; detaches `removing` tombstones and hard-deletes them; records permanent Vercel refusals and completed detaches in `org_domain_worker_events`. Holds `VERCEL_API_TOKEN` as a function secret in addition to the service key; no user session | A dropped `org_id` predicate would let one org's lease claim, stamp, or tombstone delete land on another org's row — and a wrong stamp flips an org's canonical origin to a host Vercel does not route; a dropped `org_id` on an event insert or on the skip check would park or expose another org's domain | Every `org_domains` chain in `_shared/domain-lease.ts` is `.eq("org_id", …)`-scoped and row-count-checked; the `attached_at` stamp is additionally fenced on the claim token, a live lease, the claimed domain, `status = 'verified'` and `attached_at IS NULL`; the apex denylist (`_shared/domain-denylist.ts`) refuses the platform apex and its subdomains before any lease is taken; every `org_domain_worker_events` insert in `_shared/domain-events.ts` names `org_id` and the skip-check read is `.eq("org_id", …)`-scoped; predicates pinned by `tests/domain_lease_test.ts`, `tests/domain_events_test.ts`, `supabase/tests/org_domains_suite.sql` and `supabase/tests/domain_worker_events_suite.sql`; orchestration pinned by `tests/domain_attach_test.ts` against fake Vercel/lease/events clients (the Vercel token does not exist yet, so nothing here has run end to end) |
+| `supabase/functions/send-event-reminders/index.ts` | Cron job; reads events/RSVPs and emails attendees with no user session | Reminder fan-out iterates all rows across orgs | **Implemented (Phase 3, #212):** iterates active orgs via `_shared/orgs.ts`, every query filtered on `org_id`, per-org failures isolated so one org cannot suppress another's send. **Branding (CWA-56, #322):** `organizations.branding` rides along on the already-org-anchored `listActiveOrgs()` select — no new service-role call site, no new unscoped query — and is validated by `_shared/branding.ts` (a mirror of `lib/branding.ts` + `lib/email/identity.ts`) before reaching any CSS or RFC 5322 sink. **Link origin:** every link is built on the one canonical host (the `SITE_URL` function secret) — no query |
+| `supabase/functions/send-serving-reminders/index.ts` | Cron job; reads serving signups and emails assignees with no user session | Same as `send-event-reminders` | **Implemented (Phase 3, #212):** same per-org iteration and `org_id` filters; `resolveCanSign` org-scoped; `serving_broadcasts` audit rows stamped with the processed row's org, not a constant. **Branding (CWA-56, #322):** same `listActiveOrgs()` ride-along, validated by `_shared/branding.ts`. **Link origin:** the same canonical `SITE_URL`, threaded into every cancel/signup/team-page link. **Per-team isolation (CWA-50, #316):** a failing team is recorded in the run summary's `failedItems[]` keyed by `group_id` — ids, never org-defined team names, in operator diagnostics |
 
 ## Operator scripts (1 site)
 

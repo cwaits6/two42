@@ -105,16 +105,9 @@ describe("parseAddress", () => {
 
 const ORG_ID = "11111111-2222-3333-4444-555555555555";
 
-interface OrgDomainFixture {
-  domain: string;
-  status: string;
-  attached_at: string | null;
-}
-
 interface ServiceStub {
-  // The organizations row as resolveEmailBranding (and orgBaseUrl) select it:
-  // branding plus the slug / org_domains embed the link origin rides on.
-  org?: { branding: unknown; slug?: string; org_domains?: OrgDomainFixture[] } | null;
+  // The organizations row as resolveEmailBranding selects it.
+  org?: { branding: unknown } | null;
   orgError?: { message: string } | null;
   domainRow?: { domain: string; status: string } | null;
   domainError?: { message: string } | null;
@@ -178,21 +171,15 @@ beforeEach(() => {
 describe("resolveEmailBranding", () => {
   it("uses noreply@<domain> for a verified row with a valid domain", async () => {
     const { filters } = stubServiceClient({
-      org: {
-        branding: { display_name: "Grace Fellowship" },
-        slug: "grace",
-        org_domains: [
-          { domain: "grace.church", status: "verified", attached_at: "2026-09-01T00:00:00Z" },
-        ],
-      },
+      org: { branding: { display_name: "Grace Fellowship" } },
       domainRow: { domain: "grace.church", status: "verified" },
     });
     const b = await resolveEmailBranding(ORG_ID);
     expect(b.fromAddress).toBe("noreply@grace.church");
     expect(b.orgName).toBe("Grace Fellowship");
-    // The link origin rides along on the same organizations read — the
-    // branching itself is lib/org-urls.test.ts's job; this pins the wiring.
-    expect(b.baseUrl).toBe("https://grace.church");
+    // A verified sending domain changes the From: address only — links stay
+    // on the app's one canonical origin.
+    expect(b.baseUrl).toBe(siteConfig.url);
     // Both reads carry their tenant filter — the only boundary on a
     // service-role client.
     expect(filters).toContainEqual({ table: "organizations", column: "id", value: ORG_ID });
@@ -277,46 +264,24 @@ describe("resolveEmailBranding", () => {
     expect(b.fromAddress).toBe(PLATFORM_ADDRESS);
     expect(b.baseUrl).toBe(siteConfig.url);
   });
-
-  it("uses the org subdomain as baseUrl when no custom domain is attached", async () => {
-    stubServiceClient({
-      org: {
-        branding: {},
-        slug: "grace",
-        // verified but unattached: ownership proven, host not routing yet.
-        org_domains: [{ domain: "grace.church", status: "verified", attached_at: null }],
-      },
-    });
-    const b = await resolveEmailBranding(ORG_ID);
-    expect(b.baseUrl).toBe(`https://grace.${siteConfig.platformApex}`);
-  });
 });
 
 describe("resolveRequestEmailBranding", () => {
   it("reaches the same gate once the request org resolves", async () => {
     stubRequestClient({ branding: { display_name: "Request Org" }, rpcOrgId: ORG_ID });
     const { filters } = stubServiceClient({
-      org: {
-        branding: {},
-        slug: "grace",
-        org_domains: [
-          { domain: "grace.church", status: "verified", attached_at: "2026-09-01T00:00:00Z" },
-        ],
-      },
       domainRow: { domain: "grace.church", status: "verified" },
     });
     const b = await resolveRequestEmailBranding();
     expect(b.fromAddress).toBe("noreply@grace.church");
     expect(b.orgName).toBe("Request Org");
-    // The link origin comes from orgBaseUrl() for the same resolved org.
-    expect(b.baseUrl).toBe("https://grace.church");
-    // Both service-role reads carry the resolved org as their tenant filter.
+    expect(b.baseUrl).toBe(siteConfig.url);
+    // The service-role read carries the resolved org as its tenant filter.
     expect(filters).toContainEqual({
       table: "org_email_domains",
       column: "org_id",
       value: ORG_ID,
     });
-    expect(filters).toContainEqual({ table: "organizations", column: "id", value: ORG_ID });
   });
 
   it("applies the verified gate on this path too", async () => {
@@ -380,8 +345,6 @@ describe("resolveRequestEmailBranding", () => {
     });
     const b = await resolveRequestEmailBranding();
     expect(b.fromAddress).toBe(PLATFORM_ADDRESS);
-    // orgBaseUrl() is total by the same contract, so the link origin
-    // degrades to the platform URL rather than taking the branding with it.
     expect(b.baseUrl).toBe(siteConfig.url);
     expect(b.orgName).toBe("Request Org");
   });

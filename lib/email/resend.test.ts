@@ -107,7 +107,7 @@ describe("send call sites build links from the resolved branding.baseUrl", () =>
     send.mockClear();
   });
 
-  it("sendEventReminderEmail links to /events on the org's own host", async () => {
+  it("sendEventReminderEmail links to /events on branding.baseUrl", async () => {
     await sendEventReminderEmail("a@b.org", "Jane", "Potluck", "2026-09-06", null, BRANDING);
     const { html } = send.mock.calls[0][0];
     expect(html).toContain('href="https://grace.church/events"');

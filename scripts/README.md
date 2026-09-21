@@ -78,7 +78,7 @@ a service client must scope unconditionally, which is what lets the guard
 avoid call-graph analysis. A `.from()` chain there can always take an
 `orgId` from its caller, so it gets no escape hatch. An `.rpc()` call whose
 contract has no org parameter — `app_request_org_id()` in `lib/org.ts`, which
-derives the org from the principal or the validated host header — has nothing
+derives the org from the principal or the `x-two42-org` header — has nothing
 to scope on, so the marker is the only truthful mechanism for it.
 
 The edge functions run on the service key by construction, so there is no

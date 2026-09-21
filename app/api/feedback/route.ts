@@ -111,8 +111,8 @@ export async function POST(request: Request) {
         return;
       }
 
-      // Branding for the sender's own org (the RLS-scoped profile above) —
-      // never the request org, which on a custom domain could differ.
+      // Branding for the sender's own org (the RLS-scoped profile above),
+      // never the request org.
       await sendFeedbackEmail(
         emails,
         displayName(profile),

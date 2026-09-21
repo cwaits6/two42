@@ -11,7 +11,6 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { resolveOrgSlug, resolveRequestOrgId } from "@/lib/org";
 import { BRANDING_DEFAULTS, getOrgBranding, resolveBranding } from "@/lib/branding";
 import type { OrgBranding } from "@/lib/branding";
-import { computeOrgOrigin, orgBaseUrl } from "@/lib/org-urls";
 
 export type EmailBranding = {
   // Named orgName, not fromName: sendServingBroadcastEmail's own opts carry a
@@ -29,11 +28,9 @@ export type EmailBranding = {
   // PLATFORM_ADDRESS in every other case. The local part is a fixed
   // constant — never admin-choosable.
   fromAddress: string;
-  // The org's canonical origin for any link inside the email body: the
-  // verified-and-attached custom domain, else the org's wildcard subdomain,
-  // else siteConfig.url. See lib/org-urls.ts. Carried here so the generic
-  // body builders in lib/email/*.ts, which hold no orgId of their own, build
-  // links from the recipient's org host instead of the platform constant.
+  // The origin for any link inside the email body — the app's one canonical
+  // host. Carried here so the generic body builders in lib/email/*.ts stay
+  // pure functions of their arguments.
   baseUrl: string;
 };
 
@@ -146,7 +143,6 @@ async function resolveOrgFromAddress(
 function toEmailBranding(
   b: OrgBranding,
   fromAddress: string,
-  baseUrl: string,
 ): EmailBranding {
   return {
     orgName: b.display_name,
@@ -156,7 +152,7 @@ function toEmailBranding(
     // platform constant rather than inventing a color-derivation scheme.
     accentLight: siteConfig.colors.primaryLight,
     fromAddress,
-    baseUrl,
+    baseUrl: siteConfig.url,
   };
 }
 
@@ -165,8 +161,7 @@ function toEmailBranding(
  * (the row it is acting on, its own RLS-scoped profile, an HMAC-validated
  * group). Reads via the service-role client — RLS is bypassed there, so the
  * explicit .eq("id", orgId) / .eq("org_id", orgId) filters are the ONLY
- * tenant boundary. The link origin (`baseUrl`) rides along on the same
- * organizations read as an org_domains embed, costing no extra query.
+ * tenant boundary.
  *
  * `orgId` is required on purpose. A caller with no org id in scope must
  * write resolveRequestEmailBranding() by name instead — resolving the org
@@ -184,12 +179,12 @@ export async function resolveEmailBranding(orgId: string): Promise<EmailBranding
     const service = await createServiceClient();
     const { data, error } = await service
       .from("organizations")
-      .select("branding, slug, org_domains(domain, status, attached_at)")
+      .select("branding")
       .eq("id", orgId)
       .maybeSingle();
     if (error) {
       console.error("Failed to load email branding for org %s, using defaults:", orgId, error);
-      return toEmailBranding(BRANDING_DEFAULTS, PLATFORM_ADDRESS, siteConfig.url);
+      return toEmailBranding(BRANDING_DEFAULTS, PLATFORM_ADDRESS);
     }
     if (!data) {
       // Zero rows comes back as { data: null, error: null }, so it never
@@ -197,29 +192,28 @@ export async function resolveEmailBranding(orgId: string): Promise<EmailBranding
       // the orgId itself is stale or wrong-tenant — worth a signal, since the
       // defaults are indistinguishable from org #1's real branding.
       console.warn("No organizations row for org %s; using email branding defaults", orgId);
-      return toEmailBranding(BRANDING_DEFAULTS, PLATFORM_ADDRESS, siteConfig.url);
+      return toEmailBranding(BRANDING_DEFAULTS, PLATFORM_ADDRESS);
     }
     return toEmailBranding(
       resolveBranding(data.branding),
       await resolveOrgFromAddress(service, orgId),
-      computeOrgOrigin(data.slug, data.org_domains),
     );
   } catch (err) {
     console.error("Failed to load email branding, using defaults:", err);
-    return toEmailBranding(BRANDING_DEFAULTS, PLATFORM_ADDRESS, siteConfig.url);
+    return toEmailBranding(BRANDING_DEFAULTS, PLATFORM_ADDRESS);
   }
 }
 
 /**
  * Branding for the genuinely request-scoped case: no orgId is available, so
  * the org is whatever the request resolves to — branding from the
- * request-scoped getOrgBranding(), then an org id for the sending-domain and
- * link-origin reads via resolveRequestOrgId() on the cookie-bound request
+ * request-scoped getOrgBranding(), then an org id for the sending-domain
+ * read via resolveRequestOrgId() on the cookie-bound request
  * client (the same value the RLS WITH CHECK evaluates). Split out from
  * resolveEmailBranding() so reaching this path requires writing its name,
  * not merely omitting an argument: a caller that already holds an orgId must
- * never land here by accident, because on a custom domain the request org
- * and the row's org can differ.
+ * never land here by accident, because the request org and the row's org
+ * can differ.
  *
  * Every production send site currently passes an explicit, orgId-resolved
  * branding, so this has no live caller — it exists as the correct answer for
@@ -239,19 +233,18 @@ export async function resolveRequestEmailBranding(): Promise<EmailBranding> {
       orgSlug: resolveOrgSlug(),
     });
     if (!resolvedOrgId) {
-      // No org resolvable — fail closed to the platform address and URL.
+      // No org resolvable — fail closed to the platform address.
       // Unlike the public-funnel callers of resolveRequestOrgId(), "closed"
       // here means "send from PLATFORM_ADDRESS", not a blocked email.
-      return toEmailBranding(branding, PLATFORM_ADDRESS, siteConfig.url);
+      return toEmailBranding(branding, PLATFORM_ADDRESS);
     }
     const service = await createServiceClient();
-    const [fromAddress, baseUrl] = await Promise.all([
-      resolveOrgFromAddress(service, resolvedOrgId),
-      orgBaseUrl(resolvedOrgId),
-    ]);
-    return toEmailBranding(branding, fromAddress, baseUrl);
+    return toEmailBranding(
+      branding,
+      await resolveOrgFromAddress(service, resolvedOrgId),
+    );
   } catch (err) {
     console.error("Failed to load email branding, using defaults:", err);
-    return toEmailBranding(BRANDING_DEFAULTS, PLATFORM_ADDRESS, siteConfig.url);
+    return toEmailBranding(BRANDING_DEFAULTS, PLATFORM_ADDRESS);
   }
 }
