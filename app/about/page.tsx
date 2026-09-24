@@ -5,7 +5,8 @@ import { siteConfig } from "@/lib/config";
 import { displayName, initials } from "@/lib/names";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
-import { PageRenderer } from "@/app/[orgSlug]/pages/[slug]/PageRenderer";
+import { StaticBlockContent } from "@/components/editor/StaticBlockContent";
+import type { PartialBlock } from "@blocknote/core";
 import type { AboutPage, ClassTeacherWithProfile } from "@/lib/types";
 
 export const metadata = { title: `About Our Class | ${siteConfig.name}` };
@@ -35,13 +36,14 @@ export default async function AboutClassPage() {
       .order("created_at"),
   ]);
 
-  const summary = (about as AboutPage | null)?.body ?? "";
-  const hasSummary = (() => {
+  const summaryBlocks = ((): PartialBlock[] | null => {
+    const body = (about as AboutPage | null)?.body;
+    if (!body) return null;
     try {
-      const parsed = JSON.parse(summary);
-      return Array.isArray(parsed) && parsed.length > 0;
+      const parsed = JSON.parse(body);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
     } catch {
-      return false;
+      return null;
     }
   })();
   // Private buckets: exchange stored avatar URLs for signed URLs
@@ -61,8 +63,8 @@ export default async function AboutClassPage() {
         About Our Class
       </h1>
 
-      {hasSummary ? (
-        <PageRenderer body={summary} />
+      {summaryBlocks ? (
+        <StaticBlockContent blocks={summaryBlocks} />
       ) : (
         <p className="text-lg text-muted-foreground">
           The class summary hasn&apos;t been written yet.

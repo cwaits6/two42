@@ -46,10 +46,7 @@ export default async function AdminPage() {
         { href: "/admin/events/new", label: "Create event" },
         { href: "/admin/announcements/new", label: "Post announcement" },
       ]
-    : [
-        { href: "/admin/pages", label: "Edit pages" },
-        { href: "/admin/about", label: "Edit about page" },
-      ];
+    : [{ href: "/admin/about", label: "Edit about page" }];
 
   return (
     <PageContainer size="wide">

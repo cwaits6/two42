@@ -9,7 +9,6 @@ import {
   Cog,
   Megaphone,
   BookOpen,
-  FileText,
   Settings,
   Users,
   UserCircle,
@@ -19,11 +18,7 @@ import {
   Info,
 } from "lucide-react";
 import { Fragment, useState, useEffect, type ComponentType } from "react";
-import type { PageContent, Profile } from "@/lib/types";
-import { createClient } from "@/lib/supabase/client";
-import { useOrgSlug } from "@/components/providers/OrgSlugProvider";
-
-type PageLink = Pick<PageContent, "slug" | "title">;
+import type { Profile } from "@/lib/types";
 
 interface SidebarNavProps {
   profile: Profile;
@@ -87,8 +82,6 @@ export function SidebarNav({
   onNavigate,
 }: SidebarNavProps) {
   const pathname = usePathname();
-  const orgSlug = useOrgSlug();
-  const [pages, setPages] = useState<PageLink[]>([]);
   const isEditor = profile.role === "admin" || profile.role === "content_editor";
 
   // Directory sub-menu: auto-opens while browsing the section, manually collapsible
@@ -97,21 +90,6 @@ export function SidebarNav({
   useEffect(() => {
     setDirectoryOpen(inDirectory);
   }, [inDirectory]);
-
-  useEffect(() => {
-    const supabase = createClient();
-    supabase
-      .from("page_content")
-      .select("slug, title")
-      .order("title")
-      .then(({ data, error }) => {
-        if (error) {
-          console.error("Failed to load pages for navigation:", error.message);
-          return;
-        }
-        if (data) setPages(data);
-      });
-  }, [pathname]);
 
   const isActive = (href: string, exact = false) =>
     exact ? pathname === href : pathname === href || pathname.startsWith(href + "/");
@@ -228,34 +206,6 @@ export function SidebarNav({
               ))}
           </Fragment>
         ))}
-
-        {pages.length > 0 && (
-          <>
-            {!collapsed && (
-              <p className="px-3 pt-4 pb-1 text-sm font-bold uppercase text-muted-foreground tracking-wider">
-                Pages
-              </p>
-            )}
-            {collapsed && <div className="border-t border-border my-2" role="separator" />}
-            {pages.map((page) => {
-              const href = `/${orgSlug}/pages/${page.slug}`;
-              const active = isActive(href);
-              return (
-                <Link
-                  key={page.slug}
-                  href={href}
-                  className={linkClass(active)}
-                  aria-current={active ? "page" : undefined}
-                  title={collapsed ? page.title : undefined}
-                  onClick={onNavigate}
-                >
-                  <FileText className="h-5 w-5 shrink-0" aria-hidden="true" />
-                  {!collapsed && <span className="truncate">{page.title}</span>}
-                </Link>
-              );
-            })}
-          </>
-        )}
 
         {isEditor && (
           <div className="mt-2 border-t border-border pt-2">

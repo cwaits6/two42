@@ -1,6 +1,6 @@
-// content_editor may reach the admin overview plus its two content pages;
+// content_editor may reach the admin overview plus the About Page editor;
 // every other /admin/* path stays admin-only.
-export const CONTENT_EDITOR_ADMIN_PATHS = ["/admin", "/admin/pages", "/admin/about"];
+export const CONTENT_EDITOR_ADMIN_PATHS = ["/admin", "/admin/about"];
 
 export function isContentEditorAllowed(pathname: string): boolean {
   return CONTENT_EDITOR_ADMIN_PATHS.some(

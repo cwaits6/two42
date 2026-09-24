@@ -449,18 +449,9 @@ export interface SiteSetting {
   is_public: boolean;
 }
 
-export interface PageContent {
-  slug: string;
-  title: string;
-  body: string;
-  updated_by: string | null;
-  updated_at: string;
-}
-
 /**
  * Singleton row (id = true) holding the About Our Class summary. Body is
- * BlockNote JSON, same format as PageContent.body. Members-only via RLS —
- * unlike page_content, which is publicly readable.
+ * BlockNote JSON. Members-only via RLS.
  */
 export interface AboutPage {
   id: boolean;

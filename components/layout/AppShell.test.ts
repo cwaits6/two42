@@ -7,21 +7,7 @@ describe("isSidebarRoute", () => {
     (pathname) => expect(isSidebarRoute(pathname)).toBe(true),
   );
 
-  it.each(["/acme/pages/welcome", "/other-org/pages/about"])(
-    "matches the org-scoped pages route %s",
-    (pathname) => expect(isSidebarRoute(pathname)).toBe(true),
-  );
-
-  it("matches the bare org-scoped pages index", () => {
-    expect(isSidebarRoute("/acme/pages")).toBe(true);
-  });
-
-  it.each(["/admin/pages", "/admin/pages/welcome/edit", "/platform/pages"])(
-    "does not treat %s as an org slug",
-    (pathname) => expect(isSidebarRoute(pathname)).toBe(false),
-  );
-
-  it.each(["/", "/login", "/join", "/acme/join"])(
+  it.each(["/", "/login", "/join", "/acme/join", "/acme/pages/welcome"])(
     "does not match unrelated route %s",
     (pathname) => expect(isSidebarRoute(pathname)).toBe(false),
   );

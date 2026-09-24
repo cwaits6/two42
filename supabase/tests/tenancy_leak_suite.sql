@@ -94,10 +94,6 @@ begin
   insert into public.lectures (org_id, title, video_url, series_id, created_by)
     values (_org, _tag || ' lecture', 'https://example.test/v', _series, _owner);
 
-  -- same slug in both orgs — also proves the legacy global unique is gone
-  insert into public.page_content (org_id, slug, title, body)
-    values (_org, 'leak-suite-page', _tag || ' page', 'body');
-
   insert into public.prayer_call_sessions (org_id, weekday, start_time, leader_id, event_id)
     values (_org, 2, '07:00', _owner, _event);
   insert into public.prayer_requests (org_id, author_id, body, category)
@@ -356,7 +352,6 @@ declare
   owner_a uuid := current_setting('leak_suite.owner_a')::uuid;
   anon_a_settings bigint;
   anon_a_wrong_org bigint;
-  anon_a_pages bigint;
   anon_none bigint;
   member_spoof bigint;
   member_spoof_own bigint;
@@ -370,7 +365,6 @@ begin
   perform set_config('request.headers', json_build_object('x-two42-org', 'leak-suite-org-a')::text, true);
   select count(*) into anon_a_settings from public.site_settings where org_id = org_a;
   select count(*) into anon_a_wrong_org from public.site_settings where org_id = org_b;
-  select count(*) into anon_a_pages from public.page_content where org_id = org_b;
   reset role;
 
   -- anon with no header: sees nothing
@@ -392,8 +386,6 @@ begin
     select ok(anon_a_settings >= 1, 'anon with org A header reads org A public settings');
   insert into tenancy_leak_results
     select ok(anon_a_wrong_org = 0, 'anon with org A header reads zero org B settings');
-  insert into tenancy_leak_results
-    select ok(anon_a_pages = 0, 'anon with org A header reads zero org B page_content');
   insert into tenancy_leak_results
     select ok(anon_none = 0, 'anon with no header reads nothing (fail-closed)');
   insert into tenancy_leak_results

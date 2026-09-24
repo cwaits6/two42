@@ -51,8 +51,7 @@ Rules that make these safe:
   the explicit `orgSlug` argument, then the env pin (`resolveOrgSlug()` in
   `lib/org.ts`); no request header contributes. The explicit argument is how
   an anonymous request names its org: the public per-org routes
-  (`app/[orgSlug]/join`, `app/[orgSlug]/pages/[slug]`,
-  `app/[orgSlug]/layout.tsx`) pass the URL path slug to
+  (`app/[orgSlug]/join`, `app/[orgSlug]/layout.tsx`) pass the URL path slug to
   `createClient(orgSlug)` on **both** the server and browser clients, after
   shape-checking it with `isValidOrgSlug()`. `app/[orgSlug]/layout.tsx`
   threads the slug through `getOrgBranding(orgSlug)` (`lib/branding.ts`) to

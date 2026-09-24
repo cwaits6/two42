@@ -1251,41 +1251,6 @@ export type Database = {
         }
         Relationships: []
       }
-      page_content: {
-        Row: {
-          body: string
-          org_id: string
-          slug: string
-          title: string
-          updated_at: string
-          updated_by: string | null
-        }
-        Insert: {
-          body?: string
-          org_id?: string
-          slug: string
-          title: string
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Update: {
-          body?: string
-          org_id?: string
-          slug?: string
-          title?: string
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "page_content_org_id_fkey"
-            columns: ["org_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       platform_admins: {
         Row: {
           created_at: string

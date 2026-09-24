@@ -17,7 +17,7 @@ The request host never names an org.
 | Caller | Org comes from |
 |--------|----------------|
 | Authenticated | `profiles.org_id` via `app_current_org_id()` — independent of hostname |
-| Anonymous, per-org public page | The URL path segment: `/[orgSlug]/join`, `/[orgSlug]/pages/[slug]`. The route shape-checks the slug and passes it to `createClient(orgSlug)`, which sends it as `x-two42-org`; `app_request_org_id()` validates it against a real `organizations` row |
+| Anonymous, per-org public page | The URL path segment: `/[orgSlug]/join`. The route shape-checks the slug and passes it to `createClient(orgSlug)`, which sends it as `x-two42-org`; `app_request_org_id()` validates it against a real `organizations` row |
 | Anonymous, token link | The token's own row: `/setup-account` (signup token), `/join/family/[token]` (family invite), `/serving/go` (HMAC-validated serving token) |
 | Anything else anonymous | The env pin, `NEXT_PUBLIC_ORG_SLUG` |
 
