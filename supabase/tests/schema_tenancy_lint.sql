@@ -30,7 +30,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(35);
+select plan(32);
 
 -- Structural, permanent exemptions — named once, joined by every check.
 create temporary table tenancy_root_tables on commit drop as
@@ -465,28 +465,11 @@ select throws_ok(
   'service-role insert into a plain org_id-rollout table is rejected without explicit org_id'
 );
 
-select throws_ok(
-  $$ insert into public.page_content (slug, title, body) values ('tenancy-lint-probe-slug', 'Probe', 'x') $$,
-  '23502',
-  null,
-  'service-role insert into a PK-rescoped table is rejected without explicit org_id'
-);
-
 -- ── PK re-scoping (Phase 1) + legacy-unique DROPS (Phase 2, §3.5) ──────────
 -- Phase 1 asserted the legacy single-column uniques were retained; Phase 2
 -- drops them (Task 9), so the assertions flip: the composite PKs must
 -- remain and the legacy uniques must be GONE — a revert that resurrects a
 -- global unique would break second-org provisioning.
-
-select col_is_pk('public', 'page_content', array['org_id', 'slug'], 'page_content PK is (org_id, slug)');
-select ok(
-  not exists (
-    select 1 from pg_constraint
-    where conrelid = 'public.page_content'::regclass
-      and conname = 'page_content_slug_legacy_key'
-  ),
-  'page_content''s slug-only legacy unique is dropped (slugs are per-org now)'
-);
 
 select col_is_pk('public', 'site_settings', array['org_id', 'key'], 'site_settings PK is (org_id, key)');
 select ok(

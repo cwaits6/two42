@@ -1,0 +1,13 @@
+-- Retire custom org pages. Members use the tools built into the app; a
+-- general page builder is expensive to support and painful to remove once
+-- real content depends on it, so it goes before any org relies on it.
+--
+-- Dropping the table also drops its permissive policies, the restrictive
+-- org-isolation policy, its composite primary key, and its foreign keys.
+-- Nothing else references page_content.
+--
+-- The content_editor profile role and is_content_editor() stay: they also
+-- gate the About Page editor (about_page and class_teachers write policies),
+-- the event-images storage policies, and is_member(). Retiring the role is
+-- a separate decision about who may edit the About Page.
+drop table public.page_content;

@@ -7,7 +7,6 @@ import {
   Calendar,
   BarChart2,
   HandCoins,
-  FileText,
   Info,
   BookOpen,
   Megaphone,
@@ -57,7 +56,6 @@ export const adminNavGroups: AdminNavGroup[] = [
     label: "Content",
     items: [
       { href: "/admin/lectures", label: "Lectures & Series", icon: BookOpen },
-      { href: "/admin/pages", label: "Pages", icon: FileText, contentEditorVisible: true },
       { href: "/admin/about", label: "About Page", icon: Info, contentEditorVisible: true },
       { href: "/admin/announcements/new", label: "New Announcement", icon: Megaphone },
     ],

@@ -7,10 +7,8 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { AppShell } from "@/components/layout/AppShell";
 import { SidebarProvider } from "@/components/layout/SidebarContext";
-import { OrgSlugProvider } from "@/components/providers/OrgSlugProvider";
 import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import { resolveOrgSlug } from "@/lib/org";
 import { siteConfig } from "@/lib/config";
 import { getRequestBranding } from "@/lib/branding";
 import "./globals.css";
@@ -57,7 +55,6 @@ export default async function RootLayout({
   // CSP allows inline scripts only with the per-request nonce
   const requestHeaders = await headers();
   const nonce = requestHeaders.get("x-nonce") ?? undefined;
-  let orgSlug = resolveOrgSlug();
   const hasAuthCookie = cookieStore.getAll().some((c) => c.name.includes("auth-token"));
 
   let profile = null;
@@ -93,25 +90,7 @@ export default async function RootLayout({
           .in("group_id", groupData.map((g) => g.group_id as string));
         return (count ?? 0) > 0;
       };
-      // The sidebar builds /<slug>/pages/** links to the member's own org,
-      // which the env pin only names for the pinned org's members. A failed
-      // lookup keeps the pin: those links still render the member's pages,
-      // because an authenticated principal's org overrides the path slug.
-      const loadMemberOrgSlug = async (orgId: string) => {
-        const { data: org, error: orgError } = await supabase
-          .from("organizations")
-          .select("slug")
-          .eq("id", orgId)
-          .maybeSingle();
-        if (orgError) console.error("Layout: failed to load org slug:", orgError);
-        return org?.slug;
-      };
-      const [servingAccess, memberOrgSlug] = await Promise.all([
-        loadServingAccess(),
-        data ? loadMemberOrgSlug(data.org_id) : undefined,
-      ]);
-      hasServingAccess = servingAccess;
-      if (memberOrgSlug) orgSlug = memberOrgSlug;
+      hasServingAccess = await loadServingAccess();
     }
   }
 
@@ -157,16 +136,14 @@ export default async function RootLayout({
         />
       </head>
       <body className={`${cormorant.variable} ${interTight.variable} ${jetbrainsMono.variable} antialiased min-h-screen flex flex-col`}>
-        <OrgSlugProvider orgSlug={orgSlug}>
-          <SidebarProvider>
-            <Header profile={profile} hasServingAccess={hasServingAccess} isPlatformAdmin={isPlatformAdmin} />
-            <AppShell profile={profile} hasServingAccess={hasServingAccess}>{children}</AppShell>
-          </SidebarProvider>
-          <Footer />
-          <Toaster />
-          <Analytics />
-          <SpeedInsights />
-        </OrgSlugProvider>
+        <SidebarProvider>
+          <Header profile={profile} hasServingAccess={hasServingAccess} isPlatformAdmin={isPlatformAdmin} />
+          <AppShell profile={profile} hasServingAccess={hasServingAccess}>{children}</AppShell>
+        </SidebarProvider>
+        <Footer />
+        <Toaster />
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
