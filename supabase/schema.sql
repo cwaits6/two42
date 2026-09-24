@@ -1437,19 +1437,6 @@ COMMENT ON COLUMN "public"."organizations"."custom_email_domain_enabled" IS 'Pla
 
 
 
-CREATE TABLE IF NOT EXISTS "public"."page_content" (
-    "slug" "text" NOT NULL,
-    "title" "text" NOT NULL,
-    "body" "text" DEFAULT ''::"text" NOT NULL,
-    "updated_by" "uuid",
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL
-);
-
-
-ALTER TABLE "public"."page_content" OWNER TO "postgres";
-
-
 CREATE TABLE IF NOT EXISTS "public"."platform_admins" (
     "profile_id" "uuid" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
@@ -1866,11 +1853,6 @@ ALTER TABLE ONLY "public"."organizations"
 
 ALTER TABLE ONLY "public"."organizations"
     ADD CONSTRAINT "organizations_slug_key" UNIQUE ("slug");
-
-
-
-ALTER TABLE ONLY "public"."page_content"
-    ADD CONSTRAINT "page_content_pkey" PRIMARY KEY ("org_id", "slug");
 
 
 
@@ -2482,16 +2464,6 @@ ALTER TABLE ONLY "public"."organization_members"
 
 
 
-ALTER TABLE ONLY "public"."page_content"
-    ADD CONSTRAINT "page_content_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."page_content"
-    ADD CONSTRAINT "page_content_updated_by_fkey" FOREIGN KEY ("updated_by") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
-
-
-
 ALTER TABLE ONLY "public"."platform_admins"
     ADD CONSTRAINT "platform_admins_profile_id_fkey" FOREIGN KEY ("profile_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
 
@@ -2741,10 +2713,6 @@ CREATE POLICY "Admins can delete member groups" ON "public"."member_groups" FOR 
 
 
 
-CREATE POLICY "Admins can delete page content" ON "public"."page_content" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
-
-
-
 CREATE POLICY "Admins can delete prayer call sessions" ON "public"."prayer_call_sessions" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
 
 
@@ -2865,10 +2833,6 @@ CREATE POLICY "Anyone can read event calendars" ON "public"."event_calendars" FO
 
 
 
-CREATE POLICY "Anyone can read page content" ON "public"."page_content" FOR SELECT TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
-
-
-
 CREATE POLICY "Anyone can submit access request" ON "public"."access_requests" FOR INSERT TO "authenticated", "anon" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("status" = 'pending'::"text") AND ("reviewed_by" IS NULL) AND ("reviewed_at" IS NULL) AND ("signup_token" IS NULL) AND ("token_expires_at" IS NULL) AND ("approved_role" IS NULL)));
 
 
@@ -2885,19 +2849,11 @@ CREATE POLICY "Editors can insert class teachers" ON "public"."class_teachers" F
 
 
 
-CREATE POLICY "Editors can insert page content" ON "public"."page_content" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_content_editor"() AS "is_content_editor")));
-
-
-
 CREATE POLICY "Editors can update about page" ON "public"."about_page" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_content_editor"() AS "is_content_editor")));
 
 
 
 CREATE POLICY "Editors can update class teachers" ON "public"."class_teachers" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_content_editor"() AS "is_content_editor")));
-
-
-
-CREATE POLICY "Editors can update page content" ON "public"."page_content" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_content_editor"() AS "is_content_editor")));
 
 
 
@@ -3237,10 +3193,6 @@ CREATE POLICY "org isolation" ON "public"."organizations" AS RESTRICTIVE TO "aut
 
 
 
-CREATE POLICY "org isolation" ON "public"."page_content" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
-
-
-
 CREATE POLICY "org isolation" ON "public"."prayer_call_sessions" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
@@ -3308,9 +3260,6 @@ ALTER TABLE "public"."organization_members" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."organizations" ENABLE ROW LEVEL SECURITY;
-
-
-ALTER TABLE "public"."page_content" ENABLE ROW LEVEL SECURITY;
 
 
 CREATE POLICY "platform admins can view platform admins" ON "public"."platform_admins" FOR SELECT USING (( SELECT "public"."is_platform_admin"() AS "is_platform_admin"));
@@ -3685,12 +3634,6 @@ GRANT SELECT("slug") ON TABLE "public"."organizations" TO "anon";
 
 GRANT SELECT("branding") ON TABLE "public"."organizations" TO "authenticated";
 GRANT SELECT("branding") ON TABLE "public"."organizations" TO "anon";
-
-
-
-GRANT ALL ON TABLE "public"."page_content" TO "anon";
-GRANT ALL ON TABLE "public"."page_content" TO "authenticated";
-GRANT ALL ON TABLE "public"."page_content" TO "service_role";
 
 
 
