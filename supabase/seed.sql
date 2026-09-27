@@ -66,14 +66,29 @@ ON CONFLICT (id) DO NOTHING;
 -- so we just update it to admin
 UPDATE public.profiles SET role = 'admin' WHERE id = 'a0000000-0000-0000-0000-000000000001';
 
--- Dev-only starter group so the serving flow is testable locally.
--- Deployments create their own groups at /admin/groups — provisioning
--- seeds none.
-INSERT INTO public.member_groups (id, org_id, name, description, color, icon, display_order, is_serving_role)
-VALUES ('b0000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'Serving Team', 'Signs up to serve on Sundays', '#7C9885', 'hands', 0, true)
+-- The group-model migration gave the default org its one group before this
+-- profile existed, so the seed enrols the admin as that group's leader.
+INSERT INTO public.group_members (org_id, group_id, profile_id, role)
+SELECT g.org_id, g.id, 'a0000000-0000-0000-0000-000000000001', 'leader'
+FROM public.groups g
+WHERE g.org_id = '00000000-0000-0000-0000-000000000001'
+ORDER BY g.created_at
+LIMIT 1
+ON CONFLICT (group_id, profile_id) DO UPDATE
+  SET role = excluded.role;
+
+-- Dev-only starter team under that group so the serving flow is testable
+-- locally. Deployments create their own teams at /admin/groups —
+-- provisioning seeds none.
+INSERT INTO public.teams (id, org_id, group_id, name, description, color, icon, display_order, is_serving_role)
+SELECT 'b0000000-0000-0000-0000-000000000001', g.org_id, g.id, 'Serving Team', 'Signs up to serve on Sundays', '#7C9885', 'hands', 0, true
+FROM public.groups g
+WHERE g.org_id = '00000000-0000-0000-0000-000000000001'
+ORDER BY g.created_at
+LIMIT 1
 -- Refresh the mutable fixture fields on re-seed so a stale local row picks
--- up seed changes; id and org_id are preserved, and a same-id row that
--- somehow belongs to another org is left untouched.
+-- up seed changes; id, org_id and group_id are preserved, and a same-id row
+-- that somehow belongs to another org is left untouched.
 ON CONFLICT (id) DO UPDATE
   SET name = excluded.name,
       description = excluded.description,
@@ -81,4 +96,4 @@ ON CONFLICT (id) DO UPDATE
       icon = excluded.icon,
       display_order = excluded.display_order,
       is_serving_role = excluded.is_serving_role
-  WHERE member_groups.org_id = excluded.org_id;
+  WHERE teams.org_id = excluded.org_id;
