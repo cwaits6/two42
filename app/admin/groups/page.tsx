@@ -75,8 +75,8 @@ export default function GroupsPage() {
   const [memberCounts, setMemberCounts] = useState<Record<string, number>>({});
   // teams.group_id is required, so creation needs the org's group. An org
   // provisioned after the group model landed has none until group creation
-  // ships.
-  const [parentGroupId, setParentGroupId] = useState<string | null>(null);
+  // ships. Undefined until the lookup succeeds; null means it found no group.
+  const [parentGroupId, setParentGroupId] = useState<string | null>();
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -95,12 +95,19 @@ export default function GroupsPage() {
 
     setGroups((data || []) as MemberGroup[]);
 
-    const { data: parentGroup } = await supabase
+    const { data: parentGroup, error: parentGroupError } = await supabase
       .from("groups")
       .select("id")
       .order("created_at")
       .limit(1)
       .maybeSingle();
+
+    if (parentGroupError) {
+      toast.error("Failed to load groups.");
+      setLoading(false);
+      return;
+    }
+
     setParentGroupId(parentGroup?.id ?? null);
 
     // Fetch member counts for each group
@@ -262,7 +269,7 @@ export default function GroupsPage() {
         }
       />
 
-      {!parentGroupId && (
+      {parentGroupId === null && (
         <Card className="mb-4">
           <CardContent className="pt-6">
             <p className="text-base text-muted-foreground">

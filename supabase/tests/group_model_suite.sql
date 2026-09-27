@@ -271,7 +271,132 @@ select is(
     where group_id = current_setting('gm.grp_a2')::uuid),
   1, 'A2''s roster is intact after the cross-group write attempts');
 
--- ── 7. Labels: a label from A1 cannot be attached to a member of A2 ─────────
+-- ── 7. Teams: a leader of A1 writes A1's teams and rosters, not A2's ────────
+-- The write arms on teams and team_members widened from "org admin" to
+-- "org admin or a leader of the team's group". member_a is a plain member
+-- (never an org admin) and a leader of A1 only, so every write here has to
+-- pass through the leader arm; the A2 team is the boundary it must not
+-- cross even though org-member reads still show it every row.
+do $$
+declare
+  org_a uuid := current_setting('gm.org_a')::uuid;
+  member_a2 uuid := current_setting('gm.member_a2')::uuid;
+  grp_a2 uuid := current_setting('gm.grp_a2')::uuid;
+  team_a2 uuid;
+begin
+  insert into public.teams (org_id, group_id, name)
+    values (org_a, grp_a2, 'A2 serving team') returning id into team_a2;
+  insert into public.team_members (org_id, profile_id, team_id)
+    values (org_a, member_a2, team_a2);
+  perform set_config('gm.team_a2', team_a2::text, true);
+end $$;
+
+select is(
+  (select role from public.profiles where id = current_setting('gm.member_a')::uuid),
+  'member', 'the A1 leader is a plain org member, so the admin arm cannot satisfy these writes');
+
+do $$
+declare
+  org_a uuid := current_setting('gm.org_a')::uuid;
+  member_a uuid := current_setting('gm.member_a')::uuid;
+  member_a2 uuid := current_setting('gm.member_a2')::uuid;
+  grp_a uuid := current_setting('gm.grp_a')::uuid;
+  grp_a2 uuid := current_setting('gm.grp_a2')::uuid;
+  team_a uuid := current_setting('gm.team_a')::uuid;
+  team_a2 uuid := current_setting('gm.team_a2')::uuid;
+  visible_a2 bigint;
+  team_insert_err text := 'none'; team_updated bigint; team_deleted bigint;
+  own_team_insert bigint; own_team_updated bigint;
+  roster_insert_err text := 'none'; roster_updated bigint; roster_deleted bigint;
+  own_roster_insert bigint; own_roster_updated bigint; own_roster_deleted bigint;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', member_a)::text, true);
+  perform set_config('request.headers', '{}', true);
+
+  -- Reads stay org-wide: the A2 roster is visible, so a zero row count on
+  -- the writes below comes from the write policies, not from invisibility.
+  select count(*) into visible_a2 from public.team_members where team_id = team_a2;
+
+  begin
+    insert into public.teams (org_id, group_id, name) values (org_a, grp_a2, 'Intruder team');
+  exception when others then
+    team_insert_err := sqlstate;
+  end;
+  update public.teams set description = 'edited' where id = team_a2;
+  get diagnostics team_updated = row_count;
+  delete from public.teams where id = team_a2;
+  get diagnostics team_deleted = row_count;
+
+  begin
+    insert into public.team_members (org_id, profile_id, team_id) values (org_a, member_a, team_a2);
+  exception when others then
+    roster_insert_err := sqlstate;
+  end;
+  update public.team_members set is_leader = true where team_id = team_a2;
+  get diagnostics roster_updated = row_count;
+  delete from public.team_members where team_id = team_a2;
+  get diagnostics roster_deleted = row_count;
+
+  -- Positive controls: the same leader manages A1's team and its roster.
+  insert into public.teams (org_id, group_id, name) values (org_a, grp_a, 'A1 second team');
+  get diagnostics own_team_insert = row_count;
+  update public.teams set description = 'edited' where id = team_a;
+  get diagnostics own_team_updated = row_count;
+  insert into public.team_members (org_id, profile_id, team_id) values (org_a, member_a2, team_a);
+  get diagnostics own_roster_insert = row_count;
+  update public.team_members set is_leader = true where team_id = team_a and profile_id = member_a2;
+  get diagnostics own_roster_updated = row_count;
+  delete from public.team_members where team_id = team_a and profile_id = member_a2;
+  get diagnostics own_roster_deleted = row_count;
+
+  reset role;
+  perform set_config('gm.team_visible_a2', visible_a2::text, true);
+  perform set_config('gm.team_insert_err', team_insert_err, true);
+  perform set_config('gm.team_updated', team_updated::text, true);
+  perform set_config('gm.team_deleted', team_deleted::text, true);
+  perform set_config('gm.own_team_insert', own_team_insert::text, true);
+  perform set_config('gm.own_team_updated', own_team_updated::text, true);
+  perform set_config('gm.roster_insert_err', roster_insert_err, true);
+  perform set_config('gm.roster_updated', roster_updated::text, true);
+  perform set_config('gm.roster_deleted', roster_deleted::text, true);
+  perform set_config('gm.own_roster_insert', own_roster_insert::text, true);
+  perform set_config('gm.own_roster_updated', own_roster_updated::text, true);
+  perform set_config('gm.own_roster_deleted', own_roster_deleted::text, true);
+end $$;
+
+select is(current_setting('gm.team_visible_a2')::int, 1,
+  'non-vacuity: the A1 leader can read the A2 team''s roster (reads stay org-wide)');
+select is(current_setting('gm.team_insert_err'), '42501',
+  'a leader of A1 cannot create a team under A2');
+select is(current_setting('gm.team_updated')::int, 0,
+  'a leader of A1 updates no team of A2');
+select is(current_setting('gm.team_deleted')::int, 0,
+  'a leader of A1 deletes no team of A2');
+select is(current_setting('gm.own_team_insert')::int, 1,
+  'positive control: the same leader creates a team under A1');
+select is(current_setting('gm.own_team_updated')::int, 1,
+  'positive control: the same leader updates A1''s team');
+select is(current_setting('gm.roster_insert_err'), '42501',
+  'a leader of A1 cannot add themselves to an A2 team');
+select is(current_setting('gm.roster_updated')::int, 0,
+  'a leader of A1 updates no team_members rows of an A2 team');
+select is(current_setting('gm.roster_deleted')::int, 0,
+  'a leader of A1 deletes no team_members rows of an A2 team');
+select is(current_setting('gm.own_roster_insert')::int, 1,
+  'positive control: the same leader adds a member to A1''s team');
+select is(current_setting('gm.own_roster_updated')::int, 1,
+  'positive control: the same leader promotes a member of A1''s team');
+select is(current_setting('gm.own_roster_deleted')::int, 1,
+  'positive control: the same leader removes a member from A1''s team');
+select is(
+  (select count(*)::int from public.team_members where team_id = current_setting('gm.team_a2')::uuid),
+  1, 'the A2 team''s roster is intact after the cross-group write attempts');
+select is(
+  (select description from public.teams where id = current_setting('gm.team_a2')::uuid),
+  null, 'the A2 team is unchanged after the cross-group write attempts');
+
+-- ── 8. Labels: a label from A1 cannot be attached to a member of A2 ─────────
 do $$
 declare
   org_a uuid := current_setting('gm.org_a')::uuid;
@@ -335,7 +460,7 @@ select is(current_setting('gm.label_attached')::int, 1,
 select is(current_setting('gm.label_err'), '42501',
   'a leader of A1 cannot define a label in A2');
 
--- ── 8. Helper truth table ───────────────────────────────────────────────────
+-- ── 9. Helper truth table ───────────────────────────────────────────────────
 do $$
 declare
   member_a uuid := current_setting('gm.member_a')::uuid;
@@ -372,7 +497,7 @@ select is(current_setting('gm.team_lead_owner_a'), 'true',
 select is(current_setting('gm.truth_owner_b'), 'false,false,false',
   'an org-B admin is neither member nor leader of an org-A group, nor lead of its team');
 
--- ── 9. Grants ───────────────────────────────────────────────────────────────
+-- ── 10. Grants ──────────────────────────────────────────────────────────────
 select ok(not has_function_privilege('anon', 'public.is_group_member(uuid)', 'execute'),
   'anon cannot execute is_group_member()');
 select ok(not has_function_privilege('anon', 'public.is_group_leader(uuid)', 'execute'),
@@ -395,7 +520,7 @@ select ok(
   not (select prosecdef from pg_proc where oid = 'public.group_model_backfill()'::regprocedure),
   'group_model_backfill() is not SECURITY DEFINER');
 
--- ── 10. Structural pins ─────────────────────────────────────────────────────
+-- ── 11. Structural pins ────────────────────────────────────────────────────
 select ok(not exists (
     select 1 from information_schema.tables
     where table_schema = 'public' and table_name in ('member_groups', 'profile_groups')),
