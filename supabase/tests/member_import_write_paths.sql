@@ -31,6 +31,7 @@ declare
   _admin uuid := gen_random_uuid();
   _other uuid := gen_random_uuid();
   _family uuid;
+  _grp uuid;
   _group uuid;
   _member uuid;
 begin
@@ -59,8 +60,10 @@ begin
     values (_org, 'Import Suite Household') returning id into _family;
   insert into public.family_members (org_id, family_id, first_name, last_name, relationship)
     values (_org, _family, 'Kid', 'Suite', 'child') returning id into _member;
-  insert into public.member_groups (org_id, name)
-    values (_org, 'Import Suite Group') returning id into _group;
+  insert into public.groups (org_id, name)
+    values (_org, 'Import Suite Parent Group') returning id into _grp;
+  insert into public.teams (org_id, group_id, name)
+    values (_org, _grp, 'Import Suite Group') returning id into _group;
 
   perform set_config('member_import.org', _org::text, true);
   perform set_config('member_import.admin', _admin::text, true);
@@ -151,7 +154,7 @@ begin
   _errs := _errs || _err;
 
   begin
-    insert into public.profile_groups (profile_id, group_id, is_leader, assigned_by)
+    insert into public.team_members (profile_id, team_id, is_leader, assigned_by)
       values (_profile, _group, false, _admin);
     _err := null;
   exception when others then _err := sqlerrm;
@@ -159,8 +162,8 @@ begin
   _errs := _errs || _err;
 
   begin
-    update public.profile_groups set is_leader = true
-      where profile_id = _profile and group_id = _group;
+    update public.team_members set is_leader = true
+      where profile_id = _profile and team_id = _group;
     get diagnostics _rows = row_count;
     _err := case when _rows = 0 then 'matched no row (policy filtered it)' end;
   exception when others then _err := sqlerrm;
@@ -168,8 +171,8 @@ begin
   _errs := _errs || _err;
 
   begin
-    delete from public.profile_groups
-      where profile_id = _profile and group_id = _group;
+    delete from public.team_members
+      where profile_id = _profile and team_id = _group;
     get diagnostics _rows = row_count;
     _err := case when _rows = 0 then 'matched no row (policy filtered it)' end;
   exception when others then _err := sqlerrm;
