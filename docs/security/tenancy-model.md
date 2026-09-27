@@ -145,6 +145,71 @@ exemption (`organization_members_profile_id_fkey` in
 of the profile's pinned org — the seam the Phase 4 platform-admin
 authorization contract builds on.
 
+## Group model — the first within-org boundary
+
+The org exists to hold people; everything members do together belongs to a
+**group**. Four layers, one permission role per layer above "member":
+
+| Layer | Table(s) | Holds | Role |
+|---|---|---|---|
+| Org | `organizations`, `profiles`, households | people, membership approval, branding, org settings | org admin |
+| Group (a class or small group) | `groups`, `group_members` | the content layer: calendar, announcements, serving, prayer, roster | leader (`group_members.role = 'leader'`) |
+| Team (inside one group) | `teams`, `team_members` | serving signups, reminders, `serving_team_settings` | team lead (`team_members.is_leader`) |
+| Label (inside one group) | `group_labels`, `group_member_labels` | a filter tag on a group membership | none — labels are attributes |
+
+`teams` is the renamed `member_groups` and `team_members` the renamed
+`profile_groups` (`team_members.group_id` → `team_id`); every team carries a
+required `(group_id, org_id)` composite FK into `groups`. The serving tables'
+`group_id` columns (`serving_signups`, `serving_broadcasts`,
+`serving_team_settings`) are **team ids** and keep their names. Groups stay
+one level deep — no sub-groups, no sub-orgs.
+
+**Membership-based RLS.** The org isolation floor above is unchanged; the
+group tables add the first predicate that narrows visibility *within* an
+org. Every permissive policy on the four group tables composes as
+`ORG AND (arms)`:
+
+- read: `org_id = (select app_request_org_id()) and (is_admin() or
+  is_group_member(group_id))` — plus an own-rows arm on `group_members`
+  (`profile_id = auth.uid()`) so a member can resolve their own memberships
+  before any group context exists;
+- write: `org_id = (select app_request_org_id()) and (is_admin() or
+  is_group_leader(group_id))`; group *creation* and deletion are org-admin
+  only.
+
+`is_group_member(_group_id)` and `is_group_leader(_group_id)` read
+`group_members` for `auth.uid()` **only** — the argument names the group,
+never the principal — and carry `org_id = app_current_org_id()` so a
+membership row in another org never counts. They are `SECURITY DEFINER`,
+`set search_path = ''`, EXECUTE granted to `authenticated` and revoked from
+`anon`. They take a row-dependent argument, so unlike the zero-argument
+helpers they cannot be InitPlan-hoisted and are called bare in policy
+expressions. `is_team_lead(_team_id)` is the former `is_group_leader` (which
+read `profile_groups.is_leader`, i.e. had team semantics); the seven serving
+policies and `serving_signup_create()` call it under the new name.
+
+`group_member_labels` is same-group by construction: both of its FKs are
+three-column — `(group_member_id, group_id, org_id)` into `group_members`
+and `(label_id, group_id, org_id)` into `group_labels` — so a label can only
+ever be attached to a membership of the group that defines it, before RLS
+is consulted.
+
+**What stays org-wide for now.** `teams` and `team_members` keep their
+org-member `SELECT` arms: a member approved after the group-model migration
+is not enrolled in any group (`handle_new_user()` enrols nobody), and
+membership-gating those reads would hide `/serving` from them. Their write
+arms widen from org admins to "org admin or a leader of the team's group".
+The group-scoped-content migration flips team reads to group membership.
+
+**The one-group backfill.** The migration gives every existing org one
+group named from `branding.display_name` (fallback: the org name), enrols
+every profile with `role <> 'pending'`, makes every org admin a leader, and
+attaches every existing team to it — with before/after row-count
+assertions that abort the migration on any mismatch. The logic lives in
+`group_model_backfill()` (plain `plpgsql`, idempotent, no client grant) so
+`supabase/tests/group_model_suite.sql` can prove it against fixture orgs in
+CI, where migrations run against an empty database.
+
 ## Storage tenancy
 
 `storage.objects` has no `org_id` column, so the first path segment of the
@@ -287,13 +352,17 @@ visitor can self-request admin; only server-side (service-role) writes and
 org admins — who already manage `profiles.role` within their org — can set
 it.
 
-Provisioning seeds **no groups**. Groups are org-defined: admins create
-them in `/admin/groups` and designate capabilities per group
+Provisioning seeds **no teams and no group**. Teams are org-defined: admins
+create them in `/admin/groups` and designate capabilities per team
 (`is_serving_role`) and leadership per membership
-(`profile_groups.is_leader`). Nothing in the schema or app requires a group
-to exist, so there is no platform-defined group name for a policy or
-surface to depend on (`member_groups.functional_role` is dropped in
-`20260801000000`).
+(`team_members.is_leader`). Nothing in the schema or app requires a team to
+exist, so there is no platform-defined team name for a policy or surface to
+depend on (`member_groups.functional_role` was dropped in `20260801000000`).
+A newly provisioned org has no group either — the founding admin has no
+profile at provisioning time, so nothing could be enrolled — and because
+`teams.group_id` is required, the admin groups page disables team creation
+until group creation ships. The one live org was backfilled by the
+group-model migration.
 
 Provisioning **never moves an existing profile between orgs**. If a profile
 with the owner's email already belongs to a different org, the call raises
@@ -346,7 +415,7 @@ platform seam).
   (`serving_signup_apply` / `serving_signup_create`,
   `20260803010000_serving_signup_rpc.sql`) so the signup + attendee inserts
   commit atomically (CWA-47 / #313). Its org checks — org resolved from the
-  `member_groups` row, every other row asserted to carry it, the
+  `teams` row, every other row asserted to carry it, the
   authenticated wrapper pinned to `app_request_org_id()` — replace RLS
   inside the bodies and are review-enforced: lint check 4 above only proves
   the source mentions `org_id`. Grants and org checks are pinned by
