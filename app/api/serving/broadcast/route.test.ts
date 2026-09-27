@@ -55,8 +55,8 @@ function chain(terminal: { data: unknown; error: unknown }) {
 function makeCookieClient(insertSpy: (payload: unknown) => { data: unknown; error: unknown }) {
   const tables: Record<string, { data: unknown; error: unknown }> = {
     profiles: { data: { id: "user-1", role: "admin" }, error: null },
-    profile_groups: { data: { is_leader: false }, error: null },
-    member_groups: {
+    team_members: { data: { is_leader: false }, error: null },
+    teams: {
       data: { id: "group-1", name: "Greeters", org_id: "org-1" },
       error: null,
     },
@@ -165,7 +165,7 @@ describe("POST /api/serving/broadcast — email branding", () => {
 
     await POST(broadcastRequest());
 
-    // member_groups in makeCookieClient's stub carries org_id: "org-1" — the
+    // teams in makeCookieClient's stub carries org_id: "org-1" — the
     // anchor this call must be threaded from, not a sibling row's id.
     expect(resolveEmailBranding).toHaveBeenCalledWith("org-1");
   });

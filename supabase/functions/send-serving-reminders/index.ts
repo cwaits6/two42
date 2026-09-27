@@ -236,7 +236,7 @@ async function runDaily(
   for (const { group_id } of teamSettings) {
     try {
       const { data: group, error: groupError } = await supabase
-        .from("member_groups")
+        .from("teams")
         .select("name")
         .eq("org_id", orgId)
         .eq("id", group_id)
@@ -244,7 +244,7 @@ async function runDaily(
       if (groupError) {
         // Recorded via the catch below — this used to be a silent skip whose
         // only record was a log line, invisible to the run summary.
-        throw new Error(`member_groups query failed: ${groupError.message}`);
+        throw new Error(`teams query failed: ${groupError.message}`);
       }
       if (!group) continue; // a genuinely absent group is not an error
       const teamName = group.name as string;
@@ -385,7 +385,7 @@ async function runMonthly(
     try {
       let teamSent = 0;
       const { data: group, error: groupError } = await supabase
-        .from("member_groups")
+        .from("teams")
         .select("name")
         .eq("org_id", orgId)
         .eq("id", group_id)
@@ -393,7 +393,7 @@ async function runMonthly(
       if (groupError) {
         // Recorded via the catch below — this used to be a silent skip whose
         // only record was a log line, invisible to the run summary.
-        throw new Error(`member_groups query failed: ${groupError.message}`);
+        throw new Error(`teams query failed: ${groupError.message}`);
       }
       if (!group) continue; // a genuinely absent group is not an error
       const teamName = group.name as string;
@@ -417,14 +417,14 @@ async function runMonthly(
       if (!openDates.length) continue; // all covered — nothing to broadcast
 
       // Get all team members. The profiles embed is org-safe by FK traversal
-      // from the org-filtered profile_groups parent — see _shared/orgs.ts.
+      // from the org-filtered team_members parent — see _shared/orgs.ts.
       const { data: members, error: membersError } = await supabase
-        .from("profile_groups")
+        .from("team_members")
         .select("profiles(id, first_name, preferred_name, email, email_announcements)")
         .eq("org_id", orgId)
-        .eq("group_id", group_id);
+        .eq("team_id", group_id);
       if (membersError) {
-        throw new Error(`profile_groups query failed: ${membersError.message}`);
+        throw new Error(`team_members query failed: ${membersError.message}`);
       }
 
       // Filter to the final sendable set first, then reserve once per team

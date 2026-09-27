@@ -200,9 +200,9 @@ export async function applyWrites(
           break;
         }
         case "insert_profile_group": {
-          const { error } = await supabase.from("profile_groups").insert({
+          const { error } = await supabase.from("team_members").insert({
             profile_id: write.profileId,
-            group_id: write.groupId,
+            team_id: write.groupId,
             is_leader: write.isLeader,
             assigned_by: userId,
             org_id: orgId,
@@ -212,10 +212,10 @@ export async function applyWrites(
         }
         case "update_profile_group": {
           const { data, error } = await supabase
-            .from("profile_groups")
+            .from("team_members")
             .update({ is_leader: write.isLeader })
             .eq("profile_id", write.profileId)
-            .eq("group_id", write.groupId)
+            .eq("team_id", write.groupId)
             .eq("org_id", orgId)
             .select("profile_id");
           failure = error ?? noRowsTouched(data, "update_profile_group");
@@ -223,10 +223,10 @@ export async function applyWrites(
         }
         case "delete_profile_group": {
           const { data, error } = await supabase
-            .from("profile_groups")
+            .from("team_members")
             .delete()
             .eq("profile_id", write.profileId)
-            .eq("group_id", write.groupId)
+            .eq("team_id", write.groupId)
             .eq("org_id", orgId)
             .select("profile_id");
           failure = error ?? noRowsTouched(data, "delete_profile_group");

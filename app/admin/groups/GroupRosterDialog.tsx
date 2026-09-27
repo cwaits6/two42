@@ -70,9 +70,9 @@ export function GroupRosterDialog({
               .order("last_name", { ascending: true })
               .order("first_name", { ascending: true }),
             supabase
-              .from("profile_groups")
+              .from("team_members")
               .select("profile_id, is_leader")
-              .eq("group_id", groupId),
+              .eq("team_id", groupId),
           ]);
 
         if (cancelled) return;
@@ -158,10 +158,10 @@ export function GroupRosterDialog({
     setBusy(profile.id);
 
     const { error } = await supabase
-      .from("profile_groups")
+      .from("team_members")
       .update({ is_leader: leader })
       .eq("profile_id", profile.id)
-      .eq("group_id", group.id);
+      .eq("team_id", group.id);
 
     if (error) {
       toast.error("Failed to update leader.");

@@ -218,9 +218,11 @@ export interface FamilyMember {
   updated_at: string;
 }
 
-/** An admin-defined member group; names and roles vary per deployment */
+/** A team inside one group; names and roles vary per deployment */
 export interface MemberGroup {
   id: string;
+  /** The group this team belongs to */
+  group_id: string;
   name: string;
   description: string | null;
   color: string | null;

@@ -73,13 +73,17 @@ export default function GroupsPage() {
   const [saving, setSaving] = useState(false);
   // member counts per group for delete warning
   const [memberCounts, setMemberCounts] = useState<Record<string, number>>({});
+  // teams.group_id is required, so creation needs the org's group. An org
+  // provisioned after the group model landed has none until group creation
+  // ships.
+  const [parentGroupId, setParentGroupId] = useState<string | null>(null);
 
   const supabase = useMemo(() => createClient(), []);
 
   const loadGroups = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
-      .from("member_groups")
+      .from("teams")
       .select("*")
       .order("display_order");
 
@@ -91,14 +95,22 @@ export default function GroupsPage() {
 
     setGroups((data || []) as MemberGroup[]);
 
+    const { data: parentGroup } = await supabase
+      .from("groups")
+      .select("id")
+      .order("created_at")
+      .limit(1)
+      .maybeSingle();
+    setParentGroupId(parentGroup?.id ?? null);
+
     // Fetch member counts for each group
     const { data: counts } = await supabase
-      .from("profile_groups")
-      .select("group_id");
+      .from("team_members")
+      .select("team_id");
 
     const countMap: Record<string, number> = {};
-    (counts || []).forEach((row: { group_id: string }) => {
-      countMap[row.group_id] = (countMap[row.group_id] || 0) + 1;
+    (counts || []).forEach((row: { team_id: string }) => {
+      countMap[row.team_id] = (countMap[row.team_id] || 0) + 1;
     });
     setMemberCounts(countMap);
 
@@ -139,7 +151,7 @@ export default function GroupsPage() {
     setSaving(true);
     if (editing) {
       const { error } = await supabase
-        .from("member_groups")
+        .from("teams")
         .update(payload)
         .eq("id", editing.id);
       setSaving(false);
@@ -149,14 +161,19 @@ export default function GroupsPage() {
       }
       toast.success("Group updated.");
     } else {
+      if (!parentGroupId) {
+        setSaving(false);
+        toast.error("No group exists for this organization yet.");
+        return;
+      }
       // Append at end
       const nextOrder =
         groups.length > 0
           ? Math.max(...groups.map((g) => g.display_order)) + 1
           : 0;
       const { error } = await supabase
-        .from("member_groups")
-        .insert({ ...payload, display_order: nextOrder });
+        .from("teams")
+        .insert({ ...payload, group_id: parentGroupId, display_order: nextOrder });
       setSaving(false);
       if (error) {
         toast.error("Failed to create group.");
@@ -178,7 +195,7 @@ export default function GroupsPage() {
     if (!confirm(`${warning}Delete "${group.name}"?`)) return;
 
     const { error } = await supabase
-      .from("member_groups")
+      .from("teams")
       .delete()
       .eq("id", group.id);
 
@@ -203,11 +220,11 @@ export default function GroupsPage() {
     // Swap display_order values
     const [r1, r2] = await Promise.all([
       supabase
-        .from("member_groups")
+        .from("teams")
         .update({ display_order: swapOrder })
         .eq("id", group.id),
       supabase
-        .from("member_groups")
+        .from("teams")
         .update({ display_order: newOrder })
         .eq("id", swapGroup.id),
     ]);
@@ -236,6 +253,7 @@ export default function GroupsPage() {
           <Button
             size="lg"
             onClick={openCreate}
+            disabled={!parentGroupId}
             className="bg-brand-primary hover:bg-brand-primary/90 text-white"
           >
             <Plus className="mr-2 h-5 w-5" />
@@ -243,6 +261,16 @@ export default function GroupsPage() {
           </Button>
         }
       />
+
+      {!parentGroupId && (
+        <Card className="mb-4">
+          <CardContent className="pt-6">
+            <p className="text-base text-muted-foreground">
+              This organization has no group yet, so teams cannot be created.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {groups.length === 0 ? (
         <Card>

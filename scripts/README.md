@@ -135,7 +135,7 @@ property on its args object (the repo's SQL-function argument convention —
 `email_quota_consume(_org_id, _n)`, `org_email_domain_claim(_org_id, …)`). A
 call with no such property needs a reasoned marker, as
 `provision_organization()` (which creates the org) and `serving_signup_apply()`
-(which re-derives the org from the `member_groups` row) carry. Only plain and
+(which re-derives the org from the `teams` row) carry. Only plain and
 shorthand properties are recognised — a spread or a computed key is not seen
 through, which fails toward reporting rather than silence.
 

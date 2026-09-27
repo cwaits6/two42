@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     { data: settings, error: settingsError },
     { data: profile, error: profileError },
   ] = await Promise.all([
-    supabase.from("member_groups").select("id, name, org_id").eq("id", groupId).single(),
+    supabase.from("teams").select("id, name, org_id").eq("id", groupId).single(),
     supabase
       .from("serving_team_settings")
       .select("enabled")
@@ -205,7 +205,7 @@ export async function DELETE(request: Request) {
   const { data: signup, error: signupError } = await supabase
     .from("serving_signups")
     .select(
-      "id, org_id, group_id, service_date, family_id, created_by, member_groups(name), serving_signup_attendees(profiles(id, first_name, last_name, preferred_name))"
+      "id, org_id, group_id, service_date, family_id, created_by, teams(name), serving_signup_attendees(profiles(id, first_name, last_name, preferred_name))"
     )
     .eq("id", signupId)
     .maybeSingle();
@@ -243,7 +243,7 @@ export async function DELETE(request: Request) {
   try {
     const service = await createServiceClient();
     const groupName =
-      (signup.member_groups as unknown as { name: string } | null)?.name ??
+      (signup.teams as unknown as { name: string } | null)?.name ??
       "your team";
     const attendeeProfiles = (signup.serving_signup_attendees ?? [])
       .map((a: { profiles: unknown }) => a.profiles)

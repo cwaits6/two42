@@ -152,9 +152,9 @@ export async function notifyLeadersOfCancel(
   // org_id filter is required: this is an email fan-out surface on a
   // service-role client — an unscoped read would mail another org's leaders.
   const { data: leaders, error } = await service
-    .from("profile_groups")
+    .from("team_members")
     .select("profiles(id, first_name, last_name, preferred_name, email)")
-    .eq("group_id", opts.groupId)
+    .eq("team_id", opts.groupId)
     .eq("org_id", opts.orgId)
     .eq("is_leader", true);
 

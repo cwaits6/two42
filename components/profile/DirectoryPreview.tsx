@@ -81,8 +81,8 @@ export function DirectoryPreview() {
     const [{ data: profile, error }, { data: groupRows }] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", user.id).single<Profile>(),
       supabase
-        .from("profile_groups")
-        .select("member_groups(id, name, color, icon, display_order)")
+        .from("team_members")
+        .select("teams(id, name, color, icon, display_order)")
         .eq("profile_id", user.id),
     ]);
 
@@ -93,7 +93,7 @@ export function DirectoryPreview() {
     }
 
     const groups = (groupRows || [])
-      .map((r) => r.member_groups as unknown as (GroupChip & { display_order: number }) | null)
+      .map((r) => r.teams as unknown as (GroupChip & { display_order: number }) | null)
       .filter((g): g is GroupChip & { display_order: number } => !!g)
       .sort((a, b) => a.display_order - b.display_order);
 

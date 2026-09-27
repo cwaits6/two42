@@ -175,8 +175,8 @@ describe("applyWrites — write routing", () => {
     }
     expect(calls[0].filters).toContainEqual(["id", "p1"]);
     expect(calls[2].filters).toContainEqual(["profile_id", "p1"]);
-    expect(calls[2].filters).toContainEqual(["group_id", "g1"]);
-    expect(calls[3]).toMatchObject({ table: "profile_groups", op: "delete" });
+    expect(calls[2].filters).toContainEqual(["team_id", "g1"]);
+    expect(calls[3]).toMatchObject({ table: "team_members", op: "delete" });
   });
 
   it("stamps assigned_by on a group assignment and carries is_leader", async () => {
@@ -195,7 +195,7 @@ describe("applyWrites — write routing", () => {
     // along on a write an import controls.
     expect(calls[0].payload).toEqual({
       profile_id: "p1",
-      group_id: "g1",
+      team_id: "g1",
       is_leader: true,
       assigned_by: USER,
       org_id: ORG,
@@ -235,7 +235,7 @@ describe("applyWrites — write routing", () => {
     expect(inserts.map((c) => c.table)).toEqual([
       "family_units",
       "family_members",
-      "profile_groups",
+      "team_members",
     ]);
     for (const call of inserts) {
       expect(call.payload).toMatchObject({ org_id: ORG });
@@ -349,7 +349,7 @@ describe("applyWrites — failure accounting", () => {
     // and re-uploads. A half-written line must never appear here.
     vi.spyOn(console, "error").mockImplementation(() => {});
     const { client } = fakeClient({
-      failures: { profile_groups: { code: "23505", message: "duplicate" } },
+      failures: { team_members: { code: "23505", message: "duplicate" } },
     });
     const result = await applyWrites(client, USER, ORG, spread);
     expect(result.ok).toBe(false);
@@ -443,7 +443,7 @@ describe("applyWrites — failure accounting", () => {
     async (write) => {
       vi.spyOn(console, "error").mockImplementation(() => {});
       const { client } = fakeClient({
-        matchesNothing: ["profiles", "family_members", "profile_groups"],
+        matchesNothing: ["profiles", "family_members", "team_members"],
       });
       const result = await applyWrites(client, USER, ORG, [write]);
       expect(result.ok).toBe(false);
