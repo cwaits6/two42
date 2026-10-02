@@ -133,13 +133,13 @@ export async function loadOrgSnapshot(
         .eq("org_id", orgId)
         .order("id"),
       supabase
-        .from("member_groups")
+        .from("teams")
         .select("id, name")
         .eq("org_id", orgId)
         .order("id"),
       supabase
-        .from("profile_groups")
-        .select("profile_id, group_id, is_leader")
+        .from("team_members")
+        .select("profile_id, team_id, is_leader")
         .eq("org_id", orgId)
         .order("profile_id"),
       supabase
@@ -152,8 +152,8 @@ export async function loadOrgSnapshot(
   if (profiles.error) throw new Error("Failed to load profiles");
   if (families.error) throw new Error("Failed to load family_units");
   if (familyMembers.error) throw new Error("Failed to load family_members");
-  if (groups.error) throw new Error("Failed to load member_groups");
-  if (profileGroups.error) throw new Error("Failed to load profile_groups");
+  if (groups.error) throw new Error("Failed to load teams");
+  if (profileGroups.error) throw new Error("Failed to load team_members");
   if (requests.error) throw new Error("Failed to load access_requests");
 
   return {
@@ -161,7 +161,12 @@ export async function loadOrgSnapshot(
     families: families.data ?? [],
     familyMembers: familyMembers.data ?? [],
     groups: groups.data ?? [],
-    profileGroups: profileGroups.data ?? [],
+    // The planner's shape predates the team rename and keys memberships by
+    // group_id; the column is team_members.team_id.
+    profileGroups: (profileGroups.data ?? []).map(({ team_id, ...row }) => ({
+      ...row,
+      group_id: team_id,
+    })),
     accessRequestEmails: (requests.data ?? []).map((r) =>
       r.email.trim().toLowerCase()
     ),

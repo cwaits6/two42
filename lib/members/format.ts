@@ -139,7 +139,7 @@ export interface MemberRow {
   /** Canonical-order subset of HIDDEN_FIELD_TOKENS. Non-empty = the complete
    *  set of hidden fields for this person; [] = not provided. */
   hidden_fields: HiddenFieldToken[];
-  /** member_groups names. Non-empty = authoritative membership set; [] = not
+  /** Team names. Non-empty = authoritative membership set; [] = not
    *  provided (no group changes). */
   groups: string[];
   /** Subset of `groups` the person leads. */

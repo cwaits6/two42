@@ -30,12 +30,12 @@ export function MemberGroupsSection({ profileId }: MemberGroupsSectionProps) {
     async function load() {
       const [{ data: allGroups, error: groupsErr }, { data: profileGroups, error: pgErr }] = await Promise.all([
         supabase
-          .from("member_groups")
+          .from("teams")
           .select("*")
           .order("display_order"),
         supabase
-          .from("profile_groups")
-          .select("group_id")
+          .from("team_members")
+          .select("team_id")
           .eq("profile_id", profileId),
       ]);
 
@@ -47,7 +47,7 @@ export function MemberGroupsSection({ profileId }: MemberGroupsSectionProps) {
 
       setGroups((allGroups || []) as MemberGroup[]);
       setAssigned(
-        new Set((profileGroups || []).map((pg: { group_id: string }) => pg.group_id)),
+        new Set((profileGroups || []).map((pg: { team_id: string }) => pg.team_id)),
       );
       setLoading(false);
     }

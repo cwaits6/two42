@@ -165,7 +165,7 @@ export default async function DashboardPage() {
     // Upcoming serving commitments for this member (inner join filters to user's rows)
     supabase
       .from("serving_signups")
-      .select("id, service_date, group_id, member_groups(id, name), serving_signup_attendees!inner(profile_id)")
+      .select("id, service_date, group_id, teams(id, name), serving_signup_attendees!inner(profile_id)")
       .eq("serving_signup_attendees.profile_id", profile.id)
       .gte("service_date", toDateString(new Date()))
       .order("service_date", { ascending: true })
@@ -192,7 +192,7 @@ export default async function DashboardPage() {
     id: string;
     service_date: string;
     group_id: string;
-    member_groups: { id: string; name: string } | Array<{ id: string; name: string }> | null;
+    teams: { id: string; name: string } | Array<{ id: string; name: string }> | null;
   }>;
 
   // Meeting fields live on the series anchor; exception rows inherit them.
@@ -426,7 +426,7 @@ export default async function DashboardPage() {
                 >
                   <div>
                     <div className="font-sans text-sm font-semibold text-foreground">
-                      {(Array.isArray(s.member_groups) ? s.member_groups[0]?.name : s.member_groups?.name) ?? "Serving team"}
+                      {(Array.isArray(s.teams) ? s.teams[0]?.name : s.teams?.name) ?? "Serving team"}
                     </div>
                     <div className="font-sans text-xs text-muted-foreground mt-0.5">
                       {formatServiceDate(s.service_date)}

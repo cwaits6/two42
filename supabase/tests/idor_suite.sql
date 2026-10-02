@@ -36,9 +36,14 @@ declare
   _fund uuid;
   _serving_group uuid;
   _signup uuid;
+  _group uuid;
 begin
-  insert into public.member_groups (org_id, name, is_serving_role)
-    values (_org, _tag || ' serving team', true) returning id into _serving_group;
+  insert into public.groups (org_id, name)
+    values (_org, _tag || ' group') returning id into _group;
+  insert into public.group_members (org_id, group_id, profile_id, role)
+    values (_org, _group, _owner, 'leader');
+  insert into public.teams (org_id, group_id, name, is_serving_role)
+    values (_org, _group, _tag || ' serving team', true) returning id into _serving_group;
 
   insert into public.family_units (org_id, family_name)
     values (_org, _tag || ' family') returning id into _family;
@@ -68,7 +73,7 @@ begin
     select _org, id, _owner from public.prayer_requests
       where org_id = _org and author_id = _owner limit 1;
 
-  insert into public.profile_groups (org_id, profile_id, group_id)
+  insert into public.team_members (org_id, profile_id, team_id)
     values (_org, _owner, _serving_group);
   insert into public.serving_signups (org_id, group_id, service_date, family_id, created_by)
     values (_org, _serving_group, (current_date + (7 - extract(dow from current_date)::int)), _family, _owner)
@@ -120,8 +125,10 @@ begin
   perform set_config('idor.prayer_b', (select id from public.prayer_requests where org_id = org_b limit 1)::text, true);
   perform set_config('idor.signup_a', (select id from public.serving_signups where org_id = org_a limit 1)::text, true);
   perform set_config('idor.signup_b', (select id from public.serving_signups where org_id = org_b limit 1)::text, true);
-  perform set_config('idor.group_a', (select id from public.member_groups where org_id = org_a limit 1)::text, true);
-  perform set_config('idor.group_b', (select id from public.member_groups where org_id = org_b limit 1)::text, true);
+  perform set_config('idor.group_a', (select id from public.teams where org_id = org_a limit 1)::text, true);
+  perform set_config('idor.group_b', (select id from public.teams where org_id = org_b limit 1)::text, true);
+  perform set_config('idor.grp_a', (select id from public.groups where org_id = org_a limit 1)::text, true);
+  perform set_config('idor.grp_b', (select id from public.groups where org_id = org_b limit 1)::text, true);
   perform set_config('idor.family_a', (select id from public.family_units where org_id = org_a limit 1)::text, true);
   perform set_config('idor.family_b', (select id from public.family_units where org_id = org_b limit 1)::text, true);
   perform set_config('idor.fm_a', (select id from public.family_members where org_id = org_a limit 1)::text, true);
@@ -162,7 +169,8 @@ declare
     'rsvps|' || current_setting('idor.rsvp_a') || '|' || current_setting('idor.rsvp_b'),
     'prayer_requests|' || current_setting('idor.prayer_a') || '|' || current_setting('idor.prayer_b'),
     'serving_signups|' || current_setting('idor.signup_a') || '|' || current_setting('idor.signup_b'),
-    'member_groups|' || current_setting('idor.group_a') || '|' || current_setting('idor.group_b'),
+    'teams|' || current_setting('idor.group_a') || '|' || current_setting('idor.group_b'),
+    'groups|' || current_setting('idor.grp_a') || '|' || current_setting('idor.grp_b'),
     'family_units|' || current_setting('idor.family_a') || '|' || current_setting('idor.family_b'),
     'family_members|' || current_setting('idor.fm_a') || '|' || current_setting('idor.fm_b'),
     'prayer_wall|' || current_setting('idor.prayer_a') || '|' || current_setting('idor.prayer_b'),
@@ -357,6 +365,8 @@ declare
   role_a text := 'unset';
   email_a text := 'unset';
   leader_a boolean;
+  grp_member_a boolean;
+  grp_leader_a boolean;
   fund_a boolean;
   org_member_a boolean;
   org_member_b boolean;
@@ -367,7 +377,9 @@ begin
 
   role_a := public.get_profile_role(current_setting('idor.owner_a')::uuid);
   email_a := public.get_profile_email(current_setting('idor.owner_a')::uuid);
-  leader_a := public.is_group_leader(current_setting('idor.group_a')::uuid);
+  leader_a := public.is_team_lead(current_setting('idor.group_a')::uuid);
+  grp_member_a := public.is_group_member(current_setting('idor.grp_a')::uuid);
+  grp_leader_a := public.is_group_leader(current_setting('idor.grp_a')::uuid);
   fund_a := public.giving_can_manage_fund(current_setting('idor.fund_a')::uuid);
   org_member_a := public.is_org_member(current_setting('idor.org_a')::uuid);
   org_member_b := public.is_org_member(current_setting('idor.org_b')::uuid);
@@ -379,7 +391,11 @@ begin
   insert into idor_results
     select ok(email_a is null, 'get_profile_email(org-A profile) is NULL for an org-B member');
   insert into idor_results
-    select ok(not leader_a, 'is_group_leader(org-A group) is false for an org-B member');
+    select ok(not leader_a, 'is_team_lead(org-A team) is false for an org-B member');
+  insert into idor_results
+    select ok(not grp_member_a, 'is_group_member(org-A group) is false for an org-B member');
+  insert into idor_results
+    select ok(not grp_leader_a, 'is_group_leader(org-A group) is false for an org-B member');
   insert into idor_results
     select ok(not fund_a, 'giving_can_manage_fund(org-A fund) is false for a plain org-B member');
   insert into idor_results

@@ -105,7 +105,7 @@ export async function GET(request: Request) {
     // Serving signups where this user is an attendee (inner join filters results)
     supabase
       .from("serving_signups")
-      .select("id, service_date, member_groups(name), serving_signup_attendees!inner(profile_id)")
+      .select("id, service_date, teams(name), serving_signup_attendees!inner(profile_id)")
       .eq("org_id", sub.org_id)
       .eq("serving_signup_attendees.profile_id", sub.user_id)
       .gte("service_date", thirtyDaysAgo.slice(0, 10))
@@ -127,7 +127,7 @@ export async function GET(request: Request) {
   const typedEvents = (events ?? []) as Event[];
 
   const servingSignups: ServingICSInput[] = (myServings ?? []).map((s) => {
-    const mg = s.member_groups as unknown as { name: string } | Array<{ name: string }> | null;
+    const mg = s.teams as unknown as { name: string } | Array<{ name: string }> | null;
     const teamName = (Array.isArray(mg) ? mg[0]?.name : mg?.name) ?? "Serving";
     return { signupId: s.id as string, serviceDate: s.service_date as string, teamName };
   });

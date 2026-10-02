@@ -74,8 +74,10 @@ begin
   insert into public.prayer_requests (org_id, author_id, body, category)
     values (org_b, owner_b, 'B prayer', 'health') returning id into v;
   perform set_config('fk.request_b', v::text, true);
-  insert into public.member_groups (org_id, name, is_serving_role)
-    values (org_b, 'B serving team', true) returning id into v;
+  insert into public.groups (org_id, name) values (org_b, 'B group') returning id into v;
+  perform set_config('fk.grp_b', v::text, true);
+  insert into public.teams (org_id, group_id, name, is_serving_role)
+    values (org_b, v, 'B serving team', true) returning id into v;
   perform set_config('fk.group_b', v::text, true);
 end $$;
 
@@ -89,11 +91,18 @@ select throws_ok(
   'rsvps in org A cannot reference an org B event');
 
 select throws_ok(
-  $$ insert into public.profile_groups (org_id, profile_id, group_id)
+  $$ insert into public.team_members (org_id, profile_id, team_id)
      values (current_setting('fk.org_a')::uuid, current_setting('fk.owner_a')::uuid,
              current_setting('fk.group_b')::uuid) $$,
   '23503', null,
-  'profile_groups in org A cannot reference an org B group');
+  'team_members in org A cannot reference an org B team');
+
+select throws_ok(
+  $$ insert into public.group_members (org_id, group_id, profile_id)
+     values (current_setting('fk.org_a')::uuid, current_setting('fk.grp_b')::uuid,
+             current_setting('fk.owner_a')::uuid) $$,
+  '23503', null,
+  'group_members in org A cannot reference an org B group');
 
 select throws_ok(
   $$ insert into public.prayer_responses (org_id, request_id, profile_id)
@@ -174,10 +183,11 @@ declare
   costeward_a uuid := current_setting('fk.costeward_a')::uuid;
   _family uuid; _fm uuid; _invite_token uuid; _ar uuid;
   _cal uuid; _event uuid; _series uuid; _lecture uuid; _pcs uuid;
-  _signup uuid; _fund uuid; _group uuid;
+  _signup uuid; _fund uuid; _group uuid; _grp uuid;
 begin
-  insert into public.member_groups (org_id, name, is_serving_role)
-    values (org_a, 'A serving team', true) returning id into _group;
+  insert into public.groups (org_id, name) values (org_a, 'A group') returning id into _grp;
+  insert into public.teams (org_id, group_id, name, is_serving_role)
+    values (org_a, _grp, 'A serving team', true) returning id into _group;
 
   -- 1. access_requests.invite_token ← family_invites.token
   insert into public.family_units (org_id, family_name) values (org_a, 'A family') returning id into _family;

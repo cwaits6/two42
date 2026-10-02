@@ -66,7 +66,7 @@ export default async function RootLayout({
     if (user) {
       const [{ data, error }, { data: groupData, error: groupError }, { data: platformAdmin }] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", user.id).single(),
-        supabase.from("profile_groups").select("group_id").eq("profile_id", user.id),
+        supabase.from("team_members").select("team_id").eq("profile_id", user.id),
         // Nav affordance only — every /platform surface re-checks
         // server-side; an RPC error just hides the link (fail closed).
         supabase.rpc("is_platform_admin"),
@@ -77,7 +77,7 @@ export default async function RootLayout({
       // an authenticated member with the logged-out Header/AppShell, and a
       // null groupData silently denies serving access.
       if (error) console.error("Layout: failed to load profile:", error);
-      if (groupError) console.error("Layout: failed to load profile groups:", groupError);
+      if (groupError) console.error("Layout: failed to load team memberships:", groupError);
       profile = data;
 
       const loadServingAccess = async () => {
@@ -87,7 +87,7 @@ export default async function RootLayout({
           .from("serving_team_settings")
           .select("group_id", { count: "exact", head: true })
           .eq("enabled", true)
-          .in("group_id", groupData.map((g) => g.group_id as string));
+          .in("group_id", groupData.map((g) => g.team_id as string));
         return (count ?? 0) > 0;
       };
       hasServingAccess = await loadServingAccess();

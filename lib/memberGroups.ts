@@ -14,17 +14,17 @@ export async function setGroupMembership(
   const supabase = createClient();
 
   if (member) {
-    const { error } = await supabase.from("profile_groups").insert({
+    const { error } = await supabase.from("team_members").insert({
       profile_id: profileId,
-      group_id: group.id,
+      team_id: group.id,
     });
     if (error) return `Failed to add to ${group.name}.`;
   } else {
     const { error } = await supabase
-      .from("profile_groups")
+      .from("team_members")
       .delete()
       .eq("profile_id", profileId)
-      .eq("group_id", group.id);
+      .eq("team_id", group.id);
     if (error) return `Failed to remove from ${group.name}.`;
   }
 

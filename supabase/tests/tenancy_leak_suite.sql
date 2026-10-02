@@ -39,15 +39,27 @@ declare
   _serving_group uuid;
   _signup uuid;
   _request uuid;
+  _group uuid;
+  _group_member uuid;
+  _label uuid;
 begin
   -- provisioning already seeded: organizations, event_calendars (prayer
   -- calendar), site_settings, about_page, access_requests (owner), and the
-  -- owner's profiles + organization_members rows via signup. Groups are
-  -- org-defined (provisioning seeds none), so the fixture creates its own
-  -- serving group here — which is also the member_groups row the
+  -- owner's profiles + organization_members rows via signup. Groups and
+  -- teams are org-defined (provisioning seeds none), so the fixture creates
+  -- its own group, with the owner as its leader, a label attached to that
+  -- membership, and a serving team under it — the rows the
   -- fixture-completeness gate counts.
-  insert into public.member_groups (org_id, name, is_serving_role)
-    values (_org, _tag || ' serving team', true) returning id into _serving_group;
+  insert into public.groups (org_id, name)
+    values (_org, _tag || ' group') returning id into _group;
+  insert into public.group_members (org_id, group_id, profile_id, role)
+    values (_org, _group, _owner, 'leader') returning id into _group_member;
+  insert into public.group_labels (org_id, group_id, name)
+    values (_org, _group, _tag || ' label') returning id into _label;
+  insert into public.group_member_labels (org_id, group_id, group_member_id, label_id)
+    values (_org, _group, _group_member, _label);
+  insert into public.teams (org_id, group_id, name, is_serving_role)
+    values (_org, _group, _tag || ' serving team', true) returning id into _serving_group;
 
   insert into public.family_units (org_id, family_name)
     values (_org, _tag || ' family') returning id into _family;
@@ -102,7 +114,7 @@ begin
     select _org, id, _owner from public.prayer_requests
       where org_id = _org and author_id = _owner limit 1;
 
-  insert into public.profile_groups (org_id, profile_id, group_id)
+  insert into public.team_members (org_id, profile_id, team_id)
     values (_org, _owner, _serving_group);
   insert into public.serving_team_settings (org_id, group_id, enabled)
     values (_org, _serving_group, true);

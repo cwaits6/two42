@@ -67,7 +67,7 @@ export default async function ServingLinkPage({
   // uncaptured error is indistinguishable from an absent row and renders as
   // "expired" with nothing in the logs.
   const { data: group, error: groupError } = await service
-    .from("member_groups")
+    .from("teams")
     .select("id, name, org_id")
     .eq("id", payload.g)
     .maybeSingle();
@@ -121,10 +121,10 @@ export default async function ServingLinkPage({
       .eq("org_id", group.org_id)
       .maybeSingle(),
     service
-      .from("profile_groups")
+      .from("team_members")
       .select("profile_id")
       .eq("profile_id", payload.p)
-      .eq("group_id", payload.g)
+      .eq("team_id", payload.g)
       .eq("org_id", group.org_id)
       .maybeSingle(),
     service

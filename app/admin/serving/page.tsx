@@ -69,11 +69,11 @@ export default function ServingStatsPage() {
       // Enabled teams
       const { data: teamSettings } = await supabase
         .from("serving_team_settings")
-        .select("group_id, member_groups(name)")
+        .select("group_id, teams(name)")
         .eq("enabled", true);
 
       const resolvedTeams: Team[] = (teamSettings ?? []).map((ts) => {
-        const mg = ts.member_groups as unknown as { name: string } | null;
+        const mg = ts.teams as unknown as { name: string } | null;
         return { group_id: ts.group_id as string, name: mg?.name ?? "Unknown team" };
       });
 

@@ -43,7 +43,7 @@ export default async function ServingSchedulePage({
         .eq("id", user.id)
         .single(),
       supabase
-        .from("member_groups")
+        .from("teams")
         .select("id, name, description, color")
         .eq("id", groupId)
         .maybeSingle(),
@@ -61,10 +61,10 @@ export default async function ServingSchedulePage({
   if (!settings?.enabled && !isAdmin) redirect("/serving");
 
   const { data: membership } = await supabase
-    .from("profile_groups")
+    .from("team_members")
     .select("is_leader")
     .eq("profile_id", user.id)
-    .eq("group_id", groupId)
+    .eq("team_id", groupId)
     .maybeSingle();
 
   const isMember = !!membership;
@@ -74,9 +74,9 @@ export default async function ServingSchedulePage({
   const canSignUp = isMember || isLeader || isAdmin;
 
   const { data: memberRows } = await supabase
-    .from("profile_groups")
+    .from("team_members")
     .select("profiles(email, role)")
-    .eq("group_id", groupId);
+    .eq("team_id", groupId);
   const memberCount = (memberRows ?? []).filter((row) => {
     const member = row.profiles as unknown as {
       email: string | null;

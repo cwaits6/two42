@@ -32,6 +32,8 @@ declare
   outsider_a uuid := gen_random_uuid();
   group_a uuid;
   group_b uuid;
+  grp_a uuid;
+  grp_b uuid;
   sunday1 date := current_date + (7 - extract(dow from current_date)::int);
 begin
   org_a := public.provision_organization('Serving RPC Org A', 'serving-rpc-org-a', 'owner-a@serving-rpc.example.test');
@@ -48,16 +50,18 @@ begin
     (member_a2, 'member-a2@serving-rpc.example.test'),
     (outsider_a, 'outsider-a@serving-rpc.example.test');
 
-  insert into public.member_groups (org_id, name, is_serving_role)
-    values (org_a, 'org A serving team', true) returning id into group_a;
-  insert into public.member_groups (org_id, name, is_serving_role)
-    values (org_b, 'org B serving team', true) returning id into group_b;
+  insert into public.groups (org_id, name) values (org_a, 'org A group') returning id into grp_a;
+  insert into public.groups (org_id, name) values (org_b, 'org B group') returning id into grp_b;
+  insert into public.teams (org_id, group_id, name, is_serving_role)
+    values (org_a, grp_a, 'org A serving team', true) returning id into group_a;
+  insert into public.teams (org_id, group_id, name, is_serving_role)
+    values (org_b, grp_b, 'org B serving team', true) returning id into group_b;
 
   insert into public.serving_team_settings (org_id, group_id, enabled) values
     (org_a, group_a, true),
     (org_b, group_b, true);
 
-  insert into public.profile_groups (org_id, profile_id, group_id) values
+  insert into public.team_members (org_id, profile_id, team_id) values
     (org_a, owner_a, group_a),
     (org_a, member_a2, group_a),
     (org_b, owner_b, group_b);
@@ -232,7 +236,7 @@ begin
   end;
   reset role;
 
-  -- An org A profile with no profile_groups row for the team → SV004.
+  -- An org A profile with no team_members row for the team → SV004.
   set local role authenticated;
   perform set_config('request.jwt.claims',
     json_build_object('sub', current_setting('svrpc.outsider_a'))::text, true);
@@ -514,7 +518,7 @@ select is(current_setting('svrpc.retry_created'), 'true',
 -- rejection assertions cannot tell a correct implementation from one that
 -- rejects everything: guarding the attendee insert with `if _created then`
 -- (which breaks additive re-signup outright), rejecting every spouse, and
--- deleting the is_admin/is_group_leader arms each passed the suite as it
+-- deleting the is_admin/is_team_lead arms each passed the suite as it
 -- stood. These are the acceptance assertions that catch those.
 do $$
 declare

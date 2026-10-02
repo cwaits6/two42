@@ -72,8 +72,8 @@ const EDGE_TESTS = "supabase/functions/tests/";
 // function when the file has several chains on the same table.
 const FANOUTS = [
   { file: "app/api/feedback/route.ts", fn: null, table: "profiles" },
-  { file: "app/api/serving/broadcast/route.ts", fn: null, table: "profile_groups" },
-  { file: "lib/serving/server.ts", fn: "notifyLeadersOfCancel", table: "profile_groups" },
+  { file: "app/api/serving/broadcast/route.ts", fn: null, table: "team_members" },
+  { file: "lib/serving/server.ts", fn: "notifyLeadersOfCancel", table: "team_members" },
 ];
 
 const INVENTORY = "docs/security/service-role-inventory.md";

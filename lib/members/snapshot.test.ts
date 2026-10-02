@@ -14,8 +14,8 @@ const TABLES = [
   "profiles",
   "family_units",
   "family_members",
-  "member_groups",
-  "profile_groups",
+  "teams",
+  "team_members",
   "access_requests",
 ] as const;
 

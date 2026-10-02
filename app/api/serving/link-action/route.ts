@@ -48,7 +48,7 @@ export async function POST(request: Request) {
   // `error` a 42501, a PostgREST 5xx and a genuinely absent row all render as
   // "this link expired", with nothing in the logs.
   const { data: group, error: groupError } = await service
-    .from("member_groups")
+    .from("teams")
     .select("id, name, org_id")
     .eq("id", payload.g)
     .maybeSingle();
@@ -139,10 +139,10 @@ export async function POST(request: Request) {
 
     // The link acts for a specific member — they must be on the team
     const { data: membership, error: membershipError } = await service
-      .from("profile_groups")
+      .from("team_members")
       .select("profile_id")
       .eq("profile_id", profile.id)
-      .eq("group_id", payload.g)
+      .eq("team_id", payload.g)
       .eq("org_id", group.org_id)
       .maybeSingle();
     if (membershipError) {
@@ -187,7 +187,7 @@ export async function POST(request: Request) {
     // needed because the server clients are created without a <Database>
     // generic, so `.single()` would otherwise infer `unknown`.
     // org-anchor: org_id is re-derived and enforced by the RPC itself from the
-    // already-validated member_groups row fetched above
+    // already-validated teams row fetched above
     const { data: rpc, error: rpcError } = await service
       .rpc("serving_signup_apply", {
         _group_id: payload.g,

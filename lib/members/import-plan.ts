@@ -191,7 +191,7 @@ export interface ImportPlan {
     groupAssignments: number;
   };
   /** Ordered, ready to apply: family_units inserts → family_members
-   *  inserts/updates → profiles updates → profile_groups changes. */
+   *  inserts/updates → profiles updates → team_members changes. */
   writes: PlannedWrite[];
 }
 
