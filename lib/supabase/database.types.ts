@@ -348,13 +348,13 @@ isOneToOne: false
                   ]
                 },"giving_fund_methods": {
                   Row: {
-                    "custom_handle": string | null,"display_order": number,"fund_id": string,"method": string,"org_id": string
+                    "custom_handle": string,"display_order": number,"fund_id": string,"method": string,"org_id": string
                   }
                   Insert: {
-                    "custom_handle"?: string | null,"display_order"?: number,"fund_id": string,"method": string,"org_id"?: string
+                    "custom_handle": string,"display_order"?: number,"fund_id": string,"method": string,"org_id"?: string
                   }
                   Update: {
-                    "custom_handle"?: string | null,"display_order"?: number,"fund_id"?: string,"method"?: string,"org_id"?: string
+                    "custom_handle"?: string,"display_order"?: number,"fund_id"?: string,"method"?: string,"org_id"?: string
                   }
                   Relationships: [
                     {
@@ -732,31 +732,6 @@ isOneToOne: false
                   }
                   Relationships: [
                     
-                  ]
-                },"payment_handles": {
-                  Row: {
-                    "handle": string,"method": string,"profile_id": string,"updated_at": string
-                  }
-                  Insert: {
-                    "handle": string,"method": string,"profile_id": string,"updated_at"?: string
-                  }
-                  Update: {
-                    "handle"?: string,"method"?: string,"profile_id"?: string,"updated_at"?: string
-                  }
-                  Relationships: [
-                    {
-      foreignKeyName: "payment_handles_profile_id_fkey"
-      columns: ["profile_id"]
-isOneToOne: false
-      referencedRelation: "profiles"
-      referencedColumns: ["id"]
-    },{
-      foreignKeyName: "payment_handles_profile_id_fkey"
-      columns: ["profile_id"]
-isOneToOne: false
-      referencedRelation: "profiles_directory"
-      referencedColumns: ["id"]
-    }
                   ]
                 },"platform_admins": {
                   Row: {
