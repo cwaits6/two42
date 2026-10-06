@@ -178,10 +178,46 @@ wedge that Sunday behind `unique (group_id, service_date)`:
 `SECURITY DEFINER` bypasses RLS, so **the org resolution and equality checks
 in the function bodies are the tenant boundary; no lint sees them.**
 `schema_tenancy_lint.sql` check 4 only proves the source mentions `org_id`;
-the resolution order (org from the `member_groups` row, never a caller
+the resolution order (org from the `teams` row, never a caller
 parameter; every other row asserted to carry it) is review-enforced. The
 grant matrix and the org checks are pinned by
 `supabase/tests/serving_signup_rpc_suite.sql`.
+
+## Group membership helpers — SECURITY DEFINER (`is_group_member`, `is_group_leader`, `is_team_lead`)
+
+The group model (`20260926000000_group_model_foundation.sql`) introduces the
+first within-org visibility boundary: rows on `groups`, `group_members`,
+`group_labels` and `group_member_labels` are readable by members of that
+group and writable by its leaders (org admins pass every arm). The RLS
+policies resolve membership through three `SECURITY DEFINER` helpers, each
+`STABLE`, `set search_path = ''`, and resolving the caller from `auth.uid()`
+**only** — the id argument names the group or team, never the principal:
+
+- `is_group_member(_group_id)` — a `group_members` row for `auth.uid()` in
+  the given group.
+- `is_group_leader(_group_id)` — the same row with `role = 'leader'`. This
+  replaces the pre-group-model helper of the same name, which had team-lead
+  semantics; that helper lives on as `is_team_lead`.
+- `is_team_lead(_team_id)` — a `team_members` row for `auth.uid()` on the
+  given team with `is_leader = true`. The seven serving policies
+  (`serving_signups` create/delete, `serving_signup_attendees` remove,
+  `serving_broadcasts` view/log, `serving_team_settings` insert/update) and
+  `serving_signup_create()` call it.
+
+Every body carries `org_id = public.app_current_org_id()`, so a membership
+row in another org never counts — `schema_tenancy_lint.sql` check 4 sees
+that predicate; the org equality itself is what keeps a caller-supplied id
+from resolving another tenant's row. EXECUTE: revoked from `public` and
+`anon`, granted to `authenticated` (the policies that call them are all
+`to authenticated`).
+
+`group_model_backfill()` — the one-group-per-org data migration — is
+deliberately **not** `SECURITY DEFINER` and has no client grant (EXECUTE
+revoked from `public`, `anon`, `authenticated` and `service_role`): it
+exists as a function only so `supabase/tests/group_model_suite.sql` can run
+the same logic the migration ran against fixture orgs. It is idempotent
+and asserts its own enrolment and leader counts. Grants, org checks and the
+within-org boundary are pinned by that suite and by `idor_suite.sql`.
 
 ## Email quota RPC — a definer-function bypass surface (CWA-72 / #365)
 
@@ -248,12 +284,12 @@ the `service_role`-only grant, the grant-matrix and behaviour assertions in
 | `app/api/platform/organizations/route.ts` | `provision_organization()` is EXECUTE-granted to `service_role` only | Platform-admin authority; the RPC creates the org and derives everything from it transactionally | `rpc("provision_organization")` only |
 | `app/api/platform/organizations/[id]/route.ts` | Status/branding/`custom_email_domain_enabled` writes on the tenant root, which has no org-admin write policy (the custom-domain flag is platform-operator-only by design: no grant to the org's own admin, this route is its sole write path) | Platform-admin authority; org id from the route param | `organizations` read + update `.eq("id", id)` (branding merged, never replaced) |
 | `app/api/platform/organizations/[id]/invite-owner/route.ts` | Mints the founding admin's `signup_token`; the platform admin's own-org RLS could never reach the new org's request row | Platform-admin authority; org id from the route param | `access_requests` update `.eq("org_id", id).eq("approved_role", "admin").eq("email", ownerEmail)`; rollback update on the same filters + minted token; email branding via `resolveEmailBranding(id)` |
-| `app/serving/go/page.tsx` | Unauthenticated, HMAC-signed serving link; no session exists to satisfy RLS | HMAC-validated `member_groups` row; link rejected when `profiles.org_id` disagrees | `serving_team_settings`, `profile_groups`, `serving_signups`, `profiles` (spouse), `family_units` (label) |
+| `app/serving/go/page.tsx` | Unauthenticated, HMAC-signed serving link; no session exists to satisfy RLS | HMAC-validated `teams` row; link rejected when `profiles.org_id` disagrees | `serving_team_settings`, `team_members`, `serving_signups`, `profiles` (spouse), `family_units` (label) |
 | `app/serving/[groupId]/page.tsx` | Surfaces pending (never-logged-in) spouse profiles that RLS hides from the caller | Caller's own RLS-scoped profile | `profiles` (spouse lookup) |
 | `app/join/family/[token]/page.tsx` | Signed family-invite link resolved before login; no session | The `family_invites` row itself: looked up by `token` alone (unscoped by org — the row is what resolves it), `org_id` and the org's `slug` taken from that row | `family_invites`, `organizations` (`slug`, embedded via the `org_id` FK, for the link into `/[orgSlug]/join`) |
-| `app/api/serving/signups/route.ts` | Post-delete notification email lookups for affected members | The deleted signup row's own `org_id` (authorised by the RLS-checked delete) | `profile_groups` (leaders), `family_units` (label) |
-| `app/api/serving/link-action/route.ts` | Same HMAC signed-link pattern as `serving/go`; no session | HMAC-validated `member_groups` row; link rejected when `profiles.org_id` disagrees | `serving_team_settings`, `profile_groups`, `serving_signups` (read/delete — cancel path), `rpc(serving_signup_apply)` (the signup + attendee insert pair, one transaction; the function re-derives the org from the `member_groups` row and enforces it internally — CWA-47 / #313), `profiles` (spouse), `family_units` (label) |
-| `app/api/serving/broadcast/route.ts` | Fans out email to all group members regardless of caller's RLS visibility | RLS-scoped `member_groups` row | `profile_groups` (recipients) |
+| `app/api/serving/signups/route.ts` | Post-delete notification email lookups for affected members | The deleted signup row's own `org_id` (authorised by the RLS-checked delete) | `team_members` (leaders), `family_units` (label) |
+| `app/api/serving/link-action/route.ts` | Same HMAC signed-link pattern as `serving/go`; no session | HMAC-validated `teams` row; link rejected when `profiles.org_id` disagrees | `serving_team_settings`, `team_members`, `serving_signups` (read/delete — cancel path), `rpc(serving_signup_apply)` (the signup + attendee insert pair, one transaction; the function re-derives the org from the `teams` row and enforces it internally — CWA-47 / #313), `profiles` (spouse), `family_units` (label) |
+| `app/api/serving/broadcast/route.ts` | Fans out email to all team members regardless of caller's RLS visibility | RLS-scoped `teams` row | `team_members` (recipients) |
 | `app/api/calendar/feed.ics/route.ts` | Bearer-token calendar subscription; no session | `calendar_subscription_tokens` row (`org_id` stamped at issuance); owner role re-checked | `events`, `serving_signups`, `profiles` (owner), token expiry update |
 | `app/api/auth/consume-token/route.ts` | Pre-login token flow; no session yet | The resolved `access_requests` row (`signup_token` is globally UNIQUE today — scoping is correctness-under-change) | `access_requests` update on `(id, org_id)` |
 | `app/api/auth/verify-token/route.ts` | Pre-login token flow; no session yet | The `access_requests` token row itself (`org_id` selected and required non-null) | Token row is the anchor; `handle_new_user()` reads the same row |

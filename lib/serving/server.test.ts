@@ -136,7 +136,7 @@ describe("notifyLeadersOfCancel", () => {
 
   it("builds servingUrl on the canonical origin", async () => {
     const service = stubClient({
-      profile_groups: {
+      team_members: {
         data: [
           {
             profiles: {

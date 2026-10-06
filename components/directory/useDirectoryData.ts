@@ -76,7 +76,7 @@ export function useDirectoryData() {
               .select("*")
               .order("family_name", { ascending: true }),
             supabase
-              .from("member_groups")
+              .from("teams")
               .select("id, name, color, icon, description, show_in_directory_filter")
               .order("display_order"),
           ]);
@@ -88,7 +88,7 @@ export function useDirectoryData() {
               ? "profiles_directory"
               : fErr
                 ? "families_directory_full"
-                : "member_groups",
+                : "teams",
             message: err?.message,
             details: err?.details,
             hint: err?.hint,

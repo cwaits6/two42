@@ -15,7 +15,7 @@ export const metadata = { title: `Serving | ${siteConfig.name}` };
 
 // PostgREST embeds the joined profile as a to-one object.
 type RosterRow = {
-  group_id: string;
+  team_id: string;
   is_leader: boolean;
   profiles: {
     id: string;
@@ -50,16 +50,16 @@ export default async function ServingPage() {
     { data: rosterRows },
     { data: memberships },
   ] = await Promise.all([
-    supabase.from("member_groups").select("*").order("display_order"),
+    supabase.from("teams").select("*").order("display_order"),
     supabase.from("serving_team_settings").select("*"),
     supabase
-      .from("profile_groups")
+      .from("team_members")
       .select(
-        "group_id, is_leader, profiles(id, role, first_name, last_name, preferred_name, avatar_url)"
+        "team_id, is_leader, profiles(id, role, first_name, last_name, preferred_name, avatar_url)"
       ),
     supabase
-      .from("profile_groups")
-      .select("group_id, is_leader")
+      .from("team_members")
+      .select("team_id, is_leader")
       .eq("profile_id", user.id),
   ]);
 
@@ -68,7 +68,7 @@ export default async function ServingPage() {
     ((settingsRows ?? []) as ServingTeamSettings[]).map((s) => [s.group_id, s])
   );
   const membershipMap = new Map(
-    (memberships ?? []).map((m) => [m.group_id, m.is_leader as boolean])
+    (memberships ?? []).map((m) => [m.team_id, m.is_leader as boolean])
   );
 
   // Private buckets: exchange stored avatar URLs for signed URLs
@@ -87,9 +87,9 @@ export default async function ServingPage() {
   for (const row of rosterList) {
     // Skip un-onboarded household peers (no name yet, not real roster members).
     if (!row.profiles || row.profiles.role === "pending") continue;
-    const list = rosters.get(row.group_id) ?? [];
+    const list = rosters.get(row.team_id) ?? [];
     list.push({ ...row.profiles, is_leader: row.is_leader });
-    rosters.set(row.group_id, list);
+    rosters.set(row.team_id, list);
   }
   for (const list of rosters.values()) {
     list.sort((a, b) =>

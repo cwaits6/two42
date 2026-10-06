@@ -35,17 +35,24 @@ end $$;
 
 -- ── provision_organization() completeness (§6) ──────────────────────────────
 
--- Groups are org-defined (maintainer decision, plan §12 open item 1):
--- admins create them in /admin/groups and set per-group capability flags
+-- Teams are org-defined (a maintainer decision):
+-- admins create them in /admin/groups and set per-team capability flags
 -- (is_serving_role; grants_prayer_access existed until 20260801000001) and
 -- per-membership leadership
--- (profile_groups.is_leader). A platform-seeded group would be the
+-- (team_members.is_leader). A platform-seeded team would be the
 -- hardwired-role model 20260716000002 already removed once, so its absence
--- is asserted, not assumed.
+-- is asserted, not assumed. Provisioning seeds no group either: the
+-- founding admin has no profile at provisioning time, so nothing could be
+-- enrolled — group creation is the group workspace's job.
 select is(
-  (select count(*)::int from public.member_groups
+  (select count(*)::int from public.teams
     where org_id = current_setting('su.org_a')::uuid),
-  0, 'provisioning seeds no groups — groups are org-defined');
+  0, 'provisioning seeds no teams — teams are org-defined');
+
+select is(
+  (select count(*)::int from public.groups
+    where org_id = current_setting('su.org_a')::uuid),
+  0, 'provisioning seeds no group — the founding admin has no profile to enrol yet');
 
 select is(
   (select value from public.site_settings
@@ -412,16 +419,20 @@ declare
   owner_a uuid := current_setting('su.owner_a')::uuid;
   group_a uuid;
   group_b uuid;
+  grp_a uuid;
+  grp_b uuid;
   fund_b uuid;
   lead_own text; lead_other text; manage_other text;
 begin
-  -- Provisioning seeds no groups, so each org's serving group is created
-  -- here the way an org admin would.
-  insert into public.member_groups (org_id, name, is_serving_role)
-    values (org_a, 'A serving team', true) returning id into group_a;
-  insert into public.member_groups (org_id, name, is_serving_role)
-    values (org_b, 'B serving team', true) returning id into group_b;
-  insert into public.profile_groups (org_id, profile_id, group_id, is_leader)
+  -- Provisioning seeds no groups or teams, so each org's group and serving
+  -- team are created here the way an org admin would.
+  insert into public.groups (org_id, name) values (org_a, 'A group') returning id into grp_a;
+  insert into public.groups (org_id, name) values (org_b, 'B group') returning id into grp_b;
+  insert into public.teams (org_id, group_id, name, is_serving_role)
+    values (org_a, grp_a, 'A serving team', true) returning id into group_a;
+  insert into public.teams (org_id, group_id, name, is_serving_role)
+    values (org_b, grp_b, 'B serving team', true) returning id into group_b;
+  insert into public.team_members (org_id, profile_id, team_id, is_leader)
     values (org_a, owner_a, group_a, true);
   insert into public.giving_funds (org_id, name, steward_id)
     values (org_b, 'B fund', current_setting('su.app_meta_user')::uuid)
@@ -429,8 +440,8 @@ begin
 
   set local role authenticated;
   perform set_config('request.jwt.claims', json_build_object('sub', owner_a)::text, true);
-  lead_own := public.is_group_leader(group_a)::text;
-  lead_other := public.is_group_leader(group_b)::text;
+  lead_own := public.is_team_lead(group_a)::text;
+  lead_other := public.is_team_lead(group_b)::text;
   -- owner_a is org A's founding ADMIN since access_requests.approved_role
   -- (CWA-11), and giving_can_manage_fund() short-circuits true for any org
   -- admin — the restrictive org floor is what keeps that in-org. The
@@ -446,9 +457,9 @@ begin
 end $$;
 
 select is(current_setting('su.lead_own'), 'true',
-  'is_group_leader() is true for the caller''s own-org group');
+  'is_team_lead() is true for the caller''s own-org team');
 select is(current_setting('su.lead_other'), 'false',
-  'is_group_leader() is false for another org''s group id');
+  'is_team_lead() is false for another org''s team id');
 select is(current_setting('su.manage_other'), 'false',
   'giving_can_manage_fund() is false for another org''s fund id');
 

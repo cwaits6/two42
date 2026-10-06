@@ -829,6 +829,194 @@ export type Database = {
           },
         ]
       }
+      group_labels: {
+        Row: {
+          color: string | null
+          created_at: string
+          group_id: string
+          id: string
+          name: string
+          org_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          group_id: string
+          id?: string
+          name: string
+          org_id?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          group_id?: string
+          id?: string
+          name?: string
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_labels_group_id_fkey"
+            columns: ["group_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "group_labels_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      group_member_labels: {
+        Row: {
+          applied_at: string
+          applied_by: string | null
+          group_id: string
+          group_member_id: string
+          label_id: string
+          org_id: string
+        }
+        Insert: {
+          applied_at?: string
+          applied_by?: string | null
+          group_id: string
+          group_member_id: string
+          label_id: string
+          org_id?: string
+        }
+        Update: {
+          applied_at?: string
+          applied_by?: string | null
+          group_id?: string
+          group_member_id?: string
+          label_id?: string
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_member_labels_label_fkey"
+            columns: ["label_id", "group_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "group_labels"
+            referencedColumns: ["id", "group_id", "org_id"]
+          },
+          {
+            foreignKeyName: "group_member_labels_member_fkey"
+            columns: ["group_member_id", "group_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "group_members"
+            referencedColumns: ["id", "group_id", "org_id"]
+          },
+          {
+            foreignKeyName: "group_member_labels_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      group_members: {
+        Row: {
+          added_by: string | null
+          group_id: string
+          id: string
+          joined_at: string
+          org_id: string
+          profile_id: string
+          role: string
+        }
+        Insert: {
+          added_by?: string | null
+          group_id: string
+          id?: string
+          joined_at?: string
+          org_id?: string
+          profile_id: string
+          role?: string
+        }
+        Update: {
+          added_by?: string | null
+          group_id?: string
+          id?: string
+          joined_at?: string
+          org_id?: string
+          profile_id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_members_group_id_fkey"
+            columns: ["group_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "group_members_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_members_profile_id_fkey"
+            columns: ["profile_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "group_members_profile_id_fkey"
+            columns: ["profile_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_directory"
+            referencedColumns: ["id", "org_id"]
+          },
+        ]
+      }
+      groups: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          name: string
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          org_id?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "groups_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lecture_series: {
         Row: {
           created_at: string
@@ -938,59 +1126,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "lecture_series"
             referencedColumns: ["id", "org_id"]
-          },
-        ]
-      }
-      member_groups: {
-        Row: {
-          color: string | null
-          created_at: string
-          created_by: string | null
-          description: string | null
-          display_order: number
-          icon: string | null
-          id: string
-          is_serving_role: boolean
-          name: string
-          org_id: string
-          show_in_directory_filter: boolean
-          updated_at: string
-        }
-        Insert: {
-          color?: string | null
-          created_at?: string
-          created_by?: string | null
-          description?: string | null
-          display_order?: number
-          icon?: string | null
-          id?: string
-          is_serving_role?: boolean
-          name: string
-          org_id?: string
-          show_in_directory_filter?: boolean
-          updated_at?: string
-        }
-        Update: {
-          color?: string | null
-          created_at?: string
-          created_by?: string | null
-          description?: string | null
-          display_order?: number
-          icon?: string | null
-          id?: string
-          is_serving_role?: boolean
-          name?: string
-          org_id?: string
-          show_in_directory_filter?: boolean
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "member_groups_org_id_fkey"
-            columns: ["org_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
           },
         ]
       }
@@ -1461,62 +1596,6 @@ export type Database = {
           },
         ]
       }
-      profile_groups: {
-        Row: {
-          assigned_at: string
-          assigned_by: string | null
-          group_id: string
-          is_leader: boolean
-          org_id: string
-          profile_id: string
-        }
-        Insert: {
-          assigned_at?: string
-          assigned_by?: string | null
-          group_id: string
-          is_leader?: boolean
-          org_id?: string
-          profile_id: string
-        }
-        Update: {
-          assigned_at?: string
-          assigned_by?: string | null
-          group_id?: string
-          is_leader?: boolean
-          org_id?: string
-          profile_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "profile_groups_group_id_fkey"
-            columns: ["group_id", "org_id"]
-            isOneToOne: false
-            referencedRelation: "member_groups"
-            referencedColumns: ["id", "org_id"]
-          },
-          {
-            foreignKeyName: "profile_groups_org_id_fkey"
-            columns: ["org_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "profile_groups_profile_id_fkey"
-            columns: ["profile_id", "org_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id", "org_id"]
-          },
-          {
-            foreignKeyName: "profile_groups_profile_id_fkey"
-            columns: ["profile_id", "org_id"]
-            isOneToOne: false
-            referencedRelation: "profiles_directory"
-            referencedColumns: ["id", "org_id"]
-          },
-        ]
-      }
       profiles: {
         Row: {
           address_line1: string | null
@@ -1773,7 +1852,7 @@ export type Database = {
             foreignKeyName: "serving_broadcasts_group_id_fkey"
             columns: ["group_id", "org_id"]
             isOneToOne: false
-            referencedRelation: "member_groups"
+            referencedRelation: "teams"
             referencedColumns: ["id", "org_id"]
           },
           {
@@ -1914,7 +1993,7 @@ export type Database = {
             foreignKeyName: "serving_signups_group_id_fkey"
             columns: ["group_id", "org_id"]
             isOneToOne: false
-            referencedRelation: "member_groups"
+            referencedRelation: "teams"
             referencedColumns: ["id", "org_id"]
           },
           {
@@ -1962,7 +2041,7 @@ export type Database = {
             foreignKeyName: "serving_team_settings_group_id_fkey"
             columns: ["group_id", "org_id"]
             isOneToOne: false
-            referencedRelation: "member_groups"
+            referencedRelation: "teams"
             referencedColumns: ["id", "org_id"]
           },
           {
@@ -2002,6 +2081,125 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "site_settings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_members: {
+        Row: {
+          assigned_at: string
+          assigned_by: string | null
+          is_leader: boolean
+          org_id: string
+          profile_id: string
+          team_id: string
+        }
+        Insert: {
+          assigned_at?: string
+          assigned_by?: string | null
+          is_leader?: boolean
+          org_id?: string
+          profile_id: string
+          team_id: string
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by?: string | null
+          is_leader?: boolean
+          org_id?: string
+          profile_id?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_members_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_members_profile_id_fkey"
+            columns: ["profile_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "team_members_profile_id_fkey"
+            columns: ["profile_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_directory"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "team_members_team_id_fkey"
+            columns: ["team_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id", "org_id"]
+          },
+        ]
+      }
+      teams: {
+        Row: {
+          color: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          display_order: number
+          group_id: string
+          icon: string | null
+          id: string
+          is_serving_role: boolean
+          name: string
+          org_id: string
+          show_in_directory_filter: boolean
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          display_order?: number
+          group_id: string
+          icon?: string | null
+          id?: string
+          is_serving_role?: boolean
+          name: string
+          org_id?: string
+          show_in_directory_filter?: boolean
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          display_order?: number
+          group_id?: string
+          icon?: string | null
+          id?: string
+          is_serving_role?: boolean
+          name?: string
+          org_id?: string
+          show_in_directory_filter?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teams_group_id_fkey"
+            columns: ["group_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "teams_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -2234,13 +2432,16 @@ export type Database = {
       get_profile_role: { Args: { profile_id: string }; Returns: string }
       giving_can_manage_fund: { Args: { _fund_id: string }; Returns: boolean }
       giving_stewards_can_manage: { Args: never; Returns: boolean }
+      group_model_backfill: { Args: never; Returns: undefined }
       is_admin: { Args: never; Returns: boolean }
       is_content_editor: { Args: never; Returns: boolean }
       is_group_leader: { Args: { _group_id: string }; Returns: boolean }
+      is_group_member: { Args: { _group_id: string }; Returns: boolean }
       is_household_manager: { Args: never; Returns: boolean }
       is_member: { Args: never; Returns: boolean }
       is_org_member: { Args: { _org_id: string }; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
+      is_team_lead: { Args: { _team_id: string }; Returns: boolean }
       org_email_domain_claim: {
         Args: { _cap: number; _domain: string; _org_id: string }
         Returns: {

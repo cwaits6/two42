@@ -45,12 +45,12 @@ export async function POST(request: Request) {
       .eq("id", user.id)
       .single(),
     supabase
-      .from("profile_groups")
+      .from("team_members")
       .select("is_leader")
       .eq("profile_id", user.id)
-      .eq("group_id", groupId)
+      .eq("team_id", groupId)
       .maybeSingle(),
-    supabase.from("member_groups").select("id, name, org_id").eq("id", groupId).single(),
+    supabase.from("teams").select("id, name, org_id").eq("id", groupId).single(),
     supabase
       .from("serving_team_settings")
       .select("enabled, window_weeks")
@@ -139,11 +139,11 @@ export async function POST(request: Request) {
   // org_id filter is required: the recipient list is the email fan-out
   // surface, so an unscoped service-role read here mails another org's members.
   const { data: memberRows, error: memberRowsError } = await service
-    .from("profile_groups")
+    .from("team_members")
     .select(
       "profiles(id, first_name, last_name, preferred_name, email, role, email_announcements)"
     )
-    .eq("group_id", groupId)
+    .eq("team_id", groupId)
     .eq("org_id", group.org_id);
 
   // A failed read here would silently report the team as having no emails on
