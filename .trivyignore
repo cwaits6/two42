@@ -1,0 +1,15 @@
+# Findings Trivy may skip. One id per line, with the reason, the exposure
+# here, and the condition that retires the line. Remove an entry as soon as
+# its condition is met so the scan enforces it again.
+
+# braces <= 3.0.3 — CVE-2026-93687 / GHSA-vfj7-8cjw-p6xm (CVSS 7.5, scored
+# for a network service expanding attacker-supplied globs). Disputed by the
+# maintainer: bounded by the existing maxLength option and only reachable
+# by expanding untrusted patterns —
+# https://github.com/micromatch/braces/issues/70#issuecomment-5995348316
+# Here braces runs only at lint time (eslint-plugin-next -> fast-glob ->
+# micromatch) on patterns this repo writes itself; the deployed app never
+# loads it. Added 2026-10-08. Remove when any of: `npm view braces version`
+# prints anything above 3.0.3; the advisory is withdrawn; eslint-config-next
+# no longer pulls fast-glob.
+CVE-2026-93687
