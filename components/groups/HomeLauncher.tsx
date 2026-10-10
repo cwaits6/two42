@@ -2,9 +2,12 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { groupPath, type ActiveGroup } from "@/lib/groups/active";
 import { loadHomeCards, type HomeCard, type HomeEvent } from "@/lib/groups/home";
+import { siteConfig } from "@/lib/config";
+
+const timeZone = siteConfig.timeZone;
 
 function getGreeting() {
-  const h = new Date().getHours();
+  const h = Number(new Date().toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone }));
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   return "Good evening";
@@ -13,15 +16,15 @@ function getGreeting() {
 function nextLine(event: HomeEvent | null): string {
   if (!event) return "No upcoming events";
   const d = new Date(event.start_time);
-  const weekday = d.toLocaleDateString("en-US", { weekday: "long" });
-  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const weekday = d.toLocaleDateString("en-US", { weekday: "long", timeZone });
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone });
   return `Next: ${weekday} · ${time}`;
 }
 
 function weekRowLabel(event: HomeEvent): string {
   const d = new Date(event.start_time);
-  const day = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const day = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone });
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone });
   return `${day} · ${time}`;
 }
 

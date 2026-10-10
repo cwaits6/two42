@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Calendar, HandHelping, HeartHandshake } from "lucide-react";
+import { siteConfig } from "@/lib/config";
 import { createClient } from "@/lib/supabase/server";
 import { groupPath, type ActiveGroup } from "@/lib/groups/active";
 import { formatServiceDate, toDateString } from "@/lib/serving/sundays";
@@ -22,20 +23,22 @@ function timeAgo(iso: string): string {
   return `${Math.floor(days / 7)} weeks ago`;
 }
 
+const timeZone = siteConfig.timeZone;
+
 function eventTime(startTime: string): string {
-  return new Date(startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return new Date(startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone });
 }
 
 function eventDayNumber(startTime: string): string {
-  return String(new Date(startTime).getDate());
+  return new Date(startTime).toLocaleDateString("en-US", { day: "numeric", timeZone });
 }
 
 function eventWeekday(startTime: string): string {
-  return new Date(startTime).toLocaleDateString("en-US", { weekday: "long" });
+  return new Date(startTime).toLocaleDateString("en-US", { weekday: "long", timeZone });
 }
 
 function eventMonth(startTime: string): string {
-  return new Date(startTime).toLocaleDateString("en-US", { month: "short" }).toUpperCase();
+  return new Date(startTime).toLocaleDateString("en-US", { month: "short", timeZone }).toUpperCase();
 }
 
 function excerpt(content: string): string {
