@@ -27,6 +27,8 @@ const outlineButtonClass =
   "h-12 rounded-xl border-slate-200 bg-white px-4 text-base font-medium text-slate-600 shadow-sm hover:border-brand-primary/30 hover:bg-white hover:text-brand-primary";
 
 interface EventsPageClientProps {
+  /** The group whose event pages the rows link to. */
+  groupId: string;
   allEvents: (Event & { calendar?: EventCalendar | null })[];
   calendars: EventCalendar[];
   userRsvps: Record<string, Rsvp>;
@@ -36,6 +38,7 @@ interface EventsPageClientProps {
 }
 
 export function EventsPageClient({
+  groupId,
   allEvents,
   calendars,
   userRsvps,
@@ -267,12 +270,14 @@ export function EventsPageClient({
 
       {view === "calendar" ? (
         <EventCalendarView
+          groupId={groupId}
           events={allEvents}
           visibleCalendarIds={visibleCalendarIds}
           isAdmin={isAdmin}
         />
       ) : (
         <EventListView
+          groupId={groupId}
           events={expandedUpcomingEvents}
           userRsvps={userRsvps}
           userId={userId}

@@ -26,7 +26,7 @@ export function Footer() {
             <h4 className="text-white font-bold text-lg mb-4 font-display">Quick Links</h4>
             <ul className="space-y-2">
               {[
-                { href: "/events", label: "Calendar" },
+                { href: "/calendar", label: "Calendar" },
                 { href: "/lectures", label: "Lecture Library" },
                 { href: `/${resolveOrgSlug()}/join`, label: "Join Our Group" },
                 { href: "/login", label: "Member Sign In" },

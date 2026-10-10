@@ -173,7 +173,6 @@ export function JoinMeetingBlock({
         >
           <Video className="h-4 w-4" /> {buttonLabel}
         </a>
-        {creds}
       </div>
     );
   }

@@ -1,17 +1,5 @@
 import type { ComponentType } from "react";
-import {
-  Users,
-  Home,
-  MailPlus,
-  CalendarDays,
-  Calendar,
-  BarChart2,
-  HandCoins,
-  Info,
-  BookOpen,
-  Megaphone,
-  Settings,
-} from "lucide-react";
+import { Users, Home, MailPlus, Settings } from "lucide-react";
 
 export interface AdminNavItem {
   href: string;
@@ -38,36 +26,13 @@ export const adminNavGroups: AdminNavGroup[] = [
     items: [
       { href: "/admin/members", label: "Members", icon: Users },
       { href: "/admin/families", label: "Families", icon: Home },
-      { href: "/admin/groups", label: "Groups", icon: Users },
-      { href: "/admin/invite", label: "Bulk Invite", icon: MailPlus },
+      { href: "/admin/groups", label: "Teams", icon: Users },
+      { href: "/admin/invite", label: "Bulk invite", icon: MailPlus },
     ],
-  },
-  {
-    key: "events",
-    label: "Events",
-    items: [
-      { href: "/admin/calendars", label: "Event Calendars", icon: CalendarDays },
-      { href: "/admin/events/new", label: "Create Event", icon: Calendar },
-      { href: "/admin/serving", label: "Serving Stats", icon: BarChart2 },
-    ],
-  },
-  {
-    key: "content",
-    label: "Content",
-    items: [
-      { href: "/admin/lectures", label: "Lectures & Series", icon: BookOpen },
-      { href: "/admin/about", label: "About Page", icon: Info, contentEditorVisible: true },
-      { href: "/admin/announcements/new", label: "New Announcement", icon: Megaphone },
-    ],
-  },
-  {
-    key: "giving",
-    label: "Giving",
-    items: [{ href: "/admin/giving", label: "Giving", icon: HandCoins }],
   },
   {
     key: "settings",
     label: "Settings",
-    items: [{ href: "/admin/settings", label: "Settings", icon: Settings }],
+    items: [{ href: "/admin/settings", label: "Org settings", icon: Settings }],
   },
 ];
