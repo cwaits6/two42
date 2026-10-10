@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Calendar, HandHelping, HeartHandshake } from "lucide-react";
+import { Calendar, Clock, HandHelping, HeartHandshake, MapPin } from "lucide-react";
 import { siteConfig } from "@/lib/config";
 import { createClient } from "@/lib/supabase/server";
 import { groupPath, type ActiveGroup } from "@/lib/groups/active";
@@ -41,6 +41,31 @@ function eventMonth(startTime: string): string {
   return new Date(startTime).toLocaleDateString("en-US", { month: "short", timeZone }).toUpperCase();
 }
 
+function greeting(): string {
+  const h = Number(new Date().toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone }));
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+function todayLabel(): string {
+  const d = new Date();
+  const weekday = d.toLocaleDateString("en-US", { weekday: "long", timeZone });
+  const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone });
+  return `${weekday} · ${date}`;
+}
+
+function relativeDay(startTime: string): string {
+  const dayKey = (d: Date) => d.toLocaleDateString("en-CA", { timeZone });
+  const start = new Date(startTime);
+  const today = new Date();
+  if (dayKey(start) === dayKey(today)) return "today";
+  const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+  if (dayKey(start) === dayKey(tomorrow)) return "tomorrow";
+  const days = Math.round((Date.parse(dayKey(start)) - Date.parse(dayKey(today))) / (24 * 60 * 60 * 1000));
+  return days > 1 ? `in ${days} days` : eventWeekday(startTime);
+}
+
 function excerpt(content: string): string {
   // Plain-text excerpt from content (may be JSON blocks or HTML)
   try {
@@ -59,15 +84,6 @@ function prayerCategoryLabel(category: string | null): string {
   if (!category) return "Prayer";
   return category.charAt(0).toUpperCase() + category.slice(1);
 }
-
-// Avatar colors — deterministic from index
-const AVATAR_BG = [
-  "var(--color-brand-accent)",
-  "var(--color-avatar-rust)",
-  "var(--color-avatar-sage)",
-  "var(--color-avatar-tan)",
-  "var(--color-avatar-slate)",
-];
 
 // ── component ────────────────────────────────────────────────────────────────
 
@@ -95,6 +111,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
   // Phase A — every query below is independent of `nextEvent`; fire them
   // together instead of awaiting one at a time.
   const [
+    { data: viewer },
     { data: rawEvents },
     { data: rsvps },
     { data: announcements },
@@ -102,6 +119,11 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
     { data: prayers },
     { data: myServings },
   ] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("preferred_name, first_name")
+      .eq("id", user.id)
+      .maybeSingle(),
     supabase
       .from("events")
       .select("*")
@@ -165,7 +187,6 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
   let meeting: MeetingFields | null = null;
   let goingCount = 0;
   let maybeCount = 0;
-  let attendeeInitials: string[] = [];
 
   // Phase B — these depend on `nextEvent`. The anchor lookup and the event's
   // RSVP list are mutually independent, so fetch them together.
@@ -183,7 +204,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
         : Promise.resolve(null),
       supabase
         .from("rsvps")
-        .select("status, user_id")
+        .select("status")
         .eq("event_id", nextEvent.id),
     ]);
 
@@ -194,163 +215,129 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
     if (eventRsvps) {
       goingCount = eventRsvps.filter((r) => r.status === "yes").length;
       maybeCount = eventRsvps.filter((r) => r.status === "maybe").length;
-
-      const yesIds = eventRsvps
-        .filter((r) => r.status === "yes")
-        .slice(0, 4)
-        .map((r) => r.user_id);
-
-      if (yesIds.length > 0) {
-        const { data: attendeeProfiles } = await supabase
-          .from("profiles")
-          .select("id, first_name, last_name, preferred_name")
-          .in("id", yesIds);
-
-        if (attendeeProfiles) {
-          attendeeInitials = attendeeProfiles.map((p) => {
-            const fn = p.preferred_name || p.first_name || "?";
-            const ln = p.last_name || "";
-            return `${fn[0] ?? ""}${ln[0] ?? ""}`.toUpperCase();
-          });
-        }
-      }
     }
   }
 
   const href = (path: string) => groupPath(group.id, path);
 
+  const displayName = viewer?.preferred_name || viewer?.first_name || "Friend";
+
   return (
     <div className="min-h-screen bg-background">
-      {/* ── Hero: the group, then its next meeting ───────────────────────── */}
-      <section className="px-4 pt-14 pb-10 md:px-14">
-        <div className="flex items-center gap-3 mb-5">
-          <span
-            aria-hidden="true"
-            className="h-3 w-3 rounded-full shrink-0"
-            style={{ background: group.color }}
-          />
-          <span className="text-brand-accent-text font-sans font-bold uppercase tracking-[3px] text-base">
-            {group.role === "leader" ? "You lead this group" : "Your group"}
+      {/* ── Greeting, then the next meeting ─────────────────────────────── */}
+      <section className="mx-auto max-w-[960px] px-4 pt-5 pb-8 md:px-8 md:pt-10">
+        <div className="mb-4 flex items-center gap-3">
+          <span aria-hidden="true" className="h-px w-8 bg-brand-accent" />
+          <span className="font-sans text-[15px] font-bold uppercase tracking-[3px] text-brand-accent-text">
+            {todayLabel()}
           </span>
         </div>
-        <h1 className="font-serif text-5xl md:text-6xl font-medium leading-none tracking-tight text-foreground mb-9">
-          {group.name}
+        <h1 className="mb-7 font-serif text-[40px] font-medium leading-none tracking-[-0.02em] text-foreground md:text-[56px]">
+          {greeting()}, <em className="not-italic text-brand-primary">{displayName}</em>.
         </h1>
 
         {nextEvent ? (
           <div
-            className="rounded-[18px] p-8 relative overflow-hidden"
+            className="rounded-[18px] p-7 text-white"
             style={{
               background: "var(--color-brand-primary)",
               boxShadow:
                 "0 14px 40px color-mix(in srgb, var(--color-brand-primary) 20%, transparent)",
             }}
           >
-            <div className="relative text-white">
-              <div className="flex flex-col sm:flex-row gap-6">
-                {/* Date tile: Warm Paper ground, Espresso text */}
-                <div
-                  className="flex w-28 shrink-0 flex-col items-center justify-center rounded-2xl px-3 py-4 text-center"
-                  style={{ background: "var(--color-brand-warm)", color: "var(--color-brand-navy)" }}
-                >
-                  <span className="font-sans text-sm font-bold uppercase tracking-[2px]">
-                    {eventWeekday(nextEvent.start_time)}
-                  </span>
-                  <span className="font-serif font-medium leading-none text-6xl mt-1">
-                    {eventDayNumber(nextEvent.start_time)}
-                  </span>
-                  <span className="font-sans text-sm font-bold uppercase tracking-[2px] mt-1">
-                    {eventMonth(nextEvent.start_time)}
-                  </span>
-                </div>
+            <div className="mb-[18px] flex items-center gap-2.5 font-sans text-sm font-bold uppercase tracking-[1.5px]">
+              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-brand-accent" />
+              Next meeting · {relativeDay(nextEvent.start_time)}
+            </div>
 
-                <div className="min-w-0 flex-1">
-                  <div
-                    className="font-serif font-medium leading-[1.1]"
-                    style={{ fontSize: 34, letterSpacing: "-0.5px" }}
-                  >
-                    {nextEvent.title}
-                  </div>
-                  <div className="font-sans text-base uppercase tracking-[2px] opacity-85 font-semibold mt-2">
+            <div className="flex flex-wrap items-start gap-[22px]">
+              {/* Date tile: Warm Paper ground, Espresso text */}
+              <div
+                className="flex h-[84px] w-[84px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-2xl"
+                style={{ background: "var(--color-brand-warm)", color: "var(--color-brand-navy)" }}
+              >
+                <span className="font-sans text-[13px] font-bold uppercase leading-none tracking-[0.14em] text-secondary-foreground">
+                  {eventWeekday(nextEvent.start_time).slice(0, 3)}
+                </span>
+                <span className="font-serif text-4xl font-semibold leading-none">
+                  {eventDayNumber(nextEvent.start_time)}
+                </span>
+                <span className="font-sans text-[13px] font-semibold uppercase leading-none tracking-[0.08em] text-muted-foreground">
+                  {eventMonth(nextEvent.start_time)}
+                </span>
+              </div>
+
+              <div className="min-w-0 flex-1 pt-1">
+                <div className="font-serif text-[32px] font-medium leading-[1.15] tracking-[-0.01em]">
+                  {nextEvent.title}
+                </div>
+                <div className="mt-2.5 flex flex-wrap items-center gap-x-5 gap-y-2 font-sans text-[17px]">
+                  <span className="inline-flex items-center gap-2">
+                    <Clock className="h-[18px] w-[18px]" aria-hidden="true" />
                     {eventTime(nextEvent.start_time)}
-                    {nextEvent.location ? ` · ${nextEvent.location}` : ""}
-                  </div>
-                  {nextEvent.description && (
-                    <div className="font-serif italic text-[17px] opacity-85 mt-2">
-                      {nextEvent.description.length > 80
-                        ? nextEvent.description.slice(0, 80) + "…"
-                        : nextEvent.description}
-                    </div>
+                  </span>
+                  {nextEvent.location && (
+                    <span className="inline-flex items-center gap-2">
+                      <MapPin className="h-[18px] w-[18px]" aria-hidden="true" />
+                      {nextEvent.location}
+                    </span>
                   )}
                 </div>
+                {nextEvent.description && (
+                  <p className="mt-3 max-w-[52ch] font-sans text-[17px] leading-normal text-white/90">
+                    {nextEvent.description.length > 160
+                      ? nextEvent.description.slice(0, 160) + "…"
+                      : nextEvent.description}
+                  </p>
+                )}
               </div>
+            </div>
 
-              {/* Divider + RSVP row */}
-              <div
-                className="flex flex-col sm:flex-row sm:items-center gap-4 mt-6 pt-5"
-                style={{ borderTop: "1px solid rgba(255,255,255,0.18)" }}
-              >
-                <div className="flex items-center gap-3 flex-1">
-                  <div className="flex">
-                    {(attendeeInitials.length > 0 ? attendeeInitials : ["?"])
-                      .slice(0, 4)
-                      .map((initials, i) => (
-                        <div
-                          key={i}
-                          className="w-8 h-8 rounded-full border-2 flex items-center justify-center font-sans text-xs font-semibold text-white flex-shrink-0"
-                          style={{
-                            background: AVATAR_BG[i % AVATAR_BG.length],
-                            borderColor: "var(--color-brand-primary)",
-                            marginLeft: i === 0 ? 0 : -10,
-                          }}
-                        >
-                          {initials}
-                        </div>
-                      ))}
-                  </div>
-                  <div className="font-sans text-sm opacity-90">
-                    {goingCount > 0 ? (
-                      <>
-                        <strong style={{ color: "var(--color-brand-accent)" }}>
-                          {goingCount} going
-                        </strong>
-                        {maybeCount > 0 && <> · {maybeCount} maybe</>}
-                      </>
-                    ) : (
-                      <span className="opacity-60">Be the first to RSVP</span>
-                    )}
-                  </div>
-                </div>
+            <div
+              className="mt-6 flex flex-wrap items-center justify-between gap-4 pt-[18px]"
+              style={{ borderTop: "1px solid rgba(255,255,255,0.22)" }}
+            >
+              <div className="flex items-center gap-2.5 font-sans text-base">
+                <span className="font-bold">Are you going?</span>
+                <span className="text-[15px] text-white/90">
+                  {goingCount > 0 ? (
+                    <>
+                      {goingCount} going
+                      {maybeCount > 0 && <> · {maybeCount} maybe</>}
+                    </>
+                  ) : (
+                    "Be the first to RSVP"
+                  )}
+                </span>
+              </div>
+              <RsvpSegmented
+                eventId={nextEvent.id}
+                userId={user.id}
+                currentStatus={userRsvps[nextEvent.id]?.status ?? null}
+              />
+            </div>
 
-                <RsvpSegmented
-                  eventId={nextEvent.id}
-                  userId={user.id}
-                  currentStatus={userRsvps[nextEvent.id]?.status ?? null}
+            {/* Join the call — time-aware, set on the recurring event */}
+            {meeting?.meeting_url && (
+              <div className="mt-4">
+                <JoinMeetingBlock
+                  meetingUrl={meeting.meeting_url}
+                  meetingId={meeting.meeting_id}
+                  passcode={meeting.meeting_passcode}
+                  startTime={nextEvent.start_time}
+                  endTime={nextEvent.end_time}
+                  leadMinutes={meeting.meeting_lead_minutes}
+                  recordingsHref={lectureCount && lectureCount > 0 ? href("/lectures") : null}
                 />
               </div>
-
-              {/* Join the call — time-aware, set on the recurring event */}
-              {meeting?.meeting_url && (
-                <div className="mt-4">
-                  <JoinMeetingBlock
-                    meetingUrl={meeting.meeting_url}
-                    meetingId={meeting.meeting_id}
-                    passcode={meeting.meeting_passcode}
-                    startTime={nextEvent.start_time}
-                    endTime={nextEvent.end_time}
-                    leadMinutes={meeting.meeting_lead_minutes}
-                    recordingsHref={lectureCount && lectureCount > 0 ? href("/lectures") : null}
-                  />
-                </div>
-              )}
-            </div>
+            )}
           </div>
         ) : (
-          <div className="rounded-[18px] bg-brand-warm border border-border flex items-center justify-center p-10 text-muted-foreground text-center">
+          <div className="flex items-center justify-center rounded-[18px] border border-border bg-brand-warm p-10 text-center text-muted-foreground">
             <div>
-              <Calendar className="h-10 w-10 mx-auto mb-3 text-brand-primary/40" />
+              <Calendar className="mx-auto mb-3 h-10 w-10 text-brand-primary/40" />
               <p className="font-serif text-xl text-foreground/60">No upcoming events</p>
-              <p className="text-sm mt-1">Check back soon.</p>
+              <p className="mt-1 text-sm">Check back soon.</p>
             </div>
           </div>
         )}
