@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button";
 import { AddToCalendarButton } from "@/components/events/AddToCalendarButton";
 import { RsvpButton } from "@/components/events/RsvpButton";
 import { CalendarDays, Clock, MapPin, Pencil, Plus } from "lucide-react";
+import { groupPath } from "@/lib/groups/active";
 import type { Event, EventCalendar, Rsvp } from "@/lib/types";
 
 interface EventListViewProps {
+  groupId: string;
   events: (Event & { calendar?: EventCalendar | null })[];
   userRsvps: Record<string, Rsvp>;
   userId: string | null;
@@ -14,7 +16,14 @@ interface EventListViewProps {
   isAdmin: boolean;
 }
 
-export function EventListView({ events, userRsvps, userId, isMember, isAdmin }: EventListViewProps) {
+export function EventListView({
+  groupId,
+  events,
+  userRsvps,
+  userId,
+  isMember,
+  isAdmin,
+}: EventListViewProps) {
   if (events.length === 0) {
     return (
       <div className="max-w-5xl rounded-2xl border border-dashed border-border px-6 py-12 text-center">
@@ -59,7 +68,7 @@ export function EventListView({ events, userRsvps, userId, isMember, isAdmin }: 
         const occurrenceParam = isSeriesOccurrence
           ? `?occurrence=${encodeURIComponent(event.start_time)}`
           : "";
-        const viewHref = `/events/${event.id}${occurrenceParam}`;
+        const viewHref = groupPath(groupId, `/calendar/${event.id}${occurrenceParam}`);
         const editHref = `/admin/events/${event.id}/edit${occurrenceParam}`;
 
         return (

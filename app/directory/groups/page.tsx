@@ -7,6 +7,7 @@ import { GroupCard } from "@/components/directory/GroupCard";
 import { GroupIcon } from "@/components/directory/GroupIcon";
 import { PersonCard } from "@/components/directory/PersonCard";
 import { useDirectoryData } from "@/components/directory/useDirectoryData";
+import { useDirectoryHref } from "@/components/directory/useDirectoryHref";
 import { DirectoryListSkeleton } from "@/components/directory/DirectoryListSkeleton";
 import type { DirectoryGroup } from "@/components/directory/types";
 import type { DirectoryProfile } from "@/lib/types";
@@ -17,6 +18,7 @@ type Panel =
 
 export default function GroupsPage() {
   const { groups, loading, familyMap, groupRosters } = useDirectoryData();
+  const directoryHref = useDirectoryHref();
   const [panel, setPanel] = useState<Panel | null>(null);
 
   function openPanel(next: Panel) {
@@ -29,7 +31,7 @@ export default function GroupsPage() {
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-5xl">
-      <BackLink href="/directory">Back to Directory</BackLink>
+      <BackLink href={directoryHref}>Back to Directory</BackLink>
       <h1 className="font-serif text-4xl md:text-5xl font-medium tracking-tight text-foreground mt-4 mb-6">
         Groups
       </h1>

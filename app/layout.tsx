@@ -7,10 +7,14 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { AppShell } from "@/components/layout/AppShell";
 import { SidebarProvider } from "@/components/layout/SidebarContext";
+import { GroupProvider } from "@/components/groups/GroupProvider";
 import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { siteConfig } from "@/lib/config";
 import { getRequestBranding } from "@/lib/branding";
+import { getDiscoveryOn } from "@/lib/groups/discovery";
+import { getGroupMemberships } from "@/lib/groups/server";
+import type { ActiveGroup } from "@/lib/groups/active";
 import "./globals.css";
 
 const cormorant = Cormorant_Garamond({
@@ -60,6 +64,8 @@ export default async function RootLayout({
   let profile = null;
   let hasServingAccess = false;
   let isPlatformAdmin = false;
+  let memberships: ActiveGroup[] = [];
+  let discoveryOn = false;
   if (hasAuthCookie) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -90,7 +96,11 @@ export default async function RootLayout({
           .in("group_id", groupData.map((g) => g.team_id as string));
         return (count ?? 0) > 0;
       };
-      hasServingAccess = await loadServingAccess();
+      [hasServingAccess, memberships, discoveryOn] = await Promise.all([
+        loadServingAccess(),
+        getGroupMemberships(),
+        getDiscoveryOn(),
+      ]);
     }
   }
 
@@ -136,10 +146,19 @@ export default async function RootLayout({
         />
       </head>
       <body className={`${cormorant.variable} ${interTight.variable} ${jetbrainsMono.variable} antialiased min-h-screen flex flex-col`}>
-        <SidebarProvider>
-          <Header profile={profile} hasServingAccess={hasServingAccess} isPlatformAdmin={isPlatformAdmin} />
-          <AppShell profile={profile} hasServingAccess={hasServingAccess}>{children}</AppShell>
-        </SidebarProvider>
+        <GroupProvider memberships={memberships} discoveryOn={discoveryOn}>
+          <SidebarProvider>
+            <Header
+              profile={profile}
+              hasServingAccess={hasServingAccess}
+              isPlatformAdmin={isPlatformAdmin}
+              orgName={b.display_name}
+            />
+            <AppShell profile={profile} hasServingAccess={hasServingAccess} orgName={b.display_name}>
+              {children}
+            </AppShell>
+          </SidebarProvider>
+        </GroupProvider>
         <Footer />
         <Toaster />
         <Analytics />

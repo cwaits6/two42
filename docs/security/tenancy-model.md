@@ -210,6 +210,38 @@ assertions that abort the migration on any mismatch. The logic lives in
 `supabase/tests/group_model_suite.sql` can prove it against fixture orgs in
 CI, where migrations run against an empty database.
 
+### Group context (app layer)
+
+The URL segment `/g/<groupId>` names the group a request is about, and
+`requireActiveGroup()` in `lib/groups/server.ts` is what every page and the
+layout under `app/g/[groupId]/` call first. It verifies membership on
+**every request** through `group_members` (the own-rows SELECT arm above),
+memoized only within the request by React `cache()`; nothing survives
+across requests. A malformed id 404s before any query runs. A signed-in
+viewer who is not a member of a real group gets the same 404, never a 403
+or a redirect, so the response does not confirm the group exists. For
+leader-only sub-pages, `requireGroupLeader()` 404s a member who does not
+lead the group; the settings index itself redirects such a member to the
+group dashboard instead, because a member of the group is not enumerating
+anything there.
+
+The `two42-group` cookie is a **preference, never an authority**. The
+middleware writes it on every `/g/<uuid>/…` response (server components
+cannot set cookies), and the only readers — `getActiveGroup()` for org-level
+surfaces that need a target group, and the middleware's legacy-route
+redirect — intersect its value with the verified membership list through
+`resolveActiveGroup()`: a cookie naming a group the viewer is not in is
+ignored and the first membership (by `joined_at`) applies. The client hook
+`useActiveGroup()` never reads it at all; it derives the active group from
+the URL and the membership list the root layout serialised.
+
+`loadGroupMemberships()` and `loadHomeCards()` are tier C helpers under
+`scripts/check-service-role-org-scope.mjs`: they take a `SupabaseClient`
+parameter, so every chain carries the caller's already-validated `org_id`
+(the viewer's own RLS-scoped `profiles.org_id`). The membership loader
+fails closed to an empty list on error, which resolves no group anywhere.
+No service-role client is involved in group context.
+
 ## Storage tenancy
 
 `storage.objects` has no `org_id` column, so the first path segment of the

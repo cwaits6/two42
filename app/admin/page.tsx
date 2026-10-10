@@ -41,11 +41,7 @@ export default async function AdminPage() {
     : [];
 
   const quickActions = isAdminRole
-    ? [
-        { href: "/admin/invite", label: "Invite member" },
-        { href: "/admin/events/new", label: "Create event" },
-        { href: "/admin/announcements/new", label: "Post announcement" },
-      ]
+    ? [{ href: "/admin/invite", label: "Invite member" }]
     : [{ href: "/admin/about", label: "Edit about page" }];
 
   return (
