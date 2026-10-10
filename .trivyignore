@@ -1,5 +1,5 @@
 # braces <= 3.0.3 (CVE-2026-93687): only reached at lint/scaffold time on
 # patterns this repo writes itself; no fix released and the maintainer
-# disputes it (micromatch/braces#70). Remove once `npm ls braces` shows a
-# version above 3.0.3 or the advisory is withdrawn.
+# disputes it (micromatch/braces#70). Remove once `npm ls braces` shows no
+# path to braces <= 3.0.3, or the advisory is withdrawn.
 CVE-2026-93687
