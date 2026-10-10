@@ -103,3 +103,4 @@ Full rationale, the helper inventory, and the deviations register: [`docs/securi
 ## Code comments
 
 - Code comments and test titles must not carry planning/tracking tags — `Phase N`, `PR N`, `CWA-NN`, `#NNN`, `decision Dn`, `§n` — keep the explanation, drop the tag. Tracking context belongs in commit messages and PR bodies, not in code that outlives the ticket.
+- A comment earns its place only by telling a future reader something the code cannot: a non-obvious constraint, a why, or the condition under which a workaround can be removed. Do not narrate what the code does, how a decision was reached, or the history of a change — that belongs in the commit message and PR body. One or two lines, matching the density of the surrounding file.

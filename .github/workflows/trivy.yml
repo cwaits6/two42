@@ -4,9 +4,8 @@ on:
   pull_request:
     branches:
       - main
-    # No paths: filter. The scan takes well under a minute, and a required
-    # status check that never reports on a docs-only PR blocks that PR
-    # instead of passing it, so it has to run on every PR to be required.
+    # No paths: filter — a required check must report on every PR, and the
+    # secret scan covers docs and agent config too.
 
 permissions:
   contents: read
