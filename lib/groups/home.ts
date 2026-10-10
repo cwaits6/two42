@@ -76,7 +76,7 @@ export async function loadHomeCards(
     ["prayer_wall", prayers.error],
   ].filter(([, error]) => error);
   if (failures.length > 0) {
-    for (const [table, error] of failures) console.error(`Home ${table} read failed:`, error);
+    for (const [table, error] of failures) console.error("Home %s read failed:", table, error);
     return null;
   }
 

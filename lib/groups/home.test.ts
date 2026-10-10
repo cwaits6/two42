@@ -136,6 +136,6 @@ describe("loadHomeCards", () => {
     const result = await loadHomeCards(client, { orgId: "org-1", groups: [A] });
 
     expect(result).toBeNull();
-    expect(console.error).toHaveBeenCalledWith("Home announcements read failed:", { message: "boom" });
+    expect(console.error).toHaveBeenCalledWith("Home %s read failed:", "announcements", { message: "boom" });
   });
 });
