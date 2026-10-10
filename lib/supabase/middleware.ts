@@ -1,6 +1,15 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isContentEditorAllowed } from "@/lib/admin-access";
+import {
+  GROUP_COOKIE,
+  LEGACY_GROUP_PREFIXES,
+  groupIdFromPath,
+  isLegacyGroupPath,
+  legacyRedirectTarget,
+  resolveActiveGroup,
+} from "@/lib/groups/active";
+import { loadGroupMemberships } from "@/lib/groups/memberships";
 import { isExpectedHost, normalizeHost, resolveOrgSlug } from "@/lib/org";
 import { siteConfig } from "@/lib/config";
 
@@ -102,13 +111,25 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
 
-  // Protected routes - require authentication
-  const protectedPaths = ["/dashboard", "/announcements", "/update-password", "/events", "/lectures"];
+  // Protected routes - require authentication. Boundary-matched, because
+  // "/g" would otherwise swallow "/grace/join" (the anonymous per-org join
+  // page) and any other slug starting with the same letters.
+  const protectedPaths = [
+    "/g",
+    "/dashboard",
+    "/calendar",
+    "/find-a-group",
+    "/update-password",
+    ...LEGACY_GROUP_PREFIXES,
+  ];
   const adminPaths = ["/admin"];
+  const atOrUnder = (p: string) => pathname === p || pathname.startsWith(p + "/");
 
-  const isProtected = protectedPaths.some((p) => pathname.startsWith(p));
-  const isAdmin = adminPaths.some((p) => pathname.startsWith(p));
+  // /serving/go is the emailed token landing and must stay anonymous.
+  const isProtected = !atOrUnder("/serving/go") && protectedPaths.some(atOrUnder);
+  const isAdmin = adminPaths.some(atOrUnder);
   const isPlatform = pathname.startsWith("/platform");
+  const isLegacy = isLegacyGroupPath(pathname);
 
   if ((isProtected || isAdmin || isPlatform) && !user) {
     const url = request.nextUrl.clone();
@@ -117,19 +138,47 @@ export async function updateSession(request: NextRequest) {
     return redirectTo(url);
   }
 
-  if (isAdmin && user) {
-    const { data: profile } = await supabase
+  let profile: { role: string; org_id: string } | null = null;
+  if ((isAdmin || isLegacy) && user) {
+    const { data } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, org_id")
       .eq("id", user.id)
       .single();
+    profile = data;
+  }
 
+  if (isAdmin && user) {
     const contentEditorAllowed =
       profile?.role === "content_editor" && isContentEditorAllowed(pathname);
 
     if (profile?.role !== "admin" && !contentEditorAllowed) {
       const url = request.nextUrl.clone();
       url.pathname = "/dashboard";
+      return redirectTo(url);
+    }
+  }
+
+  // Legacy unprefixed content routes (old bookmarks, links still in emails)
+  // move under the member's active group. The clone keeps the query string.
+  if (isLegacy && user) {
+    const target = legacyRedirectTarget(pathname);
+    if (target) {
+      const url = request.nextUrl.clone();
+      if (!target.needsGroup) {
+        url.pathname = target.path;
+        return redirectTo(url);
+      }
+      const memberships =
+        profile && profile.role !== "pending"
+          ? await loadGroupMemberships(supabase, { profileId: user.id, orgId: profile.org_id })
+          : [];
+      const group = resolveActiveGroup({
+        cookieGroupId: request.cookies.get(GROUP_COOKIE)?.value,
+        memberships,
+      });
+      url.pathname = group ? target.pathFor(group.id) : "/dashboard";
+      if (!group) url.search = "";
       return redirectTo(url);
     }
   }
@@ -145,6 +194,21 @@ export async function updateSession(request: NextRequest) {
       url.pathname = "/dashboard";
       return redirectTo(url);
     }
+  }
+
+  // Remember the group the member is in. The value is a preference that the
+  // resolver intersects with verified memberships at read time, so an id the
+  // member is not in (or a 404'd one) is simply ignored. Written here and
+  // nowhere else: server components cannot set cookies.
+  const urlGroupId = groupIdFromPath(pathname);
+  if (urlGroupId) {
+    supabaseResponse.cookies.set(GROUP_COOKIE, urlGroupId, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: !isDev,
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+    });
   }
 
   // Set CSP header on the response
