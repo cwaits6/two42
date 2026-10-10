@@ -1,6 +1,7 @@
--- Local development fixtures. Applied by `supabase start` / `supabase db
--- reset` only; `supabase db push` never runs this file, so nothing here can
--- reach a deployed database.
+-- Local development fixtures, applied by `supabase start` / `supabase db
+-- reset`. The guard below refuses any database that is not the CLI's local
+-- stack, so `supabase db push --include-seed` against a linked project fails
+-- before a single login is inserted.
 --
 -- Tiers are named after what they are so a screen always says which level it
 -- is showing: the org is "Sample Organization", its groups are "Group A",
@@ -10,6 +11,16 @@
 -- Accounts (all sign in with password123):
 --   admin@local.dev                 org admin, leads Group A, member of Group B
 --   <first>.<surname>@example.test  one per adult listed with an account below
+
+-- Only the CLI's local stack runs on its published default JWT secret; a
+-- hosted project always has its own.
+DO $$
+BEGIN
+  IF current_setting('app.settings.jwt_secret', true)
+     IS DISTINCT FROM 'super-secret-jwt-token-with-at-least-32-characters-long' THEN
+    RAISE EXCEPTION 'seed.sql holds well-known development logins and only runs on the local Supabase stack';
+  END IF;
+END $$;
 
 -- ── Organization ────────────────────────────────────────────────────────────
 
