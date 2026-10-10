@@ -4,24 +4,6 @@ on:
   pull_request:
     branches:
       - main
-    # Only scan PRs that touch files the scan can act on. Later patterns
-    # override earlier ones: README.md is re-included so Trivy's secret
-    # detection still covers it. .github/ is not excluded.
-    paths:
-      - '**'
-      - '!**.md'
-      - 'README.md'
-      - '!docs/**'
-      - '!LICENSE'
-      - '!.claude/**'
-      - '!.agents/**'
-      - '!.archon/**'
-      - '!.zap/**'
-      - '!.coderabbit.yaml'
-      - '!renovate.json5'
-      - '!.releaserc.json'
-      - '!.gitignore'
-      - '!.env.example'
 
 permissions:
   contents: read

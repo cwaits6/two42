@@ -1,16 +1,5 @@
-# Findings Trivy may skip. One id per line, with the reason, the exposure
-# here, and the condition that retires the line. Remove an entry as soon as
-# its condition is met so the scan enforces it again.
-
-# braces <= 3.0.3 — CVE-2026-93687 / GHSA-vfj7-8cjw-p6xm (CVSS 7.5, scored
-# for a network service expanding attacker-supplied globs). No fix is
-# released and the maintainer disputes the advisory —
-# https://github.com/micromatch/braces/issues/70#issuecomment-5995348316
-# The exception rests on who authors the patterns, not on any option in
-# braces: here it runs only at lint and scaffold time (eslint-plugin-next
-# and the shadcn CLI, each via fast-glob -> micromatch) on glob patterns
-# this repo writes itself, and the deployed app never loads it.
-# Added 2026-10-08. Remove when any of: `npm view braces version` prints
-# anything above 3.0.3; the advisory is withdrawn; no lockfile dependency
-# path reaches braces <= 3.0.3 any more (check with `npm ls braces`).
+# braces <= 3.0.3 (CVE-2026-93687): only reached at lint/scaffold time on
+# patterns this repo writes itself; no fix released and the maintainer
+# disputes it (micromatch/braces#70). Remove once `npm ls braces` shows no
+# path to braces <= 3.0.3, or the advisory is withdrawn.
 CVE-2026-93687
