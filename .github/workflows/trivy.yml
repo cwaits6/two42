@@ -4,24 +4,9 @@ on:
   pull_request:
     branches:
       - main
-    # Only scan PRs that touch files the scan can act on. Later patterns
-    # override earlier ones: README.md is re-included so Trivy's secret
-    # detection still covers it. .github/ is not excluded.
-    paths:
-      - '**'
-      - '!**.md'
-      - 'README.md'
-      - '!docs/**'
-      - '!LICENSE'
-      - '!.claude/**'
-      - '!.agents/**'
-      - '!.archon/**'
-      - '!.zap/**'
-      - '!.coderabbit.yaml'
-      - '!renovate.json5'
-      - '!.releaserc.json'
-      - '!.gitignore'
-      - '!.env.example'
+    # No paths: filter. The scan takes well under a minute, and a required
+    # status check that never reports on a docs-only PR blocks that PR
+    # instead of passing it, so it has to run on every PR to be required.
 
 permissions:
   contents: read
