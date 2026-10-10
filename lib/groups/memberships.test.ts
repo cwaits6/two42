@@ -80,12 +80,12 @@ describe("loadGroupMemberships", () => {
     expect(row.role).toBe("member");
   });
 
-  it("fails closed to an empty list and logs on a query error", async () => {
+  it("throws on a query error so a failed read never reads as no memberships", async () => {
     const { client } = makeClient({ data: null, error: { message: "boom" } });
 
-    const result = await loadGroupMemberships(client, { profileId: "p1", orgId: "org-1" });
-
-    expect(result).toEqual([]);
+    await expect(
+      loadGroupMemberships(client, { profileId: "p1", orgId: "org-1" })
+    ).rejects.toThrow("boom");
     expect(console.error).toHaveBeenCalled();
   });
 });

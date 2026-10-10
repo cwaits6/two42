@@ -94,15 +94,15 @@ describe("getGroupMemberships", () => {
     expect(createClient).not.toHaveBeenCalled();
   });
 
-  it("returns no groups for a pending profile", async () => {
-    profileResult.mockResolvedValue({ data: { org_id: "org-1", role: "pending" }, error: null });
+  it("throws when the profile read fails instead of reporting no groups", async () => {
+    profileResult.mockResolvedValue({ data: null, error: { message: "boom" } });
 
-    expect(await getGroupMemberships()).toEqual([]);
+    await expect(getGroupMemberships()).rejects.toThrow("boom");
     expect(loadGroupMemberships).not.toHaveBeenCalled();
   });
 
-  it("fails closed when the profile read errors", async () => {
-    profileResult.mockResolvedValue({ data: null, error: { message: "boom" } });
+  it("returns no groups for a pending profile", async () => {
+    profileResult.mockResolvedValue({ data: { org_id: "org-1", role: "pending" }, error: null });
 
     expect(await getGroupMemberships()).toEqual([]);
     expect(loadGroupMemberships).not.toHaveBeenCalled();

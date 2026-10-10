@@ -21,7 +21,8 @@ function groupName(row: MembershipRow): string {
  * The viewer's groups, ordered by joined_at so "first membership" is
  * deterministic. The client is a parameter and so untyped as to privilege;
  * `orgId` must be the caller's already-validated org and the predicate is
- * mandatory. Fails closed to an empty list on error: no group resolves.
+ * mandatory. A query error is thrown rather than reported as an empty list,
+ * so a database failure cannot read as "not a member".
  */
 export async function loadGroupMemberships(
   client: SupabaseClient<Database>,
@@ -37,7 +38,7 @@ export async function loadGroupMemberships(
 
   if (error) {
     console.error("Failed to load group memberships:", error);
-    return [];
+    throw new Error(`Failed to load group memberships: ${error.message}`);
   }
 
   return ((data ?? []) as MembershipRow[]).map((row) => ({

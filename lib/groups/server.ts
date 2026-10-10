@@ -15,7 +15,8 @@ import {
  * The viewer's groups for this request. Memoized with React cache() so the
  * root layout, the group layout, and every page under it share one
  * membership query per request; nothing survives past the request.
- * Anonymous, missing, and pending profiles resolve to no groups.
+ * Anonymous, missing, and pending profiles resolve to no groups; a failed
+ * read throws so it renders as an error, never as "no group".
  */
 export const getGroupMemberships = cache(async (): Promise<ActiveGroup[]> => {
   const user = await getOptionalUser();
@@ -29,7 +30,7 @@ export const getGroupMemberships = cache(async (): Promise<ActiveGroup[]> => {
     .maybeSingle();
   if (error) {
     console.error("Failed to load the viewer's profile for group context:", error);
-    return [];
+    throw new Error(`Failed to load the viewer's profile: ${error.message}`);
   }
   if (!profile || profile.role === "pending") return [];
 

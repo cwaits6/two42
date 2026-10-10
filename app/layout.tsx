@@ -96,9 +96,16 @@ export default async function RootLayout({
           .in("group_id", groupData.map((g) => g.team_id as string));
         return (count ?? 0) > 0;
       };
+      // The layout has no error boundary of its own, so a failed membership
+      // read hides the group nav and lets the page surface the error.
+      const loadNavMemberships = () =>
+        getGroupMemberships().catch((e: unknown) => {
+          console.error("Layout: failed to load group memberships:", e);
+          return [];
+        });
       [hasServingAccess, memberships, discoveryOn] = await Promise.all([
         loadServingAccess(),
-        getGroupMemberships(),
+        loadNavMemberships(),
         getDiscoveryOn(),
       ]);
     }

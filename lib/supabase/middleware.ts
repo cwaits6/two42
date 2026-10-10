@@ -8,6 +8,7 @@ import {
   isLegacyGroupPath,
   legacyRedirectTarget,
   resolveActiveGroup,
+  type ActiveGroup,
 } from "@/lib/groups/active";
 import { loadGroupMemberships } from "@/lib/groups/memberships";
 import { isExpectedHost, normalizeHost, resolveOrgSlug } from "@/lib/org";
@@ -169,14 +170,22 @@ export async function updateSession(request: NextRequest) {
         url.pathname = target.path;
         return redirectTo(url);
       }
-      const memberships =
-        profile && profile.role !== "pending"
-          ? await loadGroupMemberships(supabase, { profileId: user.id, orgId: profile.org_id })
-          : [];
-      const group = resolveActiveGroup({
-        cookieGroupId: request.cookies.get(GROUP_COOKIE)?.value,
-        memberships,
-      });
+      let group: ActiveGroup | null = null;
+      if (profile && profile.role !== "pending") {
+        try {
+          const memberships = await loadGroupMemberships(supabase, {
+            profileId: user.id,
+            orgId: profile.org_id,
+          });
+          group = resolveActiveGroup({
+            cookieGroupId: request.cookies.get(GROUP_COOKIE)?.value,
+            memberships,
+          });
+        } catch (e) {
+          // No group can be chosen for the redirect; Home reports the failure.
+          console.error("Middleware: failed to load group memberships:", e);
+        }
+      }
       url.pathname = group ? target.pathFor(group.id) : "/dashboard";
       if (!group) url.search = "";
       return redirectTo(url);
