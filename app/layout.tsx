@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
-import { Cormorant_Garamond, Inter_Tight, JetBrains_Mono } from "next/font/google";
+import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -17,17 +17,16 @@ import { getGroupMemberships } from "@/lib/groups/server";
 import type { ActiveGroup } from "@/lib/groups/active";
 import "./globals.css";
 
-const cormorant = Cormorant_Garamond({
+const fraunces = Fraunces({
   variable: "--font-serif",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  axes: ["opsz"],
   display: "swap",
 });
 
-const interTight = Inter_Tight({
+const inter = Inter({
   variable: "--font-sans",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
   display: "swap",
 });
 
@@ -152,7 +151,7 @@ export default async function RootLayout({
           }}
         />
       </head>
-      <body className={`${cormorant.variable} ${interTight.variable} ${jetbrainsMono.variable} antialiased min-h-screen flex flex-col`}>
+      <body className={`${fraunces.variable} ${inter.variable} ${jetbrainsMono.variable} antialiased min-h-screen flex flex-col`}>
         <GroupProvider memberships={memberships} discoveryOn={discoveryOn}>
           <SidebarProvider>
             <Header
