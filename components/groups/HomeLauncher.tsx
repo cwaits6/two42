@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { groupPath, type ActiveGroup } from "@/lib/groups/active";
-import { loadHomeCards, type HomeEvent } from "@/lib/groups/home";
+import { loadHomeCards, type HomeCard, type HomeEvent } from "@/lib/groups/home";
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -29,7 +29,48 @@ function plural(n: number, word: string) {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-/** Home for a member of two or more groups: one card per group, then the week. */
+type CardActivity = Pick<HomeCard, "nextEvent" | "announcementCount" | "prayerCount">;
+
+/** A group card; without activity it is only the link into the group. */
+function GroupCard({ group, activity }: { group: ActiveGroup; activity: CardActivity | null }) {
+  return (
+    <Link
+      href={groupPath(group.id, "/dashboard")}
+      className="relative overflow-hidden rounded-2xl border border-border bg-card p-6 pl-8 transition-colors hover:border-brand-primary"
+    >
+      <span
+        aria-hidden="true"
+        className="absolute inset-y-0 left-0 w-2"
+        style={{ background: group.color }}
+      />
+      <div className="flex items-start justify-between gap-3">
+        <span className="font-serif text-2xl font-medium text-foreground leading-tight">
+          {group.name}
+        </span>
+        {group.role === "leader" && (
+          <span className="shrink-0 rounded border border-brand-accent/40 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wider text-brand-accent-text">
+            Leader
+          </span>
+        )}
+      </div>
+      {activity && (
+        <>
+          <p className="mt-3 font-sans text-base text-foreground">{nextLine(activity.nextEvent)}</p>
+          <p className="mt-1 font-sans text-base text-muted-foreground">
+            {plural(activity.announcementCount, "announcement")} ·{" "}
+            {plural(activity.prayerCount, "prayer request")}
+          </p>
+        </>
+      )}
+    </Link>
+  );
+}
+
+/**
+ * Home for a member of two or more groups: one card per group, then the week.
+ * When the loader reports a failed read the cards stay as links into each
+ * group and the page says so, rather than showing an empty week and zero counts.
+ */
 export async function HomeLauncher({
   memberships,
   discoveryOn,
@@ -42,7 +83,10 @@ export async function HomeLauncher({
   orgId: string;
 }) {
   const supabase = await createClient();
-  const { cards, thisWeek } = await loadHomeCards(supabase, { orgId, groups: memberships });
+  const home = await loadHomeCards(supabase, { orgId, groups: memberships });
+  const cards = home
+    ? home.cards.map((card) => ({ group: card.group, activity: card }))
+    : memberships.map((group) => ({ group, activity: null }));
   const groupNames = new Map(memberships.map((g) => [g.id, g]));
 
   return (
@@ -51,6 +95,12 @@ export async function HomeLauncher({
         <h1 className="font-serif text-5xl md:text-6xl font-medium leading-none tracking-tight text-foreground mb-9">
           {getGreeting()}, <em className="text-brand-primary italic">{displayName}</em>.
         </h1>
+
+        {!home && (
+          <p role="alert" className="mb-9 font-sans text-base text-foreground">
+            Could not load your groups&apos; activity. Try again in a moment.
+          </p>
+        )}
 
         <div className="flex items-baseline justify-between mb-5">
           <h2 className="font-serif text-[30px] font-medium text-foreground tracking-tight">
@@ -67,79 +117,57 @@ export async function HomeLauncher({
         </div>
 
         <div className="grid gap-5 md:grid-cols-2">
-          {cards.map(({ group, nextEvent, announcementCount, prayerCount }) => (
-            <Link
-              key={group.id}
-              href={groupPath(group.id, "/dashboard")}
-              className="relative overflow-hidden rounded-2xl border border-border bg-card p-6 pl-8 transition-colors hover:border-brand-primary"
-            >
-              <span
-                aria-hidden="true"
-                className="absolute inset-y-0 left-0 w-2"
-                style={{ background: group.color }}
-              />
-              <div className="flex items-start justify-between gap-3">
-                <span className="font-serif text-2xl font-medium text-foreground leading-tight">
-                  {group.name}
-                </span>
-                {group.role === "leader" && (
-                  <span className="shrink-0 rounded border border-brand-accent/40 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wider text-brand-accent-text">
-                    Leader
-                  </span>
-                )}
-              </div>
-              <p className="mt-3 font-sans text-base text-foreground">{nextLine(nextEvent)}</p>
-              <p className="mt-1 font-sans text-base text-muted-foreground">
-                {plural(announcementCount, "announcement")} · {plural(prayerCount, "prayer request")}
-              </p>
-            </Link>
+          {cards.map(({ group, activity }) => (
+            <GroupCard key={group.id} group={group} activity={activity} />
           ))}
         </div>
       </section>
 
-      <section className="border-t border-border bg-card px-4 py-10 md:px-14 md:pb-16">
-        <h2 className="font-serif text-[30px] font-medium text-foreground tracking-tight mb-5">
-          This week
-        </h2>
-        {thisWeek.length === 0 ? (
-          <p className="text-muted-foreground text-base">Nothing on the calendar this week.</p>
-        ) : (
-          <ul>
-            {thisWeek.map(({ event, groupId }, i) => {
-              const group = groupId ? groupNames.get(groupId) : undefined;
-              return (
-                <li
-                  key={`${event.id}-${event.start_time}`}
-                  className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-4"
-                  style={i > 0 ? { borderTop: "1px solid var(--color-border)" } : undefined}
-                >
-                  <span className="font-mono text-base text-muted-foreground">
-                    {weekRowLabel(event)}
-                  </span>
-                  <span className="font-serif text-xl font-medium text-foreground">
-                    {event.title}
-                  </span>
-                  {event.location && (
-                    <span className="font-sans text-base text-muted-foreground">
-                      {event.location}
+      {home && (
+        <section className="border-t border-border bg-card px-4 py-10 md:px-14 md:pb-16">
+          <h2 className="font-serif text-[30px] font-medium text-foreground tracking-tight mb-5">
+            This week
+          </h2>
+          {home.thisWeek.length === 0 ? (
+            <p className="text-muted-foreground text-base">Nothing on the calendar this week.</p>
+          ) : (
+            <ul>
+              {home.thisWeek.map(({ event, groupId }, i) => {
+                const group = groupId ? groupNames.get(groupId) : undefined;
+                return (
+                  <li
+                    key={`${event.id}-${event.start_time}`}
+                    className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-4"
+                    style={i > 0 ? { borderTop: "1px solid var(--color-border)" } : undefined}
+                  >
+                    <span className="font-mono text-base text-muted-foreground">
+                      {weekRowLabel(event)}
                     </span>
-                  )}
-                  {group && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-0.5 font-sans text-sm text-foreground">
-                      <span
-                        aria-hidden="true"
-                        className="h-2 w-2 rounded-full"
-                        style={{ background: group.color }}
-                      />
-                      {group.name}
+                    <span className="font-serif text-xl font-medium text-foreground">
+                      {event.title}
                     </span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+                    {event.location && (
+                      <span className="font-sans text-base text-muted-foreground">
+                        {event.location}
+                      </span>
+                    )}
+                    {group && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-0.5 font-sans text-sm text-foreground">
+                        <span
+                          aria-hidden="true"
+                          className="h-2 w-2 rounded-full"
+                          style={{ background: group.color }}
+                        />
+                        {group.name}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
     </div>
   );
 }

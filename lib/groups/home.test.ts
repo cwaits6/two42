@@ -7,7 +7,7 @@ import { loadHomeCards } from "@/lib/groups/home";
 const A: ActiveGroup = { id: "a", name: "Grace", color: GROUP_DEFAULT_COLOR, role: "leader" };
 const B: ActiveGroup = { id: "b", name: "Hope", color: GROUP_DEFAULT_COLOR, role: "member" };
 
-type Result = { data?: unknown[] | null; count?: number | null; error: null };
+type Result = { data?: unknown[] | null; count?: number | null; error: unknown };
 
 function makeClient(results: Record<string, Result>) {
   const eqs: Record<string, [string, unknown][]> = {};
@@ -34,6 +34,12 @@ function makeClient(results: Record<string, Result>) {
 }
 
 const NOW = new Date("2026-10-09T12:00:00Z");
+
+async function loadOrFail(client: SupabaseClient<Database>, groups: ActiveGroup[]) {
+  const result = await loadHomeCards(client, { orgId: "org-1", groups });
+  if (!result) throw new Error("loadHomeCards reported a failed read");
+  return result;
+}
 
 function event(id: string, start: string) {
   return {
@@ -82,7 +88,7 @@ describe("loadHomeCards", () => {
       prayer_wall: { count: 2, error: null },
     });
 
-    const { cards } = await loadHomeCards(client, { orgId: "org-1", groups: [A, B] });
+    const { cards } = await loadOrFail(client, [A, B]);
 
     expect(cards.map((c) => c.group)).toEqual([A, B]);
     for (const card of cards) {
@@ -111,11 +117,25 @@ describe("loadHomeCards", () => {
       prayer_wall: { count: null, error: null },
     });
 
-    const { thisWeek, cards } = await loadHomeCards(client, { orgId: "org-1", groups: [A] });
+    const { thisWeek, cards } = await loadOrFail(client, [A]);
 
     expect(thisWeek.map((r) => r.event.id)).toEqual(["soon"]);
     expect(thisWeek[0].groupId).toBeNull();
     expect(cards[0].announcementCount).toBe(0);
     expect(cards[0].prayerCount).toBe(0);
+  });
+
+  it("reports a failed read as null instead of an empty week and zero counts", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { client } = makeClient({
+      events: { data: [event("soon", "2026-10-12T18:00:00Z")], error: null },
+      announcements: { count: null, error: { message: "boom" } },
+      prayer_wall: { count: 3, error: null },
+    });
+
+    const result = await loadHomeCards(client, { orgId: "org-1", groups: [A] });
+
+    expect(result).toBeNull();
+    expect(console.error).toHaveBeenCalledWith("Home announcements read failed:", { message: "boom" });
   });
 });

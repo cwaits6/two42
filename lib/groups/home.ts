@@ -20,6 +20,8 @@ export type ThisWeekRow = {
   groupId: string | null;
 };
 
+export type HomeData = { cards: HomeCard[]; thisWeek: ThisWeekRow[] };
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
@@ -29,11 +31,14 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * `groupId: null`. The group-scoped-content ticket makes the body per group
  * without changing the callers. The client is a parameter and so untyped as
  * to privilege; every chain carries the caller's validated `orgId`.
+ *
+ * Resolves to null when any read fails: an empty week and zero counts would
+ * read as a confident "nothing happening", so the caller renders the failure.
  */
 export async function loadHomeCards(
   client: SupabaseClient<Database>,
   opts: { orgId: string; groups: ActiveGroup[] }
-): Promise<{ cards: HomeCard[]; thisWeek: ThisWeekRow[] }> {
+): Promise<HomeData | null> {
   const { orgId, groups } = opts;
   const now = new Date();
   const nowISO = now.toISOString();
@@ -41,32 +46,41 @@ export async function loadHomeCards(
   const windowStartISO = windowStart.toISOString();
   const weekEnd = now.getTime() + 7 * DAY_MS;
 
-  const [{ data: rawEvents }, { count: announcementCount }, { count: prayerCount }] =
-    await Promise.all([
-      client
-        .from("events")
-        .select("*")
-        .eq("org_id", orgId)
-        .or(
-          `start_time.gte.${windowStartISO},` +
-            `and(recurrence_frequency.not.is.null,or(recurrence_until.is.null,recurrence_until.gte.${windowStartISO}))`
-        )
-        .order("start_time", { ascending: true })
-        .limit(500),
-      client
-        .from("announcements")
-        .select("id", { count: "exact", head: true })
-        .eq("org_id", orgId)
-        .eq("is_published", true)
-        .lte("published_at", nowISO),
-      client
-        .from("prayer_wall")
-        .select("id", { count: "exact", head: true })
-        .eq("org_id", orgId)
-        .eq("is_answered", false),
-    ]);
+  const [events, announcements, prayers] = await Promise.all([
+    client
+      .from("events")
+      .select("*")
+      .eq("org_id", orgId)
+      .or(
+        `start_time.gte.${windowStartISO},` +
+          `and(recurrence_frequency.not.is.null,or(recurrence_until.is.null,recurrence_until.gte.${windowStartISO}))`
+      )
+      .order("start_time", { ascending: true })
+      .limit(500),
+    client
+      .from("announcements")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .eq("is_published", true)
+      .lte("published_at", nowISO),
+    client
+      .from("prayer_wall")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .eq("is_answered", false),
+  ]);
 
-  const occurrences = expandUpcomingEvents((rawEvents ?? []) as Event[], windowStart);
+  const failures = [
+    ["events", events.error],
+    ["announcements", announcements.error],
+    ["prayer_wall", prayers.error],
+  ].filter(([, error]) => error);
+  if (failures.length > 0) {
+    for (const [table, error] of failures) console.error(`Home ${table} read failed:`, error);
+    return null;
+  }
+
+  const occurrences = expandUpcomingEvents((events.data ?? []) as Event[], windowStart);
   const nextEvent =
     occurrences.find(
       (e) => meetingEndMs(e.start_time, e.end_time) + ENDED_GRACE_MS > now.getTime()
@@ -81,8 +95,8 @@ export async function loadHomeCards(
   const cards: HomeCard[] = groups.map((group) => ({
     group,
     nextEvent: nextEvent ? toHomeEvent(nextEvent) : null,
-    announcementCount: announcementCount ?? 0,
-    prayerCount: prayerCount ?? 0,
+    announcementCount: announcements.count ?? 0,
+    prayerCount: prayers.count ?? 0,
   }));
 
   return { cards, thisWeek };
