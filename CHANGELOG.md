@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.31.0](https://github.com/cwaits6/two42/compare/v0.30.0...v0.31.0) (2026-10-10)
+
+
+### Features
+
+* add the group model foundation with the one-group backfill ([#428](https://github.com/cwaits6/two42/issues/428)) ([f194244](https://github.com/cwaits6/two42/commit/f194244ffd02db90748a50756d056b21dc56a8cd))
+* remove custom pages feature ([#427](https://github.com/cwaits6/two42/issues/427)) ([c6f1a17](https://github.com/cwaits6/two42/commit/c6f1a17bc2d1c7309d7473584b33ea7d3253e98a))
+
+
+### Bug Fixes
+
+* **branding:** stop resolving anonymous branding from the request host ([#402](https://github.com/cwaits6/two42/issues/402)) ([d95e2e9](https://github.com/cwaits6/two42/commit/d95e2e9f993a35f01595dc4a91ad6a907df06bdc))
+* consolidate anonymous join flow onto path-based org resolution ([#403](https://github.com/cwaits6/two42/issues/403)) ([10551c8](https://github.com/cwaits6/two42/commit/10551c8d550a2fd00e56a94f7cea9ced3bd8b4aa))
+* **tenancy:** org-scope the public content pages route ([#401](https://github.com/cwaits6/two42/issues/401)) ([c39ae4c](https://github.com/cwaits6/two42/commit/c39ae4c3c69192e985122f533e1e2ada4c2a7b6f))
+
+
+### Dependencies
+
+* bump transitive packages flagged by Trivy ([#434](https://github.com/cwaits6/two42/issues/434)) ([938b02d](https://github.com/cwaits6/two42/commit/938b02d17555bcc2d81f649643c003cafaa2cb7f))
+
 ## [0.30.0](https://github.com/cwaits6/two42/compare/v0.29.0...v0.30.0) (2026-09-12)
 
 
