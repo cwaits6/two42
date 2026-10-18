@@ -19,7 +19,6 @@ vi.mock("@/lib/groups/server", () => ({
   requireActiveGroup: (groupId: string) => requireActiveGroup(groupId),
 }));
 
-const profileRole = vi.fn<() => string>();
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: async () => ({ data: { user: { id: "user-1" } } }) },
@@ -30,8 +29,6 @@ vi.mock("@/lib/supabase/server", () => ({
             table === "groups"
               ? { data: { name: "Grace", description: "Sunday class" } }
               : { data: null },
-          single: async () =>
-            table === "profiles" ? { data: { role: profileRole() } } : { data: null },
         }),
       }),
     }),
@@ -60,8 +57,6 @@ function hrefs(node: ReactNode, out: string[] = []): string[] {
 
 beforeEach(() => {
   requireActiveGroup.mockReset();
-  profileRole.mockReset();
-  profileRole.mockReturnValue("member");
 });
 
 describe("GroupSettingsPage", () => {
@@ -73,28 +68,19 @@ describe("GroupSettingsPage", () => {
     });
   });
 
-  it("shows a leader who is not an org admin no admin links", async () => {
+  it("shows a leader the content tiles under the group and nothing under /admin", async () => {
     requireActiveGroup.mockResolvedValue(leader);
 
     const element = await GroupSettingsPage({ params: Promise.resolve({ groupId: A_ID }) });
+    const links = hrefs(element);
 
-    expect(hrefs(element).filter((h) => h.startsWith("/admin/"))).toEqual([]);
-  });
-
-  it("shows an org admin the interim content links", async () => {
-    requireActiveGroup.mockResolvedValue(leader);
-    profileRole.mockReturnValue("admin");
-
-    const element = await GroupSettingsPage({ params: Promise.resolve({ groupId: A_ID }) });
-
-    expect(hrefs(element).filter((h) => h.startsWith("/admin/"))).toEqual([
-      "/admin/events/new",
-      "/admin/calendars",
-      "/admin/serving",
-      "/admin/lectures",
-      "/admin/announcements/new",
-      "/admin/about",
-      "/admin/giving",
+    expect(links.filter((h) => h.startsWith("/admin"))).toEqual([]);
+    expect(links).toEqual([
+      `/g/${A_ID}/settings/about`,
+      `/g/${A_ID}/settings/announcements`,
+      `/g/${A_ID}/settings/lectures`,
+      `/g/${A_ID}/settings/giving`,
+      `/g/${A_ID}/settings/serving`,
     ]);
   });
 });

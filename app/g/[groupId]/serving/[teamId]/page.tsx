@@ -50,19 +50,20 @@ export default async function ServingSchedulePage({
         .from("teams")
         .select("id, name, description, color")
         .eq("id", teamId)
+        .eq("group_id", group.id)
         .maybeSingle(),
       supabase
         .from("serving_team_settings")
         .select("*")
-        .eq("group_id", teamId)
+        .eq("team_id", teamId)
         .maybeSingle(),
     ]);
 
   if (!profile || profile.role === "pending") redirect("/dashboard");
   if (!team) notFound();
 
-  const isAdmin = profile.role === "admin";
-  if (!settings?.enabled && !isAdmin) redirect(servingHref);
+  const isLeader = group.role === "leader";
+  if (!settings?.enabled && !isLeader) redirect(servingHref);
 
   const { data: membership } = await supabase
     .from("team_members")
@@ -72,10 +73,10 @@ export default async function ServingSchedulePage({
     .maybeSingle();
 
   const isMember = !!membership;
-  const isLeader = membership?.is_leader === true;
+  const isTeamLead = membership?.is_leader === true;
   // Everyone can view the schedule/roster read-only; only team members,
-  // leaders, and admins can actually claim a Sunday.
-  const canSignUp = isMember || isLeader || isAdmin;
+  // team leads, and group leaders can actually claim a Sunday.
+  const canSignUp = isMember || isTeamLead || isLeader;
 
   const { data: memberRows } = await supabase
     .from("team_members")
@@ -96,7 +97,7 @@ export default async function ServingSchedulePage({
     .select(
       "id, service_date, created_by, family_id, serving_signup_attendees(profiles(id, first_name, last_name, preferred_name))"
     )
-    .eq("group_id", teamId)
+    .eq("team_id", teamId)
     .gte("service_date", sundays[0])
     .lte("service_date", sundays[sundays.length - 1]);
 
@@ -140,7 +141,7 @@ export default async function ServingSchedulePage({
     .select(
       "id, service_date, created_by, family_id, serving_signup_attendees(profiles(id, first_name, last_name, preferred_name))"
     )
-    .eq("group_id", teamId)
+    .eq("team_id", teamId)
     .lt("service_date", sundays[0])
     .order("service_date", { ascending: false });
 
@@ -236,14 +237,14 @@ export default async function ServingSchedulePage({
           "Pick a Sunday below — one signup covers the whole morning."}
       </p>
 
-      {!settings?.enabled && isAdmin && (
+      {!settings?.enabled && isLeader && (
         <p className="text-sm text-brand-accent mb-6">
           Serving signups are not enabled for this team yet — enable them from
           the Serving page.
         </p>
       )}
 
-      {(isLeader || isAdmin) && (
+      {(isLeader || isTeamLead) && (
         <div className="flex flex-wrap items-center gap-2 mb-6">
           {settings?.enabled && (
             <EmailTeamButton
@@ -253,20 +254,18 @@ export default async function ServingSchedulePage({
               memberCount={memberCount ?? 0}
             />
           )}
-          {isAdmin && (
-            <ServingSettingsDialog
-              groupId={teamId}
-              settings={
-                settings
-                  ? {
-                      enabled: settings.enabled ?? false,
-                      reminder_days: settings.reminder_days ?? [4, 5],
-                      window_weeks: settings.window_weeks ?? 8,
-                    }
-                  : null
-              }
-            />
-          )}
+          <ServingSettingsDialog
+            teamId={teamId}
+            settings={
+              settings
+                ? {
+                    enabled: settings.enabled ?? false,
+                    reminder_days: settings.reminder_days ?? [4, 5],
+                    window_weeks: settings.window_weeks ?? 8,
+                  }
+                : null
+            }
+          />
         </div>
       )}
 
@@ -285,7 +284,7 @@ export default async function ServingSchedulePage({
         userId={user.id}
         spouse={spouse}
         canSignUp={canSignUp}
-        canManage={isLeader || isAdmin}
+        canManage={isLeader || isTeamLead}
       />
 
       {historyEntries.length > 0 && (

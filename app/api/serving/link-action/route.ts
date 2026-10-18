@@ -49,7 +49,7 @@ export async function POST(request: Request) {
   // "this link expired", with nothing in the logs.
   const { data: group, error: groupError } = await service
     .from("teams")
-    .select("id, name, org_id")
+    .select("id, name, org_id, group_id")
     .eq("id", payload.g)
     .maybeSingle();
 
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const linkMode = await getServingLinkMode(service, group.org_id);
+  const linkMode = await getServingLinkMode(service, group.org_id, group.group_id);
   if (linkMode === "login") {
     return NextResponse.json({ error: "login_required" }, { status: 403 });
   }
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
     service
       .from("serving_team_settings")
       .select("enabled")
-      .eq("group_id", payload.g)
+      .eq("team_id", payload.g)
       .eq("org_id", group.org_id)
       .maybeSingle(),
   ]);
@@ -179,7 +179,7 @@ export async function POST(request: Request) {
 
     // One RPC, one transaction: the compensating delete this
     // replaces could itself fail, wedging the Sunday behind
-    // unique (group_id, service_date). The service-role entry point takes
+    // unique (team_id, service_date). The service-role entry point takes
     // the actor explicitly — there is no session here — and re-derives
     // org_id from the group row, re-asserting the profile↔group pairing the
     // check above already made. `.single()` because `returns table`
@@ -242,8 +242,9 @@ export async function POST(request: Request) {
         await sendSignupConfirmation(service, {
           signupId: rpc.signup_id,
           orgId: group.org_id,
-          groupId: payload.g,
-          groupName: group.name,
+          groupId: group.group_id,
+          teamId: payload.g,
+          teamName: group.name,
           serviceDate: payload.d,
           attendees,
           familyId: profile.family_id,
@@ -267,7 +268,7 @@ export async function POST(request: Request) {
     .select(
       "id, family_id, created_by, serving_signup_attendees(profiles(id, first_name, last_name, preferred_name))"
     )
-    .eq("group_id", payload.g)
+    .eq("team_id", payload.g)
     .eq("service_date", payload.d)
     .eq("org_id", group.org_id)
     .maybeSingle();
@@ -320,9 +321,10 @@ export async function POST(request: Request) {
 
   try {
     await notifyLeadersOfCancel(service, {
-      groupId: payload.g,
+      groupId: group.group_id,
+      teamId: payload.g,
       orgId: group.org_id,
-      groupName: group.name,
+      teamName: group.name,
       serviceDate: payload.d,
       memberLabel: await resolveSignupLabel(
         service,

@@ -5,36 +5,34 @@ import { AddToCalendarButton } from "@/components/events/AddToCalendarButton";
 import { RsvpButton } from "@/components/events/RsvpButton";
 import { CalendarDays, Clock, MapPin, Pencil, Plus } from "lucide-react";
 import { groupPath } from "@/lib/groups/active";
-import type { Event, EventCalendar, Rsvp } from "@/lib/types";
+import { groupTextColor } from "@/lib/groups/settings";
+import type { CalendarGroup } from "@/components/events/EventsPageClient";
+import type { Event, Rsvp } from "@/lib/types";
 
 interface EventListViewProps {
-  groupId: string;
-  events: (Event & { calendar?: EventCalendar | null })[];
+  groups: CalendarGroup[];
+  events: Event[];
   userRsvps: Record<string, Rsvp>;
-  userId: string | null;
-  isMember: boolean;
-  isAdmin: boolean;
+  userId: string;
+  /** The create link for the empty state, when the viewer leads exactly one visible group. */
+  createHref: string | null;
 }
 
-export function EventListView({
-  groupId,
-  events,
-  userRsvps,
-  userId,
-  isMember,
-  isAdmin,
-}: EventListViewProps) {
+export function EventListView({ groups, events, userRsvps, userId, createHref }: EventListViewProps) {
+  const byId = new Map(groups.map((g) => [g.id, g]));
+  const showGroupName = groups.length >= 2;
+
   if (events.length === 0) {
     return (
       <div className="max-w-5xl rounded-2xl border border-dashed border-border px-6 py-12 text-center">
         <p className="text-xl text-muted-foreground">
           No upcoming calendar items right now. Check back soon!
         </p>
-        {isAdmin && (
+        {createHref && (
           <p className="mt-3">
             <Button
               nativeButton={false}
-              render={<Link href="/admin/events/new" />}
+              render={<Link href={createHref} />}
               className="bg-brand-primary hover:bg-brand-primary/90 text-white"
             >
               <Plus className="mr-1.5 h-4 w-4" />
@@ -49,6 +47,9 @@ export function EventListView({
   return (
     <div className="max-w-5xl space-y-4 overflow-visible">
       {events.map((event, index) => {
+        const group = byId.get(event.group_id);
+        const color = group?.color ?? "var(--color-brand-primary)";
+        const textColor = group ? groupTextColor(group.color) : "#FFFFFF";
         const startDate = new Date(event.start_time);
         const endDate = event.end_time ? new Date(event.end_time) : null;
         const month = startDate.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
@@ -62,14 +63,14 @@ export function EventListView({
         const formatTime = (date: Date) =>
           date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
-        // For recurring series occurrences (not exceptions), pass the occurrence
-        // date so the detail/edit pages know which specific occurrence is shown.
+        // A recurring occurrence carries its date so the detail and edit
+        // pages know which one is meant.
         const isSeriesOccurrence = !!event.recurrence_frequency && !event.series_id;
         const occurrenceParam = isSeriesOccurrence
           ? `?occurrence=${encodeURIComponent(event.start_time)}`
           : "";
-        const viewHref = groupPath(groupId, `/calendar/${event.id}${occurrenceParam}`);
-        const editHref = `/admin/events/${event.id}/edit${occurrenceParam}`;
+        const viewHref = groupPath(event.group_id, `/calendar/${event.id}${occurrenceParam}`);
+        const editHref = groupPath(event.group_id, `/calendar/${event.id}/edit${occurrenceParam}`);
 
         return (
           <div
@@ -78,13 +79,13 @@ export function EventListView({
           >
             <div
               className="absolute inset-x-0 top-0 h-1 rounded-t-2xl"
-              style={{ backgroundColor: event.calendar?.color ?? "var(--color-brand-primary)" }}
+              style={{ backgroundColor: color }}
             />
 
             <div className="flex flex-col gap-4 md:flex-row md:items-start">
               <div
-                className="shrink-0 flex h-16 w-16 flex-col items-center justify-center rounded-2xl text-white shadow-sm"
-                style={{ background: event.calendar?.color ?? "var(--color-brand-primary)" }}
+                className="shrink-0 flex h-16 w-16 flex-col items-center justify-center rounded-2xl shadow-sm"
+                style={{ background: color, color: textColor }}
               >
                 <span className="text-base font-bold tracking-widest leading-none">{month}</span>
                 <span className="text-2xl font-bold font-display leading-tight">{dayNum}</span>
@@ -100,12 +101,12 @@ export function EventListView({
                       >
                         {event.title}
                       </Link>
-                      {event.calendar && (
+                      {showGroupName && group && (
                         <Badge
                           variant="secondary"
                           className="bg-brand-bg-light text-brand-primary border-brand-primary/20 text-base"
                         >
-                          {event.calendar.name}
+                          {group.name}
                         </Badge>
                       )}
                     </div>
@@ -145,7 +146,7 @@ export function EventListView({
                     >
                       View
                     </Button>
-                    {isAdmin && (
+                    {group?.isLeader && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -176,31 +177,20 @@ export function EventListView({
                   </p>
                 )}
 
-                {childrenPlaceholder(event, isMember, userId, userRsvps)}
+                {event.is_rsvp_enabled && (
+                  <div className="border-t border-slate-100 pt-3">
+                    <RsvpButton
+                      eventId={event.id}
+                      userId={userId}
+                      currentStatus={userRsvps[event.id]?.status ?? null}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function childrenPlaceholder(
-  event: Event,
-  isMember: boolean,
-  userId: string | null,
-  userRsvps: Record<string, Rsvp>
-) {
-  if (!(isMember && userId && event.is_rsvp_enabled)) return null;
-
-  return (
-    <div className="border-t border-slate-100 pt-3">
-      <RsvpButton
-        eventId={event.id}
-        userId={userId}
-        currentStatus={userRsvps[event.id]?.status ?? null}
-      />
     </div>
   );
 }

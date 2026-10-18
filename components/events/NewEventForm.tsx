@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -20,8 +20,10 @@ import { toast } from "sonner";
 import { GoogleMapsScript } from "@/components/GoogleMapsScript";
 import { LocationInput } from "@/components/events/LocationInput";
 import { MeetingFieldsSection } from "@/components/events/MeetingFieldsSection";
+import { PostingTo } from "@/components/groups/PostingTo";
+import { ensureGroupCalendar } from "@/lib/groups/calendar";
+import { groupPath } from "@/lib/groups/active";
 import { addHour, isValidEndTime } from "@/lib/datetime-local";
-import type { EventCalendar } from "@/lib/types";
 
 const APP_TIMEZONE = "America/New_York";
 
@@ -63,10 +65,24 @@ const END_MODE_LABELS: Record<RecurrenceEndMode, string> = {
   until: "On Date",
 };
 
-export function NewEventForm() {
+const RECURRENCE_ITEMS = (Object.keys(RECURRENCE_LABELS) as RecurrenceFrequency[]).map(
+  (value) => ({ value, label: RECURRENCE_LABELS[value] })
+);
+const END_MODE_ITEMS = (Object.keys(END_MODE_LABELS) as RecurrenceEndMode[]).map(
+  (value) => ({ value, label: END_MODE_LABELS[value] })
+);
+
+interface NewEventFormProps {
+  groupId: string;
+  groupName: string;
+  /** The caller's own org, resolved server-side; stamps the calendar insert when one is needed. */
+  orgId: string;
+  /** The group's calendar, or null when the group has none yet. */
+  calendarId: string | null;
+}
+
+export function NewEventForm({ groupId, groupName, orgId, calendarId }: NewEventFormProps) {
   const [loading, setLoading] = useState(false);
-  const [calendars, setCalendars] = useState<EventCalendar[]>([]);
-  const [calendarId, setCalendarId] = useState<string | null>(null);
   const [isRsvpEnabled, setIsRsvpEnabled] = useState(true);
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrenceFrequency, setRecurrenceFrequency] = useState<RecurrenceFrequency>("weekly");
@@ -85,28 +101,12 @@ export function NewEventForm() {
 
   const rawDate = searchParams.get("date");
   const prefillDate = rawDate ? rawDate.split("T")[0] : null;
-  const selectedCalendar = calendars.find((calendar) => calendar.id === calendarId) ?? null;
   const initialStartTime = useMemo(
     () => (prefillDate ? `${prefillDate}T09:00` : ""),
     [prefillDate]
   );
   const [startTime, setStartTime] = useState(initialStartTime);
   const [endTime, setEndTime] = useState(() => addHour(initialStartTime));
-
-  useEffect(() => {
-    supabase
-      .from("event_calendars")
-      .select("*")
-      .order("name")
-      .then(({ data, error }) => {
-        if (error) {
-          console.error("Failed to load event calendars:", error);
-          toast.error("Failed to load calendars.");
-          return;
-        }
-        if (data) setCalendars(data as EventCalendar[]);
-      });
-  }, [supabase]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -163,13 +163,22 @@ export function NewEventForm() {
     const title = formData.get("title") as string;
     const description = (formData.get("description") as string) || null;
 
+    const resolvedCalendarId =
+      calendarId ?? (await ensureGroupCalendar(supabase, orgId, groupId, groupName));
+    if (!resolvedCalendarId) {
+      setLoading(false);
+      toast.error("Failed to create event.");
+      return;
+    }
+
     const { error } = await supabase.from("events").insert({
       title,
       description,
       location: nextLocation || null,
       start_time: localToUTCISO(startTime),
       end_time: endTime ? localToUTCISO(endTime) : null,
-      calendar_id: calendarId || null,
+      group_id: groupId,
+      calendar_id: resolvedCalendarId,
       is_rsvp_enabled: isRsvpEnabled,
       created_by: user?.id,
       recurrence_frequency: isRecurring ? recurrenceFrequency : null,
@@ -195,7 +204,7 @@ export function NewEventForm() {
     }
 
     toast.success("Event created!");
-    router.push("/events");
+    router.push(groupPath(groupId, "/calendar"));
   };
 
   const handleStartTimeChange = (nextStartTime: string) => {
@@ -213,6 +222,7 @@ export function NewEventForm() {
       <Card>
         <CardHeader>
           <CardTitle className="text-3xl text-brand-primary">Create Event</CardTitle>
+          <PostingTo groupName={groupName} />
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -263,48 +273,6 @@ export function NewEventForm() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-lg">Calendar</Label>
-              <Select
-                value={calendarId ?? "none"}
-                onValueChange={(val) => setCalendarId(val === "none" ? null : val)}
-              >
-                <SelectTrigger className="w-full text-lg py-6">
-                  <SelectValue placeholder="No calendar (uncategorized)">
-                    {selectedCalendar ? (
-                      <span className="flex items-center gap-2">
-                        {selectedCalendar.color && (
-                          <span
-                            className="inline-block h-3 w-3 shrink-0 rounded-full"
-                            style={{ backgroundColor: selectedCalendar.color }}
-                          />
-                        )}
-                        {selectedCalendar.name}
-                      </span>
-                    ) : (
-                      "No calendar (uncategorized)"
-                    )}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="min-w-[20rem]">
-                  <SelectItem value="none">No calendar (uncategorized)</SelectItem>
-                  {calendars.map((cal) => (
-                    <SelectItem key={cal.id} value={cal.id}>
-                      <span className="flex items-center gap-2">
-                        {cal.color && (
-                          <span
-                            className="inline-block w-3 h-3 rounded-full shrink-0"
-                            style={{ backgroundColor: cal.color }}
-                          />
-                        )}
-                        {cal.name}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
             <div className="flex items-center gap-3">
               <Switch
                 id="is_rsvp_enabled"
@@ -335,17 +303,19 @@ export function NewEventForm() {
                     <div className="space-y-2">
                       <Label className="text-lg">Repeat</Label>
                       <Select
+                        items={RECURRENCE_ITEMS}
                         value={recurrenceFrequency}
-                        onValueChange={(value) => setRecurrenceFrequency(value as RecurrenceFrequency)}
+                        onValueChange={(value) => setRecurrenceFrequency((value ?? "weekly") as RecurrenceFrequency)}
                       >
                         <SelectTrigger className="w-full text-lg py-6">
                           <SelectValue>{RECURRENCE_LABELS[recurrenceFrequency]}</SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="daily">Daily</SelectItem>
-                          <SelectItem value="weekly">Weekly</SelectItem>
-                          <SelectItem value="monthly">Monthly</SelectItem>
-                          <SelectItem value="yearly">Yearly</SelectItem>
+                          {RECURRENCE_ITEMS.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -353,16 +323,19 @@ export function NewEventForm() {
                     <div className="space-y-2">
                       <Label className="text-lg">End Repeat</Label>
                       <Select
+                        items={END_MODE_ITEMS}
                         value={recurrenceEndMode}
-                        onValueChange={(value) => setRecurrenceEndMode(value as RecurrenceEndMode)}
+                        onValueChange={(value) => setRecurrenceEndMode((value ?? "never") as RecurrenceEndMode)}
                       >
                         <SelectTrigger className="w-full text-lg py-6">
                           <SelectValue>{END_MODE_LABELS[recurrenceEndMode]}</SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="never">Never</SelectItem>
-                          <SelectItem value="count">After Number Of Times</SelectItem>
-                          <SelectItem value="until">On Date</SelectItem>
+                          {END_MODE_ITEMS.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>

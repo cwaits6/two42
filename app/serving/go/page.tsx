@@ -68,7 +68,7 @@ export default async function ServingLinkPage({
   // "expired" with nothing in the logs.
   const { data: group, error: groupError } = await service
     .from("teams")
-    .select("id, name, org_id")
+    .select("id, name, org_id, group_id")
     .eq("id", payload.g)
     .maybeSingle();
 
@@ -91,7 +91,7 @@ export default async function ServingLinkPage({
     );
   }
 
-  const linkMode = await getServingLinkMode(service, group.org_id);
+  const linkMode = await getServingLinkMode(service, group.org_id, group.group_id);
   if (linkMode === "login") {
     return (
       <Message
@@ -117,7 +117,7 @@ export default async function ServingLinkPage({
     service
       .from("serving_team_settings")
       .select("enabled")
-      .eq("group_id", payload.g)
+      .eq("team_id", payload.g)
       .eq("org_id", group.org_id)
       .maybeSingle(),
     service
@@ -132,7 +132,7 @@ export default async function ServingLinkPage({
       .select(
         "id, family_id, created_by, serving_signup_attendees(profiles(id, first_name, last_name, preferred_name))"
       )
-      .eq("group_id", payload.g)
+      .eq("team_id", payload.g)
       .eq("service_date", payload.d)
       .eq("org_id", group.org_id)
       .maybeSingle(),

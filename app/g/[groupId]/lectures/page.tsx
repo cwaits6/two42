@@ -10,6 +10,7 @@ export const metadata = { title: `Lectures | ${siteConfig.name}` };
 
 type LectureWithSeries = {
   id: string;
+  group_id: string;
   title: string;
   description: string | null;
   video_url: string;
@@ -65,6 +66,7 @@ export default async function LecturesPage({
   const { data: lecturesData } = await supabase
     .from("lectures")
     .select("*, lecture_series(id, name, teacher)")
+    .eq("group_id", group.id)
     .order("lecture_date", { ascending: false, nullsFirst: false });
 
   const allLectures = (lecturesData ?? []) as LectureWithSeries[];
@@ -73,6 +75,7 @@ export default async function LecturesPage({
   const { data: seriesData } = await supabase
     .from("lecture_series")
     .select("id, name, teacher, is_archived, created_at")
+    .eq("group_id", group.id)
     .order("created_at", { ascending: false });
 
   const allSeries = (seriesData ?? []) as LectureSeries[];

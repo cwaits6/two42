@@ -18,7 +18,7 @@ import { toast } from "sonner";
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 interface ServingSettingsDialogProps {
-  groupId: string;
+  teamId: string;
   settings: {
     enabled: boolean;
     reminder_days: number[];
@@ -26,7 +26,7 @@ interface ServingSettingsDialogProps {
   } | null;
 }
 
-export function ServingSettingsDialog({ groupId, settings }: ServingSettingsDialogProps) {
+export function ServingSettingsDialog({ teamId, settings }: ServingSettingsDialogProps) {
   const [open, setOpen] = useState(false);
   const [enabled, setEnabled] = useState(settings?.enabled ?? false);
   const [reminderDays, setReminderDays] = useState<number[]>(settings?.reminder_days ?? [4, 5]);
@@ -47,7 +47,7 @@ export function ServingSettingsDialog({ groupId, settings }: ServingSettingsDial
       data: { user },
     } = await supabase.auth.getUser();
     const { error } = await supabase.from("serving_team_settings").upsert({
-      group_id: groupId,
+      team_id: teamId,
       enabled,
       reminder_days: reminderDays,
       window_weeks: Math.max(1, Math.min(26, windowWeeks)),

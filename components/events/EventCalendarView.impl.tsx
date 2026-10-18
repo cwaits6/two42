@@ -10,41 +10,42 @@ import interactionPlugin from "@fullcalendar/interaction";
 import type { DatesSetArg, EventClickArg, EventInput } from "@fullcalendar/core";
 import type { DateClickArg } from "@fullcalendar/interaction";
 import { groupPath } from "@/lib/groups/active";
+import { groupTextColor } from "@/lib/groups/settings";
 import { buildExceptionMap, expandOccurrences } from "@/lib/recurrence";
-import type { Event, EventCalendar } from "@/lib/types";
+import type { CalendarGroup } from "@/components/events/EventsPageClient";
+import type { Event } from "@/lib/types";
 
 interface EventCalendarViewProps {
-  groupId: string;
-  events: (Event & { calendar?: EventCalendar | null })[];
-  visibleCalendarIds: Set<string | null>;
-  isAdmin?: boolean;
+  groups: CalendarGroup[];
+  events: Event[];
+  visibleGroupIds: Set<string>;
+  /** A day click creates an event when the viewer leads exactly one visible group. */
+  onDateClick?: (date: string) => void;
 }
 
 export default function EventCalendarView({
-  groupId,
+  groups,
   events,
-  visibleCalendarIds,
-  isAdmin,
+  visibleGroupIds,
+  onDateClick,
 }: EventCalendarViewProps) {
   const router = useRouter();
   const calendarRef = useRef<FullCalendar>(null);
   const [currentView, setCurrentView] = useState("dayGridMonth");
 
+  const colors = useMemo(() => new Map(groups.map((g) => [g.id, g.color])), [groups]);
+
   const filteredEvents: EventInput[] = useMemo(() => {
-    // Build exception map from all events before filtering by calendar visibility,
-    // so exception rows for hidden calendars still suppress their series occurrences.
+    // Build the exception map from every event before filtering, so an
+    // exception row of a hidden group still suppresses its series occurrence.
     const exceptions = buildExceptionMap(events);
 
-    const expanded: (Event & { calendar?: EventCalendar | null })[] = [];
-
+    const expanded: Event[] = [];
     for (const e of events) {
-      if (!visibleCalendarIds.has(e.calendar_id)) continue;
-
+      if (!visibleGroupIds.has(e.group_id)) continue;
       if (e.series_id) {
-        // Exception event — include directly (not expanded as a series)
         expanded.push(e);
       } else if (e.recurrence_frequency) {
-        // Recurring series — expand, skipping exception-covered dates
         expanded.push(...expandOccurrences(e, exceptions.get(e.id)));
       } else {
         expanded.push(e);
@@ -52,7 +53,7 @@ export default function EventCalendarView({
     }
 
     return expanded.map((e) => {
-      const color = e.calendar?.color ?? "var(--color-brand-primary)";
+      const color = colors.get(e.group_id) ?? "var(--color-brand-primary)";
       return {
         id: e.id,
         title: e.title,
@@ -60,29 +61,26 @@ export default function EventCalendarView({
         end: e.end_time ?? undefined,
         backgroundColor: color,
         borderColor: color,
+        textColor: colors.has(e.group_id) ? groupTextColor(color) : undefined,
         extendedProps: { event: e },
       };
     });
-  }, [events, visibleCalendarIds]);
+  }, [events, visibleGroupIds, colors]);
 
   const handleEventClick = (info: EventClickArg) => {
     const event = info.event.extendedProps.event as Event;
-
-    if (event.recurrence_frequency && !event.series_id) {
-      // Recurring series occurrence — pass the occurrence date so the detail
-      // page and edit page know which specific occurrence is being viewed.
-      const occurrence = encodeURIComponent(event.start_time);
-      router.push(groupPath(groupId, `/calendar/${event.id}?occurrence=${occurrence}`));
-    } else {
-      // Regular event or per-occurrence exception
-      router.push(groupPath(groupId, `/calendar/${event.id}`));
-    }
+    // A recurring occurrence carries its date so the detail and edit pages
+    // know which one is meant.
+    const occurrence =
+      event.recurrence_frequency && !event.series_id
+        ? `?occurrence=${encodeURIComponent(event.start_time)}`
+        : "";
+    router.push(groupPath(event.group_id, `/calendar/${event.id}${occurrence}`));
   };
 
   const handleDateClick = (info: DateClickArg) => {
-    if (!isAdmin) return;
-    const date = info.dateStr.split("T")[0]; // normalize to YYYY-MM-DD
-    router.push(`/admin/events/new?date=${date}`);
+    if (!onDateClick) return;
+    onDateClick(info.dateStr.split("T")[0]);
   };
 
   const handleDatesSet = (arg: DatesSetArg) => {
@@ -104,7 +102,6 @@ export default function EventCalendarView({
   return (
     <div className="bg-white rounded-[2rem] border-2 border-border overflow-hidden p-5 shadow-sm [&_.fc-event]:cursor-pointer">
       <div className="rounded-[1.5rem] border border-slate-100 bg-slate-50/70 p-4 md:p-5">
-        {/* Custom navigation buttons */}
         <div className="mb-3 flex items-center gap-2">
           <button
             onClick={() => calendarRef.current?.getApi().prev()}
@@ -136,7 +133,7 @@ export default function EventCalendarView({
           eventClick={handleEventClick}
           dateClick={handleDateClick}
           datesSet={handleDatesSet}
-          selectable={isAdmin}
+          selectable={!!onDateClick}
           height={currentView === "timeGridWeek" ? 760 : "auto"}
           scrollTime="08:00:00"
           buttonText={{
