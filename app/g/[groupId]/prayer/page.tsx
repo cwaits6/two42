@@ -94,7 +94,9 @@ export default async function PrayerPage({
           members={members}
           orgId={profile.org_id}
           prayerCall={{
-            url: settings.weekly_prayer_call_url,
+            url: settings.weekly_prayer_call_url?.startsWith("https://")
+              ? settings.weekly_prayer_call_url
+              : null,
             time: settings.weekly_prayer_call_time,
           }}
         />

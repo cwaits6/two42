@@ -61,6 +61,10 @@ begin
     (org_a, group_a, true),
     (org_b, group_b, true);
 
+  insert into public.group_members (org_id, group_id, profile_id, role) values
+    (org_a, grp_a, owner_a, 'leader'),
+    (org_a, grp_a, member_a2, 'member'),
+    (org_b, grp_b, owner_b, 'leader');
   insert into public.team_members (org_id, profile_id, team_id) values
     (org_a, owner_a, group_a),
     (org_a, member_a2, group_a),

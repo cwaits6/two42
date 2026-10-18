@@ -49,9 +49,10 @@ create table public.group_settings (
   group_id uuid primary key,
   org_id uuid not null default public.app_current_org_id()
     references public.organizations (id) on delete cascade,
-  weekly_zoom_url text,
+  weekly_zoom_url text check (weekly_zoom_url is null or weekly_zoom_url ~ '^https://'),
   zoom_meeting_time text,
-  weekly_prayer_call_url text,
+  weekly_prayer_call_url text
+    check (weekly_prayer_call_url is null or weekly_prayer_call_url ~ '^https://'),
   weekly_prayer_call_time text,
   -- NULL defers to the SERVING_LINK_MODE environment default; a stored value
   -- is an explicit choice by the group's leader.
@@ -75,10 +76,11 @@ comment on table public.group_settings is
 -- changes nothing. Not SECURITY DEFINER and no client grant: the migration
 -- runner and the test harness both run as postgres.
 --
--- Ungrouped rows go to the org's oldest group. Production has exactly one
--- group per org, so that is the only group; a local stack seeded with
--- several groups gets its pre-existing content under the first one, the
--- group the foundation backfill created.
+-- Ungrouped rows go to the org's oldest group. An org provisioned since the
+-- foundation has a calendar and an about page but no group, so the
+-- foundation backfill runs first and gives it one; after that, content with
+-- no group to own it is a defect and the function refuses. A local stack
+-- seeded with several groups gets its pre-existing content under the first.
 create function public.group_content_backfill() returns void
   language plpgsql set search_path = ''
 as $$
@@ -253,9 +255,9 @@ begin
       weekly_prayer_call_url, weekly_prayer_call_time, serving_link_mode)
     select
       _org.id, _grp,
-      nullif(max(value) filter (where key = 'weekly_zoom_url'), ''),
+      nullif(max(value) filter (where key = 'weekly_zoom_url' and value ~ '^https://'), ''),
       nullif(max(value) filter (where key = 'zoom_meeting_time'), ''),
-      nullif(max(value) filter (where key = 'weekly_prayer_call_url'), ''),
+      nullif(max(value) filter (where key = 'weekly_prayer_call_url' and value ~ '^https://'), ''),
       nullif(max(value) filter (where key = 'weekly_prayer_call_time'), ''),
       case max(value) filter (where key = 'serving_link_mode')
            when 'login' then 'login' when 'signed' then 'signed' end
@@ -275,6 +277,7 @@ revoke execute on function public.group_content_backfill()
 comment on function public.group_content_backfill() is
   'Gives every ungrouped content row to its org''s oldest group, folds each group''s calendars into one (events re-pointed, extras deleted, counts asserted), creates a calendar for a group without one, and moves the org-level call and link-mode settings onto the oldest group. Idempotent. Callable only by the migration runner and the pgTAP harness.';
 
+select public.group_model_backfill();
 select public.group_content_backfill();
 
 delete from public.site_settings
@@ -418,9 +421,6 @@ create policy "Group leaders can update event calendars" on public.event_calenda
   for update to authenticated
   using (org_id = (select public.app_request_org_id()) and public.is_group_leader(group_id))
   with check (org_id = (select public.app_request_org_id()) and public.is_group_leader(group_id));
-create policy "Group leaders can delete event calendars" on public.event_calendars
-  for delete to authenticated
-  using (org_id = (select public.app_request_org_id()) and public.is_group_leader(group_id));
 
 -- announcements
 drop policy "Members and published announcements are visible" on public.announcements;
@@ -636,7 +636,9 @@ create policy "Group leaders and stewards can update funds" on public.giving_fun
     org_id = (select public.app_request_org_id())
     and (
       public.is_group_leader(group_id)
-      or ((select public.giving_stewards_can_manage()) and steward_id = (select auth.uid()))
+      or ((select public.giving_stewards_can_manage())
+          and steward_id = (select auth.uid())
+          and public.is_group_member(group_id))
     )
   )
   with check (
@@ -653,7 +655,9 @@ create policy "Group leaders and stewards can delete funds" on public.giving_fun
     org_id = (select public.app_request_org_id())
     and (
       public.is_group_leader(group_id)
-      or ((select public.giving_stewards_can_manage()) and steward_id = (select auth.uid()))
+      or ((select public.giving_stewards_can_manage())
+          and steward_id = (select auth.uid())
+          and public.is_group_member(group_id))
     )
   );
 
@@ -951,10 +955,13 @@ as $$
       and f.org_id = public.app_current_org_id()
       and (
         public.is_group_leader(f.group_id)
-        or (public.giving_stewards_can_manage() and f.steward_id = auth.uid())
+        or (public.giving_stewards_can_manage()
+            and f.steward_id = auth.uid()
+            and public.is_group_member(f.group_id))
       )
   );
 $$;
+revoke execute on function public.giving_can_manage_fund(uuid) from public, anon;
 
 -- Same bodies as before over the renamed column; serving_signup_create()
 -- gains the group-leader arm its INSERT policy now has.
@@ -1287,7 +1294,99 @@ revoke execute on function public.provision_organization(text, text, text)
 grant execute on function public.provision_organization(text, text, text)
   to service_role;
 
--- ── 10. Storage: event images are written by the event's group leaders ────
+-- ── 9b. A team member is a member of the team's group ─────────────────────
+-- Teams live inside a group, so team membership cannot outlive group
+-- membership: leaving the group leaves its teams, and nobody joins a team
+-- of a group they are not in (that closes the org-admin self-enrol path the
+-- team_members INSERT policy's admin arm would otherwise allow).
+create function public.team_member_requires_group_membership() returns trigger
+  language plpgsql security definer set search_path = ''
+as $$
+declare
+  _group uuid;
+begin
+  -- A missing team is the FK's to refuse; a team with no group predates the
+  -- group model and has nothing to check against.
+  select t.group_id into _group
+  from public.teams t
+  where t.id = new.team_id and t.org_id = new.org_id;
+  if _group is null then
+    return new;
+  end if;
+  if not exists (
+    select 1 from public.group_members gm
+    where gm.group_id = _group
+      and gm.org_id = new.org_id
+      and gm.profile_id = new.profile_id
+  ) then
+    raise exception 'team_members: profile % is not a member of the group that owns team %',
+      new.profile_id, new.team_id
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.team_member_requires_group_membership() from public, anon, authenticated;
+
+create trigger team_members_require_group_membership
+  before insert or update of team_id, profile_id, org_id on public.team_members
+  for each row execute function public.team_member_requires_group_membership();
+
+create function public.group_member_removed_leaves_teams() returns trigger
+  language plpgsql security definer set search_path = ''
+as $$
+begin
+  delete from public.team_members tm
+  using public.teams t
+  where t.id = tm.team_id
+    and t.org_id = tm.org_id
+    and t.group_id = old.group_id
+    and tm.org_id = old.org_id
+    and tm.profile_id = old.profile_id;
+  return old;
+end;
+$$;
+revoke execute on function public.group_member_removed_leaves_teams() from public, anon, authenticated;
+
+create trigger group_members_leave_teams
+  after delete on public.group_members
+  for each row execute function public.group_member_removed_leaves_teams();
+
+-- Rows that already violate the rule cannot be kept: the serving policies
+-- honour team membership, and the trigger only guards new rows.
+do $$
+declare _n bigint;
+begin
+  delete from public.team_members tm
+  using public.teams t
+  where t.id = tm.team_id and t.org_id = tm.org_id
+    and not exists (
+      select 1 from public.group_members gm
+      where gm.group_id = t.group_id and gm.org_id = t.org_id
+        and gm.profile_id = tm.profile_id);
+  get diagnostics _n = row_count;
+  if _n > 0 then
+    raise notice 'team_members: removed % row(s) whose profile is not in the team''s group', _n;
+  end if;
+end $$;
+
+-- ── 10. Storage: event images follow the event's group ────────────────────
+-- The bucket is private and reads go through signed URLs minted under the
+-- request client, so the SELECT policy is the only read boundary.
+drop policy "Public can view event images" on storage.objects;
+create policy "Group members can view event images"
+  on storage.objects for select to authenticated
+  using (
+    bucket_id = 'event-images'
+    and (storage.foldername(name))[1] = (select public.app_request_org_id())::text
+    and (storage.foldername(name))[2] = 'events'
+    and exists (
+      select 1 from public.events e
+      where e.id::text = (storage.foldername(name))[3]
+        and public.is_group_member(e.group_id)
+    )
+  );
+
 drop policy "Editors can upload event images" on storage.objects;
 drop policy "Editors can update event images" on storage.objects;
 drop policy "Editors can delete event images" on storage.objects;

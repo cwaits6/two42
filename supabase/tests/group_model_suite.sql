@@ -382,7 +382,9 @@ select is(current_setting('gm.own_team_insert')::int, 1,
   'positive control: the same leader creates a team under A1');
 select is(current_setting('gm.own_team_updated')::int, 1,
   'positive control: the same leader updates A1''s team');
-select is(current_setting('gm.roster_insert_err'), '42501',
+-- The membership rule on team_members refuses before the policy is reached:
+-- a leader of A1 is not a member of A2, so the row is a check violation.
+select is(current_setting('gm.roster_insert_err'), '23514',
   'a leader of A1 cannot add themselves to an A2 team');
 select is(current_setting('gm.roster_updated')::int, 0,
   'a leader of A1 updates no team_members rows of an A2 team');

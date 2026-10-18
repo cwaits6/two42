@@ -236,6 +236,12 @@ on exactly the events they can see; `serving_signups`,
 — one FK hop, the shape `team_members` writes already used. The team-lead
 arms (`is_team_lead(team_id)`) stay beside the group-leader arms, and
 `serving_signup_create()` re-checks the same three arms before delegating.
+Those arms are sound only because a team member is always a member of the
+team's group: `team_members_require_group_membership` refuses any other
+row (including an org admin enrolling themselves through the admin arm),
+and `group_members_leave_teams` removes a departing member from the group's
+teams, so no serving row stays reachable through a membership that no
+longer exists.
 
 Where both sides of a parent→child FK carry `group_id`, the FK is
 three-column — `events.calendar_id`, `events.series_id`,
@@ -384,11 +390,13 @@ forwarded link, a proxy log) permanently readable across tenants. This is
 the tracked revisit of that trade-off. The `/object/public/*` path no longer
 serves either bucket; every render site exchanges the stored URL for a
 signed URL via `createSignedUrl()`/`createSignedUrls()`, whose minting is
-gated by the same org-scoped SELECT policies CWA-57 introduced (`"Public can
-view avatars"`, `"Public can view event images"`) — dormant for reads while
-the buckets were public, load-bearing now. An org-B principal's mint attempt
-for an org-A key finds no visible row and fails; a leaked signed URL dies at
-its TTL. The pgTAP assertion that previously pinned "both public" now pins
+gated by the SELECT policies on `storage.objects` — dormant for reads while
+the buckets were public, load-bearing now. Avatars keep the org-scoped
+`"Public can view avatars"`; event images read through the event's group
+(`"Group members can view event images"`: the key's `<event_id>` segment
+joined to `events` under `is_group_member(e.group_id)`), so an org member
+outside the group finds no visible row, the same as an org-B principal
+minting for an org-A key; a leaked signed URL dies at its TTL. The pgTAP assertion that previously pinned "both public" now pins
 "both private", so flipping a bucket back fails CI until this paragraph is
 revisited again.
 

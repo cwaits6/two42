@@ -441,6 +441,125 @@ select is(current_setting('gs.mv_fund'), '42501',
 select is(current_setting('gs.ok_fund_update'), '1',
   'non-vacuity: the steward can still edit the fund inside their group');
 
+-- ── 2c. Membership is the floor under every arm ─────────────────────────────
+-- A steward who leaves the group keeps no write on the fund; a leader cannot
+-- delete the group's calendar; an event image is readable only inside the
+-- event's group; an org admin outside the group reads none of it.
+do $$
+declare
+  org uuid := current_setting('gs.org')::uuid;
+  grp_a uuid := current_setting('gs.grp_a')::uuid;
+  owner uuid := current_setting('gs.owner')::uuid;
+  member_a uuid := current_setting('gs.member_a')::uuid;
+  leader_b uuid := current_setting('gs.leader_b')::uuid;
+  admin_x uuid := current_setting('gs.admin_x')::uuid;
+  cal_a uuid := current_setting('gs.cal_a')::uuid;
+  event_a uuid := current_setting('gs.event_a')::uuid;
+  fund uuid; err text; n int;
+begin
+  insert into public.giving_funds (org_id, group_id, name, steward_id, created_by)
+    values (org, grp_a, 'stewarded', member_a, member_a) returning id into fund;
+  insert into storage.objects (bucket_id, name, owner, owner_id)
+    values ('event-images', org || '/events/' || event_a || '/cover.jpg', owner, owner);
+
+  -- The steward can act while a member ...
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', member_a)::text, true);
+  insert into public.giving_fund_methods (org_id, group_id, fund_id, method, custom_handle)
+    values (org, grp_a, fund, 'zelle', 'steward-zelle');
+  get diagnostics n = row_count;
+  perform set_config('gs.steward_in', n::text, true);
+  reset role;
+
+  -- ... and not after leaving the group.
+  delete from public.group_members where group_id = grp_a and profile_id = member_a;
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', member_a)::text, true);
+  err := 'none';
+  begin
+    insert into public.giving_fund_methods (org_id, group_id, fund_id, method, custom_handle)
+      values (org, grp_a, fund, 'venmo', 'ex-steward');
+  exception when others then err := sqlstate; end;
+  perform set_config('gs.steward_out_insert', err, true);
+  delete from public.giving_funds;
+  get diagnostics n = row_count;
+  perform set_config('gs.steward_out_delete', n::text, true);
+  reset role;
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', owner)::text, true);
+  delete from public.event_calendars where id = cal_a;
+  get diagnostics n = row_count;
+  perform set_config('gs.leader_cal_delete', n::text, true);
+  select count(*) into n from storage.objects where bucket_id = 'event-images';
+  perform set_config('gs.img_leader_a', n::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', leader_b)::text, true);
+  select count(*) into n from storage.objects where bucket_id = 'event-images';
+  perform set_config('gs.img_leader_b', n::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', admin_x)::text, true);
+  select count(*) into n from storage.objects where bucket_id = 'event-images';
+  perform set_config('gs.img_admin_x', n::text, true);
+  reset role;
+  set local role anon;
+  perform set_config('request.jwt.claims', '{}', true);
+  select count(*) into n from storage.objects where bucket_id = 'event-images';
+  perform set_config('gs.img_anon', n::text, true);
+  reset role;
+
+  -- Later sections expect the fixture memberships.
+  insert into public.group_members (org_id, group_id, profile_id, role) values (org, grp_a, member_a, 'member');
+  insert into public.team_members (org_id, profile_id, team_id)
+    values (org, member_a, current_setting('gs.team_a')::uuid);
+end $$;
+select is(current_setting('gs.steward_in'), '1', 'non-vacuity: a steward in the group adds a payment method');
+select is(current_setting('gs.steward_out_insert'), '42501', 'a steward who left the group cannot add a payment method');
+select is(current_setting('gs.steward_out_delete'), '0', 'a steward who left the group cannot delete the fund');
+select is(current_setting('gs.leader_cal_delete'), '0', 'a leader cannot delete the group''s calendar');
+select is(current_setting('gs.img_leader_a'), '1', 'non-vacuity: a leader of A reads A''s event image');
+select is(current_setting('gs.img_leader_b'), '0', 'a leader of B reads no image of A''s event');
+select is(current_setting('gs.img_admin_x'), '0', 'an org admin outside the group reads no event image');
+select is(current_setting('gs.img_anon'), '0', 'anon reads no event image');
+
+-- ── 2d. A team member is a member of the team's group ───────────────────────
+do $$
+declare
+  org uuid := current_setting('gs.org')::uuid;
+  grp_a uuid := current_setting('gs.grp_a')::uuid;
+  team_a uuid := current_setting('gs.team_a')::uuid;
+  leader_b uuid := current_setting('gs.leader_b')::uuid;
+  admin_x uuid := current_setting('gs.admin_x')::uuid;
+  owner uuid := current_setting('gs.owner')::uuid;
+  err text; n int;
+begin
+  err := 'none';
+  begin
+    insert into public.team_members (org_id, profile_id, team_id) values (org, leader_b, team_a);
+  exception when others then err := sqlstate; end;
+  perform set_config('gs.tm_outsider', err, true);
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', admin_x)::text, true);
+  err := 'none';
+  begin
+    insert into public.team_members (org_id, profile_id, team_id, is_leader)
+      values (org, admin_x, team_a, true);
+  exception when others then err := sqlstate; end;
+  reset role;
+  perform set_config('gs.tm_admin_self', err, true);
+
+  insert into public.team_members (org_id, profile_id, team_id) values (org, owner, team_a);
+  get diagnostics n = row_count;
+  perform set_config('gs.tm_member_ok', n::text, true);
+  delete from public.group_members where group_id = grp_a and profile_id = owner;
+  select count(*) into n from public.team_members where team_id = team_a and profile_id = owner;
+  perform set_config('gs.tm_after_leave', n::text, true);
+  insert into public.group_members (org_id, group_id, profile_id, role) values (org, grp_a, owner, 'leader');
+end $$;
+select is(current_setting('gs.tm_outsider'), '23514', 'a profile outside the group cannot be put on its team');
+select is(current_setting('gs.tm_admin_self'), '23514', 'an org admin outside the group cannot enrol themselves on its team');
+select is(current_setting('gs.tm_member_ok'), '1', 'non-vacuity: a group member joins the team');
+select is(current_setting('gs.tm_after_leave'), '0', 'leaving the group leaves its teams');
+
 -- ── 3. Structural pins ──────────────────────────────────────────────────────
 select is(
   (select count(*)::int
@@ -570,6 +689,32 @@ select is(current_setting('gs.fold_events'), current_setting('gs.fold_events_bef
 select is(current_setting('gs.fold_b_name'), current_setting('gs.fold_b_name_before'), 'group B''s calendar is untouched');
 select is(current_setting('gs.fold_again_cals')::int, 2, 'a second call changes nothing');
 select is(current_setting('gs.fold_again_name'), 'Group A', 'a second call leaves the survivor''s name alone');
+
+-- ── 4b. The backfill gives a group-less org a group before adopting content ─
+do $$
+declare
+  org uuid; cal uuid; n int; err text := 'ok';
+begin
+  insert into public.organizations (name, slug, branding, status)
+    values ('Groupless', 'groupless-' || substr(gen_random_uuid()::text, 1, 8), '{}'::jsonb, 'active')
+    returning id into org;
+  alter table public.event_calendars alter column group_id drop not null;
+  insert into public.event_calendars (org_id, name, color) values (org, 'Prayer Calls', '#2F6BA8');
+  begin
+    perform public.group_model_backfill();
+    perform public.group_content_backfill();
+  exception when others then err := sqlstate || ' ' || sqlerrm; end;
+  alter table public.event_calendars alter column group_id set not null;
+  perform set_config('gs.bf_err', err, true);
+  select count(*) into n from public.groups where org_id = org;
+  perform set_config('gs.bf_groups', n::text, true);
+  select count(*) into n from public.event_calendars c
+    join public.groups g on g.id = c.group_id where g.org_id = org;
+  perform set_config('gs.bf_cals', n::text, true);
+end $$;
+select is(current_setting('gs.bf_err'), 'ok', 'an org with a calendar but no group does not abort the backfill');
+select is(current_setting('gs.bf_groups'), '1', 'the group-model backfill gave it one group');
+select is(current_setting('gs.bf_cals'), '1', 'the calendar was adopted by that group');
 
 -- ── 5. The signup RPC admits a group leader, and only for their group ───────
 do $$

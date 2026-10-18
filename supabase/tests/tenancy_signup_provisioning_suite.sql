@@ -440,6 +440,8 @@ begin
     values (org_a, grp_a, 'A serving team', true) returning id into group_a;
   insert into public.teams (org_id, group_id, name, is_serving_role)
     values (org_b, grp_b, 'B serving team', true) returning id into group_b;
+  insert into public.group_members (org_id, group_id, profile_id, role)
+    values (org_a, grp_a, owner_a, 'leader');
   insert into public.team_members (org_id, profile_id, team_id, is_leader)
     values (org_a, owner_a, group_a, true);
   insert into public.giving_funds (org_id, group_id, name, steward_id)

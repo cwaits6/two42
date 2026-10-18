@@ -378,11 +378,16 @@ ON CONFLICT (id) DO UPDATE
 
 INSERT INTO public.rsvps (org_id, event_id, user_id, status)
 SELECT org_id, 'e0000000-0000-0000-0000-000000000003', id,
-       CASE WHEN row_number() OVER (ORDER BY id) <= 7 THEN 'yes' ELSE 'maybe' END
-FROM public.profiles
-WHERE org_id = '00000000-0000-0000-0000-000000000001'
-  AND email LIKE '%@example.test'
-  AND relationship = 'primary'
+       CASE WHEN row_number() OVER (ORDER BY id) <= 3 THEN 'yes' ELSE 'maybe' END
+FROM public.profiles p
+WHERE p.org_id = '00000000-0000-0000-0000-000000000001'
+  AND p.email LIKE '%@example.test'
+  AND p.relationship = 'primary'
+  AND EXISTS (
+    SELECT 1 FROM public.group_members gm
+    JOIN public.events e ON e.group_id = gm.group_id AND e.org_id = gm.org_id
+    WHERE gm.profile_id = p.id AND e.id = 'e0000000-0000-0000-0000-000000000003'
+  )
 ON CONFLICT (event_id, user_id) DO NOTHING;
 
 INSERT INTO public.announcements (id, org_id, group_id, author_id, title, content, is_published, published_at)

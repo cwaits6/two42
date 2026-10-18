@@ -157,7 +157,10 @@ export async function POST(request: Request) {
   }
 
   const service = await createServiceClient();
-  const linkMode = await getServingLinkMode(supabase, group.org_id, group.group_id);
+  // On the service client so the result is the group's stored choice even
+  // when the caller's own RLS view of group_settings is empty; both ids come
+  // from the RLS-read team row above.
+  const linkMode = await getServingLinkMode(service, group.org_id, group.group_id);
   // Resolved once per broadcast, not per member: an org-level fact anchored
   // on the RLS-checked group row, and a service-role read.
   const branding = await resolveEmailBranding(group.org_id);
