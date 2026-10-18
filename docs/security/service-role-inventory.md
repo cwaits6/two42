@@ -130,13 +130,13 @@ stream (Phase 3, #212 — see the table below).
 
 What earlier phases already closed on this surface:
 
-- `getServingLinkMode()` (`lib/serving/config.ts`) requires an `orgId` and
-  filters `site_settings` on it (Phase 2) — the key-only read errored
-  outright at two orgs. All four call sites derive the org from the
-  validated group row. The last copy of the bug class, `resolveCanSign` in
-  `supabase/functions/send-serving-reminders/index.ts`, was closed in
-  Phase 3 (#212): it now takes an `orgId`, filters `site_settings` on it,
-  and throws on query error instead of silently degrading links to unsigned.
+- `getServingLinkMode()` (`lib/serving/config.ts`) requires an `orgId` and a
+  `groupId` and filters `group_settings` on both (Phase 2 closed the
+  key-only read that errored outright at two orgs; the setting is per group
+  now). All four call sites derive both ids from the validated team row. The
+  edge-function copy, `resolveGroupLinkMode()` in
+  `supabase/functions/_shared/groups.ts`, takes the same two ids and throws
+  on query error instead of silently degrading links to unsigned.
 - `app/api/serving/link-action/route.ts` derives `org_id` for its inserts
   from the HMAC-validated group row instead of the hardcoded default-org
   constant; the composite `(group_id, org_id)` FK enforces the pairing.
@@ -219,6 +219,23 @@ the same logic the migration ran against fixture orgs. It is idempotent
 and asserts its own enrolment and leader counts. Grants, org checks and the
 within-org boundary are pinned by that suite and by `idor_suite.sql`.
 
+`group_content_backfill()` (`20261017000000_group_scoped_content.sql`) is
+its content-layer twin, with the same shape: plain `plpgsql`, no client
+grant, idempotent. It gives every ungrouped content row to its org's oldest
+group, folds each group's calendars into one (events re-pointed, extras
+deleted, counts asserted), creates a calendar for a group without one, and
+moves the org-level call and link-mode settings onto `group_settings`.
+`supabase/tests/group_scope_suite.sql` runs it against fixture groups and
+pins the fold, the NOT NULL and composite FKs, the policy shapes and the
+member / leader / org-admin read and write matrix.
+
+The content policies themselves gate on `is_group_member(group_id)` /
+`is_group_leader(group_id)` — see "Group visibility" in
+[`tenancy-model.md`](tenancy-model.md). `giving_can_manage_fund(_fund_id)`
+now resolves the fund's group and admits its leaders or (when stewards may
+manage) its steward; the org admin arm is gone from it, as from every
+content policy.
+
 ## Email quota RPC — a definer-function bypass surface (CWA-72 / #365)
 
 The per-org daily send cap (`org_email_usage` + `org_email_limits`) is
@@ -284,18 +301,18 @@ the `service_role`-only grant, the grant-matrix and behaviour assertions in
 | `app/api/platform/organizations/route.ts` | `provision_organization()` is EXECUTE-granted to `service_role` only | Platform-admin authority; the RPC creates the org and derives everything from it transactionally | `rpc("provision_organization")` only |
 | `app/api/platform/organizations/[id]/route.ts` | Status/branding/`custom_email_domain_enabled` writes on the tenant root, which has no org-admin write policy (the custom-domain flag is platform-operator-only by design: no grant to the org's own admin, this route is its sole write path) | Platform-admin authority; org id from the route param | `organizations` read + update `.eq("id", id)` (branding merged, never replaced) |
 | `app/api/platform/organizations/[id]/invite-owner/route.ts` | Mints the founding admin's `signup_token`; the platform admin's own-org RLS could never reach the new org's request row | Platform-admin authority; org id from the route param | `access_requests` update `.eq("org_id", id).eq("approved_role", "admin").eq("email", ownerEmail)`; rollback update on the same filters + minted token; email branding via `resolveEmailBranding(id)` |
-| `app/serving/go/page.tsx` | Unauthenticated, HMAC-signed serving link; no session exists to satisfy RLS | HMAC-validated `teams` row; link rejected when `profiles.org_id` disagrees | `serving_team_settings`, `team_members`, `serving_signups`, `profiles` (spouse), `family_units` (label) |
+| `app/serving/go/page.tsx` | Unauthenticated, HMAC-signed serving link; no session exists to satisfy RLS | HMAC-validated `teams` row (`org_id` and `group_id`); link rejected when `profiles.org_id` disagrees | `group_settings` (link mode, on the team's `group_id`), `serving_team_settings`, `team_members`, `serving_signups` (all on `team_id`), `profiles` (spouse), `family_units` (label) |
 | `app/g/[groupId]/serving/[teamId]/page.tsx` | Surfaces pending (never-logged-in) spouse profiles that RLS hides from the caller | Caller's own RLS-scoped profile | `profiles` (spouse lookup) |
 | `app/join/family/[token]/page.tsx` | Signed family-invite link resolved before login; no session | The `family_invites` row itself: looked up by `token` alone (unscoped by org — the row is what resolves it), `org_id` and the org's `slug` taken from that row | `family_invites`, `organizations` (`slug`, embedded via the `org_id` FK, for the link into `/[orgSlug]/join`) |
-| `app/api/serving/signups/route.ts` | Post-delete notification email lookups for affected members | The deleted signup row's own `org_id` (authorised by the RLS-checked delete) | `team_members` (leaders), `family_units` (label) |
-| `app/api/serving/link-action/route.ts` | Same HMAC signed-link pattern as `serving/go`; no session | HMAC-validated `teams` row; link rejected when `profiles.org_id` disagrees | `serving_team_settings`, `team_members`, `serving_signups` (read/delete — cancel path), `rpc(serving_signup_apply)` (the signup + attendee insert pair, one transaction; the function re-derives the org from the `teams` row and enforces it internally — CWA-47 / #313), `profiles` (spouse), `family_units` (label) |
-| `app/api/serving/broadcast/route.ts` | Fans out email to all team members regardless of caller's RLS visibility | RLS-scoped `teams` row | `team_members` (recipients) |
-| `app/api/calendar/feed.ics/route.ts` | Bearer-token calendar subscription; no session | `calendar_subscription_tokens` row (`org_id` stamped at issuance); owner role re-checked | `events`, `serving_signups`, `profiles` (owner), token expiry update |
+| `app/api/serving/signups/route.ts` | Post-delete notification email lookups for affected members | The deleted signup row's own `org_id` (authorised by the RLS-checked delete); the link's group from its `teams` embed | `team_members` (leaders, on `team_id`), `family_units` (label) |
+| `app/api/serving/link-action/route.ts` | Same HMAC signed-link pattern as `serving/go`; no session | HMAC-validated `teams` row (`org_id` and `group_id`); link rejected when `profiles.org_id` disagrees | `group_settings` (link mode), `serving_team_settings`, `team_members`, `serving_signups` (read/delete — cancel path; all on `team_id`), `rpc(serving_signup_apply)` (the signup + attendee insert pair, one transaction; the function re-derives the org from the `teams` row and enforces it internally — CWA-47 / #313), `profiles` (spouse), `family_units` (label) |
+| `app/api/serving/broadcast/route.ts` | Fans out email to all team members regardless of caller's RLS visibility | RLS-scoped `teams` row (`org_id` and `group_id`); the caller must lead the team or its group (a `group_members` read on the request client) | `team_members` (recipients, on `team_id`) |
+| `app/api/calendar/feed.ics/route.ts` | Bearer-token calendar subscription; no session | `calendar_subscription_tokens` row (`org_id` stamped at issuance); owner role re-checked; the owner's `group_members` rows are the group boundary | `group_members` (the owner's groups), `events` `.in("group_id", …)`, `serving_signups` `.in("teams.group_id", …)`, `profiles` (owner), token expiry update. A `?group=` outside the owner's groups yields an empty 200; a failed membership read is a 500 |
 | `app/api/auth/consume-token/route.ts` | Pre-login token flow; no session yet | The resolved `access_requests` row (`signup_token` is globally UNIQUE today — scoping is correctness-under-change) | `access_requests` update on `(id, org_id)` |
 | `app/api/auth/verify-token/route.ts` | Pre-login token flow; no session yet | The `access_requests` token row itself (`org_id` selected and required non-null) | Token row is the anchor; `handle_new_user()` reads the same row |
 | `app/api/feedback/route.ts` | Rate-limit count and admin email fan-out (RLS exposes feedback only to admins) | Caller's own RLS-scoped profile | `feedback` (count), `profiles` (admin recipients — was a latent cross-tenant email leak; a correctness-under-change risk, not a live one at single-org scale) |
 | `app/api/household/link-member/route.ts` | Household manager updating another profile's `family_id` (RLS blocks cross-profile writes) | Caller's own RLS-scoped profile; target's org asserted equal | `profiles` update on `(id, org_id, family_id IS NULL)` |
-| `app/api/events/[id]/ics/route.ts` | Bearer-token calendar subscription; no session | `calendar_subscription_tokens` row (`org_id` stamped at issuance) | `events` (404 on cross-org id), `profiles` (owner), token expiry update |
+| `app/api/events/[id]/ics/route.ts` | Bearer-token calendar subscription; no session | `calendar_subscription_tokens` row (`org_id` stamped at issuance); the owner's membership of the event's group re-checked | `events` (404 on cross-org id), `group_members` (404 when the owner is not in the event's group), `profiles` (owner), token expiry update |
 | `app/api/family-invites/claim/route.ts` | New user claiming an invite while their role is still `pending` | The `family_invites` row; caller's profile org must match (403 otherwise) | `profiles`, `family_members`, `family_invites` updates all on the invite's `org_id` |
 | `app/api/admin/email-domain/route.ts` | GET reads `organizations.custom_email_domain_enabled`, a platform-operator column the admin's own client has no SELECT grant on (the row itself is read on the request client). POST gates on that flag, then claims the row through `org_email_domain_claim()` — the `service_role`-only RPC (see the "Email domain claim RPC" section above) that enforces the platform-wide domain cap atomically, so the route no longer holds an unscoped count read — then Resend `domains.create` returns `resend_domain_id`/`status`/`dns_records`, columns the admin's own client has no UPDATE grant on — the write must happen server-side (CWA-70 / #363); when the follow-up write fails and the Resend removal also fails, the row is kept as `status = 'cleanup_pending'` (server-set-only columns again) rather than deleted. DELETE now removes the Resend domain first and needs the same server-set-only writes when that fails | The caller's own RLS-scoped `profiles.org_id`, read on the request client; the `organizations` reads take `.eq("id", orgId)` (tenant root); the insert carries that `org_id` in its payload, and every subsequent read/write is predicate-scoped `.eq("org_id", orgId)` / `.eq("id", ...).eq("org_id", orgId)` | `organizations` `.eq("id", orgId)` (flag); `org_email_domains` existing-row select `.eq("org_id", orgId)`, unscoped head count (org-anchor), insert (payload: `org_id`, `domain`), update (`resend_domain_id`, `status`, `dns_records`, `cleanup_failed_at`) and rollback/remove deletes on `(id, org_id)` |
 | `app/api/admin/email-domain/verify/route.ts` | POST handler: the `status`/`verified_at`/`last_checked_at` transition must not be writable by the admin's own client (same column grants as above) | The caller's own RLS-scoped `profiles.org_id`, read on the request client; target row fetched `.eq("org_id", orgId)` before any write | `org_email_domains` select `.eq("org_id", orgId)` + update on `(id, org_id)` |
@@ -348,11 +365,28 @@ it — but that is the operator UI reporting and editing the flag, not the
 flag enforcing anything (see
 [`tenancy-model.md`](tenancy-model.md), Known limits).
 
-Audit result (CWA-58): all 12 org-owned query chains across both entry
-points carry an explicit `org_id` predicate (or an explicit `org_id` on
-insert); the two nested embeds are FK traversals from org-filtered parents,
-which the composite `(col, org_id)` FKs keep inside the tenant; the one
-`organizations` read is the tenant root, filtered on `status`.
+Both functions iterate org → group → team. `send-event-reminders` lists the
+org's groups through `listGroups()` (`_shared/groups.ts`), reads each
+group's events on `org_id` + `group_id`, and resolves recipients through
+`resolveEventReminderRecipients()` (`_shared/event-recipients.ts`): RSVPs
+∩ current `group_members` of the event's group → profiles with an email, so
+an RSVP from someone who has since left the group is dropped. A failing
+group is recorded in `failedItems[]` keyed by `group_id` and the org's
+other groups still run. `send-serving-reminders` keeps its team loop,
+reads `teams.group_id` with the team name, and resolves the serving link
+mode per group through `resolveGroupLinkMode()` (`group_settings`, on
+`org_id` + `group_id`, memoised per org run); every `serving_*` query is on
+`team_id`. Both shared modules are pure, with recorded-chain tests under
+`supabase/functions/tests/`.
+
+Audit result (CWA-58, re-audited with the group flip): every query chain
+across both entry points and the two shared modules carries an explicit
+`org_id` predicate (or an explicit `org_id` on insert) plus `group_id` /
+`team_id` where the row is group- or team-owned; the nested embeds are FK
+traversals from org-filtered parents, which the composite `(col, org_id)`
+FKs keep inside the tenant; the one `organizations` read is the tenant
+root, filtered on `status`. The guard proves each predicate is present;
+which variable it binds is review-enforced.
 
 Both entry points additionally call `email_quota_consume()` per team/event
 batch via `_shared/quota.ts` (CWA-72), passing the org id from the
@@ -364,8 +398,8 @@ outside its scan set entirely, so these calls are covered by review and by
 
 | File | Why service-role is used | Historical tenancy risk | Mitigation |
 |------|--------------------------|-------------------------|------------|
-| `supabase/functions/send-event-reminders/index.ts` | Cron job; reads events/RSVPs and emails attendees with no user session | Reminder fan-out iterates all rows across orgs | **Implemented (Phase 3, #212):** iterates active orgs via `_shared/orgs.ts`, every query filtered on `org_id`, per-org failures isolated so one org cannot suppress another's send. **Branding (CWA-56, #322):** `organizations.branding` rides along on the already-org-anchored `listActiveOrgs()` select — no new service-role call site, no new unscoped query — and is validated by `_shared/branding.ts` (a mirror of `lib/branding.ts` + `lib/email/identity.ts`) before reaching any CSS or RFC 5322 sink. **Link origin:** every link is built on the one canonical host (the `SITE_URL` function secret) — no query |
-| `supabase/functions/send-serving-reminders/index.ts` | Cron job; reads serving signups and emails assignees with no user session | Same as `send-event-reminders` | **Implemented (Phase 3, #212):** same per-org iteration and `org_id` filters; `resolveCanSign` org-scoped; `serving_broadcasts` audit rows stamped with the processed row's org, not a constant. **Branding (CWA-56, #322):** same `listActiveOrgs()` ride-along, validated by `_shared/branding.ts`. **Link origin:** the same canonical `SITE_URL`, threaded into every cancel/signup/team-page link. **Per-team isolation (CWA-50, #316):** a failing team is recorded in the run summary's `failedItems[]` keyed by `group_id` — ids, never org-defined team names, in operator diagnostics |
+| `supabase/functions/send-event-reminders/index.ts` | Cron job; reads events/RSVPs and emails attendees with no user session | Reminder fan-out iterates all rows across orgs | **Implemented (Phase 3, #212):** iterates active orgs via `_shared/orgs.ts`, every query filtered on `org_id`, per-org failures isolated so one org cannot suppress another's send. **Group scope:** org → group iteration, events on `group_id`, recipients gated on current group membership, per-group failures in `failedItems[]`. **Branding (CWA-56, #322):** `organizations.branding` rides along on the already-org-anchored `listActiveOrgs()` select — no new service-role call site, no new unscoped query — and is validated by `_shared/branding.ts` (a mirror of `lib/branding.ts` + `lib/email/identity.ts`) before reaching any CSS or RFC 5322 sink. **Link origin:** every link is built on the one canonical host (the `SITE_URL` function secret) — no query |
+| `supabase/functions/send-serving-reminders/index.ts` | Cron job; reads serving signups and emails assignees with no user session | Same as `send-event-reminders` | **Implemented (Phase 3, #212):** same per-org iteration and `org_id` filters; `resolveCanSign` org-scoped; `serving_broadcasts` audit rows stamped with the processed row's org, not a constant. **Branding (CWA-56, #322):** same `listActiveOrgs()` ride-along, validated by `_shared/branding.ts`. **Link origin:** the same canonical `SITE_URL`, threaded into every cancel/signup/team-page link. **Per-team isolation (CWA-50, #316):** a failing team is recorded in the run summary's `failedItems[]` keyed by `team_id` — ids, never org-defined team names, in operator diagnostics. **Group scope:** the link mode is per group (`group_settings` through `_shared/groups.ts`), every `serving_*` query is on `team_id`, and links open `/g/<group_id>/serving/<team_id>` |
 
 ## Operator scripts (1 site)
 

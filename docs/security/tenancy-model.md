@@ -152,17 +152,18 @@ The org exists to hold people; everything members do together belongs to a
 
 | Layer | Table(s) | Holds | Role |
 |---|---|---|---|
-| Org | `organizations`, `profiles`, households | people, membership approval, branding, org settings | org admin |
-| Group (a class or small group) | `groups`, `group_members` | the content layer: calendar, announcements, serving, prayer, roster | leader (`group_members.role = 'leader'`) |
+| Org | `organizations`, `profiles`, households | people, membership approval, branding, the two giving settings | org admin |
+| Group (a class or small group) | `groups`, `group_members`, `group_settings` and every content table | the content layer: calendar, announcements, lectures, about, prayer, giving, serving, roster | leader (`group_members.role = 'leader'`) |
 | Team (inside one group) | `teams`, `team_members` | serving signups, reminders, `serving_team_settings` | team lead (`team_members.is_leader`) |
 | Label (inside one group) | `group_labels`, `group_member_labels` | a filter tag on a group membership | none — labels are attributes |
 
 `teams` is the renamed `member_groups` and `team_members` the renamed
 `profile_groups` (`team_members.group_id` → `team_id`); every team carries a
 required `(group_id, org_id)` composite FK into `groups`. The serving tables'
-`group_id` columns (`serving_signups`, `serving_broadcasts`,
-`serving_team_settings`) are **team ids** and keep their names. Groups stay
-one level deep — no sub-groups, no sub-orgs.
+team columns (`serving_signups`, `serving_broadcasts`,
+`serving_team_settings`) are named `team_id`, so `group_id` means a group
+everywhere it appears. Groups stay one level deep — no sub-groups, no
+sub-orgs.
 
 **Membership-based RLS.** The org isolation floor above is unchanged; the
 group tables add the first predicate that narrows visibility *within* an
@@ -194,12 +195,84 @@ and `(label_id, group_id, org_id)` into `group_labels` — so a label can only
 ever be attached to a membership of the group that defines it, before RLS
 is consulted.
 
-**What stays org-wide for now.** `teams` and `team_members` keep their
-org-member `SELECT` arms: a member approved after the group-model migration
-is not enrolled in any group (`handle_new_user()` enrols nobody), and
-membership-gating those reads would hide `/serving` from them. Their write
-arms widen from org admins to "org admin or a leader of the team's group".
-The group-scoped-content migration flips team reads to group membership.
+### Group visibility
+
+Every content table carries `group_id uuid not null` with a composite
+`(group_id, org_id)` FK into `groups`: `events`, `event_calendars`,
+`announcements`, `lectures`, `lecture_series`, `about_page` (keyed by
+`group_id`, one row per group), `class_teachers`, `prayer_requests`,
+`prayer_responses`, `prayer_call_sessions`, `giving_funds`,
+`giving_fund_methods` and `group_settings`. The column has **no DEFAULT**:
+there is no fail-closed group resolver the way `app_current_org_id()` is one
+for the org, so NOT NULL is the guard — a write path that forgets the group
+fails with `23502` rather than landing in a wrong group.
+
+The permissive arms compose on the org floor as:
+
+- read: `org_id = (select app_request_org_id()) and
+  is_group_member(group_id)` — published announcements for members, drafts
+  for leaders; `prayer_requests` keeps its author / warrior arm on top;
+- write: `org_id = (select app_request_org_id()) and
+  is_group_leader(group_id)`, or the existing author rule
+  (`prayer_requests`, `prayer_responses`) or steward rule (`giving_funds`,
+  `giving_fund_methods` through `giving_can_manage_fund()`, which now reads
+  the fund's group).
+
+**Org admins are not implicit members.** `is_admin()` and
+`is_content_editor()` appear in no content policy: an org admin reads a
+group's content only as a member of it and edits it only as a leader of it.
+The admin arm survives on `groups`, `group_members`, `group_labels`,
+`group_member_labels`, `teams` and `team_members` only — the people layer,
+managed from Admin. The `content_editor` role therefore no longer reaches
+any content editor; it keeps the admin overview only.
+
+Rows that reach a group through a parent do so under the caller's own RLS
+rather than carrying a column: `rsvps` through `exists (select 1 from
+events e where e.id = rsvps.event_id)`, so a member RSVPs to and sees RSVPs
+on exactly the events they can see; `serving_signups`,
+`serving_signup_attendees`, `serving_broadcasts` and
+`serving_team_settings` through `exists (select 1 from teams t where t.id
+= <row>.team_id and t.org_id = <row>.org_id and is_group_member(t.group_id))`
+— one FK hop, the shape `team_members` writes already used. The team-lead
+arms (`is_team_lead(team_id)`) stay beside the group-leader arms, and
+`serving_signup_create()` re-checks the same three arms before delegating.
+
+Where both sides of a parent→child FK carry `group_id`, the FK is
+three-column — `events.calendar_id`, `events.series_id`,
+`lectures.series_id`, `prayer_call_sessions.event_id`,
+`prayer_responses.request_id`, `giving_fund_methods.fund_id` — so a member
+of two groups cannot file a child under group B for a group A parent; the
+`on delete set null (<col>)` column-list form keeps `org_id` and `group_id`
+intact on a parent delete. `about_page` is keyed by `group_id` and
+`class_teachers` is unique on `(group_id, profile_id)`, so the same person
+may lead in two groups.
+
+**One calendar per group.** The group is the calendar: `event_calendars`
+carries `group_id`, the backfill folded every pre-existing calendar of an
+org into its group's single calendar (events re-pointed, extra rows
+deleted, counts asserted), and the app resolves "the group's calendar" as
+the earliest row by `created_at` (`getGroupCalendar()` /
+`ensureGroupCalendar()` in `lib/groups/calendar.ts`). The calendar's color
+is the group's color: six-digit hex at the column (`event_calendars_color_hex`,
+default Clay `#B85C38`), re-checked by `HEX` in the membership loader before
+it reaches CSS, and validated on the write path by `validateGroupColor()`
+for 4.5:1 against white or Espresso text — the chip text color follows.
+
+**`group_settings`** holds the per-group video call, prayer call and serving
+link mode (one row per group, created on first save). The org-level
+`site_settings` keys they replace, plus `prayer_calendar_id` and
+`directory_app_url`, were deleted; `site_settings` keeps only the two
+giving keys. The anonymous read arms on `lectures`, `lecture_series`,
+`event_calendars` and published `announcements` are gone: `is_group_member()`
+is false for anon by construction, and the middleware already sends those
+paths to login.
+
+The backfill lives in `group_content_backfill()` (plain `plpgsql`,
+idempotent, no client grant), mirroring `group_model_backfill()`, so
+`supabase/tests/group_scope_suite.sql` proves the calendar fold and the
+boundary against fixture groups in CI. Ungrouped rows go to the org's oldest
+group: production has exactly one group per org, and a local stack seeded
+with several keeps its pre-existing content under the first one.
 
 **The one-group backfill.** The migration gives every existing org one
 group named from `branding.display_name` (fallback: the org name), enrols
@@ -235,14 +308,29 @@ ignored and the first membership (by `joined_at`) applies. The client hook
 `useActiveGroup()` never reads it at all; it derives the active group from
 the URL and the membership list the root layout serialised.
 
-`loadGroupMemberships()` and `loadHomeCards()` are tier C helpers under
+`loadGroupMemberships()`, `loadHomeCards()`, `getGroupCalendar()`,
+`ensureGroupCalendar()`, `getGroupSettings()`, `savePrayerCallSessions()`
+and `getServingLinkMode()` are tier C helpers under
 `scripts/check-service-role-org-scope.mjs`: they take a `SupabaseClient`
 parameter, so every chain carries the caller's already-validated `org_id`
-(the viewer's own RLS-scoped `profiles.org_id`). The membership loader
-throws on a failed read; the root layout and the middleware's legacy
-redirect are the only callers that catch it, and both fall back to no
-group, so an error never resolves a group anywhere. No service-role
-client is involved in group context.
+(the viewer's own RLS-scoped `profiles.org_id`) and, where the row is
+group-owned, the verified active group's id. The membership loader throws
+on a failed read (of memberships or of the calendars that give them their
+color); the root layout and the middleware's legacy redirect are the only
+callers that catch it, and both fall back to no group, so an error never
+resolves a group anywhere. No service-role client is involved in group
+context.
+
+The bearer-token ICS routes are the one service-role surface that crosses
+the group boundary: `app/api/calendar/feed.ics/route.ts` reads the token
+owner's `group_members` rows (scoped to the token's org) and the feed is
+`.in("group_id", …)` over exactly those groups — a `?group=` value the owner
+is not in intersects to an empty calendar, never a distinguishing status —
+and `app/api/events/[id]/ics/route.ts` 404s when the owner is not a member
+of the event's group, the same status as a cross-org id. The two cron edge
+functions iterate org → group (→ team) with an explicit `group_id` /
+`team_id` on every query; the recipient resolver drops an RSVP from someone
+who has since left the group.
 
 ## Storage tenancy
 
@@ -363,9 +451,8 @@ disambiguate within the matched set, never widen it; client-supplied
 `provision_organization(name, slug, owner_email)` builds a complete org in
 one transaction: the org row — its `branding` jsonb seeded with the full
 tenant-overridable contract (`display_name`, `logo_url`, `accent`,
-`reply_to`; see [`DESIGN.md`](../design/DESIGN.md)) — the prayer calendar plus its
-`prayer_calendar_id` setting, the settings defaults, an empty about page,
-and an **approved access request for the owner** — so self-serve
+`reply_to`; see [`DESIGN.md`](../design/DESIGN.md)) — the two org-level
+giving settings, and an **approved access request for the owner** — so self-serve
 onboarding is org-first: provision, then create the auth user, and the
 fail-closed trigger needs no special case. Phase 4 must NOT solve
 onboarding by adding a fallback branch to `handle_new_user()`. An invalid
@@ -386,7 +473,10 @@ visitor can self-request admin; only server-side (service-role) writes and
 org admins — who already manage `profiles.role` within their org — can set
 it.
 
-Provisioning seeds **no teams and no group**. Teams are org-defined: admins
+Provisioning seeds **no teams, no group, and nothing group-owned**: a
+calendar, an about page and the call settings all belong to a group, and
+there is none at provisioning time; the group's calendar is created when
+its first event, prayer call or color is saved. Teams are org-defined: admins
 create them in `/admin/groups` and designate capabilities per team
 (`is_serving_role`) and leadership per membership
 (`team_members.is_leader`). Nothing in the schema or app requires a team to
@@ -444,6 +534,18 @@ documented above (`organization_members_profile_id_fkey` — the Phase 4
 platform seam).
 
 ## Known limits (accepted, tracked)
+
+- `feedback` and the two giving keys in `site_settings` stay org-level by
+  decision: product feedback is about the app and read by org admins, and
+  the giving toggles are org policy. Storage event-image keys stay
+  `<org_id>/events/<event_id>/…` — the event id resolves the group, and the
+  three event-image policies gate on `is_group_leader(e.group_id)` through
+  it.
+- The edge functions' `group_id` / `team_id` bindings are review-enforced:
+  `check-service-role-org-scope.mjs` proves each chain names the predicate,
+  not that it binds the right variable. `_shared/event-recipients.ts` and
+  `_shared/groups.ts` are pure modules with recorded-chain tests for that
+  reason.
 
 - The serving signup write path is a `SECURITY DEFINER` pair
   (`serving_signup_apply` / `serving_signup_create`,
