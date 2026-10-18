@@ -225,12 +225,16 @@ CREATE OR REPLACE FUNCTION "public"."giving_can_manage_fund"("_fund_id" "uuid") 
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO ''
     AS $$
-  select public.is_admin() or (
-    public.giving_stewards_can_manage() and exists (
-      select 1 from public.giving_funds f
-      where f.id = _fund_id and f.steward_id = auth.uid()
-        and f.org_id = public.app_current_org_id()
-    )
+  select exists (
+    select 1 from public.giving_funds f
+    where f.id = _fund_id
+      and f.org_id = public.app_current_org_id()
+      and (
+        public.is_group_leader(f.group_id)
+        or (public.giving_stewards_can_manage()
+            and f.steward_id = auth.uid()
+            and public.is_group_member(f.group_id))
+      )
   );
 $$;
 
@@ -252,6 +256,225 @@ $$;
 
 
 ALTER FUNCTION "public"."giving_stewards_can_manage"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."group_content_backfill"() RETURNS "void"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $_$
+declare
+  _org record;
+  _grp uuid;
+  _grp_name text;
+  _g record;
+  _survivor uuid;
+  _cals int;
+  _adopted_cals int;
+  _events_before bigint;
+  _events_after bigint;
+  _bad_events bigint;
+  _t text;
+  _before bigint;
+  _after bigint;
+  _nulls bigint;
+  _content_tables constant text[] := array[
+    'announcements', 'lecture_series', 'giving_funds', 'prayer_requests',
+    'about_page', 'class_teachers', 'lectures', 'giving_fund_methods',
+    'prayer_responses', 'prayer_call_sessions'];
+begin
+  lock table public.groups in share mode;
+  lock table public.events in share mode;
+  lock table public.event_calendars in share mode;
+
+  for _org in
+    select o.id from public.organizations o order by o.created_at, o.id
+  loop
+    select g.id, g.name into _grp, _grp_name
+    from public.groups g
+    where g.org_id = _org.id
+    order by g.created_at, g.id
+    limit 1;
+
+    if _grp is null then
+      if exists (select 1 from public.events where org_id = _org.id)
+         or exists (select 1 from public.event_calendars where org_id = _org.id)
+         or exists (select 1 from public.announcements where org_id = _org.id)
+         or exists (select 1 from public.lecture_series where org_id = _org.id)
+         or exists (select 1 from public.lectures where org_id = _org.id)
+         or exists (select 1 from public.about_page where org_id = _org.id)
+         or exists (select 1 from public.class_teachers where org_id = _org.id)
+         or exists (select 1 from public.prayer_requests where org_id = _org.id)
+         or exists (select 1 from public.prayer_call_sessions where org_id = _org.id)
+         or exists (select 1 from public.giving_funds where org_id = _org.id)
+      then
+        raise exception 'group content backfill for org %: content rows but no group to own them', _org.id;
+      end if;
+      continue;
+    end if;
+
+    select count(*) into _events_before from public.events where org_id = _org.id;
+
+    -- Calendars: adopt the ungrouped ones, then events inherit their
+    -- calendar's group; whatever is left goes to the oldest group.
+    update public.event_calendars
+    set group_id = _grp
+    where org_id = _org.id and group_id is null;
+    get diagnostics _adopted_cals = row_count;
+
+    update public.events e
+    set group_id = c.group_id
+    from public.event_calendars c
+    where c.id = e.calendar_id and c.org_id = e.org_id
+      and e.org_id = _org.id and e.group_id is null;
+    update public.events
+    set group_id = _grp
+    where org_id = _org.id and group_id is null;
+
+    -- One calendar per group: the oldest survives, carries the group's
+    -- name and the Clay default, and every event of the group points at it.
+    for _g in
+      select g.id, g.name from public.groups g where g.org_id = _org.id order by g.created_at, g.id
+    loop
+      select count(*) into _cals from public.event_calendars
+      where org_id = _org.id and group_id = _g.id;
+
+      if _cals = 0 then
+        insert into public.event_calendars (org_id, group_id, name, color)
+        values (_org.id, _g.id, _g.name, '#B85C38')
+        returning id into _survivor;
+      else
+        select id into _survivor from public.event_calendars
+        where org_id = _org.id and group_id = _g.id
+        order by created_at, id
+        limit 1;
+        if _cals > 1 or (_g.id = _grp and _adopted_cals > 0) then
+          update public.event_calendars
+          set name = _g.name, color = '#B85C38'
+          where id = _survivor;
+        end if;
+      end if;
+
+      update public.events
+      set calendar_id = _survivor
+      where org_id = _org.id and group_id = _g.id
+        and calendar_id is distinct from _survivor;
+
+      delete from public.event_calendars
+      where org_id = _org.id and group_id = _g.id and id <> _survivor;
+    end loop;
+
+    select count(*) into _events_after from public.events where org_id = _org.id;
+    if _events_after <> _events_before then
+      raise exception 'group content backfill for org %: % events after the fold, % before',
+        _org.id, _events_after, _events_before;
+    end if;
+    select count(*) into _bad_events
+    from public.events e
+    left join public.event_calendars c on c.id = e.calendar_id
+    where e.org_id = _org.id and (c.id is null or c.group_id <> e.group_id);
+    if _bad_events > 0 then
+      raise exception 'group content backfill for org %: % event(s) outside their group''s calendar',
+        _org.id, _bad_events;
+    end if;
+    if exists (
+      select 1 from public.groups g
+      where g.org_id = _org.id
+        and (select count(*) from public.event_calendars c where c.group_id = g.id) <> 1
+    ) then
+      raise exception 'group content backfill for org %: a group does not have exactly one calendar', _org.id;
+    end if;
+
+    -- The other content tables. Children inherit their parent's group
+    -- first so the three-column FKs below hold; the rest go to the oldest
+    -- group. Counts are asserted per table.
+    foreach _t in array _content_tables loop
+      execute format('select count(*) from public.%I where org_id = $1', _t)
+        into _before using _org.id;
+
+      case _t
+        when 'lectures' then
+          update public.lectures l set group_id = s.group_id
+          from public.lecture_series s
+          where s.id = l.series_id and s.org_id = l.org_id
+            and l.org_id = _org.id and l.group_id is null;
+        when 'giving_fund_methods' then
+          update public.giving_fund_methods m set group_id = f.group_id
+          from public.giving_funds f
+          where f.id = m.fund_id and f.org_id = m.org_id
+            and m.org_id = _org.id and m.group_id is null;
+        when 'prayer_responses' then
+          update public.prayer_responses pr set group_id = r.group_id
+          from public.prayer_requests r
+          where r.id = pr.request_id and r.org_id = pr.org_id
+            and pr.org_id = _org.id and pr.group_id is null;
+        when 'prayer_call_sessions' then
+          update public.prayer_call_sessions s set group_id = e.group_id
+          from public.events e
+          where e.id = s.event_id and e.org_id = s.org_id
+            and s.org_id = _org.id and s.group_id is null;
+        else
+          null;
+      end case;
+
+      execute format('update public.%I set group_id = $1 where org_id = $2 and group_id is null', _t)
+        using _grp, _org.id;
+
+      execute format('select count(*), count(*) filter (where group_id is null) from public.%I where org_id = $1', _t)
+        into _after, _nulls using _org.id;
+      if _after <> _before or _nulls > 0 then
+        raise exception 'group content backfill for org %: % has % rows after (% before), % without a group',
+          _org.id, _t, _after, _before, _nulls;
+      end if;
+    end loop;
+
+    -- The org-level call and link-mode settings become the oldest group's.
+    insert into public.group_settings (
+      org_id, group_id, weekly_zoom_url, zoom_meeting_time,
+      weekly_prayer_call_url, weekly_prayer_call_time, serving_link_mode)
+    select
+      _org.id, _grp,
+      nullif(max(value) filter (where key = 'weekly_zoom_url' and value ~ '^https://'), ''),
+      nullif(max(value) filter (where key = 'zoom_meeting_time'), ''),
+      nullif(max(value) filter (where key = 'weekly_prayer_call_url' and value ~ '^https://'), ''),
+      nullif(max(value) filter (where key = 'weekly_prayer_call_time'), ''),
+      case max(value) filter (where key = 'serving_link_mode')
+           when 'login' then 'login' when 'signed' then 'signed' end
+    from public.site_settings
+    where org_id = _org.id
+      and key in ('weekly_zoom_url', 'zoom_meeting_time', 'weekly_prayer_call_url',
+                  'weekly_prayer_call_time', 'serving_link_mode')
+    having count(*) > 0
+    on conflict (group_id) do nothing;
+  end loop;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."group_content_backfill"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."group_content_backfill"() IS 'Gives every ungrouped content row to its org''s oldest group, folds each group''s calendars into one (events re-pointed, extras deleted, counts asserted), creates a calendar for a group without one, and moves the org-level call and link-mode settings onto the oldest group. Idempotent. Callable only by the migration runner and the pgTAP harness.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."group_member_removed_leaves_teams"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+begin
+  delete from public.team_members tm
+  using public.teams t
+  where t.id = tm.team_id
+    and t.org_id = tm.org_id
+    and t.group_id = old.group_id
+    and tm.org_id = old.org_id
+    and tm.profile_id = old.profile_id;
+  return old;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."group_member_removed_leaves_teams"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."group_model_backfill"() RETURNS "void"
@@ -676,7 +899,6 @@ CREATE OR REPLACE FUNCTION "public"."provision_organization"("_name" "text", "_s
     AS $_$
 declare
   _org_id uuid;
-  _cal_id uuid;
 begin
   if _slug !~ '^[a-z0-9][a-z0-9-]{1,62}$' then
     raise exception 'invalid organization slug: %', _slug using errcode = 'TN003';
@@ -710,43 +932,22 @@ begin
   )
   returning id into _org_id;
 
-  -- 2. Prayer calendar, wired into settings: lib/prayerCalls.ts and
-  -- app/prayer read prayer_calendar_id, and a missing value degrades the
-  -- prayer surface — which is why the calendar is provisioning, not
-  -- onboarding.
-  insert into public.event_calendars (org_id, name, color)
-  values (_org_id, 'Prayer Calls', '#7c9885')
-  returning id into _cal_id;
-
-  -- 3. Settings defaults — the full key list in one auditable place.
-  -- serving_link_mode's deploy default is applied at read time by
-  -- getServingLinkMode() (SERVING_LINK_MODE env); the seed row here matches
-  -- the migration-seeded default. No seeded setting is anon-readable: the
-  -- org's public name lives in organizations.branding.display_name.
+  -- 2. Settings defaults — the org-level keys in one auditable place. No
+  -- seeded setting is anon-readable: the org's public name lives in
+  -- organizations.branding.display_name.
   insert into public.site_settings (org_id, key, value, is_public)
   values
-    (_org_id, 'directory_app_url',       '',            false),
-    (_org_id, 'weekly_zoom_url',         '',            false),
-    (_org_id, 'zoom_meeting_time',       '',            false),
-    (_org_id, 'weekly_prayer_call_url',  '',            false),
-    (_org_id, 'weekly_prayer_call_time', '',            false),
-    (_org_id, 'serving_link_mode',       'signed',      false),
     (_org_id, 'giving_manage_mode',      'stewards',    false),
-    (_org_id, 'giving_dashboard_tile',   'on',          false),
-    (_org_id, 'prayer_calendar_id',      _cal_id::text, false);
+    (_org_id, 'giving_dashboard_tile',   'on',          false);
 
-  -- 4. Empty about page (per-org singleton: PK is (org_id, id), id CHECKed
-  -- true).
-  insert into public.about_page (org_id, id, body) values (_org_id, true, '');
-
-  -- 5. Approved access request for the owner, so their signup resolves
+  -- 3. Approved access request for the owner, so their signup resolves
   -- under handle_new_user()'s fail-closed rules. approved_role = 'admin'
   -- is what makes the owner the founding admin: handle_new_user()
   -- reads it at signup time, so the org never exists without an admin path.
   insert into public.access_requests (org_id, name, email, status, reviewed_at, approved_role)
   values (_org_id, _name || ' owner', _owner_email, 'approved', now(), 'admin');
 
-  -- 6. The owner email must not already have a profile. The org created
+  -- 4. The owner email must not already have a profile. The org created
   -- above holds no profiles yet, so ANY existing profile with this email
   -- necessarily belongs to another org — and a profile is never moved
   -- between orgs. An unscoped `update profiles set org_id = _org_id where
@@ -768,13 +969,13 @@ begin
       using errcode = 'TN004';
   end if;
 
-  -- 7. Nor may the owner email hold an approved access request or unclaimed
+  -- 5. Nor may the owner email hold an approved access request or unclaimed
   -- family invite in another org (a profile-less owner: invited or approved
-  -- elsewhere but not yet signed up). The step-5 insert would then be a
+  -- elsewhere but not yet signed up). The step-3 insert would then be a
   -- SECOND match for handle_new_user(), which rejects the owner's eventual
   -- signup as ambiguous (TN002) — a broken state this transaction would
   -- otherwise commit. The org_id filter excludes the request created in
-  -- step 5; checked after step 6 so an email that also has a profile keeps
+  -- step 3; checked after step 4 so an email that also has a profile keeps
   -- raising TN004.
   if exists (
     select 1 from public.access_requests
@@ -903,7 +1104,7 @@ begin
 
   select sts.enabled into _enabled
   from public.serving_team_settings sts
-  where sts.group_id = _group_id
+  where sts.team_id = _group_id
     and sts.org_id = _org;
 
   if not coalesce(_enabled, false) then
@@ -911,20 +1112,20 @@ begin
       using errcode = 'SV003';
   end if;
 
-  -- unique (group_id, service_date) is the race guard. DO NOTHING (not
+  -- unique (team_id, service_date) is the race guard. DO NOTHING (not
   -- DO UPDATE) so "who already holds this Sunday" is an explicit branch:
   -- the same member re-signing is an idempotent no-op (created = false), a
   -- different member gets SV001. FOR UPDATE serialises two concurrent
   -- re-signups on the existing row.
-  insert into public.serving_signups (org_id, group_id, service_date, family_id, created_by)
+  insert into public.serving_signups (org_id, team_id, service_date, family_id, created_by)
   values (_org, _group_id, _service_date, _family_id, _actor_id)
-  on conflict (group_id, service_date) do nothing
+  on conflict (team_id, service_date) do nothing
   returning id into _signup_id;
 
   if _signup_id is null then
     select s.id, s.created_by into _signup_id, _existing_by
     from public.serving_signups s
-    where s.group_id = _group_id
+    where s.team_id = _group_id
       and s.service_date = _service_date
       and s.org_id = _org
     for update;
@@ -955,7 +1156,7 @@ $$;
 ALTER FUNCTION "public"."serving_signup_apply"("_group_id" "uuid", "_service_date" "date", "_actor_id" "uuid", "_attendee_ids" "uuid"[]) OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."serving_signup_apply"("_group_id" "uuid", "_service_date" "date", "_actor_id" "uuid", "_attendee_ids" "uuid"[]) IS 'Atomic serving signup + attendee insert pair. Tenant anchor: org_id resolved from the teams row named by _group_id, never a caller parameter; every other row is asserted to carry it. service_role only — the HMAC signed-link route passes its validated profile id as _actor_id.';
+COMMENT ON FUNCTION "public"."serving_signup_apply"("_group_id" "uuid", "_service_date" "date", "_actor_id" "uuid", "_attendee_ids" "uuid"[]) IS 'Atomic serving signup + attendee insert pair. Tenant anchor: org_id resolved from the teams row named by _group_id (a team id), never a caller parameter; every other row is asserted to carry it. service_role only — the HMAC signed-link route passes its validated profile id as _actor_id.';
 
 
 
@@ -966,6 +1167,7 @@ CREATE OR REPLACE FUNCTION "public"."serving_signup_create"("_group_id" "uuid", 
 declare
   _actor uuid;
   _org uuid;
+  _grp uuid;
 begin
   _actor := auth.uid();
   if _actor is null then
@@ -973,7 +1175,7 @@ begin
       using errcode = 'SV002';
   end if;
 
-  select t.org_id into _org
+  select t.org_id, t.group_id into _org, _grp
   from public.teams t
   where t.id = _group_id;
 
@@ -986,8 +1188,8 @@ begin
   -- bypasses the policy. Bare helper calls are correct here — the
   -- (select ...) InitPlan rule applies to policy expressions only.
   if not (
-    public.is_admin()
-    or public.is_team_lead(_group_id)
+    public.is_team_lead(_group_id)
+    or public.is_group_leader(_grp)
     or exists (
       select 1 from public.team_members tm
       where tm.profile_id = _actor
@@ -1008,8 +1210,62 @@ $$;
 ALTER FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_date" "date", "_attendee_ids" "uuid"[]) OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_date" "date", "_attendee_ids" "uuid"[]) IS 'Authenticated serving signup entry point. Actor from auth.uid(); tenant anchor: the team''s org pinned against app_request_org_id(), fail-closed on NULL; the RLS INSERT-policy arms are re-checked before delegating to serving_signup_apply().';
+COMMENT ON FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_date" "date", "_attendee_ids" "uuid"[]) IS 'Authenticated serving signup entry point. Actor from auth.uid(); tenant anchor: the team''s org pinned against app_request_org_id(), fail-closed on NULL; the RLS INSERT-policy arms (team member, team lead, or a leader of the team''s group) are re-checked before delegating to serving_signup_apply().';
 
+
+
+CREATE OR REPLACE FUNCTION "public"."team_member_requires_group_membership"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _group uuid;
+begin
+  -- A missing team is the FK's to refuse; a team with no group predates the
+  -- group model and has nothing to check against.
+  select t.group_id into _group
+  from public.teams t
+  where t.id = new.team_id and t.org_id = new.org_id;
+  if _group is null then
+    return new;
+  end if;
+  if not exists (
+    select 1 from public.group_members gm
+    where gm.group_id = _group
+      and gm.org_id = new.org_id
+      and gm.profile_id = new.profile_id
+  ) then
+    raise exception 'team_members: profile % is not a member of the group that owns team %',
+      new.profile_id, new.team_id
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."team_member_requires_group_membership"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."team_moved_prunes_members"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+begin
+  delete from public.team_members tm
+  where tm.team_id = new.id
+    and tm.org_id = new.org_id
+    and not exists (
+      select 1 from public.group_members gm
+      where gm.group_id = new.group_id
+        and gm.org_id = new.org_id
+        and gm.profile_id = tm.profile_id);
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."team_moved_prunes_members"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."touch_updated_at"() RETURNS "trigger"
@@ -1026,16 +1282,19 @@ ALTER FUNCTION "public"."touch_updated_at"() OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."about_page" (
-    "id" boolean DEFAULT true NOT NULL,
     "body" "text" DEFAULT ''::"text" NOT NULL,
     "updated_by" "uuid",
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
-    CONSTRAINT "about_page_id_check" CHECK ("id")
+    "group_id" "uuid" NOT NULL
 );
 
 
 ALTER TABLE "public"."about_page" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."about_page" IS 'One row per group holding the About page body (BlockNote JSON). Keyed by group_id; created on first save.';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."access_requests" (
@@ -1072,7 +1331,8 @@ CREATE TABLE IF NOT EXISTS "public"."announcements" (
     "author_id" "uuid",
     "published_at" timestamp with time zone,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "group_id" "uuid" NOT NULL
 );
 
 
@@ -1099,7 +1359,8 @@ CREATE TABLE IF NOT EXISTS "public"."class_teachers" (
     "bio" "text" DEFAULT ''::"text" NOT NULL,
     "sort_order" integer DEFAULT 0 NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "group_id" "uuid" NOT NULL
 );
 
 
@@ -1109,10 +1370,12 @@ ALTER TABLE "public"."class_teachers" OWNER TO "postgres";
 CREATE TABLE IF NOT EXISTS "public"."event_calendars" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "name" "text" NOT NULL,
-    "color" "text",
+    "color" "text" DEFAULT '#B85C38'::"text",
     "created_by" "uuid",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "group_id" "uuid" NOT NULL,
+    CONSTRAINT "event_calendars_color_hex" CHECK ((("color" IS NULL) OR ("color" ~ '^#[0-9a-fA-F]{6}$'::"text")))
 );
 
 
@@ -1143,6 +1406,7 @@ CREATE TABLE IF NOT EXISTS "public"."events" (
     "meeting_show_on_dashboard" boolean DEFAULT true NOT NULL,
     "meeting_lead_minutes" integer DEFAULT 15 NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "group_id" "uuid" NOT NULL,
     CONSTRAINT "events_meeting_lead_minutes_check" CHECK ((("meeting_lead_minutes" >= 0) AND ("meeting_lead_minutes" <= 1440))),
     CONSTRAINT "events_recurrence_end_mode_check" CHECK (("recurrence_end_mode" = ANY (ARRAY['never'::"text", 'count'::"text", 'until'::"text"]))),
     CONSTRAINT "events_recurrence_frequency_check" CHECK (("recurrence_frequency" = ANY (ARRAY['daily'::"text", 'weekly'::"text", 'monthly'::"text", 'yearly'::"text"])))
@@ -1392,6 +1656,7 @@ CREATE TABLE IF NOT EXISTS "public"."giving_fund_methods" (
     "custom_handle" "text" NOT NULL,
     "display_order" integer DEFAULT 0 NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "group_id" "uuid" NOT NULL,
     CONSTRAINT "giving_fund_methods_custom_handle_check" CHECK ((("char_length"("custom_handle") >= 1) AND ("char_length"("custom_handle") <= 120))),
     CONSTRAINT "giving_fund_methods_method_check" CHECK (("method" = ANY (ARRAY['venmo'::"text", 'paypal'::"text", 'cashapp'::"text", 'zelle'::"text", 'wallet'::"text"])))
 );
@@ -1414,6 +1679,7 @@ CREATE TABLE IF NOT EXISTS "public"."giving_funds" (
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "group_id" "uuid" NOT NULL,
     CONSTRAINT "giving_funds_name_check" CHECK ((("char_length"("name") >= 1) AND ("char_length"("name") <= 80))),
     CONSTRAINT "giving_funds_steward_role_check" CHECK ((("steward_role" IS NULL) OR ("char_length"("steward_role") <= 60)))
 );
@@ -1473,6 +1739,29 @@ COMMENT ON TABLE "public"."group_members" IS 'Membership of a group. role = lead
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."group_settings" (
+    "group_id" "uuid" NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "weekly_zoom_url" "text",
+    "zoom_meeting_time" "text",
+    "weekly_prayer_call_url" "text",
+    "weekly_prayer_call_time" "text",
+    "serving_link_mode" "text",
+    "updated_by" "uuid",
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "group_settings_serving_link_mode_check" CHECK (("serving_link_mode" = ANY (ARRAY['signed'::"text", 'login'::"text"]))),
+    CONSTRAINT "group_settings_weekly_prayer_call_url_check" CHECK ((("weekly_prayer_call_url" IS NULL) OR ("weekly_prayer_call_url" ~ '^https://'::"text"))),
+    CONSTRAINT "group_settings_weekly_zoom_url_check" CHECK ((("weekly_zoom_url" IS NULL) OR ("weekly_zoom_url" ~ '^https://'::"text")))
+);
+
+
+ALTER TABLE "public"."group_settings" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."group_settings" IS 'Per-group settings: the weekly video call, the weekly prayer call and the serving email link mode. One row per group, created on first save; an absent row means the defaults.';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."groups" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
@@ -1498,7 +1787,8 @@ CREATE TABLE IF NOT EXISTS "public"."lecture_series" (
     "teacher" "text",
     "is_archived" boolean DEFAULT false NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "group_id" "uuid" NOT NULL
 );
 
 
@@ -1518,7 +1808,8 @@ CREATE TABLE IF NOT EXISTS "public"."lectures" (
     "week_number" integer,
     "scripture_reference" "text",
     "summary" "text",
-    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "group_id" "uuid" NOT NULL
 );
 
 
@@ -1636,6 +1927,7 @@ CREATE TABLE IF NOT EXISTS "public"."prayer_call_sessions" (
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "group_id" "uuid" NOT NULL,
     CONSTRAINT "prayer_call_sessions_dial_in_check" CHECK ((("dial_in" IS NULL) OR ("char_length"("dial_in") <= 40))),
     CONSTRAINT "prayer_call_sessions_join_url_check" CHECK ((("join_url" IS NULL) OR ("char_length"("join_url") <= 500))),
     CONSTRAINT "prayer_call_sessions_pin_check" CHECK ((("pin" IS NULL) OR ("char_length"("pin") <= 20))),
@@ -1657,6 +1949,7 @@ CREATE TABLE IF NOT EXISTS "public"."prayer_requests" (
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "group_id" "uuid" NOT NULL,
     CONSTRAINT "prayer_requests_body_check" CHECK ((("char_length"("body") >= 1) AND ("char_length"("body") <= 2000))),
     CONSTRAINT "prayer_requests_category_check" CHECK (("category" = ANY (ARRAY['health'::"text", 'family'::"text", 'thanksgiving'::"text", 'prodigal'::"text", 'guidance'::"text", 'grief'::"text"])))
 );
@@ -1669,7 +1962,8 @@ CREATE TABLE IF NOT EXISTS "public"."prayer_responses" (
     "request_id" "uuid" NOT NULL,
     "profile_id" "uuid" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "group_id" "uuid" NOT NULL
 );
 
 
@@ -1703,7 +1997,8 @@ CREATE OR REPLACE VIEW "public"."prayer_wall" WITH ("security_invoker"='true') A
         END AS "avatar_url",
     COALESCE("pc"."praying_count", 0) AS "praying_count",
     COALESCE("pc"."i_am_praying", false) AS "i_am_praying",
-    "r"."org_id"
+    "r"."org_id",
+    "r"."group_id"
    FROM (("public"."prayer_requests" "r"
      LEFT JOIN "public"."profiles" "p" ON ((("p"."id" = "r"."author_id") AND ("p"."org_id" = "r"."org_id"))))
      LEFT JOIN LATERAL ( SELECT ("count"(*))::integer AS "praying_count",
@@ -1766,7 +2061,7 @@ ALTER TABLE "public"."rsvps" OWNER TO "postgres";
 
 CREATE TABLE IF NOT EXISTS "public"."serving_broadcasts" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "group_id" "uuid" NOT NULL,
+    "team_id" "uuid" NOT NULL,
     "sent_by" "uuid",
     "subject" "text" NOT NULL,
     "open_dates" "date"[] DEFAULT '{}'::"date"[] NOT NULL,
@@ -1779,7 +2074,7 @@ CREATE TABLE IF NOT EXISTS "public"."serving_broadcasts" (
 ALTER TABLE "public"."serving_broadcasts" OWNER TO "postgres";
 
 
-COMMENT ON COLUMN "public"."serving_broadcasts"."group_id" IS 'Team id (references teams).';
+COMMENT ON COLUMN "public"."serving_broadcasts"."team_id" IS 'Team id (references teams).';
 
 
 
@@ -1795,7 +2090,7 @@ ALTER TABLE "public"."serving_signup_attendees" OWNER TO "postgres";
 
 CREATE TABLE IF NOT EXISTS "public"."serving_signups" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "group_id" "uuid" NOT NULL,
+    "team_id" "uuid" NOT NULL,
     "service_date" "date" NOT NULL,
     "family_id" "uuid",
     "created_by" "uuid" NOT NULL,
@@ -1807,12 +2102,12 @@ CREATE TABLE IF NOT EXISTS "public"."serving_signups" (
 ALTER TABLE "public"."serving_signups" OWNER TO "postgres";
 
 
-COMMENT ON COLUMN "public"."serving_signups"."group_id" IS 'Team id (references teams).';
+COMMENT ON COLUMN "public"."serving_signups"."team_id" IS 'Team id (references teams).';
 
 
 
 CREATE TABLE IF NOT EXISTS "public"."serving_team_settings" (
-    "group_id" "uuid" NOT NULL,
+    "team_id" "uuid" NOT NULL,
     "enabled" boolean DEFAULT false NOT NULL,
     "reminder_days" integer[] DEFAULT '{4,5}'::integer[] NOT NULL,
     "reminder_method" "text" DEFAULT 'email'::"text" NOT NULL,
@@ -1829,7 +2124,7 @@ CREATE TABLE IF NOT EXISTS "public"."serving_team_settings" (
 ALTER TABLE "public"."serving_team_settings" OWNER TO "postgres";
 
 
-COMMENT ON COLUMN "public"."serving_team_settings"."group_id" IS 'Team id (references teams).';
+COMMENT ON COLUMN "public"."serving_team_settings"."team_id" IS 'Team id (references teams).';
 
 
 
@@ -1892,7 +2187,7 @@ COMMENT ON COLUMN "public"."teams"."group_id" IS 'The group this team belongs to
 
 
 ALTER TABLE ONLY "public"."about_page"
-    ADD CONSTRAINT "about_page_pkey" PRIMARY KEY ("org_id", "id");
+    ADD CONSTRAINT "about_page_pkey" PRIMARY KEY ("group_id");
 
 
 
@@ -1927,12 +2222,17 @@ ALTER TABLE ONLY "public"."calendar_subscription_tokens"
 
 
 ALTER TABLE ONLY "public"."class_teachers"
-    ADD CONSTRAINT "class_teachers_org_id_profile_id_key" UNIQUE ("org_id", "profile_id");
+    ADD CONSTRAINT "class_teachers_group_id_profile_id_key" UNIQUE ("group_id", "profile_id");
 
 
 
 ALTER TABLE ONLY "public"."class_teachers"
     ADD CONSTRAINT "class_teachers_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."event_calendars"
+    ADD CONSTRAINT "event_calendars_id_org_group_unique" UNIQUE ("id", "org_id", "group_id");
 
 
 
@@ -1943,6 +2243,11 @@ ALTER TABLE ONLY "public"."event_calendars"
 
 ALTER TABLE ONLY "public"."event_calendars"
     ADD CONSTRAINT "event_calendars_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."events"
+    ADD CONSTRAINT "events_id_org_group_unique" UNIQUE ("id", "org_id", "group_id");
 
 
 
@@ -2002,6 +2307,11 @@ ALTER TABLE ONLY "public"."giving_fund_methods"
 
 
 ALTER TABLE ONLY "public"."giving_funds"
+    ADD CONSTRAINT "giving_funds_id_org_group_unique" UNIQUE ("id", "org_id", "group_id");
+
+
+
+ALTER TABLE ONLY "public"."giving_funds"
     ADD CONSTRAINT "giving_funds_id_org_unique" UNIQUE ("id", "org_id");
 
 
@@ -2046,6 +2356,11 @@ ALTER TABLE ONLY "public"."group_members"
 
 
 
+ALTER TABLE ONLY "public"."group_settings"
+    ADD CONSTRAINT "group_settings_pkey" PRIMARY KEY ("group_id");
+
+
+
 ALTER TABLE ONLY "public"."groups"
     ADD CONSTRAINT "groups_id_org_unique" UNIQUE ("id", "org_id");
 
@@ -2053,6 +2368,11 @@ ALTER TABLE ONLY "public"."groups"
 
 ALTER TABLE ONLY "public"."groups"
     ADD CONSTRAINT "groups_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."lecture_series"
+    ADD CONSTRAINT "lecture_series_id_org_group_unique" UNIQUE ("id", "org_id", "group_id");
 
 
 
@@ -2122,6 +2442,11 @@ ALTER TABLE ONLY "public"."prayer_call_sessions"
 
 
 ALTER TABLE ONLY "public"."prayer_requests"
+    ADD CONSTRAINT "prayer_requests_id_org_group_unique" UNIQUE ("id", "org_id", "group_id");
+
+
+
+ALTER TABLE ONLY "public"."prayer_requests"
     ADD CONSTRAINT "prayer_requests_id_org_unique" UNIQUE ("id", "org_id");
 
 
@@ -2167,11 +2492,6 @@ ALTER TABLE ONLY "public"."serving_signup_attendees"
 
 
 ALTER TABLE ONLY "public"."serving_signups"
-    ADD CONSTRAINT "serving_signups_group_id_service_date_key" UNIQUE ("group_id", "service_date");
-
-
-
-ALTER TABLE ONLY "public"."serving_signups"
     ADD CONSTRAINT "serving_signups_id_org_unique" UNIQUE ("id", "org_id");
 
 
@@ -2181,8 +2501,13 @@ ALTER TABLE ONLY "public"."serving_signups"
 
 
 
+ALTER TABLE ONLY "public"."serving_signups"
+    ADD CONSTRAINT "serving_signups_team_id_service_date_key" UNIQUE ("team_id", "service_date");
+
+
+
 ALTER TABLE ONLY "public"."serving_team_settings"
-    ADD CONSTRAINT "serving_team_settings_pkey" PRIMARY KEY ("group_id");
+    ADD CONSTRAINT "serving_team_settings_pkey" PRIMARY KEY ("team_id");
 
 
 
@@ -2206,11 +2531,19 @@ ALTER TABLE ONLY "public"."teams"
 
 
 
+CREATE INDEX "about_page_group_id_idx" ON "public"."about_page" USING "btree" ("group_id");
+
+
+
 CREATE INDEX "access_requests_invite_token_idx" ON "public"."access_requests" USING "btree" ("invite_token");
 
 
 
 CREATE INDEX "access_requests_org_id_idx" ON "public"."access_requests" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "announcements_group_id_idx" ON "public"."announcements" USING "btree" ("group_id");
 
 
 
@@ -2222,11 +2555,23 @@ CREATE INDEX "calendar_subscription_tokens_org_id_idx" ON "public"."calendar_sub
 
 
 
+CREATE INDEX "class_teachers_group_id_idx" ON "public"."class_teachers" USING "btree" ("group_id");
+
+
+
+CREATE INDEX "event_calendars_group_id_idx" ON "public"."event_calendars" USING "btree" ("group_id");
+
+
+
 CREATE INDEX "event_calendars_org_id_idx" ON "public"."event_calendars" USING "btree" ("org_id");
 
 
 
 CREATE INDEX "events_calendar_id_idx" ON "public"."events" USING "btree" ("calendar_id");
+
+
+
+CREATE INDEX "events_group_id_idx" ON "public"."events" USING "btree" ("group_id");
 
 
 
@@ -2274,7 +2619,15 @@ CREATE INDEX "feedback_org_id_idx" ON "public"."feedback" USING "btree" ("org_id
 
 
 
+CREATE INDEX "giving_fund_methods_group_id_idx" ON "public"."giving_fund_methods" USING "btree" ("group_id");
+
+
+
 CREATE INDEX "giving_fund_methods_org_id_idx" ON "public"."giving_fund_methods" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "giving_funds_group_id_idx" ON "public"."giving_funds" USING "btree" ("group_id");
 
 
 
@@ -2302,11 +2655,23 @@ CREATE INDEX "group_members_profile_org_idx" ON "public"."group_members" USING "
 
 
 
+CREATE INDEX "group_settings_org_id_idx" ON "public"."group_settings" USING "btree" ("org_id");
+
+
+
 CREATE INDEX "groups_org_id_idx" ON "public"."groups" USING "btree" ("org_id");
 
 
 
+CREATE INDEX "lecture_series_group_id_idx" ON "public"."lecture_series" USING "btree" ("group_id");
+
+
+
 CREATE INDEX "lecture_series_org_id_idx" ON "public"."lecture_series" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "lectures_group_id_idx" ON "public"."lectures" USING "btree" ("group_id");
 
 
 
@@ -2342,6 +2707,10 @@ CREATE INDEX "organization_members_profile_id_idx" ON "public"."organization_mem
 
 
 
+CREATE INDEX "prayer_call_sessions_group_id_idx" ON "public"."prayer_call_sessions" USING "btree" ("group_id");
+
+
+
 CREATE INDEX "prayer_call_sessions_org_id_idx" ON "public"."prayer_call_sessions" USING "btree" ("org_id");
 
 
@@ -2354,7 +2723,15 @@ CREATE INDEX "prayer_requests_created_at_idx" ON "public"."prayer_requests" USIN
 
 
 
+CREATE INDEX "prayer_requests_group_id_idx" ON "public"."prayer_requests" USING "btree" ("group_id");
+
+
+
 CREATE INDEX "prayer_requests_org_id_idx" ON "public"."prayer_requests" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "prayer_responses_group_id_idx" ON "public"."prayer_responses" USING "btree" ("group_id");
 
 
 
@@ -2511,6 +2888,10 @@ CREATE OR REPLACE TRIGGER "family_units_touch_updated_at" BEFORE UPDATE ON "publ
 
 
 
+CREATE OR REPLACE TRIGGER "group_members_leave_teams" AFTER DELETE OR UPDATE OF "group_id", "profile_id", "org_id" ON "public"."group_members" FOR EACH ROW EXECUTE FUNCTION "public"."group_member_removed_leaves_teams"();
+
+
+
 CREATE OR REPLACE TRIGGER "groups_touch_updated_at" BEFORE UPDATE ON "public"."groups" FOR EACH ROW EXECUTE FUNCTION "public"."touch_updated_at"();
 
 
@@ -2527,7 +2908,20 @@ CREATE OR REPLACE TRIGGER "profiles_touch_updated_at" BEFORE UPDATE ON "public".
 
 
 
+CREATE OR REPLACE TRIGGER "team_members_require_group_membership" BEFORE INSERT OR UPDATE OF "team_id", "profile_id", "org_id" ON "public"."team_members" FOR EACH ROW EXECUTE FUNCTION "public"."team_member_requires_group_membership"();
+
+
+
+CREATE OR REPLACE TRIGGER "teams_prune_members_on_move" AFTER UPDATE OF "group_id" ON "public"."teams" FOR EACH ROW WHEN (("old"."group_id" IS DISTINCT FROM "new"."group_id")) EXECUTE FUNCTION "public"."team_moved_prunes_members"();
+
+
+
 CREATE OR REPLACE TRIGGER "teams_touch_updated_at" BEFORE UPDATE ON "public"."teams" FOR EACH ROW EXECUTE FUNCTION "public"."touch_updated_at"();
+
+
+
+ALTER TABLE ONLY "public"."about_page"
+    ADD CONSTRAINT "about_page_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."groups"("id", "org_id") ON DELETE CASCADE;
 
 
 
@@ -2562,6 +2956,11 @@ ALTER TABLE ONLY "public"."announcements"
 
 
 ALTER TABLE ONLY "public"."announcements"
+    ADD CONSTRAINT "announcements_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."groups"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."announcements"
     ADD CONSTRAINT "announcements_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
 
 
@@ -2573,6 +2972,11 @@ ALTER TABLE ONLY "public"."calendar_subscription_tokens"
 
 ALTER TABLE ONLY "public"."calendar_subscription_tokens"
     ADD CONSTRAINT "calendar_subscription_tokens_user_id_fkey" FOREIGN KEY ("user_id", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."class_teachers"
+    ADD CONSTRAINT "class_teachers_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."groups"("id", "org_id") ON DELETE CASCADE;
 
 
 
@@ -2592,12 +2996,17 @@ ALTER TABLE ONLY "public"."event_calendars"
 
 
 ALTER TABLE ONLY "public"."event_calendars"
+    ADD CONSTRAINT "event_calendars_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."groups"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."event_calendars"
     ADD CONSTRAINT "event_calendars_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
 
 
 
 ALTER TABLE ONLY "public"."events"
-    ADD CONSTRAINT "events_calendar_id_fkey" FOREIGN KEY ("calendar_id", "org_id") REFERENCES "public"."event_calendars"("id", "org_id") ON DELETE SET NULL ("calendar_id");
+    ADD CONSTRAINT "events_calendar_id_fkey" FOREIGN KEY ("calendar_id", "org_id", "group_id") REFERENCES "public"."event_calendars"("id", "org_id", "group_id") ON DELETE SET NULL ("calendar_id");
 
 
 
@@ -2607,12 +3016,17 @@ ALTER TABLE ONLY "public"."events"
 
 
 ALTER TABLE ONLY "public"."events"
+    ADD CONSTRAINT "events_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."groups"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."events"
     ADD CONSTRAINT "events_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
 
 
 
 ALTER TABLE ONLY "public"."events"
-    ADD CONSTRAINT "events_series_id_fkey" FOREIGN KEY ("series_id", "org_id") REFERENCES "public"."events"("id", "org_id") ON DELETE CASCADE;
+    ADD CONSTRAINT "events_series_id_fkey" FOREIGN KEY ("series_id", "org_id", "group_id") REFERENCES "public"."events"("id", "org_id", "group_id") ON DELETE CASCADE;
 
 
 
@@ -2667,7 +3081,12 @@ ALTER TABLE ONLY "public"."feedback"
 
 
 ALTER TABLE ONLY "public"."giving_fund_methods"
-    ADD CONSTRAINT "giving_fund_methods_fund_id_fkey" FOREIGN KEY ("fund_id", "org_id") REFERENCES "public"."giving_funds"("id", "org_id") ON DELETE CASCADE;
+    ADD CONSTRAINT "giving_fund_methods_fund_id_fkey" FOREIGN KEY ("fund_id", "org_id", "group_id") REFERENCES "public"."giving_funds"("id", "org_id", "group_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."giving_fund_methods"
+    ADD CONSTRAINT "giving_fund_methods_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."groups"("id", "org_id") ON DELETE CASCADE;
 
 
 
@@ -2683,6 +3102,11 @@ ALTER TABLE ONLY "public"."giving_funds"
 
 ALTER TABLE ONLY "public"."giving_funds"
     ADD CONSTRAINT "giving_funds_created_by_fkey" FOREIGN KEY ("created_by", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE SET NULL ("created_by");
+
+
+
+ALTER TABLE ONLY "public"."giving_funds"
+    ADD CONSTRAINT "giving_funds_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."groups"("id", "org_id") ON DELETE CASCADE;
 
 
 
@@ -2746,6 +3170,21 @@ ALTER TABLE ONLY "public"."group_members"
 
 
 
+ALTER TABLE ONLY "public"."group_settings"
+    ADD CONSTRAINT "group_settings_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."groups"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."group_settings"
+    ADD CONSTRAINT "group_settings_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."group_settings"
+    ADD CONSTRAINT "group_settings_updated_by_fkey" FOREIGN KEY ("updated_by") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
+
+
+
 ALTER TABLE ONLY "public"."groups"
     ADD CONSTRAINT "groups_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
 
@@ -2753,6 +3192,11 @@ ALTER TABLE ONLY "public"."groups"
 
 ALTER TABLE ONLY "public"."groups"
     ADD CONSTRAINT "groups_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."lecture_series"
+    ADD CONSTRAINT "lecture_series_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."groups"("id", "org_id") ON DELETE CASCADE;
 
 
 
@@ -2767,12 +3211,17 @@ ALTER TABLE ONLY "public"."lectures"
 
 
 ALTER TABLE ONLY "public"."lectures"
+    ADD CONSTRAINT "lectures_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."groups"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."lectures"
     ADD CONSTRAINT "lectures_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
 
 
 
 ALTER TABLE ONLY "public"."lectures"
-    ADD CONSTRAINT "lectures_series_id_fkey" FOREIGN KEY ("series_id", "org_id") REFERENCES "public"."lecture_series"("id", "org_id") ON DELETE SET NULL ("series_id");
+    ADD CONSTRAINT "lectures_series_id_fkey" FOREIGN KEY ("series_id", "org_id", "group_id") REFERENCES "public"."lecture_series"("id", "org_id", "group_id") ON DELETE SET NULL ("series_id");
 
 
 
@@ -2817,7 +3266,12 @@ ALTER TABLE ONLY "public"."platform_admins"
 
 
 ALTER TABLE ONLY "public"."prayer_call_sessions"
-    ADD CONSTRAINT "prayer_call_sessions_event_id_fkey" FOREIGN KEY ("event_id", "org_id") REFERENCES "public"."events"("id", "org_id") ON DELETE SET NULL ("event_id");
+    ADD CONSTRAINT "prayer_call_sessions_event_id_fkey" FOREIGN KEY ("event_id", "org_id", "group_id") REFERENCES "public"."events"("id", "org_id", "group_id") ON DELETE SET NULL ("event_id");
+
+
+
+ALTER TABLE ONLY "public"."prayer_call_sessions"
+    ADD CONSTRAINT "prayer_call_sessions_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."groups"("id", "org_id") ON DELETE CASCADE;
 
 
 
@@ -2837,7 +3291,17 @@ ALTER TABLE ONLY "public"."prayer_requests"
 
 
 ALTER TABLE ONLY "public"."prayer_requests"
+    ADD CONSTRAINT "prayer_requests_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."groups"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."prayer_requests"
     ADD CONSTRAINT "prayer_requests_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."prayer_responses"
+    ADD CONSTRAINT "prayer_responses_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."groups"("id", "org_id") ON DELETE CASCADE;
 
 
 
@@ -2852,7 +3316,7 @@ ALTER TABLE ONLY "public"."prayer_responses"
 
 
 ALTER TABLE ONLY "public"."prayer_responses"
-    ADD CONSTRAINT "prayer_responses_request_id_fkey" FOREIGN KEY ("request_id", "org_id") REFERENCES "public"."prayer_requests"("id", "org_id") ON DELETE CASCADE;
+    ADD CONSTRAINT "prayer_responses_request_id_fkey" FOREIGN KEY ("request_id", "org_id", "group_id") REFERENCES "public"."prayer_requests"("id", "org_id", "group_id") ON DELETE CASCADE;
 
 
 
@@ -2892,17 +3356,17 @@ ALTER TABLE ONLY "public"."rsvps"
 
 
 ALTER TABLE ONLY "public"."serving_broadcasts"
-    ADD CONSTRAINT "serving_broadcasts_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."teams"("id", "org_id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."serving_broadcasts"
     ADD CONSTRAINT "serving_broadcasts_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
 
 
 
 ALTER TABLE ONLY "public"."serving_broadcasts"
     ADD CONSTRAINT "serving_broadcasts_sent_by_fkey" FOREIGN KEY ("sent_by", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE SET NULL ("sent_by");
+
+
+
+ALTER TABLE ONLY "public"."serving_broadcasts"
+    ADD CONSTRAINT "serving_broadcasts_team_id_fkey" FOREIGN KEY ("team_id", "org_id") REFERENCES "public"."teams"("id", "org_id") ON DELETE CASCADE;
 
 
 
@@ -2932,22 +3396,22 @@ ALTER TABLE ONLY "public"."serving_signups"
 
 
 ALTER TABLE ONLY "public"."serving_signups"
-    ADD CONSTRAINT "serving_signups_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."teams"("id", "org_id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."serving_signups"
     ADD CONSTRAINT "serving_signups_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
 
 
 
-ALTER TABLE ONLY "public"."serving_team_settings"
-    ADD CONSTRAINT "serving_team_settings_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."teams"("id", "org_id") ON DELETE CASCADE;
+ALTER TABLE ONLY "public"."serving_signups"
+    ADD CONSTRAINT "serving_signups_team_id_fkey" FOREIGN KEY ("team_id", "org_id") REFERENCES "public"."teams"("id", "org_id") ON DELETE CASCADE;
 
 
 
 ALTER TABLE ONLY "public"."serving_team_settings"
     ADD CONSTRAINT "serving_team_settings_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."serving_team_settings"
+    ADD CONSTRAINT "serving_team_settings_team_id_fkey" FOREIGN KEY ("team_id", "org_id") REFERENCES "public"."teams"("id", "org_id") ON DELETE CASCADE;
 
 
 
@@ -3039,63 +3503,11 @@ CREATE POLICY "Admins and members can update family units" ON "public"."family_u
 
 
 
-CREATE POLICY "Admins and self-stewards can create funds" ON "public"."giving_funds" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("created_by" = ( SELECT "auth"."uid"() AS "uid")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR (( SELECT "public"."giving_stewards_can_manage"() AS "giving_stewards_can_manage") AND ( SELECT "public"."is_member"() AS "is_member") AND ("steward_id" = ( SELECT "auth"."uid"() AS "uid"))))));
-
-
-
-CREATE POLICY "Admins and stewards can delete funds" ON "public"."giving_funds" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR (( SELECT "public"."giving_stewards_can_manage"() AS "giving_stewards_can_manage") AND ("steward_id" = ( SELECT "auth"."uid"() AS "uid"))))));
-
-
-
-CREATE POLICY "Admins and stewards can update funds" ON "public"."giving_funds" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR (( SELECT "public"."giving_stewards_can_manage"() AS "giving_stewards_can_manage") AND ("steward_id" = ( SELECT "auth"."uid"() AS "uid"))))));
-
-
-
-CREATE POLICY "Admins can delete announcements" ON "public"."announcements" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
-
-
-
-CREATE POLICY "Admins can delete event calendars" ON "public"."event_calendars" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
-
-
-
-CREATE POLICY "Admins can delete events" ON "public"."events" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
-
-
-
 CREATE POLICY "Admins can delete family units" ON "public"."family_units" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
 
 
 
 CREATE POLICY "Admins can delete groups" ON "public"."groups" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
-
-
-
-CREATE POLICY "Admins can delete lectures" ON "public"."lectures" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
-
-
-
-CREATE POLICY "Admins can delete prayer call sessions" ON "public"."prayer_call_sessions" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
-
-
-
-CREATE POLICY "Admins can delete series" ON "public"."lecture_series" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
-
-
-
-CREATE POLICY "Admins can delete serving settings" ON "public"."serving_team_settings" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
-
-
-
-CREATE POLICY "Admins can insert announcements" ON "public"."announcements" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
-
-
-
-CREATE POLICY "Admins can insert event calendars" ON "public"."event_calendars" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
-
-
-
-CREATE POLICY "Admins can insert events" ON "public"."events" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
 
 
 
@@ -3107,47 +3519,11 @@ CREATE POLICY "Admins can insert groups" ON "public"."groups" FOR INSERT TO "aut
 
 
 
-CREATE POLICY "Admins can insert lectures" ON "public"."lectures" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
-
-
-
-CREATE POLICY "Admins can insert prayer call sessions" ON "public"."prayer_call_sessions" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
-
-
-
-CREATE POLICY "Admins can insert series" ON "public"."lecture_series" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
-
-
-
 CREATE POLICY "Admins can read feedback" ON "public"."feedback" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
 
 
 
 CREATE POLICY "Admins can update access requests" ON "public"."access_requests" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
-
-
-
-CREATE POLICY "Admins can update announcements" ON "public"."announcements" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
-
-
-
-CREATE POLICY "Admins can update event calendars" ON "public"."event_calendars" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
-
-
-
-CREATE POLICY "Admins can update events" ON "public"."events" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
-
-
-
-CREATE POLICY "Admins can update lectures" ON "public"."lectures" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
-
-
-
-CREATE POLICY "Admins can update prayer call sessions" ON "public"."prayer_call_sessions" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
-
-
-
-CREATE POLICY "Admins can update series" ON "public"."lecture_series" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
 
 
 
@@ -3175,31 +3551,7 @@ CREATE POLICY "Anon can read public settings" ON "public"."site_settings" FOR SE
 
 
 
-CREATE POLICY "Anyone can read event calendars" ON "public"."event_calendars" FOR SELECT TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
-
-
-
 CREATE POLICY "Anyone can submit access request" ON "public"."access_requests" FOR INSERT TO "authenticated", "anon" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("status" = 'pending'::"text") AND ("reviewed_by" IS NULL) AND ("reviewed_at" IS NULL) AND ("signup_token" IS NULL) AND ("token_expires_at" IS NULL) AND ("approved_role" IS NULL)));
-
-
-
-CREATE POLICY "Editors can delete class teachers" ON "public"."class_teachers" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_content_editor"() AS "is_content_editor")));
-
-
-
-CREATE POLICY "Editors can insert about page" ON "public"."about_page" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_content_editor"() AS "is_content_editor")));
-
-
-
-CREATE POLICY "Editors can insert class teachers" ON "public"."class_teachers" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_content_editor"() AS "is_content_editor")));
-
-
-
-CREATE POLICY "Editors can update about page" ON "public"."about_page" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_content_editor"() AS "is_content_editor")));
-
-
-
-CREATE POLICY "Editors can update class teachers" ON "public"."class_teachers" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_content_editor"() AS "is_content_editor")));
 
 
 
@@ -3211,7 +3563,207 @@ CREATE POLICY "Fund managers can remove methods" ON "public"."giving_fund_method
 
 
 
-CREATE POLICY "Fund managers can update methods" ON "public"."giving_fund_methods" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."giving_can_manage_fund"("fund_id")));
+CREATE POLICY "Fund managers can update methods" ON "public"."giving_fund_methods" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."giving_can_manage_fund"("fund_id"))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."giving_can_manage_fund"("fund_id")));
+
+
+
+CREATE POLICY "Group leaders and self-stewards can create funds" ON "public"."giving_funds" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("created_by" = ( SELECT "auth"."uid"() AS "uid")) AND ("public"."is_group_leader"("group_id") OR (( SELECT "public"."giving_stewards_can_manage"() AS "giving_stewards_can_manage") AND "public"."is_group_member"("group_id") AND ("steward_id" = ( SELECT "auth"."uid"() AS "uid"))))));
+
+
+
+CREATE POLICY "Group leaders and stewards can delete funds" ON "public"."giving_funds" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("public"."is_group_leader"("group_id") OR (( SELECT "public"."giving_stewards_can_manage"() AS "giving_stewards_can_manage") AND ("steward_id" = ( SELECT "auth"."uid"() AS "uid")) AND "public"."is_group_member"("group_id")))));
+
+
+
+CREATE POLICY "Group leaders and stewards can update funds" ON "public"."giving_funds" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("public"."is_group_leader"("group_id") OR (( SELECT "public"."giving_stewards_can_manage"() AS "giving_stewards_can_manage") AND ("steward_id" = ( SELECT "auth"."uid"() AS "uid")) AND "public"."is_group_member"("group_id"))))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id") AND ("public"."is_group_leader"("group_id") OR (( SELECT "public"."giving_stewards_can_manage"() AS "giving_stewards_can_manage") AND ("steward_id" = ( SELECT "auth"."uid"() AS "uid"))))));
+
+
+
+CREATE POLICY "Group leaders can delete announcements" ON "public"."announcements" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can delete class teachers" ON "public"."class_teachers" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can delete events" ON "public"."events" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can delete lectures" ON "public"."lectures" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can delete prayer call sessions" ON "public"."prayer_call_sessions" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can delete series" ON "public"."lecture_series" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can delete serving settings" ON "public"."serving_team_settings" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (EXISTS ( SELECT 1
+   FROM "public"."teams" "t"
+  WHERE (("t"."id" = "serving_team_settings"."team_id") AND ("t"."org_id" = "serving_team_settings"."org_id") AND "public"."is_group_leader"("t"."group_id"))))));
+
+
+
+CREATE POLICY "Group leaders can insert about page" ON "public"."about_page" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can insert announcements" ON "public"."announcements" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can insert class teachers" ON "public"."class_teachers" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can insert event calendars" ON "public"."event_calendars" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can insert events" ON "public"."events" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can insert group settings" ON "public"."group_settings" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can insert lectures" ON "public"."lectures" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can insert prayer call sessions" ON "public"."prayer_call_sessions" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can insert series" ON "public"."lecture_series" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can update about page" ON "public"."about_page" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id"))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can update announcements" ON "public"."announcements" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id"))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can update class teachers" ON "public"."class_teachers" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id"))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can update event calendars" ON "public"."event_calendars" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id"))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can update events" ON "public"."events" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id"))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can update group settings" ON "public"."group_settings" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id"))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can update lectures" ON "public"."lectures" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id"))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can update prayer call sessions" ON "public"."prayer_call_sessions" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id"))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group leaders can update series" ON "public"."lecture_series" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id"))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Group members and admins can view team members" ON "public"."team_members" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR (EXISTS ( SELECT 1
+   FROM "public"."teams" "t"
+  WHERE (("t"."id" = "team_members"."team_id") AND ("t"."org_id" = "team_members"."org_id") AND "public"."is_group_member"("t"."group_id")))))));
+
+
+
+CREATE POLICY "Group members and admins can view teams" ON "public"."teams" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_member"("group_id"))));
+
+
+
+CREATE POLICY "Group members can post own prayer requests" ON "public"."prayer_requests" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id") AND ("author_id" = ( SELECT "auth"."uid"() AS "uid"))));
+
+
+
+CREATE POLICY "Group members can pray for visible requests" ON "public"."prayer_responses" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id") AND ("profile_id" = ( SELECT "auth"."uid"() AS "uid")) AND (EXISTS ( SELECT 1
+   FROM "public"."prayer_requests" "r"
+  WHERE ("r"."id" = "prayer_responses"."request_id")))));
+
+
+
+CREATE POLICY "Group members can read about page" ON "public"."about_page" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id")));
+
+
+
+CREATE POLICY "Group members can read class teachers" ON "public"."class_teachers" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id")));
+
+
+
+CREATE POLICY "Group members can read group settings" ON "public"."group_settings" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id")));
+
+
+
+CREATE POLICY "Group members can view event calendars" ON "public"."event_calendars" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id")));
+
+
+
+CREATE POLICY "Group members can view events" ON "public"."events" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id")));
+
+
+
+CREATE POLICY "Group members can view fund methods" ON "public"."giving_fund_methods" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id")));
+
+
+
+CREATE POLICY "Group members can view giving funds" ON "public"."giving_funds" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id")));
+
+
+
+CREATE POLICY "Group members can view lectures" ON "public"."lectures" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id")));
+
+
+
+CREATE POLICY "Group members can view prayer call sessions" ON "public"."prayer_call_sessions" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id")));
+
+
+
+CREATE POLICY "Group members can view prayer responses" ON "public"."prayer_responses" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id") AND (EXISTS ( SELECT 1
+   FROM "public"."prayer_requests" "r"
+  WHERE ("r"."id" = "prayer_responses"."request_id")))));
+
+
+
+CREATE POLICY "Group members can view published announcements" ON "public"."announcements" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id") AND ("is_published" OR "public"."is_group_leader"("group_id"))));
+
+
+
+CREATE POLICY "Group members can view series" ON "public"."lecture_series" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id")));
+
+
+
+CREATE POLICY "Group members can view serving settings" ON "public"."serving_team_settings" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (EXISTS ( SELECT 1
+   FROM "public"."teams" "t"
+  WHERE (("t"."id" = "serving_team_settings"."team_id") AND ("t"."org_id" = "serving_team_settings"."org_id") AND "public"."is_group_member"("t"."group_id"))))));
+
+
+
+CREATE POLICY "Group members can view serving signups" ON "public"."serving_signups" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (EXISTS ( SELECT 1
+   FROM "public"."teams" "t"
+  WHERE (("t"."id" = "serving_signups"."team_id") AND ("t"."org_id" = "serving_signups"."org_id") AND "public"."is_group_member"("t"."group_id"))))));
+
+
+
+CREATE POLICY "Group members can view visible prayer requests" ON "public"."prayer_requests" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id") AND (("author_id" = ( SELECT "auth"."uid"() AS "uid")) OR (NOT "visible_to_warriors"))));
 
 
 
@@ -3249,10 +3801,6 @@ CREATE POLICY "Leaders and admins can insert group members" ON "public"."group_m
 
 
 
-CREATE POLICY "Leaders and admins can insert serving settings" ON "public"."serving_team_settings" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_team_lead"("group_id"))));
-
-
-
 CREATE POLICY "Leaders and admins can insert team members" ON "public"."team_members" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR (EXISTS ( SELECT 1
    FROM "public"."teams" "t"
   WHERE (("t"."id" = "team_members"."team_id") AND ("t"."org_id" = "team_members"."org_id") AND "public"."is_group_leader"("t"."group_id")))))));
@@ -3260,10 +3808,6 @@ CREATE POLICY "Leaders and admins can insert team members" ON "public"."team_mem
 
 
 CREATE POLICY "Leaders and admins can insert teams" ON "public"."teams" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("group_id"))));
-
-
-
-CREATE POLICY "Leaders and admins can log serving broadcasts" ON "public"."serving_broadcasts" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("sent_by" = ( SELECT "auth"."uid"() AS "uid")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_team_lead"("group_id"))));
 
 
 
@@ -3279,10 +3823,6 @@ CREATE POLICY "Leaders and admins can update groups" ON "public"."groups" FOR UP
 
 
 
-CREATE POLICY "Leaders and admins can update serving settings" ON "public"."serving_team_settings" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_team_lead"("group_id"))));
-
-
-
 CREATE POLICY "Leaders and admins can update team members" ON "public"."team_members" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR (EXISTS ( SELECT 1
    FROM "public"."teams" "t"
   WHERE (("t"."id" = "team_members"."team_id") AND ("t"."org_id" = "team_members"."org_id") AND "public"."is_group_leader"("t"."group_id"))))))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR (EXISTS ( SELECT 1
@@ -3292,26 +3832,6 @@ CREATE POLICY "Leaders and admins can update team members" ON "public"."team_mem
 
 
 CREATE POLICY "Leaders and admins can update teams" ON "public"."teams" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("group_id")))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("group_id"))));
-
-
-
-CREATE POLICY "Leaders and admins can view serving broadcasts" ON "public"."serving_broadcasts" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_team_lead"("group_id"))));
-
-
-
-CREATE POLICY "Lectures visible to all" ON "public"."lectures" FOR SELECT TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
-
-
-
-CREATE POLICY "Members and admins can delete rsvps" ON "public"."rsvps" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (((( SELECT "auth"."uid"() AS "uid") = "user_id") AND ( SELECT "public"."is_member"() AS "is_member")) OR ( SELECT "public"."is_admin"() AS "is_admin"))));
-
-
-
-CREATE POLICY "Members and admins can insert rsvps" ON "public"."rsvps" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (((( SELECT "auth"."uid"() AS "uid") = "user_id") AND ( SELECT "public"."is_member"() AS "is_member")) OR ( SELECT "public"."is_admin"() AS "is_admin"))));
-
-
-
-CREATE POLICY "Members and admins can update rsvps" ON "public"."rsvps" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (((( SELECT "auth"."uid"() AS "uid") = "user_id") AND ( SELECT "public"."is_member"() AS "is_member")) OR ( SELECT "public"."is_admin"() AS "is_admin")))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (((( SELECT "auth"."uid"() AS "uid") = "user_id") AND ( SELECT "public"."is_member"() AS "is_member")) OR ( SELECT "public"."is_admin"() AS "is_admin"))));
 
 
 
@@ -3331,43 +3851,17 @@ CREATE POLICY "Members and admins can view groups" ON "public"."groups" FOR SELE
 
 
 
-CREATE POLICY "Members and admins can view rsvps" ON "public"."rsvps" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_member"() AS "is_member") OR ( SELECT "public"."is_admin"() AS "is_admin"))));
-
-
-
-CREATE POLICY "Members and published announcements are visible" ON "public"."announcements" FOR SELECT TO "authenticated", "anon" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_member"() AS "is_member") OR ("is_published" = true))));
-
-
-
 CREATE POLICY "Members can create own subscription token" ON "public"."calendar_subscription_tokens" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "auth"."uid"() AS "uid") = "user_id")));
 
 
 
-CREATE POLICY "Members can create serving signups" ON "public"."serving_signups" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("created_by" = ( SELECT "auth"."uid"() AS "uid")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_team_lead"("group_id") OR (EXISTS ( SELECT 1
-   FROM "public"."team_members" "tm"
-  WHERE (("tm"."profile_id" = ( SELECT "auth"."uid"() AS "uid")) AND ("tm"."team_id" = "serving_signups"."group_id")))))));
+CREATE POLICY "Members can delete own rsvps" ON "public"."rsvps" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("user_id" = ( SELECT "auth"."uid"() AS "uid"))));
 
 
 
-CREATE POLICY "Members can delete own serving signups" ON "public"."serving_signups" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("created_by" = ( SELECT "auth"."uid"() AS "uid")) OR ( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_team_lead"("group_id"))));
-
-
-
-CREATE POLICY "Members can post own prayer requests" ON "public"."prayer_requests" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_member"() AS "is_member") AND ("author_id" = ( SELECT "auth"."uid"() AS "uid"))));
-
-
-
-CREATE POLICY "Members can pray for visible requests" ON "public"."prayer_responses" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_member"() AS "is_member") AND ("profile_id" = ( SELECT "auth"."uid"() AS "uid")) AND (EXISTS ( SELECT 1
-   FROM "public"."prayer_requests" "r"
-  WHERE ("r"."id" = "prayer_responses"."request_id")))));
-
-
-
-CREATE POLICY "Members can read about page" ON "public"."about_page" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_member"() AS "is_member")));
-
-
-
-CREATE POLICY "Members can read class teachers" ON "public"."class_teachers" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_member"() AS "is_member")));
+CREATE POLICY "Members can insert own rsvps on visible events" ON "public"."rsvps" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("user_id" = ( SELECT "auth"."uid"() AS "uid")) AND (EXISTS ( SELECT 1
+   FROM "public"."events" "e"
+  WHERE (("e"."id" = "rsvps"."event_id") AND ("e"."org_id" = "rsvps"."org_id"))))));
 
 
 
@@ -3379,11 +3873,21 @@ CREATE POLICY "Members can submit their own feedback" ON "public"."feedback" FOR
 
 
 
+CREATE POLICY "Members can update own rsvps on visible events" ON "public"."rsvps" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("user_id" = ( SELECT "auth"."uid"() AS "uid")) AND (EXISTS ( SELECT 1
+   FROM "public"."events" "e"
+  WHERE (("e"."id" = "rsvps"."event_id") AND ("e"."org_id" = "rsvps"."org_id")))))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("user_id" = ( SELECT "auth"."uid"() AS "uid")) AND (EXISTS ( SELECT 1
+   FROM "public"."events" "e"
+  WHERE (("e"."id" = "rsvps"."event_id") AND ("e"."org_id" = "rsvps"."org_id"))))));
+
+
+
 CREATE POLICY "Members can update own subscription token" ON "public"."calendar_subscription_tokens" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "auth"."uid"() AS "uid") = "user_id"))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "auth"."uid"() AS "uid") = "user_id")));
 
 
 
-CREATE POLICY "Members can view all events" ON "public"."events" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_member"() AS "is_member")));
+CREATE POLICY "Members can view attendees of visible signups" ON "public"."serving_signup_attendees" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (EXISTS ( SELECT 1
+   FROM "public"."serving_signups" "s"
+  WHERE (("s"."id" = "serving_signup_attendees"."signup_id") AND ("s"."org_id" = "serving_signup_attendees"."org_id"))))));
 
 
 
@@ -3399,49 +3903,13 @@ CREATE POLICY "Members can view family units" ON "public"."family_units" FOR SEL
 
 
 
-CREATE POLICY "Members can view fund methods" ON "public"."giving_fund_methods" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_member"() AS "is_member")));
-
-
-
-CREATE POLICY "Members can view giving funds" ON "public"."giving_funds" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_member"() AS "is_member")));
-
-
-
 CREATE POLICY "Members can view own subscription token" ON "public"."calendar_subscription_tokens" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "auth"."uid"() AS "uid") = "user_id")));
 
 
 
-CREATE POLICY "Members can view prayer call sessions" ON "public"."prayer_call_sessions" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_member"() AS "is_member")));
-
-
-
-CREATE POLICY "Members can view prayer responses" ON "public"."prayer_responses" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_member"() AS "is_member") AND (EXISTS ( SELECT 1
-   FROM "public"."prayer_requests" "r"
-  WHERE ("r"."id" = "prayer_responses"."request_id")))));
-
-
-
-CREATE POLICY "Members can view serving attendees" ON "public"."serving_signup_attendees" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_member"() AS "is_member")));
-
-
-
-CREATE POLICY "Members can view serving settings" ON "public"."serving_team_settings" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_member"() AS "is_member")));
-
-
-
-CREATE POLICY "Members can view serving signups" ON "public"."serving_signups" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_member"() AS "is_member")));
-
-
-
-CREATE POLICY "Members can view team members" ON "public"."team_members" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_member"() AS "is_member")));
-
-
-
-CREATE POLICY "Members can view teams" ON "public"."teams" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_member"() AS "is_member")));
-
-
-
-CREATE POLICY "Members can view visible prayer requests" ON "public"."prayer_requests" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_member"() AS "is_member") AND (("author_id" = ( SELECT "auth"."uid"() AS "uid")) OR (NOT "visible_to_warriors"))));
+CREATE POLICY "Members can view rsvps on visible events" ON "public"."rsvps" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (EXISTS ( SELECT 1
+   FROM "public"."events" "e"
+  WHERE (("e"."id" = "rsvps"."event_id") AND ("e"."org_id" = "rsvps"."org_id"))))));
 
 
 
@@ -3453,11 +3921,17 @@ CREATE POLICY "Org readable within request org" ON "public"."organizations" FOR 
 
 
 
-CREATE POLICY "Posters and admins can delete prayer requests" ON "public"."prayer_requests" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("author_id" = ( SELECT "auth"."uid"() AS "uid")) OR ( SELECT "public"."is_admin"() AS "is_admin"))));
+CREATE POLICY "Owners, team leads and group leaders can delete serving signups" ON "public"."serving_signups" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("created_by" = ( SELECT "auth"."uid"() AS "uid")) OR "public"."is_team_lead"("team_id") OR (EXISTS ( SELECT 1
+   FROM "public"."teams" "t"
+  WHERE (("t"."id" = "serving_signups"."team_id") AND ("t"."org_id" = "serving_signups"."org_id") AND "public"."is_group_leader"("t"."group_id")))))));
 
 
 
-CREATE POLICY "Posters and admins can update prayer requests" ON "public"."prayer_requests" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("author_id" = ( SELECT "auth"."uid"() AS "uid")) OR ( SELECT "public"."is_admin"() AS "is_admin"))));
+CREATE POLICY "Posters and group leaders can delete prayer requests" ON "public"."prayer_requests" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("author_id" = ( SELECT "auth"."uid"() AS "uid")) OR "public"."is_group_leader"("group_id"))));
+
+
+
+CREATE POLICY "Posters and group leaders can update prayer requests" ON "public"."prayer_requests" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("author_id" = ( SELECT "auth"."uid"() AS "uid")) OR "public"."is_group_leader"("group_id")))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id") AND (("author_id" = ( SELECT "auth"."uid"() AS "uid")) OR "public"."is_group_leader"("group_id"))));
 
 
 
@@ -3469,13 +3943,45 @@ CREATE POLICY "Profiles are visible per access rules" ON "public"."profiles" FOR
 
 
 
-CREATE POLICY "Series visible to all" ON "public"."lecture_series" FOR SELECT TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
-
-
-
 CREATE POLICY "Signup owners can remove attendees" ON "public"."serving_signup_attendees" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (EXISTS ( SELECT 1
    FROM "public"."serving_signups" "s"
-  WHERE (("s"."id" = "serving_signup_attendees"."signup_id") AND (("s"."created_by" = ( SELECT "auth"."uid"() AS "uid")) OR ( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_team_lead"("s"."group_id")))))));
+  WHERE (("s"."id" = "serving_signup_attendees"."signup_id") AND ("s"."org_id" = "serving_signup_attendees"."org_id") AND (("s"."created_by" = ( SELECT "auth"."uid"() AS "uid")) OR "public"."is_team_lead"("s"."team_id") OR (EXISTS ( SELECT 1
+           FROM "public"."teams" "t"
+          WHERE (("t"."id" = "s"."team_id") AND ("t"."org_id" = "s"."org_id") AND "public"."is_group_leader"("t"."group_id"))))))))));
+
+
+
+CREATE POLICY "Team leads and group leaders can insert serving settings" ON "public"."serving_team_settings" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("public"."is_team_lead"("team_id") OR (EXISTS ( SELECT 1
+   FROM "public"."teams" "t"
+  WHERE (("t"."id" = "serving_team_settings"."team_id") AND ("t"."org_id" = "serving_team_settings"."org_id") AND "public"."is_group_leader"("t"."group_id")))))));
+
+
+
+CREATE POLICY "Team leads and group leaders can log serving broadcasts" ON "public"."serving_broadcasts" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("sent_by" = ( SELECT "auth"."uid"() AS "uid")) AND ("public"."is_team_lead"("team_id") OR (EXISTS ( SELECT 1
+   FROM "public"."teams" "t"
+  WHERE (("t"."id" = "serving_broadcasts"."team_id") AND ("t"."org_id" = "serving_broadcasts"."org_id") AND "public"."is_group_leader"("t"."group_id")))))));
+
+
+
+CREATE POLICY "Team leads and group leaders can update serving settings" ON "public"."serving_team_settings" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("public"."is_team_lead"("team_id") OR (EXISTS ( SELECT 1
+   FROM "public"."teams" "t"
+  WHERE (("t"."id" = "serving_team_settings"."team_id") AND ("t"."org_id" = "serving_team_settings"."org_id") AND "public"."is_group_leader"("t"."group_id"))))))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("public"."is_team_lead"("team_id") OR (EXISTS ( SELECT 1
+   FROM "public"."teams" "t"
+  WHERE (("t"."id" = "serving_team_settings"."team_id") AND ("t"."org_id" = "serving_team_settings"."org_id") AND "public"."is_group_leader"("t"."group_id")))))));
+
+
+
+CREATE POLICY "Team leads and group leaders can view serving broadcasts" ON "public"."serving_broadcasts" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("public"."is_team_lead"("team_id") OR (EXISTS ( SELECT 1
+   FROM "public"."teams" "t"
+  WHERE (("t"."id" = "serving_broadcasts"."team_id") AND ("t"."org_id" = "serving_broadcasts"."org_id") AND "public"."is_group_leader"("t"."group_id")))))));
+
+
+
+CREATE POLICY "Team members and group leaders can create serving signups" ON "public"."serving_signups" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("created_by" = ( SELECT "auth"."uid"() AS "uid")) AND ("public"."is_team_lead"("team_id") OR (EXISTS ( SELECT 1
+   FROM "public"."team_members" "tm"
+  WHERE (("tm"."profile_id" = ( SELECT "auth"."uid"() AS "uid")) AND ("tm"."team_id" = "serving_signups"."team_id")))) OR (EXISTS ( SELECT 1
+   FROM "public"."teams" "t"
+  WHERE (("t"."id" = "serving_signups"."team_id") AND ("t"."org_id" = "serving_signups"."org_id") AND "public"."is_group_leader"("t"."group_id")))))));
 
 
 
@@ -3525,6 +4031,9 @@ ALTER TABLE "public"."group_member_labels" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."group_members" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."group_settings" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."groups" ENABLE ROW LEVEL SECURITY;
@@ -3601,6 +4110,10 @@ CREATE POLICY "org isolation" ON "public"."group_member_labels" AS RESTRICTIVE T
 
 
 CREATE POLICY "org isolation" ON "public"."group_members" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."group_settings" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
 
@@ -3821,7 +4334,7 @@ GRANT ALL ON FUNCTION "public"."get_profile_role"("profile_id" "uuid") TO "servi
 
 
 
-GRANT ALL ON FUNCTION "public"."giving_can_manage_fund"("_fund_id" "uuid") TO "anon";
+REVOKE ALL ON FUNCTION "public"."giving_can_manage_fund"("_fund_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."giving_can_manage_fund"("_fund_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."giving_can_manage_fund"("_fund_id" "uuid") TO "service_role";
 
@@ -3830,6 +4343,15 @@ GRANT ALL ON FUNCTION "public"."giving_can_manage_fund"("_fund_id" "uuid") TO "s
 GRANT ALL ON FUNCTION "public"."giving_stewards_can_manage"() TO "anon";
 GRANT ALL ON FUNCTION "public"."giving_stewards_can_manage"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."giving_stewards_can_manage"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."group_content_backfill"() FROM PUBLIC;
+
+
+
+REVOKE ALL ON FUNCTION "public"."group_member_removed_leaves_teams"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."group_member_removed_leaves_teams"() TO "service_role";
 
 
 
@@ -3936,6 +4458,16 @@ GRANT ALL ON FUNCTION "public"."serving_signup_apply"("_group_id" "uuid", "_serv
 REVOKE ALL ON FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_date" "date", "_attendee_ids" "uuid"[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_date" "date", "_attendee_ids" "uuid"[]) TO "authenticated";
 GRANT ALL ON FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_date" "date", "_attendee_ids" "uuid"[]) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."team_member_requires_group_membership"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."team_member_requires_group_membership"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."team_moved_prunes_members"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."team_moved_prunes_members"() TO "service_role";
 
 
 
@@ -4056,6 +4588,12 @@ GRANT ALL ON TABLE "public"."group_member_labels" TO "service_role";
 GRANT ALL ON TABLE "public"."group_members" TO "anon";
 GRANT ALL ON TABLE "public"."group_members" TO "authenticated";
 GRANT ALL ON TABLE "public"."group_members" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."group_settings" TO "anon";
+GRANT ALL ON TABLE "public"."group_settings" TO "authenticated";
+GRANT ALL ON TABLE "public"."group_settings" TO "service_role";
 
 
 
