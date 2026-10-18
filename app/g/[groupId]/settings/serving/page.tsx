@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { siteConfig } from "@/lib/config";
 import { getGroupSettings } from "@/lib/groups/settings";
+import { defaultServingLinkMode } from "@/lib/serving/config";
 import { requireGroupLeader } from "@/lib/groups/server";
 import { AdminServingSetup } from "@/components/serving/AdminServingSetup";
 import { ServingLinkModeForm } from "@/components/groups/ServingLinkModeForm";
@@ -62,7 +63,10 @@ export default async function GroupServingSettingsPage({
       </div>
 
       <section className="rounded-2xl border border-border bg-card p-6 mb-10">
-        <ServingLinkModeForm groupId={group.id} initialMode={settings.serving_link_mode} />
+        <ServingLinkModeForm
+          groupId={group.id}
+          initialMode={settings.serving_link_mode ?? defaultServingLinkMode()}
+        />
       </section>
 
       {candidateTeams.length > 0 && (

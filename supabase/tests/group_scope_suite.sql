@@ -392,6 +392,55 @@ end $$;
 select is(current_setting('gs.rsvp_err_b'), '42501', 'a member of A cannot RSVP to an event of B');
 select is(current_setting('gs.rsvp_err_a'), 'ok', 'positive control: the same member RSVPs to an event of A');
 
+-- ── 2b. Updates: a writer cannot move a row into a group they are not in ────
+-- The author and steward arms grant the UPDATE; only WITH CHECK pins the
+-- target group. Rows without dependants are used so the composite FKs cannot
+-- mask a missing predicate.
+do $$
+declare
+  member_a uuid := current_setting('gs.member_a')::uuid;
+  org uuid := current_setting('gs.org')::uuid;
+  grp_a uuid := current_setting('gs.grp_a')::uuid;
+  grp_b uuid := current_setting('gs.grp_b')::uuid;
+  req uuid; fund uuid; err text; n int;
+begin
+  insert into public.prayer_requests (org_id, group_id, author_id, body, category)
+    values (org, grp_a, member_a, 'movable', 'health') returning id into req;
+  insert into public.giving_funds (org_id, group_id, name, steward_id, created_by)
+    values (org, grp_a, 'movable', member_a, member_a) returning id into fund;
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', member_a)::text, true);
+
+  err := 'none';
+  begin
+    update public.prayer_requests set group_id = grp_b where id = req;
+  exception when others then err := sqlstate; end;
+  perform set_config('gs.mv_prayer', err, true);
+  update public.prayer_requests set body = 'edited' where id = req;
+  get diagnostics n = row_count;
+  perform set_config('gs.ok_prayer_update', n::text, true);
+
+  err := 'none';
+  begin
+    update public.giving_funds set group_id = grp_b where id = fund;
+  exception when others then err := sqlstate; end;
+  perform set_config('gs.mv_fund', err, true);
+  update public.giving_funds set name = 'edited' where id = fund;
+  get diagnostics n = row_count;
+  perform set_config('gs.ok_fund_update', n::text, true);
+
+  reset role;
+end $$;
+select is(current_setting('gs.mv_prayer'), '42501',
+  'a poster cannot move their own prayer request into a group they are not in');
+select is(current_setting('gs.ok_prayer_update'), '1',
+  'non-vacuity: the poster can still edit the request inside their group');
+select is(current_setting('gs.mv_fund'), '42501',
+  'a steward cannot move their fund into a group they are not in');
+select is(current_setting('gs.ok_fund_update'), '1',
+  'non-vacuity: the steward can still edit the fund inside their group');
+
 -- ── 3. Structural pins ──────────────────────────────────────────────────────
 select is(
   (select count(*)::int

@@ -481,7 +481,7 @@ export interface GroupSettings {
   zoom_meeting_time: string | null;
   weekly_prayer_call_url: string | null;
   weekly_prayer_call_time: string | null;
-  serving_link_mode: "signed" | "login";
+  serving_link_mode: "signed" | "login" | null;
   updated_by: string | null;
   updated_at: string;
 }

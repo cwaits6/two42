@@ -96,6 +96,21 @@ describe("getGroupSettings", () => {
     });
   });
 
+  it("leaves the link mode unset when the row never chose one", async () => {
+    const { client } = makeClient({
+      data: {
+        weekly_zoom_url: null,
+        zoom_meeting_time: null,
+        weekly_prayer_call_url: null,
+        weekly_prayer_call_time: null,
+        serving_link_mode: null,
+      },
+      error: null,
+    });
+
+    expect((await getGroupSettings(client, "org-1", "grp-1")).serving_link_mode).toBeNull();
+  });
+
   it("throws when the read fails instead of reporting the defaults", async () => {
     const { client } = makeClient({ data: null, error: { message: "boom" } });
 

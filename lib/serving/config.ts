@@ -8,6 +8,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  */
 export type ServingLinkMode = "signed" | "login";
 
+export function defaultServingLinkMode(): ServingLinkMode {
+  return process.env.SERVING_LINK_MODE === "login" ? "login" : "signed";
+}
+
 export async function getServingLinkMode(
   supabase: SupabaseClient,
   orgId: string,
@@ -37,6 +41,7 @@ export async function getServingLinkMode(
   }
 
   // data === null here means genuinely unconfigured, not failed.
-  const value = data?.serving_link_mode || process.env.SERVING_LINK_MODE || "signed";
-  return value === "login" ? "login" : "signed";
+  return data?.serving_link_mode === "login" || data?.serving_link_mode === "signed"
+    ? data.serving_link_mode
+    : defaultServingLinkMode();
 }

@@ -16,7 +16,7 @@ export const GROUP_SETTINGS_DEFAULTS: GroupSettingsValues = {
   zoom_meeting_time: null,
   weekly_prayer_call_url: null,
   weekly_prayer_call_time: null,
-  serving_link_mode: "signed",
+  serving_link_mode: null,
 };
 
 /**
@@ -49,7 +49,10 @@ export async function getGroupSettings(
     zoom_meeting_time: data.zoom_meeting_time ?? null,
     weekly_prayer_call_url: data.weekly_prayer_call_url ?? null,
     weekly_prayer_call_time: data.weekly_prayer_call_time ?? null,
-    serving_link_mode: data.serving_link_mode === "login" ? "login" : "signed",
+    serving_link_mode:
+      data.serving_link_mode === "login" || data.serving_link_mode === "signed"
+        ? data.serving_link_mode
+        : null,
   };
 }
 

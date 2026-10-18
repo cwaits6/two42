@@ -53,7 +53,9 @@ create table public.group_settings (
   zoom_meeting_time text,
   weekly_prayer_call_url text,
   weekly_prayer_call_time text,
-  serving_link_mode text not null default 'signed'
+  -- NULL defers to the SERVING_LINK_MODE environment default; a stored value
+  -- is an explicit choice by the group's leader.
+  serving_link_mode text
     check (serving_link_mode in ('signed', 'login')),
   updated_by uuid references auth.users (id) on delete set null,
   updated_at timestamptz not null default now(),
@@ -255,8 +257,8 @@ begin
       nullif(max(value) filter (where key = 'zoom_meeting_time'), ''),
       nullif(max(value) filter (where key = 'weekly_prayer_call_url'), ''),
       nullif(max(value) filter (where key = 'weekly_prayer_call_time'), ''),
-      case when max(value) filter (where key = 'serving_link_mode') = 'login'
-           then 'login' else 'signed' end
+      case max(value) filter (where key = 'serving_link_mode')
+           when 'login' then 'login' when 'signed' then 'signed' end
     from public.site_settings
     where org_id = _org.id
       and key in ('weekly_zoom_url', 'zoom_meeting_time', 'weekly_prayer_call_url',
@@ -540,6 +542,8 @@ create policy "Group members can post own prayer requests" on public.prayer_requ
     and public.is_group_member(group_id)
     and author_id = (select auth.uid())
   );
+-- WITH CHECK pins the target row to a group the writer belongs to: the
+-- author arm alone would let a poster move a request into any group.
 create policy "Posters and group leaders can update prayer requests" on public.prayer_requests
   for update to authenticated
   using (
@@ -548,6 +552,7 @@ create policy "Posters and group leaders can update prayer requests" on public.p
   )
   with check (
     org_id = (select public.app_request_org_id())
+    and public.is_group_member(group_id)
     and (author_id = (select auth.uid()) or public.is_group_leader(group_id))
   );
 create policy "Posters and group leaders can delete prayer requests" on public.prayer_requests
@@ -636,6 +641,7 @@ create policy "Group leaders and stewards can update funds" on public.giving_fun
   )
   with check (
     org_id = (select public.app_request_org_id())
+    and public.is_group_member(group_id)
     and (
       public.is_group_leader(group_id)
       or ((select public.giving_stewards_can_manage()) and steward_id = (select auth.uid()))

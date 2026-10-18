@@ -563,13 +563,13 @@ isOneToOne: false
                   ]
                 },"group_settings": {
                   Row: {
-                    "group_id": string,"org_id": string,"serving_link_mode": string,"updated_at": string,"updated_by": string | null,"weekly_prayer_call_time": string | null,"weekly_prayer_call_url": string | null,"weekly_zoom_url": string | null,"zoom_meeting_time": string | null
+                    "group_id": string,"org_id": string,"serving_link_mode": string | null,"updated_at": string,"updated_by": string | null,"weekly_prayer_call_time": string | null,"weekly_prayer_call_url": string | null,"weekly_zoom_url": string | null,"zoom_meeting_time": string | null
                   }
                   Insert: {
-                    "group_id": string,"org_id"?: string,"serving_link_mode"?: string,"updated_at"?: string,"updated_by"?: string | null,"weekly_prayer_call_time"?: string | null,"weekly_prayer_call_url"?: string | null,"weekly_zoom_url"?: string | null,"zoom_meeting_time"?: string | null
+                    "group_id": string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null,"weekly_prayer_call_time"?: string | null,"weekly_prayer_call_url"?: string | null,"weekly_zoom_url"?: string | null,"zoom_meeting_time"?: string | null
                   }
                   Update: {
-                    "group_id"?: string,"org_id"?: string,"serving_link_mode"?: string,"updated_at"?: string,"updated_by"?: string | null,"weekly_prayer_call_time"?: string | null,"weekly_prayer_call_url"?: string | null,"weekly_zoom_url"?: string | null,"zoom_meeting_time"?: string | null
+                    "group_id"?: string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null,"weekly_prayer_call_time"?: string | null,"weekly_prayer_call_url"?: string | null,"weekly_zoom_url"?: string | null,"zoom_meeting_time"?: string | null
                   }
                   Relationships: [
                     {
@@ -811,6 +811,31 @@ isOneToOne: false
                   }
                   Relationships: [
                     
+                  ]
+                },"payment_handles": {
+                  Row: {
+                    "handle": string,"method": string,"profile_id": string,"updated_at": string
+                  }
+                  Insert: {
+                    "handle": string,"method": string,"profile_id": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "handle"?: string,"method"?: string,"profile_id"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "payment_handles_profile_id_fkey"
+      columns: ["profile_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "payment_handles_profile_id_fkey"
+      columns: ["profile_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id"]
+    }
                   ]
                 },"platform_admins": {
                   Row: {
