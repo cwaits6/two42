@@ -3,6 +3,8 @@
 // 03:00 ET during EST; the schedule is not localized) — defined in
 // supabase/migrations/20260729000000_reminder_cron_schedules.sql
 // Sends email reminders to users RSVPed to events starting in the next 24 hours.
+// Events belong to a group, so each org run fans out per group and only
+// mails RSVPed members who are still in that group.
 //
 // Runs with the service key (BYPASSRLS), so tenant isolation lives in the
 // query text: iterates every active organization and filters each query on
@@ -20,7 +22,11 @@ import {
   resolveEmailBranding,
   type EmailBranding,
 } from "../_shared/branding.ts";
-import { chunk } from "../_shared/chunk.ts";
+import {
+  resolveEventReminderRecipients,
+  type EventRecipientClient,
+} from "../_shared/event-recipients.ts";
+import { listGroups, type GroupClient } from "../_shared/groups.ts";
 import { escapeHtml } from "../_shared/html.ts";
 import { resolveServiceKey } from "../_shared/service-key.ts";
 import { reserveEmailQuota } from "../_shared/quota.ts";
@@ -29,6 +35,7 @@ import {
   listActiveOrgs,
   OrgRunError,
   summarize,
+  type ItemFailure,
   type Org,
   type OrgListClient,
   type OrgRunCounts,
@@ -106,8 +113,6 @@ async function sendEmail(
 
 // ── Per-org run ───────────────────────────────────────────────────────────────
 
-const IN_CHUNK_SIZE = 200;
-
 async function runForOrg(
   supabase: ServiceClient,
   org: Org,
@@ -120,104 +125,75 @@ async function runForOrg(
 
   let sent = 0;
   let sendFailures = 0;
+  const itemFailures: ItemFailure[] = [];
 
-  // Find events starting in the next 24 hours
-  const { data: events, error: eventsError } = await supabase
-    .from("events")
-    .select("id, title, start_time, location")
-    .eq("org_id", org.id)
-    .gte("start_time", now.toISOString())
-    .lte("start_time", tomorrow.toISOString());
-
-  if (eventsError) {
-    throw new OrgRunError(`events query failed: ${eventsError.message}`, { sent, sendFailures });
+  // Genuinely org-level: no group loop has begun, so there is nothing to
+  // isolate per-group yet. Same TS2589 reason as the OrgListClient cast in
+  // Deno.serve.
+  let groups;
+  try {
+    groups = await listGroups(supabase as unknown as GroupClient, org.id);
+  } catch (err) {
+    throw new OrgRunError(err instanceof Error ? err.message : String(err), { sent, sendFailures });
   }
-  if (!events?.length) return { sent, sendFailures };
 
-  for (const event of events) {
-    // Get RSVPs with "yes" or "maybe"
-    const { data: rsvps, error: rsvpsError } = await supabase
-      .from("rsvps")
-      .select("user_id")
-      .eq("org_id", org.id)
-      .eq("event_id", event.id)
-      .in("status", ["yes", "maybe"]);
-
-    if (rsvpsError) {
-      throw new OrgRunError(`rsvps query failed: ${rsvpsError.message}`, { sent, sendFailures });
-    }
-    if (!rsvps?.length) continue;
-
-    const userIds = rsvps.map((r) => r.user_id);
-
-    // One batched read of the trigger-synced profiles.email column replaces
-    // the old per-user admin identity lookups (two round trips per attendee).
-    // A profile can be missing for an RSVP user_id; iterating the returned
-    // rows skips it.
-    const profiles: Array<{
-      id: string;
-      first_name: string | null;
-      preferred_name: string | null;
-      email: string | null;
-    }> = [];
-    for (const ids of chunk(userIds, IN_CHUNK_SIZE)) {
-      const { data: batch, error: profilesError } = await supabase
-        .from("profiles")
-        .select("id, first_name, preferred_name, email")
+  // Per-group fault isolation: each group's body runs inside a try so one
+  // group's failure is recorded in itemFailures and the org's remaining
+  // groups still run. Query failures inside the loop throw plain Errors (not
+  // OrgRunError) so the catch records them per-group instead of aborting the
+  // org; `sent` / `sendFailures` are function-scoped, so partial counts
+  // survive a caught group.
+  for (const group of groups) {
+    try {
+      const { data: events, error: eventsError } = await supabase
+        .from("events")
+        .select("id, title, start_time, location")
         .eq("org_id", org.id)
-        .in("id", ids);
-      if (profilesError) {
-        throw new OrgRunError(`profiles query failed: ${profilesError.message}`, { sent, sendFailures });
-      }
-      profiles.push(...((batch ?? []) as typeof profiles));
-    }
+        .eq("group_id", group.id)
+        .gte("start_time", now.toISOString())
+        .lte("start_time", tomorrow.toISOString());
+      if (eventsError) throw new Error(`events query failed: ${eventsError.message}`);
+      if (!events?.length) continue;
 
-    // Pending profiles (e.g. spouses who have never logged in) can have no
-    // email — skip, don't throw.
-    const recipients = profiles.filter((p): p is (typeof profiles)[number] & { email: string } => {
-      if (!p.email) {
-        console.error(
-          "[org %s] skipping reminder: profile %s has no email (event %s)",
-          org.slug,
-          p.id,
+      for (const event of events) {
+        const recipients = await resolveEventReminderRecipients(
+          supabase as unknown as EventRecipientClient,
+          org.id,
+          group.id,
           event.id,
         );
-        return false;
-      }
-      return true;
-    });
 
-    // Reserve once per event batch against the org's daily cap,
-    // for the final filtered set only. A cap-hit is a deliberate skip of
-    // this event's batch: logged, not a sendFailure, so it does not change
-    // the 200/500 contract — and reserveEmailQuota never throws, so it adds
-    // no new failure surface to this function's throw-on-query-error flow.
-    const allowed = await reserveEmailQuota(supabase, org.id, recipients.length);
-    if (!allowed) {
-      console.warn(
-        "[org %s] event %s: daily email cap reached, skipping %d reminder(s)",
-        org.slug,
-        event.id,
-        recipients.length,
-      );
-      continue;
-    }
+        // Reserve once per event batch against the org's daily cap,
+        // for the final filtered set only. A cap-hit is a deliberate skip of
+        // this event's batch: logged, not a sendFailure or an itemFailure, so
+        // it does not change the 200/500 contract — and reserveEmailQuota
+        // never throws, so it adds no new failure surface to the loop.
+        const allowed = await reserveEmailQuota(supabase, org.id, recipients.length);
+        if (!allowed) {
+          console.warn(
+            "[org %s] event %s: daily email cap reached, skipping %d reminder(s)",
+            org.slug,
+            event.id,
+            recipients.length,
+          );
+          continue;
+        }
 
-    for (const profile of recipients) {
-      const eventDate = new Date(event.start_time).toLocaleDateString("en-US", {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      });
+        for (const profile of recipients) {
+          const eventDate = new Date(event.start_time).toLocaleDateString("en-US", {
+            weekday: "long",
+            month: "long",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          });
 
-      if (await sendEmail({
-        to: profile.email,
-        refId: profile.id,
-        branding,
-        subject: `Reminder: ${event.title} is tomorrow!`,
-        html: `
+          if (await sendEmail({
+            to: profile.email,
+            refId: profile.id,
+            branding,
+            subject: `Reminder: ${event.title} is tomorrow!`,
+            html: `
             <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
               <h1 style="color: ${branding.accent}; font-size: 28px;">Event Reminder</h1>
               <p style="font-size: 18px; line-height: 1.6; color: #44403c;">
@@ -229,18 +205,33 @@ async function runForOrg(
                 </p>
                 ${event.location ? `<p style="font-size: 18px; margin: 8px 0 0; color: #44403c;"><strong>Where:</strong> ${escapeHtml(event.location)}</p>` : ""}
               </div>
-              <a href="${baseUrl}/events"
+              <a href="${baseUrl}/g/${group.id}/calendar/${event.id}"
                  style="display: inline-block; background-color: ${branding.accent}; color: white; padding: 16px 32px; text-decoration: none; border-radius: 8px; font-size: 18px; margin-top: 20px;">
                 View Event
               </a>
             </div>
           `,
-      })) sent++;
-      else sendFailures++;
+          })) sent++;
+          else sendFailures++;
+        }
+      }
+    } catch (err) {
+      // Keyed by group id, never the group name — names are org-defined free
+      // text (tenant content) and fragile as diagnostic keys.
+      console.error(
+        "[org %s] group %s failed, continuing with remaining groups:",
+        org.slug,
+        group.id,
+        err,
+      );
+      itemFailures.push({
+        item: group.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
-  return { sent, sendFailures };
+  return { sent, sendFailures, itemFailures };
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -261,19 +252,18 @@ Deno.serve(async () => {
         org,
         resolveEmailBranding(org.branding, BRANDING_DEFAULTS, org.slug, org.org_email_domains[0] ?? null),
       )));
-    if (summary.failed.length > 0 || summary.emailsFailed > 0) {
+    if (summary.failed.length > 0 || summary.failedItems.length > 0 || summary.emailsFailed > 0) {
       console.error(
-        "run completed with failures: %d/%d orgs failed, %d emails rejected",
+        "run completed with failures: %d/%d orgs failed, %d groups failed, %d emails rejected",
         summary.failed.length,
         summary.orgs,
+        summary.failedItems.length,
         summary.emailsFailed,
       );
     }
     // Status contract: see summarize() in _shared/orgs.ts — 500 when any org
-    // or item failed (pg_net records it in net._http_response; nothing
-    // retries a 5xx, so no duplicate sends), 200 only for a clean run. This
-    // function has no inner loop, so failedItems is always empty today; the
-    // check keeps the contract uniform across both functions.
+    // OR any group failed (pg_net records it in net._http_response; nothing
+    // retries a 5xx, so no duplicate sends), 200 only for a clean run.
     return new Response(
       JSON.stringify({ message: `Sent ${summary.emailsSent} reminder emails`, ...summary }),
       {

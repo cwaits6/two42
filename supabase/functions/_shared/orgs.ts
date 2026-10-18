@@ -87,8 +87,8 @@ export interface ItemFailure {
  * refused or that never left the function — without it, a run in which every
  * send failed is byte-identical to a legitimately quiet day, because a failed
  * send throws nothing and so never reaches `failed[]`. `itemFailures` is the
- * sub-org failure channel: optional, so a runner with no inner loop
- * (send-event-reminders) is unchanged.
+ * sub-org failure channel (one team, one group): optional, so a runner with
+ * no inner loop is unchanged.
  */
 export interface OrgRunCounts {
   sent: number;
