@@ -52,7 +52,7 @@ function GroupsTabInner() {
         list={
           <div className="space-y-2.5">
             {memberships.map((g) => {
-              const count = groupRosters[g.id]?.size ?? 0;
+              const count = roster(g).length;
               return (
                 <DirRow
                   key={g.id}

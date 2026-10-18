@@ -38,7 +38,7 @@ function adultNames(family: FamilyDirectoryFull): string {
 }
 
 function FamiliesTabInner() {
-  const { members, families, profileMap, familyMap } = useDirectory();
+  const { members, families, memberships, profileMap, familyMap } = useDirectory();
   const [query, setQuery] = useState("");
   const [panel, setPanel] = useState<Panel | null>(null);
   const searchParams = useSearchParams();
@@ -146,7 +146,11 @@ function FamiliesTabInner() {
       list={
         entries.length === 0 ? (
           <p className="py-8 text-center text-base text-muted-foreground">
-            No members match your search.
+            {memberships.length === 0
+              ? "You are not in a group yet."
+              : query
+                ? "No families match your search."
+                : "No families to show."}
           </p>
         ) : (
           Object.keys(sections)
