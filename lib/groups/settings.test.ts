@@ -96,10 +96,12 @@ describe("getGroupSettings", () => {
     });
   });
 
-  it("returns the defaults and logs when the read fails", async () => {
+  it("throws when the read fails instead of reporting the defaults", async () => {
     const { client } = makeClient({ data: null, error: { message: "boom" } });
 
-    expect(await getGroupSettings(client, "org-1", "grp-1")).toEqual(GROUP_SETTINGS_DEFAULTS);
+    await expect(getGroupSettings(client, "org-1", "grp-1")).rejects.toThrow(
+      /Failed to load group settings/
+    );
     expect(console.error).toHaveBeenCalled();
   });
 });

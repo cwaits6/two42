@@ -21,6 +21,8 @@ export const GROUP_SETTINGS_DEFAULTS: GroupSettingsValues = {
 
 /**
  * The group's settings row, or the defaults when none has been saved yet.
+ * A failed read is thrown rather than reported as the defaults: the About
+ * editor saves these values back, and an outage must not read as "blank".
  * The client is a parameter and so untyped as to privilege; `orgId` must be
  * the caller's already-validated org and both predicates are mandatory.
  */
@@ -39,7 +41,7 @@ export async function getGroupSettings(
     .maybeSingle();
   if (error) {
     console.error("Failed to load group settings for group %s:", groupId, error);
-    return GROUP_SETTINGS_DEFAULTS;
+    throw new Error(`Failed to load group settings: ${error.message}`);
   }
   if (!data) return GROUP_SETTINGS_DEFAULTS;
   return {
