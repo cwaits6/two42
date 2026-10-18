@@ -418,7 +418,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
                       </p>
                     </div>
                     <Link
-                      href={href(`/announcements/${a.id}`)}
+                      href={href(`/announcements#${a.id}`)}
                       className="font-sans text-base font-semibold text-brand-primary hover:underline whitespace-nowrap pt-1"
                     >
                       Read →

@@ -239,8 +239,10 @@ the URL and the membership list the root layout serialised.
 `scripts/check-service-role-org-scope.mjs`: they take a `SupabaseClient`
 parameter, so every chain carries the caller's already-validated `org_id`
 (the viewer's own RLS-scoped `profiles.org_id`). The membership loader
-fails closed to an empty list on error, which resolves no group anywhere.
-No service-role client is involved in group context.
+throws on a failed read; the root layout and the middleware's legacy
+redirect are the only callers that catch it, and both fall back to no
+group, so an error never resolves a group anywhere. No service-role
+client is involved in group context.
 
 ## Storage tenancy
 
