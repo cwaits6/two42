@@ -8,6 +8,8 @@ export const siteConfig = {
     "To be the body of Christ through fellowship, discipleship and the faithful study of the Word of God.",
   logoMonogram: process.env.NEXT_PUBLIC_LOGO_MONOGRAM || "42",
   url: process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
+  // Server components format dates in this zone; the server itself runs in UTC.
+  timeZone: process.env.NEXT_PUBLIC_TIME_ZONE || "America/New_York",
   email: {
     from:
       process.env.NEXT_PUBLIC_EMAIL_FROM ||

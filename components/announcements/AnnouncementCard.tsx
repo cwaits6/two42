@@ -37,7 +37,10 @@ export function AnnouncementCard({ announcement }: AnnouncementCardProps) {
   const blocks = useMemo(() => parseBlocks(announcement.content), [announcement.content]);
 
   return (
-    <div className="bg-white rounded-2xl border-2 border-border overflow-hidden hover:border-brand-accent/40 hover:shadow-lg transition-all duration-200">
+    <div
+      id={announcement.id}
+      className="scroll-mt-24 bg-white rounded-2xl border-2 border-border overflow-hidden hover:border-brand-accent/40 hover:shadow-lg transition-all duration-200"
+    >
       {/* Top accent */}
       <div
         className="h-1.5 w-full bg-brand-accent"

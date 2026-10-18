@@ -7,26 +7,29 @@ import type { Profile } from "@/lib/types";
 interface AppShellProps {
   profile: Profile | null;
   hasServingAccess: boolean;
+  orgName: string;
   children: React.ReactNode;
 }
 
+// /serving stays so /serving/go keeps its frame; the rest of /serving/*
+// redirects under the group before it renders.
 export const SIDEBAR_ROUTES = [
+  "/g",
   "/dashboard",
-  "/events",
-  "/announcements",
-  "/lectures",
+  "/calendar",
   "/directory",
+  "/find-a-group",
   "/serving",
-  "/prayer",
   "/profile",
   "/settings",
 ];
 
+// Boundary-matched so "/g" never claims "/grace/join".
 export function isSidebarRoute(pathname: string): boolean {
-  return SIDEBAR_ROUTES.some((r) => pathname.startsWith(r));
+  return SIDEBAR_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"));
 }
 
-export function AppShell({ profile, hasServingAccess, children }: AppShellProps) {
+export function AppShell({ profile, hasServingAccess, orgName, children }: AppShellProps) {
   const pathname = usePathname();
   const isMember =
     profile && ["member", "content_editor", "admin"].includes(profile.role);
@@ -44,7 +47,7 @@ export function AppShell({ profile, hasServingAccess, children }: AppShellProps)
 
   return (
     <div className="flex flex-1">
-      <Sidebar profile={profile!} hasServingAccess={hasServingAccess} />
+      <Sidebar profile={profile!} hasServingAccess={hasServingAccess} orgName={orgName} />
       <main className="flex-1 overflow-y-auto">{children}</main>
     </div>
   );

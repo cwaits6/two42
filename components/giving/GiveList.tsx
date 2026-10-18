@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronDown, Pencil } from "lucide-react";
 import { AvatarCluster } from "@/components/directory/AvatarCluster";
 import { MethodButton } from "@/components/giving/MethodButton";
+import { groupPath } from "@/lib/groups/active";
 import type { ResolvedMethod } from "@/lib/giving/methods";
 
 export interface FundView {
@@ -25,7 +26,7 @@ export interface FundView {
  * Direction A — quiet accordion list. One fund open at a time; payment
  * buttons expand in place so paying is two taps from page load.
  */
-export function GiveList({ funds }: { funds: FundView[] }) {
+export function GiveList({ funds, groupId }: { funds: FundView[]; groupId: string }) {
   const [openId, setOpenId] = useState<string | null>(funds[0]?.id ?? null);
 
   return (
@@ -94,7 +95,7 @@ export function GiveList({ funds }: { funds: FundView[] }) {
                 {fund.canManage && (
                   <div className="mt-3.5 flex justify-end text-sm">
                     <Link
-                      href={`/give/${fund.id}/edit`}
+                      href={groupPath(groupId, `/give/${fund.id}/edit`)}
                       className="flex items-center gap-1 font-semibold text-brand-primary hover:underline"
                     >
                       <Pencil className="h-3.5 w-3.5" aria-hidden="true" />

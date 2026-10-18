@@ -9,16 +9,23 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import type { DatesSetArg, EventClickArg, EventInput } from "@fullcalendar/core";
 import type { DateClickArg } from "@fullcalendar/interaction";
+import { groupPath } from "@/lib/groups/active";
 import { buildExceptionMap, expandOccurrences } from "@/lib/recurrence";
 import type { Event, EventCalendar } from "@/lib/types";
 
 interface EventCalendarViewProps {
+  groupId: string;
   events: (Event & { calendar?: EventCalendar | null })[];
   visibleCalendarIds: Set<string | null>;
   isAdmin?: boolean;
 }
 
-export default function EventCalendarView({ events, visibleCalendarIds, isAdmin }: EventCalendarViewProps) {
+export default function EventCalendarView({
+  groupId,
+  events,
+  visibleCalendarIds,
+  isAdmin,
+}: EventCalendarViewProps) {
   const router = useRouter();
   const calendarRef = useRef<FullCalendar>(null);
   const [currentView, setCurrentView] = useState("dayGridMonth");
@@ -65,10 +72,10 @@ export default function EventCalendarView({ events, visibleCalendarIds, isAdmin 
       // Recurring series occurrence — pass the occurrence date so the detail
       // page and edit page know which specific occurrence is being viewed.
       const occurrence = encodeURIComponent(event.start_time);
-      router.push(`/events/${event.id}?occurrence=${occurrence}`);
+      router.push(groupPath(groupId, `/calendar/${event.id}?occurrence=${occurrence}`));
     } else {
       // Regular event or per-occurrence exception
-      router.push(`/events/${event.id}`);
+      router.push(groupPath(groupId, `/calendar/${event.id}`));
     }
   };
 

@@ -9,6 +9,7 @@ import { displayName, initials } from "@/lib/names";
 import { BackLink } from "@/components/directory/BackLink";
 import { DirRow, DirSectionLabel } from "@/components/directory/DirRow";
 import { useDirectoryData } from "@/components/directory/useDirectoryData";
+import { useDirectoryHref } from "@/components/directory/useDirectoryHref";
 import { DirectoryListSkeleton } from "@/components/directory/DirectoryListSkeleton";
 import {
   MONTH_NAMES,
@@ -33,6 +34,7 @@ interface BirthdayEntry {
 
 export default function BirthdaysPage() {
   const { members, families, loading } = useDirectoryData();
+  const directoryHref = useDirectoryHref();
   const [includeNonClassMembers, setIncludeNonClassMembers] = useState(false);
 
   const today = useMemo(() => {
@@ -99,7 +101,7 @@ export default function BirthdaysPage() {
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-3xl">
-      <BackLink href="/directory">Back to Directory</BackLink>
+      <BackLink href={directoryHref}>Back to Directory</BackLink>
       <h1 className="font-serif text-4xl md:text-5xl font-medium tracking-tight text-foreground mt-4 mb-6">
         Birthdays
       </h1>
@@ -141,7 +143,7 @@ export default function BirthdaysPage() {
                         key={entry.key}
                         href={
                           entry.profileId
-                            ? `/directory/families?person=${entry.profileId}`
+                            ? `${directoryHref}/families?person=${entry.profileId}`
                             : undefined
                         }
                         highlight={soon}

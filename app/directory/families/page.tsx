@@ -12,6 +12,7 @@ import { DirRow, DirSectionLabel } from "@/components/directory/DirRow";
 import { FamilyCard } from "@/components/directory/FamilyCard";
 import { PersonCard } from "@/components/directory/PersonCard";
 import { useDirectoryData } from "@/components/directory/useDirectoryData";
+import { useDirectoryHref } from "@/components/directory/useDirectoryHref";
 import { DirectoryListSkeleton } from "@/components/directory/DirectoryListSkeleton";
 import type { DirectoryProfile, FamilyDirectoryFull } from "@/lib/types";
 
@@ -38,6 +39,7 @@ function adultNames(family: FamilyDirectoryFull): string {
 
 function FamiliesPageInner() {
   const { members, families, loading, profileMap, familyMap } = useDirectoryData();
+  const directoryHref = useDirectoryHref();
   const [query, setQuery] = useState("");
   const [panel, setPanel] = useState<Panel | null>(null);
   const searchParams = useSearchParams();
@@ -131,7 +133,7 @@ function FamiliesPageInner() {
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-5xl">
-      <BackLink href="/directory">Back to Directory</BackLink>
+      <BackLink href={directoryHref}>Back to Directory</BackLink>
       <h1 className="font-serif text-4xl md:text-5xl font-medium tracking-tight text-foreground mt-4 mb-6">
         Families
       </h1>
