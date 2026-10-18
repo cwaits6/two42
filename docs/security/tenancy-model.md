@@ -318,8 +318,13 @@ group-owned, the verified active group's id. The membership loader throws
 on a failed read (of memberships or of the calendars that give them their
 color); the root layout and the middleware's legacy redirect are the only
 callers that catch it, and both fall back to no group, so an error never
-resolves a group anywhere. No service-role client is involved in group
-context.
+resolves a group anywhere. `getGroupSettings()` and `getGroupCalendar()`
+throw on a failed read for the same reason: the About editor saves the
+settings back, so a read failure must not render as blank defaults, and
+`ensureGroupCalendar()` inserts only after a lookup that confirmed the
+group has no calendar — a failed lookup returns null without inserting,
+so an outage cannot give a group a second calendar. No service-role client
+is involved in group context.
 
 The bearer-token ICS routes are the one service-role surface that crosses
 the group boundary: `app/api/calendar/feed.ics/route.ts` reads the token
