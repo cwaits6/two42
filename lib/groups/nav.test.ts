@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { GROUP_DEFAULT_COLOR, type ActiveGroup } from "@/lib/groups/active";
+import type { ActiveGroup } from "@/lib/groups/active";
+import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
 import { buildSidebar, type SidebarInput, type SidebarItem } from "@/lib/groups/nav";
 
 const A_ID = "11111111-1111-4111-8111-111111111111";

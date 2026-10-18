@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { GROUP_DEFAULT_COLOR, type ActiveGroup } from "@/lib/groups/active";
+import type { ActiveGroup } from "@/lib/groups/active";
+import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
 
 const cookieGet = vi.fn<(name: string) => { value: string } | undefined>();
 vi.mock("next/headers", () => ({

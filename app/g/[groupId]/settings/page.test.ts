@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement, ReactNode } from "react";
-import { GROUP_DEFAULT_COLOR, type ActiveGroup } from "@/lib/groups/active";
+import type { ActiveGroup } from "@/lib/groups/active";
+import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
 
 class RedirectSentinel extends Error {
   constructor(public readonly target: string) {

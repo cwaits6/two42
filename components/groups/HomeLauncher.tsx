@@ -136,7 +136,7 @@ export async function HomeLauncher({
           ) : (
             <ul>
               {home.thisWeek.map(({ event, groupId }, i) => {
-                const group = groupId ? groupNames.get(groupId) : undefined;
+                const group = groupNames.get(groupId);
                 return (
                   <li
                     key={`${event.id}-${event.start_time}`}
