@@ -22,11 +22,12 @@ export function DirectoryVisibilitySettings({ orgId, visibility }: DirectoryVisi
 
   async function toggle(next: boolean) {
     setOrgWide(next);
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("organizations")
       .update({ directory_visibility: next ? "org" : "shared_groups" })
-      .eq("id", orgId);
-    if (error) {
+      .eq("id", orgId)
+      .select("directory_visibility");
+    if (error || !data?.length) {
       setOrgWide(!next);
       toast.error("Failed to update the setting.");
       return;
