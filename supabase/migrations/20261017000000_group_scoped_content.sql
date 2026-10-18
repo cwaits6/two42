@@ -1349,8 +1349,31 @@ $$;
 revoke execute on function public.group_member_removed_leaves_teams() from public, anon, authenticated;
 
 create trigger group_members_leave_teams
-  after delete on public.group_members
+  after delete or update of group_id, profile_id, org_id on public.group_members
   for each row execute function public.group_member_removed_leaves_teams();
+
+-- A team moved to another group keeps only the members of that group.
+create function public.team_moved_prunes_members() returns trigger
+  language plpgsql security definer set search_path = ''
+as $$
+begin
+  delete from public.team_members tm
+  where tm.team_id = new.id
+    and tm.org_id = new.org_id
+    and not exists (
+      select 1 from public.group_members gm
+      where gm.group_id = new.group_id
+        and gm.org_id = new.org_id
+        and gm.profile_id = tm.profile_id);
+  return new;
+end;
+$$;
+revoke execute on function public.team_moved_prunes_members() from public, anon, authenticated;
+
+create trigger teams_prune_members_on_move
+  after update of group_id on public.teams
+  for each row when (old.group_id is distinct from new.group_id)
+  execute function public.team_moved_prunes_members();
 
 -- Rows that already violate the rule cannot be kept: the serving policies
 -- honour team membership, and the trigger only guards new rows.

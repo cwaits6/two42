@@ -554,11 +554,28 @@ begin
   select count(*) into n from public.team_members where team_id = team_a and profile_id = owner;
   perform set_config('gs.tm_after_leave', n::text, true);
   insert into public.group_members (org_id, group_id, profile_id, role) values (org, grp_a, owner, 'leader');
+
+  -- Moving a team to another group, or re-pointing a membership row, prunes
+  -- the same way as leaving.
+  insert into public.team_members (org_id, profile_id, team_id) values (org, owner, team_a);
+  update public.teams set group_id = current_setting('gs.grp_b')::uuid where id = team_a;
+  select count(*) into n from public.team_members where team_id = team_a;
+  perform set_config('gs.tm_after_move', n::text, true);
+  update public.teams set group_id = grp_a where id = team_a;
+  insert into public.team_members (org_id, profile_id, team_id) values (org, owner, team_a);
+  update public.group_members set group_id = current_setting('gs.grp_b')::uuid
+    where group_id = grp_a and profile_id = owner;
+  select count(*) into n from public.team_members where team_id = team_a and profile_id = owner;
+  perform set_config('gs.tm_after_repoint', n::text, true);
+  update public.group_members set group_id = grp_a
+    where group_id = current_setting('gs.grp_b')::uuid and profile_id = owner;
 end $$;
 select is(current_setting('gs.tm_outsider'), '23514', 'a profile outside the group cannot be put on its team');
 select is(current_setting('gs.tm_admin_self'), '23514', 'an org admin outside the group cannot enrol themselves on its team');
 select is(current_setting('gs.tm_member_ok'), '1', 'non-vacuity: a group member joins the team');
 select is(current_setting('gs.tm_after_leave'), '0', 'leaving the group leaves its teams');
+select is(current_setting('gs.tm_after_move'), '0', 'moving a team to another group drops members not in it');
+select is(current_setting('gs.tm_after_repoint'), '0', 're-pointing a membership row leaves the old group''s teams');
 
 -- ── 3. Structural pins ──────────────────────────────────────────────────────
 select is(
