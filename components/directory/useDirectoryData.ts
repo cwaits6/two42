@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { mintSignedUrls } from "@/lib/uploadImage";
-import type { DirectoryGroup } from "@/components/directory/types";
+import type { GroupRosters } from "@/components/directory/scope";
 import type { DirectoryProfile, FamilyDirectoryFull } from "@/lib/types";
 
 /**
@@ -49,72 +49,94 @@ export async function signDirectoryUrls(
   };
 }
 
+type RosterRow = { group_id: string; profile_id: string };
+
 /**
- * Loads the three directory data sources (member profiles, households,
- * groups) and derives the lookup maps shared by all directory sub-pages.
+ * Loads everything the directory shows — the profiles and households the
+ * viewer may read, plus the rosters of the viewer's own groups — and
+ * derives the lookup maps the tabs share. RLS decides what comes back;
+ * the rosters are what the scope filter cuts it with.
  */
-export function useDirectoryData() {
+export function useDirectoryData(membershipGroupIds: readonly string[]) {
   const [members, setMembers] = useState<DirectoryProfile[]>([]);
   const [families, setFamilies] = useState<FamilyDirectoryFull[]>([]);
-  const [groups, setGroups] = useState<DirectoryGroup[]>([]);
+  const [rosterRows, setRosterRows] = useState<RosterRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [generation, setGeneration] = useState(0);
 
   const supabase = useMemo(() => createClient(), []);
+  const groupIdsKey = membershipGroupIds.join(",");
 
   useEffect(() => {
+    let cancelled = false;
+    const groupIds = groupIdsKey ? groupIdsKey.split(",") : [];
+
     async function load() {
       try {
-        const [{ data: m, error: mErr }, { data: f, error: fErr }, { data: g, error: gErr }] =
-          await Promise.all([
-            supabase
-              .from("profiles_directory")
-              .select("*")
-              .order("last_name", { ascending: true }),
-            supabase
-              .from("families_directory_full")
-              .select("*")
-              .order("family_name", { ascending: true }),
-            supabase
-              .from("teams")
-              .select("id, name, color, icon, description, show_in_directory_filter")
-              .order("display_order"),
-          ]);
+        const [profilesResult, familiesResult, rostersResult] = await Promise.all([
+          supabase
+            .from("profiles_directory")
+            .select("*")
+            .order("last_name", { ascending: true }),
+          supabase
+            .from("families_directory_full")
+            .select("*")
+            .order("family_name", { ascending: true }),
+          groupIds.length === 0
+            ? Promise.resolve({ data: [] as RosterRow[], error: null })
+            : supabase.from("group_members").select("group_id, profile_id").in("group_id", groupIds),
+        ]);
 
-        if (mErr || fErr || gErr) {
-          const err = mErr ?? fErr ?? gErr;
+        const failed = (
+          [
+            ["profiles_directory", profilesResult.error],
+            ["families_directory_full", familiesResult.error],
+            ["group_members", rostersResult.error],
+          ] as const
+        ).find(([, err]) => err);
+        if (failed) {
+          const [source, err] = failed;
           console.error("directory load error:", {
-            source: mErr
-              ? "profiles_directory"
-              : fErr
-                ? "families_directory_full"
-                : "teams",
+            source,
             message: err?.message,
             details: err?.details,
             hint: err?.hint,
             code: err?.code,
           });
-          setError(true);
-          setLoading(false);
+          if (!cancelled) {
+            setError(true);
+            setLoading(false);
+          }
           return;
         }
 
         const signed = await signDirectoryUrls(
-          (m || []) as DirectoryProfile[],
-          (f || []) as FamilyDirectoryFull[],
+          (profilesResult.data || []) as DirectoryProfile[],
+          (familiesResult.data || []) as FamilyDirectoryFull[],
         );
+        if (cancelled) return;
         setMembers(signed.members);
         setFamilies(signed.families);
-        setGroups((g || []) as DirectoryGroup[]);
+        setRosterRows((rostersResult.data || []) as RosterRow[]);
+        setError(false);
         setLoading(false);
       } catch (err) {
         console.error("directory load failed:", err);
-        setError(true);
-        setLoading(false);
+        if (!cancelled) {
+          setError(true);
+          setLoading(false);
+        }
       }
     }
+    setLoading(true);
     load();
-  }, [supabase]);
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, groupIdsKey, generation]);
+
+  const reload = useCallback(() => setGeneration((n) => n + 1), []);
 
   const profileMap = useMemo(() => {
     const map: Record<string, DirectoryProfile> = {};
@@ -132,16 +154,31 @@ export function useDirectoryData() {
     return map;
   }, [families]);
 
-  // Roster per group, derived from listed members' group chips
   const groupRosters = useMemo(() => {
-    const map: Record<string, DirectoryProfile[]> = {};
-    for (const m of members) {
-      for (const g of m.groups || []) {
-        (map[g.id] ??= []).push(m);
-      }
+    const map: Record<string, Set<string>> = {};
+    for (const row of rosterRows) {
+      (map[row.group_id] ??= new Set()).add(row.profile_id);
+    }
+    return map as GroupRosters;
+  }, [rosterRows]);
+
+  const groupsByProfile = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const row of rosterRows) {
+      (map[row.profile_id] ??= []).push(row.group_id);
     }
     return map;
-  }, [members]);
+  }, [rosterRows]);
 
-  return { members, families, groups, loading, error, profileMap, familyMap, groupRosters };
+  return {
+    members,
+    families,
+    loading,
+    error,
+    reload,
+    profileMap,
+    familyMap,
+    groupRosters,
+    groupsByProfile,
+  };
 }

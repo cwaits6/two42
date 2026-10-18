@@ -236,6 +236,33 @@ now resolves the fund's group and admits its leaders or (when stewards may
 manage) its steward; the org admin arm is gone from it, as from every
 content policy.
 
+The people layer's directory boundary
+(`20261018000000_directory_visibility.sql`) adds three read-only helpers
+of the same shape — `SECURITY DEFINER`, `STABLE`, `set search_path = ''`,
+caller resolved from `auth.uid()` only, EXECUTE revoked from `public` and
+`anon` and granted to `authenticated`:
+
+- `org_directory_visible()` — the caller's own `organizations` row has
+  `directory_visibility = 'org'`. Reads only the tenant root, pinned by
+  `id = app_current_org_id()`; zero arguments, so it is InitPlan-hoisted.
+- `shares_group_with(_profile_id)` — the caller and the given profile share
+  a `group_members` group in the caller's org.
+- `shares_group_with_household(_family_id)` — the caller shares a group
+  with any profile in the given household, in the caller's org.
+
+Every `group_members` read in them carries `org_id =
+public.app_current_org_id()`. They are called by the `profiles`,
+`family_units` and `family_members` SELECT policies — see "Directory
+visibility" in [`tenancy-model.md`](tenancy-model.md). None writes.
+
+`handle_new_user()` (the auth signup trigger, `SECURITY DEFINER`) now also
+writes `group_members`: when the org it already resolved from the approved
+access request has exactly one group, the new non-pending profile is
+enrolled in it as a member. The org comes from the same server-owned rows
+as before, never from the caller, and every inserted column carries it.
+`supabase/tests/directory_visibility_suite.sql` pins the one-group, the
+several-groups and the family-invite (pending) cases.
+
 ## Email quota RPC — a definer-function bypass surface (CWA-72 / #365)
 
 The per-org daily send cap (`org_email_usage` + `org_email_limits`) is

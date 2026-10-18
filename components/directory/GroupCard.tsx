@@ -3,27 +3,26 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatPhone } from "@/lib/sanitize";
 import { displayName, initials } from "@/lib/names";
+import { groupInitials, type ActiveGroup } from "@/lib/groups/active";
 import { DirRow } from "@/components/directory/DirRow";
-import { GroupIcon } from "@/components/directory/GroupIcon";
-import type { DirectoryGroup } from "@/components/directory/types";
 import type { DirectoryProfile } from "@/lib/types";
 
 interface GroupCardProps {
-  group: DirectoryGroup;
+  group: Pick<ActiveGroup, "id" | "name" | "color">;
   members: DirectoryProfile[];
   onOpenPerson: (profile: DirectoryProfile) => void;
 }
 
-/** Group detail: icon, description, and the member roster as tappable rows */
+/** Group detail: the group's colour and name, then its roster as tappable rows. */
 export function GroupCard({ group, members, onOpenPerson }: GroupCardProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4">
         <div
-          className="h-13 w-13 rounded-full flex items-center justify-center text-white shrink-0"
-          style={{ backgroundColor: group.color || "var(--color-brand-neutral)" }}
+          className="flex h-13 w-13 shrink-0 items-center justify-center rounded-full text-lg font-bold text-white"
+          style={{ backgroundColor: group.color }}
         >
-          <GroupIcon name={group.icon} className="h-6 w-6" />
+          {groupInitials(group.name)}
         </div>
         <div className="min-w-0">
           <h2 className="font-serif text-2xl md:text-3xl font-medium leading-tight text-foreground">
@@ -34,10 +33,6 @@ export function GroupCard({ group, members, onOpenPerson }: GroupCardProps) {
           </p>
         </div>
       </div>
-
-      {group.description && (
-        <p className="text-base text-muted-foreground">{group.description}</p>
-      )}
 
       {members.length === 0 ? (
         <p className="text-base text-muted-foreground py-4 text-center">
