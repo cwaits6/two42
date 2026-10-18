@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { generateCombinedICS, type ServingICSInput } from "@/lib/ics-utils";
+import { generateCombinedICS, type FeedEvent, type ServingICSInput } from "@/lib/ics-utils";
 import {
   hashSubscriptionToken,
   subscriptionTokenExpiryDate,
@@ -9,7 +9,7 @@ import type { Event } from "@/lib/types";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const token = searchParams.get("token");
-  const calendarId = searchParams.get("calendar");
+  const groupParam = searchParams.get("group");
 
   // Require a valid subscription token
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -75,66 +75,102 @@ export async function GET(request: Request) {
     console.error("Failed to extend calendar subscription expiry:", expiryError);
   }
 
-  // Validate calendarId if provided
-  if (calendarId && !uuidRegex.test(calendarId)) {
-    return new Response("Invalid calendar ID", { status: 400 });
+  if (groupParam && !uuidRegex.test(groupParam)) {
+    return new Response("Invalid group ID", { status: 400 });
   }
+
+  // The feed spans the owner's groups; the membership list is the group
+  // boundary the service client would otherwise bypass. A failed read is a
+  // 500: a feed that silently dropped every group would be cached for an hour.
+  const { data: memberships, error: membershipsError } = await supabase
+    .from("group_members")
+    .select("group_id, groups(name)")
+    .eq("org_id", sub.org_id)
+    .eq("profile_id", sub.user_id);
+  if (membershipsError) {
+    console.error("Failed to fetch group memberships for calendar feed:", membershipsError);
+    return new Response("Something went wrong", { status: 500 });
+  }
+
+  const groupNames = new Map<string, string>();
+  for (const m of memberships ?? []) {
+    const g = m.groups as unknown as { name: string } | Array<{ name: string }> | null;
+    groupNames.set(m.group_id as string, (Array.isArray(g) ? g[0]?.name : g?.name) ?? "Group");
+  }
+  // A group the owner is not in intersects to nothing: an empty feed, never
+  // a distinguishing status.
+  const groupIds = [...groupNames.keys()].filter((id) => !groupParam || id === groupParam);
 
   // Bound results to a reasonable time window
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-  // org_id filters are required on both reads: the service client bypasses
-  // RLS, so without them the feed would span every org's events and signups.
-  let query = supabase
-    .from("events")
-    .select("*")
-    .eq("org_id", sub.org_id)
-    .gte("start_time", thirtyDaysAgo)
-    .order("start_time", { ascending: true })
-    .limit(500);
+  let typedEvents: Event[] = [];
+  let servingSignups: ServingICSInput[] = [];
+  if (groupIds.length > 0) {
+    // org_id filters are required on both reads: the service client bypasses
+    // RLS, so without them the feed would span every org's events and signups.
+    const [
+      { data: events, error: eventsError },
+      { data: myServings, error: servingsError },
+    ] = await Promise.all([
+      supabase
+        .from("events")
+        .select("*")
+        .eq("org_id", sub.org_id)
+        .in("group_id", groupIds)
+        .gte("start_time", thirtyDaysAgo)
+        .order("start_time", { ascending: true })
+        .limit(500),
+      // Serving signups where this user is an attendee, on the groups' teams
+      // (both inner joins filter)
+      supabase
+        .from("serving_signups")
+        .select("id, service_date, teams!inner(name, group_id), serving_signup_attendees!inner(profile_id)")
+        .eq("org_id", sub.org_id)
+        .in("teams.group_id", groupIds)
+        .eq("serving_signup_attendees.profile_id", sub.user_id)
+        .gte("service_date", thirtyDaysAgo.slice(0, 10))
+        .order("service_date", { ascending: true }),
+    ]);
 
-  if (calendarId) {
-    query = query.eq("calendar_id", calendarId);
+    if (eventsError) {
+      console.error("Failed to fetch events for calendar feed:", eventsError);
+      return new Response("Failed to fetch events", { status: 500 });
+    }
+
+    // Non-fatal: a failed serving-signups read shouldn't take down the events
+    // half of the feed, but a silent discard means a member's serving Sundays
+    // vanish behind a 200 + max-age=3600, so the client caches the gap.
+    if (servingsError) {
+      console.error("Failed to fetch serving signups for calendar feed:", servingsError);
+    }
+
+    typedEvents = (events ?? []) as Event[];
+    servingSignups = (myServings ?? []).map((s) => {
+      const team = s.teams as unknown as
+        | { name: string; group_id: string }
+        | Array<{ name: string; group_id: string }>
+        | null;
+      const t = Array.isArray(team) ? team[0] : team;
+      return {
+        signupId: s.id as string,
+        serviceDate: s.service_date as string,
+        teamName: t?.name ?? "Serving",
+        summaryPrefix: groupParam ? undefined : groupNames.get(t?.group_id ?? ""),
+      };
+    });
   }
 
-  const [
-    { data: events, error: eventsError },
-    { data: myServings, error: servingsError },
-  ] = await Promise.all([
-    query,
-    // Serving signups where this user is an attendee (inner join filters results)
-    supabase
-      .from("serving_signups")
-      .select("id, service_date, teams(name), serving_signup_attendees!inner(profile_id)")
-      .eq("org_id", sub.org_id)
-      .eq("serving_signup_attendees.profile_id", sub.user_id)
-      .gte("service_date", thirtyDaysAgo.slice(0, 10))
-      .order("service_date", { ascending: true }),
-  ]);
-
-  if (eventsError) {
-    console.error("Failed to fetch events for calendar feed:", eventsError);
-    return new Response("Failed to fetch events", { status: 500 });
-  }
-
-  // Non-fatal: a failed serving-signups read shouldn't take down the events
-  // half of the feed, but a silent discard means a member's serving Sundays
-  // vanish behind a 200 + max-age=3600, so the client caches the gap.
-  if (servingsError) {
-    console.error("Failed to fetch serving signups for calendar feed:", servingsError);
-  }
-
-  const typedEvents = (events ?? []) as Event[];
-
-  const servingSignups: ServingICSInput[] = (myServings ?? []).map((s) => {
-    const mg = s.teams as unknown as { name: string } | Array<{ name: string }> | null;
-    const teamName = (Array.isArray(mg) ? mg[0]?.name : mg?.name) ?? "Serving";
-    return { signupId: s.id as string, serviceDate: s.service_date as string, teamName };
-  });
+  // The merged feed names each event's group; a per-group feed carries no
+  // prefix, since the subscriber named the group.
+  const feedEvents: FeedEvent[] = typedEvents.map((event) => ({
+    event,
+    summaryPrefix: groupParam ? undefined : groupNames.get(event.group_id),
+  }));
 
   let icsString: string;
   try {
-    icsString = generateCombinedICS(typedEvents, servingSignups);
+    icsString = generateCombinedICS(feedEvents, servingSignups);
   } catch (err) {
     console.error("ICS generation failed:", err);
     return new Response("Failed to generate calendar feed", { status: 500 });

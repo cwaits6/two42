@@ -98,7 +98,8 @@ describe("sendSignupConfirmation", () => {
     signupId: "signup-1",
     orgId: "org-1",
     groupId: "group-1",
-    groupName: "Greeters",
+    teamId: "team-1",
+    teamName: "Greeters",
     serviceDate: "2026-09-13",
     attendees: [],
     familyId: null,
@@ -111,8 +112,12 @@ describe("sendSignupConfirmation", () => {
     await sendSignupConfirmation(stubClient(), baseOpts);
 
     expect(resolveEmailBranding).toHaveBeenCalledWith("org-1");
+    expect(getServingLinkMode).toHaveBeenCalledWith(expect.anything(), "org-1", "group-1");
     const call = sendServingConfirmationEmail.mock.calls[0][0];
     expect(call.cancelUrl).toMatch(/^https:\/\/two42\.io\/serving\/go\?token=/);
+    expect(createServingToken).toHaveBeenCalledWith(
+      expect.objectContaining({ a: "cancel", g: "team-1", p: "member-1" })
+    );
   });
 
   it("builds cancelUrl on the canonical origin in login mode", async () => {
@@ -121,15 +126,16 @@ describe("sendSignupConfirmation", () => {
     await sendSignupConfirmation(stubClient(), baseOpts);
 
     const call = sendServingConfirmationEmail.mock.calls[0][0];
-    expect(call.cancelUrl).toBe("https://two42.io/serving/group-1");
+    expect(call.cancelUrl).toBe("https://two42.io/g/group-1/serving/team-1");
   });
 });
 
 describe("notifyLeadersOfCancel", () => {
   const baseOpts = {
     groupId: "group-1",
+    teamId: "team-1",
     orgId: "org-1",
-    groupName: "Greeters",
+    teamName: "Greeters",
     serviceDate: "2026-09-13",
     memberLabel: "Sam",
   };
@@ -156,6 +162,6 @@ describe("notifyLeadersOfCancel", () => {
 
     expect(resolveEmailBranding).toHaveBeenCalledWith("org-1");
     const call = sendServingCancelNoticeEmail.mock.calls[0][0];
-    expect(call.servingUrl).toBe("https://two42.io/serving/group-1");
+    expect(call.servingUrl).toBe("https://two42.io/g/group-1/serving/team-1");
   });
 });

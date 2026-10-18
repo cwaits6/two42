@@ -57,9 +57,11 @@ function SwitchRow({
 
 export function PrayerComposer({
   me,
+  groupName,
   onPost,
 }: {
   me: Me;
+  groupName: string;
   onPost: (draft: {
     body: string;
     category: PrayerCategory;
@@ -161,12 +163,12 @@ export function PrayerComposer({
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background px-5 py-3.5">
         <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
           <span>
-            Posting as{" "}
+            Posting to{" "}
+            <strong className="font-semibold text-foreground">{groupName}</strong>{" "}
+            as{" "}
             <strong className="font-semibold text-foreground">
               {anonymous ? "Anonymous" : me.name}
-            </strong>{" "}
-            · visible to{" "}
-            <strong className="font-semibold text-foreground">everyone</strong>
+            </strong>
           </span>
         </p>
         <button

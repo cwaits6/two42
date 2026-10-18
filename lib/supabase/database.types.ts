@@ -7,16 +7,22 @@ export type Database = {
           Tables: {
             "about_page": {
                   Row: {
-                    "body": string,"id": boolean,"org_id": string,"updated_at": string,"updated_by": string | null
+                    "body": string,"group_id": string,"org_id": string,"updated_at": string,"updated_by": string | null
                   }
                   Insert: {
-                    "body"?: string,"id"?: boolean,"org_id"?: string,"updated_at"?: string,"updated_by"?: string | null
+                    "body"?: string,"group_id": string,"org_id"?: string,"updated_at"?: string,"updated_by"?: string | null
                   }
                   Update: {
-                    "body"?: string,"id"?: boolean,"org_id"?: string,"updated_at"?: string,"updated_by"?: string | null
+                    "body"?: string,"group_id"?: string,"org_id"?: string,"updated_at"?: string,"updated_by"?: string | null
                   }
                   Relationships: [
                     {
+      foreignKeyName: "about_page_group_id_fkey"
+      columns: ["group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["id","org_id"]
+    },{
       foreignKeyName: "about_page_org_id_fkey"
       columns: ["org_id"]
 isOneToOne: false
@@ -51,13 +57,13 @@ isOneToOne: false
                   ]
                 },"announcements": {
                   Row: {
-                    "author_id": string | null,"content": string,"created_at": string,"id": string,"is_published": boolean,"org_id": string,"published_at": string | null,"title": string
+                    "author_id": string | null,"content": string,"created_at": string,"group_id": string,"id": string,"is_published": boolean,"org_id": string,"published_at": string | null,"title": string
                   }
                   Insert: {
-                    "author_id"?: string | null,"content": string,"created_at"?: string,"id"?: string,"is_published"?: boolean,"org_id"?: string,"published_at"?: string | null,"title": string
+                    "author_id"?: string | null,"content": string,"created_at"?: string,"group_id": string,"id"?: string,"is_published"?: boolean,"org_id"?: string,"published_at"?: string | null,"title": string
                   }
                   Update: {
-                    "author_id"?: string | null,"content"?: string,"created_at"?: string,"id"?: string,"is_published"?: boolean,"org_id"?: string,"published_at"?: string | null,"title"?: string
+                    "author_id"?: string | null,"content"?: string,"created_at"?: string,"group_id"?: string,"id"?: string,"is_published"?: boolean,"org_id"?: string,"published_at"?: string | null,"title"?: string
                   }
                   Relationships: [
                     {
@@ -71,6 +77,12 @@ isOneToOne: false
       columns: ["author_id","org_id"]
 isOneToOne: false
       referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "announcements_group_id_fkey"
+      columns: ["group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "groups"
       referencedColumns: ["id","org_id"]
     },{
       foreignKeyName: "announcements_org_id_fkey"
@@ -113,16 +125,22 @@ isOneToOne: false
                   ]
                 },"class_teachers": {
                   Row: {
-                    "bio": string,"created_at": string,"id": string,"org_id": string,"profile_id": string,"sort_order": number,"title": string
+                    "bio": string,"created_at": string,"group_id": string,"id": string,"org_id": string,"profile_id": string,"sort_order": number,"title": string
                   }
                   Insert: {
-                    "bio"?: string,"created_at"?: string,"id"?: string,"org_id"?: string,"profile_id": string,"sort_order"?: number,"title"?: string
+                    "bio"?: string,"created_at"?: string,"group_id": string,"id"?: string,"org_id"?: string,"profile_id": string,"sort_order"?: number,"title"?: string
                   }
                   Update: {
-                    "bio"?: string,"created_at"?: string,"id"?: string,"org_id"?: string,"profile_id"?: string,"sort_order"?: number,"title"?: string
+                    "bio"?: string,"created_at"?: string,"group_id"?: string,"id"?: string,"org_id"?: string,"profile_id"?: string,"sort_order"?: number,"title"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "class_teachers_group_id_fkey"
+      columns: ["group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["id","org_id"]
+    },{
       foreignKeyName: "class_teachers_org_id_fkey"
       columns: ["org_id"]
 isOneToOne: false
@@ -131,26 +149,26 @@ isOneToOne: false
     },{
       foreignKeyName: "class_teachers_profile_id_fkey"
       columns: ["profile_id","org_id"]
-isOneToOne: true
+isOneToOne: false
       referencedRelation: "profiles"
       referencedColumns: ["id","org_id"]
     },{
       foreignKeyName: "class_teachers_profile_id_fkey"
       columns: ["profile_id","org_id"]
-isOneToOne: true
+isOneToOne: false
       referencedRelation: "profiles_directory"
       referencedColumns: ["id","org_id"]
     }
                   ]
                 },"event_calendars": {
                   Row: {
-                    "color": string | null,"created_at": string,"created_by": string | null,"id": string,"name": string,"org_id": string
+                    "color": string | null,"created_at": string,"created_by": string | null,"group_id": string,"id": string,"name": string,"org_id": string
                   }
                   Insert: {
-                    "color"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"name": string,"org_id"?: string
+                    "color"?: string | null,"created_at"?: string,"created_by"?: string | null,"group_id": string,"id"?: string,"name": string,"org_id"?: string
                   }
                   Update: {
-                    "color"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"name"?: string,"org_id"?: string
+                    "color"?: string | null,"created_at"?: string,"created_by"?: string | null,"group_id"?: string,"id"?: string,"name"?: string,"org_id"?: string
                   }
                   Relationships: [
                     {
@@ -164,6 +182,12 @@ isOneToOne: false
       columns: ["created_by","org_id"]
 isOneToOne: false
       referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "event_calendars_group_id_fkey"
+      columns: ["group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "groups"
       referencedColumns: ["id","org_id"]
     },{
       foreignKeyName: "event_calendars_org_id_fkey"
@@ -175,21 +199,21 @@ isOneToOne: false
                   ]
                 },"events": {
                   Row: {
-                    "calendar_id": string | null,"created_at": string,"created_by": string | null,"description": string | null,"end_time": string | null,"id": string,"is_rsvp_enabled": boolean,"location": string | null,"meeting_id": string | null,"meeting_lead_minutes": number,"meeting_passcode": string | null,"meeting_show_on_dashboard": boolean,"meeting_url": string | null,"org_id": string,"recurrence_count": number | null,"recurrence_end_mode": string | null,"recurrence_frequency": string | null,"recurrence_interval": number,"recurrence_until": string | null,"series_id": string | null,"series_occurrence_date": string | null,"start_time": string,"title": string
+                    "calendar_id": string | null,"created_at": string,"created_by": string | null,"description": string | null,"end_time": string | null,"group_id": string,"id": string,"is_rsvp_enabled": boolean,"location": string | null,"meeting_id": string | null,"meeting_lead_minutes": number,"meeting_passcode": string | null,"meeting_show_on_dashboard": boolean,"meeting_url": string | null,"org_id": string,"recurrence_count": number | null,"recurrence_end_mode": string | null,"recurrence_frequency": string | null,"recurrence_interval": number,"recurrence_until": string | null,"series_id": string | null,"series_occurrence_date": string | null,"start_time": string,"title": string
                   }
                   Insert: {
-                    "calendar_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"end_time"?: string | null,"id"?: string,"is_rsvp_enabled"?: boolean,"location"?: string | null,"meeting_id"?: string | null,"meeting_lead_minutes"?: number,"meeting_passcode"?: string | null,"meeting_show_on_dashboard"?: boolean,"meeting_url"?: string | null,"org_id"?: string,"recurrence_count"?: number | null,"recurrence_end_mode"?: string | null,"recurrence_frequency"?: string | null,"recurrence_interval"?: number,"recurrence_until"?: string | null,"series_id"?: string | null,"series_occurrence_date"?: string | null,"start_time": string,"title": string
+                    "calendar_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"end_time"?: string | null,"group_id": string,"id"?: string,"is_rsvp_enabled"?: boolean,"location"?: string | null,"meeting_id"?: string | null,"meeting_lead_minutes"?: number,"meeting_passcode"?: string | null,"meeting_show_on_dashboard"?: boolean,"meeting_url"?: string | null,"org_id"?: string,"recurrence_count"?: number | null,"recurrence_end_mode"?: string | null,"recurrence_frequency"?: string | null,"recurrence_interval"?: number,"recurrence_until"?: string | null,"series_id"?: string | null,"series_occurrence_date"?: string | null,"start_time": string,"title": string
                   }
                   Update: {
-                    "calendar_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"end_time"?: string | null,"id"?: string,"is_rsvp_enabled"?: boolean,"location"?: string | null,"meeting_id"?: string | null,"meeting_lead_minutes"?: number,"meeting_passcode"?: string | null,"meeting_show_on_dashboard"?: boolean,"meeting_url"?: string | null,"org_id"?: string,"recurrence_count"?: number | null,"recurrence_end_mode"?: string | null,"recurrence_frequency"?: string | null,"recurrence_interval"?: number,"recurrence_until"?: string | null,"series_id"?: string | null,"series_occurrence_date"?: string | null,"start_time"?: string,"title"?: string
+                    "calendar_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"end_time"?: string | null,"group_id"?: string,"id"?: string,"is_rsvp_enabled"?: boolean,"location"?: string | null,"meeting_id"?: string | null,"meeting_lead_minutes"?: number,"meeting_passcode"?: string | null,"meeting_show_on_dashboard"?: boolean,"meeting_url"?: string | null,"org_id"?: string,"recurrence_count"?: number | null,"recurrence_end_mode"?: string | null,"recurrence_frequency"?: string | null,"recurrence_interval"?: number,"recurrence_until"?: string | null,"series_id"?: string | null,"series_occurrence_date"?: string | null,"start_time"?: string,"title"?: string
                   }
                   Relationships: [
                     {
       foreignKeyName: "events_calendar_id_fkey"
-      columns: ["calendar_id","org_id"]
+      columns: ["calendar_id","org_id","group_id"]
 isOneToOne: false
       referencedRelation: "event_calendars"
-      referencedColumns: ["id","org_id"]
+      referencedColumns: ["id","org_id","group_id"]
     },{
       foreignKeyName: "events_created_by_fkey"
       columns: ["created_by","org_id"]
@@ -203,6 +227,12 @@ isOneToOne: false
       referencedRelation: "profiles_directory"
       referencedColumns: ["id","org_id"]
     },{
+      foreignKeyName: "events_group_id_fkey"
+      columns: ["group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["id","org_id"]
+    },{
       foreignKeyName: "events_org_id_fkey"
       columns: ["org_id"]
 isOneToOne: false
@@ -210,10 +240,10 @@ isOneToOne: false
       referencedColumns: ["id"]
     },{
       foreignKeyName: "events_series_id_fkey"
-      columns: ["series_id","org_id"]
+      columns: ["series_id","org_id","group_id"]
 isOneToOne: false
       referencedRelation: "events"
-      referencedColumns: ["id","org_id"]
+      referencedColumns: ["id","org_id","group_id"]
     }
                   ]
                 },"family_invites": {
@@ -348,20 +378,26 @@ isOneToOne: false
                   ]
                 },"giving_fund_methods": {
                   Row: {
-                    "custom_handle": string,"display_order": number,"fund_id": string,"method": string,"org_id": string
+                    "custom_handle": string,"display_order": number,"fund_id": string,"group_id": string,"method": string,"org_id": string
                   }
                   Insert: {
-                    "custom_handle": string,"display_order"?: number,"fund_id": string,"method": string,"org_id"?: string
+                    "custom_handle": string,"display_order"?: number,"fund_id": string,"group_id": string,"method": string,"org_id"?: string
                   }
                   Update: {
-                    "custom_handle"?: string,"display_order"?: number,"fund_id"?: string,"method"?: string,"org_id"?: string
+                    "custom_handle"?: string,"display_order"?: number,"fund_id"?: string,"group_id"?: string,"method"?: string,"org_id"?: string
                   }
                   Relationships: [
                     {
       foreignKeyName: "giving_fund_methods_fund_id_fkey"
-      columns: ["fund_id","org_id"]
+      columns: ["fund_id","org_id","group_id"]
 isOneToOne: false
       referencedRelation: "giving_funds"
+      referencedColumns: ["id","org_id","group_id"]
+    },{
+      foreignKeyName: "giving_fund_methods_group_id_fkey"
+      columns: ["group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "groups"
       referencedColumns: ["id","org_id"]
     },{
       foreignKeyName: "giving_fund_methods_org_id_fkey"
@@ -373,13 +409,13 @@ isOneToOne: false
                   ]
                 },"giving_funds": {
                   Row: {
-                    "co_steward_id": string | null,"created_at": string,"created_by": string | null,"description": string | null,"display_order": number,"id": string,"is_active": boolean,"name": string,"org_id": string,"retire_on": string | null,"steward_id": string,"steward_role": string | null,"updated_at": string
+                    "co_steward_id": string | null,"created_at": string,"created_by": string | null,"description": string | null,"display_order": number,"group_id": string,"id": string,"is_active": boolean,"name": string,"org_id": string,"retire_on": string | null,"steward_id": string,"steward_role": string | null,"updated_at": string
                   }
                   Insert: {
-                    "co_steward_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"display_order"?: number,"id"?: string,"is_active"?: boolean,"name": string,"org_id"?: string,"retire_on"?: string | null,"steward_id": string,"steward_role"?: string | null,"updated_at"?: string
+                    "co_steward_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"display_order"?: number,"group_id": string,"id"?: string,"is_active"?: boolean,"name": string,"org_id"?: string,"retire_on"?: string | null,"steward_id": string,"steward_role"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "co_steward_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"display_order"?: number,"id"?: string,"is_active"?: boolean,"name"?: string,"org_id"?: string,"retire_on"?: string | null,"steward_id"?: string,"steward_role"?: string | null,"updated_at"?: string
+                    "co_steward_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"display_order"?: number,"group_id"?: string,"id"?: string,"is_active"?: boolean,"name"?: string,"org_id"?: string,"retire_on"?: string | null,"steward_id"?: string,"steward_role"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -405,6 +441,12 @@ isOneToOne: false
       columns: ["created_by","org_id"]
 isOneToOne: false
       referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "giving_funds_group_id_fkey"
+      columns: ["group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "groups"
       referencedColumns: ["id","org_id"]
     },{
       foreignKeyName: "giving_funds_org_id_fkey"
@@ -519,6 +561,31 @@ isOneToOne: false
       referencedColumns: ["id","org_id"]
     }
                   ]
+                },"group_settings": {
+                  Row: {
+                    "group_id": string,"org_id": string,"serving_link_mode": string | null,"updated_at": string,"updated_by": string | null,"weekly_prayer_call_time": string | null,"weekly_prayer_call_url": string | null,"weekly_zoom_url": string | null,"zoom_meeting_time": string | null
+                  }
+                  Insert: {
+                    "group_id": string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null,"weekly_prayer_call_time"?: string | null,"weekly_prayer_call_url"?: string | null,"weekly_zoom_url"?: string | null,"zoom_meeting_time"?: string | null
+                  }
+                  Update: {
+                    "group_id"?: string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null,"weekly_prayer_call_time"?: string | null,"weekly_prayer_call_url"?: string | null,"weekly_zoom_url"?: string | null,"zoom_meeting_time"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "group_settings_group_id_fkey"
+      columns: ["group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "group_settings_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"groups": {
                   Row: {
                     "created_at": string,"created_by": string | null,"description": string | null,"id": string,"name": string,"org_id": string,"updated_at": string
@@ -540,16 +607,22 @@ isOneToOne: false
                   ]
                 },"lecture_series": {
                   Row: {
-                    "created_at": string,"id": string,"is_archived": boolean,"name": string,"org_id": string,"teacher": string | null
+                    "created_at": string,"group_id": string,"id": string,"is_archived": boolean,"name": string,"org_id": string,"teacher": string | null
                   }
                   Insert: {
-                    "created_at"?: string,"id"?: string,"is_archived"?: boolean,"name": string,"org_id"?: string,"teacher"?: string | null
+                    "created_at"?: string,"group_id": string,"id"?: string,"is_archived"?: boolean,"name": string,"org_id"?: string,"teacher"?: string | null
                   }
                   Update: {
-                    "created_at"?: string,"id"?: string,"is_archived"?: boolean,"name"?: string,"org_id"?: string,"teacher"?: string | null
+                    "created_at"?: string,"group_id"?: string,"id"?: string,"is_archived"?: boolean,"name"?: string,"org_id"?: string,"teacher"?: string | null
                   }
                   Relationships: [
                     {
+      foreignKeyName: "lecture_series_group_id_fkey"
+      columns: ["group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["id","org_id"]
+    },{
       foreignKeyName: "lecture_series_org_id_fkey"
       columns: ["org_id"]
 isOneToOne: false
@@ -559,13 +632,13 @@ isOneToOne: false
                   ]
                 },"lectures": {
                   Row: {
-                    "created_at": string,"created_by": string | null,"description": string | null,"id": string,"lecture_date": string | null,"org_id": string,"scripture_reference": string | null,"series_id": string | null,"summary": string | null,"thumbnail_url": string | null,"title": string,"video_url": string,"week_number": number | null
+                    "created_at": string,"created_by": string | null,"description": string | null,"group_id": string,"id": string,"lecture_date": string | null,"org_id": string,"scripture_reference": string | null,"series_id": string | null,"summary": string | null,"thumbnail_url": string | null,"title": string,"video_url": string,"week_number": number | null
                   }
                   Insert: {
-                    "created_at"?: string,"created_by"?: string | null,"description"?: string | null,"id"?: string,"lecture_date"?: string | null,"org_id"?: string,"scripture_reference"?: string | null,"series_id"?: string | null,"summary"?: string | null,"thumbnail_url"?: string | null,"title": string,"video_url": string,"week_number"?: number | null
+                    "created_at"?: string,"created_by"?: string | null,"description"?: string | null,"group_id": string,"id"?: string,"lecture_date"?: string | null,"org_id"?: string,"scripture_reference"?: string | null,"series_id"?: string | null,"summary"?: string | null,"thumbnail_url"?: string | null,"title": string,"video_url": string,"week_number"?: number | null
                   }
                   Update: {
-                    "created_at"?: string,"created_by"?: string | null,"description"?: string | null,"id"?: string,"lecture_date"?: string | null,"org_id"?: string,"scripture_reference"?: string | null,"series_id"?: string | null,"summary"?: string | null,"thumbnail_url"?: string | null,"title"?: string,"video_url"?: string,"week_number"?: number | null
+                    "created_at"?: string,"created_by"?: string | null,"description"?: string | null,"group_id"?: string,"id"?: string,"lecture_date"?: string | null,"org_id"?: string,"scripture_reference"?: string | null,"series_id"?: string | null,"summary"?: string | null,"thumbnail_url"?: string | null,"title"?: string,"video_url"?: string,"week_number"?: number | null
                   }
                   Relationships: [
                     {
@@ -581,6 +654,12 @@ isOneToOne: false
       referencedRelation: "profiles_directory"
       referencedColumns: ["id","org_id"]
     },{
+      foreignKeyName: "lectures_group_id_fkey"
+      columns: ["group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["id","org_id"]
+    },{
       foreignKeyName: "lectures_org_id_fkey"
       columns: ["org_id"]
 isOneToOne: false
@@ -588,10 +667,10 @@ isOneToOne: false
       referencedColumns: ["id"]
     },{
       foreignKeyName: "lectures_series_id_fkey"
-      columns: ["series_id","org_id"]
+      columns: ["series_id","org_id","group_id"]
 isOneToOne: false
       referencedRelation: "lecture_series"
-      referencedColumns: ["id","org_id"]
+      referencedColumns: ["id","org_id","group_id"]
     }
                   ]
                 },"org_domain_worker_events": {
@@ -748,20 +827,26 @@ isOneToOne: false
                   ]
                 },"prayer_call_sessions": {
                   Row: {
-                    "created_at": string,"dial_in": string | null,"display_order": number,"end_time": string | null,"event_id": string | null,"id": string,"join_url": string | null,"leader_id": string | null,"org_id": string,"pin": string | null,"start_time": string,"updated_at": string,"weekday": number
+                    "created_at": string,"dial_in": string | null,"display_order": number,"end_time": string | null,"event_id": string | null,"group_id": string,"id": string,"join_url": string | null,"leader_id": string | null,"org_id": string,"pin": string | null,"start_time": string,"updated_at": string,"weekday": number
                   }
                   Insert: {
-                    "created_at"?: string,"dial_in"?: string | null,"display_order"?: number,"end_time"?: string | null,"event_id"?: string | null,"id"?: string,"join_url"?: string | null,"leader_id"?: string | null,"org_id"?: string,"pin"?: string | null,"start_time": string,"updated_at"?: string,"weekday": number
+                    "created_at"?: string,"dial_in"?: string | null,"display_order"?: number,"end_time"?: string | null,"event_id"?: string | null,"group_id": string,"id"?: string,"join_url"?: string | null,"leader_id"?: string | null,"org_id"?: string,"pin"?: string | null,"start_time": string,"updated_at"?: string,"weekday": number
                   }
                   Update: {
-                    "created_at"?: string,"dial_in"?: string | null,"display_order"?: number,"end_time"?: string | null,"event_id"?: string | null,"id"?: string,"join_url"?: string | null,"leader_id"?: string | null,"org_id"?: string,"pin"?: string | null,"start_time"?: string,"updated_at"?: string,"weekday"?: number
+                    "created_at"?: string,"dial_in"?: string | null,"display_order"?: number,"end_time"?: string | null,"event_id"?: string | null,"group_id"?: string,"id"?: string,"join_url"?: string | null,"leader_id"?: string | null,"org_id"?: string,"pin"?: string | null,"start_time"?: string,"updated_at"?: string,"weekday"?: number
                   }
                   Relationships: [
                     {
       foreignKeyName: "prayer_call_sessions_event_id_fkey"
-      columns: ["event_id","org_id"]
+      columns: ["event_id","org_id","group_id"]
 isOneToOne: false
       referencedRelation: "events"
+      referencedColumns: ["id","org_id","group_id"]
+    },{
+      foreignKeyName: "prayer_call_sessions_group_id_fkey"
+      columns: ["group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "groups"
       referencedColumns: ["id","org_id"]
     },{
       foreignKeyName: "prayer_call_sessions_leader_id_fkey"
@@ -785,13 +870,13 @@ isOneToOne: false
                   ]
                 },"prayer_requests": {
                   Row: {
-                    "author_id": string,"body": string,"category": string,"created_at": string,"id": string,"is_anonymous": boolean,"is_answered": boolean,"org_id": string,"updated_at": string,"visible_to_warriors": boolean
+                    "author_id": string,"body": string,"category": string,"created_at": string,"group_id": string,"id": string,"is_anonymous": boolean,"is_answered": boolean,"org_id": string,"updated_at": string,"visible_to_warriors": boolean
                   }
                   Insert: {
-                    "author_id": string,"body": string,"category": string,"created_at"?: string,"id"?: string,"is_anonymous"?: boolean,"is_answered"?: boolean,"org_id"?: string,"updated_at"?: string,"visible_to_warriors"?: boolean
+                    "author_id": string,"body": string,"category": string,"created_at"?: string,"group_id": string,"id"?: string,"is_anonymous"?: boolean,"is_answered"?: boolean,"org_id"?: string,"updated_at"?: string,"visible_to_warriors"?: boolean
                   }
                   Update: {
-                    "author_id"?: string,"body"?: string,"category"?: string,"created_at"?: string,"id"?: string,"is_anonymous"?: boolean,"is_answered"?: boolean,"org_id"?: string,"updated_at"?: string,"visible_to_warriors"?: boolean
+                    "author_id"?: string,"body"?: string,"category"?: string,"created_at"?: string,"group_id"?: string,"id"?: string,"is_anonymous"?: boolean,"is_answered"?: boolean,"org_id"?: string,"updated_at"?: string,"visible_to_warriors"?: boolean
                   }
                   Relationships: [
                     {
@@ -807,6 +892,12 @@ isOneToOne: false
       referencedRelation: "profiles_directory"
       referencedColumns: ["id","org_id"]
     },{
+      foreignKeyName: "prayer_requests_group_id_fkey"
+      columns: ["group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["id","org_id"]
+    },{
       foreignKeyName: "prayer_requests_org_id_fkey"
       columns: ["org_id"]
 isOneToOne: false
@@ -816,16 +907,22 @@ isOneToOne: false
                   ]
                 },"prayer_responses": {
                   Row: {
-                    "created_at": string,"org_id": string,"profile_id": string,"request_id": string
+                    "created_at": string,"group_id": string,"org_id": string,"profile_id": string,"request_id": string
                   }
                   Insert: {
-                    "created_at"?: string,"org_id"?: string,"profile_id": string,"request_id": string
+                    "created_at"?: string,"group_id": string,"org_id"?: string,"profile_id": string,"request_id": string
                   }
                   Update: {
-                    "created_at"?: string,"org_id"?: string,"profile_id"?: string,"request_id"?: string
+                    "created_at"?: string,"group_id"?: string,"org_id"?: string,"profile_id"?: string,"request_id"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "prayer_responses_group_id_fkey"
+      columns: ["group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["id","org_id"]
+    },{
       foreignKeyName: "prayer_responses_org_id_fkey"
       columns: ["org_id"]
 isOneToOne: false
@@ -845,16 +942,16 @@ isOneToOne: false
       referencedColumns: ["id","org_id"]
     },{
       foreignKeyName: "prayer_responses_request_id_fkey"
-      columns: ["request_id","org_id"]
+      columns: ["request_id","org_id","group_id"]
 isOneToOne: false
       referencedRelation: "prayer_requests"
-      referencedColumns: ["id","org_id"]
+      referencedColumns: ["id","org_id","group_id"]
     },{
       foreignKeyName: "prayer_responses_request_id_fkey"
-      columns: ["request_id","org_id"]
+      columns: ["request_id","org_id","group_id"]
 isOneToOne: false
       referencedRelation: "prayer_wall"
-      referencedColumns: ["id","org_id"]
+      referencedColumns: ["id","org_id","group_id"]
     }
                   ]
                 },"profiles": {
@@ -933,22 +1030,16 @@ isOneToOne: false
                   ]
                 },"serving_broadcasts": {
                   Row: {
-                    "created_at": string,"group_id": string,"id": string,"open_dates": (string)[],"org_id": string,"recipient_count": number,"sent_by": string | null,"subject": string
+                    "created_at": string,"id": string,"open_dates": (string)[],"org_id": string,"recipient_count": number,"sent_by": string | null,"subject": string,"team_id": string
                   }
                   Insert: {
-                    "created_at"?: string,"group_id": string,"id"?: string,"open_dates"?: (string)[],"org_id"?: string,"recipient_count"?: number,"sent_by"?: string | null,"subject": string
+                    "created_at"?: string,"id"?: string,"open_dates"?: (string)[],"org_id"?: string,"recipient_count"?: number,"sent_by"?: string | null,"subject": string,"team_id": string
                   }
                   Update: {
-                    "created_at"?: string,"group_id"?: string,"id"?: string,"open_dates"?: (string)[],"org_id"?: string,"recipient_count"?: number,"sent_by"?: string | null,"subject"?: string
+                    "created_at"?: string,"id"?: string,"open_dates"?: (string)[],"org_id"?: string,"recipient_count"?: number,"sent_by"?: string | null,"subject"?: string,"team_id"?: string
                   }
                   Relationships: [
                     {
-      foreignKeyName: "serving_broadcasts_group_id_fkey"
-      columns: ["group_id","org_id"]
-isOneToOne: false
-      referencedRelation: "teams"
-      referencedColumns: ["id","org_id"]
-    },{
       foreignKeyName: "serving_broadcasts_org_id_fkey"
       columns: ["org_id"]
 isOneToOne: false
@@ -965,6 +1056,12 @@ isOneToOne: false
       columns: ["sent_by","org_id"]
 isOneToOne: false
       referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "serving_broadcasts_team_id_fkey"
+      columns: ["team_id","org_id"]
+isOneToOne: false
+      referencedRelation: "teams"
       referencedColumns: ["id","org_id"]
     }
                   ]
@@ -1007,13 +1104,13 @@ isOneToOne: false
                   ]
                 },"serving_signups": {
                   Row: {
-                    "created_at": string,"created_by": string,"family_id": string | null,"group_id": string,"id": string,"org_id": string,"service_date": string
+                    "created_at": string,"created_by": string,"family_id": string | null,"id": string,"org_id": string,"service_date": string,"team_id": string
                   }
                   Insert: {
-                    "created_at"?: string,"created_by": string,"family_id"?: string | null,"group_id": string,"id"?: string,"org_id"?: string,"service_date": string
+                    "created_at"?: string,"created_by": string,"family_id"?: string | null,"id"?: string,"org_id"?: string,"service_date": string,"team_id": string
                   }
                   Update: {
-                    "created_at"?: string,"created_by"?: string,"family_id"?: string | null,"group_id"?: string,"id"?: string,"org_id"?: string,"service_date"?: string
+                    "created_at"?: string,"created_by"?: string,"family_id"?: string | null,"id"?: string,"org_id"?: string,"service_date"?: string,"team_id"?: string
                   }
                   Relationships: [
                     {
@@ -1047,42 +1144,42 @@ isOneToOne: false
       referencedRelation: "family_units"
       referencedColumns: ["id","org_id"]
     },{
-      foreignKeyName: "serving_signups_group_id_fkey"
-      columns: ["group_id","org_id"]
-isOneToOne: false
-      referencedRelation: "teams"
-      referencedColumns: ["id","org_id"]
-    },{
       foreignKeyName: "serving_signups_org_id_fkey"
       columns: ["org_id"]
 isOneToOne: false
       referencedRelation: "organizations"
       referencedColumns: ["id"]
+    },{
+      foreignKeyName: "serving_signups_team_id_fkey"
+      columns: ["team_id","org_id"]
+isOneToOne: false
+      referencedRelation: "teams"
+      referencedColumns: ["id","org_id"]
     }
                   ]
                 },"serving_team_settings": {
                   Row: {
-                    "enabled": boolean,"group_id": string,"org_id": string,"reminder_days": (number)[],"reminder_method": string,"updated_at": string,"updated_by": string | null,"window_weeks": number
+                    "enabled": boolean,"org_id": string,"reminder_days": (number)[],"reminder_method": string,"team_id": string,"updated_at": string,"updated_by": string | null,"window_weeks": number
                   }
                   Insert: {
-                    "enabled"?: boolean,"group_id": string,"org_id"?: string,"reminder_days"?: (number)[],"reminder_method"?: string,"updated_at"?: string,"updated_by"?: string | null,"window_weeks"?: number
+                    "enabled"?: boolean,"org_id"?: string,"reminder_days"?: (number)[],"reminder_method"?: string,"team_id": string,"updated_at"?: string,"updated_by"?: string | null,"window_weeks"?: number
                   }
                   Update: {
-                    "enabled"?: boolean,"group_id"?: string,"org_id"?: string,"reminder_days"?: (number)[],"reminder_method"?: string,"updated_at"?: string,"updated_by"?: string | null,"window_weeks"?: number
+                    "enabled"?: boolean,"org_id"?: string,"reminder_days"?: (number)[],"reminder_method"?: string,"team_id"?: string,"updated_at"?: string,"updated_by"?: string | null,"window_weeks"?: number
                   }
                   Relationships: [
                     {
-      foreignKeyName: "serving_team_settings_group_id_fkey"
-      columns: ["group_id","org_id"]
-isOneToOne: false
-      referencedRelation: "teams"
-      referencedColumns: ["id","org_id"]
-    },{
       foreignKeyName: "serving_team_settings_org_id_fkey"
       columns: ["org_id"]
 isOneToOne: false
       referencedRelation: "organizations"
       referencedColumns: ["id"]
+    },{
+      foreignKeyName: "serving_team_settings_team_id_fkey"
+      columns: ["team_id","org_id"]
+isOneToOne: false
+      referencedRelation: "teams"
+      referencedColumns: ["id","org_id"]
     }
                   ]
                 },"site_settings": {
@@ -1209,10 +1306,16 @@ isOneToOne: false
                   ]
                 },"prayer_wall": {
                   Row: {
-                    "avatar_url": string | null,"body": string | null,"category": string | null,"created_at": string | null,"first_name": string | null,"i_am_praying": boolean | null,"id": string | null,"is_anonymous": boolean | null,"is_answered": boolean | null,"last_name": string | null,"mine": boolean | null,"org_id": string | null,"praying_count": number | null,"preferred_name": string | null,"visible_to_warriors": boolean | null
+                    "avatar_url": string | null,"body": string | null,"category": string | null,"created_at": string | null,"first_name": string | null,"group_id": string | null,"i_am_praying": boolean | null,"id": string | null,"is_anonymous": boolean | null,"is_answered": boolean | null,"last_name": string | null,"mine": boolean | null,"org_id": string | null,"praying_count": number | null,"preferred_name": string | null,"visible_to_warriors": boolean | null
                   }
                   Relationships: [
                     {
+      foreignKeyName: "prayer_requests_group_id_fkey"
+      columns: ["group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["id","org_id"]
+    },{
       foreignKeyName: "prayer_requests_org_id_fkey"
       columns: ["org_id"]
 isOneToOne: false
@@ -1286,6 +1389,9 @@ isOneToOne: false
                            },
 "giving_stewards_can_manage":
 { Args: Record<PropertyKey, never>; Returns: boolean
+                           },
+"group_content_backfill":
+{ Args: Record<PropertyKey, never>; Returns: undefined
                            },
 "group_model_backfill":
 { Args: Record<PropertyKey, never>; Returns: undefined

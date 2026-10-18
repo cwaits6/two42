@@ -42,7 +42,7 @@ begin
 
   select count(*) into anon_private_count
     from public.site_settings
-    where key in ('weekly_zoom_url', 'weekly_prayer_call_url', 'serving_link_mode', 'giving_manage_mode');
+    where key in ('giving_manage_mode', 'giving_dashboard_tile');
   if anon_private_count <> 0 then
     raise exception 'anon should NOT read private settings, got % rows', anon_private_count;
   end if;
@@ -53,9 +53,9 @@ begin
 
   select count(*) into member_private_count
     from public.site_settings
-    where key in ('weekly_zoom_url', 'weekly_prayer_call_url', 'serving_link_mode', 'giving_manage_mode');
-  if member_private_count <> 4 then
-    raise exception 'member should read all private settings via is_member(), got % of 4 rows', member_private_count;
+    where key in ('giving_manage_mode', 'giving_dashboard_tile');
+  if member_private_count <> 2 then
+    raise exception 'member should read all private settings via is_member(), got % of 2 rows', member_private_count;
   end if;
 
   reset role;

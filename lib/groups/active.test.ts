@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
 import {
-  GROUP_DEFAULT_COLOR,
   groupIdFromPath,
   groupInitials,
   groupPath,

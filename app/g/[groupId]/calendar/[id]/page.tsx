@@ -13,20 +13,21 @@ import { Pencil } from "lucide-react";
 import { siteConfig } from "@/lib/config";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
-import type { Event, EventCalendar, Rsvp } from "@/lib/types";
+import type { Event, Rsvp } from "@/lib/types";
 
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ groupId: string; id: string }>;
 }) {
-  const { id } = await params;
+  const { groupId, id } = await params;
   const supabase = await createClient();
   const { data: event } = await supabase
     .from("events")
     .select("title")
     .eq("id", id)
-    .single();
+    .eq("group_id", groupId)
+    .maybeSingle();
 
   if (!event) {
     return { title: `Event | ${siteConfig.name}` };
@@ -75,41 +76,28 @@ export default async function EventDetailPage({
   const { occurrence } = await searchParams;
   const supabase = await createClient();
 
-  // Fetch event with calendar join
+  // A cross-group id is not found, never a different status.
   const { data: eventRaw } = await supabase
     .from("events")
-    .select("*, calendar:event_calendars(*)")
+    .select("*")
     .eq("id", id)
-    .single();
+    .eq("group_id", group.id)
+    .maybeSingle();
 
   if (!eventRaw) notFound();
 
-  const event = eventRaw as Event & { calendar?: EventCalendar | null };
+  const event = eventRaw as Event;
 
-  // Auth
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  let profile = null;
-  if (user) {
-    const { data } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-    profile = data;
-  }
-
-  const isAdmin = profile?.role === "admin";
-  const isMember =
-    profile?.role === "member" ||
-    profile?.role === "content_editor" ||
-    isAdmin;
+  // requireActiveGroup() admitted only an approved member of this group.
+  const isLeader = group.role === "leader";
 
   // Fetch current user's RSVP
   let userRsvp: Rsvp | null = null;
-  if (user && isMember) {
+  if (user) {
     const { data } = await supabase
       .from("rsvps")
       .select("*")
@@ -170,27 +158,27 @@ export default async function EventDetailPage({
 
   // Meeting fields live on the series anchor; exception rows inherit them.
   let meeting: MeetingFields | null = null;
-  if (isMember) {
-    let source: MeetingFields = event;
-    if (event.series_id) {
-      const { data: anchor } = await supabase
-        .from("events")
-        .select(
-          "meeting_url, meeting_id, meeting_passcode, meeting_show_on_dashboard, meeting_lead_minutes"
-        )
-        .eq("id", event.series_id)
-        .maybeSingle();
-      if (anchor) source = anchor;
-    }
-    if (source.meeting_url) meeting = source;
+  let meetingSource: MeetingFields = event;
+  if (event.series_id) {
+    const { data: anchor } = await supabase
+      .from("events")
+      .select(
+        "meeting_url, meeting_id, meeting_passcode, meeting_show_on_dashboard, meeting_lead_minutes"
+      )
+      .eq("id", event.series_id)
+      .eq("group_id", group.id)
+      .maybeSingle();
+    if (anchor) meetingSource = anchor;
   }
+  if (meetingSource.meeting_url) meeting = meetingSource;
 
   // Recordings link for the ended state — only when there's a library to point to
   let hasLectures = false;
   if (meeting) {
     const { count } = await supabase
       .from("lectures")
-      .select("id", { count: "exact", head: true });
+      .select("id", { count: "exact", head: true })
+      .eq("group_id", group.id);
     hasLectures = (count ?? 0) > 0;
   }
 
@@ -216,9 +204,12 @@ export default async function EventDetailPage({
 
   // Build the edit URL — include the occurrence param for recurring series so the
   // edit page knows which occurrence is being modified.
-  const editHref = occurrence && event.recurrence_frequency && !event.series_id
-    ? `/admin/events/${id}/edit?occurrence=${encodeURIComponent(occurrence)}`
-    : `/admin/events/${id}/edit`;
+  const editHref = groupPath(
+    group.id,
+    occurrence && event.recurrence_frequency && !event.series_id
+      ? `/calendar/${id}/edit?occurrence=${encodeURIComponent(occurrence)}`
+      : `/calendar/${id}/edit`
+  );
 
   // Breadcrumb date label
   const breadcrumbDate = startDate.toLocaleDateString("en-US", {
@@ -259,8 +250,8 @@ export default async function EventDetailPage({
             </span>
           </nav>
 
-          {/* Admin edit button — top right, visually subordinate */}
-          {isAdmin && (
+          {/* Leader edit button — top right, visually subordinate */}
+          {isLeader && (
             <Button
               variant="outline"
               size="sm"
@@ -310,15 +301,13 @@ export default async function EventDetailPage({
               {event.title}
             </h1>
 
-            {/* Calendar name as serif-italic subtitle — only if present */}
-            {event.calendar?.name && (
-              <p
-                className="font-serif italic text-[22px] mt-2 leading-snug tracking-tight"
-                style={{ color: "var(--color-brand-primary)" }}
-              >
-                {event.calendar.name}
-              </p>
-            )}
+            {/* The group as serif-italic subtitle */}
+            <p
+              className="font-serif italic text-[22px] mt-2 leading-snug tracking-tight"
+              style={{ color: "var(--color-brand-primary)" }}
+            >
+              {group.name}
+            </p>
 
             {/* Meta strip */}
             <div
@@ -371,7 +360,7 @@ export default async function EventDetailPage({
           <div className="flex flex-col gap-4 md:sticky md:top-6">
 
             {/* ── RSVP Hero Card ── */}
-            {event.is_rsvp_enabled && isMember && user && (
+            {event.is_rsvp_enabled && user && (
               <div
                 className="rounded-[18px] p-6 relative overflow-hidden"
                 style={{
@@ -415,14 +404,14 @@ export default async function EventDetailPage({
                       location={event.location}
                       description={event.description}
                     />
-                    {isMember && <SubscribeToEventButton eventId={event.id} />}
+                    <SubscribeToEventButton eventId={event.id} />
                   </div>
                 </div>
               </div>
             )}
 
             {/* Join card when RSVP is disabled but a meeting is set */}
-            {!(event.is_rsvp_enabled && isMember && user) && meeting?.meeting_url && (
+            {!(event.is_rsvp_enabled && user) && meeting?.meeting_url && (
               <div
                 className="rounded-[18px] p-6 relative overflow-hidden"
                 style={{
@@ -446,7 +435,7 @@ export default async function EventDetailPage({
             )}
 
             {/* Calendar actions for non-RSVP or logged-out state */}
-            {!(event.is_rsvp_enabled && isMember && user) && (
+            {!(event.is_rsvp_enabled && user) && (
               <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-card p-4">
                 <AddToCalendarButton
                   instance={`event-detail-${event.id}`}
@@ -456,7 +445,7 @@ export default async function EventDetailPage({
                   location={event.location}
                   description={event.description}
                 />
-                {isMember && <SubscribeToEventButton eventId={event.id} />}
+                <SubscribeToEventButton eventId={event.id} />
               </div>
             )}
 

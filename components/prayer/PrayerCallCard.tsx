@@ -22,6 +22,7 @@ import {
 import { sessionLabel, telHref, WEEKDAY_LABELS } from "@/lib/prayer";
 import { savePrayerCallSessions, type SessionDraft } from "@/lib/prayerCalls";
 import type { MemberOption } from "@/components/giving/FundForm";
+import type { PrayerGroup } from "@/components/prayer/PrayerBoard";
 import type { PrayerCallSession } from "@/lib/types";
 
 interface Draft {
@@ -74,25 +75,29 @@ const inputClass =
 
 export function PrayerCallCard({
   initialSessions,
-  isAdmin,
+  group,
   members,
-  prayerCalendarId,
   orgId,
+  prayerCall,
 }: {
   initialSessions: PrayerCallSession[];
-  isAdmin: boolean;
+  /** The verified active group; the sessions and their events belong to it. */
+  group: PrayerGroup;
   members: MemberOption[];
-  prayerCalendarId: string | null;
   /** Resolved server-side from the caller's own profile, never derived here:
    *  the browser client cannot read a cookie-bound org anchor. */
   orgId: string;
+  /** The group's standing weekly call, from its settings. */
+  prayerCall: { url: string | null; time: string | null };
 }) {
   const [sessions, setSessions] = useState(initialSessions);
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
   const [saving, setSaving] = useState(false);
   const editing = drafts !== null;
+  const isLeader = group.isLeader;
+  const hasStandingCall = !!(prayerCall.url || prayerCall.time);
 
-  if (sessions.length === 0 && !isAdmin) return null;
+  if (sessions.length === 0 && !hasStandingCall && !isLeader) return null;
 
   const memberName = (id: string | null) =>
     id ? members.find((m) => m.id === id)?.name ?? null : null;
@@ -138,13 +143,15 @@ export function PrayerCallCard({
     const errMsg = await savePrayerCallSessions(
       supabase,
       orgId,
+      group.id,
+      group.name,
       sessionDrafts,
-      removed,
-      prayerCalendarId
+      removed
     );
     const { data: fresh, error: fetchError } = await supabase
       .from("prayer_call_sessions")
       .select("*")
+      .eq("group_id", group.id)
       .order("display_order")
       .order("created_at");
     setSaving(false);
@@ -179,7 +186,7 @@ export function PrayerCallCard({
           <span aria-hidden="true" className="h-px w-5 bg-brand-accent" />
           Weekly prayer
         </div>
-        {isAdmin && (
+        {isLeader && (
           <button
             type="button"
             onClick={() => (editing ? save() : startEditing())}
@@ -210,6 +217,22 @@ export function PrayerCallCard({
         We gather by phone to pray through the wall. Everyone is welcome to
         join. Each call is also on the group calendar.
       </p>
+
+      {hasStandingCall && (
+        <div className="mb-4 rounded-xl border border-white/15 px-4 py-3 text-sm text-background/85">
+          {prayerCall.time && <div className="font-bold text-background">{prayerCall.time}</div>}
+          {prayerCall.url && (
+            <a
+              href={prayerCall.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-0.5 inline-block break-all py-1 underline underline-offset-4 hover:text-background"
+            >
+              {prayerCall.url}
+            </a>
+          )}
+        </div>
+      )}
 
       {editing ? (
         <div className="flex flex-col gap-3">

@@ -64,6 +64,9 @@ begin
     values (_org, 'Import Suite Parent Group') returning id into _grp;
   insert into public.teams (org_id, group_id, name)
     values (_org, _grp, 'Import Suite Group') returning id into _group;
+  -- A team member must be a member of the team's group.
+  insert into public.group_members (org_id, group_id, profile_id, role)
+    values (_org, _grp, _other, 'member');
 
   perform set_config('member_import.org', _org::text, true);
   perform set_config('member_import.admin', _admin::text, true);

@@ -95,6 +95,24 @@ export async function GET(
 
   const typedEvent = event as Event;
 
+  // The service client bypasses the group boundary, so the owner's
+  // membership of the event's group is re-checked here; a non-member gets
+  // the same 404 as a cross-org id.
+  const { data: membership, error: membershipError } = await supabase
+    .from("group_members")
+    .select("group_id")
+    .eq("org_id", sub.org_id)
+    .eq("profile_id", sub.user_id)
+    .eq("group_id", typedEvent.group_id)
+    .maybeSingle();
+  if (membershipError) {
+    console.error("Failed to check group membership for event ICS:", membershipError);
+    return new Response("Something went wrong", { status: 500 });
+  }
+  if (!membership) {
+    return new Response("Event not found", { status: 404 });
+  }
+
   let icsString: string;
   try {
     icsString = generateSingleEventICS(typedEvent);

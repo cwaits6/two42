@@ -86,13 +86,12 @@ export default async function RootLayout({
       profile = data;
 
       const loadServingAccess = async () => {
-        if (data?.role === "admin") return true;
         if (!groupData?.length) return false;
         const { count } = await supabase
           .from("serving_team_settings")
-          .select("group_id", { count: "exact", head: true })
+          .select("team_id", { count: "exact", head: true })
           .eq("enabled", true)
-          .in("group_id", groupData.map((g) => g.team_id as string));
+          .in("team_id", groupData.map((g) => g.team_id as string));
         return (count ?? 0) > 0;
       };
       // The layout has no error boundary of its own, so a failed membership

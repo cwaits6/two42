@@ -14,10 +14,17 @@ function parseDateToArray(
   ];
 }
 
-export function eventToICSAttributes(event: Event): EventAttributes {
+function prefixed(prefix: string | undefined, title: string): string {
+  return prefix ? `${prefix}: ${title}` : title;
+}
+
+export function eventToICSAttributes(
+  event: Event,
+  opts: { summaryPrefix?: string } = {}
+): EventAttributes {
   const attrs: EventAttributes = {
     uid: event.id,
-    title: event.title,
+    title: prefixed(opts.summaryPrefix, event.title),
     start: parseDateToArray(event.start_time),
     startInputType: "utc",
     status: "CONFIRMED",
@@ -45,7 +52,7 @@ export function generateSingleEventICS(event: Event): string {
 }
 
 export function generateMultiEventICS(events: Event[]): string {
-  const { error, value } = createEvents(events.map(eventToICSAttributes));
+  const { error, value } = createEvents(events.map((event) => eventToICSAttributes(event)));
   if (error || !value) {
     throw new Error(`Failed to generate ICS: ${error?.message ?? "unknown error"}`);
   }
@@ -58,6 +65,8 @@ export interface ServingICSInput {
   serviceDate: string;
   teamName: string;
   description?: string;
+  /** The group name, on the merged feed only. */
+  summaryPrefix?: string;
 }
 
 /** All-day calendar entry for a serving Sunday (3-element dates → VALUE=DATE). */
@@ -66,7 +75,7 @@ export function servingToICSAttributes(input: ServingICSInput): EventAttributes 
   const next = new Date(y, m - 1, d + 1);
   return {
     uid: `serving-${input.signupId}`,
-    title: `Serving: ${input.teamName}`,
+    title: prefixed(input.summaryPrefix, `Serving: ${input.teamName}`),
     start: [y, m, d],
     end: [next.getFullYear(), next.getMonth() + 1, next.getDate()],
     status: "CONFIRMED",
@@ -82,13 +91,19 @@ export function generateServingICS(input: ServingICSInput): string {
   return value;
 }
 
-/** Combined feed: group events + serving signups in a single VCALENDAR. */
+export interface FeedEvent {
+  event: Event;
+  /** The group name, on the merged feed only. */
+  summaryPrefix?: string;
+}
+
+/** Combined feed: the member's groups' events + serving signups in one VCALENDAR. */
 export function generateCombinedICS(
-  events: Event[],
+  events: FeedEvent[],
   servingSignups: ServingICSInput[]
 ): string {
   const all: EventAttributes[] = [
-    ...events.map(eventToICSAttributes),
+    ...events.map(({ event, summaryPrefix }) => eventToICSAttributes(event, { summaryPrefix })),
     ...servingSignups.map(servingToICSAttributes),
   ];
   if (all.length === 0) {

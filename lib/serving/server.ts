@@ -83,8 +83,10 @@ export async function sendSignupConfirmation(
   opts: {
     signupId: string;
     orgId: string;
+    /** The team's group: resolves the link mode and the page the links open. */
     groupId: string;
-    groupName: string;
+    teamId: string;
+    teamName: string;
     serviceDate: string;
     attendees: NamedProfile[];
     familyId: string | null;
@@ -103,28 +105,28 @@ export async function sendSignupConfirmation(
   const branding = await resolveEmailBranding(opts.orgId);
   const baseUrl = siteConfig.url;
 
-  const linkMode = await getServingLinkMode(supabase, opts.orgId);
+  const linkMode = await getServingLinkMode(supabase, opts.orgId, opts.groupId);
   const cancelUrl =
     linkMode === "signed"
       ? `${baseUrl}/serving/go?token=${createServingToken({
           a: "cancel",
-          g: opts.groupId,
+          g: opts.teamId,
           d: opts.serviceDate,
           p: opts.recipient.id,
         })}`
-      : `${baseUrl}/serving/${opts.groupId}`;
+      : `${baseUrl}/g/${opts.groupId}/serving/${opts.teamId}`;
 
   await sendServingConfirmationEmail({
     to: opts.recipient.email,
     name: opts.recipient.name,
-    teamName: opts.groupName,
+    teamName: opts.teamName,
     serviceDate: opts.serviceDate,
     attendeesLabel,
     cancelUrl,
     icsContent: generateServingICS({
       signupId: opts.signupId,
       serviceDate: opts.serviceDate,
-      teamName: opts.groupName,
+      teamName: opts.teamName,
     }),
     branding,
   });
@@ -134,9 +136,11 @@ export async function sendSignupConfirmation(
 export async function notifyLeadersOfCancel(
   service: SupabaseClient,
   opts: {
+    /** The team's group: the page the link opens lives under it. */
     groupId: string;
+    teamId: string;
     orgId: string;
-    groupName: string;
+    teamName: string;
     serviceDate: string;
     memberLabel: string;
     excludeProfileId?: string;
@@ -154,7 +158,7 @@ export async function notifyLeadersOfCancel(
   const { data: leaders, error } = await service
     .from("team_members")
     .select("profiles(id, first_name, last_name, preferred_name, email)")
-    .eq("team_id", opts.groupId)
+    .eq("team_id", opts.teamId)
     .eq("org_id", opts.orgId)
     .eq("is_leader", true);
 
@@ -163,8 +167,8 @@ export async function notifyLeadersOfCancel(
   // slot opened, with no other signal that it happened. Log it.
   if (error) {
     console.error(
-      "Serving leaders lookup failed for group %s (org=%s):",
-      opts.groupId,
+      "Serving leaders lookup failed for team %s (org=%s):",
+      opts.teamId,
       opts.orgId,
       error
     );
@@ -209,9 +213,9 @@ export async function notifyLeadersOfCancel(
         to: leader.email,
         leaderName: displayName(leader),
         memberLabel: opts.memberLabel,
-        teamName: opts.groupName,
+        teamName: opts.teamName,
         serviceDate: opts.serviceDate,
-        servingUrl: `${baseUrl}/serving/${opts.groupId}`,
+        servingUrl: `${baseUrl}/g/${opts.groupId}/serving/${opts.teamId}`,
         branding,
       });
     } catch (err) {

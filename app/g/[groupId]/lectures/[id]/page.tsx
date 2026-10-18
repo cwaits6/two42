@@ -7,6 +7,7 @@ import { requireActiveGroup } from "@/lib/groups/server";
 
 type LectureDetail = {
   id: string;
+  group_id: string;
   title: string;
   description: string | null;
   video_url: string;
@@ -49,13 +50,14 @@ export async function generateMetadata({
 }: {
   params: Promise<{ groupId: string; id: string }>;
 }) {
-  const { id } = await params;
+  const { groupId, id } = await params;
   const supabase = await createClient();
   const { data } = await supabase
     .from("lectures")
     .select("title")
     .eq("id", id)
-    .single();
+    .eq("group_id", groupId)
+    .maybeSingle();
   return {
     title: data ? `${data.title} | ${siteConfig.name}` : `Lecture | ${siteConfig.name}`,
   };
@@ -75,7 +77,8 @@ export default async function LectureDetailPage({
     .from("lectures")
     .select("*, lecture_series(id, name, teacher)")
     .eq("id", id)
-    .single();
+    .eq("group_id", group.id)
+    .maybeSingle();
 
   if (!lectureData) notFound();
   const lecture = lectureData as LectureDetail;
@@ -88,6 +91,7 @@ export default async function LectureDetailPage({
       .from("lectures")
       .select("id, title, lecture_date")
       .eq("series_id", lecture.series_id)
+      .eq("group_id", group.id)
       .order("lecture_date", { ascending: true });
 
     if (seriesLectures) {

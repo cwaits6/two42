@@ -14,10 +14,6 @@ export type ActiveGroup = {
 export const GROUP_COOKIE = "two42-group";
 export const GROUP_PREFIX = "/g";
 
-// Every group is Clay until one calendar per group exists; the group's
-// calendar color takes over then. Named in text beside the color everywhere.
-export const GROUP_DEFAULT_COLOR = "#B85C38";
-
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function isUuid(value: string): boolean {

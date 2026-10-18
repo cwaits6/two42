@@ -31,10 +31,10 @@ export default async function NewFundPage({
     .eq("id", user.id)
     .single();
   if (!profile || profile.role === "pending") redirect("/dashboard");
-  const isAdmin = profile.role === "admin";
+  const isLeader = group.role === "leader";
 
   const stewardsCanManage = await givingStewardsCanManage(supabase, profile.org_id);
-  if (!isAdmin && !stewardsCanManage) redirect(giveHref);
+  if (!isLeader && !stewardsCanManage) redirect(giveHref);
 
   const { members } = await loadFundFormData(supabase, profile.org_id);
 
@@ -47,7 +47,9 @@ export default async function NewFundPage({
         fund={null}
         members={members}
         currentUserId={user.id}
-        isAdmin={isAdmin}
+        isLeader={isLeader}
+        groupId={group.id}
+        groupName={group.name}
         backHref={giveHref}
       />
     </div>

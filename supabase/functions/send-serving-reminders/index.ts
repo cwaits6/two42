@@ -24,6 +24,7 @@ import {
   resolveEmailBranding,
   type EmailBranding,
 } from "../_shared/branding.ts";
+import { resolveGroupLinkMode, type GroupClient } from "../_shared/groups.ts";
 import { escapeHtml } from "../_shared/html.ts";
 import { nextSunday, upcomingSundays } from "../_shared/sundays.ts";
 import { resolveServiceKey } from "../_shared/service-key.ts";
@@ -180,21 +181,27 @@ function wrap(inner: string, orgName: string): string {
 
 // ── Shared: resolve link mode ─────────────────────────────────────────────────
 
-// Org-scoped: the key-only read errored outright at two orgs (the bug class
-// closed for the app layer in lib/serving/config.ts and recorded for this
-// function in docs/security/service-role-inventory.md). An unresolvable link
-// mode is an org-level failure — throw so the per-org boundary catches it
-// instead of silently degrading every link to unsigned.
-async function resolveCanSign(supabase: ServiceClient, orgId: string): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("site_settings")
-    .select("value")
-    .eq("org_id", orgId)
-    .eq("key", "serving_link_mode")
-    .maybeSingle();
-  if (error) throw new Error(`site_settings query failed: ${error.message}`);
-  const mode = (data?.value ?? SERVING_LINK_MODE) === "login" ? "login" : "signed";
-  return mode === "signed" && !!SERVING_LINK_SECRET;
+// The link mode is a per-group setting, and several teams share a group, so
+// it is memoised per org run. resolveGroupLinkMode throws on a query error —
+// inside the team loop that is a per-team failure, not a silent downgrade to
+// unsigned links. Same TS2589 reason as the OrgListClient cast in Deno.serve.
+async function canSignForGroup(
+  supabase: ServiceClient,
+  orgId: string,
+  groupId: string,
+  cache: Map<string, boolean>,
+): Promise<boolean> {
+  const cached = cache.get(groupId);
+  if (cached !== undefined) return cached;
+  const mode = await resolveGroupLinkMode(
+    supabase as unknown as GroupClient,
+    orgId,
+    groupId,
+    SERVING_LINK_MODE,
+  );
+  const canSign = mode === "signed" && !!SERVING_LINK_SECRET;
+  cache.set(groupId, canSign);
+  return canSign;
 }
 
 // ── Daily mode: remind attendees of the next covered Sunday ──────────────────
@@ -202,7 +209,7 @@ async function resolveCanSign(supabase: ServiceClient, orgId: string): Promise<b
 async function runDaily(
   supabase: ServiceClient,
   orgId: string,
-  canSign: boolean,
+  linkModes: Map<string, boolean>,
   branding: EmailBranding,
   baseUrl: string
 ): Promise<OrgRunCounts> {
@@ -215,7 +222,7 @@ async function runDaily(
   // Only process teams whose reminder_days include today
   const { data: teamSettings, error: teamSettingsError } = await supabase
     .from("serving_team_settings")
-    .select("group_id")
+    .select("team_id, reminder_days")
     .eq("org_id", orgId)
     .eq("enabled", true)
     .contains("reminder_days", [todayDow]);
@@ -233,21 +240,23 @@ async function runDaily(
   // OrgRunError) so the catch records them per-team instead of aborting the
   // org; `sent` / `sendFailures` are function-scoped, so partial counts
   // survive a caught team.
-  for (const { group_id } of teamSettings) {
+  for (const { team_id } of teamSettings) {
     try {
       const { data: group, error: groupError } = await supabase
         .from("teams")
-        .select("name")
+        .select("name, group_id")
         .eq("org_id", orgId)
-        .eq("id", group_id)
+        .eq("id", team_id)
         .maybeSingle();
       if (groupError) {
         // Recorded via the catch below — this used to be a silent skip whose
         // only record was a log line, invisible to the run summary.
         throw new Error(`teams query failed: ${groupError.message}`);
       }
-      if (!group) continue; // a genuinely absent group is not an error
+      if (!group) continue; // a genuinely absent team is not an error
       const teamName = group.name as string;
+      const group_id = group.group_id as string;
+      const canSign = await canSignForGroup(supabase, orgId, group_id, linkModes);
 
       const sunday = nextSunday();
 
@@ -258,7 +267,7 @@ async function runDaily(
         .from("serving_signups")
         .select("id, serving_signup_attendees(profiles(id, first_name, preferred_name, email))")
         .eq("org_id", orgId)
-        .eq("group_id", group_id)
+        .eq("team_id", team_id)
         .eq("service_date", sunday)
         .maybeSingle();
       if (signupError) {
@@ -286,7 +295,7 @@ async function runDaily(
         console.warn(
           "[org %s] team %s: daily email cap reached, skipping %d reminder(s)",
           orgId,
-          group_id,
+          team_id,
           recipients.length,
         );
         continue;
@@ -297,10 +306,10 @@ async function runDaily(
         const safeTeam = escapeHtml(teamName);
         const dateLabel = escapeHtml(formatDate(sunday));
 
-        let cancelUrl = `${baseUrl}/serving/${group_id}`;
+        let cancelUrl = `${baseUrl}/g/${group_id}/serving/${team_id}`;
         if (canSign) {
           cancelUrl = `${baseUrl}/serving/go?token=${await createToken(
-            { a: "cancel", g: group_id, d: sunday, p: p.id },
+            { a: "cancel", g: team_id, d: sunday, p: p.id },
             SERVING_LINK_SECRET!
           )}`;
         }
@@ -331,16 +340,16 @@ async function runDaily(
         else sendFailures++;
       }
     } catch (err) {
-      // Keyed by group_id, never the team name — names are org-defined free
+      // Keyed by team_id, never the team name — names are org-defined free
       // text (tenant content) and fragile as diagnostic keys.
       console.error(
         "[org %s] team %s failed, continuing with remaining teams:",
         orgId,
-        group_id,
+        team_id,
         err,
       );
       itemFailures.push({
-        item: group_id,
+        item: team_id,
         error: err instanceof Error ? err.message : String(err),
       });
     }
@@ -354,7 +363,7 @@ async function runDaily(
 async function runMonthly(
   supabase: ServiceClient,
   orgId: string,
-  canSign: boolean,
+  linkModes: Map<string, boolean>,
   branding: EmailBranding,
   baseUrl: string
 ): Promise<OrgRunCounts> {
@@ -364,7 +373,7 @@ async function runMonthly(
 
   const { data: teamSettings, error: teamSettingsError } = await supabase
     .from("serving_team_settings")
-    .select("group_id, window_weeks")
+    .select("team_id, window_weeks")
     .eq("org_id", orgId)
     .eq("enabled", true);
 
@@ -381,22 +390,24 @@ async function runMonthly(
   // OrgRunError) so the catch records them per-team instead of aborting the
   // org; `sent` / `sendFailures` are function-scoped, so partial counts
   // survive a caught team.
-  for (const { group_id, window_weeks } of teamSettings) {
+  for (const { team_id, window_weeks } of teamSettings) {
     try {
       let teamSent = 0;
       const { data: group, error: groupError } = await supabase
         .from("teams")
-        .select("name")
+        .select("name, group_id")
         .eq("org_id", orgId)
-        .eq("id", group_id)
+        .eq("id", team_id)
         .maybeSingle();
       if (groupError) {
         // Recorded via the catch below — this used to be a silent skip whose
         // only record was a log line, invisible to the run summary.
         throw new Error(`teams query failed: ${groupError.message}`);
       }
-      if (!group) continue; // a genuinely absent group is not an error
+      if (!group) continue; // a genuinely absent team is not an error
       const teamName = group.name as string;
+      const group_id = group.group_id as string;
+      const canSign = await canSignForGroup(supabase, orgId, group_id, linkModes);
 
       const sundays = upcomingSundays(window_weeks ?? 8);
 
@@ -405,7 +416,7 @@ async function runMonthly(
         .from("serving_signups")
         .select("service_date")
         .eq("org_id", orgId)
-        .eq("group_id", group_id)
+        .eq("team_id", team_id)
         .in("service_date", sundays);
       if (signupsError) {
         throw new Error(`serving_signups query failed: ${signupsError.message}`);
@@ -422,7 +433,7 @@ async function runMonthly(
         .from("team_members")
         .select("profiles(id, first_name, preferred_name, email, email_announcements)")
         .eq("org_id", orgId)
-        .eq("team_id", group_id);
+        .eq("team_id", team_id);
       if (membersError) {
         throw new Error(`team_members query failed: ${membersError.message}`);
       }
@@ -455,7 +466,7 @@ async function runMonthly(
         console.warn(
           "[org %s] team %s: daily email cap reached, skipping %d broadcast email(s)",
           orgId,
-          group_id,
+          team_id,
           recipients.length,
         );
       }
@@ -467,10 +478,10 @@ async function runMonthly(
 
         const rows = await Promise.all(
           openDates.map(async (date) => {
-            let signupUrl = `${baseUrl}/serving/${group_id}`;
+            let signupUrl = `${baseUrl}/g/${group_id}/serving/${team_id}`;
             if (canSign) {
               signupUrl = `${baseUrl}/serving/go?token=${await createToken(
-                { a: "signup", g: group_id, d: date, p: m.id },
+                { a: "signup", g: team_id, d: date, p: m.id },
                 SERVING_LINK_SECRET!
               )}`;
             }
@@ -503,7 +514,7 @@ async function runMonthly(
           ${rows.join("")}
           <p style="font-size:14px;color:#78716c;margin-top:24px;">
             Want to see the full schedule?
-            <a href="${baseUrl}/serving/${group_id}" style="color:${branding.accent};">View the team page</a>
+            <a href="${baseUrl}/g/${group_id}/serving/${team_id}" style="color:${branding.accent};">View the team page</a>
           </p>
         `, branding.orgName),
         })) { sent++; teamSent++; }
@@ -518,7 +529,7 @@ async function runMonthly(
       // summary's failedItems[] (the old "log line is the only record" caveat
       // no longer applies).
       const { error: broadcastError } = await supabase.from("serving_broadcasts").insert({
-        group_id,
+        team_id,
         sent_by: null,
         org_id: orgId,
         subject: `${teamName}: monthly open-Sunday broadcast`,
@@ -527,30 +538,30 @@ async function runMonthly(
       });
       if (broadcastError) {
         // Full error object, not .message — serving_broadcasts has composite
-        // (group_id, org_id) FKs, whose violations put the offending key values
+        // (team_id, org_id) FKs, whose violations put the offending key values
         // in `details`/`hint` while `message` stays generic.
         console.error(
-          "[org %s] serving_broadcasts insert failed for group %s:",
+          "[org %s] serving_broadcasts insert failed for team %s:",
           orgId,
-          group_id,
+          team_id,
           broadcastError,
         );
         itemFailures.push({
-          item: group_id,
+          item: team_id,
           error: `serving_broadcasts insert failed: ${broadcastError.message}`,
         });
       }
     } catch (err) {
-      // Keyed by group_id, never the team name — names are org-defined free
+      // Keyed by team_id, never the team name — names are org-defined free
       // text (tenant content) and fragile as diagnostic keys.
       console.error(
         "[org %s] team %s failed, continuing with remaining teams:",
         orgId,
-        group_id,
+        team_id,
         err,
       );
       itemFailures.push({
-        item: group_id,
+        item: team_id,
         error: err instanceof Error ? err.message : String(err),
       });
     }
@@ -587,9 +598,9 @@ Deno.serve(async (req) => {
     const orgs = await listActiveOrgs(supabase as unknown as OrgListClient);
     const summary = summarize(
       await forEachOrg(orgs, async (org) => {
-        // Resolved inside the per-org callback so a failure here is caught by
-        // this org's boundary instead of aborting the whole run.
-        const canSign = await resolveCanSign(supabase, org.id);
+        // Per-group link modes, resolved lazily inside the team loop and
+        // memoised for this org's run only.
+        const linkModes = new Map<string, boolean>();
         // resolveEmailBranding is total (never throws): a malformed branding
         // row degrades to the env defaults, not an org-level failure.
         const branding = resolveEmailBranding(
@@ -599,8 +610,8 @@ Deno.serve(async (req) => {
           org.org_email_domains[0] ?? null,
         );
         return mode === "monthly"
-          ? await runMonthly(supabase, org.id, canSign, branding, SITE_URL)
-          : await runDaily(supabase, org.id, canSign, branding, SITE_URL);
+          ? await runMonthly(supabase, org.id, linkModes, branding, SITE_URL)
+          : await runDaily(supabase, org.id, linkModes, branding, SITE_URL);
       }),
     );
 

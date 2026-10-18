@@ -33,15 +33,37 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing groupId" }, { status: 400 });
   }
 
+  // The team row comes first: its group_id is what the leadership read
+  // below is keyed on. PGRST116 is .single() finding zero rows — a missing
+  // team, handled as "not enabled" like the settings check below.
+  const { data: group, error: groupError } = await supabase
+    .from("teams")
+    .select("id, name, org_id, group_id")
+    .eq("id", groupId)
+    .single();
+  if (groupError && groupError.code !== "PGRST116") {
+    console.error("Serving broadcast group lookup failed for group %s:", groupId, groupError);
+    return NextResponse.json(
+      { error: "Something went wrong — please try again" },
+      { status: 500 }
+    );
+  }
+  if (!group) {
+    return NextResponse.json(
+      { error: "Serving signups are not enabled for this team" },
+      { status: 404 }
+    );
+  }
+
   const [
     { data: profile, error: profileError },
-    { data: membership, error: membershipError },
-    { data: group, error: groupError },
+    { data: teamMembership, error: membershipError },
+    { data: groupLeadership, error: leadershipError },
     { data: settings, error: settingsError },
   ] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, first_name, last_name, preferred_name, role")
+      .select("id, first_name, last_name, preferred_name")
       .eq("id", user.id)
       .single(),
     supabase
@@ -50,11 +72,17 @@ export async function POST(request: Request) {
       .eq("profile_id", user.id)
       .eq("team_id", groupId)
       .maybeSingle(),
-    supabase.from("teams").select("id, name, org_id").eq("id", groupId).single(),
+    supabase
+      .from("group_members")
+      .select("role")
+      .eq("group_id", group.group_id)
+      .eq("profile_id", user.id)
+      .eq("role", "leader")
+      .maybeSingle(),
     supabase
       .from("serving_team_settings")
       .select("enabled, window_weeks")
-      .eq("group_id", groupId)
+      .eq("team_id", groupId)
       .maybeSingle(),
   ]);
 
@@ -66,7 +94,7 @@ export async function POST(request: Request) {
     [
       ["profile", profileError],
       ["membership", membershipError],
-      ["group", groupError],
+      ["leadership", leadershipError],
       ["settings", settingsError],
     ] as const
   ).find(([, e]) => e && e.code !== "PGRST116");
@@ -83,12 +111,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const isLeader = membership?.is_leader === true;
-  const isAdmin = profile?.role === "admin";
-  if (!profile || (!isLeader && !isAdmin)) {
+  const isLeader = teamMembership?.is_leader === true || groupLeadership !== null;
+  if (!profile || !isLeader) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  if (!group || !settings?.enabled) {
+  if (!settings?.enabled) {
     return NextResponse.json(
       { error: "Serving signups are not enabled for this team" },
       { status: 404 }
@@ -101,7 +128,7 @@ export async function POST(request: Request) {
   const { data: signups, error: signupsError } = await supabase
     .from("serving_signups")
     .select("service_date")
-    .eq("group_id", groupId)
+    .eq("team_id", groupId)
     .gte("service_date", sundays[0])
     .lte("service_date", sundays[sundays.length - 1]);
 
@@ -130,7 +157,10 @@ export async function POST(request: Request) {
   }
 
   const service = await createServiceClient();
-  const linkMode = await getServingLinkMode(supabase, group.org_id);
+  // On the service client so the result is the group's stored choice even
+  // when the caller's own RLS view of group_settings is empty; both ids come
+  // from the RLS-read team row above.
+  const linkMode = await getServingLinkMode(service, group.org_id, group.group_id);
   // Resolved once per broadcast, not per member: an org-level fact anchored
   // on the RLS-checked group row, and a service-role read.
   const branding = await resolveEmailBranding(group.org_id);
@@ -209,7 +239,7 @@ export async function POST(request: Request) {
               d: date,
               p: member.id,
             })}`
-          : `${baseUrl}/serving/${groupId}`,
+          : `${baseUrl}/g/${group.group_id}/serving/${groupId}`,
     }));
 
     try {
@@ -229,7 +259,7 @@ export async function POST(request: Request) {
   }
 
   const { error: logError } = await supabase.from("serving_broadcasts").insert({
-    group_id: groupId,
+    team_id: groupId,
     sent_by: user.id,
     subject: `${group.name}: Sundays that still need someone`,
     open_dates: openDates,

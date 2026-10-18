@@ -7,6 +7,7 @@ import { requireActiveGroup } from "@/lib/groups/server";
 
 type SeriesDetail = {
   id: string;
+  group_id: string;
   name: string;
   teacher: string | null;
   is_archived: boolean;
@@ -35,13 +36,14 @@ export async function generateMetadata({
 }: {
   params: Promise<{ groupId: string; id: string }>;
 }) {
-  const { id } = await params;
+  const { groupId, id } = await params;
   const supabase = await createClient();
   const { data } = await supabase
     .from("lecture_series")
     .select("name")
     .eq("id", id)
-    .single();
+    .eq("group_id", groupId)
+    .maybeSingle();
   return {
     title: data ? `${data.name} | ${siteConfig.name}` : `Series | ${siteConfig.name}`,
   };
@@ -58,11 +60,17 @@ export default async function SeriesDetailPage({
   const supabase = await createClient();
 
   const [{ data: seriesData }, { data: lecturesData }] = await Promise.all([
-    supabase.from("lecture_series").select("*").eq("id", id).single(),
+    supabase
+      .from("lecture_series")
+      .select("*")
+      .eq("id", id)
+      .eq("group_id", group.id)
+      .maybeSingle(),
     supabase
       .from("lectures")
       .select("id, title, description, lecture_date")
       .eq("series_id", id)
+      .eq("group_id", group.id)
       .order("lecture_date", { ascending: true }),
   ]);
 

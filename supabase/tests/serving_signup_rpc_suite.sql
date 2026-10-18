@@ -57,10 +57,14 @@ begin
   insert into public.teams (org_id, group_id, name, is_serving_role)
     values (org_b, grp_b, 'org B serving team', true) returning id into group_b;
 
-  insert into public.serving_team_settings (org_id, group_id, enabled) values
+  insert into public.serving_team_settings (org_id, team_id, enabled) values
     (org_a, group_a, true),
     (org_b, group_b, true);
 
+  insert into public.group_members (org_id, group_id, profile_id, role) values
+    (org_a, grp_a, owner_a, 'leader'),
+    (org_a, grp_a, member_a2, 'member'),
+    (org_b, grp_b, owner_b, 'leader');
   insert into public.team_members (org_id, profile_id, team_id) values
     (org_a, owner_a, group_a),
     (org_a, member_a2, group_a),
@@ -154,7 +158,7 @@ select is(current_setting('svrpc.happy_org'), current_setting('svrpc.org_a'),
   'happy path: reported org is the group''s org');
 select is(
   (select count(*) from public.serving_signups
-    where group_id = current_setting('svrpc.group_a')::uuid
+    where team_id = current_setting('svrpc.group_a')::uuid
       and service_date = current_setting('svrpc.sunday1')::date
       and org_id = current_setting('svrpc.org_a')::uuid),
   1::bigint,
@@ -162,7 +166,7 @@ select is(
 select is(
   (select count(*) from public.serving_signup_attendees a
     join public.serving_signups s on s.id = a.signup_id
-    where s.group_id = current_setting('svrpc.group_a')::uuid
+    where s.team_id = current_setting('svrpc.group_a')::uuid
       and s.service_date = current_setting('svrpc.sunday1')::date
       and a.org_id = current_setting('svrpc.org_a')::uuid),
   1::bigint,
@@ -174,14 +178,14 @@ select is(current_setting('svrpc.idem_created'), 'false',
   'idempotency: re-signup reports created = false');
 select is(
   (select count(*) from public.serving_signups
-    where group_id = current_setting('svrpc.group_a')::uuid
+    where team_id = current_setting('svrpc.group_a')::uuid
       and service_date = current_setting('svrpc.sunday1')::date),
   1::bigint,
   'idempotency: still exactly one signup row');
 select is(
   (select count(*) from public.serving_signup_attendees a
     join public.serving_signups s on s.id = a.signup_id
-    where s.group_id = current_setting('svrpc.group_a')::uuid
+    where s.team_id = current_setting('svrpc.group_a')::uuid
       and s.service_date = current_setting('svrpc.sunday1')::date),
   1::bigint,
   'idempotency: still exactly one attendee row');
@@ -253,7 +257,7 @@ begin
   -- Signups disabled for the team → SV003 (re-enabled before the next block).
   update public.serving_team_settings
     set enabled = false
-    where group_id = current_setting('svrpc.group_a')::uuid;
+    where team_id = current_setting('svrpc.group_a')::uuid;
   set local role authenticated;
   perform set_config('request.jwt.claims',
     json_build_object('sub', current_setting('svrpc.owner_a'))::text, true);
@@ -268,7 +272,7 @@ begin
   reset role;
   update public.serving_team_settings
     set enabled = true
-    where group_id = current_setting('svrpc.group_a')::uuid;
+    where team_id = current_setting('svrpc.group_a')::uuid;
 
   perform set_config('request.jwt.claims', '', true);
   perform set_config('svrpc.taken_err', taken_err, true);
@@ -282,7 +286,7 @@ select is(current_setting('svrpc.taken_err'), 'SV001',
   'a DIFFERENT member claiming a held Sunday raises SV001');
 select is(
   (select count(*) from public.serving_signups
-    where group_id = current_setting('svrpc.group_a')::uuid
+    where team_id = current_setting('svrpc.group_a')::uuid
       and service_date = current_setting('svrpc.sunday1')::date),
   1::bigint,
   'SV001 left the existing signup row alone');
@@ -291,13 +295,13 @@ select is(current_setting('svrpc.crossgroup_err'), 'SV002',
   'a cross-org group id raises SV002');
 select is(
   (select count(*) from public.serving_signups
-    where group_id = current_setting('svrpc.group_b')::uuid),
+    where team_id = current_setting('svrpc.group_b')::uuid),
   0::bigint,
   'cross-org group attempt wrote no signup rows in either org');
 select is(
   (select count(*) from public.serving_signup_attendees a
     join public.serving_signups s on s.id = a.signup_id
-    where s.group_id = current_setting('svrpc.group_b')::uuid),
+    where s.team_id = current_setting('svrpc.group_b')::uuid),
   0::bigint,
   'cross-org group attempt wrote no attendee rows in either org');
 
@@ -305,7 +309,7 @@ select is(current_setting('svrpc.crossattendee_err'), 'SV002',
   'a cross-org attendee raises SV002');
 select is(
   (select count(*) from public.serving_signups
-    where group_id = current_setting('svrpc.group_a')::uuid
+    where team_id = current_setting('svrpc.group_a')::uuid
       and service_date = current_setting('svrpc.sunday2')::date),
   0::bigint,
   'cross-org attendee attempt wrote nothing');
@@ -426,7 +430,7 @@ select is(current_setting('svrpc.dup_created'), 'true',
 select is(
   (select count(*) from public.serving_signup_attendees a
     join public.serving_signups s on s.id = a.signup_id
-    where s.group_id = current_setting('svrpc.group_b')::uuid
+    where s.team_id = current_setting('svrpc.group_b')::uuid
       and s.service_date = current_setting('svrpc.sunday2')::date),
   1::bigint,
   'duplicate attendee ids collapse to one attendee row');
@@ -473,14 +477,14 @@ select isnt(current_setting('svrpc.forced_err'), 'no error',
   'the forced attendee failure surfaced as an error');
 select is(
   (select count(*) from public.serving_signups
-    where group_id = current_setting('svrpc.group_a')::uuid
+    where team_id = current_setting('svrpc.group_a')::uuid
       and service_date = current_setting('svrpc.sunday3')::date),
   0::bigint,
   'forced mid-way failure left ZERO signup rows — the Sunday stays claimable');
 select is(
   (select count(*) from public.serving_signup_attendees a
     join public.serving_signups s on s.id = a.signup_id
-    where s.group_id = current_setting('svrpc.group_a')::uuid
+    where s.team_id = current_setting('svrpc.group_a')::uuid
       and s.service_date = current_setting('svrpc.sunday3')::date),
   0::bigint,
   'forced mid-way failure left ZERO attendee rows');
@@ -584,7 +588,9 @@ begin
   exception when others then spouse_err := sqlstate; end;
   reset role;
 
-  -- An org admin who is NOT on the team may still sign up (is_admin arm).
+  -- An org admin who is NOT on the team and leads no group is refused: the
+  -- admin's power is over people, not content. (A group leader not on the
+  -- team is admitted — see group_scope_suite.sql.)
   set local role authenticated;
   perform set_config('request.jwt.claims',
     json_build_object('sub', current_setting('svrpc.admin_a'))::text, true);
@@ -633,7 +639,7 @@ select is(current_setting('svrpc.add_created'), 'false',
 select is(
   (select count(*) from public.serving_signup_attendees a
     join public.serving_signups s on s.id = a.signup_id
-    where s.group_id = current_setting('svrpc.group_a')::uuid
+    where s.team_id = current_setting('svrpc.group_a')::uuid
       and s.service_date = current_setting('svrpc.sunday4')::date),
   2::bigint,
   'additive: re-signup ADDED the spouse — two attendee rows on one signup');
@@ -643,13 +649,13 @@ select is(current_setting('svrpc.spouse_err'), 'no error',
 select is(
   (select count(*) from public.serving_signup_attendees a
     join public.serving_signups s on s.id = a.signup_id
-    where s.group_id = current_setting('svrpc.group_a')::uuid
+    where s.team_id = current_setting('svrpc.group_a')::uuid
       and s.service_date = current_setting('svrpc.sunday5')::date),
   2::bigint,
   'household: both actor and spouse got attendee rows');
 
-select is(current_setting('svrpc.admin_err'), 'no error',
-  'authz: an org admin not on the team may sign up (is_admin arm)');
+select is(current_setting('svrpc.admin_err'), 'SV004',
+  'authz: an org admin who is neither on the team nor a leader of its group is refused');
 select is(current_setting('svrpc.nullid_err'), 'SV002',
   'a NULL element in the attendee array raises SV002');
 
@@ -673,7 +679,7 @@ declare
 begin
   select s.id into probe_signup
   from public.serving_signups s
-  where s.group_id = current_setting('svrpc.group_a')::uuid
+  where s.team_id = current_setting('svrpc.group_a')::uuid
     and s.service_date = current_setting('svrpc.sunday1')::date;
 
   set local role authenticated;

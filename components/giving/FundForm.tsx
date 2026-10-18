@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/combobox";
 import { toast } from "sonner";
 import { AvatarCluster } from "@/components/directory/AvatarCluster";
+import { PostingTo } from "@/components/groups/PostingTo";
 import { MethodButton, MethodChip } from "@/components/giving/MethodButton";
 import {
   METHOD_ORDER,
@@ -42,7 +43,9 @@ interface FundFormProps {
   fund: (GivingFund & { methods: GivingFundMethod[] }) | null;
   members: MemberOption[];
   currentUserId: string;
-  isAdmin: boolean;
+  isLeader: boolean;
+  groupId: string;
+  groupName: string;
   backHref: string;
 }
 
@@ -54,7 +57,9 @@ export function FundForm({
   fund,
   members,
   currentUserId,
-  isAdmin,
+  isLeader,
+  groupId,
+  groupName,
   backHref,
 }: FundFormProps) {
   const router = useRouter();
@@ -137,11 +142,14 @@ export function FundForm({
 
     let fundId = fund?.id;
     if (fundId) {
-      const { error } = await supabase
+      // A write the RLS policy rejects matches zero rows without an error.
+      const { data, error } = await supabase
         .from("giving_funds")
         .update(payload)
-        .eq("id", fundId);
-      if (error) {
+        .eq("id", fundId)
+        .eq("group_id", groupId)
+        .select("id");
+      if (error || !data?.length) {
         setSaving(false);
         toast.error("Failed to save the fund.");
         return;
@@ -149,7 +157,7 @@ export function FundForm({
     } else {
       const { data, error } = await supabase
         .from("giving_funds")
-        .insert({ ...payload, created_by: currentUserId })
+        .insert({ ...payload, group_id: groupId, created_by: currentUserId })
         .select("id")
         .single();
       if (error || !data) {
@@ -171,6 +179,7 @@ export function FundForm({
       return [
         {
           fund_id: fundId,
+          group_id: groupId,
           method: key,
           custom_handle: handle,
           display_order: i,
@@ -190,6 +199,7 @@ export function FundForm({
             .from("giving_fund_methods")
             .delete()
             .eq("fund_id", fundId)
+            .eq("group_id", groupId)
             .in("method", pruned)
         : { error: null };
 
@@ -205,11 +215,13 @@ export function FundForm({
 
   async function setActive(active: boolean) {
     if (!fund) return;
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("giving_funds")
       .update({ is_active: active, updated_at: new Date().toISOString() })
-      .eq("id", fund.id);
-    if (error) {
+      .eq("id", fund.id)
+      .eq("group_id", groupId)
+      .select("id");
+    if (error || !data?.length) {
       toast.error("Failed to update the fund.");
       return;
     }
@@ -221,11 +233,13 @@ export function FundForm({
   async function remove() {
     if (!fund) return;
     if (!window.confirm(`Delete "${fund.name}"? This can't be undone.`)) return;
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("giving_funds")
       .delete()
-      .eq("id", fund.id);
-    if (error) {
+      .eq("id", fund.id)
+      .eq("group_id", groupId)
+      .select("id");
+    if (error || !data?.length) {
       toast.error("Failed to delete the fund.");
       return;
     }
@@ -246,6 +260,7 @@ export function FundForm({
     <div className="grid gap-8 lg:grid-cols-[1fr_340px] lg:items-start">
       <div className="rounded-2xl border border-border bg-card p-6 sm:p-7">
         <div className="space-y-5">
+          {!fund && <PostingTo groupName={groupName} />}
           <div>
             <Label htmlFor="fund-name" className="text-base">
               Fund name
@@ -277,7 +292,7 @@ export function FundForm({
           <div className="grid gap-5 sm:grid-cols-2">
             <div>
               <Label className="text-base">Who receives it?</Label>
-              {isAdmin ? (
+              {isLeader ? (
                 <Combobox
                   items={memberIds}
                   itemToStringLabel={memberLabel}

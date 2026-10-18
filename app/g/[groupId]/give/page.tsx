@@ -57,13 +57,7 @@ export default async function GivePage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-  if (!profile || profile.role === "pending") redirect("/dashboard");
-  const isAdmin = profile.role === "admin";
+  const isLeader = group.role === "leader";
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -75,6 +69,7 @@ export default async function GivePage({
         steward:profiles!giving_funds_steward_id_fkey(id, first_name, last_name, preferred_name, avatar_url),
         co_steward:profiles!giving_funds_co_steward_id_fkey(id, first_name, last_name, preferred_name, avatar_url)`
       )
+      .eq("group_id", group.id)
       .eq("is_active", true)
       .or(`retire_on.is.null,retire_on.gte.${today}`)
       .order("display_order")
@@ -91,13 +86,14 @@ export default async function GivePage({
   // before they reach GiveList's renders.
   const funds = await signStewardAvatars(rawFunds);
   const stewardsCanManage = (modeRow?.value ?? "stewards") === "stewards";
-  const canCreate = isAdmin || stewardsCanManage;
+  const canCreate = isLeader || stewardsCanManage;
 
   let methods: GivingFundMethod[] = [];
   if (funds.length > 0) {
     const { data: methodRows } = await supabase
       .from("giving_fund_methods")
       .select("*")
+      .eq("group_id", group.id)
       .in(
         "fund_id",
         funds.map((f) => f.id)
@@ -108,7 +104,7 @@ export default async function GivePage({
   const views: FundView[] = funds.flatMap((fund) => {
     if (!fund.steward) return [];
     const canManage =
-      isAdmin || (stewardsCanManage && fund.steward_id === user.id);
+      isLeader || (stewardsCanManage && fund.steward_id === user.id);
     const resolved = resolveFundMethods(
       methods.filter((m) => m.fund_id === fund.id)
     );

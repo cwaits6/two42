@@ -127,8 +127,10 @@ export interface AccessRequest {
   created_at: string;
 }
 
+/** A group's calendar. One per group in practice; its color is the group's color. */
 export interface EventCalendar {
   id: string;
+  group_id: string;
   name: string;
   color: string | null;
   created_by: string | null;
@@ -137,6 +139,7 @@ export interface EventCalendar {
 
 export interface Event {
   id: string;
+  group_id: string;
   title: string;
   description: string | null;
   location: string | null;
@@ -173,6 +176,7 @@ export interface Rsvp {
 
 export interface Announcement {
   id: string;
+  group_id: string;
   title: string;
   content: string;
   is_published: boolean;
@@ -183,6 +187,7 @@ export interface Announcement {
 
 export interface Lecture {
   id: string;
+  group_id: string;
   title: string;
   description: string | null;
   video_url: string;
@@ -246,9 +251,9 @@ export interface ProfileGroup {
   is_leader: boolean;
 }
 
-/** Per-group serving signup configuration */
+/** Per-team serving signup configuration */
 export interface ServingTeamSettings {
-  group_id: string;
+  team_id: string;
   enabled: boolean;
   /** Days of week to send reminders (0=Sunday .. 6=Saturday) */
   reminder_days: number[];
@@ -262,7 +267,7 @@ export interface ServingTeamSettings {
 /** One covered Sunday for one serving team */
 export interface ServingSignup {
   id: string;
-  group_id: string;
+  team_id: string;
   /** YYYY-MM-DD */
   service_date: string;
   family_id: string | null;
@@ -278,7 +283,7 @@ export interface ServingSignupAttendee {
 /** Log entry for a leader "Email the team" send */
 export interface ServingBroadcast {
   id: string;
-  group_id: string;
+  team_id: string;
   sent_by: string | null;
   subject: string;
   open_dates: string[];
@@ -368,6 +373,7 @@ export type PaymentMethodKey =
 /** One giving collection, held by a named steward (optionally a couple) */
 export interface GivingFund {
   id: string;
+  group_id: string;
   name: string;
   description: string | null;
   /** Person who receives the money */
@@ -388,6 +394,7 @@ export interface GivingFund {
 /** A payment method a fund accepts */
 export interface GivingFundMethod {
   fund_id: string;
+  group_id: string;
   method: PaymentMethodKey;
   custom_handle: string;
   display_order: number;
@@ -409,6 +416,7 @@ export type PrayerCategory =
  */
 export interface PrayerWallRow {
   id: string;
+  group_id: string;
   body: string;
   category: PrayerCategory;
   is_anonymous: boolean;
@@ -427,6 +435,7 @@ export interface PrayerWallRow {
 /** One weekly prayer call session shown on the Prayer Call card */
 export interface PrayerCallSession {
   id: string;
+  group_id: string;
   /** 0 = Sunday … 6 = Saturday */
   weekday: number;
   /** "HH:MM:SS" from Postgres time */
@@ -452,12 +461,27 @@ export interface SiteSetting {
 }
 
 /**
- * Singleton row (id = true) holding the About Our Class summary. Body is
- * BlockNote JSON. Members-only via RLS.
+ * One row per group holding the About page summary. Body is BlockNote
+ * JSON. Group members only via RLS.
  */
 export interface AboutPage {
-  id: boolean;
+  group_id: string;
   body: string;
+  updated_by: string | null;
+  updated_at: string;
+}
+
+/**
+ * Per-group settings. An absent row means the defaults; the first save
+ * upserts on the group_id key.
+ */
+export interface GroupSettings {
+  group_id: string;
+  weekly_zoom_url: string | null;
+  zoom_meeting_time: string | null;
+  weekly_prayer_call_url: string | null;
+  weekly_prayer_call_time: string | null;
+  serving_link_mode: "signed" | "login" | null;
   updated_by: string | null;
   updated_at: string;
 }
@@ -469,6 +493,7 @@ export interface AboutPage {
  */
 export interface ClassTeacher {
   id: string;
+  group_id: string;
   profile_id: string;
   title: string;
   bio: string;

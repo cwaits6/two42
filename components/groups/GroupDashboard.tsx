@@ -87,11 +87,7 @@ function prayerCategoryLabel(category: string | null): string {
 
 // ── component ────────────────────────────────────────────────────────────────
 
-/**
- * One group's dashboard. The content queries are still org-wide: the
- * content tables carry no group_id yet. `group` is in scope so the
- * group-scoped-content ticket only has to add the filter.
- */
+/** One group's dashboard: its next meeting, your serving turns, its announcements and prayer. */
 export async function GroupDashboard({ group }: { group: ActiveGroup }) {
   const supabase = await createClient();
   const {
@@ -127,6 +123,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
     supabase
       .from("events")
       .select("*")
+      .eq("group_id", group.id)
       .or(
         `start_time.gte.${windowStartISO},` +
         `and(recurrence_frequency.not.is.null,or(recurrence_until.is.null,recurrence_until.gte.${windowStartISO}))`
@@ -140,22 +137,27 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
     supabase
       .from("announcements")
       .select("*")
+      .eq("group_id", group.id)
       .eq("is_published", true)
       .lte("published_at", now)
       .order("published_at", { ascending: false })
       .limit(3),
     supabase
       .from("lectures")
-      .select("id", { count: "exact", head: true }),
+      .select("id", { count: "exact", head: true })
+      .eq("group_id", group.id),
     supabase
       .from("prayer_wall")
       .select("id, category, body, created_at")
+      .eq("group_id", group.id)
+      .eq("is_answered", false)
       .order("created_at", { ascending: false })
       .limit(3),
-    // Upcoming serving commitments for this member (inner join filters to user's rows)
+    // This member's upcoming turns on the group's teams (both inner joins filter)
     supabase
       .from("serving_signups")
-      .select("id, service_date, group_id, teams(id, name), serving_signup_attendees!inner(profile_id)")
+      .select("id, service_date, team_id, teams!inner(id, name, group_id), serving_signup_attendees!inner(profile_id)")
+      .eq("teams.group_id", group.id)
       .eq("serving_signup_attendees.profile_id", user.id)
       .gte("service_date", toDateString(new Date()))
       .order("service_date", { ascending: true })
@@ -175,11 +177,10 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
     userRsvps = Object.fromEntries(rsvps.map((r) => [r.event_id, r]));
   }
 
-  // serving_signups.group_id is a team id.
   const upcomingServings = (myServings ?? []) as Array<{
     id: string;
     service_date: string;
-    group_id: string;
+    team_id: string;
     teams: { id: string; name: string } | Array<{ id: string; name: string }> | null;
   }>;
 
@@ -199,6 +200,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
               "meeting_url, meeting_id, meeting_passcode, meeting_show_on_dashboard, meeting_lead_minutes"
             )
             .eq("id", nextEvent.series_id)
+            .eq("group_id", group.id)
             .maybeSingle()
             .then(({ data }) => data)
         : Promise.resolve(null),
@@ -357,7 +359,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
               {upcomingServings.map((s) => (
                 <Link
                   key={s.id}
-                  href={href(`/serving/${s.group_id}`)}
+                  href={href(`/serving/${s.team_id}`)}
                   className="flex items-center justify-between gap-4 py-2 border-t border-border first:border-0 hover:text-brand-primary transition-colors"
                 >
                   <div>

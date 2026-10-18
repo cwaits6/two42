@@ -32,7 +32,7 @@ export default async function EditFundPage({
     .eq("id", user.id)
     .single();
   if (!profile || profile.role === "pending") redirect("/dashboard");
-  const isAdmin = profile.role === "admin";
+  const isLeader = group.role === "leader";
 
   const [{ data: fund }, { data: methodRows }, stewardsCanManage] =
     await Promise.all([
@@ -40,14 +40,19 @@ export default async function EditFundPage({
         .from("giving_funds")
         .select("*")
         .eq("id", fundId)
+        .eq("group_id", group.id)
         .maybeSingle<GivingFund>(),
-      supabase.from("giving_fund_methods").select("*").eq("fund_id", fundId),
+      supabase
+        .from("giving_fund_methods")
+        .select("*")
+        .eq("fund_id", fundId)
+        .eq("group_id", group.id),
       givingStewardsCanManage(supabase, profile.org_id),
     ]);
 
   if (!fund) notFound();
   const canManage =
-    isAdmin || (stewardsCanManage && fund.steward_id === user.id);
+    isLeader || (stewardsCanManage && fund.steward_id === user.id);
   if (!canManage) redirect(giveHref);
 
   const { members } = await loadFundFormData(supabase, profile.org_id);
@@ -61,8 +66,10 @@ export default async function EditFundPage({
         fund={{ ...fund, methods: (methodRows ?? []) as GivingFundMethod[] }}
         members={members}
         currentUserId={user.id}
-        isAdmin={isAdmin}
-        backHref={isAdmin ? "/admin/giving" : giveHref}
+        isLeader={isLeader}
+        groupId={group.id}
+        groupName={group.name}
+        backHref={isLeader ? groupPath(group.id, "/settings/giving") : giveHref}
       />
     </div>
   );

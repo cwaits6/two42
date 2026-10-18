@@ -43,37 +43,34 @@ export default async function ServingPage({
 
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
+  const isLeader = group.role === "leader";
 
-  if (!profile || profile.role === "pending") redirect("/dashboard");
-  const isAdmin = profile.role === "admin";
-
-  const [
-    { data: groupRows },
-    { data: settingsRows },
-    { data: rosterRows },
-    { data: memberships },
-  ] = await Promise.all([
-    supabase.from("teams").select("*").order("display_order"),
-    supabase.from("serving_team_settings").select("*"),
-    supabase
-      .from("team_members")
-      .select(
-        "team_id, is_leader, profiles(id, role, first_name, last_name, preferred_name, avatar_url)"
-      ),
-    supabase
-      .from("team_members")
-      .select("team_id, is_leader")
-      .eq("profile_id", user.id),
-  ]);
-
+  const { data: groupRows } = await supabase
+    .from("teams")
+    .select("*")
+    .eq("group_id", group.id)
+    .order("display_order");
   const groups = (groupRows ?? []) as MemberGroup[];
+  const teamIds = groups.map((g) => g.id);
+
+  const [{ data: settingsRows }, { data: rosterRows }, { data: memberships }] =
+    await Promise.all([
+      supabase.from("serving_team_settings").select("*").in("team_id", teamIds),
+      supabase
+        .from("team_members")
+        .select(
+          "team_id, is_leader, profiles(id, role, first_name, last_name, preferred_name, avatar_url)"
+        )
+        .in("team_id", teamIds),
+      supabase
+        .from("team_members")
+        .select("team_id, is_leader")
+        .eq("profile_id", user.id)
+        .in("team_id", teamIds),
+    ]);
+
   const settingsMap = new Map(
-    ((settingsRows ?? []) as ServingTeamSettings[]).map((s) => [s.group_id, s])
+    ((settingsRows ?? []) as ServingTeamSettings[]).map((s) => [s.team_id, s])
   );
   const membershipMap = new Map(
     (memberships ?? []).map((m) => [m.team_id, m.is_leader as boolean])
@@ -120,9 +117,9 @@ export default async function ServingPage({
   if (signupTeams.length > 0) {
     const { data: signups } = await supabase
       .from("serving_signups")
-      .select("group_id, service_date")
+      .select("team_id, service_date")
       .in(
-        "group_id",
+        "team_id",
         signupTeams.map((g) => g.id)
       )
       .gte("service_date", today);
@@ -132,14 +129,14 @@ export default async function ServingPage({
       coverage.set(
         g.id,
         (signups ?? []).filter(
-          (s) => s.group_id === g.id && window.has(s.service_date)
+          (s) => s.team_id === g.id && window.has(s.service_date)
         ).length
       );
     }
   }
 
-  // Groups an admin could still turn signups on for
-  const candidateGroups: Pick<MemberGroup, "id" | "name" | "color">[] = isAdmin
+  // Teams a group leader could still turn signups on for
+  const candidateGroups: Pick<MemberGroup, "id" | "name" | "color">[] = isLeader
     ? groups.filter((g) => !isEnabled(g.id))
     : [];
 
@@ -164,7 +161,7 @@ export default async function ServingPage({
             {signupTeams.map((team) => {
               const settings = settingsMap.get(team.id)!;
               const covered = coverage.get(team.id) ?? 0;
-              const isLeader = membershipMap.get(team.id) === true;
+              const isTeamLead = membershipMap.get(team.id) === true;
               const isMember = membershipMap.has(team.id);
               const members = rosters.get(team.id) ?? [];
               return (
@@ -179,7 +176,7 @@ export default async function ServingPage({
                         <div className="flex-1 min-w-0">
                           <p className="text-xl font-semibold flex items-center gap-2">
                             {team.name}
-                            {isLeader && (
+                            {isTeamLead && (
                               <span className="text-xs font-medium uppercase tracking-wider text-brand-accent border border-brand-accent/40 rounded px-1.5 py-0.5">
                                 Leader
                               </span>
@@ -188,8 +185,8 @@ export default async function ServingPage({
                           <p className="text-muted-foreground">
                             {covered} of the next {settings.window_weeks} Sundays
                             covered
-                            {isMember && !isLeader ? " · You're on this team" : ""}
-                            {!isMember && !isAdmin ? " · Members sign up" : ""}
+                            {isMember && !isTeamLead ? " · You're on this team" : ""}
+                            {!isMember && !isLeader ? " · Members sign up" : ""}
                           </p>
                         </div>
                         <ChevronRight className="h-6 w-6 text-muted-foreground shrink-0" />
@@ -258,7 +255,7 @@ export default async function ServingPage({
         </p>
       )}
 
-      {isAdmin && candidateGroups.length > 0 && (
+      {isLeader && candidateGroups.length > 0 && (
         <AdminServingSetup groups={candidateGroups} />
       )}
     </div>

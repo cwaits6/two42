@@ -40,9 +40,7 @@ export default async function AdminPage() {
       ).data ?? [])
     : [];
 
-  const quickActions = isAdminRole
-    ? [{ href: "/admin/invite", label: "Invite member" }]
-    : [{ href: "/admin/about", label: "Edit about page" }];
+  const quickActions = isAdminRole ? [{ href: "/admin/invite", label: "Invite member" }] : [];
 
   return (
     <PageContainer size="wide">
@@ -55,25 +53,27 @@ export default async function AdminPage() {
         <PendingRequestsList initialRequests={pendingRequests} />
       </section>
 
-      <section>
-        <h2 className="text-2xl font-bold text-brand-primary mb-4">
-          Quick actions
-        </h2>
-        <div className="flex flex-wrap gap-3">
-          {quickActions.map((action) => (
-            <Button
-              key={action.href}
-              size="lg"
-              variant="outline"
-              className="text-lg"
-              nativeButton={false}
-              render={<Link href={action.href} />}
-            >
-              {action.label}
-            </Button>
-          ))}
-        </div>
-      </section>
+      {quickActions.length > 0 && (
+        <section>
+          <h2 className="text-2xl font-bold text-brand-primary mb-4">
+            Quick actions
+          </h2>
+          <div className="flex flex-wrap gap-3">
+            {quickActions.map((action) => (
+              <Button
+                key={action.href}
+                size="lg"
+                variant="outline"
+                className="text-lg"
+                nativeButton={false}
+                render={<Link href={action.href} />}
+              >
+                {action.label}
+              </Button>
+            ))}
+          </div>
+        </section>
+      )}
     </PageContainer>
   );
 }

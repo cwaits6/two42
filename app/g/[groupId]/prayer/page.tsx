@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { siteConfig } from "@/lib/config";
 import { displayName, initials } from "@/lib/names";
 import { loadFundFormData } from "@/lib/giving/server";
+import { getGroupSettings } from "@/lib/groups/settings";
 import { PrayerBoard } from "@/components/prayer/PrayerBoard";
 import type { PrayerCallSession, PrayerWallRow } from "@/lib/types";
 import { requireActiveGroup } from "@/lib/groups/server";
@@ -16,7 +17,7 @@ export default async function PrayerPage({
   params: Promise<{ groupId: string }>;
 }) {
   const { groupId } = await params;
-  await requireActiveGroup(groupId);
+  const group = await requireActiveGroup(groupId);
   const supabase = await createClient();
   const {
     data: { user },
@@ -29,29 +30,26 @@ export default async function PrayerPage({
     .eq("id", user.id)
     .single();
   if (!profile || profile.role === "pending") redirect("/dashboard");
-  const isAdmin = profile.role === "admin";
 
   const [
     { data: requests, error: requestsError },
     { data: sessions, error: sessionsError },
     { members },
-    { data: calSetting },
+    settings,
   ] = await Promise.all([
     supabase
       .from("prayer_wall")
       .select("*")
+      .eq("group_id", group.id)
       .order("created_at", { ascending: false }),
     supabase
       .from("prayer_call_sessions")
       .select("*")
+      .eq("group_id", group.id)
       .order("display_order")
       .order("created_at"),
     loadFundFormData(supabase, profile.org_id),
-    supabase
-      .from("site_settings")
-      .select("value")
-      .eq("key", "prayer_calendar_id")
-      .maybeSingle(),
+    getGroupSettings(supabase, profile.org_id, group.id),
   ]);
   if (requestsError) {
     console.error("Failed to fetch prayer requests:", requestsError);
@@ -92,10 +90,15 @@ export default async function PrayerPage({
             initials: initials(profile),
             avatarUrl: myAvatarUrl,
           }}
-          isAdmin={isAdmin}
+          group={{ id: group.id, name: group.name, isLeader: group.role === "leader" }}
           members={members}
-          prayerCalendarId={calSetting?.value ?? null}
           orgId={profile.org_id}
+          prayerCall={{
+            url: settings.weekly_prayer_call_url?.startsWith("https://")
+              ? settings.weekly_prayer_call_url
+              : null,
+            time: settings.weekly_prayer_call_time,
+          }}
         />
       </div>
     </div>

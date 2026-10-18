@@ -5,20 +5,18 @@ import {
 } from "@/lib/admin-access";
 
 describe("CONTENT_EDITOR_ADMIN_PATHS", () => {
-  it("grants only the admin overview and the About Page editor", () => {
-    expect(CONTENT_EDITOR_ADMIN_PATHS).toEqual(["/admin", "/admin/about"]);
+  it("grants only the admin overview", () => {
+    expect(CONTENT_EDITOR_ADMIN_PATHS).toEqual(["/admin"]);
   });
 });
 
 describe("isContentEditorAllowed", () => {
-  it.each(["/admin", "/admin/about", "/admin/about/edit"])(
-    "allows %s",
-    (pathname) => {
-      expect(isContentEditorAllowed(pathname)).toBe(true);
-    }
-  );
+  it("allows /admin", () => {
+    expect(isContentEditorAllowed("/admin")).toBe(true);
+  });
 
   it.each([
+    "/admin/about",
     "/admin/pages",
     "/admin/pages/welcome/edit",
     "/admin/lectures",
@@ -34,11 +32,6 @@ describe("isContentEditorAllowed", () => {
     // "/admin" is allowed only as an exact match; a plain startsWith on it
     // would open every /admin/* page to a content editor.
     expect(isContentEditorAllowed("/admin/anything")).toBe(false);
-  });
-
-  it("matches allowed sections on a path segment, not a string prefix", () => {
-    expect(isContentEditorAllowed("/admin/aboutus")).toBe(false);
-    expect(isContentEditorAllowed("/admin/about-archive")).toBe(false);
   });
 
   it("ignores paths outside /admin", () => {

@@ -42,11 +42,15 @@ export async function POST(request: Request) {
     { data: settings, error: settingsError },
     { data: profile, error: profileError },
   ] = await Promise.all([
-    supabase.from("teams").select("id, name, org_id").eq("id", groupId).single(),
+    supabase
+      .from("teams")
+      .select("id, name, org_id, group_id")
+      .eq("id", groupId)
+      .single(),
     supabase
       .from("serving_team_settings")
       .select("enabled")
-      .eq("group_id", groupId)
+      .eq("team_id", groupId)
       .maybeSingle(),
     supabase
       .from("profiles")
@@ -170,8 +174,9 @@ export async function POST(request: Request) {
       await sendSignupConfirmation(supabase, {
         signupId: rpc.signup_id,
         orgId: group.org_id,
-        groupId,
-        groupName: group.name,
+        groupId: group.group_id,
+        teamId: groupId,
+        teamName: group.name,
         serviceDate,
         attendees,
         familyId: profile.family_id,
@@ -205,7 +210,7 @@ export async function DELETE(request: Request) {
   const { data: signup, error: signupError } = await supabase
     .from("serving_signups")
     .select(
-      "id, org_id, group_id, service_date, family_id, created_by, teams(name), serving_signup_attendees(profiles(id, first_name, last_name, preferred_name))"
+      "id, org_id, team_id, service_date, family_id, created_by, teams(name, group_id), serving_signup_attendees(profiles(id, first_name, last_name, preferred_name))"
     )
     .eq("id", signupId)
     .maybeSingle();
@@ -240,11 +245,16 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // The leader notice links into the team's group page, so without the
+  // team embed there is no page to point at.
+  const team = signup.teams as unknown as { name: string; group_id: string } | null;
+  if (!team) {
+    console.error("Serving cancel notice skipped — no team for signup %s", signupId);
+    return NextResponse.json({ success: true });
+  }
+
   try {
     const service = await createServiceClient();
-    const groupName =
-      (signup.teams as unknown as { name: string } | null)?.name ??
-      "your team";
     const attendeeProfiles = (signup.serving_signup_attendees ?? [])
       .map((a: { profiles: unknown }) => a.profiles)
       .filter(Boolean) as NamedProfile[];
@@ -252,9 +262,10 @@ export async function DELETE(request: Request) {
     // The deleted signup's own org_id scopes the notification lookups — it is
     // the row this route just authorised via the RLS-checked delete above.
     await notifyLeadersOfCancel(service, {
-      groupId: signup.group_id,
+      groupId: team.group_id,
+      teamId: signup.team_id,
       orgId: signup.org_id,
-      groupName,
+      teamName: team.name,
       serviceDate: signup.service_date,
       memberLabel: await resolveSignupLabel(
         service,

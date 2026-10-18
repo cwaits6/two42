@@ -117,7 +117,7 @@ describe("legacy group routes and the group cookie", () => {
   // Every builder method returns the chain; awaiting it yields the result.
   function chain(result: TableResult) {
     const c: Record<string, unknown> = {};
-    for (const m of ["select", "eq", "order", "single", "maybeSingle"]) {
+    for (const m of ["select", "eq", "in", "order", "single", "maybeSingle"]) {
       c[m] = () => c;
     }
     c.then = (resolve: (v: TableResult) => unknown, reject?: (e: unknown) => unknown) =>
@@ -139,6 +139,8 @@ describe("legacy group routes and the group cookie", () => {
     from.mockImplementation((table: string) => {
       if (table === "profiles") return chain({ data: profile, error: null });
       if (table === "group_members") return chain({ data: opts.memberships ?? [], error: null });
+      // The membership loader reads each group's calendar for its color.
+      if (table === "event_calendars") return chain({ data: [], error: null });
       throw new Error(`unexpected table ${table}`);
     });
   }

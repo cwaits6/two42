@@ -13,9 +13,9 @@ interface AdminServingSetupProps {
 }
 
 /**
- * Admin-only: turn on Sunday serving signups for a member group. This is
- * where a group becomes a "serving team" — the group dialog intentionally
- * doesn't expose it.
+ * Leader-only: turn on Sunday serving signups for a team. This is where a
+ * team becomes a "serving team" — the team dialog intentionally doesn't
+ * expose it.
  */
 export function AdminServingSetup({ groups }: AdminServingSetupProps) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -29,7 +29,7 @@ export function AdminServingSetup({ groups }: AdminServingSetupProps) {
     } = await supabase.auth.getUser();
     const { error } = await supabase
       .from("serving_team_settings")
-      .upsert({ group_id: groupId, enabled: true, updated_by: user?.id });
+      .upsert({ team_id: groupId, enabled: true, updated_by: user?.id });
     setBusy(null);
 
     if (error) {
@@ -47,7 +47,7 @@ export function AdminServingSetup({ groups }: AdminServingSetupProps) {
       </CardHeader>
       <CardContent>
         <p className="text-sm text-muted-foreground mb-4">
-          Turn on Sunday signups for a group. Members of the group will be able
+          Turn on Sunday signups for a team. Members of the team will be able
           to claim upcoming Sundays.
         </p>
         <div className="divide-y">

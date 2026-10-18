@@ -47,23 +47,26 @@ const TYPE_ITEMS = [
   })),
 ];
 
+export type PrayerGroup = { id: string; name: string; isLeader: boolean };
+
 export function PrayerBoard({
   initialRequests,
   sessions,
   me,
-  isAdmin,
+  group,
   members,
-  prayerCalendarId,
   orgId,
+  prayerCall,
 }: {
   initialRequests: PrayerWallRow[];
   sessions: PrayerCallSession[];
   me: Me;
-  isAdmin: boolean;
+  /** The verified active group; every write names it. */
+  group: PrayerGroup;
   members: MemberOption[];
-  prayerCalendarId: string | null;
   /** Resolved server-side from the caller's own profile; scopes the session writes. */
   orgId: string;
+  prayerCall: { url: string | null; time: string | null };
 }) {
   const [requests, setRequests] = useState(initialRequests);
   const [status, setStatus] = useState<StatusFilter>("All");
@@ -79,7 +82,7 @@ export function PrayerBoard({
     const supabase = createClient();
     const { data, error } = await supabase
       .from("prayer_requests")
-      .insert({ author_id: me.id, ...draft })
+      .insert({ author_id: me.id, group_id: group.id, ...draft })
       .select("id, created_at")
       .single();
     if (error || !data) {
@@ -89,6 +92,7 @@ export function PrayerBoard({
     setRequests((prev) => [
       {
         id: data.id,
+        group_id: group.id,
         body: draft.body,
         category: draft.category,
         is_anonymous: draft.is_anonymous,
@@ -127,11 +131,12 @@ export function PrayerBoard({
     const { error } = praying
       ? await supabase
           .from("prayer_responses")
-          .insert({ request_id: row.id, profile_id: me.id })
+          .insert({ request_id: row.id, profile_id: me.id, group_id: group.id })
       : await supabase
           .from("prayer_responses")
           .delete()
           .eq("request_id", row.id)
+          .eq("group_id", group.id)
           .eq("profile_id", me.id);
     if (error) {
       patchRequest(row.id, {
@@ -151,11 +156,13 @@ export function PrayerBoard({
     const supabase = createClient();
     const answered = !row.is_answered;
     patchRequest(row.id, { is_answered: answered });
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("prayer_requests")
       .update({ is_answered: answered })
-      .eq("id", row.id);
-    if (error) {
+      .eq("id", row.id)
+      .eq("group_id", group.id)
+      .select("id");
+    if (error || !data?.length) {
       patchRequest(row.id, { is_answered: row.is_answered });
       toast.error("Couldn't save that. Please try again.");
     }
@@ -312,13 +319,13 @@ export function PrayerBoard({
     <div className="grid gap-8 lg:grid-cols-[1.55fr_1fr] lg:items-start">
       <div className="order-2 lg:order-1">{wall}</div>
       <div className="order-1 space-y-6 lg:sticky lg:top-6 lg:order-2">
-        <PrayerComposer me={me} onPost={handlePost} />
+        <PrayerComposer me={me} groupName={group.name} onPost={handlePost} />
         <PrayerCallCard
           initialSessions={sessions}
-          isAdmin={isAdmin}
+          group={group}
           members={members}
-          prayerCalendarId={prayerCalendarId}
           orgId={orgId}
+          prayerCall={prayerCall}
         />
       </div>
     </div>

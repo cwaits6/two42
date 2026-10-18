@@ -54,15 +54,17 @@ function chain(terminal: { data: unknown; error: unknown }) {
 
 function makeCookieClient(insertSpy: (payload: unknown) => { data: unknown; error: unknown }) {
   const tables: Record<string, { data: unknown; error: unknown }> = {
-    profiles: { data: { id: "user-1", role: "admin" }, error: null },
+    profiles: { data: { id: "user-1" }, error: null },
     team_members: { data: { is_leader: false }, error: null },
+    // The caller leads the team's group, not the team itself.
+    group_members: { data: { role: "leader" }, error: null },
     teams: {
-      data: { id: "group-1", name: "Greeters", org_id: "org-1" },
+      data: { id: "group-1", name: "Greeters", org_id: "org-1", group_id: "grp-1" },
       error: null,
     },
     serving_team_settings: { data: { enabled: true, window_weeks: 8 }, error: null },
     serving_signups: { data: [], error: null },
-    site_settings: { data: null, error: null },
+    group_settings: { data: null, error: null },
   };
 
   return {
