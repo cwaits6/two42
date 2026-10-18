@@ -116,10 +116,12 @@ comment on function public.shares_group_with_household(uuid) is
 
 -- ── 5. The people policies ────────────────────────────────────────────────
 -- ORG ::= org_id = (select public.app_request_org_id()); every policy stays
--- ORG AND (arms). The self, admin and own-household arms are unchanged; the
--- directory arm gains the visibility rule. shares_group_with() takes a
--- row-dependent argument, so like is_group_member() it cannot be
--- InitPlan-hoisted and is called bare.
+-- ORG AND (arms). The self and admin arms are unchanged and the directory
+-- arm gains the visibility rule. The own-household arms keep is_member():
+-- a family-invite claim links a still-pending account to its household,
+-- and these tables were closed to pending accounts before.
+-- shares_group_with() takes a row-dependent argument, so like
+-- is_group_member() it cannot be InitPlan-hoisted and is called bare.
 
 drop policy "Profiles are visible per access rules" on public.profiles;
 create policy "Profiles are visible per access rules" on public.profiles
@@ -154,7 +156,7 @@ create policy "Members can view family units" on public.family_units
     org_id = (select public.app_request_org_id())
     and (
       (select public.is_admin())
-      or id = (select public.current_family_id())
+      or (id = (select public.current_family_id()) and (select public.is_member()))
       or (
         (select public.is_member())
         and (
@@ -172,7 +174,7 @@ create policy "Members can view family members" on public.family_members
     org_id = (select public.app_request_org_id())
     and (
       (select public.is_admin())
-      or family_id = (select public.current_family_id())
+      or (family_id = (select public.current_family_id()) and (select public.is_member()))
       or (
         (select public.is_member())
         and (

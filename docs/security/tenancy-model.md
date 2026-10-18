@@ -302,12 +302,15 @@ would not be one.
 
 The three SELECT policies keep their names and their `ORG AND (arms)`
 shape. `profiles` ("Profiles are visible per access rules"): self, org
-admin, own household, or the directory arm — `is_member() and is_unlisted
-= false and role in (member, content_editor, admin)` **and**
+admin, own household (`is_member()`-gated, as before), or the directory
+arm — `is_member() and is_unlisted = false and role in (member,
+content_editor, admin)` **and**
 `(org_directory_visible() or shares_group_with(id))`. `family_units`
 ("Members can view family units") and `family_members` ("Members can view
-family members"): org admin, own household, or `is_member() and
-(org_directory_visible() or shares_group_with_household(<family id>))`.
+family members"): org admin, own household (`is_member()`-gated, so a
+pending account linked by a family-invite claim still reads neither table),
+or `is_member() and (org_directory_visible() or
+shares_group_with_household(<family id>))`.
 The three directory views are `security_invoker` and narrow with the base
 tables; nothing else changed.
 

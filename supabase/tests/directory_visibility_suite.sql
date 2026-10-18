@@ -449,5 +449,73 @@ select is(
   pg_temp.as_text(current_setting('dv.b1')::uuid, 'select public.org_directory_visible()::text'),
   'false', 'org_directory_visible() reads the caller''s own org, not another org''s setting');
 
+-- ── 11. Pending accounts and unlisted profiles stay outside every arm but their own ──
+-- A family-invite claim links a still-pending account to its household, so
+-- the own-household arms must not open the household tables to it.
+
+do $$
+declare
+  org_a uuid := current_setting('dv.org_a')::uuid;
+  fam1 uuid := (select family_id from public.profiles where id = current_setting('dv.m1')::uuid);
+  pending_a uuid := gen_random_uuid();
+  fm uuid;
+begin
+  insert into public.family_members (org_id, family_id, first_name, relationship)
+    values (org_a, fam1, 'Spouse', 'spouse') returning id into fm;
+  insert into public.family_invites (org_id, family_member_id, family_id, invite_email)
+    values (org_a, fm, fam1, 'pending-a@directory-visibility.example.test');
+  insert into auth.users (id, email) values (pending_a, 'pending-a@directory-visibility.example.test');
+  -- What the claim route does, and what a leader could do later.
+  update public.profiles set family_id = fam1 where id = pending_a;
+  insert into public.group_members (org_id, group_id, profile_id, role)
+    values (org_a, current_setting('dv.grp_1')::uuid, pending_a, 'member');
+
+  update public.profiles set is_unlisted = true where id = current_setting('dv.m2')::uuid;
+
+  perform set_config('dv.pending_a', pending_a::text, true);
+  perform set_config('dv.fam1', fam1::text, true);
+end $$;
+
+select is(
+  (select role from public.profiles where id = current_setting('dv.pending_a')::uuid),
+  'pending', 'fixture: the family-invite signup into org A landed as pending');
+select is(
+  pg_temp.as_count(current_setting('dv.pending_a')::uuid,
+    format('select count(*) from public.family_units where id = %L', current_setting('dv.fam1'))),
+  0::bigint, 'a pending account linked to a household reads no family_units row for it');
+select is(
+  pg_temp.as_count(current_setting('dv.pending_a')::uuid,
+    format('select count(*) from public.family_members where family_id = %L', current_setting('dv.fam1'))),
+  0::bigint, 'a pending account linked to a household reads no family_members row for it');
+select is(
+  pg_temp.as_count(current_setting('dv.pending_a')::uuid,
+    format('select count(*) from public.profiles where id = %L', current_setting('dv.m1'))),
+  0::bigint, 'a pending account reads no profile of a household or group mate');
+select is(
+  pg_temp.as_count(current_setting('dv.pending_a')::uuid,
+    format('select count(*) from public.profiles where id = %L', current_setting('dv.pending_a'))),
+  1::bigint, 'positive control: a pending account reads its own profile');
+select is(
+  pg_temp.as_count(current_setting('dv.m1')::uuid,
+    format('select count(*) from public.family_units where id = %L', current_setting('dv.fam1'))),
+  1::bigint, 'positive control: an approved member reads their own household');
+select is(
+  pg_temp.as_count(current_setting('dv.m2')::uuid,
+    format('select count(*) from public.profiles where id = %L', current_setting('dv.pending_a'))),
+  0::bigint, 'a pending account in a shared group is still outside the directory arm');
+
+select is(
+  pg_temp.as_count(current_setting('dv.m1')::uuid,
+    format('select count(*) from public.profiles where id = %L', current_setting('dv.m2'))),
+  0::bigint, 'an unlisted profile is hidden from a group mate');
+select is(
+  pg_temp.as_count(current_setting('dv.m2')::uuid,
+    format('select count(*) from public.profiles where id = %L', current_setting('dv.m2'))),
+  1::bigint, 'positive control: an unlisted member reads their own profile');
+select is(
+  pg_temp.as_count(current_setting('dv.owner_a')::uuid,
+    format('select count(*) from public.profiles where id = %L', current_setting('dv.m2'))),
+  1::bigint, 'the org admin reads an unlisted profile');
+
 select * from finish();
 rollback;
