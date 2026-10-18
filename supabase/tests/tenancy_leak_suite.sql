@@ -43,13 +43,13 @@ declare
   _group_member uuid;
   _label uuid;
 begin
-  -- provisioning already seeded: organizations, event_calendars (prayer
-  -- calendar), site_settings, about_page, access_requests (owner), and the
-  -- owner's profiles + organization_members rows via signup. Groups and
-  -- teams are org-defined (provisioning seeds none), so the fixture creates
-  -- its own group, with the owner as its leader, a label attached to that
-  -- membership, and a serving team under it — the rows the
-  -- fixture-completeness gate counts.
+  -- provisioning already seeded: organizations, site_settings,
+  -- access_requests (owner), and the owner's profiles + organization_members
+  -- rows via signup. Groups and teams are org-defined (provisioning seeds
+  -- none), so the fixture creates its own group, with the owner as its
+  -- leader, a label attached to that membership, a serving team under it,
+  -- and every group-owned content row — the rows the fixture-completeness
+  -- gate counts.
   insert into public.groups (org_id, name)
     values (_org, _tag || ' group') returning id into _group;
   insert into public.group_members (org_id, group_id, profile_id, role)
@@ -75,55 +75,59 @@ begin
   insert into public.access_requests (org_id, name, email, status, invite_token)
     values (_org, _tag || ' requester', _tag || '-req@leak.example.test', 'pending', _invite_token);
 
-  insert into public.announcements (org_id, title, content, is_published, author_id)
-    values (_org, _tag || ' announcement', 'body', true, _owner);
+  insert into public.announcements (org_id, group_id, title, content, is_published, author_id)
+    values (_org, _group, _tag || ' announcement', 'body', true, _owner);
+  insert into public.about_page (org_id, group_id, body)
+    values (_org, _group, _tag || ' about');
+  insert into public.group_settings (org_id, group_id, weekly_zoom_url)
+    values (_org, _group, 'https://' || _tag || '.example.test/zoom');
 
-  insert into public.event_calendars (org_id, name, created_by)
-    values (_org, _tag || ' calendar', _owner) returning id into _calendar;
-  insert into public.events (org_id, title, start_time, calendar_id, created_by)
-    values (_org, _tag || ' event', now() + interval '7 days', _calendar, _owner)
+  insert into public.event_calendars (org_id, group_id, name, created_by)
+    values (_org, _group, _tag || ' calendar', _owner) returning id into _calendar;
+  insert into public.events (org_id, group_id, title, start_time, calendar_id, created_by)
+    values (_org, _group, _tag || ' event', now() + interval '7 days', _calendar, _owner)
     returning id into _event;
   insert into public.rsvps (org_id, event_id, user_id, status)
     values (_org, _event, _owner, 'yes');
   insert into public.calendar_subscription_tokens (org_id, user_id, token_hash, expires_at)
     values (_org, _owner, _tag || '-token-hash', now() + interval '30 days');
 
-  insert into public.class_teachers (org_id, profile_id, title)
-    values (_org, _owner, 'Teacher');
+  insert into public.class_teachers (org_id, group_id, profile_id, title)
+    values (_org, _group, _owner, 'Teacher');
   insert into public.feedback (org_id, profile_id, type, message)
     values (_org, _owner, 'idea', _tag || ' feedback');
 
-  insert into public.giving_funds (org_id, name, steward_id, created_by)
-    values (_org, _tag || ' fund', _owner, _owner) returning id into _fund;
+  insert into public.giving_funds (org_id, group_id, name, steward_id, created_by)
+    values (_org, _group, _tag || ' fund', _owner, _owner) returning id into _fund;
   -- custom_handle is NOT NULL (20260707000000_giving.sql) — omitting it
   -- aborts the whole suite with 23502 in CI, where the schema is built from
   -- the migrations rather than from the drifted shared local stack.
-  insert into public.giving_fund_methods (org_id, fund_id, method, custom_handle)
-    values (_org, _fund, 'zelle', _tag || '-zelle');
+  insert into public.giving_fund_methods (org_id, group_id, fund_id, method, custom_handle)
+    values (_org, _group, _fund, 'zelle', _tag || '-zelle');
 
-  insert into public.lecture_series (org_id, name)
-    values (_org, _tag || ' series') returning id into _series;
-  insert into public.lectures (org_id, title, video_url, series_id, created_by)
-    values (_org, _tag || ' lecture', 'https://example.test/v', _series, _owner);
+  insert into public.lecture_series (org_id, group_id, name)
+    values (_org, _group, _tag || ' series') returning id into _series;
+  insert into public.lectures (org_id, group_id, title, video_url, series_id, created_by)
+    values (_org, _group, _tag || ' lecture', 'https://example.test/v', _series, _owner);
 
-  insert into public.prayer_call_sessions (org_id, weekday, start_time, leader_id, event_id)
-    values (_org, 2, '07:00', _owner, _event);
-  insert into public.prayer_requests (org_id, author_id, body, category)
-    values (_org, _owner, _tag || ' prayer', 'health');
-  insert into public.prayer_responses (org_id, request_id, profile_id)
-    select _org, id, _owner from public.prayer_requests
+  insert into public.prayer_call_sessions (org_id, group_id, weekday, start_time, leader_id, event_id)
+    values (_org, _group, 2, '07:00', _owner, _event);
+  insert into public.prayer_requests (org_id, group_id, author_id, body, category)
+    values (_org, _group, _owner, _tag || ' prayer', 'health');
+  insert into public.prayer_responses (org_id, group_id, request_id, profile_id)
+    select _org, _group, id, _owner from public.prayer_requests
       where org_id = _org and author_id = _owner limit 1;
 
   insert into public.team_members (org_id, profile_id, team_id)
     values (_org, _owner, _serving_group);
-  insert into public.serving_team_settings (org_id, group_id, enabled)
+  insert into public.serving_team_settings (org_id, team_id, enabled)
     values (_org, _serving_group, true);
-  insert into public.serving_signups (org_id, group_id, service_date, family_id, created_by)
+  insert into public.serving_signups (org_id, team_id, service_date, family_id, created_by)
     values (_org, _serving_group, (current_date + (7 - extract(dow from current_date)::int)), _family, _owner)
     returning id into _signup;
   insert into public.serving_signup_attendees (org_id, signup_id, profile_id)
     values (_org, _signup, _owner);
-  insert into public.serving_broadcasts (org_id, group_id, sent_by, subject)
+  insert into public.serving_broadcasts (org_id, team_id, sent_by, subject)
     values (_org, _serving_group, _owner, _tag || ' broadcast');
   insert into public.org_email_domains (org_id, domain, resend_domain_id, status, dns_records)
     values (_org, _tag || '.mail.example.test', _tag || '-resend-id', 'pending', '[]'::jsonb);
@@ -497,8 +501,8 @@ begin
 
   -- INSERT tagged into org B → rejected by the restrictive WITH CHECK
   begin
-    insert into public.prayer_requests (org_id, author_id, body, category)
-    values (org_b, owner_a, 'cross-org write', 'health');
+    insert into public.prayer_requests (org_id, group_id, author_id, body, category)
+    values (org_b, (select id from public.groups where org_id = org_b limit 1), owner_a, 'cross-org write', 'health');
   exception when others then
     insert_err := sqlstate;
   end;

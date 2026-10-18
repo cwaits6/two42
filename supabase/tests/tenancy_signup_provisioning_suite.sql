@@ -54,17 +54,25 @@ select is(
     where org_id = current_setting('su.org_a')::uuid),
   0, 'provisioning seeds no group — the founding admin has no profile to enrol yet');
 
+-- Calendars, about pages and the call / link-mode settings are group-owned
+-- now, and there is no group at provisioning time to own them.
 select is(
-  (select value from public.site_settings
-    where org_id = current_setting('su.org_a')::uuid and key = 'prayer_calendar_id'),
-  (select id::text from public.event_calendars
-    where org_id = current_setting('su.org_a')::uuid and name = 'Prayer Calls'),
-  'prayer_calendar_id points at the provisioned prayer calendar');
+  (select count(*)::int from public.event_calendars
+    where org_id = current_setting('su.org_a')::uuid),
+  0, 'provisioning seeds no calendar — calendars belong to groups');
 
 select is(
   (select count(*)::int from public.site_settings
     where org_id = current_setting('su.org_a')::uuid),
-  9, 'provisioning seeds the full settings-key list');
+  2, 'provisioning seeds only the two org-level giving keys');
+
+select is(
+  (select count(*)::int from public.site_settings
+    where org_id = current_setting('su.org_a')::uuid
+      and key in ('weekly_zoom_url', 'zoom_meeting_time', 'weekly_prayer_call_url',
+                  'weekly_prayer_call_time', 'serving_link_mode', 'prayer_calendar_id',
+                  'directory_app_url')),
+  0, 'provisioning seeds none of the retired org-level keys');
 
 -- site_name was the only is_public seed and nothing read it (the public
 -- name is organizations.branding.display_name); its absence is asserted so
@@ -80,10 +88,10 @@ select is(
     where org_id = current_setting('su.org_a')::uuid and key = 'site_name'),
   0, 'provisioning no longer seeds site_name');
 
-select ok(
-  exists (select 1 from public.about_page
+select is(
+  (select count(*)::int from public.about_page
     where org_id = current_setting('su.org_a')::uuid),
-  'provisioning creates the org''s about_page row');
+  0, 'provisioning seeds no about page — one is written per group on first save');
 
 select ok(
   exists (select 1 from public.access_requests
@@ -434,8 +442,8 @@ begin
     values (org_b, grp_b, 'B serving team', true) returning id into group_b;
   insert into public.team_members (org_id, profile_id, team_id, is_leader)
     values (org_a, owner_a, group_a, true);
-  insert into public.giving_funds (org_id, name, steward_id)
-    values (org_b, 'B fund', current_setting('su.app_meta_user')::uuid)
+  insert into public.giving_funds (org_id, group_id, name, steward_id)
+    values (org_b, grp_b, 'B fund', current_setting('su.app_meta_user')::uuid)
     returning id into fund_b;
 
   set local role authenticated;
@@ -463,23 +471,33 @@ select is(current_setting('su.lead_other'), 'false',
 select is(current_setting('su.manage_other'), 'false',
   'giving_can_manage_fund() is false for another org''s fund id');
 
--- ── PostgREST about_page upsert shape after the legacy-unique drop (§3.5) ──
+-- ── PostgREST about_page upsert shape ───────────────────────────────────────
 -- This is the exact statement PostgREST generates for the AboutEditor's
--- .upsert() (no on_conflict param → the PK (org_id, id) is the arbiter;
--- org_id fills from its fail-closed DEFAULT).
+-- .upsert() (no on_conflict param → the PK (group_id) is the arbiter;
+-- org_id fills from its fail-closed DEFAULT). The leader of group A edits
+-- A's page; group B's row, in another org, is untouched.
 do $$
 declare
+  org_a uuid := current_setting('su.org_a')::uuid;
+  org_b uuid := current_setting('su.org_b')::uuid;
   owner_a uuid := current_setting('su.owner_a')::uuid;
+  grp_a uuid; grp_b uuid;
   upsert_err text := null;
 begin
-  update public.profiles set role = 'admin' where id = owner_a;
+  insert into public.groups (org_id, name) values (org_a, 'About A') returning id into grp_a;
+  insert into public.groups (org_id, name) values (org_b, 'About B') returning id into grp_b;
+  insert into public.group_members (org_id, group_id, profile_id, role)
+    values (org_a, grp_a, owner_a, 'leader');
+  insert into public.about_page (org_id, group_id, body) values (org_a, grp_a, ''), (org_b, grp_b, '');
+  perform set_config('su.about_grp_a', grp_a::text, true);
+  perform set_config('su.about_grp_b', grp_b::text, true);
 
   set local role authenticated;
   perform set_config('request.jwt.claims', json_build_object('sub', owner_a)::text, true);
   begin
-    insert into public.about_page (id, body, updated_by, updated_at)
-    values (true, 'edited by org A', owner_a, now())
-    on conflict (org_id, id) do update
+    insert into public.about_page (group_id, body, updated_by, updated_at)
+    values (grp_a, 'edited by org A', owner_a, now())
+    on conflict (group_id) do update
       set body = excluded.body, updated_by = excluded.updated_by, updated_at = excluded.updated_at;
   exception when others then
     upsert_err := sqlstate || ': ' || sqlerrm;
@@ -492,12 +510,12 @@ select is(current_setting('su.upsert_err'), 'ok',
   'the PostgREST-shaped about_page upsert (PK arbiter, defaulted org_id) succeeds');
 
 select is(
-  (select body from public.about_page where org_id = current_setting('su.org_a')::uuid),
+  (select body from public.about_page where group_id = current_setting('su.about_grp_a')::uuid),
   'edited by org A',
-  'the upsert updated org A''s about_page row');
+  'the upsert updated group A''s about_page row');
 
 select is(
-  (select body from public.about_page where org_id = current_setting('su.org_b')::uuid),
+  (select body from public.about_page where group_id = current_setting('su.about_grp_b')::uuid),
   '',
   'org B''s about_page row is untouched by org A''s upsert');
 

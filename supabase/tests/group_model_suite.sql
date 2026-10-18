@@ -304,7 +304,7 @@ declare
   grp_a2 uuid := current_setting('gm.grp_a2')::uuid;
   team_a uuid := current_setting('gm.team_a')::uuid;
   team_a2 uuid := current_setting('gm.team_a2')::uuid;
-  visible_a2 bigint;
+  visible_a1 bigint; visible_a2 bigint;
   team_insert_err text := 'none'; team_updated bigint; team_deleted bigint;
   own_team_insert bigint; own_team_updated bigint;
   roster_insert_err text := 'none'; roster_updated bigint; roster_deleted bigint;
@@ -314,8 +314,10 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', member_a)::text, true);
   perform set_config('request.headers', '{}', true);
 
-  -- Reads stay org-wide: the A2 roster is visible, so a zero row count on
-  -- the writes below comes from the write policies, not from invisibility.
+  -- Reads follow group membership: the A1 roster is visible and the A2
+  -- roster is not, so the zero row counts on the A2 writes below come from
+  -- the write policies on rows the member cannot even see.
+  select count(*) into visible_a1 from public.team_members where team_id = team_a;
   select count(*) into visible_a2 from public.team_members where team_id = team_a2;
 
   begin
@@ -351,6 +353,7 @@ begin
   get diagnostics own_roster_deleted = row_count;
 
   reset role;
+  perform set_config('gm.team_visible_a1', visible_a1::text, true);
   perform set_config('gm.team_visible_a2', visible_a2::text, true);
   perform set_config('gm.team_insert_err', team_insert_err, true);
   perform set_config('gm.team_updated', team_updated::text, true);
@@ -365,8 +368,10 @@ begin
   perform set_config('gm.own_roster_deleted', own_roster_deleted::text, true);
 end $$;
 
-select is(current_setting('gm.team_visible_a2')::int, 1,
-  'non-vacuity: the A1 leader can read the A2 team''s roster (reads stay org-wide)');
+select is(current_setting('gm.team_visible_a1')::int, 1,
+  'non-vacuity: the A1 leader reads their own team''s roster');
+select is(current_setting('gm.team_visible_a2')::int, 0,
+  'the A1 leader reads no roster of an A2 team (team reads follow group membership)');
 select is(current_setting('gm.team_insert_err'), '42501',
   'a leader of A1 cannot create a team under A2');
 select is(current_setting('gm.team_updated')::int, 0,
@@ -550,25 +555,28 @@ select ok(exists (
       and indexdef like '%(profile_id, org_id)%'),
   'group_members is indexed on (profile_id, org_id)');
 
+-- The serving policies reach is_group_leader() only through the team row
+-- (t.group_id): a call on a bare column would be the old team-semantics
+-- helper under its new name.
 select is(
   (select count(*)::int from pg_policies
     where schemaname = 'public'
       and tablename in ('serving_signups', 'serving_signup_attendees', 'serving_broadcasts', 'serving_team_settings')
-      and (qual like '%is_group_leader%' or with_check like '%is_group_leader%')),
-  0, 'no serving policy still calls is_group_leader()');
+      and (coalesce(qual, '') || coalesce(with_check, '')) ~ 'is_group_leader\((?!t\.group_id)'),
+  0, 'no serving policy calls is_group_leader() on anything but the team''s group');
 select is(
   (select count(*)::int from pg_policies
     where schemaname = 'public'
       and (qual like '%is_team_lead%' or with_check like '%is_team_lead%')
       and (tablename, policyname) in (
-        ('serving_signups', 'Members can create serving signups'),
-        ('serving_signups', 'Members can delete own serving signups'),
+        ('serving_signups', 'Team members and group leaders can create serving signups'),
+        ('serving_signups', 'Owners, team leads and group leaders can delete serving signups'),
         ('serving_signup_attendees', 'Signup owners can remove attendees'),
-        ('serving_broadcasts', 'Leaders and admins can view serving broadcasts'),
-        ('serving_broadcasts', 'Leaders and admins can log serving broadcasts'),
-        ('serving_team_settings', 'Leaders and admins can insert serving settings'),
-        ('serving_team_settings', 'Leaders and admins can update serving settings'))),
-  7, 'all seven serving policies are re-pointed at is_team_lead()');
+        ('serving_broadcasts', 'Team leads and group leaders can view serving broadcasts'),
+        ('serving_broadcasts', 'Team leads and group leaders can log serving broadcasts'),
+        ('serving_team_settings', 'Team leads and group leaders can insert serving settings'),
+        ('serving_team_settings', 'Team leads and group leaders can update serving settings'))),
+  7, 'all seven serving write/lead policies call is_team_lead()');
 select is(
   (select count(*)::int from pg_policies
     where schemaname = 'public' and tablename in ('teams', 'team_members')

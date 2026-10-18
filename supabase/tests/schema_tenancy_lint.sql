@@ -481,14 +481,14 @@ select ok(
   'site_settings'' key-only legacy unique is dropped (keys are per-org now)'
 );
 
-select col_is_pk('public', 'about_page', array['org_id', 'id'], 'about_page PK is (org_id, id)');
+select col_is_pk('public', 'about_page', array['group_id'], 'about_page PK is (group_id) — one about page per group');
 select ok(
   not exists (
     select 1 from pg_constraint
     where conrelid = 'public.about_page'::regclass
       and conname = 'about_page_id_legacy_key'
   ),
-  'about_page''s global singleton unique is dropped (one about page per org now)'
+  'about_page''s global singleton unique is dropped (one about page per group now)'
 );
 
 select col_is_pk('public', 'class_teachers', array['id'], 'class_teachers PK stays plain id');
@@ -496,9 +496,9 @@ select ok(
   exists (
     select 1 from pg_constraint
     where conrelid = 'public.class_teachers'::regclass
-      and conname = 'class_teachers_org_id_profile_id_key' and contype = 'u'
+      and conname = 'class_teachers_group_id_profile_id_key' and contype = 'u'
   ),
-  'class_teachers has (org_id, profile_id) unique'
+  'class_teachers has (group_id, profile_id) unique — a person may lead in two groups'
 );
 select ok(
   not exists (

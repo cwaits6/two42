@@ -127,6 +127,23 @@ WHERE g.org_id = '00000000-0000-0000-0000-000000000001'
 ON CONFLICT (group_id, profile_id) DO UPDATE
   SET role = excluded.role;
 
+-- The group is the calendar: the content migration gave the backfilled
+-- group (Group A) its one calendar; the two groups inserted above get theirs
+-- here. Each is named after its group so the switcher, the chips and the
+-- Showing row read consistently.
+INSERT INTO public.event_calendars (org_id, group_id, name)
+SELECT g.org_id, g.id, g.name
+FROM public.groups g
+WHERE g.org_id = '00000000-0000-0000-0000-000000000001'
+  AND NOT EXISTS (SELECT 1 FROM public.event_calendars c WHERE c.group_id = g.id);
+
+UPDATE public.event_calendars c
+SET name = g.name
+FROM public.groups g
+WHERE g.id = c.group_id
+  AND g.org_id = '00000000-0000-0000-0000-000000000001'
+  AND c.name <> g.name;
+
 -- Starter team under Group A so the serving flow is testable locally.
 -- Deployments create their own teams at /admin/groups — provisioning seeds
 -- none.
@@ -305,32 +322,59 @@ DROP TABLE seed_households;
 
 -- ── Events, announcements, prayer ───────────────────────────────────────────
 
--- The two meetings recur without end so the dashboard has a next meeting no
--- matter how long ago the seed ran. Times are local to siteConfig.timeZone.
-INSERT INTO public.events (id, org_id, title, description, location, start_time, end_time, created_by,
+-- Every content row names its group so switching groups on the dashboard
+-- shows different content: the weekly meeting and the potluck in Group A,
+-- the Sunday class in Group B, a Sunday-afternoon meeting in Group C. Each
+-- event is filed under its group's one calendar. The meetings recur without
+-- end so the dashboard has a next meeting no matter how long ago the seed
+-- ran. Times are local to siteConfig.timeZone.
+INSERT INTO public.events (id, org_id, group_id, calendar_id, title, description, location, start_time, end_time, created_by,
                            recurrence_frequency, recurrence_interval, recurrence_end_mode,
                            meeting_url, meeting_id, meeting_passcode)
-VALUES
-  ('e0000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001',
+SELECT e.id, g.org_id, g.id, c.id, e.title, e.description, e.location, e.start_time, e.end_time,
+       'a0000000-0000-0000-0000-000000000001',
+       e.recurrence_frequency, 1, e.recurrence_end_mode,
+       e.meeting_url, e.meeting_id, e.meeting_passcode
+FROM (VALUES
+  ('e0000000-0000-0000-0000-000000000001'::uuid, 'Group A',
    'Weekly Group Meeting', 'Study and prayer. Bring your questions from this week''s reading.',
    'The Sampleton home',
    ((date_trunc('week', now() AT TIME ZONE 'America/New_York')::date + 3) + time '19:00') AT TIME ZONE 'America/New_York',
    ((date_trunc('week', now() AT TIME ZONE 'America/New_York')::date + 3) + time '20:30') AT TIME ZONE 'America/New_York',
-   'a0000000-0000-0000-0000-000000000001', 'weekly', 1, 'never',
+   'weekly', 'never',
    'https://example.zoom.us/j/00000000000', '000 0000 0000', '000000'),
-  ('e0000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001',
+  ('e0000000-0000-0000-0000-000000000002'::uuid, 'Group B',
    'Sunday Class', 'Teaching hour before the service.', 'Room 242',
    ((date_trunc('week', now() AT TIME ZONE 'America/New_York')::date + 6) + time '09:30') AT TIME ZONE 'America/New_York',
    ((date_trunc('week', now() AT TIME ZONE 'America/New_York')::date + 6) + time '10:30') AT TIME ZONE 'America/New_York',
-   'a0000000-0000-0000-0000-000000000001', 'weekly', 1, 'never',
+   'weekly', 'never',
    NULL, NULL, NULL),
-  ('e0000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000001',
+  ('e0000000-0000-0000-0000-000000000003'::uuid, 'Group A',
    'Potluck Dinner', 'Bring a dish to share. Drinks and plates provided.', 'Fellowship Hall',
    ((current_date + 16) + time '18:00') AT TIME ZONE 'America/New_York',
    ((current_date + 16) + time '20:00') AT TIME ZONE 'America/New_York',
-   'a0000000-0000-0000-0000-000000000001', NULL, 1, NULL,
+   NULL, NULL,
+   NULL, NULL, NULL),
+  ('e0000000-0000-0000-0000-000000000004'::uuid, 'Group C',
+   'Sunday Afternoon Meeting', 'Discussion and prayer over coffee.', 'The Demoski home',
+   ((date_trunc('week', now() AT TIME ZONE 'America/New_York')::date + 6) + time '15:00') AT TIME ZONE 'America/New_York',
+   ((date_trunc('week', now() AT TIME ZONE 'America/New_York')::date + 6) + time '16:30') AT TIME ZONE 'America/New_York',
+   'weekly', 'never',
    NULL, NULL, NULL)
-ON CONFLICT (id) DO NOTHING;
+) AS e (id, group_name, title, description, location, start_time, end_time,
+        recurrence_frequency, recurrence_end_mode, meeting_url, meeting_id, meeting_passcode)
+JOIN public.groups g ON g.name = e.group_name
+  AND g.org_id = '00000000-0000-0000-0000-000000000001'
+JOIN LATERAL (
+  SELECT id FROM public.event_calendars WHERE group_id = g.id ORDER BY created_at, id LIMIT 1
+) c ON true
+-- A pre-existing local row (seeded before content carried a group) moves to
+-- its group and calendar on re-seed; the composite FKs make a wrong pairing
+-- a loud failure rather than a quiet one.
+ON CONFLICT (id) DO UPDATE
+  SET group_id = excluded.group_id,
+      calendar_id = excluded.calendar_id
+  WHERE events.org_id = excluded.org_id;
 
 INSERT INTO public.rsvps (org_id, event_id, user_id, status)
 SELECT org_id, 'e0000000-0000-0000-0000-000000000003', id,
@@ -341,31 +385,42 @@ WHERE org_id = '00000000-0000-0000-0000-000000000001'
   AND relationship = 'primary'
 ON CONFLICT (event_id, user_id) DO NOTHING;
 
-INSERT INTO public.announcements (id, org_id, author_id, title, content, is_published, published_at)
-VALUES
-  ('a1000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001',
+INSERT INTO public.announcements (id, org_id, group_id, author_id, title, content, is_published, published_at)
+SELECT a.id, g.org_id, g.id, 'a0000000-0000-0000-0000-000000000001', a.title, a.content, true, a.published_at
+FROM (VALUES
+  ('a1000000-0000-0000-0000-000000000001'::uuid, 'Group A',
    'Potluck sign-up is open',
    'RSVP on the calendar so we know how many tables to set. Main dishes are the biggest need this time.',
-   true, now() - interval '2 days'),
-  ('a1000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001',
+   now() - interval '2 days'),
+  ('a1000000-0000-0000-0000-000000000002'::uuid, 'Group B',
    'Parking lot repaving next week',
    'The north lot is closed Monday through Wednesday. Use the street entrance and allow a few extra minutes.',
-   true, now() - interval '6 days')
-ON CONFLICT (id) DO NOTHING;
+   now() - interval '6 days')
+) AS a (id, group_name, title, content, published_at)
+JOIN public.groups g ON g.name = a.group_name
+  AND g.org_id = '00000000-0000-0000-0000-000000000001'
+ON CONFLICT (id) DO UPDATE
+  SET group_id = excluded.group_id
+  WHERE announcements.org_id = excluded.org_id;
 
-INSERT INTO public.prayer_requests (id, org_id, author_id, body, category, is_anonymous)
-SELECT r.id, p.org_id, p.id, r.body, r.category, r.is_anonymous
+-- Each request is posted in a group its author belongs to.
+INSERT INTO public.prayer_requests (id, org_id, group_id, author_id, body, category, is_anonymous)
+SELECT r.id, p.org_id, g.id, p.id, r.body, r.category, r.is_anonymous
 FROM (VALUES
-  ('b1000000-0000-0000-0000-000000000001'::uuid, 'zoe.dummyfield@example.test',
+  ('b1000000-0000-0000-0000-000000000001'::uuid, 'zoe.dummyfield@example.test', 'Group B',
    'Ruth has a follow-up appointment Thursday after last month''s fall. Pray for a clear scan and steady steps.',
    'health', false),
-  ('b1000000-0000-0000-0000-000000000002'::uuid, 'mia.fakeworth@example.test',
+  ('b1000000-0000-0000-0000-000000000002'::uuid, 'mia.fakeworth@example.test', 'Group A',
    'Grateful that the new job came through after a long search.',
    'thanksgiving', false),
-  ('b1000000-0000-0000-0000-000000000003'::uuid, 'amelia.demoski@example.test',
+  ('b1000000-0000-0000-0000-000000000003'::uuid, 'amelia.demoski@example.test', 'Group C',
    'Deciding whether to take a transfer out of state. Wisdom for the family.',
    'guidance', true)
-) AS r (id, author_email, body, category, is_anonymous)
+) AS r (id, author_email, group_name, body, category, is_anonymous)
 JOIN public.profiles p ON p.email = r.author_email
   AND p.org_id = '00000000-0000-0000-0000-000000000001'
-ON CONFLICT (id) DO NOTHING;
+JOIN public.groups g ON g.name = r.group_name
+  AND g.org_id = '00000000-0000-0000-0000-000000000001'
+ON CONFLICT (id) DO UPDATE
+  SET group_id = excluded.group_id
+  WHERE prayer_requests.org_id = excluded.org_id;

@@ -98,6 +98,8 @@ declare
   family_b uuid;
   fm_a uuid;
   fm_b uuid;
+  grp_a uuid;
+  grp_b uuid;
   calendar_a uuid;
   calendar_b uuid;
   event_a uuid;
@@ -133,15 +135,22 @@ begin
   update public.profiles set family_id = family_a where id = owner_a;
   update public.profiles set family_id = family_b where id = owner_b;
 
-  insert into public.event_calendars (org_id, name, created_by)
-    values (org_a, 'A calendar', owner_a) returning id into calendar_a;
-  insert into public.event_calendars (org_id, name, created_by)
-    values (org_b, 'B calendar', owner_b) returning id into calendar_b;
-  insert into public.events (org_id, title, start_time, calendar_id, created_by)
-    values (org_a, 'A event', now() + interval '7 days', calendar_a, owner_a)
+  -- Event images are written by the event's group leaders, so each owner
+  -- leads the group that owns their org's event.
+  insert into public.groups (org_id, name) values (org_a, 'A group') returning id into grp_a;
+  insert into public.groups (org_id, name) values (org_b, 'B group') returning id into grp_b;
+  insert into public.group_members (org_id, group_id, profile_id, role) values
+    (org_a, grp_a, owner_a, 'leader'),
+    (org_b, grp_b, owner_b, 'leader');
+  insert into public.event_calendars (org_id, group_id, name, created_by)
+    values (org_a, grp_a, 'A calendar', owner_a) returning id into calendar_a;
+  insert into public.event_calendars (org_id, group_id, name, created_by)
+    values (org_b, grp_b, 'B calendar', owner_b) returning id into calendar_b;
+  insert into public.events (org_id, group_id, title, start_time, calendar_id, created_by)
+    values (org_a, grp_a, 'A event', now() + interval '7 days', calendar_a, owner_a)
     returning id into event_a;
-  insert into public.events (org_id, title, start_time, calendar_id, created_by)
-    values (org_b, 'B event', now() + interval '7 days', calendar_b, owner_b)
+  insert into public.events (org_id, group_id, title, start_time, calendar_id, created_by)
+    values (org_b, grp_b, 'B event', now() + interval '7 days', calendar_b, owner_b)
     returning id into event_b;
 
   -- Seed storage.objects as postgres (BYPASSRLS — before any role switch).

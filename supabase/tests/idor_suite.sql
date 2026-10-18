@@ -54,28 +54,28 @@ begin
     returning id, token into _invite, _invite_token;
   update public.profiles set family_id = _family where id = _owner;
 
-  insert into public.event_calendars (org_id, name, created_by)
-    values (_org, _tag || ' calendar', _owner) returning id into _calendar;
-  insert into public.events (org_id, title, start_time, calendar_id, created_by)
-    values (_org, _tag || ' event', now() + interval '7 days', _calendar, _owner)
+  insert into public.event_calendars (org_id, group_id, name, created_by)
+    values (_org, _group, _tag || ' calendar', _owner) returning id into _calendar;
+  insert into public.events (org_id, group_id, title, start_time, calendar_id, created_by)
+    values (_org, _group, _tag || ' event', now() + interval '7 days', _calendar, _owner)
     returning id into _event;
   insert into public.rsvps (org_id, event_id, user_id, status)
     values (_org, _event, _owner, 'yes');
   insert into public.calendar_subscription_tokens (org_id, user_id, token_hash, expires_at)
     values (_org, _owner, _tag || '-token-hash', now() + interval '30 days');
 
-  insert into public.giving_funds (org_id, name, steward_id, created_by)
-    values (_org, _tag || ' fund', _owner, _owner) returning id into _fund;
+  insert into public.giving_funds (org_id, group_id, name, steward_id, created_by)
+    values (_org, _group, _tag || ' fund', _owner, _owner) returning id into _fund;
 
-  insert into public.prayer_requests (org_id, author_id, body, category)
-    values (_org, _owner, _tag || ' prayer', 'health');
-  insert into public.prayer_responses (org_id, request_id, profile_id)
-    select _org, id, _owner from public.prayer_requests
+  insert into public.prayer_requests (org_id, group_id, author_id, body, category)
+    values (_org, _group, _owner, _tag || ' prayer', 'health');
+  insert into public.prayer_responses (org_id, group_id, request_id, profile_id)
+    select _org, _group, id, _owner from public.prayer_requests
       where org_id = _org and author_id = _owner limit 1;
 
   insert into public.team_members (org_id, profile_id, team_id)
     values (_org, _owner, _serving_group);
-  insert into public.serving_signups (org_id, group_id, service_date, family_id, created_by)
+  insert into public.serving_signups (org_id, team_id, service_date, family_id, created_by)
     values (_org, _serving_group, (current_date + (7 - extract(dow from current_date)::int)), _family, _owner)
     returning id into _signup;
   insert into public.serving_signup_attendees (org_id, signup_id, profile_id)
