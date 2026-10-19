@@ -236,6 +236,33 @@ now resolves the fund's group and admits its leaders or (when stewards may
 manage) its steward; the org admin arm is gone from it, as from every
 content policy.
 
+The people layer's directory boundary
+(`20261018000000_directory_visibility.sql`) adds three read-only helpers
+of the same shape — `SECURITY DEFINER`, `STABLE`, `set search_path = ''`,
+caller resolved from `auth.uid()` only, EXECUTE revoked from `public` and
+`anon` and granted to `authenticated`:
+
+- `org_directory_visible()` — the caller's own `organizations` row has
+  `directory_visibility = 'org'`. Reads only the tenant root, pinned by
+  `id = app_current_org_id()`; zero arguments, so it is InitPlan-hoisted.
+- `shares_group_with(_profile_id)` — the caller and the given profile share
+  a `group_members` group in the caller's org.
+- `shares_group_with_household(_family_id)` — the caller shares a group
+  with any profile in the given household, in the caller's org.
+
+Every `group_members` read in them carries `org_id =
+public.app_current_org_id()`. They are called by the `profiles`,
+`family_units` and `family_members` SELECT policies — see "Directory
+visibility" in [`tenancy-model.md`](tenancy-model.md). None writes.
+
+`handle_new_user()` (the auth signup trigger, `SECURITY DEFINER`) now also
+writes `group_members`: when the org it already resolved from the approved
+access request has exactly one group, the new non-pending profile is
+enrolled in it as a member. The org comes from the same server-owned rows
+as before, never from the caller, and every inserted column carries it.
+`supabase/tests/directory_visibility_suite.sql` pins the one-group, the
+several-groups and the family-invite (pending) cases.
+
 ## Email quota RPC — a definer-function bypass surface (CWA-72 / #365)
 
 The per-org daily send cap (`org_email_usage` + `org_email_limits`) is
@@ -299,7 +326,7 @@ the `service_role`-only grant, the grant-matrix and behaviour assertions in
 | `app/platform/organizations/page.tsx` | Org list across tenants — the surface's purpose | Platform-admin authority (as above); confined to `organizations` (tenant root) | `organizations` (deliberately unfiltered list) |
 | `app/platform/organizations/[id]/page.tsx` | Org detail + founding-admin request + email cap/usage (CWA-72) + the org's sending-domain row (for the custom-domain gate and stuck-cleanup cards); all invisible to the caller's own-org RLS (the cap tables have no permissive policy at all; the domain row is scoped to the org's own admins) | Platform-admin authority; org id from the route param | `organizations` `.eq("id", id)` (now also reads `custom_email_domain_enabled`); `access_requests` `.eq("org_id", id).eq("approved_role", "admin")`; `org_email_limits` `.eq("org_id", id)`; `org_email_usage` `.eq("org_id", id).eq("usage_date", today)`; `org_email_domains` `.eq("org_id", id)` |
 | `app/api/platform/organizations/route.ts` | `provision_organization()` is EXECUTE-granted to `service_role` only | Platform-admin authority; the RPC creates the org and derives everything from it transactionally | `rpc("provision_organization")` only |
-| `app/api/platform/organizations/[id]/route.ts` | Status/branding/`custom_email_domain_enabled` writes on the tenant root, which has no org-admin write policy (the custom-domain flag is platform-operator-only by design: no grant to the org's own admin, this route is its sole write path) | Platform-admin authority; org id from the route param | `organizations` read + update `.eq("id", id)` (branding merged, never replaced) |
+| `app/api/platform/organizations/[id]/route.ts` | Status/branding/`custom_email_domain_enabled` writes on the tenant root, whose only org-admin write policy is the single-column `directory_visibility` UPDATE (the custom-domain flag is platform-operator-only by design: no grant to the org's own admin, this route is its sole write path) | Platform-admin authority; org id from the route param | `organizations` read + update `.eq("id", id)` (branding merged, never replaced) |
 | `app/api/platform/organizations/[id]/invite-owner/route.ts` | Mints the founding admin's `signup_token`; the platform admin's own-org RLS could never reach the new org's request row | Platform-admin authority; org id from the route param | `access_requests` update `.eq("org_id", id).eq("approved_role", "admin").eq("email", ownerEmail)`; rollback update on the same filters + minted token; email branding via `resolveEmailBranding(id)` |
 | `app/serving/go/page.tsx` | Unauthenticated, HMAC-signed serving link; no session exists to satisfy RLS | HMAC-validated `teams` row (`org_id` and `group_id`); link rejected when `profiles.org_id` disagrees | `group_settings` (link mode, on the team's `group_id`), `serving_team_settings`, `team_members`, `serving_signups` (all on `team_id`), `profiles` (spouse), `family_units` (label) |
 | `app/g/[groupId]/serving/[teamId]/page.tsx` | Surfaces pending (never-logged-in) spouse profiles that RLS hides from the caller | Caller's own RLS-scoped profile | `profiles` (spouse lookup) |

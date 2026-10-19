@@ -1,9 +1,7 @@
-import { DirectoryTiles } from "@/components/directory/DirectoryTiles";
+import { MembersTab } from "@/components/directory/tabs/MembersTab";
 
-export const metadata = {
-  title: "Directory",
-};
+export const metadata = { title: "Members | Directory" };
 
-export default function DirectoryPage() {
-  return <DirectoryTiles directoryHref="/directory" />;
+export default function DirectoryMembersPage() {
+  return <MembersTab />;
 }

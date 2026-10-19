@@ -111,17 +111,31 @@ select ok(
   not has_column_privilege('authenticated', 'public.organizations', 'custom_email_domain_enabled', 'select'),
   'authenticated may not read organizations.custom_email_domain_enabled'
 );
--- The write side is enforced by RLS, not grants: Supabase's default
--- table-level UPDATE grant on organizations still stands, but no permissive
--- write policy exists, so the only write path is the service-role platform
--- route. Pin that absence — a future permissive UPDATE arm would hand the
--- flag to the org's own admin.
+-- The write side: the only permissive write policy is the org admin's
+-- UPDATE for directory_visibility, and the grants confine it to that one
+-- column — table-level UPDATE is revoked, so the policy cannot reach name,
+-- slug, status or custom_email_domain_enabled. Both halves are pinned: a
+-- second write policy, or a table-level re-grant, would hand the flag to
+-- the org's own admin.
 select is(
-  (select count(*) from pg_policies
+  (select coalesce(array_agg(policyname || ':' || cmd order by policyname), '{}')
+     from pg_policies
      where schemaname = 'public' and tablename = 'organizations'
        and permissive = 'PERMISSIVE' and cmd in ('INSERT', 'UPDATE', 'DELETE', 'ALL')),
-  0::bigint,
-  'no permissive write policy on organizations: custom_email_domain_enabled is writable only via the service-role platform route'
+  array['Admins can set directory visibility:UPDATE'],
+  'the only permissive write policy on organizations is the admin directory_visibility UPDATE'
+);
+select ok(
+  not has_table_privilege('authenticated', 'public.organizations', 'update'),
+  'authenticated holds no table-level UPDATE on organizations'
+);
+select ok(
+  not has_column_privilege('authenticated', 'public.organizations', 'custom_email_domain_enabled', 'update'),
+  'authenticated may not update organizations.custom_email_domain_enabled: it is writable only via the service-role platform route'
+);
+select ok(
+  not has_column_privilege('anon', 'public.organizations', 'directory_visibility', 'select'),
+  'anon may not read organizations.directory_visibility'
 );
 select col_not_null('public', 'organizations', 'custom_email_domain_enabled',
   'organizations.custom_email_domain_enabled is NOT NULL');

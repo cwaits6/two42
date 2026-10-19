@@ -289,6 +289,77 @@ assertions that abort the migration on any mismatch. The logic lives in
 `supabase/tests/group_model_suite.sql` can prove it against fixture orgs in
 CI, where migrations run against an empty database.
 
+### Directory visibility
+
+The people layer has its own within-org boundary
+(`20261018000000_directory_visibility.sql`): a member reads another
+member's profile when they share at least one group, or when the org admin
+has opened the directory to the whole organization. The setting is a typed
+column, `organizations.directory_visibility text not null default
+'shared_groups' check (in ('shared_groups', 'org'))`, because RLS reads
+it — it is a security boundary, not a preference, and a `site_settings` key
+would not be one.
+
+The three SELECT policies keep their names and their `ORG AND (arms)`
+shape. `profiles` ("Profiles are visible per access rules"): self, org
+admin, own household (`is_member()`-gated, as before), or the directory
+arm — `is_member() and is_unlisted = false and role in (member,
+content_editor, admin)` **and**
+`(org_directory_visible() or shares_group_with(id))`. `family_units`
+("Members can view family units") and `family_members` ("Members can view
+family members"): org admin, own household (`is_member()`-gated, so a
+pending account linked by a family-invite claim still reads neither table),
+or `is_member() and (org_directory_visible() or
+shares_group_with_household(<family id>))`.
+The three directory views are `security_invoker` and narrow with the base
+tables; nothing else changed.
+
+The helpers are `SECURITY DEFINER`, `STABLE`, `set search_path = ''`,
+EXECUTE revoked from `anon` and granted to `authenticated`:
+
+- `org_directory_visible()` — the caller's own org row
+  (`id = app_current_org_id()`) has `directory_visibility = 'org'`. Zero
+  arguments, so policies wrap it `(select ...)` and it is an InitPlan.
+- `shares_group_with(_profile_id)` — one self-join on `group_members`:
+  a row for `auth.uid()` and a row for the given profile in the same group,
+  both carrying `org_id = app_current_org_id()`.
+- `shares_group_with_household(_family_id)` — the same, for any profile
+  whose `family_id` is the given household.
+
+Like `is_group_member()`, the two row-dependent helpers are called bare in
+the policy expressions; a correlated `(select f(id))` is not an InitPlan.
+The caller is always `auth.uid()`; the argument names the other person or
+household, never the principal.
+
+**A one-group org sees no change.** The group-model backfill enrolled every
+approved member of such an org into its one group, so `shares_group_with()`
+is true for every pair of approved members and the directory arm reduces
+to the old one. To keep that true for members approved later,
+`handle_new_user()` enrols a non-pending signup into the org's group when
+the org has exactly one (`role = 'member'`); with zero or several groups it
+enrols nobody. A family-invite signup lands as `pending` and is promoted by
+the claim route, which does not enrol.
+
+**Consequences stated on purpose.** A household visible through a shared
+group lists only the profiles the viewer may read, so a spouse who is in
+no shared group is absent from that household's card. Linking a household
+member by search (`app/api/household/search-members/route.ts`) and the
+giving steward picker (`loadFundFormData()` in `lib/giving/server.ts`)
+find only people the viewer may read; both are whole-org again under
+`'org'`. `family_invites` stays `is_member()`-wide.
+
+**The write path.** `organizations` had Supabase's default table-level
+UPDATE grant and no permissive write policy. The migration revokes that
+grant from `anon` and `authenticated`, grants `update
+(directory_visibility)` and `select (directory_visibility)` to
+`authenticated` only, and adds the one permissive UPDATE policy ("Admins
+can set directory visibility": `id = app_request_org_id() and is_admin()`).
+The column grant, not the policy, is what keeps an org admin away from
+`name`, `slug`, `status` and `custom_email_domain_enabled`;
+`branding_rls_suite.sql` pins both halves and
+`directory_visibility_suite.sql` pins the read matrix, the helper truth
+table, the signup enrolment rule and the admin-only write.
+
 ### Group context (app layer)
 
 The URL segment `/g/<groupId>` names the group a request is about, and

@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DirectoryVisibilitySettings } from "@/components/directory/DirectoryVisibilitySettings";
 import { GivingSettings } from "@/components/giving/GivingSettings";
+import { getDirectoryVisibility } from "@/lib/directory/visibility";
 import { getGivingSettings } from "@/lib/giving/server";
 import { siteConfig } from "@/lib/config";
 
@@ -23,7 +25,10 @@ export default async function SettingsPage() {
     .single();
   if (profile?.role !== "admin") redirect("/dashboard");
 
-  const givingSettings = await getGivingSettings(supabase, profile.org_id);
+  const [givingSettings, directoryVisibility] = await Promise.all([
+    getGivingSettings(supabase, profile.org_id),
+    getDirectoryVisibility(),
+  ]);
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-2xl">
@@ -43,7 +48,15 @@ export default async function SettingsPage() {
               Email sending domain
             </Button>
           </div>
-          <h2 className="mb-3 text-xl font-bold text-foreground">Giving</h2>
+          <h2 className="mb-3 text-xl font-bold text-foreground">Directory</h2>
+          {directoryVisibility ? (
+            <DirectoryVisibilitySettings orgId={profile.org_id} visibility={directoryVisibility} />
+          ) : (
+            <p className="text-base text-muted-foreground">
+              The directory setting could not be loaded. Reload the page to try again.
+            </p>
+          )}
+          <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Giving</h2>
           <GivingSettings
             stewardsCanManage={givingSettings.stewardsCanManage}
             dashboardTile={givingSettings.dashboardTile}

@@ -801,13 +801,13 @@ isOneToOne: false
                   ]
                 },"organizations": {
                   Row: {
-                    "branding": NonNullable<Json>,"created_at": string,"custom_email_domain_enabled": boolean,"id": string,"name": string,"slug": string,"status": Database["public"]['Enums']["org_status"]
+                    "branding": NonNullable<Json>,"created_at": string,"custom_email_domain_enabled": boolean,"directory_visibility": string,"id": string,"name": string,"slug": string,"status": Database["public"]['Enums']["org_status"]
                   }
                   Insert: {
-                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"id"?: string,"name": string,"slug": string,"status"?: Database["public"]['Enums']["org_status"]
+                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"id"?: string,"name": string,"slug": string,"status"?: Database["public"]['Enums']["org_status"]
                   }
                   Update: {
-                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"id"?: string,"name"?: string,"slug"?: string,"status"?: Database["public"]['Enums']["org_status"]
+                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"id"?: string,"name"?: string,"slug"?: string,"status"?: Database["public"]['Enums']["org_status"]
                   }
                   Relationships: [
                     
@@ -1423,6 +1423,9 @@ isOneToOne: false
 "is_team_lead":
 { Args: { "_team_id": string }; Returns: boolean
                            },
+"org_directory_visible":
+{ Args: Record<PropertyKey, never>; Returns: boolean
+                           },
 "org_email_domain_claim":
 { Args: { "_cap": number,"_domain": string,"_org_id": string }; Returns: {
               "cleanup_failed_at": string | null,
@@ -1454,6 +1457,12 @@ isOneToOne: false
 { Args: { "_attendee_ids": (string)[],"_group_id": string,"_service_date": string }; Returns: {
               "created": boolean,"signup_id": string,"signup_org_id": string
             }[]
+                           },
+"shares_group_with":
+{ Args: { "_profile_id": string }; Returns: boolean
+                           },
+"shares_group_with_household":
+{ Args: { "_family_id": string }; Returns: boolean
                            }
           }
           Enums: {
