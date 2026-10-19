@@ -623,8 +623,8 @@ begin
 
   _org_id := _org_ids[1];
 
-  -- Approval logic (CWA-11): an approved access request grants its
-  -- approved_role, with NULL preserving the pre-Phase-4 behavior ('member').
+  -- Approval logic: an approved access request grants its
+  -- approved_role, with NULL preserving the previous behavior ('member').
   -- The order by makes a non-NULL approved_role win deterministically if an
   -- org somehow holds two approved requests for the same email. _role stays
   -- NULL — hence 'pending' — when the match came only from family_invites
@@ -654,6 +654,19 @@ begin
   insert into public.organization_members (org_id, profile_id)
   values (_org_id, new.id)
   on conflict do nothing;
+
+  -- One-group orgs: enrol on signup, mirroring group_model_backfill(). With
+  -- zero or several groups there is no right answer, so nobody is enrolled.
+  -- A family-invite signup lands as 'pending' and is promoted later by the
+  -- claim route, which does not enrol.
+  if _role <> 'pending'
+     and (select count(*) from public.groups g where g.org_id = _org_id) = 1 then
+    insert into public.group_members (org_id, group_id, profile_id, role)
+    select _org_id, g.id, new.id, 'member'
+    from public.groups g
+    where g.org_id = _org_id
+    on conflict (group_id, profile_id) do nothing;
+  end if;
 
   return new;
 end;
@@ -809,6 +822,25 @@ ALTER FUNCTION "public"."is_team_lead"("_team_id" "uuid") OWNER TO "postgres";
 
 
 COMMENT ON FUNCTION "public"."is_team_lead"("_team_id" "uuid") IS 'True when the caller (auth.uid()) is a lead of the given team in their own org. Formerly is_group_leader.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."org_directory_visible"() RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select exists (
+    select 1 from public.organizations o
+    where o.id = public.app_current_org_id()
+      and o.directory_visibility = 'org'
+  );
+$$;
+
+
+ALTER FUNCTION "public"."org_directory_visible"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."org_directory_visible"() IS 'True when the caller''s own org has directory_visibility = org. Zero-argument so policies hoist it as an InitPlan.';
 
 
 SET default_tablespace = '';
@@ -1211,6 +1243,57 @@ ALTER FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_da
 
 
 COMMENT ON FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_date" "date", "_attendee_ids" "uuid"[]) IS 'Authenticated serving signup entry point. Actor from auth.uid(); tenant anchor: the team''s org pinned against app_request_org_id(), fail-closed on NULL; the RLS INSERT-policy arms (team member, team lead, or a leader of the team''s group) are re-checked before delegating to serving_signup_apply().';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."shares_group_with"("_profile_id" "uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select exists (
+    select 1
+    from public.group_members mine
+    join public.group_members theirs
+      on theirs.group_id = mine.group_id
+     and theirs.org_id = mine.org_id
+    where mine.profile_id = auth.uid()
+      and theirs.profile_id = _profile_id
+      and mine.org_id = public.app_current_org_id()
+  );
+$$;
+
+
+ALTER FUNCTION "public"."shares_group_with"("_profile_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."shares_group_with"("_profile_id" "uuid") IS 'True when the caller (auth.uid()) and the given profile are both members of at least one group in the caller''s own org. Caller resolved from auth.uid() only.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."shares_group_with_household"("_family_id" "uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select exists (
+    select 1
+    from public.profiles p
+    join public.group_members theirs
+      on theirs.profile_id = p.id
+     and theirs.org_id = p.org_id
+    join public.group_members mine
+      on mine.group_id = theirs.group_id
+     and mine.org_id = theirs.org_id
+    where p.family_id = _family_id
+      and p.org_id = public.app_current_org_id()
+      and mine.profile_id = auth.uid()
+  );
+$$;
+
+
+ALTER FUNCTION "public"."shares_group_with_household"("_family_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."shares_group_with_household"("_family_id" "uuid") IS 'True when the caller (auth.uid()) shares a group with any profile in the given household, in the caller''s own org. Caller resolved from auth.uid() only.';
 
 
 
@@ -1893,7 +1976,9 @@ CREATE TABLE IF NOT EXISTS "public"."organizations" (
     "slug" "text" NOT NULL,
     "branding" "jsonb" DEFAULT '{}'::"jsonb" NOT NULL,
     "status" "public"."org_status" DEFAULT 'active'::"public"."org_status" NOT NULL,
-    "custom_email_domain_enabled" boolean DEFAULT false NOT NULL
+    "custom_email_domain_enabled" boolean DEFAULT false NOT NULL,
+    "directory_visibility" "text" DEFAULT 'shared_groups'::"text" NOT NULL,
+    CONSTRAINT "organizations_directory_visibility_check" CHECK (("directory_visibility" = ANY (ARRAY['shared_groups'::"text", 'org'::"text"])))
 );
 
 
@@ -1901,6 +1986,10 @@ ALTER TABLE "public"."organizations" OWNER TO "postgres";
 
 
 COMMENT ON COLUMN "public"."organizations"."custom_email_domain_enabled" IS 'Platform-operator-only gate on custom sending-domain claims. Flippable only from /platform (app/api/platform/organizations/[id]/route.ts); never exposed to the org''s own admin.';
+
+
+
+COMMENT ON COLUMN "public"."organizations"."directory_visibility" IS 'Security boundary read by the profiles, family_units and family_members SELECT policies, not a preference. shared_groups: a member reads only people who share a group with them. org: every approved member reads the whole directory.';
 
 
 
@@ -3523,6 +3612,10 @@ CREATE POLICY "Admins can read feedback" ON "public"."feedback" FOR SELECT TO "a
 
 
 
+CREATE POLICY "Admins can set directory visibility" ON "public"."organizations" FOR UPDATE TO "authenticated" USING ((("id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin"))) WITH CHECK ((("id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
+
+
+
 CREATE POLICY "Admins can update access requests" ON "public"."access_requests" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
 
 
@@ -3895,11 +3988,11 @@ CREATE POLICY "Members can view family invites" ON "public"."family_invites" FOR
 
 
 
-CREATE POLICY "Members can view family members" ON "public"."family_members" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_member"() AS "is_member")));
+CREATE POLICY "Members can view family members" ON "public"."family_members" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR (("family_id" = ( SELECT "public"."current_family_id"() AS "current_family_id")) AND ( SELECT "public"."is_member"() AS "is_member")) OR (( SELECT "public"."is_member"() AS "is_member") AND (( SELECT "public"."org_directory_visible"() AS "org_directory_visible") OR "public"."shares_group_with_household"("family_id"))))));
 
 
 
-CREATE POLICY "Members can view family units" ON "public"."family_units" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_member"() AS "is_member")));
+CREATE POLICY "Members can view family units" ON "public"."family_units" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR (("id" = ( SELECT "public"."current_family_id"() AS "current_family_id")) AND ( SELECT "public"."is_member"() AS "is_member")) OR (( SELECT "public"."is_member"() AS "is_member") AND (( SELECT "public"."org_directory_visible"() AS "org_directory_visible") OR "public"."shares_group_with_household"("id"))))));
 
 
 
@@ -3939,7 +4032,7 @@ CREATE POLICY "Profiles are updatable per access rules" ON "public"."profiles" F
 
 
 
-CREATE POLICY "Profiles are visible per access rules" ON "public"."profiles" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ((( SELECT "auth"."uid"() AS "uid") = "id") OR ( SELECT "public"."is_admin"() AS "is_admin") OR (("family_id" IS NOT NULL) AND ("family_id" = ( SELECT "public"."current_family_id"() AS "current_family_id")) AND (( SELECT "auth"."uid"() AS "uid") <> "id") AND ( SELECT "public"."is_member"() AS "is_member")) OR (( SELECT "public"."is_member"() AS "is_member") AND ("is_unlisted" = false) AND ("role" = ANY (ARRAY['member'::"text", 'content_editor'::"text", 'admin'::"text"]))))));
+CREATE POLICY "Profiles are visible per access rules" ON "public"."profiles" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ((( SELECT "auth"."uid"() AS "uid") = "id") OR ( SELECT "public"."is_admin"() AS "is_admin") OR (("family_id" IS NOT NULL) AND ("family_id" = ( SELECT "public"."current_family_id"() AS "current_family_id")) AND (( SELECT "auth"."uid"() AS "uid") <> "id") AND ( SELECT "public"."is_member"() AS "is_member")) OR (( SELECT "public"."is_member"() AS "is_member") AND ("is_unlisted" = false) AND ("role" = ANY (ARRAY['member'::"text", 'content_editor'::"text", 'admin'::"text"])) AND (( SELECT "public"."org_directory_visible"() AS "org_directory_visible") OR "public"."shares_group_with"("id"))))));
 
 
 
@@ -4425,6 +4518,12 @@ GRANT ALL ON FUNCTION "public"."is_team_lead"("_team_id" "uuid") TO "service_rol
 
 
 
+REVOKE ALL ON FUNCTION "public"."org_directory_visible"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."org_directory_visible"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."org_directory_visible"() TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."org_email_domains" TO "service_role";
 GRANT SELECT,DELETE ON TABLE "public"."org_email_domains" TO "authenticated";
 
@@ -4458,6 +4557,18 @@ GRANT ALL ON FUNCTION "public"."serving_signup_apply"("_group_id" "uuid", "_serv
 REVOKE ALL ON FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_date" "date", "_attendee_ids" "uuid"[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_date" "date", "_attendee_ids" "uuid"[]) TO "authenticated";
 GRANT ALL ON FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_date" "date", "_attendee_ids" "uuid"[]) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."shares_group_with"("_profile_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."shares_group_with"("_profile_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."shares_group_with"("_profile_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."shares_group_with_household"("_family_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."shares_group_with_household"("_family_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."shares_group_with_household"("_family_id" "uuid") TO "service_role";
 
 
 
@@ -4642,8 +4753,8 @@ GRANT ALL ON TABLE "public"."organization_members" TO "service_role";
 
 
 
-GRANT INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."organizations" TO "anon";
-GRANT INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."organizations" TO "authenticated";
+GRANT INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."organizations" TO "anon";
+GRANT INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."organizations" TO "authenticated";
 GRANT ALL ON TABLE "public"."organizations" TO "service_role";
 
 
@@ -4664,6 +4775,10 @@ GRANT SELECT("slug") ON TABLE "public"."organizations" TO "anon";
 
 GRANT SELECT("branding") ON TABLE "public"."organizations" TO "authenticated";
 GRANT SELECT("branding") ON TABLE "public"."organizations" TO "anon";
+
+
+
+GRANT SELECT("directory_visibility"),UPDATE("directory_visibility") ON TABLE "public"."organizations" TO "authenticated";
 
 
 
