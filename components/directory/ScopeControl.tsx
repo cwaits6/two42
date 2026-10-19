@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -11,10 +12,14 @@ import {
 import { useDirectory } from "@/components/directory/DirectoryContext";
 import { scopeValue } from "@/components/directory/scope";
 
-/** "Show people from" — the scope dropdown above every directory tab. */
+/**
+ * "Show people from" — the scope dropdown above the people tabs. The Groups
+ * tab lists groups, not people, and ignores the scope, so it hides the control.
+ */
 export function ScopeControl() {
   const { scope, setScope, options, showControl } = useDirectory();
-  if (!showControl) return null;
+  const onGroupsTab = usePathname().endsWith("/groups");
+  if (!showControl || onGroupsTab) return null;
 
   return (
     <div className="mb-7 flex flex-wrap items-center gap-3">
