@@ -1,13 +1,13 @@
-# Mend-hosted Renovate opens npm PRs without regenerating package-lock.json
-# (its artifact step has not run for this repo since late September), so
-# `npm ci` fails every job on them; a Supabase CLI pin bump likewise lands
-# without the regenerated database.types.ts the pgtap job byte-compares.
-# This job runs the steps Renovate skipped and pushes the result back to the
-# Renovate branch. It pushes with the App token (a GITHUB_TOKEN push would
-# not re-trigger CI) under the github-actions[bot] identity, which
-# renovate.json5 lists in gitIgnoredAuthors so Renovate keeps rebasing and
-# automerging the branch as its own. When Renovate rebases and drops the
-# commit, `synchronize` fires and this runs again — self-healing by design.
+# A Supabase CLI pin bump from Renovate lands without the regenerated
+# database.types.ts the pgtap job byte-compares, and when Renovate's own
+# lockfile step fails the PR ships with package-lock.json out of sync, so
+# `npm ci` fails every job on it. This job regenerates both on the Renovate
+# branch and commits the result through the GitHub API with the App token:
+# GitHub signs API commits, so they show as Verified, they are authored by the
+# App's bot user (listed in renovate.json5 gitIgnoredAuthors so Renovate keeps
+# rebasing and automerging the branch as its own), and unlike a GITHUB_TOKEN
+# push they re-trigger CI. When Renovate rebases and drops the commit,
+# `synchronize` fires and this runs again — self-healing by design.
 name: Renovate lockfile sync
 
 on:
@@ -46,7 +46,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ steps.app-token.outputs.token }}
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -88,17 +87,41 @@ jobs:
           supabase db start
           npm run db:types
 
-      - name: Commit and push
+      # createCommitOnBranch rather than `git push`: GitHub signs the commit
+      # (Verified) and no write token ever touches the checkout.
+      # expectedHeadOid makes it fail loudly if Renovate moved the branch
+      # meanwhile; the resulting `synchronize` event reruns this job.
+      - name: Commit through the GitHub API
         env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json lib/supabase/database.types.ts
-          if git diff --staged --quiet; then
+          changed=()
+          while IFS= read -r file; do changed+=("$file"); done \
+            < <(git diff --name-only -- package-lock.json lib/supabase/database.types.ts)
+          if [ "${#changed[@]}" -eq 0 ]; then
             echo "Lockfile and types already in sync"
             exit 0
           fi
-          git diff --staged --stat
-          git commit -m "chore(deps): sync lockfile and generated types with the dependency bump"
-          git push origin "HEAD:$HEAD_REF"
+          git diff --stat -- "${changed[@]}"
+          node - "$REPO" "$HEAD_REF" "$(git rev-parse HEAD)" "${changed[@]}" <<'EOF' > "$RUNNER_TEMP/commit.json"
+          const fs = require("node:fs");
+          const [repo, branch, head, ...files] = process.argv.slice(2);
+          const query = `mutation ($input: CreateCommitOnBranchInput!) {
+            createCommitOnBranch(input: $input) { commit { oid } }
+          }`;
+          const input = {
+            branch: { repositoryNameWithOwner: repo, branchName: branch },
+            expectedHeadOid: head,
+            message: { headline: "chore(deps): sync lockfile and generated types with the dependency bump" },
+            fileChanges: {
+              additions: files.map((path) => ({
+                path,
+                contents: fs.readFileSync(path).toString("base64"),
+              })),
+            },
+          };
+          process.stdout.write(JSON.stringify({ query, variables: { input } }));
+          EOF
+          gh api graphql --input "$RUNNER_TEMP/commit.json" --jq '.data.createCommitOnBranch.commit.oid'
