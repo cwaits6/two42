@@ -12,7 +12,7 @@ name: Renovate lockfile sync
 
 on:
   pull_request:
-    branches: [main]
+    branches: [ci/renovate-lockfile-sync]
     paths:
       - package.json
       - .github/workflows/supabase.yml
@@ -29,7 +29,7 @@ jobs:
     # Same-repo PRs by Renovate only: the job pushes with a write token, so
     # it must never run for a fork or a human branch.
     if: >-
-      github.event.pull_request.user.login == 'renovate[bot]' &&
+      github.event.pull_request.user.login == 'cwaits6' &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
