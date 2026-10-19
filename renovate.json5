@@ -6,26 +6,11 @@
   "lockFileMaintenance": {
     "automergeSchedule": ["at any time"]
   },
-  // renovate-lockfile.yml commits database.types.ts (and package-lock.json)
-  // to Renovate branches through the GitHub API, so the commit is signed and
-  // authored by the App's bot user. Renovate compares commit author emails
-  // against gitAuthor + this list to decide whether a branch was hand-edited;
-  // an unlisted email stops rebasing and automerge.
-  "gitIgnoredAuthors": [
-    "269082166+cwaits6-release-bot[bot]@users.noreply.github.com"
-  ],
   "packageRules": [
     // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age
     // minimumReleaseAge is inherited from local>cwaits6/renovate-config.
-    //
-    // An in-range update to an `overrides` entry is a lockfile-only update,
-    // which Renovate applies with `npm install <name>@<version>`. npm rejects
-    // that (EOVERRIDE) for any name that has an override, so the lockfile
-    // step fails and the PR ships with package-lock.json out of sync. Bumping
-    // the range edits package.json instead, and the plain lockfile regenerate
-    // succeeds.
     {
-      "description": "Bump override ranges in package.json instead of lockfile-only updates npm refuses",
+      "description": "Bump override ranges in package.json: npm rejects the lockfile-only `npm install <name>@<version>` with EOVERRIDE for an overridden name",
       "matchManagers": ["npm"],
       "matchDepTypes": ["overrides"],
       "rangeStrategy": "bump"
