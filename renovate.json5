@@ -6,6 +6,11 @@
   "lockFileMaintenance": {
     "automergeSchedule": ["at any time"]
   },
+  // renovate-lockfile.yml commits package-lock.json / database.types.ts to
+  // Renovate branches under this identity. Renovate compares author AND
+  // committer emails against gitAuthor + this list to decide whether a branch
+  // was hand-edited; an unlisted email stops rebasing and automerge.
+  "gitIgnoredAuthors": ["github-actions[bot]@users.noreply.github.com"],
   "packageRules": [
     // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age
     // minimumReleaseAge is inherited from local>cwaits6/renovate-config.
