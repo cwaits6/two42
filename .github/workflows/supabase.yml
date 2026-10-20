@@ -11,6 +11,8 @@ on:
         "supabase/functions/**",
         "lib/supabase/database.types.ts",
         ".github/workflows/supabase.yml",
+        "package.json",
+        "package-lock.json",
       ]
   push:
     branches: [main]
@@ -28,18 +30,21 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          version: 2.119.0
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Link to Supabase project
-        run: supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: npx supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Lint migrations
-        run: supabase db lint --linked
+        run: npx supabase db lint --linked
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
@@ -53,17 +58,25 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+    env:
+      RENOVATE_PR: >-
+        ${{ github.event_name == 'pull_request'
+          && github.event.pull_request.user.login == 'renovate[bot]'
+          && github.event.pull_request.head.repo.full_name == github.repository }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          version: 2.119.0
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Start local database
-        run: supabase db start
+        run: npx supabase db start
 
       # supabase/tests/site_settings_rls.sql predates pgTAP (plain SQL, no
       # TAP output) and would fail pg_prove; every other supabase/tests/*.sql
@@ -74,12 +87,44 @@ jobs:
           while IFS= read -r -d '' f; do files+=("$f"); done \
             < <(find supabase/tests -name '*.sql' ! -name 'site_settings_rls.sql' -print0 | sort -z)
           echo "Running: ${files[*]}"
-          supabase test db "${files[@]}"
+          npx supabase test db "${files[@]}"
+
+      - name: Regenerate types
+        run: npm run db:types
+
+      # Renovate bumps the CLI but cannot run it, so types drift on its branch
+      # is the new CLI's output: commit it there. The App token makes the
+      # commit signed and re-triggers CI; GITHUB_TOKEN would do neither.
+      - name: Generate app token
+        if: env.RENOVATE_PR == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Commit regenerated types to the Renovate branch
+        if: env.RENOVATE_PR == 'true'
+        id: sync
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          FILE: lib/supabase/database.types.ts
+        run: |
+          if git diff --quiet -- "$FILE"; then
+            echo "Types already in sync"
+            exit 0
+          fi
+          current=$(gh api "repos/$GITHUB_REPOSITORY/contents/$FILE?ref=$HEAD_REF" --jq .sha)
+          gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/$FILE" \
+            -f message="chore(db): regenerate database types with the bumped Supabase CLI" \
+            -f branch="$HEAD_REF" -f sha="$current" \
+            -f content="$(base64 -w0 "$FILE")" --jq .commit.sha
+          echo "committed=true" >> "$GITHUB_OUTPUT"
 
       - name: Check generated types are up to date
-        run: |
-          npm run db:types
-          git diff --exit-code lib/supabase/database.types.ts
+        if: steps.sync.outputs.committed != 'true'
+        run: git diff --exit-code -- lib/supabase/database.types.ts
 
   # Edge function unit tests. Pure units against the
   # _shared/ modules — no network, no database.
@@ -148,29 +193,32 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
 
-      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          version: 2.119.0
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Link to Supabase project
-        run: supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: npx supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Deploy edge functions
-        run: supabase functions deploy send-event-reminders send-serving-reminders
+        run: npx supabase functions deploy send-event-reminders send-serving-reminders
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Push migrations
-        run: supabase db push
+        run: npx supabase db push
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Dump schema
-        run: supabase db dump --schema public -f supabase/schema.sql
+        run: npx supabase db dump --schema public -f supabase/schema.sql
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
