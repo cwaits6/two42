@@ -10,6 +10,14 @@
     // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age
     // minimumReleaseAge is inherited from local>cwaits6/renovate-config.
     {
+      "description": "Bump override ranges in package.json: npm rejects the lockfile-only `npm install <name>@<version>` with EOVERRIDE for an overridden name",
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["overrides"],
+      "rangeStrategy": "bump"
+    },
+    // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age
+    // minimumReleaseAge is inherited from local>cwaits6/renovate-config.
+    {
       "description": "Keep ESLint on v9 until eslint-plugin-react supports ESLint 10",
       "matchPackageNames": ["eslint"],
       "allowedVersions": "<10.0.0"
