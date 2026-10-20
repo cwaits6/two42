@@ -2,7 +2,7 @@ name: Supabase
 
 on:
   pull_request:
-    branches: [main]
+    branches: [ci/supabase-cli-pin]
     paths: &supabase_paths
       [
         "supabase/migrations/**",
@@ -61,7 +61,7 @@ jobs:
     env:
       RENOVATE_PR: >-
         ${{ github.event_name == 'pull_request'
-          && github.event.pull_request.user.login == 'renovate[bot]'
+          && github.event.pull_request.user.login == 'cwaits6'
           && github.event.pull_request.head.repo.full_name == github.repository }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
