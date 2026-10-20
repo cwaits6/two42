@@ -6,6 +6,9 @@
   "lockFileMaintenance": {
     "automergeSchedule": ["at any time"]
   },
+  // The pgtap job commits regenerated types to Renovate branches as the App
+  // bot; an unlisted author makes Renovate treat the branch as hand-edited.
+  "gitIgnoredAuthors": ["269082166+cwaits6-release-bot[bot]@users.noreply.github.com"],
   "packageRules": [
     // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age
     // minimumReleaseAge is inherited from local>cwaits6/renovate-config.
