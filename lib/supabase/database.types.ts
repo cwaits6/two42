@@ -9,6 +9,7 @@ export type Database = {
                   Row: {
                     "body": string,"group_id": string,"org_id": string,"updated_at": string,"updated_by": string | null
                   }
+                  ComputedFields: never
                   Insert: {
                     "body"?: string,"group_id": string,"org_id"?: string,"updated_at"?: string,"updated_by"?: string | null
                   }
@@ -34,6 +35,7 @@ isOneToOne: false
                   Row: {
                     "approved_role": string | null,"created_at": string,"email": string,"id": string,"invite_token": string | null,"message": string | null,"name": string,"org_id": string,"reviewed_at": string | null,"reviewed_by": string | null,"signup_token": string | null,"status": string,"token_expires_at": string | null
                   }
+                  ComputedFields: never
                   Insert: {
                     "approved_role"?: string | null,"created_at"?: string,"email": string,"id"?: string,"invite_token"?: string | null,"message"?: string | null,"name": string,"org_id"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"signup_token"?: string | null,"status"?: string,"token_expires_at"?: string | null
                   }
@@ -59,6 +61,7 @@ isOneToOne: false
                   Row: {
                     "author_id": string | null,"content": string,"created_at": string,"group_id": string,"id": string,"is_published": boolean,"org_id": string,"published_at": string | null,"title": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "author_id"?: string | null,"content": string,"created_at"?: string,"group_id": string,"id"?: string,"is_published"?: boolean,"org_id"?: string,"published_at"?: string | null,"title": string
                   }
@@ -96,6 +99,7 @@ isOneToOne: false
                   Row: {
                     "created_at": string,"expires_at": string,"id": string,"org_id": string,"token_hash": string,"user_id": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "created_at"?: string,"expires_at": string,"id"?: string,"org_id"?: string,"token_hash": string,"user_id": string
                   }
@@ -127,6 +131,7 @@ isOneToOne: false
                   Row: {
                     "bio": string,"created_at": string,"group_id": string,"id": string,"org_id": string,"profile_id": string,"sort_order": number,"title": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "bio"?: string,"created_at"?: string,"group_id": string,"id"?: string,"org_id"?: string,"profile_id": string,"sort_order"?: number,"title"?: string
                   }
@@ -164,6 +169,7 @@ isOneToOne: false
                   Row: {
                     "color": string | null,"created_at": string,"created_by": string | null,"group_id": string,"id": string,"name": string,"org_id": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "color"?: string | null,"created_at"?: string,"created_by"?: string | null,"group_id": string,"id"?: string,"name": string,"org_id"?: string
                   }
@@ -201,6 +207,7 @@ isOneToOne: false
                   Row: {
                     "calendar_id": string | null,"created_at": string,"created_by": string | null,"description": string | null,"end_time": string | null,"group_id": string,"id": string,"is_rsvp_enabled": boolean,"location": string | null,"meeting_id": string | null,"meeting_lead_minutes": number,"meeting_passcode": string | null,"meeting_show_on_dashboard": boolean,"meeting_url": string | null,"org_id": string,"recurrence_count": number | null,"recurrence_end_mode": string | null,"recurrence_frequency": string | null,"recurrence_interval": number,"recurrence_until": string | null,"series_id": string | null,"series_occurrence_date": string | null,"start_time": string,"title": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "calendar_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"end_time"?: string | null,"group_id": string,"id"?: string,"is_rsvp_enabled"?: boolean,"location"?: string | null,"meeting_id"?: string | null,"meeting_lead_minutes"?: number,"meeting_passcode"?: string | null,"meeting_show_on_dashboard"?: boolean,"meeting_url"?: string | null,"org_id"?: string,"recurrence_count"?: number | null,"recurrence_end_mode"?: string | null,"recurrence_frequency"?: string | null,"recurrence_interval"?: number,"recurrence_until"?: string | null,"series_id"?: string | null,"series_occurrence_date"?: string | null,"start_time": string,"title": string
                   }
@@ -250,6 +257,7 @@ isOneToOne: false
                   Row: {
                     "accepted_at": string | null,"created_at": string,"created_by": string | null,"family_id": string,"family_member_id": string,"id": string,"invite_email": string,"org_id": string,"sent_at": string | null,"token": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "accepted_at"?: string | null,"created_at"?: string,"created_by"?: string | null,"family_id": string,"family_member_id": string,"id"?: string,"invite_email": string,"org_id"?: string,"sent_at"?: string | null,"token"?: string
                   }
@@ -293,6 +301,7 @@ isOneToOne: false
                   Row: {
                     "avatar_url": string | null,"birth_day": number | null,"birth_month": number | null,"birth_year": number | null,"claimed_profile_id": string | null,"created_at": string,"family_id": string,"first_name": string,"id": string,"is_class_member": boolean,"last_name": string | null,"org_id": string,"preferred_name": string | null,"relationship": string,"updated_at": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "avatar_url"?: string | null,"birth_day"?: number | null,"birth_month"?: number | null,"birth_year"?: number | null,"claimed_profile_id"?: string | null,"created_at"?: string,"family_id": string,"first_name": string,"id"?: string,"is_class_member"?: boolean,"last_name"?: string | null,"org_id"?: string,"preferred_name"?: string | null,"relationship": string,"updated_at"?: string
                   }
@@ -330,6 +339,7 @@ isOneToOne: false
                   Row: {
                     "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"city": string | null,"created_at": string,"family_name": string,"hide_address": boolean,"hide_phone_home": boolean,"id": string,"org_id": string,"phone_home": string | null,"photo_url": string | null,"postal_code": string | null,"state": string | null,"updated_at": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "address_line1"?: string | null,"address_line2"?: string | null,"anniversary"?: string | null,"city"?: string | null,"created_at"?: string,"family_name": string,"hide_address"?: boolean,"hide_phone_home"?: boolean,"id"?: string,"org_id"?: string,"phone_home"?: string | null,"photo_url"?: string | null,"postal_code"?: string | null,"state"?: string | null,"updated_at"?: string
                   }
@@ -349,6 +359,7 @@ isOneToOne: false
                   Row: {
                     "created_at": string,"id": string,"message": string,"org_id": string,"profile_id": string | null,"type": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "created_at"?: string,"id"?: string,"message": string,"org_id"?: string,"profile_id"?: string | null,"type": string
                   }
@@ -380,6 +391,7 @@ isOneToOne: false
                   Row: {
                     "custom_handle": string,"display_order": number,"fund_id": string,"group_id": string,"method": string,"org_id": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "custom_handle": string,"display_order"?: number,"fund_id": string,"group_id": string,"method": string,"org_id"?: string
                   }
@@ -411,6 +423,7 @@ isOneToOne: false
                   Row: {
                     "co_steward_id": string | null,"created_at": string,"created_by": string | null,"description": string | null,"display_order": number,"group_id": string,"id": string,"is_active": boolean,"name": string,"org_id": string,"retire_on": string | null,"steward_id": string,"steward_role": string | null,"updated_at": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "co_steward_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"display_order"?: number,"group_id": string,"id"?: string,"is_active"?: boolean,"name": string,"org_id"?: string,"retire_on"?: string | null,"steward_id": string,"steward_role"?: string | null,"updated_at"?: string
                   }
@@ -472,6 +485,7 @@ isOneToOne: false
                   Row: {
                     "color": string | null,"created_at": string,"group_id": string,"id": string,"name": string,"org_id": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "color"?: string | null,"created_at"?: string,"group_id": string,"id"?: string,"name": string,"org_id"?: string
                   }
@@ -497,6 +511,7 @@ isOneToOne: false
                   Row: {
                     "applied_at": string,"applied_by": string | null,"group_id": string,"group_member_id": string,"label_id": string,"org_id": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "applied_at"?: string,"applied_by"?: string | null,"group_id": string,"group_member_id": string,"label_id": string,"org_id"?: string
                   }
@@ -528,6 +543,7 @@ isOneToOne: false
                   Row: {
                     "added_by": string | null,"group_id": string,"id": string,"joined_at": string,"org_id": string,"profile_id": string,"role": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "added_by"?: string | null,"group_id": string,"id"?: string,"joined_at"?: string,"org_id"?: string,"profile_id": string,"role"?: string
                   }
@@ -565,6 +581,7 @@ isOneToOne: false
                   Row: {
                     "group_id": string,"org_id": string,"serving_link_mode": string | null,"updated_at": string,"updated_by": string | null,"weekly_prayer_call_time": string | null,"weekly_prayer_call_url": string | null,"weekly_zoom_url": string | null,"zoom_meeting_time": string | null
                   }
+                  ComputedFields: never
                   Insert: {
                     "group_id": string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null,"weekly_prayer_call_time"?: string | null,"weekly_prayer_call_url"?: string | null,"weekly_zoom_url"?: string | null,"zoom_meeting_time"?: string | null
                   }
@@ -590,6 +607,7 @@ isOneToOne: false
                   Row: {
                     "created_at": string,"created_by": string | null,"description": string | null,"id": string,"name": string,"org_id": string,"updated_at": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "created_at"?: string,"created_by"?: string | null,"description"?: string | null,"id"?: string,"name": string,"org_id"?: string,"updated_at"?: string
                   }
@@ -609,6 +627,7 @@ isOneToOne: false
                   Row: {
                     "created_at": string,"group_id": string,"id": string,"is_archived": boolean,"name": string,"org_id": string,"teacher": string | null
                   }
+                  ComputedFields: never
                   Insert: {
                     "created_at"?: string,"group_id": string,"id"?: string,"is_archived"?: boolean,"name": string,"org_id"?: string,"teacher"?: string | null
                   }
@@ -634,6 +653,7 @@ isOneToOne: false
                   Row: {
                     "created_at": string,"created_by": string | null,"description": string | null,"group_id": string,"id": string,"lecture_date": string | null,"org_id": string,"scripture_reference": string | null,"series_id": string | null,"summary": string | null,"thumbnail_url": string | null,"title": string,"video_url": string,"week_number": number | null
                   }
+                  ComputedFields: never
                   Insert: {
                     "created_at"?: string,"created_by"?: string | null,"description"?: string | null,"group_id": string,"id"?: string,"lecture_date"?: string | null,"org_id"?: string,"scripture_reference"?: string | null,"series_id"?: string | null,"summary"?: string | null,"thumbnail_url"?: string | null,"title": string,"video_url": string,"week_number"?: number | null
                   }
@@ -677,6 +697,7 @@ isOneToOne: false
                   Row: {
                     "acknowledged_at": string | null,"created_at": string,"detail": string | null,"domain": string,"event": string,"id": string,"org_id": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "acknowledged_at"?: string | null,"created_at"?: string,"detail"?: string | null,"domain": string,"event": string,"id"?: string,"org_id"?: string
                   }
@@ -696,6 +717,7 @@ isOneToOne: false
                   Row: {
                     "attach_claim_token": string | null,"attach_claimed_at": string | null,"attached_at": string | null,"created_at": string,"domain": string,"id": string,"last_checked_at": string | null,"org_id": string,"status": Database["public"]['Enums']["org_domain_status"],"verification_token": string,"verified_at": string | null
                   }
+                  ComputedFields: never
                   Insert: {
                     "attach_claim_token"?: string | null,"attach_claimed_at"?: string | null,"attached_at"?: string | null,"created_at"?: string,"domain": string,"id"?: string,"last_checked_at"?: string | null,"org_id"?: string,"status"?: Database["public"]['Enums']["org_domain_status"],"verification_token"?: string,"verified_at"?: string | null
                   }
@@ -715,6 +737,7 @@ isOneToOne: false
                   Row: {
                     "cleanup_failed_at": string | null,"created_at": string,"dns_records": NonNullable<Json>,"domain": string,"id": string,"last_checked_at": string | null,"org_id": string,"resend_domain_id": string | null,"status": string,"verified_at": string | null
                   }
+                  ComputedFields: never
                   Insert: {
                     "cleanup_failed_at"?: string | null,"created_at"?: string,"dns_records"?: NonNullable<Json>,"domain": string,"id"?: string,"last_checked_at"?: string | null,"org_id"?: string,"resend_domain_id"?: string | null,"status"?: string,"verified_at"?: string | null
                   }
@@ -734,6 +757,7 @@ isOneToOne: false
                   Row: {
                     "daily_cap": number,"org_id": string,"updated_at": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "daily_cap"?: number,"org_id"?: string,"updated_at"?: string
                   }
@@ -753,6 +777,7 @@ isOneToOne: true
                   Row: {
                     "org_id": string,"sent_count": number,"usage_date": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "org_id"?: string,"sent_count"?: number,"usage_date"?: string
                   }
@@ -772,6 +797,7 @@ isOneToOne: false
                   Row: {
                     "created_at": string,"org_id": string,"profile_id": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "created_at"?: string,"org_id": string,"profile_id": string
                   }
@@ -803,6 +829,7 @@ isOneToOne: false
                   Row: {
                     "branding": NonNullable<Json>,"created_at": string,"custom_email_domain_enabled": boolean,"directory_visibility": string,"id": string,"name": string,"slug": string,"status": Database["public"]['Enums']["org_status"]
                   }
+                  ComputedFields: never
                   Insert: {
                     "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"id"?: string,"name": string,"slug": string,"status"?: Database["public"]['Enums']["org_status"]
                   }
@@ -816,6 +843,7 @@ isOneToOne: false
                   Row: {
                     "created_at": string,"profile_id": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "created_at"?: string,"profile_id": string
                   }
@@ -829,6 +857,7 @@ isOneToOne: false
                   Row: {
                     "created_at": string,"dial_in": string | null,"display_order": number,"end_time": string | null,"event_id": string | null,"group_id": string,"id": string,"join_url": string | null,"leader_id": string | null,"org_id": string,"pin": string | null,"start_time": string,"updated_at": string,"weekday": number
                   }
+                  ComputedFields: never
                   Insert: {
                     "created_at"?: string,"dial_in"?: string | null,"display_order"?: number,"end_time"?: string | null,"event_id"?: string | null,"group_id": string,"id"?: string,"join_url"?: string | null,"leader_id"?: string | null,"org_id"?: string,"pin"?: string | null,"start_time": string,"updated_at"?: string,"weekday": number
                   }
@@ -872,6 +901,7 @@ isOneToOne: false
                   Row: {
                     "author_id": string,"body": string,"category": string,"created_at": string,"group_id": string,"id": string,"is_anonymous": boolean,"is_answered": boolean,"org_id": string,"updated_at": string,"visible_to_warriors": boolean
                   }
+                  ComputedFields: never
                   Insert: {
                     "author_id": string,"body": string,"category": string,"created_at"?: string,"group_id": string,"id"?: string,"is_anonymous"?: boolean,"is_answered"?: boolean,"org_id"?: string,"updated_at"?: string,"visible_to_warriors"?: boolean
                   }
@@ -909,6 +939,7 @@ isOneToOne: false
                   Row: {
                     "created_at": string,"group_id": string,"org_id": string,"profile_id": string,"request_id": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "created_at"?: string,"group_id": string,"org_id"?: string,"profile_id": string,"request_id": string
                   }
@@ -958,6 +989,7 @@ isOneToOne: false
                   Row: {
                     "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"approved_at": string | null,"approved_by": string | null,"avatar_url": string | null,"bio": string | null,"birth_day": number | null,"birth_month": number | null,"birth_year": number | null,"city": string | null,"created_at": string,"email": string | null,"email_announcements": boolean,"employer": string | null,"family_id": string | null,"first_name": string | null,"hide_address": boolean,"hide_anniversary": boolean,"hide_birth_year": boolean,"hide_birthday": boolean,"hide_email": boolean,"hide_occupation": boolean,"hide_phone_home": boolean,"hide_phone_mobile": boolean,"hide_phone_work": boolean,"id": string,"is_unlisted": boolean,"last_name": string | null,"occupation": string | null,"org_id": string,"phone": string | null,"phone_home": string | null,"phone_mobile": string | null,"phone_work": string | null,"postal_code": string | null,"preferred_name": string | null,"relationship": string,"role": string,"setup_completed": boolean,"state": string | null,"updated_at": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "address_line1"?: string | null,"address_line2"?: string | null,"anniversary"?: string | null,"approved_at"?: string | null,"approved_by"?: string | null,"avatar_url"?: string | null,"bio"?: string | null,"birth_day"?: number | null,"birth_month"?: number | null,"birth_year"?: number | null,"city"?: string | null,"created_at"?: string,"email"?: string | null,"email_announcements"?: boolean,"employer"?: string | null,"family_id"?: string | null,"first_name"?: string | null,"hide_address"?: boolean,"hide_anniversary"?: boolean,"hide_birth_year"?: boolean,"hide_birthday"?: boolean,"hide_email"?: boolean,"hide_occupation"?: boolean,"hide_phone_home"?: boolean,"hide_phone_mobile"?: boolean,"hide_phone_work"?: boolean,"id": string,"is_unlisted"?: boolean,"last_name"?: string | null,"occupation"?: string | null,"org_id"?: string,"phone"?: string | null,"phone_home"?: string | null,"phone_mobile"?: string | null,"phone_work"?: string | null,"postal_code"?: string | null,"preferred_name"?: string | null,"relationship"?: string,"role"?: string,"setup_completed"?: boolean,"state"?: string | null,"updated_at"?: string
                   }
@@ -995,6 +1027,7 @@ isOneToOne: false
                   Row: {
                     "created_at": string,"event_id": string,"id": string,"org_id": string,"status": string,"user_id": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "created_at"?: string,"event_id": string,"id"?: string,"org_id"?: string,"status": string,"user_id": string
                   }
@@ -1032,6 +1065,7 @@ isOneToOne: false
                   Row: {
                     "created_at": string,"id": string,"open_dates": (string)[],"org_id": string,"recipient_count": number,"sent_by": string | null,"subject": string,"team_id": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "created_at"?: string,"id"?: string,"open_dates"?: (string)[],"org_id"?: string,"recipient_count"?: number,"sent_by"?: string | null,"subject": string,"team_id": string
                   }
@@ -1069,6 +1103,7 @@ isOneToOne: false
                   Row: {
                     "org_id": string,"profile_id": string,"signup_id": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "org_id"?: string,"profile_id": string,"signup_id": string
                   }
@@ -1106,6 +1141,7 @@ isOneToOne: false
                   Row: {
                     "created_at": string,"created_by": string,"family_id": string | null,"id": string,"org_id": string,"service_date": string,"team_id": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "created_at"?: string,"created_by": string,"family_id"?: string | null,"id"?: string,"org_id"?: string,"service_date": string,"team_id": string
                   }
@@ -1161,6 +1197,7 @@ isOneToOne: false
                   Row: {
                     "enabled": boolean,"org_id": string,"reminder_days": (number)[],"reminder_method": string,"team_id": string,"updated_at": string,"updated_by": string | null,"window_weeks": number
                   }
+                  ComputedFields: never
                   Insert: {
                     "enabled"?: boolean,"org_id"?: string,"reminder_days"?: (number)[],"reminder_method"?: string,"team_id": string,"updated_at"?: string,"updated_by"?: string | null,"window_weeks"?: number
                   }
@@ -1186,6 +1223,7 @@ isOneToOne: false
                   Row: {
                     "is_public": boolean,"key": string,"org_id": string,"updated_at": string | null,"updated_by": string | null,"value": string | null
                   }
+                  ComputedFields: never
                   Insert: {
                     "is_public"?: boolean,"key": string,"org_id"?: string,"updated_at"?: string | null,"updated_by"?: string | null,"value"?: string | null
                   }
@@ -1205,6 +1243,7 @@ isOneToOne: false
                   Row: {
                     "assigned_at": string,"assigned_by": string | null,"is_leader": boolean,"org_id": string,"profile_id": string,"team_id": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "assigned_at"?: string,"assigned_by"?: string | null,"is_leader"?: boolean,"org_id"?: string,"profile_id": string,"team_id": string
                   }
@@ -1242,6 +1281,7 @@ isOneToOne: false
                   Row: {
                     "color": string | null,"created_at": string,"created_by": string | null,"description": string | null,"display_order": number,"group_id": string,"icon": string | null,"id": string,"is_serving_role": boolean,"name": string,"org_id": string,"show_in_directory_filter": boolean,"updated_at": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "color"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"display_order"?: number,"group_id": string,"icon"?: string | null,"id"?: string,"is_serving_role"?: boolean,"name": string,"org_id"?: string,"show_in_directory_filter"?: boolean,"updated_at"?: string
                   }
@@ -1270,6 +1310,7 @@ isOneToOne: false
                   Row: {
                     "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"city": string | null,"created_at": string | null,"family_name": string | null,"id": string | null,"org_id": string | null,"phone_home": string | null,"photo_url": string | null,"postal_code": string | null,"state": string | null,"updated_at": string | null
                   }
+                  ComputedFields: never
                   Insert: {
                            "address_line1"?: never,"address_line2"?: never,"anniversary"?: string | null,"city"?: never,"created_at"?: string | null,"family_name"?: string | null,"id"?: string | null,"org_id"?: string | null,"phone_home"?: never,"photo_url"?: string | null,"postal_code"?: never,"state"?: never,"updated_at"?: string | null
                          }
@@ -1289,6 +1330,7 @@ isOneToOne: false
                   Row: {
                     "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"city": string | null,"created_at": string | null,"family_members_list": Json | null,"family_name": string | null,"id": string | null,"members": Json | null,"org_id": string | null,"phone_home": string | null,"photo_url": string | null,"postal_code": string | null,"state": string | null,"updated_at": string | null
                   }
+                  ComputedFields: never
                   Insert: {
                            "address_line1"?: never,"address_line2"?: never,"anniversary"?: string | null,"city"?: never,"created_at"?: string | null,"family_members_list"?: never,"family_name"?: string | null,"id"?: string | null,"members"?: never,"org_id"?: string | null,"phone_home"?: never,"photo_url"?: string | null,"postal_code"?: never,"state"?: never,"updated_at"?: string | null
                          }
@@ -1308,6 +1350,7 @@ isOneToOne: false
                   Row: {
                     "avatar_url": string | null,"body": string | null,"category": string | null,"created_at": string | null,"first_name": string | null,"group_id": string | null,"i_am_praying": boolean | null,"id": string | null,"is_anonymous": boolean | null,"is_answered": boolean | null,"last_name": string | null,"mine": boolean | null,"org_id": string | null,"praying_count": number | null,"preferred_name": string | null,"visible_to_warriors": boolean | null
                   }
+                  ComputedFields: never
                   Relationships: [
                     {
       foreignKeyName: "prayer_requests_group_id_fkey"
@@ -1327,6 +1370,7 @@ isOneToOne: false
                   Row: {
                     "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"avatar_url": string | null,"bio": string | null,"birth_day": number | null,"birth_month": number | null,"birth_year": number | null,"city": string | null,"created_at": string | null,"email": string | null,"employer": string | null,"family_id": string | null,"first_name": string | null,"groups": Json | null,"id": string | null,"last_name": string | null,"occupation": string | null,"org_id": string | null,"phone_home": string | null,"phone_mobile": string | null,"phone_work": string | null,"postal_code": string | null,"preferred_name": string | null,"relationship": string | null,"role": string | null,"state": string | null
                   }
+                  ComputedFields: never
                   Relationships: [
                     {
       foreignKeyName: "profiles_family_id_fkey"
