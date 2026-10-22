@@ -233,12 +233,20 @@ export interface MemberGroup {
   color: string | null;
   icon: string | null;
   display_order: number;
-  show_in_directory_filter: boolean;
-  /** Listed on the Serve page as a standing role/team (vs. a directory-only tag) */
+  /** Listed on the Serve page as a standing role/team */
   is_serving_role: boolean;
   created_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** A filter defined inside one group and applied to a group membership, never to the person */
+export interface GroupLabel {
+  id: string;
+  group_id: string;
+  name: string;
+  color: string | null;
+  created_at: string;
 }
 
 /** Join record linking a profile to a member group */
