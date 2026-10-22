@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/auth";
+import { expect, openAs, test } from "./fixtures/auth";
 
 // Household ids follow the seed's row order: Sampleton is the first
 // household (Group A), Dummyfield the sixth (Group B).
@@ -18,7 +18,16 @@ test.describe("a member of one group", () => {
     }
   });
 
-  test("a deep link to another group's household opens nothing", async ({ page }) => {
+  test("a deep link to another group's household opens nothing", async ({ page, browser, baseURL }) => {
+    if (!baseURL) throw new Error("baseURL is not configured");
+
+    // The barred id must be a real household someone can open, or the
+    // negative assertions below would pass against a stale id.
+    const admin = await openAs(browser, baseURL, "admin");
+    await admin.page.goto(`/directory/families?family=${SAMPLETON_HOUSEHOLD}`);
+    await expect(admin.page.getByRole("heading", { name: "Sampleton" })).toBeVisible();
+    await admin.context.close();
+
     await page.goto(`/directory/families?family=${DUMMYFIELD_HOUSEHOLD}`);
     await expect(page.getByRole("heading", { name: "Dummyfield" })).toBeVisible();
 
