@@ -244,7 +244,11 @@ jobs:
           fi
           base64 -w0 "$FILE" > "$RUNNER_TEMP/schema.b64"
           for i in 1 2 3; do
-            current=$(gh api "repos/$GITHUB_REPOSITORY/contents/$FILE?ref=main" --jq .sha)
+            if ! current=$(gh api "repos/$GITHUB_REPOSITORY/contents/$FILE?ref=main" --jq .sha); then
+              echo "Blob sha read failed (attempt $i), retrying..."
+              sleep $((i * 2))
+              continue
+            fi
             if jq -n --arg message "chore(db): update schema dump [skip ci]" \
                      --arg sha "$current" \
                      --rawfile content "$RUNNER_TEMP/schema.b64" \
