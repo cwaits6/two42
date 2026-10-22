@@ -10,6 +10,7 @@
     "lint": "eslint --max-warnings=0",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:e2e": "playwright test",
     "guard:tenancy": "node scripts/check-service-role-org-scope.mjs",
     "db:types": "supabase gen types typescript --local --schema public > lib/supabase/database.types.ts.tmp && mv lib/supabase/database.types.ts.tmp lib/supabase/database.types.ts"
   },
@@ -67,6 +68,7 @@
     "sharp": "^0.35.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^25.6.0",
     "@types/react": "^19",
