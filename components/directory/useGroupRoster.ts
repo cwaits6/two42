@@ -61,15 +61,19 @@ export function useGroupRoster(groupId: string | null): GroupRoster {
   const [loading, setLoading] = useState(groupId !== null);
   const [error, setError] = useState(false);
   const [generation, setGeneration] = useState(0);
-  const waiters = useRef<(() => void)[]>([]);
+  const requested = useRef(0);
+  // Each waiter names the generation it asked for: only a load of that
+  // generation or a later one may settle it, otherwise an in-flight earlier
+  // load finishing before the effect re-runs would resolve it with stale data.
+  const waiters = useRef<{ gen: number; resolve: () => void }[]>([]);
 
-  const settleWaiters = useCallback(() => {
-    const pending = waiters.current;
-    waiters.current = [];
-    for (const resolve of pending) resolve();
+  const settleWaiters = useCallback((upTo: number) => {
+    const ready = waiters.current.filter((w) => w.gen <= upTo);
+    waiters.current = waiters.current.filter((w) => w.gen > upTo);
+    for (const { resolve } of ready) resolve();
   }, []);
 
-  useEffect(() => settleWaiters, [settleWaiters]);
+  useEffect(() => () => settleWaiters(Number.POSITIVE_INFINITY), [settleWaiters]);
 
   useEffect(() => {
     if (!groupId) {
@@ -80,7 +84,7 @@ export function useGroupRoster(groupId: string | null): GroupRoster {
       setMemberLabels([]);
       setLoading(false);
       setError(false);
-      settleWaiters();
+      settleWaiters(generation);
       return;
     }
     let cancelled = false;
@@ -138,7 +142,7 @@ export function useGroupRoster(groupId: string | null): GroupRoster {
 
     setLoading(true);
     load(groupId).finally(() => {
-      if (!cancelled) settleWaiters();
+      if (!cancelled) settleWaiters(generation);
     });
     return () => {
       cancelled = true;
@@ -150,8 +154,9 @@ export function useGroupRoster(groupId: string | null): GroupRoster {
   const reload = useCallback(
     () =>
       new Promise<void>((resolve) => {
-        waiters.current.push(resolve);
-        setGeneration((n) => n + 1);
+        const gen = ++requested.current;
+        waiters.current.push({ gen, resolve });
+        setGeneration(gen);
       }),
     [],
   );
