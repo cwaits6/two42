@@ -6,8 +6,11 @@ on:
   push:
     branches: [main]
 
-# No paths: filter. All three jobs are cheap, and a gate that can be
-# skipped by not touching a path in a filter list is not a gate.
+# No paths: filter on the workflow. A gate that can be skipped by not
+# touching a path in a filter list is not a gate, and the lint, unit and
+# guard jobs are cheap enough to always run. The e2e job is the exception:
+# it builds the app and boots a Supabase stack, so it gates on its own
+# changed-path list in-job, where a skip still reports a passing check.
 
 jobs:
   lint:
