@@ -18,6 +18,10 @@ interface DirRowProps {
   selected?: boolean;
   /** Soft-blue emphasis for upcoming birthdays / anniversaries */
   highlight?: boolean;
+  /** Controls beside the row, each its own tap target, never nested inside the row control */
+  actions?: ReactNode;
+  /** A selection checkbox before the row in bulk mode */
+  leading?: ReactNode;
 }
 
 /**
@@ -33,12 +37,15 @@ export function DirRow({
   trailing,
   selected,
   highlight,
+  actions,
+  leading,
 }: DirRowProps) {
   const interactive = !!href || !!onClick;
   const className = cn(
     "w-full flex items-center gap-4 min-h-16 px-4 py-3 rounded-xl border bg-card text-left transition-colors",
     selected || highlight ? "bg-brand-warm border-brand-primary/40" : "border-border",
     interactive && "hover:border-brand-primary/60",
+    (actions || leading) && "flex-1 min-w-0",
   );
 
   const inner = (
@@ -57,15 +64,15 @@ export function DirRow({
     </>
   );
 
+  let control: ReactNode;
   if (href) {
-    return (
+    control = (
       <Link href={href} className={className} aria-current={selected ? "true" : undefined}>
         {inner}
       </Link>
     );
-  }
-  if (onClick) {
-    return (
+  } else if (onClick) {
+    control = (
       <button
         type="button"
         onClick={onClick}
@@ -75,8 +82,18 @@ export function DirRow({
         {inner}
       </button>
     );
+  } else {
+    control = <div className={className}>{inner}</div>;
   }
-  return <div className={className}>{inner}</div>;
+
+  if (!actions && !leading) return control;
+  return (
+    <div className="flex items-center gap-2">
+      {leading}
+      {control}
+      {actions}
+    </div>
+  );
 }
 
 /** Muted section label used above groups of rows (A–Z letters, month names) */
