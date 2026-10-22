@@ -1,4 +1,4 @@
-import { mkdirSync, renameSync, statSync } from "node:fs";
+import { mkdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { test as base, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { PASSWORD, PERSONAS, type PersonaKey } from "./personas";
@@ -28,9 +28,7 @@ async function signIn(browser: Browser, baseURL: string, key: PersonaKey, file: 
   await page.locator("form").getByRole("button", { name: "Sign In" }).click();
   await page.waitForURL((url) => url.pathname !== "/login");
   mkdirSync(STATE_DIR, { recursive: true });
-  const partial = `${file}.${process.pid}.tmp`;
-  await context.storageState({ path: partial });
-  renameSync(partial, file);
+  await context.storageState({ path: file });
   await context.close();
 }
 
