@@ -7,12 +7,14 @@ export const GRID_START_HOUR = 6;
 export const GRID_END_HOUR = 22;
 export const GRID_MINUTES = (GRID_END_HOUR - GRID_START_HOUR) * 60;
 
-/** Height of one grid hour, in pixels. A 30-minute event still fits a 44px target on top of it. */
+/** Height of one grid hour, in pixels. */
 export const HOUR_HEIGHT_PX = 64;
 
+/** The shortest block, in pixels: the touch-target floor, which also keeps its time and title legible. */
+export const MIN_BLOCK_PX = 44;
+
 const DEFAULT_DURATION_MINUTES = 60;
-/** The shortest block that keeps its time and title legible. */
-const MIN_BLOCK_MINUTES = 30;
+const MIN_BLOCK_MINUTES = Math.ceil((MIN_BLOCK_PX / HOUR_HEIGHT_PX) * 60);
 
 export type Placement =
   | { kind: "timed"; topMinutes: number; durationMinutes: number }
@@ -21,20 +23,23 @@ export type Placement =
 /**
  * Where an event sits in its day column. A start outside 6 am to 10 pm goes
  * to the all-day row; a timed event is clipped at 10 pm and, without an end,
- * drawn as one hour.
+ * drawn as one hour. A block never draws shorter than the minimum, so a late
+ * start is moved up until its minimum-length block ends at 10 pm; otherwise
+ * the grid would clip it.
  */
 export function placeEvent(start: Date, end: Date | null): Placement {
   const startMinutes = start.getHours() * 60 + start.getMinutes() - GRID_START_HOUR * 60;
   if (startMinutes < 0 || startMinutes >= GRID_MINUTES) return { kind: "allDay" };
 
+  const top = Math.min(startMinutes, GRID_MINUTES - MIN_BLOCK_MINUTES);
   const rawDuration = end
     ? Math.round((end.getTime() - start.getTime()) / 60_000)
     : DEFAULT_DURATION_MINUTES;
   const durationMinutes = Math.min(
-    GRID_MINUTES - startMinutes,
+    GRID_MINUTES - top,
     Math.max(MIN_BLOCK_MINUTES, rawDuration)
   );
-  return { kind: "timed", topMinutes: startMinutes, durationMinutes };
+  return { kind: "timed", topMinutes: top, durationMinutes };
 }
 
 export type Lane = { lane: number; laneCount: number };
@@ -91,7 +96,8 @@ export function addDays(date: Date, days: number): Date {
 /**
  * The locale's first day of the week, 0 = Sunday through 6 = Saturday.
  * Intl's week info is Monday = 1 through Sunday = 7; a runtime without it
- * (Firefox before 2026) falls back to Sunday.
+ * falls back to Sunday; remove the fallback once every supported browser ships
+ * Intl.Locale weekInfo.
  */
 export function localeWeekStart(locale: string | undefined): number {
   try {

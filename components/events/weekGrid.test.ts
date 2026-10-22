@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   GRID_MINUTES,
+  HOUR_HEIGHT_PX,
+  MIN_BLOCK_PX,
   addDays,
   dayKey,
   formatHour,
@@ -30,8 +32,24 @@ describe("placeEvent", () => {
     expect(placeEvent(at(12), null)).toMatchObject({ durationMinutes: 60 });
   });
 
-  it("keeps a short event at the 30-minute floor", () => {
-    expect(placeEvent(at(12), at(12, 15))).toMatchObject({ durationMinutes: 30 });
+  it("keeps a short event at the minimum block length", () => {
+    const minimum = Math.ceil((MIN_BLOCK_PX / HOUR_HEIGHT_PX) * 60);
+    expect(minimum).toBe(42);
+    expect(placeEvent(at(12), at(12, 15))).toMatchObject({ durationMinutes: minimum });
+  });
+
+  it("floors an end before the start to the minimum", () => {
+    expect(placeEvent(at(12), at(11))).toMatchObject({
+      topMinutes: 6 * 60,
+      durationMinutes: 42,
+    });
+  });
+
+  it("gives a 30-minute block at least the pixel target", () => {
+    const placed = placeEvent(at(9), at(9, 30));
+    expect(placed.kind === "timed" && (placed.durationMinutes / 60) * HOUR_HEIGHT_PX).toBeGreaterThanOrEqual(
+      MIN_BLOCK_PX
+    );
   });
 
   it("clips at 10 pm", () => {
@@ -39,7 +57,7 @@ describe("placeEvent", () => {
       topMinutes: 15 * 60,
       durationMinutes: 60,
     });
-    expect(placeEvent(at(21, 45), null)).toMatchObject({ durationMinutes: 15 });
+    expect(placeEvent(at(21, 45), null)).toMatchObject({ topMinutes: 918, durationMinutes: 42 });
   });
 
   it("sends a start before 6 am or at 10 pm or later to the all-day row", () => {
@@ -49,9 +67,20 @@ describe("placeEvent", () => {
     expect(placeEvent(at(23, 30), null)).toEqual({ kind: "allDay" });
   });
 
-  it("stays inside the grid at the last timed minute", () => {
-    const last = placeEvent(at(21, 59), at(22, 30));
-    expect(last).toMatchObject({ kind: "timed", topMinutes: GRID_MINUTES - 1, durationMinutes: 1 });
+  it("moves a late start up so its minimum block ends at 10 pm", () => {
+    for (const late of [at(21, 30), at(21, 59)]) {
+      const placed = placeEvent(late, at(22, 30));
+      expect(placed).toMatchObject({ kind: "timed", topMinutes: 918, durationMinutes: 42 });
+      if (placed.kind !== "timed") continue;
+      const bottomPx = ((placed.topMinutes + placed.durationMinutes) / 60) * HOUR_HEIGHT_PX;
+      expect(bottomPx).toBe((GRID_MINUTES / 60) * HOUR_HEIGHT_PX);
+      expect(((placed.durationMinutes) / 60) * HOUR_HEIGHT_PX).toBeGreaterThanOrEqual(MIN_BLOCK_PX);
+    }
+  });
+
+  it("does not move a start that already fits", () => {
+    expect(placeEvent(at(21, 18), null)).toMatchObject({ topMinutes: 918, durationMinutes: 42 });
+    expect(placeEvent(at(21, 17), null)).toMatchObject({ topMinutes: 917, durationMinutes: 43 });
   });
 });
 
@@ -64,6 +93,13 @@ describe("layoutLanes", () => {
   it("gives non-overlapping events the full width", () => {
     expect(layoutLanes([span(1, 1), span(2, 1), span(4, 2)])).toEqual([
       { lane: 0, laneCount: 1 },
+      { lane: 0, laneCount: 1 },
+      { lane: 0, laneCount: 1 },
+    ]);
+  });
+
+  it("does not overlap events that touch end to start", () => {
+    expect(layoutLanes([span(1, 1), span(2, 1)])).toEqual([
       { lane: 0, laneCount: 1 },
       { lane: 0, laneCount: 1 },
     ]);

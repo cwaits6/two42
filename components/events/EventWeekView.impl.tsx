@@ -1,14 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import type { CSSProperties } from "react";
+import { useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { groupTextColor } from "@/lib/groups/settings";
+import { blockStyle } from "@/components/events/blockStyle";
 import type { CalendarGroup } from "@/components/events/EventsPageClient";
 import { eventDetailHref, expandVisibleEvents } from "@/components/events/visibleEvents";
 import {
   GRID_MINUTES,
   HOUR_HEIGHT_PX,
+  MIN_BLOCK_PX,
   addDays,
   dayKey,
   formatTime,
@@ -34,8 +36,7 @@ type Block = {
   title: string;
   time: string;
   tooltip: string;
-  color: string;
-  textColor: string;
+  style: CSSProperties;
 };
 
 type TimedBlock = Block & { topMinutes: number; durationMinutes: number; lane: Lane };
@@ -61,6 +62,24 @@ export default function EventWeekView({ groups, events, visibleGroupIds }: Event
     [days, groups, events, visibleGroupIds]
   );
   const phoneColumn = columns.find((c) => c.key === phoneKey) ?? columns[0];
+
+  const tabsId = useId();
+  const tabId = (key: string) => `${tabsId}-tab-${key}`;
+  const panelId = `${tabsId}-panel`;
+
+  // Arrow keys, Home and End move the selected day and its focus, the tabs contract.
+  const onDayKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const index = columns.findIndex((c) => c.key === phoneKey);
+    let next: number;
+    if (e.key === "ArrowRight") next = (index + 1) % columns.length;
+    else if (e.key === "ArrowLeft") next = (index - 1 + columns.length) % columns.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = columns.length - 1;
+    else return;
+    e.preventDefault();
+    setSelectedKey(columns[next].key);
+    e.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]')[next]?.focus();
+  };
 
   const goTo = (date: Date) => {
     setAnchor(date);
@@ -90,23 +109,31 @@ export default function EventWeekView({ groups, events, visibleGroupIds }: Event
         </div>
 
         <div className="md:hidden">
-          <div role="tablist" aria-label="Day" className="mb-3 grid grid-cols-7 gap-0.5">
+          <div
+            role="tablist"
+            aria-label="Day"
+            onKeyDown={onDayKeyDown}
+            className="mb-3 grid grid-cols-7 gap-0.5"
+          >
             {columns.map((column) => {
               const selected = column.key === phoneKey;
               const isToday = column.key === todayKey;
               return (
                 <button
                   key={column.key}
+                  id={tabId(column.key)}
                   type="button"
                   role="tab"
                   aria-selected={selected}
+                  aria-controls={panelId}
+                  tabIndex={selected ? 0 : -1}
                   aria-current={isToday ? "date" : undefined}
                   onClick={() => setSelectedKey(column.key)}
                   className={`flex min-h-14 flex-col items-center justify-center rounded-xl border-2 text-base leading-tight transition-colors ${
                     selected
                       ? "border-brand-primary bg-brand-primary text-white"
                       : isToday
-                        ? "border-brand-primary bg-white text-brand-primary"
+                        ? "border-brand-primary bg-white text-secondary-foreground"
                         : "border-transparent bg-white text-slate-700 hover:border-slate-300"
                   }`}
                 >
@@ -118,7 +145,9 @@ export default function EventWeekView({ groups, events, visibleGroupIds }: Event
               );
             })}
           </div>
-          <WeekGrid columns={[phoneColumn]} todayKey={todayKey} />
+          <div role="tabpanel" id={panelId} aria-labelledby={tabId(phoneColumn.key)}>
+            <WeekGrid columns={[phoneColumn]} todayKey={todayKey} />
+          </div>
         </div>
 
         <div className="hidden md:block">
@@ -139,7 +168,7 @@ function buildColumns(days: Date[], groups: CalendarGroup[], occurrences: Event[
     const column = columns.get(dayKey(start));
     if (!column) continue;
     const group = byId.get(event.group_id);
-    const color = group?.color ?? "var(--color-brand-primary)";
+    const style = blockStyle(group?.color ?? "var(--color-brand-primary)");
     const time = formatTime(start);
     const block: Block = {
       key: `${event.id}-${event.start_time}`,
@@ -147,8 +176,7 @@ function buildColumns(days: Date[], groups: CalendarGroup[], occurrences: Event[
       title: event.title,
       time,
       tooltip: `${time} · ${event.title}${group ? ` · ${group.name}` : ""}`,
-      color,
-      textColor: group ? groupTextColor(group.color) : "#FFFFFF",
+      style,
     };
     const placement = placeEvent(start, event.end_time ? new Date(event.end_time) : null);
     if (placement.kind === "allDay") {
@@ -159,8 +187,12 @@ function buildColumns(days: Date[], groups: CalendarGroup[], occurrences: Event[
   }
 
   for (const column of columns.values()) {
-    const lanes = layoutLanes(column.timed);
-    column.timed = column.timed.map((block, i) => ({ ...block, lane: lanes[i] }));
+    // Source order is Tab and screen-reader order, so it follows the visual column.
+    const sorted = [...column.timed].sort(
+      (a, b) => a.topMinutes - b.topMinutes || b.durationMinutes - a.durationMinutes
+    );
+    const lanes = layoutLanes(sorted);
+    column.timed = sorted.map((block, i) => ({ ...block, lane: lanes[i] }));
   }
   return [...columns.values()];
 }
@@ -181,13 +213,17 @@ function WeekGrid({ columns, todayKey }: { columns: DayColumn[]; todayKey: strin
           <div
             key={column.key}
             className={`flex flex-col items-center border-l border-slate-200 py-2 text-base leading-tight ${todayTint(column.key)} ${
-              column.key === todayKey ? "text-brand-primary" : "text-slate-700"
+              column.key === todayKey ? "text-secondary-foreground" : "text-slate-700"
             }`}
           >
             <span className="font-medium">
               {column.date.toLocaleDateString("en-US", { weekday: "short" })}
             </span>
-            <span className="font-display text-2xl font-bold">{column.date.getDate()}</span>
+            <span
+              className={`font-display text-2xl font-bold ${column.key === todayKey ? "text-brand-primary" : ""}`}
+            >
+              {column.date.getDate()}
+            </span>
             {column.key === todayKey && <span className="sr-only">Today</span>}
           </div>
         ))}
@@ -207,7 +243,7 @@ function WeekGrid({ columns, todayKey }: { columns: DayColumn[]; todayKey: strin
                 title={block.tooltip}
                 aria-label={block.tooltip}
                 className="block min-h-11 truncate rounded-lg px-2 py-2 text-base font-semibold leading-snug"
-                style={{ backgroundColor: block.color, color: block.textColor }}
+                style={block.style}
               >
                 {block.title}
               </Link>
@@ -252,11 +288,10 @@ function WeekGrid({ columns, todayKey }: { columns: DayColumn[]; todayKey: strin
                 style={{
                   top: minutesToPx(block.topMinutes),
                   height: minutesToPx(block.durationMinutes),
-                  minHeight: 44,
+                  minHeight: MIN_BLOCK_PX,
                   left: `calc(${(block.lane.lane / block.lane.laneCount) * 100}% + 2px)`,
                   width: `calc(${100 / block.lane.laneCount}% - 4px)`,
-                  backgroundColor: block.color,
-                  color: block.textColor,
+                  ...block.style,
                 }}
               >
                 <span className="block font-semibold">{block.time}</span>
