@@ -26,7 +26,6 @@ export const adminNavGroups: AdminNavGroup[] = [
     items: [
       { href: "/admin/members", label: "Members", icon: Users },
       { href: "/admin/families", label: "Families", icon: Home },
-      { href: "/admin/groups", label: "Teams", icon: Users },
       { href: "/admin/invite", label: "Bulk invite", icon: MailPlus },
     ],
   },

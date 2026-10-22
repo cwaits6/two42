@@ -193,7 +193,10 @@ policies and `serving_signup_create()` call it under the new name.
 three-column — `(group_member_id, group_id, org_id)` into `group_members`
 and `(label_id, group_id, org_id)` into `group_labels` — so a label can only
 ever be attached to a membership of the group that defines it, before RLS
-is consulted.
+is consulted. Labels are written only through the cookie-bound client under
+these policies (Group settings › Labels and the roster's Edit and Select
+modes); no service-role or `SECURITY DEFINER` path touches them, so the
+service-role inventory carries no entry for them.
 
 ### Group visibility
 
@@ -222,8 +225,9 @@ The permissive arms compose on the org floor as:
 `is_content_editor()` appear in no content policy: an org admin reads a
 group's content only as a member of it and edits it only as a leader of it.
 The admin arm survives on `groups`, `group_members`, `group_labels`,
-`group_member_labels`, `teams` and `team_members` only — the people layer,
-managed from Admin. The `content_editor` role therefore no longer reaches
+`group_member_labels`, `teams` and `team_members` only — the people layer.
+Org admins manage people from Admin; the only UI for teams and labels is
+Group settings, which a leader of the group reaches. The `content_editor` role therefore no longer reaches
 any content editor; it keeps the admin overview only.
 
 Rows that reach a group through a parent do so under the caller's own RLS
@@ -560,17 +564,17 @@ it.
 Provisioning seeds **no teams, no group, and nothing group-owned**: a
 calendar, an about page and the call settings all belong to a group, and
 there is none at provisioning time; the group's calendar is created when
-its first event, prayer call or color is saved. Teams are org-defined: admins
-create them in `/admin/groups` and designate capabilities per team
+its first event, prayer call or color is saved. Teams are defined per group:
+its leaders create them in Group settings › Teams
+(`/g/<groupId>/settings/teams`) and designate capabilities per team
 (`is_serving_role`) and leadership per membership
 (`team_members.is_leader`). Nothing in the schema or app requires a team to
 exist, so there is no platform-defined team name for a policy or surface to
 depend on (`member_groups.functional_role` was dropped in `20260801000000`).
 A newly provisioned org has no group either — the founding admin has no
 profile at provisioning time, so nothing could be enrolled — and because
-`teams.group_id` is required, the admin groups page disables team creation
-until group creation ships. The one live org was backfilled by the
-group-model migration.
+`teams.group_id` is required, no team can exist until group creation ships.
+The one live org was backfilled by the group-model migration.
 
 Provisioning **never moves an existing profile between orgs**. If a profile
 with the owner's email already belongs to a different org, the call raises

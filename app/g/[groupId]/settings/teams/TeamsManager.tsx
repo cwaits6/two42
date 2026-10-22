@@ -24,96 +24,94 @@ import {
   ArrowUp,
   ArrowDown,
   Users,
-  Filter,
   HandHeart,
 } from "lucide-react";
-import type { MemberGroup } from "@/lib/types";
+import type { MemberGroup, ServingTeamSettings } from "@/lib/types";
 import { siteConfig } from "@/lib/config";
-import { GroupRosterDialog } from "./GroupRosterDialog";
+import { ServingSettingsDialog } from "@/components/serving/ServingSettingsDialog";
+import { TeamRosterDialog } from "./TeamRosterDialog";
 import { IconPicker } from "./IconPicker";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 
-interface GroupFormState {
+interface TeamFormState {
   name: string;
   description: string;
   color: string;
   icon: string;
-  show_in_directory_filter: boolean;
   is_serving_role: boolean;
 }
 
-const EMPTY_FORM: GroupFormState = {
+const EMPTY_FORM: TeamFormState = {
   name: "",
   description: "",
   color: siteConfig.colors.primary,
   icon: "users",
-  show_in_directory_filter: true,
   is_serving_role: false,
 };
 
-function fromGroup(g: MemberGroup): GroupFormState {
+function fromTeam(t: MemberGroup): TeamFormState {
   return {
-    name: g.name,
-    description: g.description || "",
-    color: g.color || siteConfig.colors.primary,
-    icon: g.icon || "users",
-    show_in_directory_filter: g.show_in_directory_filter ?? true,
-    is_serving_role: g.is_serving_role ?? false,
+    name: t.name,
+    description: t.description || "",
+    color: t.color || siteConfig.colors.primary,
+    icon: t.icon || "users",
+    is_serving_role: t.is_serving_role ?? false,
   };
 }
 
-export default function GroupsPage() {
-  const [groups, setGroups] = useState<MemberGroup[]>([]);
+type TeamSettings = Pick<ServingTeamSettings, "team_id" | "enabled" | "reminder_days" | "window_weeks">;
+
+interface TeamsManagerProps {
+  groupId: string;
+  groupName: string;
+}
+
+export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
+  const [teams, setTeams] = useState<MemberGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<MemberGroup | null>(null);
-  const [rosterGroup, setRosterGroup] = useState<MemberGroup | null>(null);
-  const [form, setForm] = useState<GroupFormState>(EMPTY_FORM);
+  const [rosterTeam, setRosterTeam] = useState<MemberGroup | null>(null);
+  const [form, setForm] = useState<TeamFormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
-  // member counts per group for delete warning
   const [memberCounts, setMemberCounts] = useState<Record<string, number>>({});
-  // teams.group_id is required, so creation needs the org's group. An org
-  // provisioned after the group model landed has none until group creation
-  // ships. Undefined until the lookup succeeds; null means it found no group.
-  const [parentGroupId, setParentGroupId] = useState<string | null>();
+  const [settingsByTeam, setSettingsByTeam] = useState<Record<string, TeamSettings>>({});
 
   const supabase = useMemo(() => createClient(), []);
 
-  const loadGroups = useCallback(async () => {
+  const loadTeams = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("teams")
       .select("*")
+      .eq("group_id", groupId)
       .order("display_order");
 
     if (error) {
-      toast.error("Failed to load groups.");
+      toast.error("Failed to load teams.");
       setLoading(false);
       return;
     }
 
-    setGroups((data || []) as MemberGroup[]);
+    const rows = (data || []) as MemberGroup[];
+    setTeams(rows);
+    const teamIds = rows.map((t) => t.id);
 
-    const { data: parentGroup, error: parentGroupError } = await supabase
-      .from("groups")
-      .select("id")
-      .order("created_at")
-      .limit(1)
-      .maybeSingle();
-
-    if (parentGroupError) {
-      toast.error("Failed to load groups.");
+    if (teamIds.length === 0) {
+      setMemberCounts({});
+      setSettingsByTeam({});
       setLoading(false);
       return;
     }
 
-    setParentGroupId(parentGroup?.id ?? null);
-
-    // Fetch member counts for each group
-    const { data: counts } = await supabase
-      .from("team_members")
-      .select("team_id");
+    const [{ data: counts }, { data: settings }] = await Promise.all([
+      supabase.from("team_members").select("team_id").in("team_id", teamIds),
+      supabase
+        .from("serving_team_settings")
+        .select("team_id, enabled, reminder_days, window_weeks")
+        .in("team_id", teamIds),
+    ]);
 
     const countMap: Record<string, number> = {};
     (counts || []).forEach((row: { team_id: string }) => {
@@ -121,12 +119,18 @@ export default function GroupsPage() {
     });
     setMemberCounts(countMap);
 
+    const settingsMap: Record<string, TeamSettings> = {};
+    ((settings || []) as TeamSettings[]).forEach((row) => {
+      settingsMap[row.team_id] = row;
+    });
+    setSettingsByTeam(settingsMap);
+
     setLoading(false);
-  }, [supabase]);
+  }, [supabase, groupId]);
 
   useEffect(() => {
-    loadGroups();
-  }, [loadGroups]);
+    loadTeams();
+  }, [loadTeams]);
 
   function openCreate() {
     setEditing(null);
@@ -134,15 +138,15 @@ export default function GroupsPage() {
     setDialogOpen(true);
   }
 
-  function openEdit(group: MemberGroup) {
-    setEditing(group);
-    setForm(fromGroup(group));
+  function openEdit(team: MemberGroup) {
+    setEditing(team);
+    setForm(fromTeam(team));
     setDialogOpen(true);
   }
 
   async function handleSave() {
     if (!form.name.trim()) {
-      toast.error("Group name is required.");
+      toast.error("Team name is required.");
       return;
     }
 
@@ -151,96 +155,98 @@ export default function GroupsPage() {
       description: form.description.trim() || null,
       color: form.color || null,
       icon: form.icon || null,
-      show_in_directory_filter: form.show_in_directory_filter,
       is_serving_role: form.is_serving_role,
     };
 
     setSaving(true);
     if (editing) {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("teams")
         .update(payload)
-        .eq("id", editing.id);
+        .eq("id", editing.id)
+        .eq("group_id", groupId)
+        .select("id");
       setSaving(false);
-      if (error) {
-        toast.error("Failed to update group.");
+      if (error || !data?.length) {
+        toast.error("Failed to update team.");
         return;
       }
-      toast.success("Group updated.");
+      toast.success("Team updated.");
     } else {
-      if (!parentGroupId) {
-        setSaving(false);
-        toast.error("No group exists for this organization yet.");
-        return;
-      }
       // Append at end
       const nextOrder =
-        groups.length > 0
-          ? Math.max(...groups.map((g) => g.display_order)) + 1
+        teams.length > 0
+          ? Math.max(...teams.map((t) => t.display_order)) + 1
           : 0;
       const { error } = await supabase
         .from("teams")
-        .insert({ ...payload, group_id: parentGroupId, display_order: nextOrder });
+        .insert({ ...payload, group_id: groupId, display_order: nextOrder });
       setSaving(false);
       if (error) {
-        toast.error("Failed to create group.");
+        toast.error("Failed to create team.");
         return;
       }
-      toast.success("Group created.");
+      toast.success("Team created.");
     }
 
     setDialogOpen(false);
-    loadGroups();
+    loadTeams();
   }
 
-  async function handleDelete(group: MemberGroup) {
-    const count = memberCounts[group.id] || 0;
+  async function handleDelete(team: MemberGroup) {
+    const count = memberCounts[team.id] || 0;
     const warning =
       count > 0
-        ? `"${group.name}" has ${count} member(s) assigned. They will be removed from this group. `
+        ? `"${team.name}" has ${count} member(s). They will be removed from this team. `
         : "";
-    if (!confirm(`${warning}Delete "${group.name}"?`)) return;
+    if (!confirm(`${warning}Delete "${team.name}"?`)) return;
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("teams")
       .delete()
-      .eq("id", group.id);
+      .eq("id", team.id)
+      .eq("group_id", groupId)
+      .select("id");
 
-    if (error) {
-      toast.error("Failed to delete group.");
+    if (error || !data?.length) {
+      toast.error("Failed to delete team.");
       return;
     }
-    toast.success("Group deleted.");
+    toast.success("Team deleted.");
     setDialogOpen(false);
-    loadGroups();
+    loadTeams();
   }
 
-  async function moveGroup(group: MemberGroup, direction: "up" | "down") {
-    const idx = groups.findIndex((g) => g.id === group.id);
+  async function moveTeam(team: MemberGroup, direction: "up" | "down") {
+    const idx = teams.findIndex((t) => t.id === team.id);
     const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= groups.length) return;
+    if (swapIdx < 0 || swapIdx >= teams.length) return;
 
-    const swapGroup = groups[swapIdx];
-    const newOrder = group.display_order;
-    const swapOrder = swapGroup.display_order;
+    const swapTeam = teams[swapIdx];
+    const newOrder = team.display_order;
+    const swapOrder = swapTeam.display_order;
 
     // Swap display_order values
     const [r1, r2] = await Promise.all([
       supabase
         .from("teams")
         .update({ display_order: swapOrder })
-        .eq("id", group.id),
+        .eq("id", team.id)
+        .eq("group_id", groupId)
+        .select("id"),
       supabase
         .from("teams")
         .update({ display_order: newOrder })
-        .eq("id", swapGroup.id),
+        .eq("id", swapTeam.id)
+        .eq("group_id", groupId)
+        .select("id"),
     ]);
 
-    if (r1.error || r2.error) {
+    if (r1.error || r2.error || !r1.data?.length || !r2.data?.length) {
       toast.error("Failed to reorder.");
       return;
     }
-    loadGroups();
+    loadTeams();
   }
 
   if (loading) {
@@ -254,45 +260,32 @@ export default function GroupsPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Member Groups"
-        subtitle="Create and manage groups. Control which groups appear as filter chips in the member directory."
+        title="Teams"
+        subtitle={`Greeters, Prayer Team and other serving teams in ${groupName}.`}
         actions={
           <Button
             size="lg"
             onClick={openCreate}
-            disabled={!parentGroupId}
             className="bg-brand-primary hover:bg-brand-primary/90 text-white"
           >
             <Plus className="mr-2 h-5 w-5" />
-            New Group
+            New team
           </Button>
         }
       />
 
-      {parentGroupId === null && (
-        <Card className="mb-4">
-          <CardContent className="pt-6">
-            <p className="text-base text-muted-foreground">
-              This organization has no group yet, so teams cannot be created.
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      {groups.length === 0 ? (
+      {teams.length === 0 ? (
         <Card>
           <CardContent className="pt-6 text-center">
-            <p className="text-base text-muted-foreground">
-              No groups yet. Create one to start organizing members.
-            </p>
+            <p className="text-base text-muted-foreground">No teams yet.</p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-3">
-          {groups.map((group, idx) => (
+          {teams.map((team, idx) => (
             <Card
-              key={group.id}
-              onClick={() => setRosterGroup(group)}
+              key={team.id}
+              onClick={() => setRosterTeam(team)}
               className="cursor-pointer transition-shadow hover:shadow-md"
             >
               <CardContent className="pt-5 pb-5">
@@ -300,46 +293,40 @@ export default function GroupsPage() {
                   {/* Color swatch */}
                   <div
                     className="w-4 h-4 rounded-full shrink-0"
-                    style={{ backgroundColor: group.color || "var(--color-brand-neutral)" }}
+                    style={{ backgroundColor: team.color || "var(--color-brand-neutral)" }}
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold">{group.name}</p>
-                      {group.show_in_directory_filter && (
-                        <Badge variant="secondary" className="text-xs gap-1">
-                          <Filter className="h-3 w-3" />
-                          Directory filter
-                        </Badge>
-                      )}
-                      {group.is_serving_role && (
+                      <p className="font-semibold">{team.name}</p>
+                      {team.is_serving_role && (
                         <Badge variant="secondary" className="text-xs gap-1">
                           <HandHeart className="h-3 w-3" />
                           Serving role
                         </Badge>
                       )}
                     </div>
-                    {group.description && (
+                    {team.description && (
                       <p className="text-sm text-muted-foreground">
-                        {group.description}
+                        {team.description}
                       </p>
                     )}
                     <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
                       <Users className="h-3 w-3" />
                       <span>
-                        {memberCounts[group.id] || 0} member
-                        {(memberCounts[group.id] || 0) !== 1 ? "s" : ""}
+                        {memberCounts[team.id] || 0} member
+                        {(memberCounts[team.id] || 0) !== 1 ? "s" : ""}
                       </span>
                     </div>
                   </div>
                   <div
-                    className="flex items-center gap-1 shrink-0"
+                    className="flex items-center gap-1 shrink-0 flex-wrap justify-end"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <Button
                       variant="ghost"
                       size="icon-sm"
                       disabled={idx === 0}
-                      onClick={() => moveGroup(group, "up")}
+                      onClick={() => moveTeam(team, "up")}
                       aria-label="Move up"
                     >
                       <ArrowUp className="h-4 w-4" />
@@ -347,16 +334,22 @@ export default function GroupsPage() {
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      disabled={idx === groups.length - 1}
-                      onClick={() => moveGroup(group, "down")}
+                      disabled={idx === teams.length - 1}
+                      onClick={() => moveTeam(team, "down")}
                       aria-label="Move down"
                     >
                       <ArrowDown className="h-4 w-4" />
                     </Button>
+                    {team.is_serving_role && (
+                      <ServingSettingsDialog
+                        teamId={team.id}
+                        settings={settingsByTeam[team.id] ?? null}
+                      />
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setRosterGroup(group)}
+                      onClick={() => setRosterTeam(team)}
                     >
                       <Users className="mr-1 h-4 w-4" />
                       Members
@@ -364,7 +357,7 @@ export default function GroupsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => openEdit(group)}
+                      onClick={() => openEdit(team)}
                     >
                       <Pencil className="mr-1 h-4 w-4" />
                       Edit
@@ -377,11 +370,13 @@ export default function GroupsPage() {
         </div>
       )}
 
-      <GroupRosterDialog
-        group={rosterGroup}
-        onClose={() => setRosterGroup(null)}
-        onCountChange={(groupId, count) =>
-          setMemberCounts((prev) => ({ ...prev, [groupId]: count }))
+      <TeamRosterDialog
+        team={rosterTeam}
+        groupId={groupId}
+        groupName={groupName}
+        onClose={() => setRosterTeam(null)}
+        onCountChange={(teamId, count) =>
+          setMemberCounts((prev) => ({ ...prev, [teamId]: count }))
         }
       />
 
@@ -389,15 +384,15 @@ export default function GroupsPage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {editing ? "Edit group" : "New group"}
+              {editing ? "Edit team" : "New team"}
             </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label htmlFor="g_name">Group name</Label>
+              <Label htmlFor="t_name">Team name</Label>
               <Input
-                id="g_name"
+                id="t_name"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 placeholder="e.g. Prayer Team"
@@ -405,9 +400,9 @@ export default function GroupsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="g_desc">Description</Label>
+              <Label htmlFor="t_desc">Description</Label>
               <Textarea
-                id="g_desc"
+                id="t_desc"
                 value={form.description}
                 onChange={(e) =>
                   setForm({ ...form, description: e.target.value })
@@ -418,10 +413,10 @@ export default function GroupsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="g_color">Color</Label>
+              <Label htmlFor="t_color">Color</Label>
               <div className="flex items-center gap-2">
                 <input
-                  id="g_color"
+                  id="t_color"
                   type="color"
                   value={form.color}
                   onChange={(e) =>
@@ -450,30 +445,14 @@ export default function GroupsPage() {
 
             <div className="flex items-center justify-between rounded-lg border p-3">
               <div className="space-y-0.5">
-                <Label htmlFor="g_filter">Show as directory filter chip</Label>
+                <Label htmlFor="t_serving">Serving role</Label>
                 <p className="text-xs text-muted-foreground">
-                  When enabled, members can filter the directory by this group.
-                </p>
-              </div>
-              <Switch
-                id="g_filter"
-                checked={form.show_in_directory_filter}
-                onCheckedChange={(v) =>
-                  setForm({ ...form, show_in_directory_filter: v })
-                }
-              />
-            </div>
-
-            <div className="flex items-center justify-between rounded-lg border p-3">
-              <div className="space-y-0.5">
-                <Label htmlFor="g_serving">Serving role</Label>
-                <p className="text-xs text-muted-foreground">
-                  Lists this group on the Serving page with a roster everyone
+                  Lists this team on the Serving page with a roster everyone
                   can see. Turn on Sunday signups separately from that page.
                 </p>
               </div>
               <Switch
-                id="g_serving"
+                id="t_serving"
                 checked={form.is_serving_role}
                 onCheckedChange={(v) =>
                   setForm({ ...form, is_serving_role: v })
@@ -502,7 +481,7 @@ export default function GroupsPage() {
                 disabled={saving}
                 className="bg-brand-primary hover:bg-brand-primary/90 text-white"
               >
-                {saving ? "Saving..." : editing ? "Save Changes" : "Create"}
+                {saving ? "Saving..." : editing ? "Save changes" : "Create"}
               </Button>
             </div>
           </DialogFooter>
