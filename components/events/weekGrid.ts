@@ -83,8 +83,9 @@ export function segmentOn(start: Date, end: Date | null, day: Date): Segment | n
  */
 export function placeSegment(segment: Segment): Placement {
   if (!segment.continuesBefore || !segment.end) return placeEvent(segment.start, segment.end);
-  const endMinutes =
-    Math.round((segment.end.getTime() - segment.start.getTime()) / 60_000) - GRID_START_HOUR * 60;
+  if (segment.continuesAfter) return { kind: "allDay" };
+  // Clock fields, not elapsed time since midnight: a day with a DST change is not 24 hours long.
+  const endMinutes = segment.end.getHours() * 60 + segment.end.getMinutes() - GRID_START_HOUR * 60;
   if (endMinutes <= 0 || endMinutes >= GRID_MINUTES) return { kind: "allDay" };
   return { kind: "timed", topMinutes: 0, durationMinutes: Math.max(MIN_BLOCK_MINUTES, endMinutes) };
 }

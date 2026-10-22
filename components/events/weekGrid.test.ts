@@ -189,6 +189,20 @@ describe("placeSegment", () => {
     expect(placeSegment(segment(midnight, at(22), true, false))).toEqual({ kind: "allDay" });
     expect(placeSegment(segment(midnight, new Date(2026, 8, 30), true, true))).toEqual({ kind: "allDay" });
   });
+
+  it("reads a continuation's end from the clock on a daylight-saving day", () => {
+    // The US fall-back day is 25 hours long; the block must still end where the clock says.
+    const changeDay = new Date(2026, 10, 1);
+    expect(placeSegment(segment(changeDay, new Date(2026, 10, 1, 14), true, false))).toEqual({
+      kind: "timed",
+      topMinutes: 0,
+      durationMinutes: 8 * 60,
+    });
+    expect(placeSegment(segment(changeDay, new Date(2026, 10, 1, 21, 30), true, false))).toMatchObject({
+      kind: "timed",
+      durationMinutes: 930,
+    });
+  });
 });
 
 describe("spansDays", () => {
