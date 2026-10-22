@@ -51,7 +51,13 @@ export function RosterFilterMenu({ teams, labels, filter, onChange }: RosterFilt
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button variant="outline" aria-haspopup="menu" />}
+        render={
+          <Button
+            variant="outline"
+            aria-haspopup="menu"
+            aria-label={isEmptyFilter(filter) ? undefined : `Filter, ${filterButtonLabel(filter)}`}
+          />
+        }
       >
         {filterButtonLabel(filter)}
         <ChevronDown aria-hidden="true" />
@@ -59,7 +65,7 @@ export function RosterFilterMenu({ teams, labels, filter, onChange }: RosterFilt
       <DropdownMenuContent className="min-w-64">
         {teams.length > 0 && (
           <DropdownMenuGroup>
-            <DropdownMenuLabel className="text-sm">Teams</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-base">Teams</DropdownMenuLabel>
             {teams.map((team) => (
               <DropdownMenuCheckboxItem
                 key={team.id}
@@ -78,7 +84,7 @@ export function RosterFilterMenu({ teams, labels, filter, onChange }: RosterFilt
         )}
         {labels.length > 0 && (
           <DropdownMenuGroup>
-            <DropdownMenuLabel className="text-sm">Labels</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-base">Labels</DropdownMenuLabel>
             {labels.map((label) => (
               <DropdownMenuCheckboxItem
                 key={label.id}
@@ -103,7 +109,7 @@ export function RosterFilterMenu({ teams, labels, filter, onChange }: RosterFilt
         >
           Clear filters
         </DropdownMenuItem>
-        <p className="px-1.5 pt-1 pb-1.5 text-sm text-muted-foreground">
+        <p className="px-1.5 pt-1 pb-1.5 text-base text-muted-foreground">
           Leaders set teams and labels in Group settings.
         </p>
       </DropdownMenuContent>

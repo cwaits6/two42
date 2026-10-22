@@ -115,7 +115,7 @@ export function EditMemberDialog({
               </SelectContent>
             </Select>
             {isSelf && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-base text-muted-foreground">
                 Another leader can change your role.
               </p>
             )}
@@ -147,7 +147,7 @@ export function EditMemberDialog({
             </fieldset>
           )}
 
-          <p className="text-sm text-muted-foreground">
+          <p className="text-base text-muted-foreground">
             In {groupName} only. Their {orgName} profile does not change.
           </p>
         </div>

@@ -162,6 +162,9 @@ function MembersTabInner() {
       if (error) errors.push(error);
     }
     if (errors.length > 0) {
+      // A failed write leaves no reload behind it; refresh so a retry diffs
+      // against what is actually applied.
+      await roster.reload();
       toast.error(errors[0]);
       return;
     }
@@ -217,9 +220,11 @@ function MembersTabInner() {
       )}
       {isLeader && mode === "list" && (
         <div className="ml-auto flex gap-2">
-          <Button variant="outline" onClick={() => setMode("select")}>
-            Select
-          </Button>
+          {roster.labels.length > 0 && (
+            <Button variant="outline" onClick={() => setMode("select")}>
+              Select
+            </Button>
+          )}
           <Button
             onClick={() => setMode("add")}
             className="bg-brand-primary text-white hover:bg-brand-primary/90"
@@ -286,10 +291,9 @@ function MembersTabInner() {
                       return (
                         <DirRow
                           key={m.id}
-                          onClick={
-                            selecting ? () => setChecked(toggleInSet(checked, m.id)) : () => openPerson(m)
-                          }
-                          selected={selecting ? checked.has(m.id) : selected?.id === m.id}
+                          onClick={selecting ? undefined : () => openPerson(m)}
+                          selected={selecting ? undefined : selected?.id === m.id}
+                          highlighted={selecting && checked.has(m.id)}
                           avatar={
                             <Avatar className="h-12 w-12">
                               {m.avatar_url && <AvatarImage src={m.avatar_url} alt={name} />}
@@ -312,7 +316,7 @@ function MembersTabInner() {
                               <Checkbox
                                 checked={checked.has(m.id)}
                                 onCheckedChange={() => setChecked(toggleInSet(checked, m.id))}
-                                aria-label={`Select ${name}`}
+                                aria-label={name}
                               />
                             ) : undefined
                           }

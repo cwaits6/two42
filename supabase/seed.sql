@@ -145,8 +145,8 @@ WHERE g.id = c.group_id
   AND c.name <> g.name;
 
 -- Starter team under Group A so the serving flow is testable locally.
--- Deployments create their own teams at /admin/groups — provisioning seeds
--- none.
+-- Deployments create their own teams in Group settings › Teams — provisioning
+-- seeds none.
 INSERT INTO public.teams (id, org_id, group_id, name, description, color, icon, display_order, is_serving_role)
 SELECT 'b0000000-0000-0000-0000-000000000001', g.org_id, g.id, 'Serving Team', 'Signs up to serve on Sundays', '#7C9885', 'hands', 0, true
 FROM public.groups g

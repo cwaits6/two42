@@ -64,7 +64,7 @@ export function BulkLabelBar({
                     />
                     {label.name}
                     {state === "some" && (
-                      <span className="ml-auto pl-3 text-sm text-muted-foreground">Some</span>
+                      <span className="ml-auto pl-3 text-base text-muted-foreground">Some</span>
                     )}
                   </DropdownMenuCheckboxItem>
                 );

@@ -16,6 +16,8 @@ interface DirRowProps {
   trailing?: ReactNode;
   /** Soft-blue emphasis for the selected item in a two-pane list */
   selected?: boolean;
+  /** Selected background without aria-current, for rows whose state a separate control owns */
+  highlighted?: boolean;
   /** Soft-blue emphasis for upcoming birthdays / anniversaries */
   highlight?: boolean;
   /** Controls beside the row, each its own tap target, never nested inside the row control */
@@ -36,6 +38,7 @@ export function DirRow({
   subtitle,
   trailing,
   selected,
+  highlighted,
   highlight,
   actions,
   leading,
@@ -43,7 +46,7 @@ export function DirRow({
   const interactive = !!href || !!onClick;
   const className = cn(
     "w-full flex items-center gap-4 min-h-16 px-4 py-3 rounded-xl border bg-card text-left transition-colors",
-    selected || highlight ? "bg-brand-warm border-brand-primary/40" : "border-border",
+    selected || highlighted || highlight ? "bg-brand-warm border-brand-primary/40" : "border-border",
     interactive && "hover:border-brand-primary/60",
     (actions || leading) && "flex-1 min-w-0",
   );

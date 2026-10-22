@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { RosterIndex } from "@/components/directory/rosterFilter";
 import type { GroupRole } from "@/lib/groups/active";
@@ -61,6 +61,15 @@ export function useGroupRoster(groupId: string | null): GroupRoster {
   const [loading, setLoading] = useState(groupId !== null);
   const [error, setError] = useState(false);
   const [generation, setGeneration] = useState(0);
+  const waiters = useRef<(() => void)[]>([]);
+
+  const settleWaiters = useCallback(() => {
+    const pending = waiters.current;
+    waiters.current = [];
+    for (const resolve of pending) resolve();
+  }, []);
+
+  useEffect(() => settleWaiters, [settleWaiters]);
 
   useEffect(() => {
     if (!groupId) {
@@ -71,6 +80,7 @@ export function useGroupRoster(groupId: string | null): GroupRoster {
       setMemberLabels([]);
       setLoading(false);
       setError(false);
+      settleWaiters();
       return;
     }
     let cancelled = false;
@@ -127,13 +137,24 @@ export function useGroupRoster(groupId: string | null): GroupRoster {
     }
 
     setLoading(true);
-    load(groupId);
+    load(groupId).finally(() => {
+      if (!cancelled) settleWaiters();
+    });
     return () => {
       cancelled = true;
     };
-  }, [supabase, groupId, generation]);
+  }, [supabase, groupId, generation, settleWaiters]);
 
-  const reload = useCallback(async () => setGeneration((n) => n + 1), []);
+  // Resolves once the refetch this call triggers has been applied, so a
+  // caller can keep its busy state up until the roster is current.
+  const reload = useCallback(
+    () =>
+      new Promise<void>((resolve) => {
+        waiters.current.push(resolve);
+        setGeneration((n) => n + 1);
+      }),
+    [],
+  );
 
   const membershipByProfile = useMemo(
     () => new Map(memberships.map((m) => [m.profileId, m])),

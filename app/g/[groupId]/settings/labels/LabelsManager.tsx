@@ -51,6 +51,7 @@ export function LabelsManager({ groupId, groupName }: LabelsManagerProps) {
   const [deleting, setDeleting] = useState<GroupLabel | null>(null);
   const [form, setForm] = useState<LabelFormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [deletingBusy, setDeletingBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -138,12 +139,14 @@ export function LabelsManager({ groupId, groupName }: LabelsManagerProps) {
 
   async function handleDelete() {
     if (!deleting) return;
+    setDeletingBusy(true);
     const { data, error } = await supabase
       .from("group_labels")
       .delete()
       .eq("id", deleting.id)
       .eq("group_id", groupId)
       .select("id");
+    setDeletingBusy(false);
     if (error || !data?.length) {
       toast.error("Failed to delete label.");
       return;
@@ -293,11 +296,11 @@ export function LabelsManager({ groupId, groupName }: LabelsManagerProps) {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleting(null)}>
+            <Button variant="outline" onClick={() => setDeleting(null)} disabled={deletingBusy}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDelete}>
-              Delete
+            <Button variant="destructive" onClick={handleDelete} disabled={deletingBusy}>
+              {deletingBusy ? "Deleting…" : "Delete"}
             </Button>
           </DialogFooter>
         </DialogContent>

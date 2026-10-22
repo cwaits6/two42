@@ -173,7 +173,6 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
       }
       toast.success("Team updated.");
     } else {
-      // Append at end
       const nextOrder =
         teams.length > 0
           ? Math.max(...teams.map((t) => t.display_order)) + 1
@@ -226,7 +225,6 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
     const newOrder = team.display_order;
     const swapOrder = swapTeam.display_order;
 
-    // Swap display_order values
     const [r1, r2] = await Promise.all([
       supabase
         .from("teams")
@@ -290,7 +288,6 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
             >
               <CardContent className="pt-5 pb-5">
                 <div className="flex items-center gap-4">
-                  {/* Color swatch */}
                   <div
                     className="w-4 h-4 rounded-full shrink-0"
                     style={{ backgroundColor: team.color || "var(--color-brand-neutral)" }}

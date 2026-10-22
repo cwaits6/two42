@@ -16,8 +16,6 @@ export interface RosterIndex {
   labelsByProfile: ReadonlyMap<string, ReadonlySet<string>>;
 }
 
-export const EMPTY_INDEX: RosterIndex = { teamsByProfile: new Map(), labelsByProfile: new Map() };
-
 export function isEmptyFilter(filter: RosterFilter): boolean {
   return filter.teamIds.size === 0 && filter.labelIds.size === 0;
 }

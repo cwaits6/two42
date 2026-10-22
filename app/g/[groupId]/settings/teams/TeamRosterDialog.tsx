@@ -122,6 +122,14 @@ export function TeamRosterDialog({
     () => profiles.filter((p) => assigned.has(p.id)),
     [profiles, assigned],
   );
+  // Team rows whose profile RLS hides from the viewer: counted on the team,
+  // but there is no one to list.
+  const hiddenCount = useMemo(() => {
+    const listed = new Set(profiles.map((p) => p.id));
+    let n = 0;
+    for (const id of assigned) if (!listed.has(id)) n += 1;
+    return n;
+  }, [profiles, assigned]);
   const candidates = useMemo(
     () => profiles.filter((p) => !assigned.has(p.id)),
     [profiles, assigned],
@@ -247,6 +255,12 @@ export function TeamRosterDialog({
             </Button>
           )}
         </div>
+
+        {!loading && mode === "roster" && hiddenCount > 0 && (
+          <p className="text-base text-muted-foreground shrink-0">
+            {hiddenCount} on this team {hiddenCount === 1 ? "is" : "are"} not visible to you.
+          </p>
+        )}
 
         <div className="overflow-y-auto flex-1 -mx-1 px-1">
           {loading ? (

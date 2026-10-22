@@ -20,12 +20,13 @@ export async function setGroupMembership(
     });
     if (error) return `Failed to add to ${group.name}.`;
   } else {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("team_members")
       .delete()
       .eq("profile_id", profileId)
-      .eq("team_id", group.id);
-    if (error) return `Failed to remove from ${group.name}.`;
+      .eq("team_id", group.id)
+      .select("profile_id");
+    if (error || !data?.length) return `Failed to remove from ${group.name}.`;
   }
 
   return null;
