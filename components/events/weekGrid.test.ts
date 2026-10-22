@@ -1,0 +1,194 @@
+import { describe, expect, it } from "vitest";
+import {
+  GRID_MINUTES,
+  addDays,
+  dayKey,
+  formatHour,
+  gridHours,
+  layoutLanes,
+  localeWeekStart,
+  placeEvent,
+  weekDays,
+  weekTitle,
+} from "./weekGrid";
+
+// Local-time constructors keep these independent of the machine's zone.
+const at = (hour: number, minute = 0) => new Date(2026, 8, 29, hour, minute);
+
+describe("placeEvent", () => {
+  it("offsets a start time from 6 am in minutes", () => {
+    expect(placeEvent(at(19), at(20, 30))).toEqual({
+      kind: "timed",
+      topMinutes: 13 * 60,
+      durationMinutes: 90,
+    });
+    expect(placeEvent(at(6), at(7))).toMatchObject({ topMinutes: 0, durationMinutes: 60 });
+    expect(placeEvent(at(9, 15), at(10))).toMatchObject({ topMinutes: 195, durationMinutes: 45 });
+  });
+
+  it("draws an event without an end as one hour", () => {
+    expect(placeEvent(at(12), null)).toMatchObject({ durationMinutes: 60 });
+  });
+
+  it("keeps a short event at the 30-minute floor", () => {
+    expect(placeEvent(at(12), at(12, 15))).toMatchObject({ durationMinutes: 30 });
+  });
+
+  it("clips at 10 pm", () => {
+    expect(placeEvent(at(21), at(23, 30))).toMatchObject({
+      topMinutes: 15 * 60,
+      durationMinutes: 60,
+    });
+    expect(placeEvent(at(21, 45), null)).toMatchObject({ durationMinutes: 15 });
+  });
+
+  it("sends a start before 6 am or at 10 pm or later to the all-day row", () => {
+    expect(placeEvent(at(0), at(1))).toEqual({ kind: "allDay" });
+    expect(placeEvent(at(5, 59), at(7))).toEqual({ kind: "allDay" });
+    expect(placeEvent(at(22), at(23))).toEqual({ kind: "allDay" });
+    expect(placeEvent(at(23, 30), null)).toEqual({ kind: "allDay" });
+  });
+
+  it("stays inside the grid at the last timed minute", () => {
+    const last = placeEvent(at(21, 59), at(22, 30));
+    expect(last).toMatchObject({ kind: "timed", topMinutes: GRID_MINUTES - 1, durationMinutes: 1 });
+  });
+});
+
+describe("layoutLanes", () => {
+  const span = (startHour: number, hours: number) => ({
+    topMinutes: startHour * 60,
+    durationMinutes: hours * 60,
+  });
+
+  it("gives non-overlapping events the full width", () => {
+    expect(layoutLanes([span(1, 1), span(2, 1), span(4, 2)])).toEqual([
+      { lane: 0, laneCount: 1 },
+      { lane: 0, laneCount: 1 },
+      { lane: 0, laneCount: 1 },
+    ]);
+  });
+
+  it("places two overlapping events side by side", () => {
+    expect(layoutLanes([span(1, 2), span(2, 2)])).toEqual([
+      { lane: 0, laneCount: 2 },
+      { lane: 1, laneCount: 2 },
+    ]);
+  });
+
+  it("shares a cluster's width across a chain of overlaps", () => {
+    // A and B overlap, B and C overlap, A and C do not: C reuses A's lane
+    // but the cluster is still two wide.
+    expect(layoutLanes([span(1, 2), span(2, 2), span(3, 1)])).toEqual([
+      { lane: 0, laneCount: 2 },
+      { lane: 1, laneCount: 2 },
+      { lane: 0, laneCount: 2 },
+    ]);
+  });
+
+  it("widens to three lanes when three events share a time", () => {
+    expect(layoutLanes([span(1, 3), span(1, 1), span(1, 2)])).toEqual([
+      { lane: 0, laneCount: 3 },
+      { lane: 2, laneCount: 3 },
+      { lane: 1, laneCount: 3 },
+    ]);
+  });
+
+  it("keeps separate clusters at their own widths and the input order", () => {
+    expect(layoutLanes([span(5, 1), span(1, 1), span(1, 1)])).toEqual([
+      { lane: 0, laneCount: 1 },
+      { lane: 0, laneCount: 2 },
+      { lane: 1, laneCount: 2 },
+    ]);
+  });
+
+  it("handles an empty column", () => {
+    expect(layoutLanes([])).toEqual([]);
+  });
+});
+
+describe("weekDays", () => {
+  const tuesday = new Date(2026, 8, 29, 15, 42);
+
+  it("starts on Sunday for a Sunday-first locale", () => {
+    const days = weekDays(tuesday, 0);
+    expect(days.map(dayKey)).toEqual([
+      "2026-09-27",
+      "2026-09-28",
+      "2026-09-29",
+      "2026-09-30",
+      "2026-10-01",
+      "2026-10-02",
+      "2026-10-03",
+    ]);
+    expect(days.every((d) => d.getHours() === 0 && d.getMinutes() === 0)).toBe(true);
+  });
+
+  it("starts on Monday for a Monday-first locale", () => {
+    expect(weekDays(tuesday, 1).map(dayKey)).toEqual([
+      "2026-09-28",
+      "2026-09-29",
+      "2026-09-30",
+      "2026-10-01",
+      "2026-10-02",
+      "2026-10-03",
+      "2026-10-04",
+    ]);
+  });
+
+  it("starts on Saturday for a Saturday-first locale", () => {
+    expect(weekDays(tuesday, 6).map(dayKey)[0]).toBe("2026-09-26");
+    expect(weekDays(new Date(2026, 8, 26), 6).map(dayKey)[0]).toBe("2026-09-26");
+  });
+
+  it("keeps the anchor's own day when it is the first day", () => {
+    expect(weekDays(new Date(2026, 8, 27), 0).map(dayKey)[0]).toBe("2026-09-27");
+    expect(weekDays(new Date(2026, 8, 28), 1).map(dayKey)[0]).toBe("2026-09-28");
+  });
+});
+
+describe("localeWeekStart", () => {
+  it("maps Intl week info onto Sunday = 0", () => {
+    expect(localeWeekStart("en-US")).toBe(0);
+    expect(localeWeekStart("en-GB")).toBe(1);
+    expect(localeWeekStart("de-DE")).toBe(1);
+  });
+
+  it("falls back to Sunday for an invalid tag", () => {
+    expect(localeWeekStart("not a locale")).toBe(0);
+    expect(localeWeekStart(undefined)).toBe(0);
+  });
+});
+
+describe("weekTitle", () => {
+  it("names both months when the week crosses one", () => {
+    expect(weekTitle(weekDays(new Date(2026, 8, 29), 0))).toBe("Sep 27 – Oct 3, 2026");
+  });
+
+  it("names the month once inside one month", () => {
+    expect(weekTitle(weekDays(new Date(2026, 9, 7), 0))).toBe("Oct 4 – 10, 2026");
+  });
+
+  it("names both years across a year end", () => {
+    expect(weekTitle(weekDays(new Date(2026, 11, 30), 0))).toBe("Dec 27, 2026 – Jan 2, 2027");
+  });
+});
+
+describe("gridHours", () => {
+  it("runs 6 am through 9 pm with 12-hour labels", () => {
+    const hours = gridHours();
+    expect(hours).toHaveLength(16);
+    expect(hours[0]).toEqual({ hour: 6, label: "6 AM" });
+    expect(hours[6]).toEqual({ hour: 12, label: "12 PM" });
+    expect(hours[15]).toEqual({ hour: 21, label: "9 PM" });
+    expect(formatHour(22)).toBe("10 PM");
+  });
+});
+
+describe("addDays", () => {
+  it("steps across a daylight-saving change by calendar day", () => {
+    const beforeChange = new Date(2026, 10, 1);
+    expect(dayKey(addDays(beforeChange, 7))).toBe("2026-11-08");
+    expect(dayKey(addDays(beforeChange, -7))).toBe("2026-10-25");
+  });
+});

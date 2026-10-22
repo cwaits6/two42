@@ -1,0 +1,146 @@
+// Pure placement math for the Week view. No React, no DOM: every rule here
+// is testable with plain Dates. All day arithmetic uses the local getters so
+// the grid, "today", and the event times agree with the List view, which
+// formats with the browser's own zone.
+
+export const GRID_START_HOUR = 6;
+export const GRID_END_HOUR = 22;
+export const GRID_MINUTES = (GRID_END_HOUR - GRID_START_HOUR) * 60;
+
+/** Height of one grid hour, in pixels. A 30-minute event still fits a 44px target on top of it. */
+export const HOUR_HEIGHT_PX = 64;
+
+const DEFAULT_DURATION_MINUTES = 60;
+/** The shortest block that keeps its time and title legible. */
+const MIN_BLOCK_MINUTES = 30;
+
+export type Placement =
+  | { kind: "timed"; topMinutes: number; durationMinutes: number }
+  | { kind: "allDay" };
+
+/**
+ * Where an event sits in its day column. A start outside 6 am to 10 pm goes
+ * to the all-day row; a timed event is clipped at 10 pm and, without an end,
+ * drawn as one hour.
+ */
+export function placeEvent(start: Date, end: Date | null): Placement {
+  const startMinutes = start.getHours() * 60 + start.getMinutes() - GRID_START_HOUR * 60;
+  if (startMinutes < 0 || startMinutes >= GRID_MINUTES) return { kind: "allDay" };
+
+  const rawDuration = end
+    ? Math.round((end.getTime() - start.getTime()) / 60_000)
+    : DEFAULT_DURATION_MINUTES;
+  const durationMinutes = Math.min(
+    GRID_MINUTES - startMinutes,
+    Math.max(MIN_BLOCK_MINUTES, rawDuration)
+  );
+  return { kind: "timed", topMinutes: startMinutes, durationMinutes };
+}
+
+export type Lane = { lane: number; laneCount: number };
+
+/**
+ * Side-by-side lanes for the timed events of one column, index-aligned with
+ * the input. Events that overlap in time, directly or through a chain of
+ * overlaps, form a cluster and share its width equally; each takes the first
+ * lane free at its start. Sorted by start, then longest first, so the
+ * earliest and longest events keep the leftmost lanes.
+ */
+export function layoutLanes(spans: { topMinutes: number; durationMinutes: number }[]): Lane[] {
+  const order = spans
+    .map((span, index) => ({ ...span, index, end: span.topMinutes + span.durationMinutes }))
+    .sort((a, b) => a.topMinutes - b.topMinutes || b.end - a.end);
+
+  const lanes: Lane[] = spans.map(() => ({ lane: 0, laneCount: 1 }));
+  let cluster: number[] = [];
+  let laneEnds: number[] = [];
+  let clusterEnd = -1;
+
+  const closeCluster = () => {
+    for (const index of cluster) lanes[index].laneCount = laneEnds.length;
+    cluster = [];
+    laneEnds = [];
+  };
+
+  for (const item of order) {
+    if (item.topMinutes >= clusterEnd) closeCluster();
+    let lane = laneEnds.findIndex((end) => end <= item.topMinutes);
+    if (lane === -1) lane = laneEnds.push(0) - 1;
+    laneEnds[lane] = item.end;
+    lanes[item.index].lane = lane;
+    cluster.push(item.index);
+    clusterEnd = Math.max(clusterEnd, item.end);
+  }
+  closeCluster();
+  return lanes;
+}
+
+/** Local calendar date as "YYYY-MM-DD", the key that buckets events into day columns. */
+export function dayKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export function addDays(date: Date, days: number): Date {
+  const next = new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+  return next;
+}
+
+/**
+ * The locale's first day of the week, 0 = Sunday through 6 = Saturday.
+ * Intl's week info is Monday = 1 through Sunday = 7; a runtime without it
+ * (Firefox before 2026) falls back to Sunday.
+ */
+export function localeWeekStart(locale: string | undefined): number {
+  try {
+    const intlLocale = new Intl.Locale(locale ?? "en-US") as Intl.Locale & {
+      getWeekInfo?: () => { firstDay: number };
+      weekInfo?: { firstDay: number };
+    };
+    const info = intlLocale.getWeekInfo?.() ?? intlLocale.weekInfo;
+    if (info && info.firstDay >= 1 && info.firstDay <= 7) return info.firstDay % 7;
+  } catch {
+    // An unparseable locale tag; use the fallback.
+  }
+  return 0;
+}
+
+/** The seven local-midnight dates of the week that contains `anchor`, starting on `firstDay`. */
+export function weekDays(anchor: Date, firstDay: number): Date[] {
+  const offset = (anchor.getDay() - firstDay + 7) % 7;
+  const first = addDays(anchor, -offset);
+  return Array.from({ length: 7 }, (_, i) => addDays(first, i));
+}
+
+const monthShort = (date: Date) => date.toLocaleDateString("en-US", { month: "short" });
+
+/** "Sep 27 – Oct 3, 2026"; the month is repeated only when it changes, the year only across a year end. */
+export function weekTitle(days: Date[]): string {
+  const first = days[0];
+  const last = days[days.length - 1];
+  if (first.getFullYear() !== last.getFullYear()) {
+    return `${monthShort(first)} ${first.getDate()}, ${first.getFullYear()} – ${monthShort(last)} ${last.getDate()}, ${last.getFullYear()}`;
+  }
+  const end = first.getMonth() === last.getMonth()
+    ? `${last.getDate()}`
+    : `${monthShort(last)} ${last.getDate()}`;
+  return `${monthShort(first)} ${first.getDate()} – ${end}, ${last.getFullYear()}`;
+}
+
+/** The grid's hour rows, 6 AM through 9 PM, each labelled at its top line. */
+export function gridHours(): { hour: number; label: string }[] {
+  return Array.from({ length: GRID_END_HOUR - GRID_START_HOUR }, (_, i) => {
+    const hour = GRID_START_HOUR + i;
+    return { hour, label: formatHour(hour) };
+  });
+}
+
+export function formatHour(hour: number): string {
+  return new Date(2000, 0, 1, hour).toLocaleTimeString("en-US", { hour: "numeric" });
+}
+
+export function formatTime(date: Date): string {
+  return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
