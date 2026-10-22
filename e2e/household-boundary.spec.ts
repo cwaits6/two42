@@ -24,9 +24,12 @@ test.describe("a member of one group", () => {
     // The barred id must be a real household someone can open, or the
     // negative assertions below would pass against a stale id.
     const admin = await openAs(browser, baseURL, "admin");
-    await admin.page.goto(`/directory/families?family=${SAMPLETON_HOUSEHOLD}`);
-    await expect(admin.page.getByRole("heading", { name: "Sampleton" })).toBeVisible();
-    await admin.context.close();
+    try {
+      await admin.page.goto(`/directory/families?family=${SAMPLETON_HOUSEHOLD}`);
+      await expect(admin.page.getByRole("heading", { name: "Sampleton" })).toBeVisible();
+    } finally {
+      await admin.context.close();
+    }
 
     await page.goto(`/directory/families?family=${DUMMYFIELD_HOUSEHOLD}`);
     await expect(page.getByRole("heading", { name: "Dummyfield" })).toBeVisible();

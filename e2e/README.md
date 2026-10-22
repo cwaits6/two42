@@ -21,7 +21,12 @@ In CI the `e2e` job in `.github/workflows/test.yml` stands up an ephemeral
 stack with `npx supabase start` (the pinned CLI, never the remote project)
 and is the only sanctioned way to run the suite there. It runs when a change
 touches `app/`, `components/`, `lib/`, `supabase/migrations/`,
-`supabase/seed.sql`, `e2e/`, or `playwright.config.ts`.
+`supabase/seed.sql`, `e2e/`, `playwright.config.ts`, `package.json`,
+`package-lock.json`, `next.config.ts`, `proxy.ts`, `instrumentation.ts`,
+`supabase/config.toml`, or the workflow file itself.
+
+On a shared local stack the specs assume the seed default for
+`directory_visibility`, and the toggle spec normalises the org to it.
 
 ## Personas
 
@@ -48,7 +53,7 @@ not covered here.
 | Spec                                 | Boundary                                                                                   |
 | ------------------------------------ | ------------------------------------------------------------------------------------------ |
 | `directory-scope.spec.ts`            | Scope control absent for a one-group member; options, roster, tab carry-over, search       |
-| `directory-visibility-toggle.spec.ts`| The org-wide switch adds and removes "Everyone in …"; outsiders marked; restored in afterAll |
+| `directory-visibility-toggle.spec.ts`| The org-wide switch adds and removes "Everyone in …"; outsiders marked; left off in afterAll   |
 | `household-boundary.spec.ts`         | Only households sharing a group are listed; a deep link to another's opens nothing         |
 | `group-frame.spec.ts`                | Switcher lists own groups only; a foreign `/g/<id>/…` is a 404; content stays in its group |
 | `anonymous.spec.ts`                  | `/directory` and `/g/<id>/directory` redirect to `/login`                                  |
@@ -75,4 +80,9 @@ do not belong here. Before writing one:
 The job is not in the "Protect main" ruleset. Add it only after ten
 consecutive green runs on `main`, so a flaky selector cannot block an
 unrelated merge. If it turns flaky after that, it is removed, not retried
-into submission.
+into submission. A run where the path gate skipped the job still reports
+green, so count only runs whose step summary says "Playwright boundaries: ran"
+toward the ten. `supabase start` in the job pulls six images from a public
+registry and has already hit a transient "Data limit exceeded" that the CLI
+retried through, so diagnose a future flake as registry quota before suspecting
+a selector.

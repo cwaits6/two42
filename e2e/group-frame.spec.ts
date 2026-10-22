@@ -14,6 +14,9 @@ test.describe("the org admin, in Group A and Group B", () => {
   });
 
   test("a group the admin is not in is a 404, not a 403", async ({ page }) => {
+    // Control: a group the admin belongs to resolves, so the 404s below are
+    // specific to Group C rather than every /g/* route failing.
+    expect((await page.goto(`/g/${GROUP_B}/dashboard`))?.status()).toBe(200);
     for (const route of ["/dashboard", "/directory", "/calendar", "/announcements"]) {
       const response = await page.goto(`/g/${GROUP_C}${route}`);
       expect(response?.status(), route).toBe(404);

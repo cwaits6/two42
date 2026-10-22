@@ -21,20 +21,26 @@ function isFresh(file: string): boolean {
 async function signIn(browser: Browser, baseURL: string, key: PersonaKey, file: string) {
   const persona = PERSONAS[key];
   const context = await browser.newContext({ baseURL });
-  const page = await context.newPage();
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(persona.email);
-  await page.getByLabel("Password").fill(PASSWORD);
-  await page.locator("form").getByRole("button", { name: "Sign In" }).click();
-  await page.waitForURL((url) => url.pathname !== "/login");
-  mkdirSync(STATE_DIR, { recursive: true });
-  await context.storageState({ path: file });
-  await context.close();
+  try {
+    const page = await context.newPage();
+    await page.goto("/login");
+    await page.getByLabel("Email").fill(persona.email);
+    await page.getByLabel("Password").fill(PASSWORD);
+    await page.locator("form").getByRole("button", { name: "Sign In" }).click();
+    await page.waitForURL((url) => url.pathname !== "/login");
+    mkdirSync(STATE_DIR, { recursive: true });
+    await context.storageState({ path: file });
+  } finally {
+    await context.close();
+  }
 }
 
 /** The storage-state file for a persona, signing in through /login when the cache is cold or stale. */
 export async function storageStateFor(browser: Browser, baseURL: string, key: PersonaKey) {
-  const file = path.join(STATE_DIR, `${key}.json`);
+  // The origin is part of the key so a state captured for one server is never
+  // reused against another within the freshness window.
+  const origin = new URL(baseURL).origin.replace(/[^a-zA-Z0-9]+/g, "_");
+  const file = path.join(STATE_DIR, `${key}-${origin}.json`);
   if (!isFresh(file)) await signIn(browser, baseURL, key, file);
   return file;
 }

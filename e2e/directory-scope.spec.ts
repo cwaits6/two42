@@ -3,7 +3,8 @@ import { expect, test } from "./fixtures/auth";
 import { GROUP_B } from "./fixtures/personas";
 
 // Assumes the org is at its seeded directory_visibility of shared_groups;
-// the visibility-toggle spec restores that even when it fails.
+// the visibility-toggle spec forces it to that seed default before and after
+// its own tests, even when they fail.
 
 const scopeControl = (page: Page) =>
   page.getByRole("combobox", { name: "Show people from" });

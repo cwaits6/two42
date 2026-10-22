@@ -103,13 +103,16 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
+          set -o pipefail
           git fetch --no-tags --depth=1 origin "$BASE"
-          if git diff --name-only "$BASE" HEAD \
-            | grep -Eq '^(app|components|lib|e2e)/|^supabase/migrations/|^supabase/seed\.sql$|^playwright\.config\.ts$'; then
+          changed=$(git diff --name-only "$BASE" HEAD)
+          if grep -Eq '^(app|components|lib|e2e)/|^supabase/migrations/|^supabase/seed\.sql$|^supabase/config\.toml$|^playwright\.config\.ts$|^package\.json$|^package-lock\.json$|^next\.config\.ts$|^proxy\.ts$|^instrumentation\.ts$|^\.github/workflows/test\.yml$' <<< "$changed"; then
             echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "Playwright boundaries: ran" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
-            echo "Nothing the suite covers changed; skipping."
+            echo "Playwright boundaries: skipped — no gated paths changed" >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice::Playwright boundaries skipped (no gated paths changed)"
           fi
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0

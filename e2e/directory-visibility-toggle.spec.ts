@@ -34,8 +34,12 @@ test.beforeAll(async ({ browser }) => {
 });
 
 test.afterAll(async () => {
-  await setOrgWide(admin.page, false);
-  await admin.context.close();
+  if (!admin) return;
+  try {
+    await setOrgWide(admin.page, false);
+  } finally {
+    await admin.context.close();
+  }
 });
 
 test.describe("a member of one group", () => {
