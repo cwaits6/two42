@@ -28,6 +28,14 @@ const supabaseOrigin = (() => {
   }
 })();
 
+// connect-src must name the configured origin too: the *.supabase.co
+// wildcard never matches a local stack (http://127.0.0.1:54321), which a
+// production build runs against in the e2e job. In production it repeats
+// the wildcard harmlessly.
+const supabaseConnectSources = supabaseOrigin
+  ? ` ${supabaseOrigin} ${supabaseOrigin.replace(/^http/, "ws")}`
+  : "";
+
 export async function updateSession(request: NextRequest) {
   const rawHost =
     request.headers.get("host") ?? request.headers.get("x-forwarded-host") ?? "";
@@ -51,7 +59,7 @@ export async function updateSession(request: NextRequest) {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     `img-src 'self' data: blob: https://maps.gstatic.com https://maps.googleapis.com${supabaseOrigin ? ` ${supabaseOrigin}` : ""}${isDev ? " http://127.0.0.1:* http://localhost:*" : ""}`,
     "font-src 'self' https://fonts.gstatic.com",
-    `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://vitals.vercel-insights.com https://maps.googleapis.com https://places.googleapis.com https://maps.gstatic.com blob:${isDev ? " http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*" : ""}`,
+    `connect-src 'self' https://*.supabase.co wss://*.supabase.co${supabaseConnectSources} https://vitals.vercel-insights.com https://maps.googleapis.com https://places.googleapis.com https://maps.gstatic.com blob:${isDev ? " http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*" : ""}`,
     "frame-src 'self' https://www.google.com",
     "frame-ancestors 'none'",
     "object-src 'none'",
