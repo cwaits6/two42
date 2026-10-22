@@ -42,6 +42,53 @@ export function placeEvent(start: Date, end: Date | null): Placement {
   return { kind: "timed", topMinutes: top, durationMinutes };
 }
 
+export type Segment = {
+  start: Date;
+  end: Date | null;
+  /** The event began on an earlier day, so this part starts at local midnight. */
+  continuesBefore: boolean;
+  /** The event runs on past this day's end. */
+  continuesAfter: boolean;
+};
+
+/**
+ * The part of an event that falls on the local calendar day `day`, or null
+ * when none does. An event without an end, or whose end is not after its
+ * start, belongs to its start day only; an end exactly at midnight does not
+ * reach into the next day. Multi-day events are drawn once per day they touch.
+ */
+export function segmentOn(start: Date, end: Date | null, day: Date): Segment | null {
+  const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+  const dayEnd = addDays(dayStart, 1);
+  if (!end || end.getTime() <= start.getTime()) {
+    if (dayKey(start) !== dayKey(dayStart)) return null;
+    return { start, end, continuesBefore: false, continuesAfter: false };
+  }
+  if (start.getTime() >= dayEnd.getTime() || end.getTime() <= dayStart.getTime()) return null;
+  const continuesBefore = start.getTime() < dayStart.getTime();
+  const continuesAfter = end.getTime() > dayEnd.getTime();
+  return {
+    start: continuesBefore ? dayStart : start,
+    end: continuesAfter ? dayEnd : end,
+    continuesBefore,
+    continuesAfter,
+  };
+}
+
+/**
+ * Where a day's segment sits in its column. A segment that starts on this
+ * day follows `placeEvent`. A continuation from an earlier day is drawn from
+ * 6 am to its end; when it ends before the grid opens, or covers the whole
+ * grid, it goes to the all-day row instead of a full-height block.
+ */
+export function placeSegment(segment: Segment): Placement {
+  if (!segment.continuesBefore || !segment.end) return placeEvent(segment.start, segment.end);
+  const endMinutes =
+    Math.round((segment.end.getTime() - segment.start.getTime()) / 60_000) - GRID_START_HOUR * 60;
+  if (endMinutes <= 0 || endMinutes >= GRID_MINUTES) return { kind: "allDay" };
+  return { kind: "timed", topMinutes: 0, durationMinutes: Math.max(MIN_BLOCK_MINUTES, endMinutes) };
+}
+
 export type Lane = { lane: number; laneCount: number };
 
 /**
@@ -149,4 +196,15 @@ export function formatHour(hour: number): string {
 
 export function formatTime(date: Date): string {
   return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+/** "Fri 7:00 PM": the day is needed when a range crosses midnight. */
+export function formatDayTime(date: Date): string {
+  return `${date.toLocaleDateString("en-US", { weekday: "short" })} ${formatTime(date)}`;
+}
+
+/** True when the event's last moment falls on a later local day than its start. */
+export function spansDays(start: Date, end: Date | null): boolean {
+  if (!end || end.getTime() <= start.getTime()) return false;
+  return dayKey(new Date(end.getTime() - 1)) !== dayKey(start);
 }

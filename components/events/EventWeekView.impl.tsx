@@ -13,11 +13,14 @@ import {
   MIN_BLOCK_PX,
   addDays,
   dayKey,
+  formatDayTime,
   formatTime,
   gridHours,
   layoutLanes,
   localeWeekStart,
-  placeEvent,
+  placeSegment,
+  segmentOn,
+  spansDays,
   weekDays,
   weekTitle,
   type Lane,
@@ -160,33 +163,40 @@ export default function EventWeekView({ groups, events, visibleGroupIds }: Event
 
 function buildColumns(days: Date[], groups: CalendarGroup[], occurrences: Event[]): DayColumn[] {
   const byId = new Map(groups.map((g) => [g.id, g]));
-  const columns = new Map<string, DayColumn>(
-    days.map((date) => [dayKey(date), { date, key: dayKey(date), allDay: [], timed: [] }])
-  );
+  const columns: DayColumn[] = days.map((date) => ({ date, key: dayKey(date), allDay: [], timed: [] }));
   for (const event of occurrences) {
     const start = new Date(event.start_time);
-    const column = columns.get(dayKey(start));
-    if (!column) continue;
+    const end = event.end_time ? new Date(event.end_time) : null;
     const group = byId.get(event.group_id);
     const style = blockStyle(group?.color ?? "var(--color-brand-primary)");
-    const time = formatTime(start);
-    const block: Block = {
-      key: `${event.id}-${event.start_time}`,
-      href: eventDetailHref(event),
-      title: event.title,
-      time,
-      tooltip: `${time} · ${event.title}${group ? ` · ${group.name}` : ""}`,
-      style,
-    };
-    const placement = placeEvent(start, event.end_time ? new Date(event.end_time) : null);
-    if (placement.kind === "allDay") {
-      column.allDay.push(block);
-    } else {
-      column.timed.push({ ...block, ...placement, lane: { lane: 0, laneCount: 1 } });
+    const when =
+      end && spansDays(start, end) ? `${formatDayTime(start)} – ${formatDayTime(end)}` : formatTime(start);
+    const tooltip = `${when} · ${event.title}${group ? ` · ${group.name}` : ""}`;
+    const href = eventDetailHref(event);
+
+    // A multi-day event is drawn once in every column it touches.
+    for (const column of columns) {
+      const segment = segmentOn(start, end, column.date);
+      if (!segment) continue;
+      const block: Block = {
+        key: `${event.id}-${event.start_time}-${column.key}`,
+        href,
+        title: event.title,
+        time:
+          segment.continuesBefore && segment.end ? `Until ${formatTime(segment.end)}` : formatTime(start),
+        tooltip,
+        style,
+      };
+      const placement = placeSegment(segment);
+      if (placement.kind === "allDay") {
+        column.allDay.push(block);
+      } else {
+        column.timed.push({ ...block, ...placement, lane: { lane: 0, laneCount: 1 } });
+      }
     }
   }
 
-  for (const column of columns.values()) {
+  for (const column of columns) {
     // Source order is Tab and screen-reader order, so it follows the visual column.
     const sorted = [...column.timed].sort(
       (a, b) => a.topMinutes - b.topMinutes || b.durationMinutes - a.durationMinutes
@@ -194,7 +204,7 @@ function buildColumns(days: Date[], groups: CalendarGroup[], occurrences: Event[
     const lanes = layoutLanes(sorted);
     column.timed = sorted.map((block, i) => ({ ...block, lane: lanes[i] }));
   }
-  return [...columns.values()];
+  return columns;
 }
 
 const HOURS = gridHours();

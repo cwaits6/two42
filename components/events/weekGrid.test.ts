@@ -5,11 +5,15 @@ import {
   MIN_BLOCK_PX,
   addDays,
   dayKey,
+  formatDayTime,
   formatHour,
   gridHours,
   layoutLanes,
   localeWeekStart,
   placeEvent,
+  placeSegment,
+  segmentOn,
+  spansDays,
   weekDays,
   weekTitle,
 } from "./weekGrid";
@@ -81,6 +85,125 @@ describe("placeEvent", () => {
   it("does not move a start that already fits", () => {
     expect(placeEvent(at(21, 18), null)).toMatchObject({ topMinutes: 918, durationMinutes: 42 });
     expect(placeEvent(at(21, 17), null)).toMatchObject({ topMinutes: 917, durationMinutes: 43 });
+  });
+});
+
+describe("segmentOn", () => {
+  const day = (date: number) => new Date(2026, 8, date);
+  const on = (date: number, hour: number, minute = 0) => new Date(2026, 8, date, hour, minute);
+
+  it("keeps a same-day event whole, on its own day only", () => {
+    expect(segmentOn(at(19), at(20, 30), day(29))).toEqual({
+      start: at(19),
+      end: at(20, 30),
+      continuesBefore: false,
+      continuesAfter: false,
+    });
+    expect(segmentOn(at(19), at(20, 30), day(30))).toBeNull();
+    expect(segmentOn(at(19), null, day(29))).toMatchObject({ end: null, continuesAfter: false });
+    expect(segmentOn(at(19), null, day(30))).toBeNull();
+  });
+
+  it("belongs to the start day alone when the end is not after the start", () => {
+    expect(segmentOn(at(12), at(11), day(29))).toMatchObject({ end: at(11), continuesAfter: false });
+    expect(segmentOn(at(12), at(11), day(28))).toBeNull();
+  });
+
+  it("splits an overnight event at local midnight", () => {
+    const start = on(29, 19);
+    const end = on(30, 1);
+    expect(segmentOn(start, end, day(29))).toEqual({
+      start,
+      end: day(30),
+      continuesBefore: false,
+      continuesAfter: true,
+    });
+    expect(segmentOn(start, end, day(30))).toEqual({
+      start: day(30),
+      end,
+      continuesBefore: true,
+      continuesAfter: false,
+    });
+    expect(segmentOn(start, end, day(28))).toBeNull();
+    expect(segmentOn(start, end, new Date(2026, 9, 1))).toBeNull();
+  });
+
+  it("gives a three-day event a full middle day", () => {
+    const start = on(27, 10);
+    const end = on(29, 14);
+    expect(segmentOn(start, end, day(28))).toEqual({
+      start: day(28),
+      end: day(29),
+      continuesBefore: true,
+      continuesAfter: true,
+    });
+    expect(segmentOn(start, end, day(29))).toMatchObject({ start: day(29), end, continuesBefore: true });
+  });
+
+  it("does not reach into the next day when the end is exactly midnight", () => {
+    expect(segmentOn(on(29, 19), day(30), day(29))).toMatchObject({ continuesAfter: false });
+    expect(segmentOn(on(29, 19), day(30), day(30))).toBeNull();
+  });
+
+  it("ignores the day argument's time of day", () => {
+    expect(segmentOn(at(19), at(20), new Date(2026, 8, 29, 23, 59))).not.toBeNull();
+  });
+});
+
+describe("placeSegment", () => {
+  const segment = (start: Date, end: Date | null, continuesBefore: boolean, continuesAfter: boolean) => ({
+    start,
+    end,
+    continuesBefore,
+    continuesAfter,
+  });
+  const midnight = new Date(2026, 8, 29);
+
+  it("places a segment that starts today like the event itself", () => {
+    expect(placeSegment(segment(at(19), at(20, 30), false, false))).toEqual(placeEvent(at(19), at(20, 30)));
+    expect(placeSegment(segment(at(19), new Date(2026, 8, 30), false, true))).toEqual({
+      kind: "timed",
+      topMinutes: 13 * 60,
+      durationMinutes: 3 * 60,
+    });
+  });
+
+  it("draws a continuation from 6 am to its end", () => {
+    expect(placeSegment(segment(midnight, at(14), true, false))).toEqual({
+      kind: "timed",
+      topMinutes: 0,
+      durationMinutes: 8 * 60,
+    });
+    expect(placeSegment(segment(midnight, at(6, 10), true, false))).toMatchObject({
+      topMinutes: 0,
+      durationMinutes: 42,
+    });
+  });
+
+  it("sends a continuation that ends before 6 am to the all-day row", () => {
+    expect(placeSegment(segment(midnight, at(1), true, false))).toEqual({ kind: "allDay" });
+    expect(placeSegment(segment(midnight, at(6), true, false))).toEqual({ kind: "allDay" });
+  });
+
+  it("sends a continuation that covers the whole grid to the all-day row", () => {
+    expect(placeSegment(segment(midnight, at(22), true, false))).toEqual({ kind: "allDay" });
+    expect(placeSegment(segment(midnight, new Date(2026, 8, 30), true, true))).toEqual({ kind: "allDay" });
+  });
+});
+
+describe("spansDays", () => {
+  it("is true only when the event's last moment is on a later day", () => {
+    expect(spansDays(at(19), at(20))).toBe(false);
+    expect(spansDays(at(19), null)).toBe(false);
+    expect(spansDays(at(19), new Date(2026, 8, 30, 1))).toBe(true);
+    expect(spansDays(at(19), new Date(2026, 8, 30))).toBe(false);
+    expect(spansDays(at(12), at(11))).toBe(false);
+  });
+});
+
+describe("formatDayTime", () => {
+  it("names the weekday with the time", () => {
+    expect(formatDayTime(at(19))).toBe("Tue 7:00 PM");
   });
 });
 
