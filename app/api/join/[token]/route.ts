@@ -12,7 +12,10 @@ import { createServiceClient } from "@/lib/supabase/server";
 
 const SIGNUP_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-const INVALID = NextResponse.json({ error: INVITE_INVALID_TEXT }, { status: 404 });
+// A Response body can be sent once, so the dead-link reply is built per request.
+function invalid() {
+  return NextResponse.json({ error: INVITE_INVALID_TEXT }, { status: 404 });
+}
 const CANNOT_SIGN_UP = {
   error: "We can't set up an account for that email address. If you already have an account, sign in and open this link again.",
 };
@@ -28,7 +31,7 @@ type RedeemedRow = Database["public"]["Functions"]["group_invite_redeem"]["Retur
  */
 export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  if (!isUuid(token)) return INVALID;
+  if (!isUuid(token)) return invalid();
 
   let body: { name?: unknown; email?: unknown };
   try {
@@ -58,7 +61,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   if (error) {
     switch (error.code) {
       case "GI001":
-        return INVALID;
+        return invalid();
       case "GI002":
         return NextResponse.json({ error: "Enter your name and a valid email address." }, { status: 400 });
       case "GI003":
