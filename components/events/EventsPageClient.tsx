@@ -1,11 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useReducer, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Rss, ChevronDown, Plus } from "lucide-react";
 import { EventCalendarView } from "@/components/events/EventCalendarView";
 import { EventListView } from "@/components/events/EventListView";
+import { EventWeekView } from "@/components/events/EventWeekView";
+import {
+  CALENDAR_VIEWS,
+  calendarViewReducer,
+  initialCalendarViewState,
+  type CalendarView,
+} from "@/components/events/calendarViewState";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { groupPath } from "@/lib/groups/active";
 import { expandUpcomingEvents } from "@/lib/recurrence";
@@ -19,8 +26,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import type { Event, Rsvp } from "@/lib/types";
-
-type View = "calendar" | "list";
 
 export type CalendarGroup = {
   id: string;
@@ -42,7 +47,12 @@ interface EventsPageClientProps {
 
 export function EventsPageClient({ groups, allEvents, userRsvps, userId }: EventsPageClientProps) {
   const router = useRouter();
-  const [view, setView] = useState<View>("calendar");
+  const [{ view, visibleGroupIds }, dispatch] = useReducer(
+    calendarViewReducer,
+    groups.map((g) => g.id),
+    initialCalendarViewState
+  );
+  const setView = (next: CalendarView) => dispatch({ type: "setView", view: next });
 
   // webcal:// feed links need an absolute host, but this component still SSRs,
   // where `window` is undefined. Resolve the host on the client after mount.
@@ -78,17 +88,8 @@ export function EventsPageClient({ groups, allEvents, userRsvps, userId }: Event
     }`;
   }
 
-  const [visibleGroupIds, setVisibleGroupIds] = useState<Set<string>>(
-    () => new Set(groups.map((g) => g.id))
-  );
-  const toggleGroup = (id: string) =>
-    setVisibleGroupIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  const showAll = () => setVisibleGroupIds(new Set(groups.map((g) => g.id)));
+  const toggleGroup = (id: string) => dispatch({ type: "toggleGroup", id });
+  const showAll = () => dispatch({ type: "showAll" });
   const anyHidden = visibleGroupIds.size < groups.length;
 
   // For the list view, expand recurring events from the ±1-year window and
@@ -107,6 +108,18 @@ export function EventsPageClient({ groups, allEvents, userRsvps, userId }: Event
     ledVisible.length === 1
       ? (date: string) => router.push(newEventHref(ledVisible[0].id, date))
       : undefined;
+
+  // Arrow keys move the checked view and its focus, the radiogroup contract.
+  const onViewKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    const index = CALENDAR_VIEWS.findIndex((v) => v.value === view);
+    const next = CALENDAR_VIEWS[(index + step + CALENDAR_VIEWS.length) % CALENDAR_VIEWS.length];
+    setView(next.value);
+    const radios = e.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]');
+    radios[CALENDAR_VIEWS.indexOf(next)]?.focus();
+  };
 
   return (
     <div>
@@ -148,29 +161,32 @@ export function EventsPageClient({ groups, allEvents, userRsvps, userId }: Event
       />
 
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="inline-flex w-fit items-center rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
-          <Button
-            onClick={() => setView("calendar")}
-            variant="ghost"
-            className={`h-12 rounded-lg px-5 text-base font-semibold ${
-              view === "calendar"
-                ? "bg-brand-primary text-white shadow-sm hover:bg-brand-primary/90 hover:text-white"
-                : "text-slate-600 hover:bg-slate-50 hover:text-brand-primary"
-            }`}
-          >
-            Calendar
-          </Button>
-          <Button
-            onClick={() => setView("list")}
-            variant="ghost"
-            className={`h-12 rounded-lg px-5 text-base font-semibold ${
-              view === "list"
-                ? "bg-brand-primary text-white shadow-sm hover:bg-brand-primary/90 hover:text-white"
-                : "text-slate-600 hover:bg-slate-50 hover:text-brand-primary"
-            }`}
-          >
-            List
-          </Button>
+        <div
+          role="radiogroup"
+          aria-label="View"
+          onKeyDown={onViewKeyDown}
+          className="inline-flex w-fit items-center rounded-xl border border-slate-200 bg-white p-1 shadow-sm"
+        >
+          {CALENDAR_VIEWS.map((option) => {
+            const checked = view === option.value;
+            return (
+              <Button
+                key={option.value}
+                role="radio"
+                aria-checked={checked}
+                tabIndex={checked ? 0 : -1}
+                onClick={() => setView(option.value)}
+                variant="ghost"
+                className={`h-12 rounded-lg px-5 text-base font-semibold ${
+                  checked
+                    ? "bg-brand-primary text-white shadow-sm hover:bg-brand-primary/90 hover:text-white"
+                    : "text-slate-600 hover:bg-slate-50 hover:text-brand-primary"
+                }`}
+              >
+                {option.label}
+              </Button>
+            );
+          })}
         </div>
 
         {ledVisible.length === 1 && (
@@ -214,14 +230,18 @@ export function EventsPageClient({ groups, allEvents, userRsvps, userId }: Event
         )}
       </div>
 
-      {view === "calendar" ? (
+      {view === "month" && (
         <EventCalendarView
           groups={groups}
           events={allEvents}
           visibleGroupIds={visibleGroupIds}
           onDateClick={onDateClick}
         />
-      ) : (
+      )}
+      {view === "week" && (
+        <EventWeekView groups={groups} events={allEvents} visibleGroupIds={visibleGroupIds} />
+      )}
+      {view === "list" && (
         <EventListView
           groups={groups}
           events={upcomingVisible}

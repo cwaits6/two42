@@ -1,24 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
-import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
-import type { DatesSetArg, EventClickArg, EventInput } from "@fullcalendar/core";
+import type { EventClickArg, EventInput } from "@fullcalendar/core";
 import type { DateClickArg } from "@fullcalendar/interaction";
-import { groupPath } from "@/lib/groups/active";
 import { groupTextColor } from "@/lib/groups/settings";
-import { buildExceptionMap, expandOccurrences } from "@/lib/recurrence";
 import type { CalendarGroup } from "@/components/events/EventsPageClient";
+import { eventDetailHref, expandVisibleEvents } from "@/components/events/visibleEvents";
 import type { Event } from "@/lib/types";
 
 interface EventCalendarViewProps {
   groups: CalendarGroup[];
   events: Event[];
-  visibleGroupIds: Set<string>;
+  visibleGroupIds: ReadonlySet<string>;
   /** A day click creates an event when the viewer leads exactly one visible group. */
   onDateClick?: (date: string) => void;
 }
@@ -31,28 +29,11 @@ export default function EventCalendarView({
 }: EventCalendarViewProps) {
   const router = useRouter();
   const calendarRef = useRef<FullCalendar>(null);
-  const [currentView, setCurrentView] = useState("dayGridMonth");
 
   const colors = useMemo(() => new Map(groups.map((g) => [g.id, g.color])), [groups]);
 
   const filteredEvents: EventInput[] = useMemo(() => {
-    // Build the exception map from every event before filtering, so an
-    // exception row of a hidden group still suppresses its series occurrence.
-    const exceptions = buildExceptionMap(events);
-
-    const expanded: Event[] = [];
-    for (const e of events) {
-      if (!visibleGroupIds.has(e.group_id)) continue;
-      if (e.series_id) {
-        expanded.push(e);
-      } else if (e.recurrence_frequency) {
-        expanded.push(...expandOccurrences(e, exceptions.get(e.id)));
-      } else {
-        expanded.push(e);
-      }
-    }
-
-    return expanded.map((e) => {
+    return expandVisibleEvents(events, visibleGroupIds).map((e) => {
       const color = colors.get(e.group_id) ?? "var(--color-brand-primary)";
       return {
         id: e.id,
@@ -68,36 +49,13 @@ export default function EventCalendarView({
   }, [events, visibleGroupIds, colors]);
 
   const handleEventClick = (info: EventClickArg) => {
-    const event = info.event.extendedProps.event as Event;
-    // A recurring occurrence carries its date so the detail and edit pages
-    // know which one is meant.
-    const occurrence =
-      event.recurrence_frequency && !event.series_id
-        ? `?occurrence=${encodeURIComponent(event.start_time)}`
-        : "";
-    router.push(groupPath(event.group_id, `/calendar/${event.id}${occurrence}`));
+    router.push(eventDetailHref(info.event.extendedProps.event as Event));
   };
 
   const handleDateClick = (info: DateClickArg) => {
     if (!onDateClick) return;
     onDateClick(info.dateStr.split("T")[0]);
   };
-
-  const handleDatesSet = (arg: DatesSetArg) => {
-    setCurrentView(arg.view.type);
-  };
-
-  useEffect(() => {
-    if (currentView !== "timeGridWeek") return;
-
-    const timeoutId = window.setTimeout(() => {
-      calendarRef.current?.getApi().scrollToTime("08:00:00");
-    }, 0);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [currentView]);
-
-  const navUnit = currentView === "timeGridWeek" ? "week" : "month";
 
   return (
     <div className="bg-white rounded-[2rem] border-2 border-border overflow-hidden p-5 shadow-sm [&_.fc-event]:cursor-pointer">
@@ -106,14 +64,14 @@ export default function EventCalendarView({
           <button
             onClick={() => calendarRef.current?.getApi().prev()}
             className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition-colors hover:border-brand-primary/30 hover:text-brand-primary"
-            aria-label={`Previous ${navUnit}`}
+            aria-label="Previous month"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
           <button
             onClick={() => calendarRef.current?.getApi().next()}
             className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition-colors hover:border-brand-primary/30 hover:text-brand-primary"
-            aria-label={`Next ${navUnit}`}
+            aria-label="Next month"
           >
             <ChevronRight className="h-5 w-5" />
           </button>
@@ -121,32 +79,16 @@ export default function EventCalendarView({
 
         <FullCalendar
           ref={calendarRef}
-          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+          plugins={[dayGridPlugin, interactionPlugin]}
           initialView="dayGridMonth"
-          headerToolbar={{
-            left: "today",
-            center: "title",
-            right: "dayGridMonth,timeGridWeek",
-          }}
+          headerToolbar={{ left: "today", center: "title", right: "" }}
           timeZone="America/New_York"
           events={filteredEvents}
           eventClick={handleEventClick}
           dateClick={handleDateClick}
-          datesSet={handleDatesSet}
           selectable={!!onDateClick}
-          height={currentView === "timeGridWeek" ? 760 : "auto"}
-          scrollTime="08:00:00"
-          buttonText={{
-            today: "Today",
-            month: "Month",
-            week: "Week",
-          }}
-          views={{
-            timeGridWeek: {
-              slotMinTime: "00:00:00",
-              slotMaxTime: "24:00:00",
-            },
-          }}
+          height="auto"
+          buttonText={{ today: "Today" }}
         />
       </div>
     </div>
