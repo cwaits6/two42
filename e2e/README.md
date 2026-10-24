@@ -26,8 +26,9 @@ touches `app/`, `components/`, `lib/`, `supabase/migrations/`,
 `supabase/config.toml`, or the workflow file itself.
 
 On a shared local stack the specs assume the seed defaults for
-`directory_visibility` and `group_creation_policy` (`approval`); the two
-specs that change those settings normalise the org back to them.
+`directory_visibility`, `group_creation_policy` (`approval`) and
+`group_discovery` (on), and that no group is private; the three specs that
+change those settings normalise them back in `beforeAll` and `afterAll`.
 
 ## Personas
 
@@ -42,6 +43,7 @@ persona looks signed out.
 | `admin`     | admin@local.dev                   | leads A, member B |
 | `oneGroup`  | isaac.seedly@example.test         | B                 |
 | `twoGroups` | leo.loremsworth@example.test      | B, C              |
+| `leadsC`    | amelia.demoski@example.test       | leads C           |
 
 Group B and Group C are addressed by the fixed ids the seed inserts
 (`fixtures/personas.ts`). Group A is the migration-created group and has no
@@ -59,6 +61,7 @@ not covered here.
 | `group-frame.spec.ts`                | Switcher lists own groups only; a foreign `/g/<id>/…` is a 404; content stays in its group |
 | `anonymous.spec.ts`                  | `/directory` and `/g/<id>/directory` redirect to `/login`                                  |
 | `group-creation-policy.spec.ts`      | The org's create policy decides whether a member sees "Request a group", "Create a group" or neither; restored to approval in afterAll |
+| `group-discovery.spec.ts`            | A private group is listed for its members and tagged for the org admin but absent for everyone else, and its deep link stays a 404; the org switch removes Find a group and every other group; both restored in afterAll |
 
 ## Adding a spec
 

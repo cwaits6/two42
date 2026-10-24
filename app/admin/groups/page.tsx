@@ -5,7 +5,9 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { AdminCreateGroupButton } from "@/components/admin/AdminCreateGroupButton";
 import { OrgGroupControls } from "@/components/admin/OrgGroupControls";
 import { PendingGroupRequests } from "@/components/admin/PendingGroupRequests";
+import { GroupDiscoverySettings } from "@/components/groups/GroupDiscoverySettings";
 import { getGroupCreationPolicy } from "@/lib/groups/creationPolicy";
+import { getDiscoveryOn } from "@/lib/groups/discovery";
 import { PENDING_GROUP_REQUEST_SELECT, toPendingGroupRequest } from "@/lib/groups/requests";
 import { siteConfig } from "@/lib/config";
 
@@ -26,19 +28,24 @@ export default async function AdminGroupsPage() {
   if (profile?.role !== "admin") redirect("/dashboard");
 
   // The admin arms of the three SELECT policies return the whole org.
-  const [policy, { data: requests, error: requestsError }, { data: groups, error: groupsError }] =
-    await Promise.all([
-      getGroupCreationPolicy(),
-      supabase
-        .from("group_requests")
-        .select(PENDING_GROUP_REQUEST_SELECT)
-        .eq("status", "pending")
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("groups")
-        .select("id, name, description, group_members(count)")
-        .order("name", { ascending: true }),
-    ]);
+  const [
+    policy,
+    discoveryOn,
+    { data: requests, error: requestsError },
+    { data: groups, error: groupsError },
+  ] = await Promise.all([
+    getGroupCreationPolicy(),
+    getDiscoveryOn(),
+    supabase
+      .from("group_requests")
+      .select(PENDING_GROUP_REQUEST_SELECT)
+      .eq("status", "pending")
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("groups")
+      .select("id, name, description, group_members(count)")
+      .order("name", { ascending: true }),
+  ]);
   if (requestsError) console.error("Failed to load group requests:", requestsError);
   if (groupsError) console.error("Failed to load groups:", groupsError);
 
@@ -56,7 +63,10 @@ export default async function AdminGroupsPage() {
 
       <section className="mb-10">
         <h2 className="mb-4 text-2xl font-bold text-brand-primary">Group settings</h2>
-        <OrgGroupControls orgId={profile.org_id} policy={policy} />
+        <div className="space-y-4">
+          <GroupDiscoverySettings orgId={profile.org_id} discoveryOn={discoveryOn} />
+          <OrgGroupControls orgId={profile.org_id} policy={policy} />
+        </div>
       </section>
 
       <section className="mb-10">

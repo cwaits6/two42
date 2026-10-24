@@ -19,6 +19,11 @@ const TILES: { href: string; label: string; description: string }[] = [
     description: "The summary, leadership, group color and weekly calls.",
   },
   {
+    href: "/settings/privacy",
+    label: "Privacy and joining",
+    description: "Who can find this group and how people join it.",
+  },
+  {
     href: "/settings/announcements",
     label: "Announcements",
     description: "Drafts, scheduled and published announcements.",
