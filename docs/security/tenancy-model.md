@@ -436,6 +436,68 @@ members). The first member-created group is the org's second, after which
 `handle_new_user()`'s one-group enrolment stops enrolling new signups
 anywhere until a leader adds them; the rule is unchanged.
 
+### Group discovery
+
+Whether members can find and ask to join groups is three columns read by
+definer functions and never by a policy
+(`20261026000000_group_discovery.sql`): `organizations.group_discovery
+boolean not null default true` (the ceiling: `anon` has no grant on it,
+`authenticated` reads it and the org's own admin writes it through the
+single org-settings UPDATE policy), `groups.is_private boolean not null
+default false` (a leader hides their group from non-members whatever the
+org switch says — private can only hide more, never less) and
+`groups.join_policy text not null default 'approval' check (in ('open',
+'approval'))`. **The `groups` SELECT policy is unchanged**: a non-member
+still reads no `groups` row, so `/g/<id>` stays a 404 for them, and a
+private group is not a new kind of row but a flag on one.
+
+`discoverable_groups()` is the one read behind Find a group and
+Directory › Groups. Tenant anchor: the caller's own `profiles` row
+(`auth.uid()`, not pending); it returns the caller's own groups always,
+every other non-private group while the org switch is on, and private
+groups additionally for an org admin, with only the columns the row shows
+(name, meeting time, member count, the two flags, the viewer's role and
+their pending-request state). With the switch off an org admin sees no
+more than a member: they manage groups on Admin › Groups.
+
+**Join requests are rows of their own.** `group_join_requests` (`org_id`
+default `app_current_org_id()`, the restrictive isolation floor, composite
+FKs `(group_id, org_id)` into `groups` and `(profile_id, org_id)` into
+`profiles`, one pending row per `(group_id, profile_id)` by partial unique
+index) has one permissive policy, SELECT for the requester, the group's
+leaders and org admins, and **no client write grant at all**: table-level
+INSERT, UPDATE and DELETE are revoked from `anon` and `authenticated`, so a
+direct write fails with `42501` rather than matching zero rows. Every write
+goes through:
+
+- `join_group(_group_id)` — org from the caller's own `profiles` row; the
+  group is looked up by id **and** that org; the org switch must be on and
+  the group not private. All four failures are the same `GJ001`, so the
+  response never says whether a hidden group exists. Then the core.
+- `join_group_apply(_group_id, _actor_id)` — the policy branch: `open`
+  writes the `group_members` row (and resolves any stale pending request
+  with no reviewer); `approval` files a pending request. Plain plpgsql with
+  EXECUTE revoked from everyone including `service_role`: it carries no
+  discovery or privacy gate, so only a wrapper that has applied its own
+  gate (`join_group()` today; an invite-link wrapper later) may reach it.
+  It still asserts the actor is an approved member of the group's org
+  (`GJ002`) and not already in it (`GJ003`).
+- `review_group_join_request(_request_id, _approve)` — org from the
+  caller's own `profiles` row; the request is selected by id **and** that
+  org with `for update`, and the caller must lead its group or be an org
+  admin, else `GJ004` (the same as a missing id). Approve writes the
+  membership and marks the row in one transaction.
+
+`pending_group_join_requests(_group_id)` is the leader's list — the one
+place a leader reads the name and email of a profile they may not share a
+group with. It is scoped to pending requests for a group the caller leads
+(or any group, for an org admin), returns name, preferred name and email
+only, and honours `hide_email`. `supabase/tests/group_discovery_suite.sql`
+pins the grants, what a non-member, a member and an org admin each see,
+open vs approval joining, who may review, the org switch as a ceiling,
+every direct write path and the cross-org floor;
+`e2e/group-discovery.spec.ts` asserts the rendered consequence.
+
 ### Group context (app layer)
 
 The URL segment `/g/<groupId>` names the group a request is about, and
@@ -478,6 +540,15 @@ settings back, so a read failure must not render as blank defaults, and
 group has no calendar — a failed lookup returns null without inserting,
 so an outage cannot give a group a second calendar. No service-role client
 is involved in group context.
+
+`getDiscoveryOn()` in `lib/groups/discovery.ts` reads the org switch
+through the cookie-bound request client and **fails closed to `false`**: a
+read error or a missing row renders discovery as off everywhere (no "Find
+a group" link, `/find-a-group` a 404, the Groups tab showing own groups
+only), exactly as the pre-discovery stub did. `discoverable_groups()` and
+`join_group()` enforce the truth regardless of what the UI offers, and the
+browser-side `.rpc()` calls run on the cookie-bound client, so no
+service-role client is involved anywhere in discovery.
 
 The bearer-token ICS routes are the one service-role surface that crosses
 the group boundary: `app/api/calendar/feed.ics/route.ts` reads the token

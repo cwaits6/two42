@@ -60,6 +60,8 @@ begin
     values (_org, _group, _group_member, _label);
   insert into public.group_requests (org_id, requested_by, name)
     values (_org, _owner, _tag || ' group request');
+  insert into public.group_join_requests (org_id, group_id, profile_id)
+    values (_org, _group, _owner);
   insert into public.teams (org_id, group_id, name, is_serving_role)
     values (_org, _group, _tag || ' serving team', true) returning id into _serving_group;
 

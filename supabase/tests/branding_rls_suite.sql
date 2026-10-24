@@ -113,11 +113,11 @@ select ok(
 );
 -- The write side: the only permissive write policy is the org admin's
 -- whole-row UPDATE, and the column grants confine it to the org settings
--- columns (directory_visibility, group_creation_policy) — table-level UPDATE
--- is revoked, so the policy cannot reach name, slug, status or
--- custom_email_domain_enabled. Both halves are pinned: a second write
--- policy, or a table-level re-grant, would hand the flag to the org's own
--- admin.
+-- columns (directory_visibility, group_creation_policy, group_discovery) —
+-- table-level UPDATE is revoked, so the policy cannot reach name, slug,
+-- status or custom_email_domain_enabled. Both halves are pinned: a second
+-- write policy, or a table-level re-grant, would hand the flag to the org's
+-- own admin.
 select is(
   (select coalesce(array_agg(policyname || ':' || cmd order by policyname), '{}')
      from pg_policies
@@ -141,6 +141,10 @@ select ok(
 select ok(
   not has_column_privilege('anon', 'public.organizations', 'group_creation_policy', 'select'),
   'anon may not read organizations.group_creation_policy'
+);
+select ok(
+  not has_column_privilege('anon', 'public.organizations', 'group_discovery', 'select'),
+  'anon may not read organizations.group_discovery'
 );
 select col_not_null('public', 'organizations', 'custom_email_domain_enabled',
   'organizations.custom_email_domain_enabled is NOT NULL');
