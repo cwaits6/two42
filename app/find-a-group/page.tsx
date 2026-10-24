@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { CreateGroupAction } from "@/components/groups/CreateGroupAction";
 import { getDiscoveryOn } from "@/lib/groups/discovery";
 import { siteConfig } from "@/lib/config";
 
@@ -14,6 +15,7 @@ export default async function FindAGroupPage() {
   return (
     <PageContainer>
       <PageHeader title="Find a group" />
+      <CreateGroupAction className="mb-6" />
       <p className="text-lg text-muted-foreground">No groups are open to join yet.</p>
     </PageContainer>
   );

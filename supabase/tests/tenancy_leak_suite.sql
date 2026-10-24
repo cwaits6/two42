@@ -58,6 +58,8 @@ begin
     values (_org, _group, _tag || ' label') returning id into _label;
   insert into public.group_member_labels (org_id, group_id, group_member_id, label_id)
     values (_org, _group, _group_member, _label);
+  insert into public.group_requests (org_id, requested_by, name)
+    values (_org, _owner, _tag || ' group request');
   insert into public.teams (org_id, group_id, name, is_serving_role)
     values (_org, _group, _tag || ' serving team', true) returning id into _serving_group;
 
