@@ -3,21 +3,35 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { groupIdFromPath, type ActiveGroup } from "@/lib/groups/active";
+import type { GroupCreationPolicy } from "@/lib/groups/creation";
+
+export type GroupCreation = {
+  policy: GroupCreationPolicy;
+  isOrgAdmin: boolean;
+};
 
 type GroupContextValue = {
   memberships: ActiveGroup[];
   discoveryOn: boolean;
+  creation: GroupCreation;
 };
 
-const GroupContext = createContext<GroupContextValue>({ memberships: [], discoveryOn: false });
+const GroupContext = createContext<GroupContextValue>({
+  memberships: [],
+  discoveryOn: false,
+  creation: { policy: "approval", isOrgAdmin: false },
+});
 
 export function GroupProvider({
   memberships,
   discoveryOn,
+  creation,
   children,
 }: GroupContextValue & { children: ReactNode }) {
   return (
-    <GroupContext.Provider value={{ memberships, discoveryOn }}>{children}</GroupContext.Provider>
+    <GroupContext.Provider value={{ memberships, discoveryOn, creation }}>
+      {children}
+    </GroupContext.Provider>
   );
 }
 
@@ -27,6 +41,10 @@ export function useGroupMemberships(): ActiveGroup[] {
 
 export function useDiscoveryOn(): boolean {
   return useContext(GroupContext).discoveryOn;
+}
+
+export function useGroupCreation(): GroupCreation {
+  return useContext(GroupContext).creation;
 }
 
 /**

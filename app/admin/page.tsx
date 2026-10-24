@@ -6,6 +6,8 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { siteConfig } from "@/lib/config";
 import { PendingRequestsList } from "./PendingRequestsList";
+import { PendingGroupRequests } from "@/components/admin/PendingGroupRequests";
+import { PENDING_GROUP_REQUEST_SELECT, toPendingGroupRequest } from "@/lib/groups/requests";
 
 export const metadata = { title: `Admin | ${siteConfig.name}` };
 
@@ -28,19 +30,32 @@ export default async function AdminPage() {
   }
   const isAdminRole = profile.role === "admin";
 
-  // access_requests SELECT is admin-only under RLS; skip the query entirely
-  // for content_editor rather than reading a guaranteed-empty result.
-  const pendingRequests = isAdminRole
-    ? ((
-        await supabase
+  // access_requests and group_requests SELECT are admin-only under RLS; skip
+  // the queries entirely for content_editor rather than reading a
+  // guaranteed-empty result.
+  const [pendingRequests, pendingGroupRequests] = isAdminRole
+    ? await Promise.all([
+        supabase
           .from("access_requests")
           .select("id, name, email, created_at")
           .eq("status", "pending")
           .order("created_at", { ascending: true })
-      ).data ?? [])
-    : [];
+          .then(({ data }) => data ?? []),
+        supabase
+          .from("group_requests")
+          .select(PENDING_GROUP_REQUEST_SELECT)
+          .eq("status", "pending")
+          .order("created_at", { ascending: true })
+          .then(({ data }) => (data ?? []).map(toPendingGroupRequest)),
+      ])
+    : [[], []];
 
-  const quickActions = isAdminRole ? [{ href: "/admin/invite", label: "Invite member" }] : [];
+  const quickActions = isAdminRole
+    ? [
+        { href: "/admin/invite", label: "Invite member" },
+        { href: "/admin/groups", label: "Manage groups" },
+      ]
+    : [];
 
   return (
     <PageContainer size="wide">
@@ -50,7 +65,14 @@ export default async function AdminPage() {
         <h2 className="text-2xl font-bold text-brand-primary mb-4">
           Needs attention
         </h2>
+        <h3 className="mb-3 text-xl font-semibold text-foreground">Access requests</h3>
         <PendingRequestsList initialRequests={pendingRequests} />
+        {isAdminRole && (
+          <>
+            <h3 className="mb-3 mt-8 text-xl font-semibold text-foreground">Group requests</h3>
+            <PendingGroupRequests initialRequests={pendingGroupRequests} />
+          </>
+        )}
       </section>
 
       {quickActions.length > 0 && (

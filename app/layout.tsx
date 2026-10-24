@@ -13,8 +13,10 @@ import { createClient } from "@/lib/supabase/server";
 import { siteConfig } from "@/lib/config";
 import { getRequestBranding } from "@/lib/branding";
 import { getDiscoveryOn } from "@/lib/groups/discovery";
+import { getGroupCreationPolicy } from "@/lib/groups/creationPolicy";
 import { getGroupMemberships } from "@/lib/groups/server";
 import type { ActiveGroup } from "@/lib/groups/active";
+import type { GroupCreationPolicy } from "@/lib/groups/creation";
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -65,6 +67,7 @@ export default async function RootLayout({
   let isPlatformAdmin = false;
   let memberships: ActiveGroup[] = [];
   let discoveryOn = false;
+  let creationPolicy: GroupCreationPolicy = "approval";
   if (hasAuthCookie) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -101,10 +104,11 @@ export default async function RootLayout({
           console.error("Layout: failed to load group memberships:", e);
           return [];
         });
-      [hasServingAccess, memberships, discoveryOn] = await Promise.all([
+      [hasServingAccess, memberships, discoveryOn, creationPolicy] = await Promise.all([
         loadServingAccess(),
         loadNavMemberships(),
         getDiscoveryOn(),
+        getGroupCreationPolicy(),
       ]);
     }
   }
@@ -151,7 +155,11 @@ export default async function RootLayout({
         />
       </head>
       <body className={`${fraunces.variable} ${inter.variable} ${jetbrainsMono.variable} antialiased min-h-screen flex flex-col`}>
-        <GroupProvider memberships={memberships} discoveryOn={discoveryOn}>
+        <GroupProvider
+          memberships={memberships}
+          discoveryOn={discoveryOn}
+          creation={{ policy: creationPolicy, isOrgAdmin: profile?.role === "admin" }}
+        >
           <SidebarProvider>
             <Header
               profile={profile}

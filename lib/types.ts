@@ -127,6 +127,20 @@ export interface AccessRequest {
   created_at: string;
 }
 
+/** A member's request for a new group under the approval policy. */
+export interface GroupRequest {
+  id: string;
+  org_id: string;
+  requested_by: string;
+  name: string;
+  description: string | null;
+  status: "pending" | "approved" | "declined";
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  group_id: string | null;
+  created_at: string;
+}
+
 /** A group's calendar. One per group in practice; its color is the group's color. */
 export interface EventCalendar {
   id: string;
