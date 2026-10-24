@@ -457,6 +457,93 @@ COMMENT ON FUNCTION "public"."group_content_backfill"() IS 'Gives every ungroupe
 
 
 
+CREATE OR REPLACE FUNCTION "public"."group_create"("_name" "text", "_description" "text" DEFAULT NULL::"text", "_leader_id" "uuid" DEFAULT NULL::"uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _actor uuid := auth.uid();
+  _org uuid;
+  _admin boolean;
+  _policy text;
+  _leader uuid;
+begin
+  if _actor is null then
+    raise exception 'group creation rejected: no authenticated principal' using errcode = 'GC002';
+  end if;
+  -- Org and role from the caller's own profile, never a parameter.
+  select p.org_id, p.role = 'admin' into _org, _admin
+  from public.profiles p where p.id = _actor and p.role <> 'pending';
+  if _org is null then
+    raise exception 'group creation rejected: actor % is not an approved member', _actor using errcode = 'GC002';
+  end if;
+  if _name is null or btrim(_name) = '' then
+    raise exception 'group creation rejected: name is required' using errcode = 'GC006';
+  end if;
+
+  _leader := coalesce(_leader_id, _actor);
+  if not _admin then
+    if _leader <> _actor then
+      raise exception 'group creation rejected: only an org admin may name another leader' using errcode = 'GC005';
+    end if;
+    select o.group_creation_policy into _policy from public.organizations o where o.id = _org;
+    if _policy is distinct from 'open' then
+      raise exception 'group creation rejected: org policy is %', coalesce(_policy, 'unknown') using errcode = 'GC001';
+    end if;
+  end if;
+
+  return public.group_create_for(_org, _name, _description, _leader, _actor);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."group_create"("_name" "text", "_description" "text", "_leader_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."group_create"("_name" "text", "_description" "text", "_leader_id" "uuid") IS 'Creates a group with its leader and calendar. Tenant anchor: the caller''s own profiles row (org and role), never a parameter. A non-admin may only lead the group themselves (GC005) and only under the open policy (GC001); an admin may name any approved member of their org (GC003 otherwise). GC002: not an approved member. GC006: blank name.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."group_create_for"("_org" "uuid", "_name" "text", "_description" "text", "_leader" "uuid", "_created_by" "uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _group uuid;
+begin
+  -- The leader must be an approved member of this org; a pending or
+  -- foreign profile is refused before any row is written.
+  if not exists (
+    select 1 from public.profiles p
+    where p.id = _leader and p.org_id = _org and p.role <> 'pending'
+  ) then
+    raise exception 'group creation rejected: leader % is not an approved member of org %', _leader, _org
+      using errcode = 'GC003';
+  end if;
+
+  insert into public.groups (org_id, name, description, created_by)
+  values (_org, btrim(_name), nullif(btrim(coalesce(_description, '')), ''), _created_by)
+  returning id into _group;
+
+  insert into public.group_members (org_id, group_id, profile_id, role, added_by)
+  values (_org, _group, _leader, 'leader', _created_by);
+
+  -- The group is the calendar: one row, named after the group, Clay.
+  insert into public.event_calendars (org_id, group_id, name, color)
+  values (_org, _group, btrim(_name), '#B85C38');
+
+  return _group;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."group_create_for"("_org" "uuid", "_name" "text", "_description" "text", "_leader" "uuid", "_created_by" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."group_create_for"("_org" "uuid", "_name" "text", "_description" "text", "_leader" "uuid", "_created_by" "uuid") IS 'Writes a group, its leader row and its calendar in one transaction. No client grant: called only by group_create() and group_request_approve(), which resolve _org from the caller''s own profile. Raises GC003 when the leader is not an approved member of _org.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."group_member_removed_leaves_teams"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO ''
@@ -561,6 +648,51 @@ ALTER FUNCTION "public"."group_model_backfill"() OWNER TO "postgres";
 
 
 COMMENT ON FUNCTION "public"."group_model_backfill"() IS 'Gives every org without a group exactly one, named from branding.display_name (fallback: the org name), enrols every approved member, makes every org admin a leader, and attaches unassigned teams. Idempotent. Callable only by the migration runner and the pgTAP harness.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."group_request_approve"("_request_id" "uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _actor uuid := auth.uid();
+  _org uuid;
+  _req public.group_requests%rowtype;
+  _group uuid;
+begin
+  if _actor is null then
+    raise exception 'group approval rejected: no authenticated principal' using errcode = 'GC002';
+  end if;
+  select p.org_id into _org from public.profiles p where p.id = _actor and p.role = 'admin';
+  if _org is null then
+    raise exception 'group approval rejected: actor % is not an org admin', _actor using errcode = 'GC005';
+  end if;
+
+  -- The request must be in the admin's own org; a foreign or missing id is
+  -- the same error so the response confirms nothing.
+  select r.* into _req from public.group_requests r
+  where r.id = _request_id and r.org_id = _org and r.status = 'pending'
+  for update;
+  if not found then
+    raise exception 'group approval rejected: no pending request %', _request_id using errcode = 'GC004';
+  end if;
+
+  _group := public.group_create_for(_org, _req.name, _req.description, _req.requested_by, _req.requested_by);
+
+  update public.group_requests
+  set status = 'approved', group_id = _group, reviewed_by = _actor, reviewed_at = now()
+  where id = _req.id and org_id = _org;
+
+  return _group;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."group_request_approve"("_request_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."group_request_approve"("_request_id" "uuid") IS 'Turns a pending group request into a group led by its requester. Tenant anchor: the caller''s own profiles row, which must be an org admin (GC005); the request is looked up by id AND that org (GC004 for missing or foreign). GC003 when the requester is no longer an approved member.';
 
 
 
@@ -922,6 +1054,22 @@ ALTER FUNCTION "public"."org_email_domain_claim"("_org_id" "uuid", "_domain" "te
 
 
 COMMENT ON FUNCTION "public"."org_email_domain_claim"("_org_id" "uuid", "_domain" "text", "_cap" integer) IS 'Atomic claim of an org''s custom sending domain under a platform-wide cap. Tenant anchor: service_role-only EXECUTE — _org_id must come from an anchor the server-side caller already validated (the admin''s RLS-scoped profile), never from a request. Raises SD001 (unknown org), SD002 (custom domains not enabled), SD003 (cap reached), or 23505 (org already holds a row).';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."org_group_creation_policy"() RETURNS "text"
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select o.group_creation_policy from public.organizations o
+  where o.id = public.app_current_org_id();
+$$;
+
+
+ALTER FUNCTION "public"."org_group_creation_policy"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."org_group_creation_policy"() IS 'The caller''s own org''s group_creation_policy; NULL when the caller has no org. Zero-argument so policies hoist it as an InitPlan.';
 
 
 
@@ -1822,6 +1970,29 @@ COMMENT ON TABLE "public"."group_members" IS 'Membership of a group. role = lead
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."group_requests" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "requested_by" "uuid" NOT NULL,
+    "name" "text" NOT NULL,
+    "description" "text",
+    "status" "text" DEFAULT 'pending'::"text" NOT NULL,
+    "reviewed_by" "uuid",
+    "reviewed_at" timestamp with time zone,
+    "group_id" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "group_requests_name_not_blank" CHECK (("btrim"("name") <> ''::"text")),
+    CONSTRAINT "group_requests_status_check" CHECK (("status" = ANY (ARRAY['pending'::"text", 'approved'::"text", 'declined'::"text"])))
+);
+
+
+ALTER TABLE "public"."group_requests" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."group_requests" IS 'A member''s request for a new group under the approval policy. Approval goes through group_request_approve(), which creates the group and links it here; decline is a plain UPDATE. Declined rows are the record and are never deleted by the app.';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."group_settings" (
     "group_id" "uuid" NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
@@ -1978,7 +2149,9 @@ CREATE TABLE IF NOT EXISTS "public"."organizations" (
     "status" "public"."org_status" DEFAULT 'active'::"public"."org_status" NOT NULL,
     "custom_email_domain_enabled" boolean DEFAULT false NOT NULL,
     "directory_visibility" "text" DEFAULT 'shared_groups'::"text" NOT NULL,
-    CONSTRAINT "organizations_directory_visibility_check" CHECK (("directory_visibility" = ANY (ARRAY['shared_groups'::"text", 'org'::"text"])))
+    "group_creation_policy" "text" DEFAULT 'approval'::"text" NOT NULL,
+    CONSTRAINT "organizations_directory_visibility_check" CHECK (("directory_visibility" = ANY (ARRAY['shared_groups'::"text", 'org'::"text"]))),
+    CONSTRAINT "organizations_group_creation_policy_check" CHECK (("group_creation_policy" = ANY (ARRAY['open'::"text", 'approval'::"text", 'admins'::"text"])))
 );
 
 
@@ -1990,6 +2163,10 @@ COMMENT ON COLUMN "public"."organizations"."custom_email_domain_enabled" IS 'Pla
 
 
 COMMENT ON COLUMN "public"."organizations"."directory_visibility" IS 'Security boundary read by the profiles, family_units and family_members SELECT policies, not a preference. shared_groups: a member reads only people who share a group with them. org: every approved member reads the whole directory.';
+
+
+
+COMMENT ON COLUMN "public"."organizations"."group_creation_policy" IS 'Who may create a group. open: any approved member, live at once. approval: a member files a request an org admin approves. admins: org admins only. Read by group_create() and the group_requests INSERT policy, so a security boundary, not a preference.';
 
 
 
@@ -2444,6 +2621,11 @@ ALTER TABLE ONLY "public"."group_members"
 
 
 
+ALTER TABLE ONLY "public"."group_requests"
+    ADD CONSTRAINT "group_requests_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."group_settings"
     ADD CONSTRAINT "group_settings_pkey" PRIMARY KEY ("group_id");
 
@@ -2740,6 +2922,18 @@ CREATE INDEX "group_members_org_id_idx" ON "public"."group_members" USING "btree
 
 
 CREATE INDEX "group_members_profile_org_idx" ON "public"."group_members" USING "btree" ("profile_id", "org_id");
+
+
+
+CREATE UNIQUE INDEX "group_requests_one_pending_per_name" ON "public"."group_requests" USING "btree" ("org_id", "requested_by", "name") WHERE ("status" = 'pending'::"text");
+
+
+
+CREATE INDEX "group_requests_org_id_idx" ON "public"."group_requests" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "group_requests_org_status_idx" ON "public"."group_requests" USING "btree" ("org_id", "status");
 
 
 
@@ -3258,6 +3452,26 @@ ALTER TABLE ONLY "public"."group_members"
 
 
 
+ALTER TABLE ONLY "public"."group_requests"
+    ADD CONSTRAINT "group_requests_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."groups"("id", "org_id") ON DELETE SET NULL ("group_id");
+
+
+
+ALTER TABLE ONLY "public"."group_requests"
+    ADD CONSTRAINT "group_requests_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."group_requests"
+    ADD CONSTRAINT "group_requests_requested_by_fkey" FOREIGN KEY ("requested_by", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."group_requests"
+    ADD CONSTRAINT "group_requests_reviewed_by_fkey" FOREIGN KEY ("reviewed_by") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
+
+
+
 ALTER TABLE ONLY "public"."group_settings"
     ADD CONSTRAINT "group_settings_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."groups"("id", "org_id") ON DELETE CASCADE;
 
@@ -3611,7 +3825,11 @@ CREATE POLICY "Admins can read feedback" ON "public"."feedback" FOR SELECT TO "a
 
 
 
-CREATE POLICY "Admins can set directory visibility" ON "public"."organizations" FOR UPDATE TO "authenticated" USING ((("id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin"))) WITH CHECK ((("id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
+CREATE POLICY "Admins can review group requests" ON "public"."group_requests" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin") AND ("status" = 'pending'::"text"))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin") AND ("group_id" IS NULL) AND ((("status" = 'pending'::"text") AND ("reviewed_by" IS NULL) AND ("reviewed_at" IS NULL)) OR (("status" = 'declined'::"text") AND ("reviewed_by" = ( SELECT "auth"."uid"() AS "uid")) AND ("reviewed_at" IS NOT NULL)))));
+
+
+
+CREATE POLICY "Admins can set org settings" ON "public"."organizations" FOR UPDATE TO "authenticated" USING ((("id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin"))) WITH CHECK ((("id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_admin"() AS "is_admin")));
 
 
 
@@ -3961,6 +4179,10 @@ CREATE POLICY "Members can read settings" ON "public"."site_settings" FOR SELECT
 
 
 
+CREATE POLICY "Members can request a group under approval mode" ON "public"."group_requests" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("requested_by" = ( SELECT "auth"."uid"() AS "uid")) AND ( SELECT "public"."is_member"() AS "is_member") AND ("status" = 'pending'::"text") AND ("reviewed_by" IS NULL) AND ("reviewed_at" IS NULL) AND ("group_id" IS NULL) AND (( SELECT "public"."org_group_creation_policy"() AS "org_group_creation_policy") = 'approval'::"text")));
+
+
+
 CREATE POLICY "Members can submit their own feedback" ON "public"."feedback" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "auth"."uid"() AS "uid") = "profile_id") AND ( SELECT "public"."is_member"() AS "is_member")));
 
 
@@ -4032,6 +4254,10 @@ CREATE POLICY "Profiles are updatable per access rules" ON "public"."profiles" F
 
 
 CREATE POLICY "Profiles are visible per access rules" ON "public"."profiles" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ((( SELECT "auth"."uid"() AS "uid") = "id") OR ( SELECT "public"."is_admin"() AS "is_admin") OR (("family_id" IS NOT NULL) AND ("family_id" = ( SELECT "public"."current_family_id"() AS "current_family_id")) AND (( SELECT "auth"."uid"() AS "uid") <> "id") AND ( SELECT "public"."is_member"() AS "is_member")) OR (( SELECT "public"."is_member"() AS "is_member") AND ("is_unlisted" = false) AND ("role" = ANY (ARRAY['member'::"text", 'content_editor'::"text", 'admin'::"text"])) AND (( SELECT "public"."org_directory_visible"() AS "org_directory_visible") OR "public"."shares_group_with"("id"))))));
+
+
+
+CREATE POLICY "Requesters and admins can view group requests" ON "public"."group_requests" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("requested_by" = ( SELECT "auth"."uid"() AS "uid")) OR ( SELECT "public"."is_admin"() AS "is_admin"))));
 
 
 
@@ -4125,6 +4351,9 @@ ALTER TABLE "public"."group_member_labels" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."group_members" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."group_requests" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."group_settings" ENABLE ROW LEVEL SECURITY;
 
 
@@ -4202,6 +4431,10 @@ CREATE POLICY "org isolation" ON "public"."group_member_labels" AS RESTRICTIVE T
 
 
 CREATE POLICY "org isolation" ON "public"."group_members" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."group_requests" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
 
@@ -4442,12 +4675,28 @@ REVOKE ALL ON FUNCTION "public"."group_content_backfill"() FROM PUBLIC;
 
 
 
+REVOKE ALL ON FUNCTION "public"."group_create"("_name" "text", "_description" "text", "_leader_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."group_create"("_name" "text", "_description" "text", "_leader_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."group_create"("_name" "text", "_description" "text", "_leader_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."group_create_for"("_org" "uuid", "_name" "text", "_description" "text", "_leader" "uuid", "_created_by" "uuid") FROM PUBLIC;
+
+
+
 REVOKE ALL ON FUNCTION "public"."group_member_removed_leaves_teams"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."group_member_removed_leaves_teams"() TO "service_role";
 
 
 
 REVOKE ALL ON FUNCTION "public"."group_model_backfill"() FROM PUBLIC;
+
+
+
+REVOKE ALL ON FUNCTION "public"."group_request_approve"("_request_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."group_request_approve"("_request_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."group_request_approve"("_request_id" "uuid") TO "service_role";
 
 
 
@@ -4534,6 +4783,12 @@ GRANT INSERT("domain") ON TABLE "public"."org_email_domains" TO "authenticated";
 
 REVOKE ALL ON FUNCTION "public"."org_email_domain_claim"("_org_id" "uuid", "_domain" "text", "_cap" integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."org_email_domain_claim"("_org_id" "uuid", "_domain" "text", "_cap" integer) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."org_group_creation_policy"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."org_group_creation_policy"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."org_group_creation_policy"() TO "service_role";
 
 
 
@@ -4701,6 +4956,24 @@ GRANT ALL ON TABLE "public"."group_members" TO "service_role";
 
 
 
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."group_requests" TO "anon";
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."group_requests" TO "authenticated";
+GRANT ALL ON TABLE "public"."group_requests" TO "service_role";
+
+
+
+GRANT UPDATE("status") ON TABLE "public"."group_requests" TO "authenticated";
+
+
+
+GRANT UPDATE("reviewed_by") ON TABLE "public"."group_requests" TO "authenticated";
+
+
+
+GRANT UPDATE("reviewed_at") ON TABLE "public"."group_requests" TO "authenticated";
+
+
+
 GRANT ALL ON TABLE "public"."group_settings" TO "anon";
 GRANT ALL ON TABLE "public"."group_settings" TO "authenticated";
 GRANT ALL ON TABLE "public"."group_settings" TO "service_role";
@@ -4778,6 +5051,10 @@ GRANT SELECT("branding") ON TABLE "public"."organizations" TO "anon";
 
 
 GRANT SELECT("directory_visibility"),UPDATE("directory_visibility") ON TABLE "public"."organizations" TO "authenticated";
+
+
+
+GRANT SELECT("group_creation_policy"),UPDATE("group_creation_policy") ON TABLE "public"."organizations" TO "authenticated";
 
 
 
