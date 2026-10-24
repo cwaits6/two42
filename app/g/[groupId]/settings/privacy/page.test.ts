@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactElement, ReactNode } from "react";
 import type { ActiveGroup } from "@/lib/groups/active";
 import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
 
@@ -20,7 +21,7 @@ vi.mock("@/lib/supabase/server", () => ({
     from: () => ({
       select: () => ({
         eq: () => ({
-          maybeSingle: async () => ({ data: groupFlags() }),
+          maybeSingle: async () => groupFlags(),
         }),
       }),
     }),
@@ -34,11 +35,49 @@ const { default: GroupPrivacySettingsPage } = await import("./page");
 
 const A_ID = "11111111-1111-4111-8111-111111111111";
 const leader: ActiveGroup = { id: A_ID, name: "Grace", color: GROUP_DEFAULT_COLOR, role: "leader" };
+const UNAVAILABLE_TEXT =
+  "Couldn't load this group's privacy settings. Reload the page to try again.";
+
+type Element = ReactElement<{ children?: ReactNode; role?: string }>;
+
+function flatten(node: ReactNode, out: Element[] = []): Element[] {
+  if (Array.isArray(node)) {
+    node.forEach((n) => flatten(n, out));
+    return out;
+  }
+  if (!node || typeof node !== "object" || !("props" in node)) return out;
+  const element = node as Element;
+  out.push(element);
+  flatten(element.props.children, out);
+  return out;
+}
+
+function texts(node: ReactNode, out: string[] = []): string[] {
+  if (typeof node === "string") {
+    out.push(node);
+    return out;
+  }
+  if (Array.isArray(node)) {
+    node.forEach((n) => texts(n, out));
+    return out;
+  }
+  if (!node || typeof node !== "object" || !("props" in node)) return out;
+  texts((node as ReactElement<{ children?: ReactNode }>).props.children, out);
+  return out;
+}
+
+function expectUnavailable(element: ReactElement) {
+  const nodes = flatten(element);
+  expect(nodes.some((e) => e.type === PrivacyAndJoiningManager)).toBe(false);
+  expect(nodes.find((e) => e.props.role === "alert")).toBeDefined();
+  expect(texts(element)).toContain(UNAVAILABLE_TEXT);
+}
 
 beforeEach(() => {
   requireGroupLeader.mockReset();
   getDiscoveryOn.mockReset();
   groupFlags.mockReset();
+  vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 describe("GroupPrivacySettingsPage", () => {
@@ -54,7 +93,7 @@ describe("GroupPrivacySettingsPage", () => {
   it("renders the manager with the group's flags and the org switch when the viewer leads it", async () => {
     requireGroupLeader.mockResolvedValue(leader);
     getDiscoveryOn.mockResolvedValue(true);
-    groupFlags.mockReturnValue({ is_private: true, join_policy: "open" });
+    groupFlags.mockReturnValue({ data: { is_private: true, join_policy: "open" }, error: null });
 
     const element = await GroupPrivacySettingsPage({ params: Promise.resolve({ groupId: A_ID }) });
 
@@ -68,17 +107,24 @@ describe("GroupPrivacySettingsPage", () => {
     });
   });
 
-  it("falls back to public and approval when the flags read returns nothing", async () => {
+  it("shows the unavailable notice, not the controls, when the flags read fails", async () => {
     requireGroupLeader.mockResolvedValue(leader);
-    getDiscoveryOn.mockResolvedValue(false);
-    groupFlags.mockReturnValue(null);
+    getDiscoveryOn.mockResolvedValue(true);
+    groupFlags.mockReturnValue({ data: null, error: { code: "57014", message: "canceled" } });
 
     const element = await GroupPrivacySettingsPage({ params: Promise.resolve({ groupId: A_ID }) });
 
-    expect(element.props).toMatchObject({
-      initialPrivate: false,
-      initialPolicy: "approval",
-      orgDiscoveryOn: false,
-    });
+    expectUnavailable(element);
+    expect(console.error).toHaveBeenCalled();
+  });
+
+  it("shows the unavailable notice when the flags read returns no row", async () => {
+    requireGroupLeader.mockResolvedValue(leader);
+    getDiscoveryOn.mockResolvedValue(false);
+    groupFlags.mockReturnValue({ data: null, error: null });
+
+    const element = await GroupPrivacySettingsPage({ params: Promise.resolve({ groupId: A_ID }) });
+
+    expectUnavailable(element);
   });
 });
