@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAll } from "@/lib/supabase/fetchAll";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -105,20 +106,40 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
       return;
     }
 
-    const [{ data: counts }, { data: settings }] = await Promise.all([
-      supabase.from("team_members").select("team_id").in("team_id", teamIds),
-      supabase
-        .from("serving_team_settings")
-        .select("team_id, enabled, reminder_days, window_weeks")
-        .in("team_id", teamIds),
-    ]);
-
+    const [{ data: counts, error: countsError }, { data: settings, error: settingsError }] =
+      await Promise.all([
+        fetchAll((from, to) =>
+          supabase
+            .from("team_members")
+            .select("team_id")
+            .in("team_id", teamIds)
+            .order("team_id")
+            .order("profile_id")
+            .range(from, to),
+        ),
+        supabase
+          .from("serving_team_settings")
+          .select("team_id, enabled, reminder_days, window_weeks")
+          .in("team_id", teamIds),
+      ]);
+    // Keep the previous counts rather than showing every team as empty, which
+    // would also silence the member warning on delete.
+    if (countsError) {
+      toast.error("Failed to load team members.");
+      setLoading(false);
+      return;
+    }
     const countMap: Record<string, number> = {};
     (counts || []).forEach((row: { team_id: string }) => {
       countMap[row.team_id] = (countMap[row.team_id] || 0) + 1;
     });
     setMemberCounts(countMap);
 
+    if (settingsError) {
+      toast.error("Failed to load serving settings.");
+      setLoading(false);
+      return;
+    }
     const settingsMap: Record<string, TeamSettings> = {};
     ((settings || []) as TeamSettings[]).forEach((row) => {
       settingsMap[row.team_id] = row;

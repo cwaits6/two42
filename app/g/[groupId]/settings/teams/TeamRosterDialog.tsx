@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAll } from "@/lib/supabase/fetchAll";
 import { mintSignedUrls } from "@/lib/uploadImage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,15 +68,24 @@ export function TeamRosterDialog({
       try {
         const [{ data: members, error: mErr }, { data: rows, error: rErr }] =
           await Promise.all([
-            supabase
-              .from("group_members")
-              .select("profile_id, profiles(id, first_name, last_name, preferred_name, avatar_url)")
-              .eq("group_id", groupId)
-              .returns<{ profile_id: string; profiles: RosterProfile | null }[]>(),
-            supabase
-              .from("team_members")
-              .select("profile_id, is_leader")
-              .eq("team_id", teamId),
+            fetchAll((from, to) =>
+              supabase
+                .from("group_members")
+                .select("profile_id, profiles(id, first_name, last_name, preferred_name, avatar_url)")
+                .eq("group_id", groupId)
+                .order("id")
+                .range(from, to)
+                .returns<{ profile_id: string; profiles: RosterProfile | null }[]>(),
+            ),
+            fetchAll((from, to) =>
+              supabase
+                .from("team_members")
+                .select("profile_id, is_leader")
+                .eq("team_id", teamId)
+                .order("team_id")
+                .order("profile_id")
+                .range(from, to),
+            ),
           ]);
 
         if (cancelled) return;
