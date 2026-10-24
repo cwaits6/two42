@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAll } from "@/lib/supabase/fetchAll";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -57,7 +58,15 @@ export function LabelsManager({ groupId, groupName }: LabelsManagerProps) {
     setLoading(true);
     const [labelRows, appliedRows] = await Promise.all([
       supabase.from("group_labels").select("*").eq("group_id", groupId).order("name"),
-      supabase.from("group_member_labels").select("label_id").eq("group_id", groupId),
+      fetchAll((from, to) =>
+        supabase
+          .from("group_member_labels")
+          .select("label_id")
+          .eq("group_id", groupId)
+          .order("group_member_id")
+          .order("label_id")
+          .range(from, to),
+      ),
     ]);
     if (labelRows.error || appliedRows.error) {
       toast.error("Failed to load labels.");

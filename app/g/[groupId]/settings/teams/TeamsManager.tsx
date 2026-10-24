@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAll } from "@/lib/supabase/fetchAll";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -106,7 +107,15 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
     }
 
     const [{ data: counts }, { data: settings }] = await Promise.all([
-      supabase.from("team_members").select("team_id").in("team_id", teamIds),
+      fetchAll((from, to) =>
+        supabase
+          .from("team_members")
+          .select("team_id")
+          .in("team_id", teamIds)
+          .order("team_id")
+          .order("profile_id")
+          .range(from, to),
+      ),
       supabase
         .from("serving_team_settings")
         .select("team_id, enabled, reminder_days, window_weeks")

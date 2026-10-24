@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAll } from "@/lib/supabase/fetchAll";
 import type { RosterIndex } from "@/components/directory/rosterFilter";
 import type { GroupRole } from "@/lib/groups/active";
 
@@ -91,18 +92,50 @@ export function useGroupRoster(groupId: string | null): GroupRoster {
 
     async function load(id: string) {
       const [members, teamRows, teamMemberRows, labelRows, memberLabelRows] = await Promise.all([
-        supabase.from("group_members").select("id, profile_id, role").eq("group_id", id),
-        supabase
-          .from("teams")
-          .select("id, name, color, icon")
-          .eq("group_id", id)
-          .order("display_order"),
-        supabase
-          .from("team_members")
-          .select("team_id, profile_id, teams!inner(group_id)")
-          .eq("teams.group_id", id),
-        supabase.from("group_labels").select("id, name, color").eq("group_id", id).order("name"),
-        supabase.from("group_member_labels").select("group_member_id, label_id").eq("group_id", id),
+        fetchAll((from, to) =>
+          supabase
+            .from("group_members")
+            .select("id, profile_id, role")
+            .eq("group_id", id)
+            .order("id")
+            .range(from, to),
+        ),
+        fetchAll((from, to) =>
+          supabase
+            .from("teams")
+            .select("id, name, color, icon")
+            .eq("group_id", id)
+            .order("display_order")
+            .order("id")
+            .range(from, to),
+        ),
+        fetchAll((from, to) =>
+          supabase
+            .from("team_members")
+            .select("team_id, profile_id, teams!inner(group_id)")
+            .eq("teams.group_id", id)
+            .order("team_id")
+            .order("profile_id")
+            .range(from, to),
+        ),
+        fetchAll((from, to) =>
+          supabase
+            .from("group_labels")
+            .select("id, name, color")
+            .eq("group_id", id)
+            .order("name")
+            .order("id")
+            .range(from, to),
+        ),
+        fetchAll((from, to) =>
+          supabase
+            .from("group_member_labels")
+            .select("group_member_id, label_id")
+            .eq("group_id", id)
+            .order("group_member_id")
+            .order("label_id")
+            .range(from, to),
+        ),
       ]);
       if (cancelled) return;
 
