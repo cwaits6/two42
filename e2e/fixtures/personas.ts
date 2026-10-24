@@ -17,6 +17,8 @@ export const PERSONAS = {
   oneGroup: { email: "isaac.seedly@example.test", name: "Isaac Seedly" },
   /** Member of Group B and Group C. */
   twoGroups: { email: "leo.loremsworth@example.test", name: "Leo Loremsworth" },
+  /** Leads Group C; in no other group. */
+  leadsC: { email: "amelia.demoski@example.test", name: "Amelia Demoski" },
 } as const;
 
 export type PersonaKey = keyof typeof PERSONAS;

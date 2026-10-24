@@ -304,6 +304,76 @@ every mode, the approve path and the cross-org floor are pinned by
 the `group_requests` policies, zero-row-checked in the UI. No service-role
 client is involved anywhere in the feature.
 
+## Group discovery and joining RPCs — a definer-function bypass surface
+
+Group discovery (`20261026000000_group_discovery.sql`) lets a member find a
+group they are not in and join it or ask to, which the `groups` SELECT
+policy (members and admins only) cannot express without widening every
+`groups` read in the app. The reads and writes go through four
+`SECURITY DEFINER` entry points over an un-granted core instead; the
+`groups` policy is unchanged.
+
+- `discoverable_groups()` — the one list behind Find a group and
+  Directory › Groups. Tenant anchor: the caller's own `profiles` row
+  (`auth.uid()`, not pending), no parameter. Returns the caller's own
+  groups always, other non-private groups while `organizations.group_discovery`
+  is on, and private groups additionally for an org admin; every join in
+  the body carries the group's `org_id`. Read-only. EXECUTE:
+  `authenticated` only.
+- `join_group(_group_id)` — the member-facing gate. Tenant anchor: the
+  caller's own `profiles` row; the group is looked up by id **and** that
+  org, the org switch must be on and the group not private (`GJ001` for a
+  missing id, a foreign group, a private group and a switched-off org
+  alike, so the response confirms nothing). Delegates to the core.
+  EXECUTE: `authenticated` only.
+- `join_group_apply(_group_id, _actor_id)` — the plain plpgsql core (not
+  `SECURITY DEFINER`; it inherits the caller's bypass). Org from the
+  `groups` row; asserts `_actor_id` is an approved member of that org
+  (`GJ002`) and not already in the group (`GJ003`); under `open` inserts
+  the `group_members` row and resolves any stale pending request with
+  `reviewed_by = null`, under `approval` inserts the pending
+  `group_join_requests` row. Every inserted row carries the group's
+  `org_id`. EXECUTE revoked from `public`, `anon`, `authenticated` **and**
+  `service_role`: reachable only through `join_group()` today. An
+  invite-link wrapper that has validated its token may call it later and
+  needs no further grant; if that wrapper runs on the service client it
+  grants `service_role` EXECUTE on the core in its own migration.
+- `pending_group_join_requests(_group_id)` — the leader's review list.
+  Tenant anchor: the caller's own `profiles` row; rows only when the caller
+  leads the group (`is_group_leader()`) or is an org admin (`is_admin()`),
+  else empty. Returns id, created_at, first_name, last_name, preferred_name
+  and email (NULL when the requester set `hide_email`) for pending
+  requests only. Read-only. EXECUTE: `authenticated` only.
+- `review_group_join_request(_request_id, _approve)` — approve or decline.
+  Tenant anchor: the caller's own `profiles` row; the request is selected
+  by id **and** that org with `for update`, and the caller must lead its
+  group or be an org admin, so a foreign, missing, decided or
+  not-permitted id is the same `GJ004`. Approve asserts the requester is
+  still an approved member (`GJ002`), inserts the membership and stamps
+  the row in one transaction. EXECUTE: `authenticated` only.
+
+`group_join_requests` carries the restrictive isolation floor, one SELECT
+policy (the requester, the group's leaders, org admins) and **no client
+write grant** — table-level INSERT, UPDATE and DELETE are revoked from
+`anon` and `authenticated`, so a direct write fails with `42501` instead
+of matching zero rows; only the functions above write it. The org switch
+and the two group flags are written by the cookie-bound client under the
+existing `organizations` org-settings policy (column grants only; no new
+policy) and the `groups` "Leaders and admins can update groups" policy,
+zero-row-checked in the UI.
+
+`SECURITY DEFINER` bypasses RLS, so **the org resolution and the
+assertions in the function bodies are the tenant boundary; no lint sees
+them.** `schema_tenancy_lint.sql` check 4 only proves the bodies mention
+`org_id`. The browser-side `.rpc()` calls (`GroupJoinAction`,
+`useDiscoverableGroups`, `PrivacyAndJoiningManager`) and the server-side
+`getDiscoverableGroups()` run on the cookie-bound client and are not
+service-rooted, so the guard has nothing to check there; the grant matrix,
+the visibility rules, both join policies, who may review, the org switch
+as a ceiling, every direct write path and the cross-org floor are pinned
+by `supabase/tests/group_discovery_suite.sql`. No service-role client is
+involved anywhere in the feature.
+
 ## Email quota RPC — a definer-function bypass surface (CWA-72 / #365)
 
 The per-org daily send cap (`org_email_usage` + `org_email_limits`) is
