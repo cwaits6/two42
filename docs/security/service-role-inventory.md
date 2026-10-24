@@ -403,7 +403,9 @@ assertions in their bodies are the tenant boundary; no lint sees them**.
   link is the approval; `added_by` = the link's creator); otherwise it
   delegates to the un-granted `join_group_apply()` core, which applies the
   group's `join_policy` — `joined` or `requested`. One use row per person
-  per link. EXECUTE: `authenticated` (and `service_role`).
+  per link. EXECUTE: `authenticated` only — revoked from `service_role`,
+  because the caller's own session is the anchor and a service caller has
+  none.
 - `handle_new_user()` — when the approved request that admits a signup
   names a `group_id`, the trigger enrols that group (its composite FK pins
   it to the signup's org) and stamps `profile_id` on the use row, ahead of
