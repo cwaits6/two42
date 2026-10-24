@@ -10,8 +10,10 @@
  * rows, cells, emails — ever reaches console.* (log codes and table names
  * only; the CSV is full-roster PII).
  */
+import { resolveBranding } from "@/lib/branding";
 import { requireOrgAdmin } from "@/lib/members/access";
 import {
+  filenameSlug,
   memberRowsFromSnapshot,
   serializeMembers,
 } from "@/lib/members/format";
@@ -55,22 +57,24 @@ export async function GET() {
   // prescribes for it.
   const { data: org, error: orgError } = await gate.supabase
     .from("organizations")
-    .select("slug")
+    .select("name, branding")
     .eq("id", gate.orgId)
     .maybeSingle();
   if (orgError) {
     // Not a 500 — the CSV is correct and complete; only the filename degrades.
     // But two full-PII rosters from different orgs sharing "members-<date>"
-    // is worth a log line rather than a silent collapse to slug = "".
+    // is worth a log line rather than a silent collapse to an unnamed file.
     console.error(
-      "members export: org slug lookup failed; falling back to an unnamed file: code=%s message=%s",
+      "members export: org name lookup failed; falling back to an unnamed file: code=%s message=%s",
       orgError.code,
       orgError.message
     );
   }
-  const slug = (org?.slug ?? "").replace(/[^a-zA-Z0-9-]/g, "");
+  const orgLabel = org
+    ? resolveBranding(org.branding).display_name ?? org.name
+    : "";
   const date = new Date().toISOString().slice(0, 10);
-  const filename = ["members", slug, date].filter(Boolean).join("-");
+  const filename = ["members", filenameSlug(orgLabel), date].filter(Boolean).join("-");
 
   return new Response(csv, {
     status: 200,

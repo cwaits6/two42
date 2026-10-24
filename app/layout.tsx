@@ -114,11 +114,9 @@ export default async function RootLayout({
   }
 
   // Free on every path: generateMetadata() above already awaited this, and
-  // cache() memoizes it for the request. Anonymous requests never resolve an
-  // org here — the root layout's routes carry no org identifier, and the
-  // env pin would brand them as one tenant — so this renders the platform
-  // default unless the request is authenticated (lib/branding.ts). Org-scoped routes apply their own org's branding in
-  // app/[orgSlug]/layout.tsx.
+  // cache() memoizes it for the request. Anonymous requests resolve no org,
+  // so this renders the platform default unless the request is
+  // authenticated (lib/branding.ts).
   const b = await getRequestBranding();
 
   return (

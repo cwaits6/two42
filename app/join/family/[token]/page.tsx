@@ -1,26 +1,15 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { ArrowRight } from "lucide-react";
 import { siteConfig } from "@/lib/config";
 import { AuthShell } from "@/app/(auth)/_components/AuthShell";
+import { FamilyRequestForm } from "./FamilyRequestForm";
 
 interface PageProps {
   params: Promise<{ token: string }>;
 }
 
 export const metadata = { title: `Join Your Household | ${siteConfig.name}` };
-
-// Link into the org's own join page. The org comes from the invite row
-// itself (see the lookup below) and reaches the join page as a path segment.
-export function buildFamilyInviteJoinUrl(
-  orgSlug: string,
-  token: string,
-  email: string,
-): string {
-  return `/${orgSlug}/join?invite_token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
-}
 
 function ErrorCard({
   title,
@@ -52,9 +41,8 @@ export default async function FamilyJoinPage({ params }: PageProps) {
 
   // org-anchor: the invite row resolves the org for every step below. This
   // page is reached before login, from any host, so the token is the only
-  // thing that can name the org. Embedding organizations(slug) in the same
-  // query gives the link below a path-based destination without a second
-  // round trip.
+  // thing that can name the org; the request form posts the same token to
+  // /api/family-invites/request, which resolves it again server-side.
   const { data: invite, error: inviteError } = await supabase
     .from("family_invites")
     .select(
@@ -71,9 +59,6 @@ export default async function FamilyJoinPage({ params }: PageProps) {
       ),
       family_units!family_invites_family_id_fkey (
         family_name
-      ),
-      organizations!family_invites_org_id_fkey (
-        slug
       )
     `,
     )
@@ -99,23 +84,7 @@ export default async function FamilyJoinPage({ params }: PageProps) {
     );
   }
 
-  const org = invite?.organizations as unknown as { slug: string } | null;
-
-  if (invite && !org?.slug) {
-    // Should be structurally impossible under the org_id FK — log it so an
-    // invariant violation is diagnosable if it ever occurs.
-    console.error(
-      "Family join page: invite row has no resolvable org:",
-      invite.id,
-      invite.org_id,
-    );
-  }
-
-  // Invalid token, or (never expected under the org_id FK) a row with no
-  // resolvable org — fail closed with an inline message. The message is the
-  // same for both causes on purpose: distinguishing them would leak which
-  // tokens exist.
-  if (!invite || !org?.slug) {
+  if (!invite) {
     return (
       <ErrorCard
         title="Invite Not Found"
@@ -174,14 +143,6 @@ export default async function FamilyJoinPage({ params }: PageProps) {
         .join(" ")
     : "you";
 
-  // Pass invite_token so the access-request form can store it, and pre-fill
-  // email.
-  const joinUrl = buildFamilyInviteJoinUrl(
-    org.slug,
-    token,
-    invite.invite_email,
-  );
-
   return (
     <AuthShell
       eyebrow={`${familyMember?.relationship ?? "Family"} invite`}
@@ -207,29 +168,12 @@ export default async function FamilyJoinPage({ params }: PageProps) {
           )}
         </div>
 
-        <div className="space-y-3">
-          <p className="text-lg text-muted-foreground">
-            Your invite was sent to{" "}
-            <span className="font-medium text-foreground">
-              {invite.invite_email}
-            </span>
-            . Use that email address when you sign up.
-          </p>
-          <p className="text-lg text-muted-foreground">
-            After you request access, an admin will review and approve your
-            account. This usually takes less than a day.
-          </p>
-        </div>
+        <p className="text-lg text-muted-foreground">
+          After you request access, an admin will review and approve your
+          account. This usually takes less than a day.
+        </p>
 
-        <Link href={joinUrl} className="block">
-          <Button
-            size="lg"
-            className="w-full bg-brand-primary hover:bg-brand-primary/90 text-white flex items-center justify-center gap-2"
-          >
-            Request Access
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-        </Link>
+        <FamilyRequestForm token={token} email={invite.invite_email} />
       </div>
     </AuthShell>
   );

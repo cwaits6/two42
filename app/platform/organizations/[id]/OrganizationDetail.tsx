@@ -22,7 +22,6 @@ type OrgStatus = Database["public"]["Enums"]["org_status"];
 export interface OrgDetail {
   id: string;
   name: string;
-  slug: string;
   status: OrgStatus;
   // Platform-operator gate on custom sending domains.
   customEmailDomainEnabled: boolean;

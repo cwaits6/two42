@@ -141,6 +141,19 @@ export interface GroupRequest {
   created_at: string;
 }
 
+/** A link into one group; dead once revoked, expired or used max_uses times. */
+export interface GroupInvite {
+  id: string;
+  org_id: string;
+  group_id: string;
+  token: string;
+  created_by: string | null;
+  created_at: string;
+  expires_at: string | null;
+  max_uses: number | null;
+  revoked_at: string | null;
+}
+
 /** A group's calendar. One per group in practice; its color is the group's color. */
 export interface EventCalendar {
   id: string;

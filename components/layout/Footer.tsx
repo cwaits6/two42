@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { siteConfig } from "@/lib/config";
-import { resolveOrgSlug } from "@/lib/org";
 import { Heart } from "lucide-react";
 
 export function Footer() {
@@ -28,7 +27,6 @@ export function Footer() {
               {[
                 { href: "/calendar", label: "Calendar" },
                 { href: "/lectures", label: "Lecture Library" },
-                { href: `/${resolveOrgSlug()}/join`, label: "Join Our Group" },
                 { href: "/login", label: "Member Sign In" },
               ].map((link) => (
                 <li key={link.href}>

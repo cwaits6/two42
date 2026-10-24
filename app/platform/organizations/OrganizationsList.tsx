@@ -17,13 +17,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { isReservedOrgSlug } from "@/lib/org";
 import type { Database } from "@/lib/supabase/database.types";
 
 export interface PlatformOrg {
   id: string;
   name: string;
-  slug: string;
   status: Database["public"]["Enums"]["org_status"];
   created_at: string;
 }
@@ -31,10 +29,6 @@ export interface PlatformOrg {
 interface OrganizationsListProps {
   initialOrgs: PlatformOrg[];
 }
-
-// Mirrors provision_organization()'s TN003 regex so the operator gets a
-// clean message before the RPC raises.
-const SLUG = /^[a-z0-9][a-z0-9-]{1,62}$/;
 
 // Mirrors EMAIL in lib/branding.ts. Copied rather than imported: that module
 // pulls in the server Supabase client, and this is a client component. The
@@ -46,22 +40,13 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ name: "", slug: "", ownerEmail: "" });
+  const [form, setForm] = useState({ name: "", ownerEmail: "" });
 
   async function handleCreate() {
     const name = form.name.trim();
-    const slug = form.slug.trim();
     const ownerEmail = form.ownerEmail.trim();
-    if (!name || !slug || !ownerEmail) {
-      toast.error("Name, slug, and owner email are required.");
-      return;
-    }
-    if (!SLUG.test(slug)) {
-      toast.error("Slug must be lowercase letters, numbers, and hyphens.");
-      return;
-    }
-    if (isReservedOrgSlug(slug)) {
-      toast.error("That slug is reserved for platform use.");
+    if (!name || !ownerEmail) {
+      toast.error("Name and owner email are required.");
       return;
     }
     if (ownerEmail.length > 254 || !EMAIL.test(ownerEmail)) {
@@ -74,7 +59,7 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
       const res = await fetch("/api/platform/organizations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, slug, ownerEmail }),
+        body: JSON.stringify({ name, ownerEmail }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
@@ -83,7 +68,7 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
       }
       toast.success(`Organization ${name} created.`);
       setDialogOpen(false);
-      setForm({ name: "", slug: "", ownerEmail: "" });
+      setForm({ name: "", ownerEmail: "" });
       router.refresh();
     } catch (err) {
       console.error(err);
@@ -125,7 +110,6 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
                         {org.status === "active" ? "Active" : "Suspended"}
                       </Badge>
                     </div>
-                    <p className="text-base text-muted-foreground">{org.slug}</p>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {/* Locale and time zone are explicit: a bare
                           toLocaleDateString() renders in the server's zone
@@ -172,18 +156,6 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 placeholder="e.g. Grace Chapel"
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="org-slug">Slug</Label>
-              <Input
-                id="org-slug"
-                value={form.slug}
-                onChange={(e) => setForm({ ...form, slug: e.target.value })}
-                placeholder="e.g. grace-chapel"
-              />
-              <p className="text-sm text-muted-foreground">
-                Lowercase letters, numbers, and hyphens.
-              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="org-owner-email">Owner email</Label>

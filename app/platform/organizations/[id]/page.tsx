@@ -29,7 +29,7 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
   const service = await createServiceClient();
   const { data: org, error: orgError } = await service
     .from("organizations")
-    .select("id, name, slug, status, created_at, branding, custom_email_domain_enabled")
+    .select("id, name, status, created_at, branding, custom_email_domain_enabled")
     .eq("id", id)
     .maybeSingle();
 
@@ -63,7 +63,7 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
     console.error("Platform founding-admin read failed", ownerError);
     return (
       <PageContainer>
-        <PageHeader title={org.name} subtitle={org.slug} backHref="/platform/organizations" backLabel="Back to Organizations" />
+        <PageHeader title={org.name} subtitle={org.id} backHref="/platform/organizations" backLabel="Back to Organizations" />
         <p className="text-base">
           Could not load the founding-admin request. Try again in a moment.
         </p>
@@ -153,7 +153,6 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
   const detail: OrgDetail = {
     id: org.id,
     name: org.name,
-    slug: org.slug,
     status: org.status,
     customEmailDomainEnabled: org.custom_email_domain_enabled,
     branding: {
@@ -168,7 +167,7 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
     <PageContainer>
       <PageHeader
         title={org.name}
-        subtitle={org.slug}
+        subtitle={org.id}
         backHref="/platform/organizations"
         backLabel="Back to Organizations"
       />

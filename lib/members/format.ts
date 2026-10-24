@@ -225,6 +225,20 @@ export function serializeMembers(rows: MemberRow[]): string {
   return serializeCsv([[...MEMBER_CSV_COLUMNS], ...rows.map(rowToCells)]);
 }
 
+/**
+ * A free-text org name as a filename segment: lower-case, runs of anything
+ * outside a-z and 0-9 collapsed to one hyphen, no leading or trailing
+ * hyphen, at most 60 characters. Empty when nothing survives.
+ */
+export function filenameSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60)
+    .replace(/-+$/, "");
+}
+
 const TRUE_WORDS = new Set(["true", "yes", "1"]);
 const FALSE_WORDS = new Set(["false", "no", "0"]);
 

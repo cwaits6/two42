@@ -16,8 +16,9 @@ export default async function PlatformOrganizationsPage() {
   // predicate here. See docs/security/service-role-inventory.md.
   const { data: orgs, error } = await service
     .from("organizations")
-    .select("id, name, slug, status, created_at")
-    .order("slug");
+    .select("id, name, status, created_at")
+    .order("name")
+    .order("created_at");
 
   // Without this, a failed read is indistinguishable from an empty
   // deployment: orgs is null and the list renders "No organizations yet."

@@ -11,7 +11,7 @@ import {
   type ActiveGroup,
 } from "@/lib/groups/active";
 import { loadGroupMemberships } from "@/lib/groups/memberships";
-import { isExpectedHost, normalizeHost, resolveOrgSlug } from "@/lib/org";
+import { isExpectedHost, normalizeHost } from "@/lib/org";
 import { siteConfig } from "@/lib/config";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -75,15 +75,6 @@ export async function updateSession(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
-      // Org resolution header — see lib/org.ts. The middleware client only
-      // serves authenticated auth/role checks, where the principal's org
-      // wins, but every client sends the header so anon paths never depend
-      // on which client they happen to use.
-      global: {
-        headers: {
-          "x-two42-org": resolveOrgSlug(),
-        },
-      },
       cookies: {
         getAll() {
           return request.cookies.getAll();
@@ -121,8 +112,9 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // Protected routes - require authentication. Boundary-matched, because
-  // "/g" would otherwise swallow "/grace/join" (the anonymous per-org join
-  // page) and any other slug starting with the same letters.
+  // "/g" would otherwise swallow any public path starting with the same
+  // letters ("/give-thanks"); /join/<token> and /join/family/<token> stay
+  // anonymous.
   const protectedPaths = [
     "/g",
     "/dashboard",

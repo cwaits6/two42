@@ -81,24 +81,19 @@ export function resolveBranding(raw: unknown): OrgBranding {
 }
 
 /**
- * The request org's branding, memoized per request with React cache() —
- * cache() dedupes repeated calls with the same arguments within one render
- * (Supabase calls are not fetch-memoized). RLS narrows organizations to the
- * request org, so no explicit org filter is needed — but only because this
- * uses createClient(); a service-role client would bypass RLS and require one.
- *
- * Pass `orgSlug` when the URL itself names the org (the /[orgSlug]/** routes):
- * it becomes the x-two42-org header that app_request_org_id() resolves for an
- * anonymous caller. Without it the client falls back to the env-pinned
- * slug, which is only legitimate when the caller is authenticated (the header
- * is ignored and the org comes from the profile) — see getRequestBranding().
+ * The caller's own org's branding, memoized per request with React cache() —
+ * cache() dedupes repeated calls within one render (Supabase calls are not
+ * fetch-memoized). RLS narrows organizations to the caller's org, so no
+ * explicit org filter is needed — but only because this uses createClient();
+ * a service-role client would bypass RLS and require one. An anonymous
+ * request resolves no org and reads no row; see getRequestBranding().
  *
  * Never throws: branding must not be able to 500 a page. Any error or
  * missing row degrades to BRANDING_DEFAULTS.
  */
-export const getOrgBranding = cache(async (orgSlug?: string): Promise<OrgBranding> => {
+export const getOrgBranding = cache(async (): Promise<OrgBranding> => {
   try {
-    const supabase = await createClient(orgSlug);
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from("organizations")
       .select("branding")
@@ -110,11 +105,10 @@ export const getOrgBranding = cache(async (orgSlug?: string): Promise<OrgBrandin
     if (!data) {
       // maybeSingle() reports zero rows as { data: null, error: null }, so
       // this branch is NOT reachable via `error` above. Not "unconfigured" —
-      // the request resolved no org row at all: most likely
-      // NEXT_PUBLIC_ORG_SLUG does not match the seeded org's slug
-      // (lib/org.ts), or the permissive SELECT policy regressed. The defaults
-      // are byte-identical to org #1's backfilled branding, so without this
-      // line a totally non-functional read path is invisible in the logs.
+      // the request resolved no org row at all: an anonymous caller reached
+      // this directly, or the permissive SELECT policy regressed. The
+      // defaults are byte-identical to org #1's backfilled branding, so
+      // without this line a non-functional read path is invisible in the logs.
       console.warn("No organization row visible for this request; using branding defaults");
       return BRANDING_DEFAULTS;
     }
@@ -131,10 +125,8 @@ export const getOrgBranding = cache(async (orgSlug?: string): Promise<OrgBrandin
  * (/, /login, /forgot-password, /setup-account) that carry no org
  * identifier. An authenticated request resolves its own org from
  * profiles.org_id (app_current_org_id()), which is theirs to see; an
- * anonymous request here must NOT fall back to app_request_org_id(),
- * whose x-two42-org header would carry the env-pinned slug and brand
- * every generic page as that one tenant. Org-scoped subtrees
- * (/[orgSlug]/**) call getOrgBranding(orgSlug) directly instead of this.
+ * anonymous request resolves no org and is branded with the platform
+ * defaults without a query.
  *
  * Memoized per request with cache() — generateMetadata() and the layout
  * body both call this once per render, same rationale as getOrgBranding().

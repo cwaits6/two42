@@ -92,14 +92,47 @@ export function discoveryRowSubtitle(row: Pick<DiscoverableGroup, "member_count"
   return row.description ? `${count} · ${row.description}` : count;
 }
 
-export function privacyHelperText(orgDiscoveryOn: boolean): string {
-  return orgDiscoveryOn
-    ? "Hidden from Find a group and the Directory. People join by invite link or when a leader adds them. The organization's setting is the ceiling: a private group can only hide more, never less."
-    : "Already hidden: the organization has turned off finding groups. Private keeps this group hidden if that changes.";
+/**
+ * A helper sentence with one slot the UI renders as a link to the group's
+ * Invite links page. `link` is null when the sentence has no slot.
+ */
+export interface HelperSentence {
+  before: string;
+  link: string | null;
+  after: string;
 }
 
-export const PRIVATE_POLICY_HELPER =
-  "Not used while the group is private. People join by invite link or when a leader adds them.";
+export const INVITE_LINK_WORDS = "invite link";
+
+export function privacyHelper(orgDiscoveryOn: boolean): HelperSentence {
+  return orgDiscoveryOn
+    ? {
+        before: "Hidden from Find a group and the Directory. People join by ",
+        link: INVITE_LINK_WORDS,
+        after:
+          " or when a leader adds them. The organization's setting is the ceiling: a private group can only hide more, never less.",
+      }
+    : {
+        before:
+          "Already hidden: the organization has turned off finding groups. Private keeps this group hidden if that changes.",
+        link: null,
+        after: "",
+      };
+}
+
+export function helperSentenceText(sentence: HelperSentence): string {
+  return `${sentence.before}${sentence.link ?? ""}${sentence.after}`;
+}
+
+export function privacyHelperText(orgDiscoveryOn: boolean): string {
+  return helperSentenceText(privacyHelper(orgDiscoveryOn));
+}
+
+export const PRIVATE_POLICY_HELPER: HelperSentence = {
+  before: "Not used while the group is private. People join by ",
+  link: INVITE_LINK_WORDS,
+  after: " or when a leader adds them.",
+};
 
 export const OPEN_POLICY_EMPTY_TEXT =
   "Requests are approved automatically while the join policy is Open.";

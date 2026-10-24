@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ApprovalQueue } from "@/components/admin/ApprovalQueue";
@@ -23,11 +24,27 @@ import {
   PRIVATE_POLICY_HELPER,
   parseJoinPolicy,
   pendingRequestsEmptyText,
-  privacyHelperText,
+  privacyHelper,
   reviewErrorMessage,
+  type HelperSentence,
   type JoinPolicy,
 } from "@/lib/groups/joining";
 import { displayName } from "@/lib/names";
+
+/** Renders a helper sentence with its slot linked to the Invite links page. */
+function HelperText({ sentence, inviteHref }: { sentence: HelperSentence; inviteHref: string }) {
+  return (
+    <>
+      {sentence.before}
+      {sentence.link ? (
+        <Link href={inviteHref} className="font-medium text-brand-primary underline">
+          {sentence.link}
+        </Link>
+      ) : null}
+      {sentence.after}
+    </>
+  );
+}
 
 interface PendingRequest {
   id: string;
@@ -148,6 +165,7 @@ export function PrivacyAndJoiningManager({
   }
 
   const policyOption = JOIN_POLICY_OPTIONS.find((o) => o.value === policy);
+  const inviteHref = groupPath(groupId, "/settings/invites");
 
   return (
     <PageContainer>
@@ -166,7 +184,7 @@ export function PrivacyAndJoiningManager({
                 Private group
               </Label>
               <p className="mt-2 text-base text-muted-foreground">
-                {privacyHelperText(orgDiscoveryOn)}
+                <HelperText sentence={privacyHelper(orgDiscoveryOn)} inviteHref={inviteHref} />
               </p>
             </div>
             <Switch
@@ -203,7 +221,11 @@ export function PrivacyAndJoiningManager({
                 </SelectContent>
               </Select>
               <p className="text-base text-muted-foreground">
-                {isPrivate ? PRIVATE_POLICY_HELPER : policyOption?.description}
+                {isPrivate ? (
+                  <HelperText sentence={PRIVATE_POLICY_HELPER} inviteHref={inviteHref} />
+                ) : (
+                  policyOption?.description
+                )}
               </p>
             </div>
             {!isPrivate && (
