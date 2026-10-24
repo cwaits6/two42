@@ -1,3 +1,5 @@
+import type { Tables } from "@/lib/supabase/database.types";
+
 export type UserRole = "pending" | "member" | "content_editor" | "admin";
 
 export type AccessRequestStatus = "pending" | "approved" | "denied";
@@ -142,17 +144,7 @@ export interface GroupRequest {
 }
 
 /** A link into one group; dead once revoked, expired or used max_uses times. */
-export interface GroupInvite {
-  id: string;
-  org_id: string;
-  group_id: string;
-  token: string;
-  created_by: string | null;
-  created_at: string;
-  expires_at: string | null;
-  max_uses: number | null;
-  revoked_at: string | null;
-}
+export type GroupInvite = Tables<"group_invites">;
 
 /** A group's calendar. One per group in practice; its color is the group's color. */
 export interface EventCalendar {

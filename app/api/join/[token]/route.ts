@@ -7,6 +7,7 @@ import { reserveEmailQuota } from "@/lib/email/quota";
 import { sendGroupInviteEmail } from "@/lib/email/resend";
 import { isUuid } from "@/lib/groups/active";
 import { INVITE_INVALID_TEXT } from "@/lib/groups/invites";
+import type { Database } from "@/lib/supabase/database.types";
 import { createServiceClient } from "@/lib/supabase/server";
 
 const SIGNUP_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -16,12 +17,7 @@ const CANNOT_SIGN_UP = {
   error: "We can't set up an account for that email address. If you already have an account, sign in and open this link again.",
 };
 
-type RedeemedRow = {
-  org_id: string;
-  group_id: string;
-  group_name: string;
-  access_request_id: string;
-};
+type RedeemedRow = Database["public"]["Functions"]["group_invite_redeem"]["Returns"][number];
 
 /**
  * POST /api/join/[token] — the new-person path of a group invite. The
@@ -74,7 +70,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
         return NextResponse.json({ error: "Failed to process the invite" }, { status: 500 });
     }
   }
-  const row = (Array.isArray(data) ? data[0] : data) as RedeemedRow | undefined;
+  const row: RedeemedRow | undefined = data?.[0];
   if (!row) {
     console.error("Join route: redeem returned no row");
     return NextResponse.json({ error: "Failed to process the invite" }, { status: 500 });

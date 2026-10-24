@@ -95,7 +95,7 @@ export function InviteLinksManager({ groupId, groupName }: InviteLinksManagerPro
       setLoading(false);
       return;
     }
-    const rows = (inviteRows.data ?? []) as GroupInvite[];
+    const rows: GroupInvite[] = inviteRows.data ?? [];
     const counts: Record<string, number> = {};
     for (const row of useRows.data ?? []) {
       counts[row.invite_id] = (counts[row.invite_id] ?? 0) + 1;
@@ -163,7 +163,7 @@ export function InviteLinksManager({ groupId, groupName }: InviteLinksManagerPro
       toast.error("Couldn't create the link.");
       return;
     }
-    const created = data as GroupInvite;
+    const created: GroupInvite = data;
     setInvites((prev) => [created, ...prev]);
     setCreateOpen(false);
     setExpiry(DEFAULT_EXPIRY_PRESET);
