@@ -181,6 +181,11 @@ select ok(
   and not has_table_privilege('authenticated', 'public.group_join_requests', 'update')
   and not has_table_privilege('authenticated', 'public.group_join_requests', 'delete'),
   'authenticated holds no INSERT, UPDATE or DELETE on group_join_requests');
+select ok(
+  not has_table_privilege('anon', 'public.group_join_requests', 'insert')
+  and not has_table_privilege('anon', 'public.group_join_requests', 'update')
+  and not has_table_privilege('anon', 'public.group_join_requests', 'delete'),
+  'anon holds no INSERT, UPDATE or DELETE on group_join_requests');
 select ok(has_table_privilege('authenticated', 'public.group_join_requests', 'select'),
   'positive control: authenticated holds SELECT on group_join_requests');
 
@@ -408,6 +413,7 @@ declare
   member_sees bigint; leader_row text; member_review_err text := 'none';
   approve_result text; again_err text := 'none'; ghost_err text := 'none';
   hidden_email_row text; decline_result text; refile_result text; admin_result text;
+  decline_members bigint;
 begin
   set local role authenticated;
   perform set_config('request.headers', '{}', true);
@@ -450,6 +456,10 @@ begin
   select coalesce(first_name, '-') || ':' || coalesce(email, '-')
     into hidden_email_row from public.pending_group_join_requests(grp_a1);
   decline_result := public.review_group_join_request(req2, false);
+  reset role;
+  select count(*) into decline_members from public.group_members
+    where group_id = grp_a1 and profile_id = member_a3;
+  set local role authenticated;
 
   perform set_config('request.jwt.claims', json_build_object('sub', member_a3)::text, true);
   refile_result := public.join_group(grp_a1);
@@ -472,6 +482,7 @@ begin
   perform set_config('gd.s5_ghost_err', ghost_err, true);
   perform set_config('gd.s5_hidden_email_row', coalesce(hidden_email_row, 'none'), true);
   perform set_config('gd.s5_decline_result', decline_result, true);
+  perform set_config('gd.s5_decline_members', decline_members::text, true);
   perform set_config('gd.s5_refile_result', refile_result, true);
   perform set_config('gd.s5_admin_result', admin_result, true);
 end $$;
@@ -505,12 +516,8 @@ select is(
   (select status || ':' || (reviewed_by = current_setting('gd.leader_a1')::uuid)::text
      from public.group_join_requests where id = current_setting('gd.req2')::uuid),
   'declined:true', 'and the request is declined with the reviewer stamped');
-select is(
-  (select count(*)::int from public.group_members
-    where group_id = current_setting('gd.grp_a1')::uuid and profile_id = current_setting('gd.member_a3')::uuid
-      and (select status from public.group_join_requests where id = current_setting('gd.req2')::uuid) = 'declined'
-      and not exists (select 1 from public.group_join_requests where id = current_setting('gd.req3')::uuid and status = 'approved')),
-  0, 'a decline writes no membership');
+select is(current_setting('gd.s5_decline_members')::int, 0,
+  'a decline writes no membership');
 select is(current_setting('gd.s5_refile_result'), 'requested',
   'a declined requester may ask again');
 select is(current_setting('gd.s5_admin_result'), 'approved',
@@ -519,6 +526,92 @@ select is(
   (select count(*)::int from public.group_members
     where group_id = current_setting('gd.grp_a1')::uuid and profile_id = current_setting('gd.member_a3')::uuid),
   1, 'and the membership is written');
+
+-- ── 5b. Review stays inside the group, the flag and the requester ───────────
+-- A leader of a different group in the same org holds no review rights here;
+-- lurker_a's request is the subject, filed under approval and left pending.
+do $$
+declare
+  grp_a1 uuid := current_setting('gd.grp_a1')::uuid;
+  leader_a1 uuid := current_setting('gd.leader_a1')::uuid;
+  member_a3 uuid := current_setting('gd.member_a3')::uuid;
+  lurker_a uuid := current_setting('gd.lurker_a')::uuid;
+  req4 uuid;
+  other_rows bigint; other_err text := 'none'; lead_rows bigint;
+  null_err text := 'none'; null_status text; stale_err text := 'none';
+  stale_members bigint; control_result text;
+begin
+  set local role authenticated;
+  perform set_config('request.headers', '{}', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', lurker_a)::text, true);
+  perform public.join_group(grp_a1);
+  reset role;
+  select id into req4 from public.group_join_requests
+    where group_id = grp_a1 and profile_id = lurker_a and status = 'pending';
+  set local role authenticated;
+
+  perform set_config('request.jwt.claims', json_build_object('sub', member_a3)::text, true);
+  select count(*) into other_rows from public.pending_group_join_requests(grp_a1);
+  begin
+    perform public.review_group_join_request(req4, true);
+  exception when others then
+    other_err := sqlstate;
+  end;
+
+  perform set_config('request.jwt.claims', json_build_object('sub', leader_a1)::text, true);
+  select count(*) into lead_rows from public.pending_group_join_requests(grp_a1);
+  begin
+    perform public.review_group_join_request(req4, null);
+  exception when others then
+    null_err := sqlstate;
+  end;
+  reset role;
+  select status into null_status from public.group_join_requests where id = req4;
+
+  update public.profiles set role = 'pending' where id = lurker_a;
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', leader_a1)::text, true);
+  begin
+    perform public.review_group_join_request(req4, true);
+  exception when others then
+    stale_err := sqlstate;
+  end;
+  reset role;
+  select count(*) into stale_members from public.group_members
+    where group_id = grp_a1 and profile_id = lurker_a;
+  update public.profiles set role = 'member' where id = lurker_a;
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', leader_a1)::text, true);
+  control_result := public.review_group_join_request(req4, false);
+  reset role;
+
+  perform set_config('gd.s5b_other_rows', other_rows::text, true);
+  perform set_config('gd.s5b_other_err', other_err, true);
+  perform set_config('gd.s5b_lead_rows', lead_rows::text, true);
+  perform set_config('gd.s5b_null_err', null_err, true);
+  perform set_config('gd.s5b_null_status', null_status, true);
+  perform set_config('gd.s5b_stale_err', stale_err, true);
+  perform set_config('gd.s5b_stale_members', stale_members::text, true);
+  perform set_config('gd.s5b_control_result', control_result, true);
+end $$;
+
+select is(current_setting('gd.s5b_lead_rows')::int, 1,
+  'positive control: the group''s own leader lists the pending request');
+select is(current_setting('gd.s5b_other_rows')::int, 0,
+  'a leader of a different group in the same org gets an empty pending list');
+select is(current_setting('gd.s5b_other_err'), 'GJ004',
+  'and reviewing the request gets GJ004');
+select is(current_setting('gd.s5b_null_err'), '22004',
+  'a NULL approve flag is rejected with 22004');
+select is(current_setting('gd.s5b_null_status'), 'pending',
+  'and leaves the request pending');
+select is(current_setting('gd.s5b_stale_err'), 'GJ002',
+  'approving a requester who has since been demoted to pending gets GJ002');
+select is(current_setting('gd.s5b_stale_members')::int, 0,
+  'and writes no membership');
+select is(current_setting('gd.s5b_control_result'), 'declined',
+  'positive control: the group''s own leader still reviews the request once the account is active');
 
 -- ── 6. A stale request under an open policy ─────────────────────────────────
 -- A pending request filed under approval; the policy flips to open; joining

@@ -66,8 +66,13 @@ test.beforeAll(async ({ browser }) => {
 
 test.afterAll(async () => {
   try {
-    if (leaderC) await setGroupCPrivate(false);
-    if (admin) await setDiscovery(true);
+    // Separate pages, so one failed restore never skips the other.
+    const results = await Promise.allSettled([
+      leaderC ? setGroupCPrivate(false) : Promise.resolve(),
+      admin ? setDiscovery(true) : Promise.resolve(),
+    ]);
+    const failed = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (failed) throw failed.reason;
   } finally {
     await leaderC?.context.close();
     await admin?.context.close();

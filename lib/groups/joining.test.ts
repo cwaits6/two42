@@ -11,6 +11,7 @@ import {
   parseJoinPolicy,
   pendingRequestsEmptyText,
   privacyHelperText,
+  reviewErrorMessage,
   toDiscoverableGroup,
   type DiscoverableGroup,
 } from "@/lib/groups/joining";
@@ -78,6 +79,7 @@ describe("joinRowState", () => {
   it.each([
     ["a group the viewer leads", { viewer_role: "leader" }, "leads"],
     ["a group the viewer is in", { viewer_role: "member" }, "member"],
+    ["a private group the viewer is in is still theirs", { viewer_role: "member", is_private: true }, "member"],
     ["a private group the viewer leads is still theirs", { viewer_role: "leader", is_private: true }, "leads"],
     ["a private row without a role is the admin tag", { is_private: true }, "private"],
     ["a private open group still shows the tag, never Join", { is_private: true, join_policy: "open" }, "private"],
@@ -152,5 +154,18 @@ describe("joinErrorMessage", () => {
 
   it.each([undefined, "", "PGRST301", "GC001"])("falls back for %p", (code) => {
     expect(joinErrorMessage(code)).toBe("Couldn't update your membership. Please try again.");
+  });
+});
+
+describe("reviewErrorMessage", () => {
+  it.each([
+    ["GJ002", "That person's account isn't active, so they can't be added."],
+    ["GJ004", "That request is no longer pending."],
+  ])("%s → %s", (code, message) => {
+    expect(reviewErrorMessage(code)).toBe(message);
+  });
+
+  it.each([undefined, "", "GJ001", "PGRST301", "22004"])("falls back for %p", (code) => {
+    expect(reviewErrorMessage(code)).toBe("Couldn't update the request. Please try again.");
   });
 });
