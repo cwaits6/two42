@@ -124,18 +124,22 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
       ]);
     // Keep the previous counts rather than showing every team as empty, which
     // would also silence the member warning on delete.
-    if (countsError || settingsError) {
-      toast.error("Failed to load teams.");
+    if (countsError) {
+      toast.error("Failed to load team members.");
       setLoading(false);
       return;
     }
-
     const countMap: Record<string, number> = {};
     (counts || []).forEach((row: { team_id: string }) => {
       countMap[row.team_id] = (countMap[row.team_id] || 0) + 1;
     });
     setMemberCounts(countMap);
 
+    if (settingsError) {
+      toast.error("Failed to load serving settings.");
+      setLoading(false);
+      return;
+    }
     const settingsMap: Record<string, TeamSettings> = {};
     ((settings || []) as TeamSettings[]).forEach((row) => {
       settingsMap[row.team_id] = row;
