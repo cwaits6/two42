@@ -3,6 +3,7 @@ import {
   NO_PENDING_JOIN_REQUESTS_TEXT,
   groupPendingJoinRequests,
   pendingJoinRequestsSummary,
+  requestedOn,
   toPendingJoinRequest,
   type PendingJoinRequest,
 } from "@/lib/groups/joinQueue";
@@ -84,5 +85,13 @@ describe("pendingJoinRequestsSummary", () => {
     [12, "12 join requests waiting."],
   ])("counts %i", (count, text) => {
     expect(pendingJoinRequestsSummary(count)).toBe(text);
+  });
+});
+
+describe("requestedOn", () => {
+  it("renders the org's calendar day, not the server's", () => {
+    // 03:30Z on the 21st is still the evening of the 20th in New York.
+    expect(requestedOn("2026-10-21T03:30:00Z", "America/New_York")).toBe("Oct 20, 2026");
+    expect(requestedOn("2026-10-21T03:30:00Z", "UTC")).toBe("Oct 21, 2026");
   });
 });

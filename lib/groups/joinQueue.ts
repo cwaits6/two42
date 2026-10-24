@@ -70,6 +70,20 @@ export function groupPendingJoinRequests(rows: PendingJoinRequest[]): JoinQueueS
   return [...sections.values()];
 }
 
+/**
+ * The day a request was filed, in the org's time zone and a fixed locale.
+ * These queues render on the server and again in the browser, so a
+ * locale- or zone-dependent string would differ between the two.
+ */
+export function requestedOn(createdAt: string, timeZone: string): string {
+  return new Date(createdAt).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone,
+  });
+}
+
 /** The Admin overview's one-line count of requests waiting across every group. */
 export function pendingJoinRequestsSummary(count: number): string {
   if (count === 0) return NO_PENDING_JOIN_REQUESTS_TEXT;

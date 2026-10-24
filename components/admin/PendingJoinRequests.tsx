@@ -13,10 +13,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { siteConfig } from "@/lib/config";
 import { createClient } from "@/lib/supabase/client";
 import {
   NO_PENDING_JOIN_REQUESTS_TEXT,
   groupPendingJoinRequests,
+  requestedOn,
   type PendingJoinRequest,
 } from "@/lib/groups/joinQueue";
 import { reviewErrorMessage } from "@/lib/groups/joining";
@@ -92,7 +94,7 @@ export function PendingJoinRequests({
                 id: r.id,
                 title: displayName(r.requester),
                 subtitle: r.email ?? undefined,
-                meta: `Requested ${new Date(r.created_at).toLocaleDateString()}`,
+                meta: `Requested ${requestedOn(r.created_at, siteConfig.timeZone)}`,
               }))}
               onApprove={(id) => {
                 const request = byId(id);
