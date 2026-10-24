@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import DOMPurify from "dompurify";
 import { Megaphone } from "lucide-react";
+import { SanitizedHtml } from "@/components/editor/SanitizedHtml";
 import { StaticBlockContent } from "@/components/editor/StaticBlockContent";
 import type { Announcement } from "@/lib/types";
 import type { PartialBlock } from "@blocknote/core";
@@ -73,9 +73,9 @@ export function AnnouncementCard({ announcement }: AnnouncementCardProps) {
             <StaticBlockContent blocks={blocks} />
           </div>
         ) : (
-          <div
+          <SanitizedHtml
+            html={announcement.content}
             className="text-base text-slate-600 leading-relaxed [&_a]:text-brand-accent [&_a]:underline [&_a:hover]:text-brand-accent/90 [&_strong]:font-semibold [&_strong]:text-slate-800"
-            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(announcement.content) }}
           />
         )}
       </div>
