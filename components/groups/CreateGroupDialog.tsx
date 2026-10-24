@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -67,6 +68,7 @@ export function CreateGroupDialog({
   onCreated,
   onRequested,
 }: CreateGroupDialogProps) {
+  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -168,6 +170,12 @@ export function CreateGroupDialog({
             description: checkedDescription.value,
           })
           .select("id, name");
+        if (error?.code === "42501") {
+          toast.error("Your organization no longer takes group requests.");
+          router.refresh();
+          close();
+          return;
+        }
         if (error?.code === "23505") {
           toast.error("You already asked for a group with this name.");
           return;
@@ -251,7 +259,7 @@ export function CreateGroupDialog({
                     className="h-12 px-3 text-base"
                   />
                   <ComboboxPopup>
-                    <ComboboxEmpty />
+                    <ComboboxEmpty className="text-base" />
                     <ComboboxList>
                       {(id: string) => (
                         <ComboboxItem key={id} value={id} className="min-h-11">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
@@ -30,22 +30,28 @@ interface OrgGroupControlsProps {
   policy: GroupCreationPolicy;
 }
 
-/** Org admin controls for groups; the create policy today, discovery when it lands. */
+/** Org admin controls for groups. */
 export function OrgGroupControls({ orgId, policy }: OrgGroupControlsProps) {
   const router = useRouter();
   const [current, setCurrent] = useState(policy);
+  const [saving, setSaving] = useState(false);
+  const latest = useRef(0);
 
   async function change(raw: string | null) {
     const next = parseGroupCreationPolicy(raw);
     if (next === current) return;
     const previous = current;
+    const request = ++latest.current;
     setCurrent(next);
+    setSaving(true);
     const supabase = createClient();
     const { data, error } = await supabase
       .from("organizations")
       .update({ group_creation_policy: next })
       .eq("id", orgId)
       .select("group_creation_policy");
+    if (request !== latest.current) return;
+    setSaving(false);
     if (error || !data?.length) {
       setCurrent(previous);
       toast.error("Failed to update the setting.");
@@ -63,7 +69,12 @@ export function OrgGroupControls({ orgId, policy }: OrgGroupControlsProps) {
         <Label htmlFor="group-creation-policy" className="text-base">
           Who can create groups
         </Label>
-        <Select items={GROUP_CREATION_POLICY_OPTIONS} value={current} onValueChange={change}>
+        <Select
+          items={GROUP_CREATION_POLICY_OPTIONS}
+          value={current}
+          onValueChange={change}
+          disabled={saving}
+        >
           <SelectTrigger id="group-creation-policy" className="h-12 w-full text-base sm:max-w-sm">
             <SelectValue />
           </SelectTrigger>

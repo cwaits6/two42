@@ -45,7 +45,7 @@ export function ApprovalQueue({
               <div className="min-w-0">
                 <p className="text-xl font-semibold">{row.title}</p>
                 {row.subtitle && <p className="text-base text-muted-foreground">{row.subtitle}</p>}
-                {row.meta && <p className="text-sm text-muted-foreground mt-1">{row.meta}</p>}
+                {row.meta && <p className="text-base text-muted-foreground mt-1">{row.meta}</p>}
               </div>
               <div className="flex gap-2 shrink-0">
                 <Button

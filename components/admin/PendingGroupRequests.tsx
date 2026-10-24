@@ -31,6 +31,8 @@ export function PendingGroupRequests({
     try {
       const { error } = await supabase.rpc("group_request_approve", { _request_id: id });
       if (error) {
+        // Decided elsewhere already: the row no longer belongs in the queue.
+        if (error.code === "GC004") remove(id);
         toast.error(groupCreationErrorMessage(error.code));
         return;
       }

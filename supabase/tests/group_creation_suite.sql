@@ -209,7 +209,7 @@ begin
   select count(*) into b_sees from public.group_requests where org_id = org_a;
   begin
     insert into public.group_requests (org_id, requested_by, name)
-      values (org_a, member_a1, 'Smuggled');
+      values (org_a, owner_b, 'Smuggled');
   exception when others then
     b_err := sqlstate;
   end;
@@ -262,6 +262,10 @@ declare
   member_err text := 'none'; again_err text := 'none'; foreign_err text := 'none';
   direct_err text := 'none'; admin_declined bigint; member_declined bigint;
   stale_declined bigint; reset_pending bigint; after_member text; after_stale text;
+  after_foreign text; ghost_err text := 'none';
+  pin_reviewer_err text := 'none'; pin_stamp_err text := 'none';
+  pin_only_reviewer_err text := 'none'; pin_group_err text := 'none'; col_name_err text := 'none';
+  req4 uuid; grp_real uuid;
 begin
   set local role authenticated;
   perform set_config('request.headers', '{}', true);
@@ -273,8 +277,23 @@ begin
     member_err := sqlstate;
   end;
 
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_b)::text, true);
+  begin
+    perform public.group_request_approve(req);
+  exception when others then
+    foreign_err := sqlstate;
+  end;
+  reset role;
+  select status into after_foreign from public.group_requests where id = req;
+  set local role authenticated;
+
   perform set_config('request.jwt.claims', json_build_object('sub', owner_a)::text, true);
   g := public.group_request_approve(req);
+  begin
+    perform public.group_request_approve(gen_random_uuid());
+  exception when others then
+    ghost_err := sqlstate;
+  end;
   begin
     perform public.group_request_approve(req);
   exception when others then
@@ -288,16 +307,12 @@ begin
   get diagnostics reset_pending = row_count;
   select status into after_stale from public.group_requests where id = req;
 
-  perform set_config('request.jwt.claims', json_build_object('sub', owner_b)::text, true);
-  begin
-    perform public.group_request_approve(req);
-  exception when others then
-    foreign_err := sqlstate;
-  end;
-
   reset role;
   insert into public.group_requests (org_id, requested_by, name)
     values (org_a, member_a1, 'Ladies Lunch') returning id into req2;
+  insert into public.group_requests (org_id, requested_by, name)
+    values (org_a, member_a1, 'Reviewer Pin') returning id into req4;
+  select id into grp_real from public.groups where org_id = org_a limit 1;
 
   set local role authenticated;
   perform set_config('request.jwt.claims', json_build_object('sub', member_a1)::text, true);
@@ -312,6 +327,33 @@ begin
     update public.group_requests set status = 'approved' where id = req2;
   exception when others then
     direct_err := sqlstate;
+  end;
+  begin
+    update public.group_requests
+      set status = 'declined', reviewed_by = member_a1, reviewed_at = now() where id = req4;
+  exception when others then
+    pin_reviewer_err := sqlstate;
+  end;
+  begin
+    update public.group_requests
+      set status = 'declined', reviewed_by = owner_a, reviewed_at = null where id = req4;
+  exception when others then
+    pin_stamp_err := sqlstate;
+  end;
+  begin
+    update public.group_requests set reviewed_by = owner_a where id = req4;
+  exception when others then
+    pin_only_reviewer_err := sqlstate;
+  end;
+  begin
+    update public.group_requests set group_id = grp_real where id = req4;
+  exception when others then
+    pin_group_err := sqlstate;
+  end;
+  begin
+    update public.group_requests set name = 'Renamed' where id = req4;
+  exception when others then
+    col_name_err := sqlstate;
   end;
   update public.group_requests
     set status = 'declined', reviewed_by = owner_a, reviewed_at = now()
@@ -331,6 +373,14 @@ begin
   perform set_config('gc.s3_stale_declined', stale_declined::text, true);
   perform set_config('gc.s3_reset_pending', reset_pending::text, true);
   perform set_config('gc.s3_after_stale', after_stale, true);
+  perform set_config('gc.s3_after_foreign', after_foreign, true);
+  perform set_config('gc.s3_ghost_err', ghost_err, true);
+  perform set_config('gc.s3_pin_reviewer_err', pin_reviewer_err, true);
+  perform set_config('gc.s3_pin_stamp_err', pin_stamp_err, true);
+  perform set_config('gc.s3_pin_only_reviewer_err', pin_only_reviewer_err, true);
+  perform set_config('gc.s3_pin_group_err', pin_group_err, true);
+  perform set_config('gc.s3_col_name_err', col_name_err, true);
+  perform set_config('gc.req4', req4::text, true);
 end $$;
 
 select is(current_setting('gc.s3_member_err'), 'GC005',
@@ -372,13 +422,31 @@ select is(current_setting('gc.s3_after_stale'), 'approved',
 select is(current_setting('gc.s3_again_err'), 'GC004',
   'approving the same request again gets GC004');
 select is(current_setting('gc.s3_foreign_err'), 'GC004',
-  'org B''s admin approving org A''s request gets GC004, the same as a missing id');
+  'org B''s admin approving a still-pending org A request gets GC004, the same as a missing id');
+select is(current_setting('gc.s3_after_foreign'), 'pending',
+  'and the foreign attempt leaves the org A request pending');
+select is(current_setting('gc.s3_ghost_err'), 'GC004',
+  'approving an id that never existed gets GC004');
 select is(current_setting('gc.s3_member_declined')::int, 0,
   'a member''s decline matches zero rows');
 select is(current_setting('gc.s3_after_member'), 'pending',
   'and leaves the request pending');
 select is(current_setting('gc.s3_direct_err'), '42501',
   'an admin cannot set status = approved with a plain UPDATE');
+select is(current_setting('gc.s3_pin_reviewer_err'), '42501',
+  'a decline naming someone else as reviewer is refused');
+select is(current_setting('gc.s3_pin_stamp_err'), '42501',
+  'a decline without a review timestamp is refused');
+select is(current_setting('gc.s3_pin_only_reviewer_err'), '42501',
+  'stamping a reviewer on a still-pending request is refused');
+select is(current_setting('gc.s3_pin_group_err'), '42501',
+  'an admin cannot link a request to a group with a plain UPDATE');
+select is(current_setting('gc.s3_col_name_err'), '42501',
+  'an admin cannot change the filed name: the column is not granted');
+select is(
+  (select status || ':' || name || ':' || coalesce(reviewed_by::text, '-') || ':' || coalesce(group_id::text, '-')
+     from public.group_requests where id = current_setting('gc.req4')::uuid),
+  'pending:Reviewer Pin:-:-', 'and the refused updates left the request untouched');
 select is(current_setting('gc.s3_admin_declined')::int, 1,
   'positive control: the admin''s decline matches one row');
 select is(

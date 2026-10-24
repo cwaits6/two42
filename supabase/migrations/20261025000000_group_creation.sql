@@ -100,6 +100,10 @@ create unique index group_requests_one_pending_per_name
   on public.group_requests (org_id, requested_by, name) where status = 'pending';
 alter table public.group_requests enable row level security;
 
+-- Admins decide a request by status only; the filed fields stay as the member wrote them.
+revoke update on public.group_requests from anon, authenticated;
+grant update (status, reviewed_by, reviewed_at) on public.group_requests to authenticated;
+
 comment on table public.group_requests is
   'A member''s request for a new group under the approval policy. Approval goes through group_request_approve(), which creates the group and links it here; decline is a plain UPDATE. Declined rows are the record and are never deleted by the app.';
 
@@ -146,7 +150,11 @@ create policy "Admins can review group requests" on public.group_requests
   with check (
     org_id = (select public.app_request_org_id())
     and (select public.is_admin())
-    and status in ('pending', 'declined')
+    and group_id is null
+    and (
+      (status = 'pending' and reviewed_by is null and reviewed_at is null)
+      or (status = 'declined' and reviewed_by = (select auth.uid()) and reviewed_at is not null)
+    )
   );
 
 -- ── 4. The shared core ────────────────────────────────────────────────────
