@@ -36,7 +36,7 @@ end $$;
 -- ── provision_organization() completeness (§6) ──────────────────────────────
 
 -- Teams are org-defined (a maintainer decision):
--- admins create them in /admin/groups and set per-team capability flags
+-- leaders create them in Group settings › Teams and set per-team capability flags
 -- (is_serving_role; grants_prayer_access existed until 20260801000001) and
 -- per-membership leadership
 -- (team_members.is_leader). A platform-seeded team would be the

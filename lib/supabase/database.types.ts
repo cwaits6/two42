@@ -1279,14 +1279,14 @@ isOneToOne: false
                   ]
                 },"teams": {
                   Row: {
-                    "color": string | null,"created_at": string,"created_by": string | null,"description": string | null,"display_order": number,"group_id": string,"icon": string | null,"id": string,"is_serving_role": boolean,"name": string,"org_id": string,"show_in_directory_filter": boolean,"updated_at": string
+                    "color": string | null,"created_at": string,"created_by": string | null,"description": string | null,"display_order": number,"group_id": string,"icon": string | null,"id": string,"is_serving_role": boolean,"name": string,"org_id": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "color"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"display_order"?: number,"group_id": string,"icon"?: string | null,"id"?: string,"is_serving_role"?: boolean,"name": string,"org_id"?: string,"show_in_directory_filter"?: boolean,"updated_at"?: string
+                    "color"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"display_order"?: number,"group_id": string,"icon"?: string | null,"id"?: string,"is_serving_role"?: boolean,"name": string,"org_id"?: string,"updated_at"?: string
                   }
                   Update: {
-                    "color"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"display_order"?: number,"group_id"?: string,"icon"?: string | null,"id"?: string,"is_serving_role"?: boolean,"name"?: string,"org_id"?: string,"show_in_directory_filter"?: boolean,"updated_at"?: string
+                    "color"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"display_order"?: number,"group_id"?: string,"icon"?: string | null,"id"?: string,"is_serving_role"?: boolean,"name"?: string,"org_id"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     {

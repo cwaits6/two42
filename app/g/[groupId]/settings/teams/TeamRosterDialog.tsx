@@ -23,56 +23,59 @@ type RosterProfile = Pick<
   "id" | "first_name" | "last_name" | "preferred_name" | "avatar_url"
 >;
 
-interface GroupRosterDialogProps {
-  group: MemberGroup | null;
+interface TeamRosterDialogProps {
+  team: MemberGroup | null;
+  groupId: string;
+  groupName: string;
   onClose: () => void;
   /** Called with the new member count whenever the roster changes */
-  onCountChange: (groupId: string, count: number) => void;
+  onCountChange: (teamId: string, count: number) => void;
 }
 
 /**
- * Group roster management, Okta-style: the default view shows only who is
- * currently in the group (with remove), and an explicit "Add members" mode
- * searches the rest of the class. Denormalized role flags on profiles stay
- * in sync via database triggers.
+ * Team roster management: the default view shows only who is currently on
+ * the team (with remove), and an explicit "Add to team" mode searches the
+ * rest of the group. A team lives inside one group, so only the group's
+ * members are candidates.
  */
-export function GroupRosterDialog({
-  group,
+export function TeamRosterDialog({
+  team,
+  groupId,
+  groupName,
   onClose,
   onCountChange,
-}: GroupRosterDialogProps) {
+}: TeamRosterDialogProps) {
   const [profiles, setProfiles] = useState<RosterProfile[]>([]);
   const [assigned, setAssigned] = useState<Set<string>>(new Set());
   const [leaders, setLeaders] = useState<Set<string>>(new Set());
-  // Which group the current profiles/assigned belong to — anything else is
-  // stale data from a previously opened group and must render as loading.
-  const [loadedGroupId, setLoadedGroupId] = useState<string | null>(null);
+  // Which team the current profiles/assigned belong to — anything else is
+  // stale data from a previously opened team and must render as loading.
+  const [loadedTeamId, setLoadedTeamId] = useState<string | null>(null);
   const [mode, setMode] = useState<"roster" | "add">("roster");
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const supabase = useMemo(() => createClient(), []);
-  const groupId = group?.id;
+  const teamId = team?.id;
 
   useEffect(() => {
-    if (!groupId) return;
+    if (!teamId) return;
     let cancelled = false;
 
-    async function load(groupId: string) {
+    async function load(teamId: string) {
       setMode("roster");
       setQuery("");
       try {
         const [{ data: members, error: mErr }, { data: rows, error: rErr }] =
           await Promise.all([
             supabase
-              .from("profiles")
-              .select("id, first_name, last_name, preferred_name, avatar_url")
-              .in("role", ["member", "content_editor", "admin"])
-              .order("last_name", { ascending: true })
-              .order("first_name", { ascending: true }),
+              .from("group_members")
+              .select("profile_id, profiles(id, first_name, last_name, preferred_name, avatar_url)")
+              .eq("group_id", groupId)
+              .returns<{ profile_id: string; profiles: RosterProfile | null }[]>(),
             supabase
               .from("team_members")
               .select("profile_id, is_leader")
-              .eq("team_id", groupId),
+              .eq("team_id", teamId),
           ]);
 
         if (cancelled) return;
@@ -81,9 +84,17 @@ export function GroupRosterDialog({
           return;
         }
         const memberRows = (rows || []) as { profile_id: string; is_leader: boolean }[];
+        // A null embed is a profile RLS hides from the viewer; skip it.
+        const profileRows = (members || [])
+          .map((m) => m.profiles)
+          .filter((p): p is RosterProfile => p !== null)
+          .sort((a, b) =>
+            `${a.last_name ?? ""} ${a.first_name ?? ""}`.localeCompare(
+              `${b.last_name ?? ""} ${b.first_name ?? ""}`,
+            ),
+          );
         // Private buckets: exchange stored avatar URLs for signed
         // URLs before they reach the AvatarImage renders below.
-        const profileRows = (members || []) as RosterProfile[];
         const signed = await mintSignedUrls(profileRows.map((p) => p.avatar_url));
         if (cancelled) return;
         setProfiles(profileRows.map((p, i) => ({ ...p, avatar_url: signed[i] })));
@@ -91,26 +102,34 @@ export function GroupRosterDialog({
         setLeaders(
           new Set(memberRows.filter((r) => r.is_leader).map((r) => r.profile_id)),
         );
-        setLoadedGroupId(groupId);
+        setLoadedTeamId(teamId);
       } catch (err) {
         if (cancelled) return;
-        console.error("GroupRosterDialog load failed", err);
+        console.error("TeamRosterDialog load failed", err);
         toast.error("Failed to load roster.");
       }
     }
 
-    load(groupId);
+    load(teamId);
     return () => {
       cancelled = true;
     };
-  }, [groupId, supabase]);
+  }, [teamId, groupId, supabase]);
 
-  const loading = !group || loadedGroupId !== group.id;
+  const loading = !team || loadedTeamId !== team.id;
 
   const roster = useMemo(
     () => profiles.filter((p) => assigned.has(p.id)),
     [profiles, assigned],
   );
+  // Team rows whose profile RLS hides from the viewer: counted on the team,
+  // but there is no one to list.
+  const hiddenCount = useMemo(() => {
+    const listed = new Set(profiles.map((p) => p.id));
+    let n = 0;
+    for (const id of assigned) if (!listed.has(id)) n += 1;
+    return n;
+  }, [profiles, assigned]);
   const candidates = useMemo(
     () => profiles.filter((p) => !assigned.has(p.id)),
     [profiles, assigned],
@@ -130,10 +149,10 @@ export function GroupRosterDialog({
   }, [mode, roster, candidates, query]);
 
   async function handleChange(profile: RosterProfile, member: boolean) {
-    if (!group) return;
+    if (!team) return;
     setBusy(profile.id);
 
-    const errorMessage = await setGroupMembership(profile.id, group, member);
+    const errorMessage = await setGroupMembership(profile.id, team, member);
     if (errorMessage) {
       toast.error(errorMessage);
       setBusy(null);
@@ -149,22 +168,23 @@ export function GroupRosterDialog({
       nextLeaders.delete(profile.id);
       setLeaders(nextLeaders);
     }
-    onCountChange(group.id, next.size);
+    onCountChange(team.id, next.size);
     setBusy(null);
   }
 
   async function handleLeaderChange(profile: RosterProfile, leader: boolean) {
-    if (!group) return;
+    if (!team) return;
     setBusy(profile.id);
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("team_members")
       .update({ is_leader: leader })
       .eq("profile_id", profile.id)
-      .eq("team_id", group.id);
+      .eq("team_id", team.id)
+      .select("profile_id");
 
-    if (error) {
-      toast.error("Failed to update leader.");
+    if (error || !data?.length) {
+      toast.error("Failed to update team lead.");
       setBusy(null);
       return;
     }
@@ -182,7 +202,7 @@ export function GroupRosterDialog({
   }
 
   return (
-    <Dialog open={!!group} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={!!team} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-md max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -197,17 +217,17 @@ export function GroupRosterDialog({
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             )}
-            {group?.color && (
+            {team?.color && (
               <span
                 className="inline-block w-3 h-3 rounded-full shrink-0"
-                style={{ backgroundColor: group.color }}
+                style={{ backgroundColor: team.color }}
               />
             )}
             {mode === "add"
-              ? `Add to ${group?.name}`
+              ? `Add to ${team?.name}`
               : loading
-                ? group?.name
-                : `${group?.name} — ${assigned.size} member${assigned.size !== 1 ? "s" : ""}`}
+                ? team?.name
+                : `${team?.name} — ${assigned.size} member${assigned.size !== 1 ? "s" : ""}`}
           </DialogTitle>
         </DialogHeader>
 
@@ -231,10 +251,16 @@ export function GroupRosterDialog({
               className="bg-brand-primary hover:bg-brand-primary/90 text-white shrink-0"
             >
               <Plus className="mr-1 h-4 w-4" />
-              Add members
+              Add to team
             </Button>
           )}
         </div>
+
+        {!loading && mode === "roster" && hiddenCount > 0 && (
+          <p className="text-base text-muted-foreground shrink-0">
+            {hiddenCount} on this team {hiddenCount === 1 ? "is" : "are"} not visible to you.
+          </p>
+        )}
 
         <div className="overflow-y-auto flex-1 -mx-1 px-1">
           {loading ? (
@@ -246,8 +272,8 @@ export function GroupRosterDialog({
               {query.trim()
                 ? "No one matches your search."
                 : mode === "roster"
-                  ? "No members in this group yet. Use “Add members” to build the roster."
-                  : "Everyone is already in this group."}
+                  ? "No one on this team yet. Use “Add to team” to build the roster."
+                  : `Everyone in ${groupName} is already on this team.`}
             </p>
           ) : (
             <div className="divide-y">
@@ -265,7 +291,7 @@ export function GroupRosterDialog({
                     {displayName(p)}
                     {leaders.has(p.id) && (
                       <span className="ml-2 text-xs font-medium uppercase tracking-wider text-brand-accent">
-                        Leader
+                        Team lead
                       </span>
                     )}
                   </span>
@@ -278,8 +304,8 @@ export function GroupRosterDialog({
                         onClick={() => handleLeaderChange(p, !leaders.has(p.id))}
                         aria-label={
                           leaders.has(p.id)
-                            ? `Remove ${displayName(p)} as leader of ${group?.name}`
-                            : `Make ${displayName(p)} a leader of ${group?.name}`
+                            ? `Remove ${displayName(p)} as team lead of ${team?.name}`
+                            : `Make ${displayName(p)} team lead of ${team?.name}`
                         }
                         className={
                           leaders.has(p.id)
@@ -297,7 +323,7 @@ export function GroupRosterDialog({
                         size="icon-sm"
                         disabled={busy === p.id}
                         onClick={() => handleChange(p, false)}
-                        aria-label={`Remove ${displayName(p)} from ${group?.name}`}
+                        aria-label={`Remove ${displayName(p)} from ${team?.name}`}
                         className="text-muted-foreground hover:text-destructive"
                       >
                         <X className="h-4 w-4" />

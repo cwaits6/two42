@@ -38,6 +38,16 @@ const TILES: { href: string; label: string; description: string }[] = [
     label: "Serving",
     description: "Serving teams, email links and who has served.",
   },
+  {
+    href: "/settings/teams",
+    label: "Teams",
+    description: "Greeters, Prayer Team and other serving teams.",
+  },
+  {
+    href: "/settings/labels",
+    label: "Labels",
+    description: "Men, Women, Tuesday table and other ways to filter your members.",
+  },
 ];
 
 export default async function GroupSettingsPage({

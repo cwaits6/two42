@@ -81,6 +81,8 @@ describe("GroupSettingsPage", () => {
       `/g/${A_ID}/settings/lectures`,
       `/g/${A_ID}/settings/giving`,
       `/g/${A_ID}/settings/serving`,
+      `/g/${A_ID}/settings/teams`,
+      `/g/${A_ID}/settings/labels`,
     ]);
   });
 });
