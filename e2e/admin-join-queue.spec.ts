@@ -1,14 +1,16 @@
 import { execFileSync } from "node:child_process";
 import type { Browser, Page } from "@playwright/test";
 import { expect, openAs, test } from "./fixtures/auth";
-import { GROUP_B, PERSONAS } from "./fixtures/personas";
+import { GROUP_B, GROUP_C, PERSONAS } from "./fixtures/personas";
 
-// Isaac's requests and the Group A membership that Approve writes are rows
-// every other spec assumes absent, so the tests run in order and both hooks
-// delete them whatever happens between. Nothing in the UI deletes a reviewed
-// request, so the restore goes through the stack's own Postgres container:
-// the name `supabase start` gives it from config.toml's project_id, locally
-// and in CI alike.
+// The request goes to Group C, which the admin does not lead: an approval
+// that only worked for leaders would fail here. Isaac's request and the
+// Group C membership that Approve writes are rows every other spec assumes
+// absent, so the tests run in order and both hooks delete them whatever
+// happens between. Nothing in the UI deletes a reviewed request, so the
+// restore goes through the stack's own Postgres container: the name
+// `supabase start` gives it from config.toml's project_id, locally and in
+// CI alike.
 test.describe.configure({ mode: "serial" });
 
 const DB_CONTAINER = "supabase_db_small-group-hub";
@@ -18,14 +20,17 @@ const ONE_WAITING = "1 join request waiting.";
 const NONE_WAITING = "No pending join requests.";
 const REVIEW_ACTION = "Review join requests";
 
+// Scoped to Isaac's rows on Group C only: the stack is shared, and another
+// spec may hold rows of its own for him.
 const RESTORE_SQL = `
   delete from public.group_members m
-    using public.profiles p, public.groups g
+    using public.profiles p
     where p.id = m.profile_id and p.email = '${ISAAC.email}'
-      and g.id = m.group_id and g.org_id = m.org_id and g.name = 'Group A';
+      and m.group_id = '${GROUP_C}';
   delete from public.group_join_requests r
     using public.profiles p
-    where p.id = r.profile_id and p.email = '${ISAAC.email}';
+    where p.id = r.profile_id and p.email = '${ISAAC.email}'
+      and r.group_id = '${GROUP_C}';
 `;
 
 function restoreSeed() {
@@ -40,14 +45,14 @@ function restoreSeed() {
 test.beforeAll(() => restoreSeed());
 test.afterAll(() => restoreSeed());
 
-function groupARow(page: Page) {
-  return page.getByRole("listitem").filter({ hasText: "Group A" });
+function groupCRow(page: Page) {
+  return page.getByRole("listitem").filter({ hasText: "Group C" });
 }
 
-async function askToJoinGroupA(page: Page) {
+async function askToJoinGroupC(page: Page) {
   await page.goto("/find-a-group");
-  await groupARow(page).getByRole("button", { name: "Request to join" }).click();
-  await expect(groupARow(page)).toContainText("Request sent");
+  await groupCRow(page).getByRole("button", { name: "Request to join" }).click();
+  await expect(groupCRow(page)).toContainText("Request sent");
 }
 
 /** Isaac's own view, opened beside the admin's page in the same test. */
@@ -63,17 +68,17 @@ async function withIsaac(browser: Browser, baseURL: string, check: (page: Page) 
 test.describe("a member of Group B only", () => {
   test.use({ persona: "oneGroup" });
 
-  test("asks to join Group A", async ({ page }) => {
+  test("asks to join Group C", async ({ page }) => {
     await page.goto(`/g/${GROUP_B}/dashboard`);
     await expect(page.getByRole("button", { name: SWITCHER })).toHaveCount(0);
-    await askToJoinGroupA(page);
+    await askToJoinGroupC(page);
   });
 });
 
-test.describe("the org admin, declining", () => {
+test.describe("the org admin, who does not lead Group C, declining", () => {
   test.use({ persona: "admin" });
 
-  test("sees it counted on the overview and declines it under Group A; Isaac stays out", async ({
+  test("sees it counted on the overview and declines it under Group C; Isaac stays out", async ({
     page,
     browser,
     baseURL,
@@ -85,11 +90,11 @@ test.describe("the org admin, declining", () => {
     await page.getByRole("button", { name: REVIEW_ACTION }).click();
     await expect(page).toHaveURL(/\/admin\/groups$/);
 
-    const queue = page.getByRole("region", { name: "Group A" });
+    const queue = page.getByRole("region", { name: "Group C" });
     await expect(queue.getByText(ISAAC.name)).toBeVisible();
     await queue.getByRole("button", { name: "Decline" }).click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog).toContainText(`Decline ${ISAAC.name}'s request to join Group A?`);
+    await expect(dialog).toContainText(`Decline ${ISAAC.name}'s request to join Group C?`);
     await dialog.getByRole("button", { name: "Decline" }).click();
     await expect(page.getByText("Request declined.")).toBeVisible();
     await expect(queue).toHaveCount(0);
@@ -101,7 +106,7 @@ test.describe("the org admin, declining", () => {
       await isaac.goto(`/g/${GROUP_B}/dashboard`);
       await expect(isaac.getByRole("button", { name: SWITCHER })).toHaveCount(0);
       await isaac.goto("/find-a-group");
-      await expect(groupARow(isaac).getByRole("button", { name: "Request to join" })).toBeVisible();
+      await expect(groupCRow(isaac).getByRole("button", { name: "Request to join" })).toBeVisible();
     });
   });
 });
@@ -110,14 +115,14 @@ test.describe("a member of Group B only, declined once", () => {
   test.use({ persona: "oneGroup" });
 
   test("can ask again", async ({ page }) => {
-    await askToJoinGroupA(page);
+    await askToJoinGroupC(page);
   });
 });
 
-test.describe("the org admin, approving", () => {
+test.describe("the org admin, who does not lead Group C, approving", () => {
   test.use({ persona: "admin" });
 
-  test("approves it under Group A, Isaac gains the group, and the overview count clears", async ({
+  test("approves it under Group C, Isaac gains the group, and the overview count clears", async ({
     page,
     browser,
     baseURL,
@@ -125,10 +130,10 @@ test.describe("the org admin, approving", () => {
     if (!baseURL) throw new Error("baseURL is not configured");
 
     await page.goto("/admin/groups");
-    const queue = page.getByRole("region", { name: "Group A" });
+    const queue = page.getByRole("region", { name: "Group C" });
     await expect(queue.getByText(ISAAC.name)).toBeVisible();
     await queue.getByRole("button", { name: "Approve" }).click();
-    await expect(page.getByText(`${ISAAC.name} joined Group A.`)).toBeVisible();
+    await expect(page.getByText(`${ISAAC.name} joined Group C.`)).toBeVisible();
     await expect(queue).toHaveCount(0);
     await expect(page.getByText(NONE_WAITING)).toBeVisible();
 
@@ -140,9 +145,9 @@ test.describe("the org admin, approving", () => {
       await isaac.goto(`/g/${GROUP_B}/dashboard`);
       await isaac.getByRole("button", { name: SWITCHER }).click();
       const rows = isaac.getByRole("menuitem");
-      await expect(rows.filter({ hasText: "Group A" })).toHaveCount(1);
+      await expect(rows.filter({ hasText: "Group A" })).toHaveCount(0);
       await expect(rows.filter({ hasText: "Group B" })).toHaveCount(1);
-      await expect(rows.filter({ hasText: "Group C" })).toHaveCount(0);
+      await expect(rows.filter({ hasText: "Group C" })).toHaveCount(1);
     });
   });
 });

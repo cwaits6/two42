@@ -67,7 +67,7 @@ not covered here.
 | `anonymous.spec.ts`                  | `/directory` and `/g/<id>/directory` redirect to `/login`                                  |
 | `group-creation-policy.spec.ts`      | The org's create policy decides whether a member sees "Request a group", "Create a group" or neither; restored to approval in afterAll |
 | `group-discovery.spec.ts`            | A private group is listed for its members and tagged for the org admin but absent for everyone else, and its deep link stays a 404; the org switch removes Find a group and every other group; both restored in afterAll |
-| `admin-join-queue.spec.ts`           | A join request filed by a member of another group is counted on the Admin overview and listed under its group on Admin › Groups; Decline (confirmed in the dialog) removes it and leaves the requester out; a second request approved gains the requester the group in their switcher and clears the overview count; the request and membership rows are deleted in afterAll |
+| `admin-join-queue.spec.ts`           | A join request for a group the org admin does not lead is counted on the Admin overview and listed under its group on Admin › Groups; Decline (confirmed in the dialog) removes it and leaves the requester out; a second request approved gains the requester the group in their switcher and clears the overview count; the request and membership rows are deleted in afterAll |
 
 ## Adding a spec
 
