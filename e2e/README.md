@@ -18,8 +18,10 @@ stack on `:54321`, whose seed is already applied. Nothing is reset. Set
 already up. `npx playwright show-report` opens the last HTML report.
 
 In CI the `e2e` job in `.github/workflows/test.yml` stands up an ephemeral
-stack with `npx supabase start` (the pinned CLI, never the remote project)
-and is the only sanctioned way to run the suite there. It runs when a change
+stack with `npx supabase start` (the pinned CLI, never the remote project),
+hands the build that stack's own service key (the token pages read their
+anchor row on the service client), and is the only sanctioned way to run the
+suite there. It runs when a change
 touches `app/`, `components/`, `lib/`, `supabase/migrations/`,
 `supabase/seed.sql`, `e2e/`, `playwright.config.ts`, `package.json`,
 `package-lock.json`, `next.config.ts`, `proxy.ts`, `instrumentation.ts`,
