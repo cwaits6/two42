@@ -18,6 +18,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { BlockEditor } from "@/components/editor";
+import { parseStoredBlocks } from "@/components/editor/normalizeBlocks";
+import type { CuratedBlock } from "@/components/editor/schema";
 import { toast } from "sonner";
 import { ArrowDown, ArrowUp, Pencil, Plus, Search, X } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -26,7 +28,6 @@ import { displayName, initials } from "@/lib/names";
 import { groupPath } from "@/lib/groups/active";
 import { ensureGroupCalendar } from "@/lib/groups/calendar";
 import { validateGroupColor, type GroupSettingsValues } from "@/lib/groups/settings";
-import type { Block, PartialBlock } from "@blocknote/core";
 import type { ClassTeacherWithProfile } from "@/lib/types";
 
 type MemberOption = {
@@ -71,19 +72,9 @@ export function AboutEditor({
   const router = useRouter();
 
   // --- Summary ---
-  const blocksRef = useRef<Block[]>([]);
+  const blocksRef = useRef<CuratedBlock[]>([]);
   const isDirtyRef = useRef(false);
   const [savingSummary, setSavingSummary] = useState(false);
-
-  const parsedInitialContent = (): PartialBlock[] | undefined => {
-    if (!initialBody) return undefined;
-    try {
-      const parsed = JSON.parse(initialBody);
-      return Array.isArray(parsed) ? parsed : undefined;
-    } catch {
-      return undefined;
-    }
-  };
 
   const handleSaveSummary = async () => {
     setSavingSummary(true);
@@ -366,7 +357,7 @@ export function AboutEditor({
         <CardContent className="space-y-4">
           <div className="rounded-lg overflow-hidden border border-border">
             <BlockEditor
-              initialContent={parsedInitialContent()}
+              initialContent={parseStoredBlocks(initialBody) ?? undefined}
               onChange={(blocks) => {
                 blocksRef.current = blocks;
                 isDirtyRef.current = true;

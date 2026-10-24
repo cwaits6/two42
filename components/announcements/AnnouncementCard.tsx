@@ -4,37 +4,17 @@ import { useMemo } from "react";
 import DOMPurify from "dompurify";
 import { Megaphone } from "lucide-react";
 import { StaticBlockContent } from "@/components/editor/StaticBlockContent";
+import { parseStoredBlocks } from "@/components/editor/normalizeBlocks";
 import type { Announcement } from "@/lib/types";
-import type { PartialBlock } from "@blocknote/core";
 
 interface AnnouncementCardProps {
   announcement: Announcement;
 }
 
-function parseBlocks(content: string): PartialBlock[] | null {
-  try {
-    const parsed = JSON.parse(content);
-    if (!Array.isArray(parsed)) return null;
-
-    // Validate each element is a block-like object with a "type" property
-    const isValidBlock = (item: unknown): item is PartialBlock =>
-      typeof item === "object" &&
-      item !== null &&
-      "type" in item &&
-      typeof (item as Record<string, unknown>).type === "string";
-
-    if (parsed.every(isValidBlock)) {
-      return parsed;
-    }
-  } catch {
-    // not JSON — legacy HTML content
-  }
-  return null;
-}
-
 export function AnnouncementCard({ announcement }: AnnouncementCardProps) {
   const date = new Date(announcement.published_at || announcement.created_at);
-  const blocks = useMemo(() => parseBlocks(announcement.content), [announcement.content]);
+  // A body that is not a block document is a legacy HTML announcement.
+  const blocks = useMemo(() => parseStoredBlocks(announcement.content), [announcement.content]);
 
   return (
     <div

@@ -1,0 +1,259 @@
+[
+  {
+    "id": "92fdb66e-b43c-41e9-aab1-a168e5091610",
+    "type": "heading",
+    "props": {
+      "backgroundColor": "default",
+      "textColor": "default",
+      "textAlignment": "left",
+      "level": 1,
+      "isToggleable": false
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "Our Class: A Story of Faith, Fellowship, and Growth",
+        "styles": {}
+      }
+    ],
+    "children": []
+  },
+  {
+    "id": "17b254fa-b3a9-40dd-8578-b263af3eee6d",
+    "type": "paragraph",
+    "props": {
+      "backgroundColor": "default",
+      "textColor": "default",
+      "textAlignment": "left"
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "The story of our class is ultimately a story of God's faithfulness.",
+        "styles": {}
+      }
+    ],
+    "children": []
+  },
+  {
+    "id": "779de941-dd4d-47f8-9621-d84da3d9ec51",
+    "type": "paragraph",
+    "props": {
+      "backgroundColor": "default",
+      "textColor": "default",
+      "textAlignment": "left"
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "In 2005, after years of faithful leadership by its founding teachers, the class entered a new chapter. Two members agreed to serve as co-teachers, a partnership born partly out of necessity. Both kept demanding travel schedules, so neither could commit to a full-time teaching rotation. What began as a practical solution became a remarkably effective ministry partnership that continues to this day.",
+        "styles": {}
+      }
+    ],
+    "children": []
+  },
+  {
+    "id": "6cf99607-1dee-4a0e-9227-f2d90beb15b8",
+    "type": "paragraph",
+    "props": {
+      "backgroundColor": "default",
+      "textColor": "default",
+      "textAlignment": "left"
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "The class began meeting in a modest classroom. As attendance steadily increased, one challenge surfaced repeatedly: finding a room large enough to hold everyone who wanted to attend. Over the years, the class relocated multiple times as God continued to add to its numbers.",
+        "styles": {}
+      }
+    ],
+    "children": []
+  },
+  {
+    "id": "819e5746-75d7-4920-9cf3-accf8f487884",
+    "type": "paragraph",
+    "props": {
+      "backgroundColor": "default",
+      "textColor": "default",
+      "textAlignment": "left"
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "In 2025, the class moved into its current home in the church's new building, providing space for continued growth while keeping the close-knit community that has always defined it.",
+        "styles": {}
+      }
+    ],
+    "children": []
+  },
+  {
+    "id": "67c81d8d-92b2-43e6-9b73-6ea5f7f27718",
+    "type": "paragraph",
+    "props": {
+      "backgroundColor": "default",
+      "textColor": "default",
+      "textAlignment": "left"
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "Throughout its history, the class has served as a launching point for ministry and discipleship. Roughly a dozen new classes have been birthed from its membership, extending its impact throughout the church and beyond. Many of the church's most active volunteers, leaders, teachers, mentors, and servants have spent part of their spiritual journey within the class.",
+        "styles": {}
+      }
+    ],
+    "children": []
+  },
+  {
+    "id": "ab7fe8b3-ce18-4414-8307-56ff4f0336aa",
+    "type": "paragraph",
+    "props": {
+      "backgroundColor": "default",
+      "textColor": "default",
+      "textAlignment": "left"
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "Together, we have celebrated weddings, births, graduations, career milestones, and countless answered prayers. We have walked alongside one another through illness, loss, hardship, and seasons of profound challenge. Through every season, God has faithfully knit together a community marked by friendship, encouragement, biblical truth, and genuine care for one another.",
+        "styles": {}
+      }
+    ],
+    "children": []
+  },
+  {
+    "id": "35faac54-4e15-434b-817d-34de9c47f646",
+    "type": "paragraph",
+    "props": {
+      "backgroundColor": "default",
+      "textColor": "default",
+      "textAlignment": "left"
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "Over the decades, nearly one thousand believers have called this class their Sunday morning home. Some remained for a season; others for a lifetime. All have contributed to the rich legacy of faith and fellowship that continues today.",
+        "styles": {}
+      }
+    ],
+    "children": []
+  },
+  {
+    "id": "ba9a3f56-88f5-4d79-949d-7915b8f704c0",
+    "type": "paragraph",
+    "props": {
+      "backgroundColor": "default",
+      "textColor": "default",
+      "textAlignment": "left"
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "Our mission remains simple: to study God's Word deeply, encourage one another faithfully, serve Christ wholeheartedly, and enjoy the journey together.",
+        "styles": {}
+      }
+    ],
+    "children": []
+  },
+  {
+    "id": "c9024f71-c54d-447d-86e0-dd31b39c2c38",
+    "type": "paragraph",
+    "props": {
+      "backgroundColor": "default",
+      "textColor": "default",
+      "textAlignment": "left"
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "Of course, after all these years, a few unresolved debates still remain:",
+        "styles": {}
+      }
+    ],
+    "children": []
+  },
+  {
+    "id": "d0353006-da20-49e8-a034-e715e35c9afa",
+    "type": "numberedListItem",
+    "props": {
+      "backgroundColor": "default",
+      "textColor": "default",
+      "textAlignment": "left"
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "The hermeneutic analysis of the Book of Revelation.",
+        "styles": {}
+      }
+    ],
+    "children": []
+  },
+  {
+    "id": "0a241a50-478b-4a2a-af78-8162a1507a23",
+    "type": "numberedListItem",
+    "props": {
+      "backgroundColor": "default",
+      "textColor": "default",
+      "textAlignment": "left"
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "Whether John was a fryer, or a broiler.",
+        "styles": {}
+      }
+    ],
+    "children": []
+  },
+  {
+    "id": "6f3feb22-c241-41b3-af6c-78c9b789ab1b",
+    "type": "numberedListItem",
+    "props": {
+      "backgroundColor": "default",
+      "textColor": "default",
+      "textAlignment": "left"
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "Why one teacher insists on irrationally large fonts. The slides are visible from low-earth orbit.",
+        "styles": {}
+      }
+    ],
+    "children": []
+  },
+  {
+    "id": "334149e8-143f-42bd-8240-0e1357a22a0b",
+    "type": "paragraph",
+    "props": {
+      "backgroundColor": "default",
+      "textColor": "default",
+      "textAlignment": "left"
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "While these mysteries remain unsolved, one thing is certain: if you're looking for biblical teaching, authentic friendships, meaningful discussion, plenty of laughter, and a group of people committed to growing in Christ together, you'll find a home here.",
+        "styles": {}
+      }
+    ],
+    "children": []
+  },
+  {
+    "id": "3d067584-49c4-4273-8d01-d4a340c4a574",
+    "type": "paragraph",
+    "props": {
+      "backgroundColor": "default",
+      "textColor": "default",
+      "textAlignment": "left"
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "We'd love for you to join us.",
+        "styles": {}
+      }
+    ],
+    "children": []
+  }
+]

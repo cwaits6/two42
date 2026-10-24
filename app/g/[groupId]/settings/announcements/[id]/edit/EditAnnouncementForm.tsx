@@ -12,8 +12,9 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BlockEditor } from "@/components/editor";
+import { parseStoredBlocks } from "@/components/editor/normalizeBlocks";
+import type { CuratedBlock } from "@/components/editor/schema";
 import { toast } from "sonner";
-import type { Block, PartialBlock } from "@blocknote/core";
 import type { Announcement } from "@/lib/types";
 
 function toLocalDatetime(iso: string | null): string {
@@ -38,7 +39,7 @@ export function EditAnnouncementForm({
     "loading",
   );
   const [publishNow, setPublishNow] = useState(true);
-  const blocksRef = useRef<Block[]>([]);
+  const blocksRef = useRef<CuratedBlock[]>([]);
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const listHref = groupPath(groupId, "/settings/announcements");
@@ -65,16 +66,6 @@ export function EditAnnouncementForm({
     }
     load();
   }, [announcementId, groupId, supabase]);
-
-  const parsedContent = (): PartialBlock[] | undefined => {
-    if (!announcement?.content) return undefined;
-    try {
-      return JSON.parse(announcement.content) as PartialBlock[];
-    } catch {
-      // Legacy HTML content — can't parse as blocks
-      return undefined;
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -216,7 +207,7 @@ export function EditAnnouncementForm({
             <Label className="text-lg">Content</Label>
             <div className="rounded-lg overflow-hidden border border-border">
               <BlockEditor
-                initialContent={parsedContent()}
+                initialContent={parseStoredBlocks(announcement.content) ?? undefined}
                 onChange={(blocks) => {
                   blocksRef.current = blocks;
                 }}

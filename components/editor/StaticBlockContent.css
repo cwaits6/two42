@@ -1,48 +1,8 @@
-/* Static read-only BlockNote rendering.
-   Base structural styles (block layout, list markers, inline content) come from
-   BlockNote's core stylesheet; the rules below clone the read-only brand
-   overrides from BlockEditor.css, re-scoped from .bn-editor to .bn-static. */
+/* Read-only render. Block layout and list markers come from BlockNote's core
+   stylesheet; typography is the shared BlockContent.css. */
 
 @import "@blocknote/core/style.css";
 
-/* Text colors and styling */
-.bn-static p,
 .bn-static .bn-block-content {
-  color: var(--foreground) !important;
-  font-family: inherit !important;
-  line-height: 1.75 !important;
-}
-
-/* Heading styling */
-.bn-static h1,
-.bn-static h2,
-.bn-static h3 {
-  color: var(--foreground) !important;
-  font-family: var(--font-display, Georgia, serif) !important;
-  font-weight: 700 !important;
-}
-
-/* List styling */
-.bn-static ul,
-.bn-static ol {
-  margin-left: 1.5rem !important;
-}
-
-/* Code blocks */
-.bn-static pre {
-  background: var(--background, oklch(0.985 0.004 150)) !important;
-  border: 1px solid var(--border, oklch(0.88 0.02 163)) !important;
-  border-radius: 0.5rem !important;
-  padding: 1rem !important;
-}
-
-/* Link styling */
-.bn-static a {
-  color: var(--color-brand-accent) !important;
-  text-decoration: underline !important;
-}
-
-.bn-static a:hover {
-  color: var(--color-brand-accent) !important;
-  opacity: 0.8;
+  padding-block: 0.25em;
 }
