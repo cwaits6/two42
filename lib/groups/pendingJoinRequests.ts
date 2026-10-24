@@ -25,7 +25,7 @@ export async function getPendingJoinRequests(
         _group_id: group.id,
       });
       if (error) {
-        console.error(`Failed to load pending join requests for group ${group.id}:`, error);
+        console.error("Failed to load pending join requests for group:", group.id, error);
         return null;
       }
       const rows: PendingJoinRequestRow[] = data ?? [];
