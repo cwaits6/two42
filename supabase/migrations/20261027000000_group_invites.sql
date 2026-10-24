@@ -382,7 +382,7 @@ begin
 end;
 $$;
 
-revoke execute on function public.group_invite_join(uuid) from public, anon;
+revoke execute on function public.group_invite_join(uuid) from public, anon, service_role;
 grant execute on function public.group_invite_join(uuid) to authenticated;
 
 comment on function public.group_invite_join(uuid) is
@@ -559,5 +559,18 @@ begin
      or has_table_privilege('authenticated', 'public.group_invite_uses', 'update')
      or has_table_privilege('authenticated', 'public.group_invite_uses', 'delete') then
     raise exception 'group_invite_uses: authenticated must hold no table-level write privilege';
+  end if;
+
+  -- Default privileges grant EXECUTE to every API role on creation, so each
+  -- role a function is not meant for has to be revoked by name.
+  if has_function_privilege('anon', 'public.group_invite_redeem(uuid, text, text, text, timestamptz)', 'execute')
+     or has_function_privilege('authenticated', 'public.group_invite_redeem(uuid, text, text, text, timestamptz)', 'execute')
+     or not has_function_privilege('service_role', 'public.group_invite_redeem(uuid, text, text, text, timestamptz)', 'execute') then
+    raise exception 'group_invite_redeem: service_role only';
+  end if;
+  if has_function_privilege('anon', 'public.group_invite_join(uuid)', 'execute')
+     or has_function_privilege('service_role', 'public.group_invite_join(uuid)', 'execute')
+     or not has_function_privilege('authenticated', 'public.group_invite_join(uuid)', 'execute') then
+    raise exception 'group_invite_join: authenticated only';
   end if;
 end $$;
