@@ -31,6 +31,11 @@ On a shared local stack the specs assume the seed defaults for
 `directory_visibility`, `group_creation_policy` (`approval`) and
 `group_discovery` (on), and that no group is private; the three specs that
 change those settings normalise them back in `beforeAll` and `afterAll`.
+`admin-join-queue.spec.ts` is the one spec that writes rows — a join request
+and the membership its approval creates — and it deletes both in `beforeAll`
+and `afterAll` through the stack's Postgres container
+(`supabase_db_small-group-hub`, the name `supabase start` derives from
+`config.toml`), because no UI deletes a reviewed request.
 
 ## Personas
 
@@ -64,6 +69,7 @@ not covered here.
 | `anonymous.spec.ts`                  | `/directory` and `/g/<id>/directory` redirect to `/login`                                  |
 | `group-creation-policy.spec.ts`      | The org's create policy decides whether a member sees "Request a group", "Create a group" or neither; restored to approval in afterAll |
 | `group-discovery.spec.ts`            | A private group is listed for its members and tagged for the org admin but absent for everyone else, and its deep link stays a 404; the org switch removes Find a group and every other group; both restored in afterAll |
+| `admin-join-queue.spec.ts`           | A join request for a group the org admin does not lead is counted on the Admin overview and listed under its group on Admin › Groups; Decline (confirmed in the dialog) removes it and leaves the requester out; a second request approved gains the requester the group in their switcher and clears the overview count; the request and membership rows are deleted in afterAll |
 | `group-invite.spec.ts`               | A leader's invite link names the group and offers the signup form to a stranger until it is revoked, after which the same URL shows the one dead-link message and no form; a non-member gets a 404 on the invites page; the created link is revoked in afterAll |
 
 ## Adding a spec

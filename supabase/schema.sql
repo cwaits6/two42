@@ -116,6 +116,49 @@ $$;
 ALTER FUNCTION "public"."current_family_id"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."discoverable_groups"() RETURNS TABLE("id" "uuid", "name" "text", "description" "text", "member_count" integer, "is_private" boolean, "join_policy" "text", "viewer_role" "text", "request_status" "text")
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  with me as (
+    select p.org_id, (p.role = 'admin') as is_admin
+    from public.profiles p
+    where p.id = auth.uid() and p.role <> 'pending'
+  ),
+  org as (
+    select o.group_discovery from public.organizations o join me on o.id = me.org_id
+  )
+  select
+    g.id,
+    g.name,
+    g.description,
+    (select count(*)::int from public.group_members c
+      where c.group_id = g.id and c.org_id = g.org_id),
+    g.is_private,
+    g.join_policy,
+    gm.role,
+    r.status
+  from public.groups g
+  cross join me
+  cross join org
+  left join public.group_members gm
+    on gm.group_id = g.id and gm.org_id = g.org_id and gm.profile_id = auth.uid()
+  left join public.group_join_requests r
+    on r.group_id = g.id and r.org_id = g.org_id
+   and r.profile_id = auth.uid() and r.status = 'pending'
+  where g.org_id = me.org_id
+    and (gm.id is not null or (org.group_discovery and (not g.is_private or me.is_admin)))
+  order by (gm.id is null), g.name;
+$$;
+
+
+ALTER FUNCTION "public"."discoverable_groups"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."discoverable_groups"() IS 'The groups a member may see on Find a group and Directory › Groups: their own always; others while the org switch is on and the group is not private; private groups additionally for org admins. Tenant anchor: the caller''s own profiles row (auth.uid(), not pending); no parameter. Returns only the columns the discovery row shows.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."email_quota_consume"("_org_id" "uuid", "_n" integer) RETURNS boolean
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO ''
@@ -957,6 +1000,103 @@ COMMENT ON FUNCTION "public"."is_team_lead"("_team_id" "uuid") IS 'True when the
 
 
 
+CREATE OR REPLACE FUNCTION "public"."join_group"("_group_id" "uuid") RETURNS "text"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _actor uuid := auth.uid();
+  _org uuid;
+  _private boolean;
+  _discovery boolean;
+begin
+  if _actor is null then
+    raise exception 'join rejected: no authenticated principal' using errcode = 'GJ002';
+  end if;
+  select p.org_id into _org from public.profiles p where p.id = _actor and p.role <> 'pending';
+  if _org is null then
+    raise exception 'join rejected: actor % is not an approved member', _actor using errcode = 'GJ002';
+  end if;
+
+  select g.is_private into _private from public.groups g where g.id = _group_id and g.org_id = _org;
+  if _private is null then
+    raise exception 'join rejected: group % is not open to join', _group_id using errcode = 'GJ001';
+  end if;
+  select o.group_discovery into _discovery from public.organizations o where o.id = _org;
+  if not coalesce(_discovery, false) or _private then
+    raise exception 'join rejected: group % is not open to join', _group_id using errcode = 'GJ001';
+  end if;
+
+  return public.join_group_apply(_group_id, _actor);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."join_group"("_group_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."join_group"("_group_id" "uuid") IS 'Joins or requests to join a group a member found. Tenant anchor: the caller''s own profiles row (GJ002 when none or pending); the group is looked up by id AND that org, the org switch must be on and the group not private (GJ001 for all four, so a hidden group reads like a missing id). Then join_group_apply().';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."join_group_apply"("_group_id" "uuid", "_actor_id" "uuid") RETURNS "text"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _org uuid;
+  _policy text;
+begin
+  select g.org_id, g.join_policy into _org, _policy
+  from public.groups g where g.id = _group_id;
+  if _org is null then
+    raise exception 'join rejected: group % is not open to join', _group_id using errcode = 'GJ001';
+  end if;
+
+  if not exists (
+    select 1 from public.profiles p
+    where p.id = _actor_id and p.org_id = _org and p.role <> 'pending'
+  ) then
+    raise exception 'join rejected: actor % is not an approved member of org %', _actor_id, _org
+      using errcode = 'GJ002';
+  end if;
+
+  if exists (
+    select 1 from public.group_members m
+    where m.group_id = _group_id and m.profile_id = _actor_id and m.org_id = _org
+  ) then
+    raise exception 'join rejected: actor % is already a member of group %', _actor_id, _group_id
+      using errcode = 'GJ003';
+  end if;
+
+  if _policy = 'open' then
+    insert into public.group_members (org_id, group_id, profile_id, role, added_by)
+    values (_org, _group_id, _actor_id, 'member', _actor_id)
+    on conflict (group_id, profile_id) do nothing;
+    -- A request filed under an earlier approval policy is moot once its
+    -- author has joined; reviewed_by stays null to say nobody reviewed it.
+    update public.group_join_requests
+      set status = 'approved', reviewed_at = now()
+      where group_id = _group_id and profile_id = _actor_id
+        and org_id = _org and status = 'pending';
+    return 'joined';
+  end if;
+
+  insert into public.group_join_requests (org_id, group_id, profile_id)
+  values (_org, _group_id, _actor_id)
+  on conflict (group_id, profile_id) where status = 'pending' do nothing;
+  return 'requested';
+end;
+$$;
+
+
+ALTER FUNCTION "public"."join_group_apply"("_group_id" "uuid", "_actor_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."join_group_apply"("_group_id" "uuid", "_actor_id" "uuid") IS 'The join_policy branch: open enrols _actor_id and returns joined; approval files a pending group_join_requests row and returns requested. No discovery or privacy gate and no client grant: reached only through join_group() today, and through an invite-link wrapper later. Org from the groups row; _actor_id must be an approved member of it (GJ002). GJ001 unknown group, GJ003 already a member.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."org_directory_visible"() RETURNS boolean
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO ''
@@ -1073,6 +1213,30 @@ COMMENT ON FUNCTION "public"."org_group_creation_policy"() IS 'The caller''s own
 
 
 
+CREATE OR REPLACE FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") RETURNS TABLE("id" "uuid", "created_at" timestamp with time zone, "first_name" "text", "last_name" "text", "preferred_name" "text", "email" "text")
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select r.id, r.created_at, p.first_name, p.last_name, p.preferred_name,
+    case when p.hide_email then null else p.email end
+  from public.profiles me
+  join public.group_join_requests r on r.org_id = me.org_id
+  join public.profiles p on p.id = r.profile_id and p.org_id = r.org_id
+  where me.id = auth.uid() and me.role <> 'pending'
+    and r.group_id = _group_id
+    and r.status = 'pending'
+    and (public.is_admin() or public.is_group_leader(_group_id))
+  order by r.created_at;
+$$;
+
+
+ALTER FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") IS 'Pending requests for a group with each requester''s name and email (NULL when hide_email), for the leader''s review list. Tenant anchor: the caller''s own profiles row; rows only when the caller leads the group or is an org admin, else empty.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."provision_organization"("_name" "text", "_slug" "text", "_owner_email" "text") RETURNS "uuid"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO ''
@@ -1178,6 +1342,68 @@ $_$;
 
 
 ALTER FUNCTION "public"."provision_organization"("_name" "text", "_slug" "text", "_owner_email" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."review_group_join_request"("_request_id" "uuid", "_approve" boolean) RETURNS "text"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _actor uuid := auth.uid();
+  _org uuid;
+  _req public.group_join_requests%rowtype;
+  _next text;
+  _n integer;
+begin
+  if _approve is null then
+    raise exception 'review rejected: approve flag is required' using errcode = '22004';
+  end if;
+  if _actor is null then
+    raise exception 'review rejected: no authenticated principal' using errcode = 'GJ002';
+  end if;
+  select p.org_id into _org from public.profiles p where p.id = _actor and p.role <> 'pending';
+  if _org is null then
+    raise exception 'review rejected: actor % is not an approved member', _actor using errcode = 'GJ002';
+  end if;
+
+  select r.* into _req from public.group_join_requests r
+  where r.id = _request_id and r.org_id = _org and r.status = 'pending'
+  for update;
+  if not found or not (public.is_admin() or public.is_group_leader(_req.group_id)) then
+    raise exception 'review rejected: no pending join request %', _request_id using errcode = 'GJ004';
+  end if;
+
+  if _approve then
+    if not exists (
+      select 1 from public.profiles p
+      where p.id = _req.profile_id and p.org_id = _org and p.role <> 'pending'
+    ) then
+      raise exception 'review rejected: requester % is not an approved member of org %', _req.profile_id, _org
+        using errcode = 'GJ002';
+    end if;
+    insert into public.group_members (org_id, group_id, profile_id, role, added_by)
+    values (_org, _req.group_id, _req.profile_id, 'member', _actor)
+    on conflict (group_id, profile_id) do nothing;
+  end if;
+
+  _next := case when _approve then 'approved' else 'declined' end;
+  update public.group_join_requests
+    set status = _next, reviewed_by = _actor, reviewed_at = now()
+    where id = _req.id and org_id = _org;
+  get diagnostics _n = row_count;
+  if _n <> 1 then
+    raise exception 'review rejected: join request % was not stamped', _req.id using errcode = 'GJ004';
+  end if;
+  return _next;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."review_group_join_request"("_request_id" "uuid", "_approve" boolean) OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."review_group_join_request"("_request_id" "uuid", "_approve" boolean) IS 'Approves (writes the group_members row) or declines a pending join request in one transaction. Tenant anchor: the caller''s own profiles row; the request is selected by id AND that org with for update, and the caller must lead its group or be an org admin (GJ004 for missing, foreign, decided or not permitted). GJ002 when the requester is no longer an approved member. 22004 when _approve is NULL, so a missing flag never reads as a decline.';
+
 
 
 CREATE OR REPLACE FUNCTION "public"."rls_auto_enable"() RETURNS "event_trigger"
@@ -1919,6 +2145,27 @@ CREATE TABLE IF NOT EXISTS "public"."giving_funds" (
 ALTER TABLE "public"."giving_funds" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."group_join_requests" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "group_id" "uuid" NOT NULL,
+    "profile_id" "uuid" NOT NULL,
+    "status" "text" DEFAULT 'pending'::"text" NOT NULL,
+    "reviewed_by" "uuid",
+    "reviewed_at" timestamp with time zone,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "group_join_requests_reviewed_consistent" CHECK ((("status" = 'pending'::"text") = ("reviewed_at" IS NULL))),
+    CONSTRAINT "group_join_requests_status_check" CHECK (("status" = ANY (ARRAY['pending'::"text", 'approved'::"text", 'declined'::"text"])))
+);
+
+
+ALTER TABLE "public"."group_join_requests" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."group_join_requests" IS 'A member''s request to join a group under the approval policy. Written only by join_group_apply() and review_group_join_request(); read by the requester, the group''s leaders and org admins. Declined rows are the record and are never deleted by the app.';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."group_labels" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
@@ -2024,6 +2271,9 @@ CREATE TABLE IF NOT EXISTS "public"."groups" (
     "created_by" "uuid",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "is_private" boolean DEFAULT false NOT NULL,
+    "join_policy" "text" DEFAULT 'approval'::"text" NOT NULL,
+    CONSTRAINT "groups_join_policy_check" CHECK (("join_policy" = ANY (ARRAY['open'::"text", 'approval'::"text"]))),
     CONSTRAINT "groups_name_not_blank" CHECK (("btrim"("name") <> ''::"text"))
 );
 
@@ -2032,6 +2282,14 @@ ALTER TABLE "public"."groups" OWNER TO "postgres";
 
 
 COMMENT ON TABLE "public"."groups" IS 'A class or small group. Holds the content layer (calendar, announcements, lectures, serving, prayer, giving, roster). One level deep: no sub-groups.';
+
+
+
+COMMENT ON COLUMN "public"."groups"."is_private" IS 'Hidden from discovery for non-members regardless of the org switch, and join_group() refuses it. Members and org admins still see the row through discoverable_groups().';
+
+
+
+COMMENT ON COLUMN "public"."groups"."join_policy" IS 'open: join_group() enrols the caller at once. approval: join_group() files a group_join_requests row for a leader to review. Not consulted while is_private.';
 
 
 
@@ -2150,6 +2408,7 @@ CREATE TABLE IF NOT EXISTS "public"."organizations" (
     "custom_email_domain_enabled" boolean DEFAULT false NOT NULL,
     "directory_visibility" "text" DEFAULT 'shared_groups'::"text" NOT NULL,
     "group_creation_policy" "text" DEFAULT 'approval'::"text" NOT NULL,
+    "group_discovery" boolean DEFAULT true NOT NULL,
     CONSTRAINT "organizations_directory_visibility_check" CHECK (("directory_visibility" = ANY (ARRAY['shared_groups'::"text", 'org'::"text"]))),
     CONSTRAINT "organizations_group_creation_policy_check" CHECK (("group_creation_policy" = ANY (ARRAY['open'::"text", 'approval'::"text", 'admins'::"text"])))
 );
@@ -2167,6 +2426,10 @@ COMMENT ON COLUMN "public"."organizations"."directory_visibility" IS 'Security b
 
 
 COMMENT ON COLUMN "public"."organizations"."group_creation_policy" IS 'Who may create a group. open: any approved member, live at once. approval: a member files a request an org admin approves. admins: org admins only. Read by group_create() and the group_requests INSERT policy, so a security boundary, not a preference.';
+
+
+
+COMMENT ON COLUMN "public"."organizations"."group_discovery" IS 'Ceiling for group discovery. false: members see only the groups they belong to and join_group() refuses every group. Read by discoverable_groups() and join_group(), never by a policy.';
 
 
 
@@ -2586,6 +2849,11 @@ ALTER TABLE ONLY "public"."giving_funds"
 
 
 
+ALTER TABLE ONLY "public"."group_join_requests"
+    ADD CONSTRAINT "group_join_requests_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."group_labels"
     ADD CONSTRAINT "group_labels_group_name_key" UNIQUE ("group_id", "name");
 
@@ -2902,6 +3170,22 @@ CREATE INDEX "giving_funds_group_id_idx" ON "public"."giving_funds" USING "btree
 
 
 CREATE INDEX "giving_funds_org_id_idx" ON "public"."giving_funds" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "group_join_requests_group_status_idx" ON "public"."group_join_requests" USING "btree" ("group_id", "status");
+
+
+
+CREATE UNIQUE INDEX "group_join_requests_one_pending_idx" ON "public"."group_join_requests" USING "btree" ("group_id", "profile_id") WHERE ("status" = 'pending'::"text");
+
+
+
+CREATE INDEX "group_join_requests_org_id_idx" ON "public"."group_join_requests" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "group_join_requests_org_status_idx" ON "public"."group_join_requests" USING "btree" ("org_id", "status");
 
 
 
@@ -3399,6 +3683,26 @@ ALTER TABLE ONLY "public"."giving_funds"
 
 ALTER TABLE ONLY "public"."giving_funds"
     ADD CONSTRAINT "giving_funds_steward_id_fkey" FOREIGN KEY ("steward_id", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."group_join_requests"
+    ADD CONSTRAINT "group_join_requests_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."groups"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."group_join_requests"
+    ADD CONSTRAINT "group_join_requests_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."group_join_requests"
+    ADD CONSTRAINT "group_join_requests_profile_id_fkey" FOREIGN KEY ("profile_id", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."group_join_requests"
+    ADD CONSTRAINT "group_join_requests_reviewed_by_fkey" FOREIGN KEY ("reviewed_by") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
 
 
 
@@ -4261,6 +4565,10 @@ CREATE POLICY "Requesters and admins can view group requests" ON "public"."group
 
 
 
+CREATE POLICY "Requesters, leaders and admins can view join requests" ON "public"."group_join_requests" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("profile_id" = ( SELECT "auth"."uid"() AS "uid")) OR ( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("group_id"))));
+
+
+
 CREATE POLICY "Signup owners can remove attendees" ON "public"."serving_signup_attendees" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (EXISTS ( SELECT 1
    FROM "public"."serving_signups" "s"
   WHERE (("s"."id" = "serving_signup_attendees"."signup_id") AND ("s"."org_id" = "serving_signup_attendees"."org_id") AND (("s"."created_by" = ( SELECT "auth"."uid"() AS "uid")) OR "public"."is_team_lead"("s"."team_id") OR (EXISTS ( SELECT 1
@@ -4342,6 +4650,9 @@ ALTER TABLE "public"."giving_fund_methods" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."giving_funds" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."group_join_requests" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."group_labels" ENABLE ROW LEVEL SECURITY;
 
 
@@ -4419,6 +4730,10 @@ CREATE POLICY "org isolation" ON "public"."giving_fund_methods" AS RESTRICTIVE T
 
 
 CREATE POLICY "org isolation" ON "public"."giving_funds" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."group_join_requests" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
 
@@ -4630,6 +4945,12 @@ GRANT ALL ON FUNCTION "public"."current_family_id"() TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."discoverable_groups"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."discoverable_groups"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."discoverable_groups"() TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."email_quota_consume"("_org_id" "uuid", "_n" integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."email_quota_consume"("_org_id" "uuid", "_n" integer) TO "service_role";
 
@@ -4766,6 +5087,16 @@ GRANT ALL ON FUNCTION "public"."is_team_lead"("_team_id" "uuid") TO "service_rol
 
 
 
+REVOKE ALL ON FUNCTION "public"."join_group"("_group_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."join_group"("_group_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."join_group"("_group_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."join_group_apply"("_group_id" "uuid", "_actor_id" "uuid") FROM PUBLIC;
+
+
+
 REVOKE ALL ON FUNCTION "public"."org_directory_visible"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."org_directory_visible"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."org_directory_visible"() TO "service_role";
@@ -4792,8 +5123,20 @@ GRANT ALL ON FUNCTION "public"."org_group_creation_policy"() TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."provision_organization"("_name" "text", "_slug" "text", "_owner_email" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."provision_organization"("_name" "text", "_slug" "text", "_owner_email" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."review_group_join_request"("_request_id" "uuid", "_approve" boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."review_group_join_request"("_request_id" "uuid", "_approve" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."review_group_join_request"("_request_id" "uuid", "_approve" boolean) TO "service_role";
 
 
 
@@ -4938,6 +5281,12 @@ GRANT ALL ON TABLE "public"."giving_funds" TO "service_role";
 
 
 
+GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."group_join_requests" TO "anon";
+GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."group_join_requests" TO "authenticated";
+GRANT ALL ON TABLE "public"."group_join_requests" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."group_labels" TO "anon";
 GRANT ALL ON TABLE "public"."group_labels" TO "authenticated";
 GRANT ALL ON TABLE "public"."group_labels" TO "service_role";
@@ -5055,6 +5404,10 @@ GRANT SELECT("directory_visibility"),UPDATE("directory_visibility") ON TABLE "pu
 
 
 GRANT SELECT("group_creation_policy"),UPDATE("group_creation_policy") ON TABLE "public"."organizations" TO "authenticated";
+
+
+
+GRANT SELECT("group_discovery"),UPDATE("group_discovery") ON TABLE "public"."organizations" TO "authenticated";
 
 
 
