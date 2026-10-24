@@ -219,8 +219,9 @@ select ok(
   has_function_privilege('service_role', 'public.group_invite_redeem(uuid, text, text, text, timestamptz)', 'execute'),
   'positive control: service_role can execute group_invite_redeem()');
 select ok(
-  not has_function_privilege('anon', 'public.group_invite_join(uuid)', 'execute'),
-  'anon cannot execute group_invite_join()');
+  not has_function_privilege('anon', 'public.group_invite_join(uuid)', 'execute')
+  and not has_function_privilege('service_role', 'public.group_invite_join(uuid)', 'execute'),
+  'neither anon nor service_role can execute group_invite_join()');
 select ok(
   has_function_privilege('authenticated', 'public.group_invite_join(uuid)', 'execute'),
   'authenticated can execute group_invite_join()');

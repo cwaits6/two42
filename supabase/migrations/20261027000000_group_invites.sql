@@ -383,7 +383,7 @@ end;
 $$;
 
 revoke execute on function public.group_invite_join(uuid) from public, anon;
-grant execute on function public.group_invite_join(uuid) to authenticated, service_role;
+grant execute on function public.group_invite_join(uuid) to authenticated;
 
 comment on function public.group_invite_join(uuid) is
   'A signed-in member follows a group invite. Tenant anchor: the caller''s own profiles row (GI006 when none or pending); the invite row, locked for update, must carry that org (GI001 for foreign, missing, revoked, expired or used up). Returns already_member with no use row; joined at once for a private group (added_by = the invite''s creator); otherwise join_group_apply() decides joined or requested. One use row per person per link.';
