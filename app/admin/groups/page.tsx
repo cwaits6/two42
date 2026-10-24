@@ -58,7 +58,8 @@ export default async function AdminGroupsPage() {
     description: g.description,
     memberCount: g.group_members[0]?.count ?? 0,
   }));
-  const joinRequests = await getPendingJoinRequests(groupRows);
+  // Without the groups there is nothing to read, and an empty queue would misreport the failure.
+  const joinRequests = groupsError ? null : await getPendingJoinRequests(groupRows);
 
   return (
     <PageContainer size="wide">
