@@ -1,4 +1,5 @@
-import type { CuratedPartialBlock, HeadingLevel } from "./schema";
+import { HEADING_LEVELS, KEPT_STYLES, TEXT_BLOCK_TYPES, type HeadingLevel, type KeptStyle, type TextBlockType } from "./curated";
+import type { CuratedPartialBlock } from "./schema";
 
 // Shapes a stored document may carry from the unrestricted editor. Only the
 // fields the normaliser reads are typed; everything else is ignored.
@@ -12,14 +13,10 @@ type StoredBlock = {
   children?: unknown;
 };
 
-type CuratedStyles = { bold?: true; italic?: true };
+type CuratedStyles = Partial<Record<KeptStyle, true>>;
 type CuratedText = { type: "text"; text: string; styles: CuratedStyles };
 type CuratedLink = { type: "link"; href: string; content: CuratedText[] };
 type CuratedInline = CuratedText | CuratedLink;
-
-const KEPT_STYLES = ["bold", "italic"] as const;
-const TEXT_BLOCK_TYPES = ["paragraph", "bulletListItem", "numberedListItem", "quote"] as const;
-type TextBlockType = (typeof TEXT_BLOCK_TYPES)[number];
 
 function isTextBlockType(type: unknown): type is TextBlockType {
   return TEXT_BLOCK_TYPES.includes(type as TextBlockType);
@@ -85,7 +82,8 @@ function inlineContent(content: unknown): CuratedInline[] {
 }
 
 function headingLevel(level: unknown): HeadingLevel {
-  return typeof level === "number" && level >= 3 ? 3 : 2;
+  if (typeof level !== "number") return HEADING_LEVELS[0];
+  return HEADING_LEVELS.find((kept) => kept >= level) ?? HEADING_LEVELS[HEADING_LEVELS.length - 1];
 }
 
 function inlineText(content: CuratedInline[]): string {

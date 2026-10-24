@@ -8,9 +8,7 @@ import {
   defaultInlineContentSpecs,
   defaultStyleSpecs,
 } from "@blocknote/core";
-
-export const HEADING_LEVELS = [2, 3] as const;
-export type HeadingLevel = (typeof HEADING_LEVELS)[number];
+import { HEADING_LEVELS } from "./curated";
 
 // The one schema the editor and the server renderer share. Anything a stored
 // document carries that is not here must go through `normalizeBlocks` first,
