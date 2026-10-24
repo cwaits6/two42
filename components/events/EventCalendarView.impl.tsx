@@ -128,7 +128,7 @@ export default function EventCalendarView({
             center: "title",
             right: "dayGridMonth,timeGridWeek",
           }}
-          timeZone="America/New_York"
+          timeZone="local"
           events={filteredEvents}
           eventClick={handleEventClick}
           dateClick={handleDateClick}
