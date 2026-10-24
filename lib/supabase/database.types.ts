@@ -33,17 +33,29 @@ isOneToOne: false
                   ]
                 },"access_requests": {
                   Row: {
-                    "approved_role": string | null,"created_at": string,"email": string,"id": string,"invite_token": string | null,"message": string | null,"name": string,"org_id": string,"reviewed_at": string | null,"reviewed_by": string | null,"signup_token": string | null,"status": string,"token_expires_at": string | null
+                    "approved_role": string | null,"created_at": string,"email": string,"group_id": string | null,"group_invite_id": string | null,"id": string,"invite_token": string | null,"message": string | null,"name": string,"org_id": string,"reviewed_at": string | null,"reviewed_by": string | null,"signup_token": string | null,"status": string,"token_expires_at": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "approved_role"?: string | null,"created_at"?: string,"email": string,"id"?: string,"invite_token"?: string | null,"message"?: string | null,"name": string,"org_id"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"signup_token"?: string | null,"status"?: string,"token_expires_at"?: string | null
+                    "approved_role"?: string | null,"created_at"?: string,"email": string,"group_id"?: string | null,"group_invite_id"?: string | null,"id"?: string,"invite_token"?: string | null,"message"?: string | null,"name": string,"org_id"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"signup_token"?: string | null,"status"?: string,"token_expires_at"?: string | null
                   }
                   Update: {
-                    "approved_role"?: string | null,"created_at"?: string,"email"?: string,"id"?: string,"invite_token"?: string | null,"message"?: string | null,"name"?: string,"org_id"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"signup_token"?: string | null,"status"?: string,"token_expires_at"?: string | null
+                    "approved_role"?: string | null,"created_at"?: string,"email"?: string,"group_id"?: string | null,"group_invite_id"?: string | null,"id"?: string,"invite_token"?: string | null,"message"?: string | null,"name"?: string,"org_id"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"signup_token"?: string | null,"status"?: string,"token_expires_at"?: string | null
                   }
                   Relationships: [
                     {
+      foreignKeyName: "access_requests_group_id_fkey"
+      columns: ["group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "access_requests_group_invite_id_fkey"
+      columns: ["group_invite_id","org_id"]
+isOneToOne: false
+      referencedRelation: "group_invites"
+      referencedColumns: ["id","org_id"]
+    },{
       foreignKeyName: "access_requests_invite_token_fkey"
       columns: ["invite_token","org_id"]
 isOneToOne: false
@@ -481,6 +493,76 @@ isOneToOne: false
       referencedColumns: ["id","org_id"]
     }
                   ]
+                },"group_invite_uses": {
+                  Row: {
+                    "access_request_id": string | null,"email": string | null,"group_id": string,"id": string,"invite_id": string,"org_id": string,"outcome": string,"profile_id": string | null,"used_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "access_request_id"?: string | null,"email"?: string | null,"group_id": string,"id"?: string,"invite_id": string,"org_id"?: string,"outcome": string,"profile_id"?: string | null,"used_at"?: string
+                  }
+                  Update: {
+                    "access_request_id"?: string | null,"email"?: string | null,"group_id"?: string,"id"?: string,"invite_id"?: string,"org_id"?: string,"outcome"?: string,"profile_id"?: string | null,"used_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "group_invite_uses_access_request_id_fkey"
+      columns: ["access_request_id","org_id"]
+isOneToOne: false
+      referencedRelation: "access_requests"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "group_invite_uses_invite_id_fkey"
+      columns: ["invite_id","group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "group_invites"
+      referencedColumns: ["id","group_id","org_id"]
+    },{
+      foreignKeyName: "group_invite_uses_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "group_invite_uses_profile_id_fkey"
+      columns: ["profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "group_invite_uses_profile_id_fkey"
+      columns: ["profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
+                },"group_invites": {
+                  Row: {
+                    "created_at": string,"created_by": string | null,"expires_at": string | null,"group_id": string,"id": string,"max_uses": number | null,"org_id": string,"revoked_at": string | null,"token": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"created_by"?: string | null,"expires_at"?: string | null,"group_id": string,"id"?: string,"max_uses"?: number | null,"org_id"?: string,"revoked_at"?: string | null,"token"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"created_by"?: string | null,"expires_at"?: string | null,"group_id"?: string,"id"?: string,"max_uses"?: number | null,"org_id"?: string,"revoked_at"?: string | null,"token"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "group_invites_group_id_fkey"
+      columns: ["group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "group_invites_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"group_join_requests": {
                   Row: {
                     "created_at": string,"group_id": string,"id": string,"org_id": string,"profile_id": string,"reviewed_at": string | null,"reviewed_by": string | null,"status": string
@@ -903,14 +985,14 @@ isOneToOne: false
                   ]
                 },"organizations": {
                   Row: {
-                    "branding": NonNullable<Json>,"created_at": string,"custom_email_domain_enabled": boolean,"directory_visibility": string,"group_creation_policy": string,"group_discovery": boolean,"id": string,"name": string,"slug": string,"status": Database["public"]['Enums']["org_status"]
+                    "branding": NonNullable<Json>,"created_at": string,"custom_email_domain_enabled": boolean,"directory_visibility": string,"group_creation_policy": string,"group_discovery": boolean,"id": string,"name": string,"slug": string | null,"status": Database["public"]['Enums']["org_status"]
                   }
                   ComputedFields: never
                   Insert: {
-                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"group_creation_policy"?: string,"group_discovery"?: boolean,"id"?: string,"name": string,"slug": string,"status"?: Database["public"]['Enums']["org_status"]
+                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"group_creation_policy"?: string,"group_discovery"?: boolean,"id"?: string,"name": string,"slug"?: string | null,"status"?: Database["public"]['Enums']["org_status"]
                   }
                   Update: {
-                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"group_creation_policy"?: string,"group_discovery"?: boolean,"id"?: string,"name"?: string,"slug"?: string,"status"?: Database["public"]['Enums']["org_status"]
+                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"group_creation_policy"?: string,"group_discovery"?: boolean,"id"?: string,"name"?: string,"slug"?: string | null,"status"?: Database["public"]['Enums']["org_status"]
                   }
                   Relationships: [
                     
@@ -1524,6 +1606,14 @@ isOneToOne: false
 "group_create_for":
 { Args: { "_created_by": string,"_description": string,"_leader": string,"_name": string,"_org": string }; Returns: string
                            },
+"group_invite_join":
+{ Args: { "_token": string }; Returns: string
+                           },
+"group_invite_redeem":
+{ Args: { "_email": string,"_name": string,"_signup_token": string,"_token": string,"_token_expires_at": string }; Returns: {
+              "access_request_id": string,"group_id": string,"group_name": string,"org_id": string
+            }[]
+                           },
 "group_model_backfill":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
@@ -1594,7 +1684,7 @@ isOneToOne: false
             }[]
                            },
 "provision_organization":
-{ Args: { "_name": string,"_owner_email": string,"_slug": string }; Returns: string
+{ Args: { "_name": string,"_owner_email": string }; Returns: string
                            },
 "review_group_join_request":
 { Args: { "_approve": boolean,"_request_id": string }; Returns: string

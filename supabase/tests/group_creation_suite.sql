@@ -35,8 +35,8 @@ declare
   pending_a uuid := gen_random_uuid();
   owner_b uuid := gen_random_uuid();
 begin
-  org_a := public.provision_organization('Group Creation Org A', 'group-creation-org-a', 'owner-a@group-creation.example.test');
-  org_b := public.provision_organization('Group Creation Org B', 'group-creation-org-b', 'owner-b@group-creation.example.test');
+  org_a := public.provision_organization('Group Creation Org A', 'owner-a@group-creation.example.test');
+  org_b := public.provision_organization('Group Creation Org B', 'owner-b@group-creation.example.test');
 
   insert into public.access_requests (org_id, name, email, status) values
     (org_a, 'Member A1', 'member-a1@group-creation.example.test', 'approved'),

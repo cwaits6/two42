@@ -22,8 +22,8 @@ declare
   owner_a uuid := gen_random_uuid();
   owner_b uuid := gen_random_uuid();
 begin
-  org_a := public.provision_organization('Signup Suite Org A', 'signup-suite-org-a', 'su-owner-a@leak.example.test');
-  org_b := public.provision_organization('Signup Suite Org B', 'signup-suite-org-b', 'su-owner-b@leak.example.test');
+  org_a := public.provision_organization('Signup Suite Org A', 'su-owner-a@leak.example.test');
+  org_b := public.provision_organization('Signup Suite Org B', 'su-owner-b@leak.example.test');
   insert into auth.users (id, email) values
     (owner_a, 'su-owner-a@leak.example.test'),
     (owner_b, 'su-owner-b@leak.example.test');
@@ -111,7 +111,7 @@ select is(
 -- raise TN004 rather than re-pin them (the cross-tenant write that would
 -- become an account-takeover primitive once Phase 4 exposes a caller).
 select throws_ok(
-  $$ select public.provision_organization('Signup Suite Org C', 'signup-suite-org-c', 'su-owner-b@leak.example.test') $$,
+  $$ select public.provision_organization('Signup Suite Org C', 'su-owner-b@leak.example.test') $$,
   'TN004', null,
   'provisioning refuses an owner email that already belongs to another org');
 
@@ -121,7 +121,7 @@ select is(
   'the rejected call left the existing owner profile in its original org');
 
 select ok(
-  not exists (select 1 from public.organizations where slug = 'signup-suite-org-c'),
+  not exists (select 1 from public.organizations where name = 'Signup Suite Org C'),
   'the rejected call left no partial org behind (atomic)');
 
 select ok(
@@ -157,18 +157,18 @@ begin
 end $$;
 
 select throws_ok(
-  $$ select public.provision_organization('Signup Suite Org E', 'signup-suite-org-e', 'unclaimed-owner@leak.example.test') $$,
+  $$ select public.provision_organization('Signup Suite Org E', 'unclaimed-owner@leak.example.test') $$,
   'TN005', null,
   'provisioning refuses an owner email with an approved access request in another org');
 
 select throws_ok(
-  $$ select public.provision_organization('Signup Suite Org F', 'signup-suite-org-f', 'pending-invitee@leak.example.test') $$,
+  $$ select public.provision_organization('Signup Suite Org F', 'pending-invitee@leak.example.test') $$,
   'TN005', null,
   'provisioning refuses an owner email with an unclaimed family invite in another org');
 
 select ok(
   not exists (select 1 from public.organizations
-    where slug in ('signup-suite-org-e', 'signup-suite-org-f')),
+    where name in ('Signup Suite Org E', 'Signup Suite Org F')),
   'the TN005-rejected calls left no partial org behind (atomic)');
 
 select is(
@@ -176,60 +176,13 @@ select is(
     where lower(email) in ('unclaimed-owner@leak.example.test', 'pending-invitee@leak.example.test')),
   1, 'the TN005-rejected calls left no second approved access request behind');
 
--- Guardrails
-select throws_ok(
-  $$ select public.provision_organization('Dup Org', 'signup-suite-org-a', 'dup@leak.example.test') $$,
-  '23505', null,
-  'duplicate slug is rejected');
-
-select ok(
-  not exists (select 1 from public.organizations where name = 'Dup Org'),
-  'the failed duplicate-slug call left no partial org behind (atomic)');
-
-select throws_ok(
-  $$ select public.provision_organization('Bad Slug Org', 'Bad_Slug!', 'bad@leak.example.test') $$,
-  'TN003', null,
-  'invalid slug is rejected');
-
--- Reserved subdomain labels (Phase 5 PR 1, CWA-65 / #358): TN006 fires
--- after the TN003 shape check, and the whole call rolls back.
-select throws_ok(
-  $$ select public.provision_organization('Reserved Slug Org', 'admin', 'reserved@leak.example.test') $$,
-  'TN006', null,
-  'reserved slug is rejected');
-
-select throws_ok(
-  $$ select public.provision_organization('Reserved Slug Org', 'api', 'reserved@leak.example.test') $$,
-  'TN006', null,
-  'a second reserved slug (api) is rejected');
-
-select ok(
-  not exists (select 1 from public.organizations where slug in ('admin', 'api')),
-  'the TN006-rejected calls left no partial org behind (atomic)');
-
-select ok(
-  not exists (
-    select 1 from public.access_requests
-    where lower(email) = 'reserved@leak.example.test'),
-  'the TN006-rejected calls left no access request behind (atomic)');
-
-do $$
-declare
-  _org_id uuid;
-begin
-  _org_id := public.provision_organization(
-    'Not Reserved Org', 'signup-suite-not-reserved', 'not-reserved@leak.example.test'
-  );
-  perform set_config('su.org_not_reserved', _org_id::text, true);
-end $$;
-
-select ok(
-  exists (
-    select 1 from public.organizations
-    where id = current_setting('su.org_not_reserved')::uuid
-      and slug = 'signup-suite-not-reserved'
-  ),
-  'a normal (non-reserved) slug still provisions');
+-- Nothing routes by slug any more, so provisioning writes none and the
+-- three-argument form is gone.
+select is(
+  (select slug from public.organizations where id = current_setting('su.org_a')::uuid),
+  null, 'provisioning writes no slug');
+select hasnt_function('public', 'provision_organization', array['text', 'text', 'text'],
+  'the three-argument provision_organization(name, slug, owner_email) no longer exists');
 
 -- Not callable from PostgREST roles: EXECUTE is revoked.
 do $$
@@ -239,14 +192,14 @@ declare
 begin
   set local role anon;
   begin
-    perform public.provision_organization('Sneaky Org', 'sneaky-org', 'sneak@leak.example.test');
+    perform public.provision_organization('Sneaky Org', 'sneak@leak.example.test');
   exception when others then
     anon_err := sqlstate;
   end;
   reset role;
   set local role authenticated;
   begin
-    perform public.provision_organization('Sneaky Org 2', 'sneaky-org-2', 'sneak2@leak.example.test');
+    perform public.provision_organization('Sneaky Org 2', 'sneak2@leak.example.test');
   exception when others then
     auth_err := sqlstate;
   end;
@@ -381,7 +334,7 @@ select is(
 -- The TN004 duplicate-owner guard uses the same comparison: a case-variant
 -- of an existing profile email is still the same account.
 select throws_ok(
-  $$ select public.provision_organization('Signup Suite Org D', 'signup-suite-org-d', 'SU-OWNER-B@leak.example.test') $$,
+  $$ select public.provision_organization('Signup Suite Org D', 'SU-OWNER-B@leak.example.test') $$,
   'TN004', null,
   'provisioning refuses a case-variant of an owner email that already belongs to another org');
 

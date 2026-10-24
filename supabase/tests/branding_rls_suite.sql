@@ -54,7 +54,7 @@ declare
   _org_id uuid;
 begin
   _org_id := public.provision_organization(
-    'Branding Suite Org', 'branding-suite-org', 'owner@branding-suite.example.test'
+    'Branding Suite Org', 'owner@branding-suite.example.test'
   );
   perform set_config('branding_suite.org_id', _org_id::text, true);
 end $$;
@@ -151,14 +151,14 @@ select col_not_null('public', 'organizations', 'custom_email_domain_enabled',
 select col_default_is('public', 'organizations', 'custom_email_domain_enabled', 'false',
   'organizations.custom_email_domain_enabled defaults to false (no org gets custom domains until an operator flips it)');
 
--- anon resolving the org via the x-two42-org header reads exactly 1 row.
+-- anon resolves no org, so a header names nothing.
 set local role anon;
 reset request.jwt.claims;
 select set_config('request.headers', json_build_object('x-two42-org', 'default')::text, true);
 select is(
   (select count(*) from public.organizations),
-  1::bigint,
-  'anon with x-two42-org header reads exactly the request org row'
+  0::bigint,
+  'anon reads no organizations row even with an x-two42-org header'
 );
 
 -- anon with no org header reads nothing (fail-closed).

@@ -81,8 +81,8 @@ declare
   grp_1 uuid; grp_2 uuid;
   fam0 uuid; fam1 uuid; fam2 uuid; fam3 uuid;
 begin
-  org_a := public.provision_organization('Directory Visibility Org A', 'directory-visibility-org-a', 'owner-a@directory-visibility.example.test');
-  org_b := public.provision_organization('Directory Visibility Org B', 'directory-visibility-org-b', 'owner-b@directory-visibility.example.test');
+  org_a := public.provision_organization('Directory Visibility Org A', 'owner-a@directory-visibility.example.test');
+  org_b := public.provision_organization('Directory Visibility Org B', 'owner-b@directory-visibility.example.test');
 
   insert into public.access_requests (org_id, name, email, status) values
     (org_a, 'Member 0', 'm0@directory-visibility.example.test', 'approved'),

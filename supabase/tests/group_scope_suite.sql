@@ -41,7 +41,7 @@ declare
   signup_a uuid; signup_b uuid;
   sunday date := current_date + (7 - extract(dow from current_date)::int);
 begin
-  org := public.provision_organization('Group Scope Org', 'group-scope-org', 'owner@group-scope.example.test');
+  org := public.provision_organization('Group Scope Org', 'owner@group-scope.example.test');
 
   insert into public.access_requests (org_id, name, email, status) values
     (org, 'Member A', 'member-a@group-scope.example.test', 'approved'),
@@ -588,7 +588,10 @@ select is(
      -- group_requests.group_id is the link set when a request is approved,
      -- not the key its rows are scoped by: a pending request has no group,
      -- and its policies gate on org_id and the requester.
-     and c.table_name <> 'group_requests'),
+     -- access_requests.group_id is the group an invite link enrols a signup
+     -- into; an admin-approved request names none, and the table is scoped
+     -- by org_id alone.
+     and c.table_name not in ('group_requests', 'access_requests')),
   0, 'no public base table allows a NULL group_id');
 
 select is(

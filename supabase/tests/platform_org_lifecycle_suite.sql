@@ -49,18 +49,18 @@ select ok(
   has_column_privilege('authenticated', 'public.organizations', 'name', 'select'),
   'authenticated still reads organizations.name');
 
--- ── #318 read path: the anon branding read survives the narrowing ───────────
+-- ── Anonymous requests resolve no org, header or not ────────────────────────
 
 set local role anon;
 select set_config('request.headers', json_build_object('x-two42-org', 'default')::text, true);
 select is(
   (select count(*) from public.organizations where branding is not null),
-  1::bigint,
-  'anon with x-two42-org still reads the request org''s branding row');
+  0::bigint,
+  'anon reads no organizations row even with an x-two42-org header');
 select is(
   (select public.app_request_org_id()),
-  '00000000-0000-0000-0000-000000000001'::uuid,
-  'app_request_org_id() still resolves the header org');
+  null::uuid,
+  'app_request_org_id() is NULL for anon whatever the header says');
 reset role;
 select set_config('request.headers', '{}', true);
 
@@ -76,7 +76,10 @@ select throws_ok(
   '23514', null,
   'approved_role rejects values outside (member, admin)');
 
--- ── approved_role: the anon INSERT policy pins it to NULL ───────────────────
+-- ── approved_role: no anonymous INSERT can reach it ─────────────────────────
+-- access_requests has no INSERT policy for any client role since the slug
+-- join form went away, so a visitor cannot self-request at all, let alone
+-- as an admin.
 
 do $$
 declare
@@ -104,9 +107,9 @@ begin
 end $$;
 
 select is(current_setting('lifecycle.admin_attempt_err'), '42501',
-  'anon INSERT with approved_role = admin is rejected by the policy');
-select is(current_setting('lifecycle.plain_attempt_err'), 'no error',
-  'the same anon INSERT without approved_role succeeds');
+  'anon INSERT with approved_role = admin is rejected (RLS 42501)');
+select is(current_setting('lifecycle.plain_attempt_err'), '42501',
+  'anon INSERT without approved_role is rejected too: no public write path remains (RLS 42501)');
 
 -- ── provision_organization() stamps the founding admin ──────────────────────
 
@@ -115,7 +118,7 @@ declare
   _org_id uuid;
 begin
   _org_id := public.provision_organization(
-    'Lifecycle Suite Org', 'lifecycle-suite-org', 'owner@lifecycle.example.test'
+    'Lifecycle Suite Org', 'owner@lifecycle.example.test'
   );
   perform set_config('lifecycle.org_id', _org_id::text, true);
 end $$;

@@ -39,9 +39,9 @@ declare
   org_b uuid;
   org_c uuid;
 begin
-  org_a := public.provision_organization('Quota Org A', 'quota-org-a', 'owner-a@quota.example.test');
-  org_b := public.provision_organization('Quota Org B', 'quota-org-b', 'owner-b@quota.example.test');
-  org_c := public.provision_organization('Quota Org C', 'quota-org-c', 'owner-c@quota.example.test');
+  org_a := public.provision_organization('Quota Org A', 'owner-a@quota.example.test');
+  org_b := public.provision_organization('Quota Org B', 'owner-b@quota.example.test');
+  org_c := public.provision_organization('Quota Org C', 'owner-c@quota.example.test');
 
   insert into public.org_email_limits (org_id, daily_cap) values
     (org_b, 5),

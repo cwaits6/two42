@@ -42,6 +42,7 @@ declare
   _group uuid;
   _group_member uuid;
   _label uuid;
+  _invite_link uuid;
 begin
   -- provisioning already seeded: organizations, site_settings,
   -- access_requests (owner), and the owner's profiles + organization_members
@@ -62,6 +63,10 @@ begin
     values (_org, _owner, _tag || ' group request');
   insert into public.group_join_requests (org_id, group_id, profile_id)
     values (_org, _group, _owner);
+  insert into public.group_invites (org_id, group_id, created_by)
+    values (_org, _group, _owner) returning id into _invite_link;
+  insert into public.group_invite_uses (org_id, invite_id, group_id, email, outcome, profile_id)
+    values (_org, _invite_link, _group, _tag || '-use@leak.example.test', 'joined', _owner);
   insert into public.teams (org_id, group_id, name, is_serving_role)
     values (_org, _group, _tag || ' serving team', true) returning id into _serving_group;
 
@@ -160,8 +165,8 @@ declare
   owner_a uuid := gen_random_uuid();
   owner_b uuid := gen_random_uuid();
 begin
-  org_a := public.provision_organization('Leak Suite Org A', 'leak-suite-org-a', 'owner-a@leak.example.test');
-  org_b := public.provision_organization('Leak Suite Org B', 'leak-suite-org-b', 'owner-b@leak.example.test');
+  org_a := public.provision_organization('Leak Suite Org A', 'owner-a@leak.example.test');
+  org_b := public.provision_organization('Leak Suite Org B', 'owner-b@leak.example.test');
 
   -- Owners sign up AFTER provisioning (the §5/§6 org-first contract):
   -- handle_new_user() resolves each into their org via the approved
@@ -364,37 +369,35 @@ begin
                'profiles SELECT does not recurse through app_current_org_id()'));
 end $$;
 
--- ── Header resolution (§9.2) ────────────────────────────────────────────────
+-- ── Anonymous resolution (§9.2) ─────────────────────────────────────────────
+-- No header names an org any more: an anonymous caller resolves NULL and
+-- reads nothing, and a member sending another org's header still reads
+-- only their own org.
 do $$
 declare
   org_a uuid := current_setting('leak_suite.org_a')::uuid;
   org_b uuid := current_setting('leak_suite.org_b')::uuid;
   owner_a uuid := current_setting('leak_suite.owner_a')::uuid;
-  anon_a_settings bigint;
-  anon_a_wrong_org bigint;
+  anon_with_header bigint;
   anon_none bigint;
   member_spoof bigint;
   member_spoof_own bigint;
 begin
-  -- anon + org A header: sees only org A's public rows. jwt claims are
-  -- cleared explicitly — set_config(..., true) persists for the whole
-  -- transaction, so the previous block's principal would otherwise leak
-  -- into these "anonymous" checks.
+  -- jwt claims are cleared explicitly — set_config(..., true) persists for
+  -- the whole transaction, so the previous block's principal would
+  -- otherwise leak into these "anonymous" checks.
   set local role anon;
   perform set_config('request.jwt.claims', '', true);
   perform set_config('request.headers', json_build_object('x-two42-org', 'leak-suite-org-a')::text, true);
-  select count(*) into anon_a_settings from public.site_settings where org_id = org_a;
-  select count(*) into anon_a_wrong_org from public.site_settings where org_id = org_b;
+  select count(*) into anon_with_header from public.site_settings;
   reset role;
 
-  -- anon with no header: sees nothing
   set local role anon;
   perform set_config('request.jwt.claims', '', true);
   perform set_config('request.headers', '{}', true);
   select count(*) into anon_none from public.site_settings;
   reset role;
 
-  -- authenticated member of A sending org B's header: still resolves to A
   set local role authenticated;
   perform set_config('request.jwt.claims', json_build_object('sub', owner_a)::text, true);
   perform set_config('request.headers', json_build_object('x-two42-org', 'leak-suite-org-b')::text, true);
@@ -403,28 +406,21 @@ begin
   reset role;
 
   insert into tenancy_leak_results
-    select ok(anon_a_settings >= 1, 'anon with org A header reads org A public settings');
-  insert into tenancy_leak_results
-    select ok(anon_a_wrong_org = 0, 'anon with org A header reads zero org B settings');
+    select ok(anon_with_header = 0, 'anon with an x-two42-org header still reads nothing (no header path remains)');
   insert into tenancy_leak_results
     select ok(anon_none = 0, 'anon with no header reads nothing (fail-closed)');
   insert into tenancy_leak_results
-    select ok(member_spoof = 0, 'org A member sending x-two42-org: org-b still reads zero org B rows (principal wins over header)');
+    select ok(member_spoof = 0, 'org A member sending x-two42-org: org-b still reads zero org B rows');
   insert into tenancy_leak_results
     select ok(member_spoof_own >= 1, 'org A member sending org B header still reads their own org');
 end $$;
 
--- ── app_request_org_id() never raises on a malformed GUC (§9.2) ─────────────
--- Regression guard for the nullif() in 20260731000001_org_helpers.sql:47.
--- `current_setting('request.headers', true)` returns '' (not NULL) once the
--- GUC has been set and cleared in the session, and ''::json raises 22P02.
--- Every other test here sets request.headers to valid JSON, so without this
--- block deleting the inner nullif() leaves the whole suite green.
---
--- This matters more than a leak would: the helper is called from the USING
--- and WITH CHECK of all 30 restrictive policies, so if it raises, every
--- query against every org-owned table errors for that connection — a total
--- outage, not a leak.
+-- ── app_request_org_id() never raises on any GUC state (§9.2) ───────────────
+-- The helper is called from the USING and WITH CHECK of every restrictive
+-- policy, so if it raised, every query against every org-owned table would
+-- error for that connection — a total outage, not a leak. It no longer
+-- reads request.headers at all; this pins that no GUC value can make it
+-- raise or resolve an org.
 do $$
 declare
   empty_result text;
@@ -432,7 +428,6 @@ declare
   garbage_result text;
   anon_rows text;
 begin
-  -- empty-string GUC → NULL, not 22P02
   perform set_config('request.jwt.claims', '', true);
   perform set_config('request.headers', '', true);
   begin
@@ -441,7 +436,6 @@ begin
     empty_result := 'raised ' || sqlstate;
   end;
 
-  -- valid JSON with no x-two42-org key → NULL
   perform set_config('request.headers', '{}', true);
   begin
     unset_result := coalesce((select public.app_request_org_id())::text, 'null');
@@ -449,8 +443,6 @@ begin
     unset_result := 'raised ' || sqlstate;
   end;
 
-  -- non-JSON garbage: behaviour is pinned here so it is a deliberate choice,
-  -- not an accident. What must never happen is it resolving AN ORG.
   perform set_config('request.headers', 'not json at all', true);
   begin
     garbage_result := coalesce((select public.app_request_org_id())::text, 'null');
@@ -458,8 +450,6 @@ begin
     garbage_result := 'raised ' || sqlstate;
   end;
 
-  -- and the end-to-end consequence: an anon read under an empty GUC returns
-  -- zero rows rather than erroring the statement.
   perform set_config('request.headers', '', true);
   set local role anon;
   begin
@@ -477,13 +467,13 @@ end $$;
 
 insert into tenancy_leak_results
   select is(current_setting('leak_suite.guc_empty'), 'null',
-    'app_request_org_id() returns NULL (not 22P02) for an empty request.headers GUC');
+    'app_request_org_id() returns NULL for an empty request.headers GUC');
 insert into tenancy_leak_results
   select is(current_setting('leak_suite.guc_unset'), 'null',
     'app_request_org_id() returns NULL when request.headers carries no x-two42-org');
 insert into tenancy_leak_results
-  select is(current_setting('leak_suite.guc_garbage'), 'raised 22P02',
-    'app_request_org_id() on non-JSON request.headers raises 22P02 rather than resolving an org');
+  select is(current_setting('leak_suite.guc_garbage'), 'null',
+    'app_request_org_id() returns NULL on non-JSON request.headers (it never reads the header)');
 insert into tenancy_leak_results
   select is(current_setting('leak_suite.guc_anon_rows'), '0',
     'an anon read under an empty request.headers GUC returns 0 rows rather than erroring');
@@ -541,19 +531,18 @@ begin
     select is(delete_b_count, 0, 'DELETE targeting org B rows affects 0 rows');
 end $$;
 
--- ── Anon write isolation: the /join form's only public write path (§9.3) ────
--- access_requests is the one table anon may INSERT into, and the header is
--- its only org gate. Every other anon assertion in this suite is a read, so
--- without this block the product's single public write path is untested.
+-- ── Anon write isolation: no public write path remains (§9.3) ───────────────
+-- access_requests used to be the one table anon could INSERT into, through
+-- the slug join form. That policy is gone: a household invite files its
+-- request through a token-anchored route on the service client, and an
+-- anonymous insert fails whatever org it names and whatever header it sends.
 do $$
 declare
   match_err text := null;
   other_err text := null;
   approved_err text := null;
   none_err text := null;
-  landed_org text;
 begin
-  -- anon with org A's header inserting a row tagged org A → accepted
   set local role anon;
   perform set_config('request.jwt.claims', '', true);
   perform set_config('request.headers', json_build_object('x-two42-org', 'leak-suite-org-a')::text, true);
@@ -565,7 +554,6 @@ begin
     match_err := sqlstate;
   end;
 
-  -- …tagged org B while sending org A's header → rejected
   begin
     insert into public.access_requests (org_id, name, email, status)
     values (current_setting('leak_suite.org_b')::uuid, 'anon intruder',
@@ -574,9 +562,8 @@ begin
     other_err := sqlstate;
   end;
 
-  -- …correctly tagged but pre-approved → rejected. status = 'approved' is
-  -- the signup trust anchor (handle_new_user() mints a member profile from
-  -- it), so a public insert must never be able to arrive already reviewed.
+  -- status = 'approved' is the signup trust anchor (handle_new_user() mints
+  -- a member profile from it), so this one matters most.
   begin
     insert into public.access_requests (org_id, name, email, status)
     values (current_setting('leak_suite.org_a')::uuid, 'anon self-approver',
@@ -585,7 +572,6 @@ begin
     approved_err := sqlstate;
   end;
 
-  -- …with no header at all → rejected (app_request_org_id() is NULL)
   perform set_config('request.headers', '{}', true);
   begin
     insert into public.access_requests (org_id, name, email, status)
@@ -596,22 +582,15 @@ begin
   end;
   reset role;
 
-  select org_id::text into landed_org from public.access_requests
-    where email = 'anon-join@leak.example.test';
-
   perform set_config('leak_suite.anon_match', coalesce(match_err, 'ok'), true);
   perform set_config('leak_suite.anon_other', coalesce(other_err, 'ok'), true);
   perform set_config('leak_suite.anon_approved', coalesce(approved_err, 'ok'), true);
   perform set_config('leak_suite.anon_none', coalesce(none_err, 'ok'), true);
-  perform set_config('leak_suite.anon_landed', coalesce(landed_org, 'none'), true);
 end $$;
 
 insert into tenancy_leak_results
-  select is(current_setting('leak_suite.anon_match'), 'ok',
-    'anon INSERT into access_requests succeeds when org_id matches the x-two42-org header');
-insert into tenancy_leak_results
-  select is(current_setting('leak_suite.anon_landed'), current_setting('leak_suite.org_a'),
-    'the accepted anon access request landed in the header''s org');
+  select is(current_setting('leak_suite.anon_match'), '42501',
+    'anon INSERT into access_requests is rejected even when org_id matches the x-two42-org header (RLS 42501)');
 insert into tenancy_leak_results
   select is(current_setting('leak_suite.anon_other'), '42501',
     'anon INSERT tagged another org than the header is rejected (RLS 42501)');
@@ -621,27 +600,12 @@ insert into tenancy_leak_results
 insert into tenancy_leak_results
   select is(current_setting('leak_suite.anon_approved'), '42501',
     'anon INSERT arriving pre-approved is rejected — no self-approved signup trust anchor (RLS 42501)');
-
--- The join flow (Phase 3, CWA-10) resolves its org through the same
--- app_request_org_id() the policy above evaluates — but the slug
--- resolveOrgSlug() defaults to ('default', lib/org.ts) must still be
--- reachable. If a migration renames the seeded org's slug,
--- app_request_org_id() returns NULL for anon and the join page fails closed
--- to "Join requests unavailable" (with an operator log line as of CWA-10's
--- review pass) rather than ever reaching a 42501 — pin it here so that
--- drift shows up as a test failure instead of only at that page.
---
--- This assertion is a seed-integrity check, not proof that no UUID↔slug
--- coupling exists: it keys on the hardcoded seed UUID below, which still has
--- to agree with whatever resolveOrgSlug() resolves to. A differently-idded
--- org seeded with slug 'default' would pass this assertion while breaking
--- the join flow it is meant to guard.
 insert into tenancy_leak_results
   select is(
-    (select slug from public.organizations
-      where id = '00000000-0000-0000-0000-000000000001'::uuid),
-    'default',
-    'the seeded org (00000000-0000-0000-0000-000000000001) still carries the slug resolveOrgSlug() defaults to (''default'')');
+    (select count(*)::int from pg_catalog.pg_policies
+      where schemaname = 'public' and tablename = 'access_requests' and cmd = 'INSERT'),
+    0,
+    'access_requests has no INSERT policy left for any client role');
 
 -- ── platform_admins (org-orthogonal, unchanged by the org floor) ────────────
 do $$
