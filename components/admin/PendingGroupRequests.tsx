@@ -51,14 +51,22 @@ export function PendingGroupRequests({
         toast.error("Session expired. Please log in again.");
         return;
       }
-      // A write the UPDATE policy rejects matches zero rows without an error.
+      // A write the UPDATE policy rejects matches zero rows without an error;
+      // the status predicate makes a decline that lost the race to an approval
+      // one of them.
       const { data, error } = await supabase
         .from("group_requests")
         .update({ status: "declined", reviewed_by: user.id, reviewed_at: new Date().toISOString() })
         .eq("id", id)
+        .eq("status", "pending")
         .select("id");
-      if (error || !data?.length) {
+      if (error) {
         toast.error("Couldn't decline the request. Please try again.");
+        return;
+      }
+      if (!data?.length) {
+        toast.error("This request was already reviewed.");
+        remove(id);
         return;
       }
       toast.success("Request declined.");

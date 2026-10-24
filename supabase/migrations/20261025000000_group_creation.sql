@@ -132,13 +132,16 @@ create policy "Members can request a group under approval mode" on public.group_
     and (select public.org_group_creation_policy()) = 'approval'
   );
 
--- 'approved' is reachable only through group_request_approve(), so an
--- approved request always names the group it created.
+-- Only a pending request is reviewable: once decided it is the record, so
+-- a stale decline cannot overwrite an approval. 'approved' is reachable only
+-- through group_request_approve(), so an approved request always names the
+-- group it created.
 create policy "Admins can review group requests" on public.group_requests
   for update to authenticated
   using (
     org_id = (select public.app_request_org_id())
     and (select public.is_admin())
+    and status = 'pending'
   )
   with check (
     org_id = (select public.app_request_org_id())

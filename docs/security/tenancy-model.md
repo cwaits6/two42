@@ -397,10 +397,11 @@ policies compose on the floor as `ORG AND (arms)`:
   with no reviewer, timestamp or group, **and**
   `org_group_creation_policy() = 'approval'` — the policy, not the UI, is
   what keeps a request out of an open or admins-only org;
-- update: org admins, with a `WITH CHECK` of `status in ('pending',
-  'declined')` so `'approved'` is unreachable by a plain UPDATE. Decline is
-  that UPDATE; approval is the RPC below. No DELETE policy: a declined row
-  is the record.
+- update: org admins, on `status = 'pending'` rows only, with a `WITH CHECK`
+  of `status in ('pending', 'declined')` so `'approved'` is unreachable by a
+  plain UPDATE and a decided request cannot be re-decided (a stale decline
+  after an approval matches zero rows). Decline is that UPDATE; approval is
+  the RPC below. No DELETE policy: a declined row is the record.
 
 **Creation is a `SECURITY DEFINER` RPC, not widened RLS.** A group needs
 three rows — `groups`, its leader's `group_members` row and its one

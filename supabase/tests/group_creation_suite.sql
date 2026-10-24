@@ -6,9 +6,9 @@
 -- the tenant boundary on this surface and no lint sees them; this suite is
 -- what pins them. It covers the shape and grants, every mode (approval,
 -- open, admins), the approve path and what it writes, the zero-row writes
--- a non-admin's decline and setting change produce, and the cross-org
--- floor. Every "cannot" has a paired positive control so the suite cannot
--- go green by rejecting everything.
+-- a non-admin's decline, a stale decline and a setting change produce, and
+-- the cross-org floor. Every "cannot" has a paired positive control so the
+-- suite cannot go green by rejecting everything.
 --
 -- Run locally (rollback-safe, never mutates the shared local stack):
 --
@@ -261,7 +261,7 @@ declare
   g uuid;
   member_err text := 'none'; again_err text := 'none'; foreign_err text := 'none';
   direct_err text := 'none'; admin_declined bigint; member_declined bigint;
-  after_member text;
+  stale_declined bigint; reset_pending bigint; after_member text; after_stale text;
 begin
   set local role authenticated;
   perform set_config('request.headers', '{}', true);
@@ -280,6 +280,13 @@ begin
   exception when others then
     again_err := sqlstate;
   end;
+  update public.group_requests
+    set status = 'declined', reviewed_by = owner_a, reviewed_at = now()
+    where id = req;
+  get diagnostics stale_declined = row_count;
+  update public.group_requests set status = 'pending' where id = req;
+  get diagnostics reset_pending = row_count;
+  select status into after_stale from public.group_requests where id = req;
 
   perform set_config('request.jwt.claims', json_build_object('sub', owner_b)::text, true);
   begin
@@ -321,6 +328,9 @@ begin
   perform set_config('gc.s3_member_declined', member_declined::text, true);
   perform set_config('gc.s3_after_member', after_member, true);
   perform set_config('gc.s3_admin_declined', admin_declined::text, true);
+  perform set_config('gc.s3_stale_declined', stale_declined::text, true);
+  perform set_config('gc.s3_reset_pending', reset_pending::text, true);
+  perform set_config('gc.s3_after_stale', after_stale, true);
 end $$;
 
 select is(current_setting('gc.s3_member_err'), 'GC005',
@@ -353,6 +363,12 @@ select is(
           || ':' || (reviewed_at is not null)::text
      from public.group_requests where id = current_setting('gc.req1')::uuid),
   'approved:true:true:true', 'the request is approved, linked to the group, and stamped with the reviewer');
+select is(current_setting('gc.s3_stale_declined')::int, 0,
+  'an admin declining an already-approved request matches zero rows');
+select is(current_setting('gc.s3_reset_pending')::int, 0,
+  'an admin resetting an approved request to pending matches zero rows');
+select is(current_setting('gc.s3_after_stale'), 'approved',
+  'and the request stays approved');
 select is(current_setting('gc.s3_again_err'), 'GC004',
   'approving the same request again gets GC004');
 select is(current_setting('gc.s3_foreign_err'), 'GC004',
