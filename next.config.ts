@@ -27,7 +27,9 @@ const nextConfig: NextConfig = {
   // Loaded from node_modules at runtime, not bundled: its per-framework
   // instrumentations dynamically require packages this app does not install
   // (e.g. @nestjs/core), which Turbopack treats as a build error.
-  serverExternalPackages: ["@opentelemetry/auto-instrumentations-node"],
+  // server-util reaches React's client API (createContext), which the server
+  // bundle's react-server build lacks; externalising it loads it through Node.
+  serverExternalPackages: ["@opentelemetry/auto-instrumentations-node", "@blocknote/server-util"],
   async headers() {
     return [
       {
