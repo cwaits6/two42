@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useDiscoveryOn } from "@/components/groups/GroupProvider";
+import { CreateGroupAction } from "@/components/groups/CreateGroupAction";
 import { groupInitials, type ActiveGroup } from "@/lib/groups/active";
 import { BackLink } from "@/components/directory/BackLink";
 import { DirRow } from "@/components/directory/DirRow";
@@ -42,12 +43,16 @@ function GroupsTabInner() {
 
   if (memberships.length === 0) {
     return (
-      <p className="py-8 text-center text-base text-muted-foreground">You are not in a group yet.</p>
+      <>
+        <CreateGroupAction className="mb-5" />
+        <p className="py-8 text-center text-base text-muted-foreground">You are not in a group yet.</p>
+      </>
     );
   }
 
   return (
     <>
+      <CreateGroupAction className="mb-5" />
       <TwoPane
         list={
           <div className="space-y-2.5">

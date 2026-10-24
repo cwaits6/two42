@@ -577,6 +577,44 @@ isOneToOne: false
       referencedColumns: ["id","org_id"]
     }
                   ]
+                },"group_requests": {
+                  Row: {
+                    "created_at": string,"description": string | null,"group_id": string | null,"id": string,"name": string,"org_id": string,"requested_by": string,"reviewed_at": string | null,"reviewed_by": string | null,"status": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"description"?: string | null,"group_id"?: string | null,"id"?: string,"name": string,"org_id"?: string,"requested_by": string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"description"?: string | null,"group_id"?: string | null,"id"?: string,"name"?: string,"org_id"?: string,"requested_by"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "group_requests_group_id_fkey"
+      columns: ["group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "group_requests_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "group_requests_requested_by_fkey"
+      columns: ["requested_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "group_requests_requested_by_fkey"
+      columns: ["requested_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
                 },"group_settings": {
                   Row: {
                     "group_id": string,"org_id": string,"serving_link_mode": string | null,"updated_at": string,"updated_by": string | null,"weekly_prayer_call_time": string | null,"weekly_prayer_call_url": string | null,"weekly_zoom_url": string | null,"zoom_meeting_time": string | null
@@ -827,14 +865,14 @@ isOneToOne: false
                   ]
                 },"organizations": {
                   Row: {
-                    "branding": NonNullable<Json>,"created_at": string,"custom_email_domain_enabled": boolean,"directory_visibility": string,"id": string,"name": string,"slug": string,"status": Database["public"]['Enums']["org_status"]
+                    "branding": NonNullable<Json>,"created_at": string,"custom_email_domain_enabled": boolean,"directory_visibility": string,"group_creation_policy": string,"id": string,"name": string,"slug": string,"status": Database["public"]['Enums']["org_status"]
                   }
                   ComputedFields: never
                   Insert: {
-                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"id"?: string,"name": string,"slug": string,"status"?: Database["public"]['Enums']["org_status"]
+                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"group_creation_policy"?: string,"id"?: string,"name": string,"slug": string,"status"?: Database["public"]['Enums']["org_status"]
                   }
                   Update: {
-                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"id"?: string,"name"?: string,"slug"?: string,"status"?: Database["public"]['Enums']["org_status"]
+                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"group_creation_policy"?: string,"id"?: string,"name"?: string,"slug"?: string,"status"?: Database["public"]['Enums']["org_status"]
                   }
                   Relationships: [
                     
@@ -1437,8 +1475,17 @@ isOneToOne: false
 "group_content_backfill":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
+"group_create":
+{ Args: { "_description"?: string,"_leader_id"?: string,"_name": string }; Returns: string
+                           },
+"group_create_for":
+{ Args: { "_created_by": string,"_description": string,"_leader": string,"_name": string,"_org": string }; Returns: string
+                           },
 "group_model_backfill":
 { Args: Record<PropertyKey, never>; Returns: undefined
+                           },
+"group_request_approve":
+{ Args: { "_request_id": string }; Returns: string
                            },
 "is_admin":
 { Args: Record<PropertyKey, never>; Returns: boolean
@@ -1489,6 +1536,9 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"org_group_creation_policy":
+{ Args: Record<PropertyKey, never>; Returns: string
+                           },
 "provision_organization":
 { Args: { "_name": string,"_owner_email": string,"_slug": string }; Returns: string
                            },

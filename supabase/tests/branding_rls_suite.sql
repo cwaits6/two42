@@ -112,18 +112,19 @@ select ok(
   'authenticated may not read organizations.custom_email_domain_enabled'
 );
 -- The write side: the only permissive write policy is the org admin's
--- UPDATE for directory_visibility, and the grants confine it to that one
--- column — table-level UPDATE is revoked, so the policy cannot reach name,
--- slug, status or custom_email_domain_enabled. Both halves are pinned: a
--- second write policy, or a table-level re-grant, would hand the flag to
--- the org's own admin.
+-- whole-row UPDATE, and the column grants confine it to the org settings
+-- columns (directory_visibility, group_creation_policy) — table-level UPDATE
+-- is revoked, so the policy cannot reach name, slug, status or
+-- custom_email_domain_enabled. Both halves are pinned: a second write
+-- policy, or a table-level re-grant, would hand the flag to the org's own
+-- admin.
 select is(
   (select coalesce(array_agg(policyname || ':' || cmd order by policyname), '{}')
      from pg_policies
      where schemaname = 'public' and tablename = 'organizations'
        and permissive = 'PERMISSIVE' and cmd in ('INSERT', 'UPDATE', 'DELETE', 'ALL')),
-  array['Admins can set directory visibility:UPDATE'],
-  'the only permissive write policy on organizations is the admin directory_visibility UPDATE'
+  array['Admins can set org settings:UPDATE'],
+  'the only permissive write policy on organizations is the admin org-settings UPDATE'
 );
 select ok(
   not has_table_privilege('authenticated', 'public.organizations', 'update'),
@@ -136,6 +137,10 @@ select ok(
 select ok(
   not has_column_privilege('anon', 'public.organizations', 'directory_visibility', 'select'),
   'anon may not read organizations.directory_visibility'
+);
+select ok(
+  not has_column_privilege('anon', 'public.organizations', 'group_creation_policy', 'select'),
+  'anon may not read organizations.group_creation_policy'
 );
 select col_not_null('public', 'organizations', 'custom_email_domain_enabled',
   'organizations.custom_email_domain_enabled is NOT NULL');

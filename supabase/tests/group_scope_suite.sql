@@ -584,7 +584,11 @@ select is(
    join information_schema.tables t
      on t.table_schema = c.table_schema and t.table_name = c.table_name
    where c.table_schema = 'public' and c.column_name = 'group_id'
-     and t.table_type = 'BASE TABLE' and c.is_nullable = 'YES'),
+     and t.table_type = 'BASE TABLE' and c.is_nullable = 'YES'
+     -- group_requests.group_id is the link set when a request is approved,
+     -- not the key its rows are scoped by: a pending request has no group,
+     -- and its policies gate on org_id and the requester.
+     and c.table_name <> 'group_requests'),
   0, 'no public base table allows a NULL group_id');
 
 select is(

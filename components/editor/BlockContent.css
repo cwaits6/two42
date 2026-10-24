@@ -1,0 +1,58 @@
+/* Brand type scale for curated block content. Shared by the editor
+   (.bn-editor) and the read-only render (.bn-static) so a leader sees while
+   writing exactly what members see on the page. Sizes are the --text-*
+   tokens, so the Display text-size setting scales them too. */
+
+.bn-editor,
+.bn-static {
+  color: var(--foreground);
+  font-family: var(--font-sans, inherit);
+  font-size: var(--text-lg);
+  line-height: 1.65;
+}
+
+/* BlockNote sizes headings off the block wrapper, so the h element inherits
+   from it here instead of taking the page-level h2/h3 rules. */
+.bn-editor :is(h2, h3),
+.bn-static :is(h2, h3) {
+  font: inherit;
+  color: inherit;
+  margin: 0;
+}
+
+.bn-editor [data-content-type="heading"],
+.bn-static [data-content-type="heading"] {
+  color: var(--color-brand-primary);
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: var(--text-2xl) !important;
+  font-weight: 700;
+  line-height: 1.2;
+  padding-top: 1.25em;
+}
+
+.bn-editor [data-content-type="heading"][data-level="3"],
+.bn-static [data-content-type="heading"][data-level="3"] {
+  color: var(--foreground);
+  font-size: var(--text-xl) !important;
+}
+
+.bn-editor [data-content-type="quote"] blockquote,
+.bn-static [data-content-type="quote"] blockquote {
+  color: var(--muted-foreground);
+  border-left: 3px solid var(--color-brand-accent);
+  font-style: italic;
+}
+
+/* Links carry the text-safe accent and an underline, so colour is never
+   the only cue. */
+.bn-editor a,
+.bn-static a {
+  color: var(--color-brand-accent-text);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.bn-editor a:hover,
+.bn-static a:hover {
+  color: var(--color-brand-primary);
+}

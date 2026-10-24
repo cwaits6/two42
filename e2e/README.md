@@ -25,8 +25,9 @@ touches `app/`, `components/`, `lib/`, `supabase/migrations/`,
 `package-lock.json`, `next.config.ts`, `proxy.ts`, `instrumentation.ts`,
 `supabase/config.toml`, or the workflow file itself.
 
-On a shared local stack the specs assume the seed default for
-`directory_visibility`, and the toggle spec normalises the org to it.
+On a shared local stack the specs assume the seed defaults for
+`directory_visibility` and `group_creation_policy` (`approval`); the two
+specs that change those settings normalise the org back to them.
 
 ## Personas
 
@@ -57,6 +58,7 @@ not covered here.
 | `household-boundary.spec.ts`         | Only households sharing a group are listed; a deep link to another's opens nothing         |
 | `group-frame.spec.ts`                | Switcher lists own groups only; a foreign `/g/<id>/…` is a 404; content stays in its group |
 | `anonymous.spec.ts`                  | `/directory` and `/g/<id>/directory` redirect to `/login`                                  |
+| `group-creation-policy.spec.ts`      | The org's create policy decides whether a member sees "Request a group", "Create a group" or neither; restored to approval in afterAll |
 
 ## Adding a spec
 
