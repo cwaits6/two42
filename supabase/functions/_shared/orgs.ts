@@ -18,7 +18,6 @@
 export interface Org {
   id: string;
   name: string;
-  slug: string;
   // The raw organizations.branding jsonb. Deliberately `unknown`, not a typed
   // shape: _shared/branding.ts is the sole validator of this column, and this
   // module must not grow a second, weaker opinion about it.
@@ -48,7 +47,7 @@ export interface OrgListClient {
 }
 
 /**
- * Active organizations, ordered by slug for a stable, reproducible run order.
+ * Active organizations, ordered by id for a stable, reproducible run order.
  * Suspended orgs are skipped — a suspended tenant must not email its members.
  * Throws on query failure: enumerating zero orgs because of an error is
  * indistinguishable from "no orgs" at the call site, and would silently make
@@ -65,9 +64,9 @@ export interface OrgListClient {
 export async function listActiveOrgs(supabase: OrgListClient): Promise<Org[]> {
   const { data, error } = await supabase
     .from("organizations")
-    .select("id, name, slug, branding, org_email_domains(domain, status)")
+    .select("id, name, branding, org_email_domains(domain, status)")
     .eq("status", "active")
-    .order("slug");
+    .order("id");
   if (error) throw new Error(`Failed to list organizations: ${error.message}`);
   return data ?? [];
 }
@@ -98,7 +97,6 @@ export interface OrgRunCounts {
 
 export interface OrgRunResult extends OrgRunCounts {
   orgId: string;
-  slug: string;
   error?: string;
 }
 
@@ -129,7 +127,7 @@ export class OrgRunError extends Error {
 
 /**
  * Run `fn` once per org, sequentially, isolating failures: one org throwing is
- * logged with its slug and recorded, and the remaining orgs still run.
+ * logged with its id and recorded, and the remaining orgs still run.
  * Sequential rather than parallel so outbound Resend concurrency stays at
  * today's rate instead of being multiplied by the org count.
  */
@@ -143,7 +141,6 @@ export async function forEachOrg(
       const { sent, sendFailures, itemFailures } = await fn(org);
       results.push({
         orgId: org.id,
-        slug: org.slug,
         sent,
         sendFailures,
         // Omitted when empty so runners without an inner loop keep today's
@@ -151,7 +148,7 @@ export async function forEachOrg(
         ...(itemFailures?.length ? { itemFailures } : {}),
       });
     } catch (err) {
-      console.error("[org %s %s] reminder run failed:", org.slug, org.id, err);
+      console.error("[org %s] reminder run failed:", org.id, err);
       // OrgRunError carries whatever was sent (and which items had already
       // failed) before the mid-run abort; ordinary errors fall back to zeroes.
       const counts: OrgRunCounts = err instanceof OrgRunError
@@ -159,7 +156,6 @@ export async function forEachOrg(
         : { sent: 0, sendFailures: 0 };
       results.push({
         orgId: org.id,
-        slug: org.slug,
         sent: counts.sent,
         sendFailures: counts.sendFailures,
         ...(counts.itemFailures?.length ? { itemFailures: counts.itemFailures } : {}),
@@ -197,9 +193,9 @@ export function summarize(results: OrgRunResult[]): {
     emailsFailed: results.reduce((n, r) => n + r.sendFailures, 0),
     failed: results
       .filter((r) => r.error)
-      .map((r) => ({ org: r.slug, error: r.error as string })),
+      .map((r) => ({ org: r.orgId, error: r.error as string })),
     failedItems: results.flatMap((r) =>
-      (r.itemFailures ?? []).map((f) => ({ org: r.slug, item: f.item, error: f.error }))
+      (r.itemFailures ?? []).map((f) => ({ org: r.orgId, item: f.item, error: f.error }))
     ),
   };
 }

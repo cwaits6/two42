@@ -138,7 +138,7 @@ function resolveFromAddress(
 export function resolveEmailBranding(
   raw: unknown,
   defaults: BrandingDefaults,
-  orgSlug?: string,
+  orgLabel?: string,
   emailDomain?: { domain: string; status: string } | null,
 ): EmailBranding {
   const fromAddress = resolveFromAddress(
@@ -166,7 +166,7 @@ export function resolveEmailBranding(
     // nowhere near the symptom (mail replying to noreply@).
     console.warn(
       "[org %s] Ignoring malformed branding.reply_to; sending without a Reply-To header",
-      orgSlug ?? "unknown",
+      orgLabel ?? "unknown",
     );
   }
   return {

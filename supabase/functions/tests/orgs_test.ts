@@ -56,32 +56,29 @@ function makeFakeClient(result: {
 const orgA: Org = {
   id: "a-id",
   name: "Org A",
-  slug: "a",
   branding: { display_name: "Org A Fellowship", accent: "#2E6F5E" },
   org_email_domains: [{ domain: "org-a.example", status: "verified" }],
 };
 const orgB: Org = {
   id: "b-id",
   name: "Org B",
-  slug: "b",
   branding: {},
   org_email_domains: [],
 };
 const orgC: Org = {
   id: "c-id",
   name: "Org C",
-  slug: "c",
   branding: null,
   org_email_domains: [],
 };
 
-Deno.test("listActiveOrgs filters on status = active and orders by slug", async () => {
+Deno.test("listActiveOrgs filters on status = active and orders by id", async () => {
   const { client, recorded } = makeFakeClient({ data: [orgA, orgB], error: null });
   const orgs = await listActiveOrgs(client);
   assertEquals(recorded.from, "organizations");
-  assertEquals(recorded.select, "id, name, slug, branding, org_email_domains(domain, status)");
+  assertEquals(recorded.select, "id, name, branding, org_email_domains(domain, status)");
   assertEquals(recorded.eq, ["status", "active"]);
-  assertEquals(recorded.order, "slug");
+  assertEquals(recorded.order, "id");
   assertEquals(orgs, [orgA, orgB]);
 });
 
@@ -102,14 +99,14 @@ Deno.test("listActiveOrgs returns [] when data is null and there is no error", a
 Deno.test("forEachOrg runs every org and totals the counts", async () => {
   const seen: string[] = [];
   const results = await forEachOrg([orgA, orgB, orgC], (org) => {
-    seen.push(org.slug);
+    seen.push(org.id);
     return Promise.resolve({ sent: seen.length * 10, sendFailures: seen.length });
   });
-  assertEquals(seen, ["a", "b", "c"]);
+  assertEquals(seen, ["a-id", "b-id", "c-id"]);
   assertEquals(results, [
-    { orgId: "a-id", slug: "a", sent: 10, sendFailures: 1 },
-    { orgId: "b-id", slug: "b", sent: 20, sendFailures: 2 },
-    { orgId: "c-id", slug: "c", sent: 30, sendFailures: 3 },
+    { orgId: "a-id", sent: 10, sendFailures: 1 },
+    { orgId: "b-id", sent: 20, sendFailures: 2 },
+    { orgId: "c-id", sent: 30, sendFailures: 3 },
   ]);
 });
 
@@ -137,20 +134,19 @@ Deno.test("forEachOrg continues after one org throws", async () => {
   try {
     const seen: string[] = [];
     const results = await forEachOrg([orgA, orgB, orgC], (org) => {
-      seen.push(org.slug);
-      if (org.slug === "b") return Promise.reject(new Error("org b exploded"));
+      seen.push(org.id);
+      if (org.id === "b-id") return Promise.reject(new Error("org b exploded"));
       return Promise.resolve({ sent: 1, sendFailures: 0 });
     });
-    assertEquals(seen, ["a", "b", "c"]);
-    assertEquals(results[0], { orgId: "a-id", slug: "a", sent: 1, sendFailures: 0 });
+    assertEquals(seen, ["a-id", "b-id", "c-id"]);
+    assertEquals(results[0], { orgId: "a-id", sent: 1, sendFailures: 0 });
     assertEquals(results[1], {
       orgId: "b-id",
-      slug: "b",
       sent: 0,
       sendFailures: 0,
       error: "org b exploded",
     });
-    assertEquals(results[2], { orgId: "c-id", slug: "c", sent: 1, sendFailures: 0 });
+    assertEquals(results[2], { orgId: "c-id", sent: 1, sendFailures: 0 });
   } finally {
     console.error = originalError;
   }
@@ -164,19 +160,18 @@ Deno.test("forEachOrg uses the accumulated counts from an OrgRunError instead of
   console.error = () => {};
   try {
     const results = await forEachOrg([orgA, orgB], (org) => {
-      if (org.slug === "a") {
+      if (org.id === "a-id") {
         return Promise.reject(new OrgRunError("org a exploded mid-run", { sent: 7, sendFailures: 2 }));
       }
       return Promise.resolve({ sent: 3, sendFailures: 0 });
     });
     assertEquals(results[0], {
       orgId: "a-id",
-      slug: "a",
       sent: 7,
       sendFailures: 2,
       error: "org a exploded mid-run",
     });
-    assertEquals(results[1], { orgId: "b-id", slug: "b", sent: 3, sendFailures: 0 });
+    assertEquals(results[1], { orgId: "b-id", sent: 3, sendFailures: 0 });
   } finally {
     console.error = originalError;
   }
@@ -188,7 +183,7 @@ Deno.test("forEachOrg records non-Error throws", async () => {
   try {
     const results = await forEachOrg([orgA], () => Promise.reject("plain string"));
     assertEquals(results, [
-      { orgId: "a-id", slug: "a", sent: 0, sendFailures: 0, error: "plain string" },
+      { orgId: "a-id", sent: 0, sendFailures: 0, error: "plain string" },
     ]);
   } finally {
     console.error = originalError;
@@ -199,17 +194,17 @@ Deno.test("forEachOrg returns [] for no orgs", async () => {
   assertEquals(await forEachOrg([], () => Promise.resolve({ sent: 1, sendFailures: 0 })), []);
 });
 
-Deno.test("summarize totals sends and lists failures by slug", () => {
+Deno.test("summarize totals sends and lists failures by org id", () => {
   const results: OrgRunResult[] = [
-    { orgId: "a-id", slug: "a", sent: 5, sendFailures: 0 },
-    { orgId: "b-id", slug: "b", sent: 0, sendFailures: 0, error: "org b exploded" },
-    { orgId: "c-id", slug: "c", sent: 7, sendFailures: 0 },
+    { orgId: "a-id", sent: 5, sendFailures: 0 },
+    { orgId: "b-id", sent: 0, sendFailures: 0, error: "org b exploded" },
+    { orgId: "c-id", sent: 7, sendFailures: 0 },
   ];
   assertEquals(summarize(results), {
     orgs: 3,
     emailsSent: 12,
     emailsFailed: 0,
-    failed: [{ org: "b", error: "org b exploded" }],
+    failed: [{ org: "b-id", error: "org b exploded" }],
     failedItems: [],
   });
 });
@@ -219,8 +214,8 @@ Deno.test("summarize totals sends and lists failures by slug", () => {
 // "nobody had a reminder due".
 Deno.test("summarize counts send failures separately from thrown org failures", () => {
   const results: OrgRunResult[] = [
-    { orgId: "a-id", slug: "a", sent: 0, sendFailures: 12 },
-    { orgId: "b-id", slug: "b", sent: 0, sendFailures: 5 },
+    { orgId: "a-id", sent: 0, sendFailures: 12 },
+    { orgId: "b-id", sent: 0, sendFailures: 5 },
   ];
   assertEquals(summarize(results), {
     orgs: 2,
@@ -233,16 +228,16 @@ Deno.test("summarize counts send failures separately from thrown org failures", 
 
 Deno.test("summarize reports every org failing without throwing", () => {
   const results: OrgRunResult[] = [
-    { orgId: "a-id", slug: "a", sent: 0, sendFailures: 0, error: "a died" },
-    { orgId: "b-id", slug: "b", sent: 0, sendFailures: 0, error: "b died" },
+    { orgId: "a-id", sent: 0, sendFailures: 0, error: "a died" },
+    { orgId: "b-id", sent: 0, sendFailures: 0, error: "b died" },
   ];
   assertEquals(summarize(results), {
     orgs: 2,
     emailsSent: 0,
     emailsFailed: 0,
     failed: [
-      { org: "a", error: "a died" },
-      { org: "b", error: "b died" },
+      { org: "a-id", error: "a died" },
+      { org: "b-id", error: "b died" },
     ],
     failedItems: [],
   });
@@ -265,7 +260,7 @@ Deno.test("forEachOrg propagates itemFailures from a successful return", async (
   const results = await forEachOrg([orgA], () =>
     Promise.resolve({ sent: 4, sendFailures: 1, itemFailures: failures }));
   assertEquals(results, [
-    { orgId: "a-id", slug: "a", sent: 4, sendFailures: 1, itemFailures: failures },
+    { orgId: "a-id", sent: 4, sendFailures: 1, itemFailures: failures },
   ]);
 });
 
@@ -274,7 +269,7 @@ Deno.test("forEachOrg omits itemFailures when a runner returns an empty list", a
     Promise.resolve({ sent: 2, sendFailures: 0, itemFailures: [] }));
   // Exact shape: no itemFailures key — runners without item failures keep
   // today's result shape and response body.
-  assertEquals(results, [{ orgId: "a-id", slug: "a", sent: 2, sendFailures: 0 }]);
+  assertEquals(results, [{ orgId: "a-id", sent: 2, sendFailures: 0 }]);
 });
 
 // Both channels together: an org that aborts mid-run must still report both its
@@ -284,7 +279,7 @@ Deno.test("forEachOrg propagates itemFailures carried by an OrgRunError", async 
   console.error = () => {};
   try {
     const results = await forEachOrg([orgA, orgB], (org) => {
-      if (org.slug === "a") {
+      if (org.id === "a-id") {
         return Promise.reject(
           new OrgRunError("org a exploded mid-run", {
             sent: 7,
@@ -297,23 +292,21 @@ Deno.test("forEachOrg propagates itemFailures carried by an OrgRunError", async 
     });
     assertEquals(results[0], {
       orgId: "a-id",
-      slug: "a",
       sent: 7,
       sendFailures: 2,
       itemFailures: [{ item: "team-1", error: "team 1 exploded" }],
       error: "org a exploded mid-run",
     });
-    assertEquals(results[1], { orgId: "b-id", slug: "b", sent: 3, sendFailures: 0 });
+    assertEquals(results[1], { orgId: "b-id", sent: 3, sendFailures: 0 });
   } finally {
     console.error = originalError;
   }
 });
 
-Deno.test("summarize flattens itemFailures into failedItems stamped with the org slug", () => {
+Deno.test("summarize flattens itemFailures into failedItems stamped with the org id", () => {
   const results: OrgRunResult[] = [
     {
       orgId: "a-id",
-      slug: "a",
       sent: 5,
       sendFailures: 1,
       itemFailures: [
@@ -321,10 +314,9 @@ Deno.test("summarize flattens itemFailures into failedItems stamped with the org
         { item: "team-2", error: "team 2 exploded" },
       ],
     },
-    { orgId: "b-id", slug: "b", sent: 4, sendFailures: 0 },
+    { orgId: "b-id", sent: 4, sendFailures: 0 },
     {
       orgId: "c-id",
-      slug: "c",
       sent: 2,
       sendFailures: 0,
       itemFailures: [{ item: "team-9", error: "team 9 exploded" }],
@@ -335,11 +327,11 @@ Deno.test("summarize flattens itemFailures into failedItems stamped with the org
     orgs: 3,
     emailsSent: 11,
     emailsFailed: 1,
-    failed: [{ org: "c", error: "org c exploded mid-run" }],
+    failed: [{ org: "c-id", error: "org c exploded mid-run" }],
     failedItems: [
-      { org: "a", item: "team-1", error: "team 1 exploded" },
-      { org: "a", item: "team-2", error: "team 2 exploded" },
-      { org: "c", item: "team-9", error: "team 9 exploded" },
+      { org: "a-id", item: "team-1", error: "team 1 exploded" },
+      { org: "a-id", item: "team-2", error: "team 2 exploded" },
+      { org: "c-id", item: "team-9", error: "team 9 exploded" },
     ],
   });
 });
