@@ -2257,7 +2257,6 @@ CREATE TABLE IF NOT EXISTS "public"."teams" (
     "created_by" "uuid",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "show_in_directory_filter" boolean DEFAULT true NOT NULL,
     "is_serving_role" boolean DEFAULT false NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
     "group_id" "uuid" NOT NULL
