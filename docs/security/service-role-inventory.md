@@ -263,6 +263,47 @@ as before, never from the caller, and every inserted column carries it.
 `supabase/tests/directory_visibility_suite.sql` pins the one-group, the
 several-groups and the family-invite (pending) cases.
 
+## Group creation RPCs — a definer-function bypass surface
+
+Self-serve group creation (`20261025000000_group_creation.sql`) writes a
+group, its leader's `group_members` row and its one `event_calendars` row
+through a `SECURITY DEFINER` pair over a shared core, because the browser
+has no transaction across three PostgREST statements and a failure between
+them would leave a leaderless group nobody can reach:
+
+- `group_create(_name, _description, _leader_id)` — the member- and
+  admin-facing entry point. Tenant anchor: the caller's own `profiles` row
+  (`auth.uid()`, not pending) resolves the org **and** the role; no
+  parameter names an org. A non-admin may lead the group only themselves
+  (`GC005`) and only while the org's `group_creation_policy` is `'open'`
+  (`GC001`); an org admin may name any approved member of their org.
+  EXECUTE: `authenticated` only.
+- `group_request_approve(_request_id)` — turns a pending `group_requests`
+  row into a group led by its requester. Tenant anchor: the caller's own
+  `profiles` row, which must be an org admin (`GC005`); the request is
+  selected by id **and** that org with `for update`, so a foreign id and a
+  missing one are the same `GC004`. EXECUTE: `authenticated` only.
+- `group_create_for(_org, _name, _description, _leader, _created_by)` — the
+  plain plpgsql core (not `SECURITY DEFINER`; it inherits the callers'
+  bypass). Asserts the leader is an approved member of `_org` (`GC003`)
+  before writing, and every inserted row carries `_org`. EXECUTE revoked
+  from `public`, `anon`, `authenticated` **and** `service_role`: it is
+  reachable only through the two entry points.
+- `org_group_creation_policy()` — the zero-argument reader the
+  `group_requests` INSERT policy uses; the caller's own org row only.
+  EXECUTE: `authenticated`.
+
+`SECURITY DEFINER` bypasses RLS, so **the org resolution and the
+assertions in the function bodies are the tenant boundary; no lint sees
+them.** `schema_tenancy_lint.sql` check 4 only proves the bodies mention
+`org_id`. The browser-side `.rpc()` calls (`CreateGroupDialog`,
+`PendingGroupRequests`) run on the cookie-bound client and are not
+service-rooted, so the guard has nothing to check there; the grant matrix,
+every mode, the approve path and the cross-org floor are pinned by
+`supabase/tests/group_creation_suite.sql`. Decline is a plain UPDATE under
+the `group_requests` policies, zero-row-checked in the UI. No service-role
+client is involved anywhere in the feature.
+
 ## Email quota RPC — a definer-function bypass surface (CWA-72 / #365)
 
 The per-org daily send cap (`org_email_usage` + `org_email_limits`) is

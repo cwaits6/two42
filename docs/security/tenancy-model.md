@@ -175,8 +175,10 @@ org. Every permissive policy on the four group tables composes as
   (`profile_id = auth.uid()`) so a member can resolve their own memberships
   before any group context exists;
 - write: `org_id = (select app_request_org_id()) and (is_admin() or
-  is_group_leader(group_id))`; group *creation* and deletion are org-admin
-  only.
+  is_group_leader(group_id))`; group *deletion* is org-admin only, and
+  creation goes through `group_create()` under the org's
+  `group_creation_policy` (see "Group creation" below) — the "Admins can
+  insert groups" policy stays but nothing in the app uses it.
 
 `is_group_member(_group_id)` and `is_group_leader(_group_id)` read
 `group_members` for `auth.uid()` **only** — the argument names the group,
@@ -356,13 +358,82 @@ find only people the viewer may read; both are whole-org again under
 UPDATE grant and no permissive write policy. The migration revokes that
 grant from `anon` and `authenticated`, grants `update
 (directory_visibility)` and `select (directory_visibility)` to
-`authenticated` only, and adds the one permissive UPDATE policy ("Admins
-can set directory visibility": `id = app_request_org_id() and is_admin()`).
-The column grant, not the policy, is what keeps an org admin away from
-`name`, `slug`, `status` and `custom_email_domain_enabled`;
-`branding_rls_suite.sql` pins both halves and
-`directory_visibility_suite.sql` pins the read matrix, the helper truth
-table, the signup enrolment rule and the admin-only write.
+`authenticated` only, and adds the one permissive UPDATE policy — "Admins
+can set org settings", whole-row `id = app_request_org_id() and
+is_admin()` (created as "Admins can set directory visibility" and renamed
+when `group_creation_policy` joined it). The column grants, not the policy,
+are what keep an org admin away from `name`, `slug`, `status` and
+`custom_email_domain_enabled`; `branding_rls_suite.sql` pins both halves
+and `directory_visibility_suite.sql` pins the read matrix, the helper
+truth table, the signup enrolment rule and the admin-only write.
+
+### Group creation
+
+Who may start a group is an org setting read by RLS and by a definer
+function, so like directory visibility it is a typed column:
+`organizations.group_creation_policy text not null default 'approval'
+check (in ('open', 'approval', 'admins'))`
+(`20261025000000_group_creation.sql`). `open`: any approved member creates a
+group and it is live at once. `approval`: a member files a request an org
+admin approves. `admins`: org admins only. `anon` has no grant on the
+column; `authenticated` reads and (through the single org-settings UPDATE
+policy above) the org's own admin writes it.
+`org_group_creation_policy()` is the zero-argument `SECURITY DEFINER`
+reader, shaped like `org_directory_visible()`: the caller's own org row,
+NULL for anyone without one, so every comparison fails closed.
+
+**Requests are rows of their own.** `group_requests` (`org_id` default
+`app_current_org_id()`, the restrictive isolation floor, composite FKs
+`(requested_by, org_id)` into `profiles` and `(group_id, org_id)` into
+`groups` with `on delete set null (group_id)`) holds a pending request
+rather than a `status` column on `groups`, so nothing that treats a
+`groups` row as a live group — the one-group signup enrolment in
+`handle_new_user()`, `group_content_backfill()`, the directory helpers, the
+one-calendar-per-group invariant — needs a new predicate. Its permissive
+policies compose on the floor as `ORG AND (arms)`:
+
+- read: the requester (`requested_by = auth.uid()`) or an org admin;
+- insert: the requester themselves, `is_member()`, `status = 'pending'`
+  with no reviewer, timestamp or group, **and**
+  `org_group_creation_policy() = 'approval'` — the policy, not the UI, is
+  what keeps a request out of an open or admins-only org;
+- update: org admins, with a `WITH CHECK` of `status in ('pending',
+  'declined')` so `'approved'` is unreachable by a plain UPDATE. Decline is
+  that UPDATE; approval is the RPC below. No DELETE policy: a declined row
+  is the record.
+
+**Creation is a `SECURITY DEFINER` RPC, not widened RLS.** A group needs
+three rows — `groups`, its leader's `group_members` row and its one
+`event_calendars` row — and the browser cannot write them in one
+transaction, so `group_create(_name, _description, _leader_id)` and
+`group_request_approve(_request_id)` do, over an un-granted plpgsql core,
+`group_create_for(_org, _name, _description, _leader, _created_by)`. The
+org checks in their bodies replace the isolation policy on this surface:
+
+- both entry points resolve the org **from the caller's own `profiles`
+  row** (`auth.uid()`, not pending), never from a parameter;
+- `group_create()` lets an org admin name any leader, refuses a non-admin
+  who names anyone but themselves (`GC005`), and refuses a non-admin unless
+  the org's policy is `'open'` (`GC001`);
+- `group_request_approve()` requires the caller to be an org admin
+  (`GC005`) and looks the request up by id **and** that org, so a foreign
+  id is the same `GC004` as a missing one;
+- the core asserts the leader is an approved member of that org (`GC003`)
+  before writing, and every row it inserts carries that `org_id`.
+
+`GC002` is no principal or a pending account; `GC006` a blank name. Grants:
+EXECUTE on the two entry points and the reader revoked from `public` and
+`anon`, granted to `authenticated`; the core revoked from everyone
+including `service_role`. `schema_tenancy_lint.sql` check 4 only sees that
+the bodies mention `org_id`; `supabase/tests/group_creation_suite.sql` pins
+the grants, every mode, the approve path and what it writes, the zero-row
+decline and setting writes, and the cross-org floor.
+
+**Consequences stated on purpose.** An org admin who names someone else as
+leader is not a member of the new group (org admins are not implicit
+members). The first member-created group is the org's second, after which
+`handle_new_user()`'s one-group enrolment stops enrolling new signups
+anywhere until a leader adds them; the rule is unchanged.
 
 ### Group context (app layer)
 
