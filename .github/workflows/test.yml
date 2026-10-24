@@ -6,8 +6,11 @@ on:
   push:
     branches: [main]
 
-# No paths: filter. All three jobs are cheap, and a gate that can be
-# skipped by not touching a path in a filter list is not a gate.
+# No paths: filter on the workflow. A gate that can be skipped by not
+# touching a path in a filter list is not a gate, and the lint, unit and
+# guard jobs are cheap enough to always run. The e2e job is the exception:
+# it builds the app and boots a Supabase stack, so it gates on its own
+# changed-path list in-job, where a skip still reports a passing check.
 
 jobs:
   lint:
@@ -76,3 +79,95 @@ jobs:
 
       - name: Run service-role org_id guard
         run: npm run guard:tenancy
+
+  # Browser guard rails for the tenancy and visibility boundaries. Runs the
+  # production build against an ephemeral local Supabase stack — the same
+  # kind the pgtap job uses; the remote project is never touched.
+  e2e:
+    name: Playwright boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: false
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The path filter lives inside the job rather than on the workflow so
+      # the check always reports: a required check that never reports blocks
+      # the PR forever. Only these paths can change what the specs see.
+      - name: Check whether the change can reach the suite
+        id: changes
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -o pipefail
+          git fetch --no-tags --depth=1 origin "$BASE"
+          changed=$(git diff --name-only "$BASE" HEAD)
+          if grep -Eq '^(app|components|lib|e2e)/|^supabase/migrations/|^supabase/seed\.sql$|^supabase/config\.toml$|^playwright\.config\.ts$|^package\.json$|^package-lock\.json$|^next\.config\.ts$|^proxy\.ts$|^instrumentation\.ts$|^\.github/workflows/test\.yml$' <<< "$changed"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "Playwright boundaries: ran" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Playwright boundaries: skipped — no gated paths changed" >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice::Playwright boundaries skipped (no gated paths changed)"
+          fi
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.changes.outputs.run == 'true'
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+        if: steps.changes.outputs.run == 'true'
+
+      # The pinned CLI from package.json applies the migrations and seed.sql.
+      # Services the specs never reach are left out to keep the start short.
+      - name: Start the local Supabase stack
+        if: steps.changes.outputs.run == 'true'
+        run: npx supabase start -x studio,imgproxy,mailpit,postgres-meta,edge-runtime,logflare,vector
+
+      - name: Point the build at the local stack
+        if: steps.changes.outputs.run == 'true'
+        run: |
+          npx supabase status -o env | sed -n \
+            -e 's/^API_URL="\(.*\)"$/NEXT_PUBLIC_SUPABASE_URL=\1/p' \
+            -e 's/^ANON_KEY="\(.*\)"$/NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=\1/p' \
+            | tee -a "$GITHUB_ENV"
+          test "$(grep -c '^NEXT_PUBLIC_SUPABASE_' "$GITHUB_ENV")" -eq 2
+
+      - name: Resolve the Playwright version
+        if: steps.changes.outputs.run == 'true'
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.changes.outputs.run == 'true'
+        id: browsers
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install Chromium
+        if: steps.changes.outputs.run == 'true' && steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      # The cache holds the browser, not the apt packages it needs.
+      - name: Install Chromium system dependencies
+        if: steps.changes.outputs.run == 'true' && steps.browsers.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Run the suite
+        if: steps.changes.outputs.run == 'true'
+        run: npm run test:e2e
+
+      - name: Upload the HTML report
+        if: failure() && steps.changes.outputs.run == 'true'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
