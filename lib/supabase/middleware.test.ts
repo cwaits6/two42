@@ -36,6 +36,7 @@ vi.mock("@supabase/ssr", () => ({
 // in place before the middleware module loads.
 vi.hoisted(() => {
   process.env.NEXT_PUBLIC_SITE_URL = "https://two42.io";
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "http://127.0.0.1:54321";
 });
 
 // vi.mock is hoisted, so this import sees the mocks above.
@@ -286,5 +287,21 @@ describe("cookie scope regression", () => {
     const setCookie = res.cookies.get("sb-access-token");
     expect(setCookie).toBeDefined();
     expect(setCookie?.domain).toBeUndefined();
+  });
+});
+
+describe("content security policy", () => {
+  it("lets the browser reach the configured Supabase origin, local stacks included", async () => {
+    const req = new NextRequest("https://two42.io/", {
+      headers: { host: "two42.io" },
+    });
+    const res = await updateSession(req);
+    const connectSrc = res.headers
+      .get("Content-Security-Policy")
+      ?.split(";")
+      .map((d) => d.trim())
+      .find((d) => d.startsWith("connect-src "));
+    expect(connectSrc).toContain(" http://127.0.0.1:54321");
+    expect(connectSrc).toContain(" ws://127.0.0.1:54321");
   });
 });
