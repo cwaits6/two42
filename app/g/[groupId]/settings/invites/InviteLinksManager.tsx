@@ -72,8 +72,9 @@ export function InviteLinksManager({ groupId, groupName }: InviteLinksManagerPro
   const [focusId, setFocusId] = useState<string | null>(null);
   const copyButtons = useRef<Record<string, HTMLButtonElement | null>>({});
 
+  // Only the first load shows the placeholder: a refresh after create or
+  // revoke keeps the list mounted, so focus can land on the new link's button.
   const load = useCallback(async () => {
-    setLoading(true);
     const [inviteRows, useRows] = await Promise.all([
       supabase
         .from("group_invites")
