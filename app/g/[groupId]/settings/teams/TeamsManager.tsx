@@ -106,21 +106,29 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
       return;
     }
 
-    const [{ data: counts }, { data: settings }] = await Promise.all([
-      fetchAll((from, to) =>
+    const [{ data: counts, error: countsError }, { data: settings, error: settingsError }] =
+      await Promise.all([
+        fetchAll((from, to) =>
+          supabase
+            .from("team_members")
+            .select("team_id")
+            .in("team_id", teamIds)
+            .order("team_id")
+            .order("profile_id")
+            .range(from, to),
+        ),
         supabase
-          .from("team_members")
-          .select("team_id")
-          .in("team_id", teamIds)
-          .order("team_id")
-          .order("profile_id")
-          .range(from, to),
-      ),
-      supabase
-        .from("serving_team_settings")
-        .select("team_id, enabled, reminder_days, window_weeks")
-        .in("team_id", teamIds),
-    ]);
+          .from("serving_team_settings")
+          .select("team_id, enabled, reminder_days, window_weeks")
+          .in("team_id", teamIds),
+      ]);
+    // Keep the previous counts rather than showing every team as empty, which
+    // would also silence the member warning on delete.
+    if (countsError || settingsError) {
+      toast.error("Failed to load teams.");
+      setLoading(false);
+      return;
+    }
 
     const countMap: Record<string, number> = {};
     (counts || []).forEach((row: { team_id: string }) => {
