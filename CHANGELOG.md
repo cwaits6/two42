@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.31.0](https://github.com/cwaits6/two42/compare/v0.30.0...v0.31.0) (2026-10-24)
+
+
+### Features
+
+* add the group model foundation with the one-group backfill ([#428](https://github.com/cwaits6/two42/issues/428)) ([f194244](https://github.com/cwaits6/two42/commit/f194244ffd02db90748a50756d056b21dc56a8cd))
+* **calendar:** add a Week view to the calendar page ([#458](https://github.com/cwaits6/two42/issues/458)) ([ee89d42](https://github.com/cwaits6/two42/commit/ee89d426150f611755b714f091174186097a8783))
+* **editor:** curate the block editor to brand-safe blocks ([#477](https://github.com/cwaits6/two42/issues/477)) ([764d275](https://github.com/cwaits6/two42/commit/764d27577a8f9f44302c8d9c151275ada0315275))
+* group directory with a scope filter and an org-wide visibility setting ([#441](https://github.com/cwaits6/two42/issues/441)) ([234a830](https://github.com/cwaits6/two42/commit/234a83044cc33bf833a4a1799ae2b9c8b3dc24a3))
+* **groups:** self-serve group creation with a per-org approval setting ([#476](https://github.com/cwaits6/two42/issues/476)) ([8b146fa](https://github.com/cwaits6/two42/commit/8b146fa33172f6b62688ec4c52fee2b7cdad46cf))
+* make the group switcher the app frame ([#437](https://github.com/cwaits6/two42/issues/437)) ([1f74d27](https://github.com/cwaits6/two42/commit/1f74d277a272a0c44fc2339f6cde0a439dc84899))
+* remove custom pages feature ([#427](https://github.com/cwaits6/two42/issues/427)) ([c6f1a17](https://github.com/cwaits6/two42/commit/c6f1a17bc2d1c7309d7473584b33ea7d3253e98a))
+* require group_id on every content table, one calendar per group, calendar at two levels ([#440](https://github.com/cwaits6/two42/issues/440)) ([d60128d](https://github.com/cwaits6/two42/commit/d60128dbf3c7356cf6b0124a848d112debebd59d))
+* teams and labels inside a group; roster filters ([#459](https://github.com/cwaits6/two42/issues/459)) ([46a622c](https://github.com/cwaits6/two42/commit/46a622cb8baab6efa85e3dcc7de2748adaf9c4a1))
+
+
+### Bug Fixes
+
+* **about:** render the group summary again by externalising @blocknote/server-util ([#470](https://github.com/cwaits6/two42/issues/470)) ([6c11842](https://github.com/cwaits6/two42/commit/6c11842c64c650b3344f52599b73833ac1419433))
+* **announcements:** render legacy HTML bodies without crashing the server ([#478](https://github.com/cwaits6/two42/issues/478)) ([ed43ae8](https://github.com/cwaits6/two42/commit/ed43ae8d2c70ef0a78970c6746cf25f496743945))
+* **branding:** stop resolving anonymous branding from the request host ([#402](https://github.com/cwaits6/two42/issues/402)) ([d95e2e9](https://github.com/cwaits6/two42/commit/d95e2e9f993a35f01595dc4a91ad6a907df06bdc))
+* **calendar:** render the Month view in the viewer's local time ([#468](https://github.com/cwaits6/two42/issues/468)) ([9c08c03](https://github.com/cwaits6/two42/commit/9c08c03e7fb1731e6a129e699a878643f8c86f1d))
+* consolidate anonymous join flow onto path-based org resolution ([#403](https://github.com/cwaits6/two42/issues/403)) ([10551c8](https://github.com/cwaits6/two42/commit/10551c8d550a2fd00e56a94f7cea9ced3bd8b4aa))
+* **csp:** allow the configured Supabase origin in connect-src ([#461](https://github.com/cwaits6/two42/issues/461)) ([e881165](https://github.com/cwaits6/two42/commit/e881165fbbc3af62e8e5d3c21dfe86b5fbc799dd))
+* **deps:** update undici to 7.30.1 for CVE-2026-109869 ([#469](https://github.com/cwaits6/two42/issues/469)) ([b64fe3a](https://github.com/cwaits6/two42/commit/b64fe3acd8a47b374f6b96ecefeac3d5677a00aa))
+* **groups:** read complete rosters and exact counts past the API row cap ([#471](https://github.com/cwaits6/two42/issues/471)) ([fb1b1e1](https://github.com/cwaits6/two42/commit/fb1b1e1ba95a6325bd36aabc7dd1db056055a6d5))
+* keep OpenTelemetry auto-instrumentations out of the Turbopack bundle ([#450](https://github.com/cwaits6/two42/issues/450)) ([7db7b5e](https://github.com/cwaits6/two42/commit/7db7b5ed74ed8ce0117343ab5ee2316d9213df2b))
+* **tenancy:** org-scope the public content pages route ([#401](https://github.com/cwaits6/two42/issues/401)) ([c39ae4c](https://github.com/cwaits6/two42/commit/c39ae4c3c69192e985122f533e1e2ada4c2a7b6f))
+
+
+### Dependencies
+
+* bump transitive packages flagged by Trivy ([#434](https://github.com/cwaits6/two42/issues/434)) ([938b02d](https://github.com/cwaits6/two42/commit/938b02d17555bcc2d81f649643c003cafaa2cb7f))
+
 ## [0.30.0](https://github.com/cwaits6/two42/compare/v0.29.0...v0.30.0) (2026-09-12)
 
 
