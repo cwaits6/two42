@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { StaticBlockContent } from "@/components/editor/StaticBlockContent";
-import type { PartialBlock } from "@blocknote/core";
+import { parseStoredBlocks } from "@/components/editor/normalizeBlocks";
 import type { AboutPage, ClassTeacherWithProfile } from "@/lib/types";
 import { requireActiveGroup } from "@/lib/groups/server";
 
@@ -49,16 +49,7 @@ export default async function AboutGroupPage({
     getGroupSettings(supabase, profile.org_id, group.id),
   ]);
 
-  const summaryBlocks = ((): PartialBlock[] | null => {
-    const body = (about as AboutPage | null)?.body;
-    if (!body) return null;
-    try {
-      const parsed = JSON.parse(body);
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
-    } catch {
-      return null;
-    }
-  })();
+  const summaryBlocks = parseStoredBlocks((about as AboutPage | null)?.body);
   // Private buckets: exchange stored avatar URLs for signed URLs
   // before they reach the AvatarImage renders below.
   const teacherRows = (teachers ?? []) as ClassTeacherWithProfile[];
@@ -81,7 +72,7 @@ export default async function AboutGroupPage({
         About {group.name}
       </h1>
 
-      {summaryBlocks ? (
+      {summaryBlocks?.length ? (
         <StaticBlockContent blocks={summaryBlocks} />
       ) : (
         <p className="text-lg text-muted-foreground">

@@ -1,4 +1,4 @@
-/* BlockNote editor styling */
+/* Editor chrome. Content typography lives in BlockContent.css. */
 
 .bn-container {
   background: transparent !important;
@@ -13,51 +13,47 @@
   padding: 0 !important;
 }
 
-/* Text colors and styling */
-.bn-editor p,
-.bn-block-content {
-  color: var(--foreground) !important;
-  font-family: inherit !important;
-  line-height: 1.75 !important;
-}
-
-/* Heading styling */
-.bn-editor h1,
-.bn-editor h2,
-.bn-editor h3 {
-  color: var(--foreground) !important;
-  font-family: var(--font-display, Georgia, serif) !important;
-  font-weight: 700 !important;
-}
-
-/* List styling */
-.bn-editor ul,
-.bn-editor ol {
-  margin-left: 1.5rem !important;
-}
-
-/* Code blocks */
-.bn-editor pre {
-  background: var(--background, oklch(0.985 0.004 150)) !important;
-  border: 1px solid var(--border, oklch(0.88 0.02 163)) !important;
-  border-radius: 0.5rem !important;
-  padding: 1rem !important;
-}
-
-/* Link styling */
-.bn-editor a {
-  color: var(--color-brand-accent) !important;
-  text-decoration: underline !important;
-}
-
-.bn-editor a:hover {
-  color: var(--color-brand-accent) !important;
-  opacity: 0.8;
-}
-
-/* Focus state */
 .bn-container:focus-within {
   border-color: var(--color-brand-primary) !important;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand-primary) 10%, transparent) !important;
 }
 
+/* Toolbar controls and slash-menu rows meet the 44px touch target and the
+   text-base floor; BlockNote's defaults are 36px and text-sm/text-xs. The
+   item class is repeated on the row's inner divs, so the row is matched by
+   its role. */
+.bn-shadcn .bn-toolbar button,
+.bn-shadcn .bn-toolbar [role="combobox"] {
+  min-height: 44px;
+  min-width: 44px;
+  font-size: var(--text-base);
+}
+
+.bn-shadcn .bn-toolbar [role="combobox"] {
+  padding-inline: 0.75rem;
+}
+
+.bn-shadcn .bn-toolbar svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.bn-shadcn [role="option"].bn-suggestion-menu-item {
+  min-height: 44px;
+}
+
+.bn-shadcn [role="option"].bn-suggestion-menu-item > div:not([data-position]) > div:first-child {
+  font-size: var(--text-base);
+}
+
+.bn-shadcn [role="option"].bn-suggestion-menu-item > div:not([data-position]) > div + div {
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.bn-shadcn .bn-suggestion-menu-label,
+.bn-shadcn [role="option"]:not(.bn-suggestion-menu-item),
+.bn-shadcn [role="menuitem"] {
+  font-size: var(--text-base);
+  min-height: 44px;
+}

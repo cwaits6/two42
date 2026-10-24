@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import DOMPurify from "dompurify";
-import type { PartialBlock } from "@blocknote/core";
 import { renderBlocksToFullHTML } from "./renderBlocks";
+import type { CuratedPartialBlock } from "./schema";
+import "./BlockContent.css";
 import "./StaticBlockContent.css";
 
 interface StaticBlockContentProps {
-  blocks: PartialBlock[];
+  blocks: CuratedPartialBlock[];
 }
 
 export function StaticBlockContent({ blocks }: StaticBlockContentProps) {
@@ -30,7 +31,7 @@ export function StaticBlockContent({ blocks }: StaticBlockContentProps) {
   }, [blocks]);
 
   if (error) {
-    return <p className="text-sm text-muted-foreground">Unable to display this content.</p>;
+    return <p className="text-base text-muted-foreground">Unable to display this content.</p>;
   }
 
   if (html === null) {

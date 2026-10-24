@@ -11,8 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BlockEditor } from "@/components/editor";
+import type { CuratedBlock } from "@/components/editor/schema";
 import { toast } from "sonner";
-import type { Block } from "@blocknote/core";
 
 export function NewAnnouncementForm({
   groupId,
@@ -23,7 +23,7 @@ export function NewAnnouncementForm({
 }) {
   const [loading, setLoading] = useState(false);
   const [publishNow, setPublishNow] = useState(true);
-  const blocksRef = useRef<Block[]>([]);
+  const blocksRef = useRef<CuratedBlock[]>([]);
   const router = useRouter();
   const supabase = createClient();
 
