@@ -389,14 +389,14 @@ isOneToOne: false
                   ]
                 },"giving_fund_methods": {
                   Row: {
-                    "custom_handle": string,"display_order": number,"fund_id": string,"group_id": string,"method": string,"org_id": string
+                    "custom_handle": string | null,"display_order": number,"fund_id": string,"group_id": string,"method": string,"org_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "custom_handle": string,"display_order"?: number,"fund_id": string,"group_id": string,"method": string,"org_id"?: string
+                    "custom_handle"?: string | null,"display_order"?: number,"fund_id": string,"group_id": string,"method": string,"org_id"?: string
                   }
                   Update: {
-                    "custom_handle"?: string,"display_order"?: number,"fund_id"?: string,"group_id"?: string,"method"?: string,"org_id"?: string
+                    "custom_handle"?: string | null,"display_order"?: number,"fund_id"?: string,"group_id"?: string,"method"?: string,"org_id"?: string
                   }
                   Relationships: [
                     {
@@ -476,6 +476,44 @@ isOneToOne: false
     },{
       foreignKeyName: "giving_funds_steward_id_fkey"
       columns: ["steward_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
+                },"group_join_requests": {
+                  Row: {
+                    "created_at": string,"group_id": string,"id": string,"org_id": string,"profile_id": string,"reviewed_at": string | null,"reviewed_by": string | null,"status": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"group_id": string,"id"?: string,"org_id"?: string,"profile_id": string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"group_id"?: string,"id"?: string,"org_id"?: string,"profile_id"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"status"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "group_join_requests_group_id_fkey"
+      columns: ["group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "group_join_requests_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "group_join_requests_profile_id_fkey"
+      columns: ["profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "group_join_requests_profile_id_fkey"
+      columns: ["profile_id","org_id"]
 isOneToOne: false
       referencedRelation: "profiles_directory"
       referencedColumns: ["id","org_id"]
@@ -643,14 +681,14 @@ isOneToOne: false
                   ]
                 },"groups": {
                   Row: {
-                    "created_at": string,"created_by": string | null,"description": string | null,"id": string,"name": string,"org_id": string,"updated_at": string
+                    "created_at": string,"created_by": string | null,"description": string | null,"id": string,"is_private": boolean,"join_policy": string,"name": string,"org_id": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"created_by"?: string | null,"description"?: string | null,"id"?: string,"name": string,"org_id"?: string,"updated_at"?: string
+                    "created_at"?: string,"created_by"?: string | null,"description"?: string | null,"id"?: string,"is_private"?: boolean,"join_policy"?: string,"name": string,"org_id"?: string,"updated_at"?: string
                   }
                   Update: {
-                    "created_at"?: string,"created_by"?: string | null,"description"?: string | null,"id"?: string,"name"?: string,"org_id"?: string,"updated_at"?: string
+                    "created_at"?: string,"created_by"?: string | null,"description"?: string | null,"id"?: string,"is_private"?: boolean,"join_policy"?: string,"name"?: string,"org_id"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -865,17 +903,43 @@ isOneToOne: false
                   ]
                 },"organizations": {
                   Row: {
-                    "branding": NonNullable<Json>,"created_at": string,"custom_email_domain_enabled": boolean,"directory_visibility": string,"group_creation_policy": string,"id": string,"name": string,"slug": string,"status": Database["public"]['Enums']["org_status"]
+                    "branding": NonNullable<Json>,"created_at": string,"custom_email_domain_enabled": boolean,"directory_visibility": string,"group_creation_policy": string,"group_discovery": boolean,"id": string,"name": string,"slug": string,"status": Database["public"]['Enums']["org_status"]
                   }
                   ComputedFields: never
                   Insert: {
-                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"group_creation_policy"?: string,"id"?: string,"name": string,"slug": string,"status"?: Database["public"]['Enums']["org_status"]
+                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"group_creation_policy"?: string,"group_discovery"?: boolean,"id"?: string,"name": string,"slug": string,"status"?: Database["public"]['Enums']["org_status"]
                   }
                   Update: {
-                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"group_creation_policy"?: string,"id"?: string,"name"?: string,"slug"?: string,"status"?: Database["public"]['Enums']["org_status"]
+                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"group_creation_policy"?: string,"group_discovery"?: boolean,"id"?: string,"name"?: string,"slug"?: string,"status"?: Database["public"]['Enums']["org_status"]
                   }
                   Relationships: [
                     
+                  ]
+                },"payment_handles": {
+                  Row: {
+                    "handle": string,"method": string,"profile_id": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "handle": string,"method": string,"profile_id": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "handle"?: string,"method"?: string,"profile_id"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "payment_handles_profile_id_fkey"
+      columns: ["profile_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "payment_handles_profile_id_fkey"
+      columns: ["profile_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id"]
+    }
                   ]
                 },"platform_admins": {
                   Row: {
@@ -1451,6 +1515,11 @@ isOneToOne: false
 "current_family_id":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
+"discoverable_groups":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "description": string,"id": string,"is_private": boolean,"join_policy": string,"member_count": number,"name": string,"request_status": string,"viewer_role": string
+            }[]
+                           },
 "email_quota_consume":
 { Args: { "_n": number,"_org_id": string }; Returns: boolean
                            },
@@ -1514,6 +1583,12 @@ isOneToOne: false
 "is_team_lead":
 { Args: { "_team_id": string }; Returns: boolean
                            },
+"join_group":
+{ Args: { "_group_id": string }; Returns: string
+                           },
+"join_group_apply":
+{ Args: { "_actor_id": string,"_group_id": string }; Returns: string
+                           },
 "org_directory_visible":
 { Args: Record<PropertyKey, never>; Returns: boolean
                            },
@@ -1539,8 +1614,16 @@ isOneToOne: false
 "org_group_creation_policy":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
+"pending_group_join_requests":
+{ Args: { "_group_id": string }; Returns: {
+              "created_at": string,"email": string,"first_name": string,"id": string,"last_name": string,"preferred_name": string
+            }[]
+                           },
 "provision_organization":
 { Args: { "_name": string,"_owner_email": string,"_slug": string }; Returns: string
+                           },
+"review_group_join_request":
+{ Args: { "_approve": boolean,"_request_id": string }; Returns: string
                            },
 "serving_signup_apply":
 { Args: { "_actor_id": string,"_attendee_ids": (string)[],"_group_id": string,"_service_date": string }; Returns: {
