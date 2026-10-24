@@ -208,8 +208,11 @@ function buildColumns(days: Date[], groups: CalendarGroup[], occurrences: Event[
 }
 
 const HOURS = gridHours();
-const GRID_HEIGHT_PX = (GRID_MINUTES / 60) * HOUR_HEIGHT_PX;
+// Room above the first hour line so the centred "6 AM" label clears the all-day row's border.
+const GRID_INSET_PX = 14;
+const GRID_HEIGHT_PX = (GRID_MINUTES / 60) * HOUR_HEIGHT_PX + GRID_INSET_PX;
 const minutesToPx = (minutes: number) => (minutes / 60) * HOUR_HEIGHT_PX;
+const gridTop = (minutes: number) => GRID_INSET_PX + minutesToPx(minutes);
 
 function WeekGrid({ columns, todayKey }: { columns: DayColumn[]; todayKey: string }) {
   const template = { gridTemplateColumns: `5.5rem repeat(${columns.length}, minmax(0, 1fr))` };
@@ -268,7 +271,7 @@ function WeekGrid({ columns, todayKey }: { columns: DayColumn[]; todayKey: strin
             <span
               key={hour}
               className="absolute right-2 -translate-y-1/2 font-mono text-base text-slate-500"
-              style={{ top: minutesToPx((hour - HOURS[0].hour) * 60) }}
+              style={{ top: gridTop((hour - HOURS[0].hour) * 60) }}
             >
               {label}
             </span>
@@ -285,7 +288,7 @@ function WeekGrid({ columns, todayKey }: { columns: DayColumn[]; todayKey: strin
                 key={hour}
                 aria-hidden="true"
                 className="absolute inset-x-0 border-t border-slate-200"
-                style={{ top: minutesToPx((hour - HOURS[0].hour) * 60) }}
+                style={{ top: gridTop((hour - HOURS[0].hour) * 60) }}
               />
             ))}
             {column.timed.map((block) => (
@@ -296,7 +299,7 @@ function WeekGrid({ columns, todayKey }: { columns: DayColumn[]; todayKey: strin
                 aria-label={block.tooltip}
                 className="absolute overflow-hidden rounded-lg border border-white/70 px-1.5 py-0.5 text-base leading-tight shadow-sm"
                 style={{
-                  top: minutesToPx(block.topMinutes),
+                  top: gridTop(block.topMinutes),
                   height: minutesToPx(block.durationMinutes),
                   minHeight: MIN_BLOCK_PX,
                   left: `calc(${(block.lane.lane / block.lane.laneCount) * 100}% + 2px)`,
