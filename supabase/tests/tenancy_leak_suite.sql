@@ -369,7 +369,7 @@ begin
                'profiles SELECT does not recurse through app_current_org_id()'));
 end $$;
 
--- ── Anonymous resolution (§9.2) ─────────────────────────────────────────────
+-- ── Anonymous resolution ────────────────────────────────────────────────────
 -- No header names an org any more: an anonymous caller resolves NULL and
 -- reads nothing, and a member sending another org's header still reads
 -- only their own org.
@@ -415,7 +415,7 @@ begin
     select ok(member_spoof_own >= 1, 'org A member sending org B header still reads their own org');
 end $$;
 
--- ── app_request_org_id() never raises on any GUC state (§9.2) ───────────────
+-- ── app_request_org_id() never raises on any GUC state ──────────────────────
 -- The helper is called from the USING and WITH CHECK of every restrictive
 -- policy, so if it raised, every query against every org-owned table would
 -- error for that connection — a total outage, not a leak. It no longer
@@ -531,7 +531,7 @@ begin
     select is(delete_b_count, 0, 'DELETE targeting org B rows affects 0 rows');
 end $$;
 
--- ── Anon write isolation: no public write path remains (§9.3) ───────────────
+-- ── Anon write isolation: no public write path remains ──────────────────────
 -- access_requests used to be the one table anon could INSERT into, through
 -- the slug join form. That policy is gone: a household invite files its
 -- request through a token-anchored route on the service client, and an
