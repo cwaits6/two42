@@ -3,7 +3,7 @@ import Link from "next/link";
 import { AuthShell } from "@/app/(auth)/_components/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { resolveBranding } from "@/lib/branding";
+import { orgDisplayName } from "@/lib/branding";
 import { siteConfig } from "@/lib/config";
 import { groupPath, isUuid } from "@/lib/groups/active";
 import { INVITE_INVALID_TEXT, INVITE_OTHER_ORG_TEXT, inviteStatus } from "@/lib/groups/invites";
@@ -73,7 +73,7 @@ const loadInvite = cache(async (token: string): Promise<InviteLookup> => {
       orgId: row.org_id,
       groupId: row.group_id,
       groupName: group.name,
-      orgName: resolveBranding(org.branding).display_name ?? org.name,
+      orgName: orgDisplayName(org.branding, org.name),
     },
   };
 });

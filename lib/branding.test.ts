@@ -16,6 +16,7 @@ import {
   BRANDING_DEFAULTS,
   getOrgBranding,
   getRequestBranding,
+  orgDisplayName,
   resolveBranding,
 } from "@/lib/branding";
 
@@ -230,5 +231,23 @@ describe("getOrgBranding", () => {
 
     expect(result).toEqual(BRANDING_DEFAULTS);
     expect(errorSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("orgDisplayName", () => {
+  it("prefers a set display_name, stripped of control characters", () => {
+    expect(orgDisplayName({ display_name: " Grace\u0000 Church " }, "Grace Fellowship")).toBe(
+      "Grace Church",
+    );
+  });
+
+  it.each([
+    ["a blank display_name", { display_name: "   " }],
+    ["a missing display_name", { accent: "#B85C38" }],
+    ["a non-string display_name", { display_name: 7 }],
+    ["null branding", null],
+    ["array branding", []],
+  ])("falls back to the org's own name for %s, never the platform name", (_label, raw) => {
+    expect(orgDisplayName(raw, "Grace Fellowship")).toBe("Grace Fellowship");
   });
 });

@@ -81,6 +81,19 @@ export function resolveBranding(raw: unknown): OrgBranding {
 }
 
 /**
+ * The name an org goes by in copy addressed to outsiders: its branding
+ * display_name when an admin has set one, else `fallback` — the
+ * organizations.name the caller already holds. resolveBranding() cannot
+ * serve here: it substitutes the platform name for a blank display_name.
+ */
+export function orgDisplayName(raw: unknown, fallback: string): string {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return fallback;
+  const name = (raw as Record<string, unknown>).display_name;
+  const clean = typeof name === "string" ? name.replace(CONTROL, "").trim() : "";
+  return clean !== "" ? clean : fallback;
+}
+
+/**
  * The caller's own org's branding, memoized per request with React cache() —
  * cache() dedupes repeated calls within one render (Supabase calls are not
  * fetch-memoized). RLS narrows organizations to the caller's org, so no

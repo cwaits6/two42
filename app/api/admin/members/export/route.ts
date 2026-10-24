@@ -10,7 +10,7 @@
  * rows, cells, emails — ever reaches console.* (log codes and table names
  * only; the CSV is full-roster PII).
  */
-import { resolveBranding } from "@/lib/branding";
+import { orgDisplayName } from "@/lib/branding";
 import { requireOrgAdmin } from "@/lib/members/access";
 import {
   filenameSlug,
@@ -70,9 +70,7 @@ export async function GET() {
       orgError.message
     );
   }
-  const orgLabel = org
-    ? resolveBranding(org.branding).display_name ?? org.name
-    : "";
+  const orgLabel = org ? orgDisplayName(org.branding, org.name) : "";
   const date = new Date().toISOString().slice(0, 10);
   const filename = ["members", filenameSlug(orgLabel), date].filter(Boolean).join("-");
 
