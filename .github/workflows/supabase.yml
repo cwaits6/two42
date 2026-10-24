@@ -227,29 +227,37 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
+      # Committed through the contents API, as the Renovate types commit
+      # above, so the App signs it; a git push from the runner is unsigned.
+      # The dump is 200 KB, past the kernel's per-argument limit once
+      # base64-encoded, so the body goes in through a file rather than -f.
+      # The blob sha is re-read on each attempt because main can move
+      # between the dump and the write.
       - name: Commit schema dump
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          FILE: supabase/schema.sql
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add supabase/schema.sql
-          if git diff --staged --quiet; then
+          if git diff --quiet -- "$FILE"; then
             echo "No schema changes to commit"
             exit 0
           fi
-          git commit -m "chore(db): update schema dump [skip ci]"
-          git fetch origin main
-          git pull --rebase origin main
-          pushed=false
+          base64 -w0 "$FILE" > "$RUNNER_TEMP/schema.b64"
           for i in 1 2 3; do
-            if git push; then
-              pushed=true
-              break
+            if ! current=$(gh api "repos/$GITHUB_REPOSITORY/contents/$FILE?ref=main" --jq .sha); then
+              echo "Blob sha read failed (attempt $i), retrying..."
+              sleep $((i * 2))
+              continue
             fi
-            echo "Push failed (attempt $i), rebasing and retrying..."
+            if jq -n --arg message "chore(db): update schema dump [skip ci]" \
+                     --arg sha "$current" \
+                     --rawfile content "$RUNNER_TEMP/schema.b64" \
+                     '{message: $message, branch: "main", sha: $sha, content: $content}' \
+              | gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/$FILE" --input - --jq .commit.sha; then
+              exit 0
+            fi
+            echo "Commit failed (attempt $i), refreshing the blob sha and retrying..."
             sleep $((i * 2))
-            git pull --rebase origin main
           done
-          if [ "$pushed" = false ]; then
-            echo "All push attempts failed"
-            exit 1
-          fi
+          echo "All commit attempts failed"
+          exit 1
