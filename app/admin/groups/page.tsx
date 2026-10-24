@@ -5,9 +5,11 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { AdminCreateGroupButton } from "@/components/admin/AdminCreateGroupButton";
 import { OrgGroupControls } from "@/components/admin/OrgGroupControls";
 import { PendingGroupRequests } from "@/components/admin/PendingGroupRequests";
+import { PendingJoinRequests } from "@/components/admin/PendingJoinRequests";
 import { GroupDiscoverySettings } from "@/components/groups/GroupDiscoverySettings";
 import { getGroupCreationPolicy } from "@/lib/groups/creationPolicy";
 import { getDiscoveryOn } from "@/lib/groups/discovery";
+import { getPendingJoinRequests } from "@/lib/groups/pendingJoinRequests";
 import { PENDING_GROUP_REQUEST_SELECT, toPendingGroupRequest } from "@/lib/groups/requests";
 import { siteConfig } from "@/lib/config";
 
@@ -56,6 +58,7 @@ export default async function AdminGroupsPage() {
     description: g.description,
     memberCount: g.group_members[0]?.count ?? 0,
   }));
+  const joinRequests = await getPendingJoinRequests(groupRows);
 
   return (
     <PageContainer size="wide">
@@ -72,6 +75,17 @@ export default async function AdminGroupsPage() {
       <section className="mb-10">
         <h2 className="mb-4 text-2xl font-bold text-brand-primary">Pending group requests</h2>
         <PendingGroupRequests initialRequests={pending} />
+      </section>
+
+      <section className="mb-10">
+        <h2 className="mb-4 text-2xl font-bold text-brand-primary">Pending join requests</h2>
+        {joinRequests === null ? (
+          <p role="alert" className="text-lg text-muted-foreground">
+            Couldn&apos;t load the join requests. Reload the page to try again.
+          </p>
+        ) : (
+          <PendingJoinRequests initialRequests={joinRequests} />
+        )}
       </section>
 
       <section>
