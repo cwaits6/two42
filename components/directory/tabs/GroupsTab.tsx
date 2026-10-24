@@ -55,7 +55,8 @@ function GroupsTabInner() {
       .filter((p): p is DirectoryProfile => Boolean(p))
       .sort((a, b) => (a.last_name ?? "").localeCompare(b.last_name ?? ""));
 
-  const discoveryReady = !discovery.loading && !discovery.error;
+  // Keep the last good rows on screen while a reload is in flight.
+  const discoveryReady = !discovery.error && (!discovery.loading || discovery.rows.length > 0);
   const listRows: ListRow[] = discoveryReady
     ? discovery.rows.map((row) => {
         const own = row.viewer_role ? memberships.find((g) => g.id === row.id) : undefined;
@@ -75,6 +76,11 @@ function GroupsTabInner() {
         <p className="py-8 text-center text-base text-muted-foreground">You are not in a group yet.</p>
         {discoveryOn && discoveryReady && (
           <p className="text-center text-base text-muted-foreground">{NO_GROUPS_TEXT}</p>
+        )}
+        {discoveryOn && discovery.error && (
+          <p role="alert" className="text-center text-base text-muted-foreground">
+            {LOAD_FAILED_TEXT}
+          </p>
         )}
       </>
     );

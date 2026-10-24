@@ -300,7 +300,11 @@ declare
   _org uuid;
   _req public.group_join_requests%rowtype;
   _next text;
+  _n integer;
 begin
+  if _approve is null then
+    raise exception 'review rejected: approve flag is required' using errcode = '22004';
+  end if;
   if _actor is null then
     raise exception 'review rejected: no authenticated principal' using errcode = 'GJ002';
   end if;
@@ -333,6 +337,10 @@ begin
   update public.group_join_requests
     set status = _next, reviewed_by = _actor, reviewed_at = now()
     where id = _req.id and org_id = _org;
+  get diagnostics _n = row_count;
+  if _n <> 1 then
+    raise exception 'review rejected: join request % was not stamped', _req.id using errcode = 'GJ004';
+  end if;
   return _next;
 end;
 $$;
@@ -356,7 +364,7 @@ comment on function public.join_group(uuid) is
 comment on function public.pending_group_join_requests(uuid) is
   'Pending requests for a group with each requester''s name and email (NULL when hide_email), for the leader''s review list. Tenant anchor: the caller''s own profiles row; rows only when the caller leads the group or is an org admin, else empty.';
 comment on function public.review_group_join_request(uuid, boolean) is
-  'Approves (writes the group_members row) or declines a pending join request in one transaction. Tenant anchor: the caller''s own profiles row; the request is selected by id AND that org with for update, and the caller must lead its group or be an org admin (GJ004 for missing, foreign, decided or not permitted). GJ002 when the requester is no longer an approved member.';
+  'Approves (writes the group_members row) or declines a pending join request in one transaction. Tenant anchor: the caller''s own profiles row; the request is selected by id AND that org with for update, and the caller must lead its group or be an org admin (GJ004 for missing, foreign, decided or not permitted). GJ002 when the requester is no longer an approved member. 22004 when _approve is NULL, so a missing flag never reads as a decline.';
 
 -- ── 8. Self-check ─────────────────────────────────────────────────────────
 -- Fails the migration, not CI, if the new table's policy or grant shape

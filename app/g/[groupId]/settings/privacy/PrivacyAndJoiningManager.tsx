@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ApprovalQueue } from "@/components/admin/ApprovalQueue";
@@ -21,10 +21,10 @@ import { groupPath } from "@/lib/groups/active";
 import {
   JOIN_POLICY_OPTIONS,
   PRIVATE_POLICY_HELPER,
-  joinErrorMessage,
   parseJoinPolicy,
   pendingRequestsEmptyText,
   privacyHelperText,
+  reviewErrorMessage,
   type JoinPolicy,
 } from "@/lib/groups/joining";
 import { displayName } from "@/lib/names";
@@ -56,6 +56,8 @@ export function PrivacyAndJoiningManager({
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [isPrivate, setIsPrivate] = useState(initialPrivate);
+  const [savingPrivate, setSavingPrivate] = useState(false);
+  const latestPrivate = useRef(0);
   const [savedPolicy, setSavedPolicy] = useState(initialPolicy);
   const [policy, setPolicy] = useState(initialPolicy);
   const [savingPolicy, setSavingPolicy] = useState(false);
@@ -79,7 +81,10 @@ export function PrivacyAndJoiningManager({
   }, [loadRequests]);
 
   async function togglePrivate(next: boolean) {
+    const previous = isPrivate;
+    const request = ++latestPrivate.current;
     setIsPrivate(next);
+    setSavingPrivate(true);
     // The "Leaders and admins can update groups" policy is the authority on
     // who may save; a non-leader's write matches zero rows.
     const { data, error } = await supabase
@@ -87,8 +92,10 @@ export function PrivacyAndJoiningManager({
       .update({ is_private: next })
       .eq("id", groupId)
       .select("id");
+    if (request !== latestPrivate.current) return;
+    setSavingPrivate(false);
     if (error || !data?.length) {
-      setIsPrivate(!next);
+      setIsPrivate(previous);
       toast.error("Couldn't save the setting.");
       return;
     }
@@ -125,7 +132,7 @@ export function PrivacyAndJoiningManager({
         _approve: approve,
       });
       if (error) {
-        toast.error(joinErrorMessage(error.code));
+        toast.error(reviewErrorMessage(error.code));
         // Decided elsewhere already: the row no longer belongs in the list.
         if (error.code === "GJ004") setRequests((prev) => prev.filter((r) => r.id !== id));
         return;
@@ -166,6 +173,7 @@ export function PrivacyAndJoiningManager({
               id="group-private"
               className="mt-1.5 shrink-0"
               checked={isPrivate}
+              disabled={savingPrivate}
               onCheckedChange={togglePrivate}
             />
           </div>

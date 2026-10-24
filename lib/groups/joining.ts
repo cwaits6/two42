@@ -118,7 +118,17 @@ const ERROR_MESSAGES: Record<string, string> = {
   GJ004: "That request is no longer pending.",
 };
 
-/** Member-facing copy for a join_group() / review_group_join_request() error code. */
+/** Member-facing copy for a join_group() error code. */
 export function joinErrorMessage(code: string | undefined): string {
   return (code && ERROR_MESSAGES[code]) || "Couldn't update your membership. Please try again.";
+}
+
+const REVIEW_ERROR_MESSAGES: Record<string, string> = {
+  GJ002: "That person's account isn't active, so they can't be added.",
+  GJ004: ERROR_MESSAGES.GJ004,
+};
+
+/** Leader-facing copy for a review_group_join_request() error code. */
+export function reviewErrorMessage(code: string | undefined): string {
+  return (code && REVIEW_ERROR_MESSAGES[code]) || "Couldn't update the request. Please try again.";
 }

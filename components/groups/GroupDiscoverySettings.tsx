@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -16,18 +16,25 @@ interface GroupDiscoverySettingsProps {
 /** Org admin control for whether members can find and request to join groups. */
 export function GroupDiscoverySettings({ orgId, discoveryOn }: GroupDiscoverySettingsProps) {
   const [on, setOn] = useState(discoveryOn);
+  const [saving, setSaving] = useState(false);
+  const latest = useRef(0);
   const router = useRouter();
   const supabase = createClient();
 
   async function toggle(next: boolean) {
+    const previous = on;
+    const request = ++latest.current;
     setOn(next);
+    setSaving(true);
     const { data, error } = await supabase
       .from("organizations")
       .update({ group_discovery: next })
       .eq("id", orgId)
       .select("group_discovery");
+    if (request !== latest.current) return;
+    setSaving(false);
     if (error || !data?.length) {
-      setOn(!next);
+      setOn(previous);
       toast.error("Failed to update the setting.");
       return;
     }
@@ -51,7 +58,7 @@ export function GroupDiscoverySettings({ orgId, discoveryOn }: GroupDiscoverySet
             directly. Each group can be more private than this setting, never less.
           </p>
         </div>
-        <Switch id="group-discovery" className="mt-0.5 shrink-0" checked={on} onCheckedChange={toggle} />
+        <Switch id="group-discovery" className="mt-0.5 shrink-0" checked={on} disabled={saving} onCheckedChange={toggle} />
       </div>
     </div>
   );
