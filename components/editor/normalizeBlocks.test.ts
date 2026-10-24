@@ -164,3 +164,17 @@ describe("parseStoredBlocks", () => {
     expect(out).toEqual(normalizeBlocks(groupASummary));
   });
 });
+
+describe("normalizeBlocks on numbered lists", () => {
+  it("carries the start number through", () => {
+    const [block] = normalizeBlocks([
+      { type: "numberedListItem", props: { start: 4, textColor: "red" }, content: [text("Fourth")] },
+    ]);
+    expect(block.props).toEqual({ start: 4 });
+  });
+
+  it("leaves start unset when the stored block has none", () => {
+    const [block] = normalizeBlocks([{ type: "numberedListItem", content: [text("First")] }]);
+    expect(block.props ?? {}).not.toHaveProperty("start");
+  });
+});

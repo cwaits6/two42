@@ -1,7 +1,5 @@
 // The names of what the curated schema keeps, kept free of any BlockNote import
 // so the normaliser can ship to client read paths that never load the editor.
-// `schema.ts` builds the editor schema from these; `renderBlocks.test.ts`
-// proves the two agree.
 export const HEADING_LEVELS = [2, 3] as const;
 export type HeadingLevel = (typeof HEADING_LEVELS)[number];
 

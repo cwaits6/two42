@@ -47,7 +47,7 @@
 }
 
 .bn-shadcn [role="option"].bn-suggestion-menu-item > div:not([data-position]) > div + div {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: var(--muted-foreground);
 }
 

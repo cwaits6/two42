@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { HEADING_LEVELS, KEPT_STYLES, TEXT_BLOCK_TYPES } from "./curated";
+import { ServerBlockNoteEditor } from "@blocknote/server-util";
+import { normalizeBlocks } from "./normalizeBlocks";
 import { renderBlocksToFullHTML } from "./renderBlocks";
 import { curatedSchema, type CuratedPartialBlock } from "./schema";
 import groupASummary from "./fixtures/group-a-summary.json";
@@ -88,5 +90,19 @@ describe("renderBlocksToFullHTML on legacy content", () => {
     expect(html).not.toMatch(/<pre\b|<code\b|<table\b|<img\b|<input\b|<figure\b/);
     expect(html).toMatch(/<blockquote[^>]*>Be kind<\/blockquote>/);
     expect(html).toMatch(/data-content-type="bulletListItem"><p[^>]*>First point/);
+  });
+});
+
+describe("pasted HTML parsed by the editor's own parser", () => {
+  it("is curated to a level-2 heading and a paragraph without colour or alignment", async () => {
+    const editor = ServerBlockNoteEditor.create({ schema: curatedSchema });
+    const parsed = await editor.tryParseHTMLToBlocks(
+      '<h1>Big</h1><p style="color:red;text-align:center">x</p>',
+    );
+    const [heading, paragraph] = normalizeBlocks(parsed);
+    expect(heading).toMatchObject({ type: "heading", props: { level: 2 } });
+    expect(paragraph.type).toBe("paragraph");
+    expect(paragraph.props ?? {}).not.toHaveProperty("textColor");
+    expect(paragraph.props ?? {}).not.toHaveProperty("textAlignment");
   });
 });

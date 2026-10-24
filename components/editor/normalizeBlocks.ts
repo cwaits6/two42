@@ -101,6 +101,10 @@ function normalizeBlock(block: StoredBlock): CuratedPartialBlock | null {
   if (block.type === "heading") {
     return { id, type: "heading", props: { level: headingLevel(props.level) }, content, children };
   }
+  if (block.type === "numberedListItem") {
+    const start = typeof props.start === "number" ? { start: props.start } : undefined;
+    return { id, type: "numberedListItem", props: start, content, children };
+  }
   if (isTextBlockType(block.type)) {
     return { id, type: block.type, content, children };
   }
