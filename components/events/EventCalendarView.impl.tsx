@@ -82,7 +82,7 @@ export default function EventCalendarView({
           plugins={[dayGridPlugin, interactionPlugin]}
           initialView="dayGridMonth"
           headerToolbar={{ left: "today", center: "title", right: "" }}
-          timeZone="America/New_York"
+          timeZone="local"
           events={filteredEvents}
           eventClick={handleEventClick}
           dateClick={handleDateClick}
