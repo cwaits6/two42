@@ -20,9 +20,12 @@ function linkCard(page: Page, url: string) {
 async function revokeCreatedLink() {
   if (!inviteUrl || revoked) return;
   await admin.page.goto(`/g/${groupAId}/settings/invites`);
-  const card = linkCard(admin.page, inviteUrl);
-  if ((await card.count()) === 0) return;
-  await card.getByRole("button", { name: "Revoke link" }).click();
+  // The list loads client-side; a count taken before it settles reads as
+  // "already gone" and would leave the link live.
+  await expect(admin.page.getByText("Loading...")).toHaveCount(0);
+  const revokeButton = linkCard(admin.page, inviteUrl).getByRole("button", { name: "Revoke link" });
+  if ((await revokeButton.count()) === 0) return;
+  await revokeButton.click();
   await admin.page.getByRole("dialog").getByRole("button", { name: "Revoke link" }).click();
   await expect(admin.page.getByText("Link revoked.")).toBeVisible();
   revoked = true;
@@ -37,7 +40,9 @@ test.beforeAll(async ({ browser }) => {
   await admin.page.goto(`/g/${GROUP_B}/dashboard`);
   await admin.page.getByRole("button", { name: "Switch group. Current group: Group B" }).click();
   await admin.page.getByRole("menuitem").filter({ hasText: "Group A" }).click();
-  await admin.page.waitForURL(/\/g\/[0-9a-f-]{36}\//);
+  await admin.page.waitForURL(
+    (url) => /^\/g\/[0-9a-f-]{36}\//.test(url.pathname) && !url.pathname.includes(GROUP_B),
+  );
   groupAId = new URL(admin.page.url()).pathname.split("/")[2];
 });
 

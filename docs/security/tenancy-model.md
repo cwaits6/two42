@@ -22,19 +22,23 @@ run can never be vacuous.
 | Helper | Resolves | From |
 |---|---|---|
 | `app_current_org_id()` | the calling principal's org | the caller's own `profiles.org_id` — server-owned state only |
-| `app_request_org_id()` | the org a request is *about* | the principal's org first; for anonymous callers only, the org whose `slug` matches the `x-two42-org` request header |
+| `app_request_org_id()` | the org a request is *about* | the principal's org, the same as `app_current_org_id()`; NULL for anonymous callers. Kept as the policy-facing name every isolation policy cites |
 
 Rules that make these safe:
 
 - Both are `STABLE`, `SECURITY DEFINER`, `set search_path = ''`. Every call
   site wraps them as `(select public.app_…())` so the planner evaluates
   them once per statement (InitPlan), not per row.
-- **Fail-closed by construction.** No principal and no resolvable header ⇒
-  NULL ⇒ `org_id = NULL` is not TRUE ⇒ rows filtered on read, rejected on
-  write. There is no "no org means everything" branch anywhere.
-- **A logged-in user can never widen their scope with the header** — the
-  principal's org always wins. The header only ever selects among orgs'
-  already-public content for anonymous visitors.
+- **Fail-closed by construction.** No principal ⇒ NULL ⇒ `org_id = NULL`
+  is not TRUE ⇒ rows filtered on read, rejected on write. There is no "no
+  org means everything" branch anywhere, and no header can name an org.
+- **Anonymous entry points are token rows.** Nothing anonymous resolves an
+  org through the helpers: `/setup-account` (the `access_requests.signup_token`
+  row), `/join/family/[token]` (the `family_invites` row), `/serving/go`
+  (the HMAC-validated `teams` row) and `/join/[token]` (the `group_invites`
+  row) each read their row on the service client under an `// org-anchor:`
+  marker, fail closed on a lookup error and on no row, and scope everything
+  after it to that row's `org_id`.
 - **Deliberately no GUC override.** Any role can `set_config()` an
   arbitrary GUC; a trusted service-role override, if ever needed, belongs
   to Phase 3 and must be gated on `auth.role() = 'service_role'`.
@@ -46,31 +50,17 @@ Rules that make these safe:
   `Host` — an org subdomain, an unrelated domain — gets a 404 with no app
   response at all. There is no host → org mapping anywhere: no subdomain
   classification, no custom-domain registry, no resolver RPC.
-- Every app Supabase client (server, browser, middleware) sends
-  `x-two42-org`. `lib/supabase/server.ts`'s `createClient()` precedence is
-  the explicit `orgSlug` argument, then the env pin (`resolveOrgSlug()` in
-  `lib/org.ts`); no request header contributes. The explicit argument is how
-  an anonymous request names its org: the public per-org routes
-  (`app/[orgSlug]/join`, `app/[orgSlug]/layout.tsx`) pass the URL path slug to
-  `createClient(orgSlug)` on **both** the server and browser clients, after
-  shape-checking it with `isValidOrgSlug()`. `app/[orgSlug]/layout.tsx`
-  threads the slug through `getOrgBranding(orgSlug)` (`lib/branding.ts`) to
-  theme every route in that subtree. The DB still validates every slug
-  against a real `organizations` row and still ignores the header for
-  authenticated principals, so the trust model is unchanged — the header
-  grants nothing, it only selects which org's already-public surface an
-  anonymous request is about.
-- The app-layer complement is **`resolveRequestOrgId()`** (`lib/org.ts`,
-  Phase 4b CWA-48 / #314): the single fail-closed helper that resolves a
-  request's org through `app_request_org_id()` before a page relies on it.
-  It fails closed on both failure modes — an RPC error, and an RPC success
-  returning NULL (a slug matching no organization row) — logging each, so
-  its one remaining caller (`app/[orgSlug]/join/page.tsx`, with the URL
-  slug overriding the header) takes its already-unavailable path (a
-  "requests unavailable" render) instead of falling back to an org. The
-  plain `/join` route is retired, and `app/join/family/[token]/page.tsx`
-  resolves its org from the `family_invites` token row instead, never from
-  the request host.
+- No app Supabase client (server, browser, middleware) sends an org header
+  of any kind, and `createClient()` takes no org argument. A session is the
+  only thing that resolves an org through the helpers; the pre-login
+  surfaces are the token rows above.
+- The app-layer complement is **`resolveRequestOrgId()`** (`lib/org.ts`):
+  the single fail-closed helper that resolves a request's org through
+  `app_request_org_id()` for a caller that holds a session but no org id of
+  its own (`lib/uploadImage.ts`, `lib/email/identity.ts`). It fails closed
+  on both failure modes — an RPC error, and an RPC success returning NULL —
+  logging each, so its callers refuse the upload or send from the platform
+  address instead of falling back to an org.
 
 Also, `org_id` on every org-owned table is `NOT NULL DEFAULT
 app_current_org_id()`: a write with no session and no explicit org violates
@@ -498,6 +488,40 @@ open vs approval joining, who may review, the org switch as a ceiling,
 every direct write path and the cross-org floor;
 `e2e/group-discovery.spec.ts` asserts the rendered consequence.
 
+### Group invite links
+
+A group's leaders and the org's admins mint links into that group
+(`20261027000000_group_invites.sql`). `group_invites` (`org_id` default
+`app_current_org_id()`, the restrictive isolation floor, a composite FK into
+`groups`, a DB-minted plaintext `uuid` token, `expires_at`, `max_uses`,
+`revoked_at`) is read, created and revoked by the leaders and admins under
+three permissive policies; the UPDATE is confined by column grant to
+`revoked_at` and cannot clear it again, and there is no DELETE policy or
+privilege. `group_invite_uses` holds one row per redemption, is readable by
+the same people and writable by no client at all. `access_requests` gains
+`group_id` and `group_invite_id` (composite FKs, column-list `set null`)
+and `unique (id, org_id)` so the use row can reference it.
+
+Redemption is two `SECURITY DEFINER` functions whose bodies are the tenant
+boundary. `group_invite_redeem()` (service_role only) locks the invite row
+the token selects, takes the org from it, and writes the approved request
+and the use row in one transaction; the route mails the setup link and
+clears the token if the mail never left. `group_invite_join()`
+(authenticated) takes the org from the caller's own profile and refuses an
+invite from any other org as `GI001`, the same as a dead link; a private
+group admits at once (the link is the approval), otherwise
+`join_group_apply()` applies the group's `join_policy`. One dead-link code
+(`GI001`) covers unknown, revoked, expired, used-up and foreign alike, so
+the page never says which. `supabase/tests/group_invites_suite.sql` pins the
+grants, who may mint and revoke, both redemption paths, the cap and the
+cross-org floor; `e2e/group-invite.spec.ts` asserts the rendered consequence.
+
+Anonymous org resolution therefore ends with this feature: the slug join
+page is gone, `app_request_org_id()` collapses to the principal's org, the
+anonymous `access_requests` INSERT policy is dropped (a household invitee
+files their request through `app/api/family-invites/request/route.ts`,
+anchored on the `family_invites` row), and no client sends an org header.
+
 ### Group context (app layer)
 
 The URL segment `/g/<groupId>` names the group a request is about, and
@@ -679,20 +703,22 @@ one org → raises (`TN002`). Server-set `raw_app_meta_data ->> 'org_id'` may
 disambiguate within the matched set, never widen it; client-supplied
 `raw_user_meta_data` is never consulted for org selection.
 
-`provision_organization(name, slug, owner_email)` builds a complete org in
-one transaction: the org row — its `branding` jsonb seeded with the full
+`provision_organization(name, owner_email)` builds a complete org in one
+transaction: the org row — its `branding` jsonb seeded with the full
 tenant-overridable contract (`display_name`, `logo_url`, `accent`,
 `reply_to`; see [`DESIGN.md`](../design/DESIGN.md)) — the two org-level
 giving settings, and an **approved access request for the owner** — so self-serve
 onboarding is org-first: provision, then create the auth user, and the
 fail-closed trigger needs no special case. Phase 4 must NOT solve
-onboarding by adding a fallback branch to `handle_new_user()`. An invalid
-slug raises `TN003`; a slug on the reserved-label denylist (`www`, `app`,
-`api`, `admin`, `platform`, …) raises `TN006`. The list was introduced when
-slugs were going to become host labels; host routing is retired, but the DB
-rule and its `lib/org.ts` mirror (`RESERVED_ORG_SLUGS`) are unchanged.
-`default` — the slug of the one org that exists today — is deliberately
-not yet on the list.
+onboarding by adding a fallback branch to `handle_new_user()`. Nothing
+routes by slug any more, so provisioning takes none and writes none;
+`organizations.slug` is nullable and awaits its drop.
+
+An approved access request may name a `group_id` (and `group_invite_id`):
+the group an invite link admits the person into. `handle_new_user()` enrols
+that group — its composite FK pins it to the signup's org — and stamps the
+new profile on the `group_invite_uses` row, ahead of the one-group fallback
+that enrols a signup with no invite into an org's only group.
 
 **`access_requests.approved_role`** (Phase 4a, `20260802000002`) names the
 role `handle_new_user()` grants when an approved request resolves a signup:
@@ -804,14 +830,11 @@ platform seam).
   cap-boundary behavior are pinned by
   `supabase/tests/org_email_quota_suite.sql`; the inventory records the
   call sites ([service-role-inventory.md](service-role-inventory.md)).
-- An authenticated member of org A visiting org B's public page resolves to
-  org A, not org B (fail-closed, not wrong-tenant): the principal's own org
-  overrides the path org, so the request returns org A's own content at that
-  slug if org A happens to have a matching page, or no row if it does not —
-  never org B's. Every org shares the one canonical host, so this is the
-  path-addressed case:
-  `/[orgSlug]/join` redirects a signed-in user to `/dashboard` before any
-  org resolution happens. Session cookies stay host-scoped (no `Domain=`
+- An authenticated member of org A who opens org B's group invite link is
+  told the invite is for a different organization and offered Sign out:
+  `group_invite_join()` compares the caller's own org to the invite row's
+  and answers `GI001` on a mismatch, the same as a dead link, so nothing
+  about org B is confirmed. Session cookies stay host-scoped (no `Domain=`
   widening anywhere in `lib/supabase/{server,client,middleware}.ts`, pinned
   by a regression test), so they are never sent to a subdomain of the
   canonical host.
@@ -834,13 +857,12 @@ platform seam).
   `select (id, name, slug, branding)`. Neither role can select `status`,
   `created_at`, or any column a later phase adds — `ADD COLUMN` grants
   nothing, so a new column is unreadable until someone lists it there on
-  purpose. An anonymous caller who resolves the org via `x-two42-org` reads
-  exactly those three columns.
+  purpose. An anonymous caller now resolves no org and reads no row at all;
+  the `anon` grant stays until the slug column is dropped.
   Remaining gap: `branding` is a single jsonb value, so `reply_to` rides along
   with the three keys the app shell needs; column privileges cannot reach
   inside jsonb, and excluding it needs a SECURITY DEFINER projection.
-  Accepted: the slug is already public by construction (it *is* the header
-  value), and `reply_to` is an address the org publishes on every outbound
+  Accepted: `reply_to` is an address the org publishes on every outbound
   email.
 - **`organizations.status` cuts no access path.** The one place it ever
   gated routing — the custom-domain host resolver — is retired along with
@@ -894,7 +916,6 @@ platform seam).
   platform mails is built on the one canonical host — `siteConfig.url` in
   the app, the `SITE_URL` function secret in the cron edge functions — so no
   admin-supplied value reaches a link origin. Each target route resolves its
-  org without the host: `/setup-account` and `/join/family/[token]` from the
-  token's row, `/serving/go` from the HMAC-validated token, `/serving/**` and
-  `/events` from the signed-in session, `/[orgSlug]/join` from its path
-  segment.
+  org without the host: `/setup-account`, `/join/family/[token]` and
+  `/join/[token]` from the token's row, `/serving/go` from the HMAC-validated
+  token, `/serving/**` and `/events` from the signed-in session.
