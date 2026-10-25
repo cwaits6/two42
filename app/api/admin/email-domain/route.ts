@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { requireOrgAdmin } from "@/lib/members/access";
 import { getOrgEmailDomainCap } from "@/lib/email/domainCap";
+import { CUSTOM_SENDING_DOMAINS_ENABLED } from "@/lib/email/sendingDomains";
 import { removeResendDomain } from "@/lib/email/resendDomains";
 
 /**
@@ -61,6 +62,13 @@ const CLEANUP_PENDING = "cleanup_pending";
 // error.code.
 const CLAIM_NOT_ENABLED = "SD002";
 const CLAIM_CAP_REACHED = "SD003";
+
+// The whole surface is hidden while CUSTOM_SENDING_DOMAINS_ENABLED is false:
+// 404 before auth or any data work, so the routes are indistinguishable from
+// ones that do not exist.
+function hiddenResponse() {
+  return NextResponse.json({ error: "Not found" }, { status: 404 });
+}
 
 function gateError(status: 401 | 403) {
   return NextResponse.json(
@@ -215,6 +223,7 @@ function conflictResponse(status: string | undefined) {
 }
 
 export async function GET() {
+  if (!CUSTOM_SENDING_DOMAINS_ENABLED) return hiddenResponse();
   const gate = await requireOrgAdmin();
   if (!gate.ok) return gateError(gate.status);
   const { supabase, orgId } = gate;
@@ -264,6 +273,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (!CUSTOM_SENDING_DOMAINS_ENABLED) return hiddenResponse();
   const gate = await requireOrgAdmin();
   if (!gate.ok) return gateError(gate.status);
   const { orgId } = gate;
@@ -491,6 +501,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE() {
+  if (!CUSTOM_SENDING_DOMAINS_ENABLED) return hiddenResponse();
   const gate = await requireOrgAdmin();
   if (!gate.ok) return gateError(gate.status);
   const { orgId } = gate;
