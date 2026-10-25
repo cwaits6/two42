@@ -33,14 +33,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   const { token } = await params;
   if (!isUuid(token)) return invalid();
 
-  let body: { name?: unknown; email?: unknown };
+  let body: unknown;
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  const name = typeof body.name === "string" ? body.name.trim() : "";
-  const email = typeof body.email === "string" ? body.email.trim() : "";
+  // A body of `null` parses fine, so the shape check has to come after.
+  const fields: { name?: unknown; email?: unknown } =
+    typeof body === "object" && body !== null ? body : {};
+  const name = typeof fields.name === "string" ? fields.name.trim() : "";
+  const email = typeof fields.email === "string" ? fields.email.trim() : "";
   if (!name || !email || email.length > 254 || !EMAIL.test(email)) {
     return NextResponse.json({ error: "Enter your name and a valid email address." }, { status: 400 });
   }

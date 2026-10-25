@@ -71,10 +71,13 @@ export function InviteLinksManager({ groupId, groupName }: InviteLinksManagerPro
   const [revokeBusy, setRevokeBusy] = useState(false);
   const [focusId, setFocusId] = useState<string | null>(null);
   const copyButtons = useRef<Record<string, HTMLButtonElement | null>>({});
+  // Loads can overlap (create, create, revoke); only the newest may write state.
+  const loadSeq = useRef(0);
 
   // Only the first load shows the placeholder: a refresh after create or
   // revoke keeps the list mounted, so focus can land on the new link's button.
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     const [inviteRows, useRows] = await Promise.all([
       supabase
         .from("group_invites")
@@ -90,6 +93,7 @@ export function InviteLinksManager({ groupId, groupName }: InviteLinksManagerPro
           .range(from, to),
       ),
     ]);
+    if (seq !== loadSeq.current) return;
     if (inviteRows.error || useRows.error) {
       console.error("Failed to load invite links:", inviteRows.error ?? useRows.error);
       setLoadFailed(true);
@@ -112,6 +116,7 @@ export function InviteLinksManager({ groupId, groupName }: InviteLinksManagerPro
         .in("id", creatorIds);
       creatorRows = (data ?? []) as Creator[];
     }
+    if (seq !== loadSeq.current) return;
     setInvites(rows);
     setUseCounts(counts);
     setCreators(Object.fromEntries(creatorRows.map((c) => [c.id, c])));
@@ -192,6 +197,7 @@ export function InviteLinksManager({ groupId, groupName }: InviteLinksManagerPro
     setInvites((prev) => prev.map((i) => (i.id === revoking.id ? { ...i, revoked_at: revokedAt } : i)));
     setRevoking(null);
     toast.success("Link revoked.");
+    load();
   }
 
   const now = new Date();
