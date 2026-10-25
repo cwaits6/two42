@@ -58,26 +58,6 @@ COMMENT ON FUNCTION "public"."app_current_org_id"() IS 'Org of the calling princ
 
 
 
-CREATE OR REPLACE FUNCTION "public"."app_org_slug_for_host"("_host" "text") RETURNS "text"
-    LANGUAGE "sql" STABLE SECURITY DEFINER
-    SET "search_path" TO ''
-    AS $$
-  select o.slug
-  from public.org_domains d
-  join public.organizations o on o.id = d.org_id
-  where d.domain = _host
-    and d.status = 'verified'
-    and o.status = 'active';
-$$;
-
-
-ALTER FUNCTION "public"."app_org_slug_for_host"("_host" "text") OWNER TO "postgres";
-
-
-COMMENT ON FUNCTION "public"."app_org_slug_for_host"("_host" "text") IS 'Resolves a request host to an org slug for host-based routing. Verified/active gating only — no normalization: the caller (middleware) canonicalizes the host once. Returns NULL (fails closed) for any unmatched, unverified, or suspended-org host. Called by lib/supabase/host-resolution.ts.';
-
-
-
 CREATE OR REPLACE FUNCTION "public"."app_request_org_id"() RETURNS "uuid"
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO ''
@@ -2653,7 +2633,6 @@ CREATE TABLE IF NOT EXISTS "public"."organizations" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "name" "text" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "slug" "text",
     "branding" "jsonb" DEFAULT '{}'::"jsonb" NOT NULL,
     "status" "public"."org_status" DEFAULT 'active'::"public"."org_status" NOT NULL,
     "custom_email_domain_enabled" boolean DEFAULT false NOT NULL,
@@ -3242,11 +3221,6 @@ ALTER TABLE ONLY "public"."organization_members"
 
 ALTER TABLE ONLY "public"."organizations"
     ADD CONSTRAINT "organizations_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."organizations"
-    ADD CONSTRAINT "organizations_slug_key" UNIQUE ("slug");
 
 
 
@@ -5298,13 +5272,6 @@ GRANT ALL ON FUNCTION "public"."app_current_org_id"() TO "service_role";
 
 
 
-REVOKE ALL ON FUNCTION "public"."app_org_slug_for_host"("_host" "text") FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."app_org_slug_for_host"("_host" "text") TO "anon";
-GRANT ALL ON FUNCTION "public"."app_org_slug_for_host"("_host" "text") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."app_org_slug_for_host"("_host" "text") TO "service_role";
-
-
-
 GRANT ALL ON FUNCTION "public"."app_request_org_id"() TO "anon";
 GRANT ALL ON FUNCTION "public"."app_request_org_id"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."app_request_org_id"() TO "service_role";
@@ -5782,11 +5749,6 @@ GRANT SELECT("id") ON TABLE "public"."organizations" TO "anon";
 
 
 GRANT SELECT("name") ON TABLE "public"."organizations" TO "authenticated";
-
-
-
-GRANT SELECT("slug") ON TABLE "public"."organizations" TO "authenticated";
-GRANT SELECT("slug") ON TABLE "public"."organizations" TO "anon";
 
 
 
