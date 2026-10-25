@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -59,6 +59,8 @@ export function EditEventForm({
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = useMemo(() => createClient(), []);
+  // The input values as loaded, to tell whether the leader changed a time.
+  const loadedTimes = useRef<{ start: string; end: string } | null>(null);
 
   const calendarHref = groupPath(groupId, "/calendar");
   const detailHref = groupPath(groupId, `/calendar/${eventId}`);
@@ -105,6 +107,7 @@ export function EditEventForm({
         nextStartTime = isoToLocalInput(eventData.start_time, timeZone);
         nextEndTime = eventData.end_time ? isoToLocalInput(eventData.end_time, timeZone) : "";
       }
+      loadedTimes.current = { start: nextStartTime, end: nextEndTime };
       setStartTime(nextStartTime);
       setEndTime(isValidEndTime(nextStartTime, nextEndTime) ? nextEndTime : addHour(nextStartTime));
       setLoadState("ready");
@@ -191,16 +194,24 @@ export function EditEventForm({
 
     // Edit all events in the series (or a one-off / exception event). A
     // zero-row match is a stale or cross-group id, not a success.
+    // An input value reads back as the first occurrence of a repeated autumn
+    // hour, so times the leader did not touch keep their stored instants.
+    const startValue = formData.get("start_time") as string;
+    const endValue = (formData.get("end_time") as string) || "";
+    const timeChanges =
+      startValue === loadedTimes.current?.start && endValue === loadedTimes.current?.end
+        ? {}
+        : {
+            start_time: localToUTCISO(startValue, timeZone),
+            end_time: endValue ? localToUTCISO(endValue, timeZone) : null,
+          };
     const { data: updated, error } = await supabase
       .from("events")
       .update({
         title,
         description,
         location: nextLocation || null,
-        start_time: localToUTCISO(formData.get("start_time") as string, timeZone),
-        end_time: (formData.get("end_time") as string)
-          ? localToUTCISO(formData.get("end_time") as string, timeZone)
-          : null,
+        ...timeChanges,
         is_rsvp_enabled: isRsvpEnabled,
         meeting_url: trimmedMeetingUrl || null,
         meeting_id: meetingId.trim() || null,
