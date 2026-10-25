@@ -84,7 +84,7 @@ describe.each([
 
 describe("expandOccurrences", () => {
   it("skips an occurrence covered by an exception row", () => {
-    const excluded = new Set([Date.parse("2026-11-04T00:00:00.000Z")]);
+    const excluded = new Set(["2026-11-03"]);
     expect(expandOccurrences(series(), NY, excluded).map((o) => o.start_time)).toEqual([
       SEVEN_PM_BEFORE_CHANGE,
       "2026-11-11T00:00:00.000Z",
@@ -103,3 +103,82 @@ describe("expandOccurrences", () => {
     ]);
   });
 });
+
+describe("monthly stepping on the 29th to 31st", () => {
+  const JAN_31_7PM = "2027-02-01T00:00:00.000Z";
+
+  it("clamps to the last day of a short month instead of overflowing into the next", () => {
+    const monthly = series({
+      start_time: JAN_31_7PM,
+      end_time: null,
+      recurrence_frequency: "monthly",
+      recurrence_count: 4,
+    });
+    expect(expandOccurrences(monthly, NY).map((o) => o.start_time)).toEqual([
+      JAN_31_7PM,
+      "2027-03-01T00:00:00.000Z",
+      "2027-03-31T23:00:00.000Z",
+      "2027-04-30T23:00:00.000Z",
+    ]);
+  });
+});
+
+describe("weekly stepping across the spring-forward change", () => {
+  it("keeps 7:00 PM when clocks go forward on 14 March 2027", () => {
+    const weekly = series({ start_time: "2027-03-10T00:00:00.000Z", end_time: null });
+    const occurrences = expandOccurrences(weekly, NY);
+    expect(occurrences.map((o) => o.start_time)).toEqual([
+      "2027-03-10T00:00:00.000Z",
+      "2027-03-16T23:00:00.000Z",
+      "2027-03-23T23:00:00.000Z",
+    ]);
+    for (const o of occurrences) expect(formatEventTime(o.start_time, NY)).toBe("7:00 PM");
+  });
+});
+
+describe("exception rows are matched by calendar day", () => {
+  const exception = (occurrenceDate: string): Event =>
+    series({
+      id: "x",
+      series_id: "s",
+      series_occurrence_date: occurrenceDate,
+      recurrence_frequency: null,
+      recurrence_end_mode: null,
+      recurrence_count: null,
+      start_time: occurrenceDate,
+    });
+  const starts = (events: Event[], now: Date) =>
+    expandUpcomingEvents(events, NY, now, new Date("2027-12-31T00:00:00.000Z"))
+      .filter((o) => !o.series_id)
+      .map((o) => o.start_time);
+
+  it("suppresses an occurrence whose exception row was stepped in a zone without the change", () => {
+    // Stepped by 7 x 24 h across the autumn change, the row sits an hour off
+    // the 7:00 PM occurrence on the same New York day.
+    const anchor = series({ recurrence_count: 3 });
+    const now = new Date("2026-10-01T00:00:00.000Z");
+    const rows = [anchor, exception("2026-11-03T23:00:00.000Z")];
+    expect(starts(rows, now)).toEqual([SEVEN_PM_BEFORE_CHANGE, "2026-11-11T00:00:00.000Z"]);
+  });
+
+  it("suppresses an occurrence whose row was written for the same day in an earlier month step", () => {
+    const anchor = series({
+      start_time: "2027-02-01T00:00:00.000Z",
+      end_time: null,
+      recurrence_frequency: "monthly",
+      recurrence_count: 3,
+    });
+    const now = new Date("2027-01-01T00:00:00.000Z");
+    // 31 March at 6:00 PM local on the day of the 7:00 PM occurrence.
+    const rows = [anchor, exception("2027-03-31T22:00:00.000Z")];
+    expect(starts(rows, now)).toEqual(["2027-02-01T00:00:00.000Z", "2027-03-01T00:00:00.000Z"]);
+  });
+
+  it("still keeps an occurrence on a different day", () => {
+    const anchor = series({ recurrence_count: 3 });
+    const now = new Date("2026-10-01T00:00:00.000Z");
+    const rows = [anchor, exception("2026-11-05T00:00:00.000Z")];
+    expect(starts(rows, now)).toHaveLength(3);
+  });
+});
+

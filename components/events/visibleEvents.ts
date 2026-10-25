@@ -13,7 +13,7 @@ export function expandVisibleEvents(
   visibleGroupIds: ReadonlySet<string>,
   timeZone: string
 ): Event[] {
-  const exceptions = buildExceptionMap(events);
+  const exceptions = buildExceptionMap(events, timeZone);
   const expanded: Event[] = [];
   for (const e of events) {
     if (!visibleGroupIds.has(e.group_id)) continue;

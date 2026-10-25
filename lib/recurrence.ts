@@ -1,4 +1,5 @@
 import { DateTime } from "luxon";
+import { dayKey } from "@/lib/time/zone";
 import type { Event, EventCalendar } from "@/lib/types";
 
 const MAX_OCCURRENCES = 500;
@@ -30,17 +31,21 @@ export function addRecurrenceInterval(
 }
 
 /**
- * Build a map of { series_id → Set<occurrence_date_ms> } from exception events.
- * Pass this to expandOccurrences so it can skip dates covered by exceptions.
+ * Build a map of { series_id → Set<calendar day in timeZone> } from exception
+ * events. Pass this to expandOccurrences so it can skip days covered by
+ * exceptions. A series has one occurrence per day, and the day survives what
+ * the exact instant does not: rows written under the earlier stepping
+ * (overflowed months) or from a browser outside the org zone.
  */
 export function buildExceptionMap(
-  events: (Event & { calendar?: EventCalendar | null })[]
-): Map<string, Set<number>> {
-  const map = new Map<string, Set<number>>();
+  events: (Event & { calendar?: EventCalendar | null })[],
+  timeZone: string
+): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>();
   for (const e of events) {
     if (e.series_id && e.series_occurrence_date) {
       if (!map.has(e.series_id)) map.set(e.series_id, new Set());
-      map.get(e.series_id)!.add(new Date(e.series_occurrence_date).getTime());
+      map.get(e.series_id)!.add(dayKey(e.series_occurrence_date, timeZone));
     }
   }
   return map;
@@ -72,9 +77,9 @@ function fastForwardIndex(
 
 /**
  * Expand a recurring series anchor into its individual occurrences, stepping
- * in `timeZone` (the org's zone). Occurrences whose date (ms) appears in
- * excludedTimestamps are skipped — those dates are covered by per-occurrence
- * exception rows.
+ * in `timeZone` (the org's zone). Occurrences whose calendar day in that zone
+ * appears in excludedDays are skipped — those days are covered by
+ * per-occurrence exception rows.
  *
  * Pass `now` to fast-forward past already-elapsed occurrences so the
  * maxCount budget applies to visible/upcoming instances, not past ones.
@@ -82,7 +87,7 @@ function fastForwardIndex(
 export function expandOccurrences(
   event: Event & { calendar?: EventCalendar | null },
   timeZone: string,
-  excludedTimestamps?: Set<number>,
+  excludedDays?: Set<string>,
   windowEnd?: Date,
   now?: Date
 ): (Event & { calendar?: EventCalendar | null })[] {
@@ -116,7 +121,7 @@ export function expandOccurrences(
 
     if (occStartDate > end) break;
     if (untilDate && occStartDate > untilDate) break;
-    if (excludedTimestamps?.has(occStartDate.getTime())) continue;
+    if (excludedDays?.has(dayKey(occStart, timeZone))) continue;
 
     const occEnd =
       event.end_time
@@ -143,7 +148,7 @@ export function expandUpcomingEvents(
   now: Date = new Date(),
   windowEnd?: Date
 ): (Event & { calendar?: EventCalendar | null })[] {
-  const exceptions = buildExceptionMap(allEvents);
+  const exceptions = buildExceptionMap(allEvents, timeZone);
   const results: (Event & { calendar?: EventCalendar | null })[] = [];
 
   for (const e of allEvents) {
