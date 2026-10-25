@@ -26,6 +26,7 @@ import {
   resolveEventReminderRecipients,
   type EventRecipientClient,
 } from "../_shared/event-recipients.ts";
+import { formatReminderDate, reminderTimeZone } from "../_shared/event-time.ts";
 import { listGroups, type GroupClient } from "../_shared/groups.ts";
 import { escapeHtml } from "../_shared/html.ts";
 import { resolveServiceKey } from "../_shared/service-key.ts";
@@ -123,6 +124,15 @@ async function runForOrg(
 
   const baseUrl = SITE_URL;
 
+  const timeZone = reminderTimeZone(org.timezone);
+  if (timeZone !== org.timezone) {
+    console.error(
+      "[org %s] this runtime cannot format in time zone %s; reminder times fall back to UTC",
+      org.id,
+      org.timezone,
+    );
+  }
+
   let sent = 0;
   let sendFailures = 0;
   const itemFailures: ItemFailure[] = [];
@@ -180,15 +190,7 @@ async function runForOrg(
         }
 
         for (const profile of recipients) {
-          // The org's wall clock, not the runtime's (UTC).
-          const eventDate = new Date(event.start_time).toLocaleDateString("en-US", {
-            weekday: "long",
-            month: "long",
-            day: "numeric",
-            hour: "numeric",
-            minute: "2-digit",
-            timeZone: org.timezone,
-          });
+          const eventDate = formatReminderDate(event.start_time, timeZone);
 
           if (await sendEmail({
             to: profile.email,

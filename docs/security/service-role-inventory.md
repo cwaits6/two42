@@ -584,10 +584,12 @@ which variable it binds is review-enforced.
 
 `listActiveOrgs()` also selects `organizations.timezone` on that same
 org-anchored read: `send-event-reminders` formats each reminder's event time
-with `timeZone: org.timezone`, so the mail shows the org's wall clock rather
-than the runtime's (UTC). The column is validated by the database
-(`organizations_timezone_check()` refuses a name Postgres does not know), so
-it reaches `Intl` as-is. No new query and no new service-role call site.
+through `_shared/event-time.ts` in that zone, so the mail shows the org's
+wall clock rather than the runtime's (UTC). The database stores only exact
+IANA names (`organizations_timezone_check()`), and the function still checks
+the stored name against its own `Intl` before formatting, falling back to UTC
+with a logged error, so a zone the runtime's ICU does not know cannot stop an
+org's sends. No new query and no new service-role call site.
 
 Both entry points additionally call `email_quota_consume()` per team/event
 batch via `_shared/quota.ts` (CWA-72), passing the org id from the
