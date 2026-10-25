@@ -24,16 +24,6 @@
 --   docker exec -i supabase_db_small-group-hub \
 --     psql -U postgres -d postgres -f - < supabase/demo/first-redeemer.sql
 
--- Only the CLI's local stack runs on its published default JWT secret; a
--- hosted project always has its own.
-DO $$
-BEGIN
-  IF current_setting('app.settings.jwt_secret', true)
-     IS DISTINCT FROM 'super-secret-jwt-token-with-at-least-32-characters-long' THEN
-    RAISE EXCEPTION 'first-redeemer.sql holds well-known development logins and only runs on the local Supabase stack';
-  END IF;
-END $$;
-
 DO $$
 DECLARE
   _org uuid;
@@ -54,6 +44,14 @@ DECLARE
   _team_kids   uuid := 'de3c0000-0000-0000-0000-00000000b003';
   _fam uuid[];
 BEGIN
+  -- Only the CLI's local stack runs on its published default JWT secret; a
+  -- hosted project always has its own. The check lives inside the one block
+  -- that writes, so psql without ON_ERROR_STOP cannot run past it.
+  IF current_setting('app.settings.jwt_secret', true)
+     IS DISTINCT FROM 'super-secret-jwt-token-with-at-least-32-characters-long' THEN
+    RAISE EXCEPTION 'first-redeemer.sql holds well-known development logins and only runs on the local Supabase stack';
+  END IF;
+
   SELECT id INTO _org FROM public.organizations WHERE name = 'First Redeemer Church';
   IF _org IS NULL THEN
     _org := public.provision_organization('First Redeemer Church', 'susan.anderson@example.test');
