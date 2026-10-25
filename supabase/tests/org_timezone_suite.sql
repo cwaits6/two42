@@ -8,7 +8,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(29);
+select plan(35);
 
 -- ── Probe helpers: run one statement as an authenticated actor ──────────────
 create function pg_temp.as_text(_actor uuid, _query text) returns text
@@ -67,9 +67,17 @@ begin
   perform set_config('tz.owner_b', owner_b::text, true);
 end $$;
 
+-- Org B starts in a different zone than org A, so a read that crosses orgs
+-- returns a value that gives the leak away.
+update public.organizations set timezone = 'Asia/Tokyo'
+  where id = current_setting('tz.org_b')::uuid;
+
 select is(
   (select role from public.profiles where id = current_setting('tz.owner_a')::uuid),
   'admin', 'fixture: org A''s owner is its admin');
+select is(
+  (select role from public.profiles where id = current_setting('tz.owner_b')::uuid),
+  'admin', 'fixture: org B''s owner is its admin');
 select is(
   (select role from public.profiles where id = current_setting('tz.member_a')::uuid),
   'member', 'fixture: org A''s member is a plain member');
@@ -99,6 +107,14 @@ select is(
   pg_temp.as_text(current_setting('tz.member_a')::uuid,
     'select timezone from public.organizations'),
   'America/New_York', 'a plain member reads their own org''s zone');
+select is(
+  pg_temp.as_text(current_setting('tz.member_a')::uuid,
+    'select count(*)::text from public.organizations'),
+  '1', 'a plain member sees only their own org row');
+select is(
+  pg_temp.as_text(current_setting('tz.owner_b')::uuid,
+    format('select timezone from public.organizations where id = %L', current_setting('tz.org_a'))),
+  null, 'the admin of org B cannot read org A''s zone by id');
 
 -- ── 4. The write path ───────────────────────────────────────────────────────
 select is(
@@ -127,6 +143,12 @@ select is(
 select is(
   (select timezone from public.organizations where id = current_setting('tz.org_a')::uuid),
   'America/Chicago', 'org B''s write changed nothing in org A');
+
+select is(
+  pg_temp.as_write(current_setting('tz.owner_b')::uuid,
+    format('update public.organizations set timezone = %L where id = %L',
+      'America/Denver', current_setting('tz.org_b'))),
+  'rows=1', 'the admin of org B sets their own org''s zone');
 
 -- ── 5. The validator ────────────────────────────────────────────────────────
 select is(
@@ -169,6 +191,19 @@ select is(
 select is(
   (select timezone from public.organizations where id = current_setting('tz.org_a')::uuid),
   'America/Chicago', 'none of the refused writes changed anything');
+
+-- anon holds no SELECT grant on the column, so the read is refused outright.
+set local role anon;
+select set_config('request.jwt.claims', '{"role":"anon"}', true);
+select throws_ok(
+  'select timezone from public.organizations',
+  '42501', null,
+  'anon cannot read organizations.timezone');
+reset role;
+
+select is(
+  (select prosecdef from pg_catalog.pg_proc where proname = 'organizations_timezone_check'),
+  false, 'the validator trigger function is not SECURITY DEFINER');
 
 reset role;
 select throws_ok(

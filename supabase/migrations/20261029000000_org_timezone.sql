@@ -33,6 +33,9 @@ begin
   return new;
 end $$;
 
+comment on function public.organizations_timezone_check() is
+  'Trigger function: refuses an organizations.timezone that is not an exact IANA name in pg_timezone_names (no posix/ duplicates, no Factory). SECURITY INVOKER; raises check_violation.';
+
 create trigger organizations_timezone_check
   before insert or update of timezone on public.organizations
   for each row execute function public.organizations_timezone_check();
@@ -58,7 +61,7 @@ begin
   end if;
   if has_column_privilege('anon', 'public.organizations', 'timezone', 'select')
      or has_column_privilege('anon', 'public.organizations', 'timezone', 'update') then
-    raise exception 'organizations.timezone: anon must hold no privilege on the column';
+    raise exception 'organizations.timezone: anon must hold no SELECT or UPDATE privilege on the column';
   end if;
   if has_table_privilege('authenticated', 'public.organizations', 'update') then
     raise exception 'organizations: table-level UPDATE must stay revoked from authenticated';
@@ -69,6 +72,10 @@ begin
     and permissive = 'PERMISSIVE' and cmd in ('INSERT', 'UPDATE', 'DELETE', 'ALL');
   if _writes <> 1 then
     raise exception 'organizations: expected exactly one permissive write policy, found %', _writes;
+  end if;
+
+  if not exists (select 1 from pg_catalog.pg_timezone_names where name = 'America/New_York') then
+    raise exception 'organizations.timezone: the default is not a known zone on this build';
   end if;
 
   -- The probe rows never commit: the trigger aborts the subtransaction, and

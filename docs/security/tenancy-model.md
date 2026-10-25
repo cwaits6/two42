@@ -447,7 +447,7 @@ private group is not a new kind of row but a flag on one.
 (`20261029000000_org_timezone.sql`) is the one zone every event time is
 entered and displayed in; it is a display setting, read by no policy and no
 definer function. Same grant shape as the other org settings: `anon` has no
-grant on the column, `authenticated` reads it (every signed-in member's
+SELECT or UPDATE grant on the column (it holds only Supabase's pre-existing, inert table-level INSERT), `authenticated` reads it (every signed-in member's
 event surfaces format in it, through the request-scoped
 `getOrgTimeZone()` in `lib/time/orgZone.ts`), and the org's own admin writes
 it through the single org-settings UPDATE policy. The database is the one
