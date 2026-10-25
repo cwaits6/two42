@@ -18,7 +18,7 @@ vi.mock("@/lib/supabase/current-user", () => ({
 
 vi.mock("@/components/landing/LandingPage", () => ({ LandingPage: () => null }));
 
-const { default: HomePage } = await import("./page");
+const { default: HomePage, metadata } = await import("./page");
 
 beforeEach(() => {
   getOptionalUser.mockReset();
@@ -33,5 +33,15 @@ describe("HomePage", () => {
   it("renders the front door for everyone else", async () => {
     getOptionalUser.mockResolvedValue(null);
     await expect(HomePage()).resolves.toBeTruthy();
+  });
+
+  it("describes two42 in the title and description, not a congregation", () => {
+    const title = String(metadata.title);
+    const description = String(metadata.description);
+    expect(title).toMatch(/two42/);
+    expect(description).toMatch(/groups/);
+    for (const text of [title, description]) {
+      expect(text).not.toMatch(/\bfaith\b|congregation|\bour church\b|first redeemer|body of christ/i);
+    }
   });
 });
