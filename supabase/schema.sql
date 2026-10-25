@@ -82,24 +82,14 @@ CREATE OR REPLACE FUNCTION "public"."app_request_org_id"() RETURNS "uuid"
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO ''
     AS $$
-  select case
-    when (select auth.uid()) is not null then (select public.app_current_org_id())
-    else (select o.id from public.organizations o
-      where o.slug = nullif(
-        -- request.headers is only set (to a JSON object) by PostgREST; in
-        -- any other execution context it is unset or empty, and the nullif
-        -- below turns that into NULL rather than a JSON cast error, keeping
-        -- the fail-closed contract.
-        nullif(current_setting('request.headers', true), '')::json
-          ->> 'x-two42-org', ''))
-  end;
+  select public.app_current_org_id();
 $$;
 
 
 ALTER FUNCTION "public"."app_request_org_id"() OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."app_request_org_id"() IS 'Org a request is about: the authenticated principal''s org, else the org whose slug matches the x-two42-org request header (anon public surface only). NULL when neither resolves — fail-closed. Wrap call sites as (select public.app_request_org_id()).';
+COMMENT ON FUNCTION "public"."app_request_org_id"() IS 'Org of the calling principal (app_current_org_id()). NULL for anonymous and service callers — fail-closed. Kept as the policy-facing name; wrap call sites as (select public.app_request_org_id()).';
 
 
 
@@ -587,6 +577,210 @@ COMMENT ON FUNCTION "public"."group_create_for"("_org" "uuid", "_name" "text", "
 
 
 
+CREATE OR REPLACE FUNCTION "public"."group_invite_join"("_token" "uuid") RETURNS "text"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _uid uuid := auth.uid();
+  _org uuid;
+  _email text;
+  _inv public.group_invites%rowtype;
+  _private boolean;
+  _counted boolean;
+  _result text;
+begin
+  if _uid is null then
+    raise exception 'invite join rejected: no authenticated principal' using errcode = 'GI006';
+  end if;
+  -- Org from the caller's own profile; the invite must carry the same one.
+  select p.org_id, p.email into _org, _email
+  from public.profiles p where p.id = _uid and p.role <> 'pending';
+  if _org is null then
+    raise exception 'invite join rejected: caller % is not an approved member', _uid using errcode = 'GI006';
+  end if;
+
+  select gi.* into _inv from public.group_invites gi where gi.token = _token for update;
+  if not found
+     or _inv.org_id <> _org
+     or _inv.revoked_at is not null
+     or (_inv.expires_at is not null and _inv.expires_at <= now()) then
+    raise exception 'invite join rejected: link is not valid' using errcode = 'GI001';
+  end if;
+
+  if exists (
+    select 1 from public.group_members m
+    where m.group_id = _inv.group_id and m.profile_id = _uid and m.org_id = _org) then
+    return 'already_member';
+  end if;
+
+  -- The same person following the link again is one use, not two.
+  _counted := exists (
+    select 1 from public.group_invite_uses u
+    where u.invite_id = _inv.id and u.org_id = _org and u.profile_id = _uid);
+  if not _counted and _inv.max_uses is not null and (
+       select count(*) from public.group_invite_uses u
+       where u.invite_id = _inv.id and u.org_id = _org) >= _inv.max_uses then
+    raise exception 'invite join rejected: link is not valid' using errcode = 'GI001';
+  end if;
+
+  select g.is_private into _private
+  from public.groups g where g.id = _inv.group_id and g.org_id = _org;
+  if _private is null then
+    raise exception 'invite join rejected: link is not valid' using errcode = 'GI001';
+  end if;
+
+  if _private then
+    -- A private group has no discoverable join path, so the link is the
+    -- approval: the creator vouches, as added_by records.
+    insert into public.group_members (org_id, group_id, profile_id, role, added_by)
+    values (_org, _inv.group_id, _uid, 'member', _inv.created_by)
+    on conflict (group_id, profile_id) do nothing;
+    update public.group_join_requests
+      set status = 'approved', reviewed_at = now()
+      where group_id = _inv.group_id and profile_id = _uid
+        and org_id = _org and status = 'pending';
+    _result := 'joined';
+  else
+    _result := public.join_group_apply(_inv.group_id, _uid);
+  end if;
+
+  if not _counted then
+    insert into public.group_invite_uses (org_id, invite_id, group_id, email, outcome, profile_id)
+    values (_org, _inv.id, _inv.group_id, lower(_email), _result, _uid);
+  end if;
+
+  return _result;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."group_invite_join"("_token" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."group_invite_join"("_token" "uuid") IS 'A signed-in member follows a group invite. Tenant anchor: the caller''s own profiles row (GI006 when none or pending); the invite row, locked for update, must carry that org (GI001 for foreign, missing, revoked, expired or used up). Returns already_member with no use row; joined at once for a private group (added_by = the invite''s creator); otherwise join_group_apply() decides joined or requested. One use row per person per link.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."group_invite_redeem"("_token" "uuid", "_name" "text", "_email" "text", "_signup_token" "text", "_token_expires_at" timestamp with time zone) RETURNS TABLE("org_id" "uuid", "group_id" "uuid", "group_name" "text", "access_request_id" "uuid")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _inv public.group_invites%rowtype;
+  _org uuid;
+  _group uuid;
+  _gname text;
+  _name_norm text := btrim(coalesce(_name, ''));
+  _email_norm text := lower(btrim(coalesce(_email, '')));
+  _request uuid;
+  _counted boolean;
+begin
+  if auth.uid() is not null then
+    raise exception 'invite redeem rejected: a signed-in caller takes the member path'
+      using errcode = 'GI006';
+  end if;
+  if _name_norm = ''
+     or _email_norm = '' or length(_email_norm) > 254 or position('@' in _email_norm) = 0
+     or _signup_token is null or btrim(_signup_token) = ''
+     or _token_expires_at is null then
+    raise exception 'invite redeem rejected: name, email and a signup token are required'
+      using errcode = 'GI002';
+  end if;
+
+  -- The token is the only thing that names the org: this lookup is
+  -- unscoped and the row it returns anchors every read and write below.
+  -- Locked so two first-time submissions on a one-use link serialise.
+  select gi.* into _inv from public.group_invites gi where gi.token = _token for update;
+  if not found
+     or _inv.revoked_at is not null
+     or (_inv.expires_at is not null and _inv.expires_at <= now()) then
+    raise exception 'invite redeem rejected: link is not valid' using errcode = 'GI001';
+  end if;
+  _org := _inv.org_id;
+  _group := _inv.group_id;
+  select g.name into _gname from public.groups g where g.id = _group and g.org_id = _org;
+  if _gname is null then
+    raise exception 'invite redeem rejected: link is not valid' using errcode = 'GI001';
+  end if;
+
+  -- An address that already has an account anywhere cannot sign up again
+  -- (auth emails are unique), and one approved or invited into another org
+  -- would be ambiguous at signup (TN002): refuse now rather than mail a
+  -- link that cannot work. Existence checks only; nothing is returned.
+  if exists (select 1 from public.profiles p where lower(p.email) = _email_norm)
+     or exists (
+       select 1 from public.access_requests ar
+       where lower(ar.email) = _email_norm and ar.status = 'approved' and ar.org_id <> _org)
+     or exists (
+       select 1 from public.family_invites fi
+       where lower(fi.invite_email) = _email_norm and fi.accepted_at is null and fi.org_id <> _org) then
+    raise exception 'invite redeem rejected: address cannot sign up through this link'
+      using errcode = 'GI003';
+  end if;
+
+  if exists (
+    select 1 from public.access_requests ar
+    where ar.org_id = _org and lower(ar.email) = _email_norm and ar.status = 'denied') then
+    raise exception 'invite redeem rejected: address was denied by an admin' using errcode = 'GI004';
+  end if;
+
+  -- A repeat submission by the same address refreshes the setup link and
+  -- counts as the same use, so a lost email never burns a one-use link.
+  _counted := exists (
+    select 1 from public.group_invite_uses u
+    where u.invite_id = _inv.id and u.org_id = _org and u.email = _email_norm);
+  if not _counted and _inv.max_uses is not null and (
+       select count(*) from public.group_invite_uses u
+       where u.invite_id = _inv.id and u.org_id = _org) >= _inv.max_uses then
+    raise exception 'invite redeem rejected: link is not valid' using errcode = 'GI001';
+  end if;
+
+  select ar.id into _request from public.access_requests ar
+  where ar.org_id = _org and lower(ar.email) = _email_norm
+  order by ar.created_at desc
+  limit 1
+  for update;
+
+  if _request is not null then
+    -- The latest link wins, including over a request that named another group.
+    update public.access_requests ar
+      set status = 'approved',
+          name = _name_norm,
+          reviewed_by = _inv.created_by,
+          reviewed_at = now(),
+          signup_token = _signup_token,
+          token_expires_at = _token_expires_at,
+          group_id = _group,
+          group_invite_id = _inv.id
+      where ar.id = _request and ar.org_id = _org;
+  else
+    insert into public.access_requests
+      (org_id, name, email, status, reviewed_by, reviewed_at, signup_token, token_expires_at,
+       group_id, group_invite_id)
+    values
+      (_org, _name_norm, _email_norm, 'approved', _inv.created_by, now(), _signup_token, _token_expires_at,
+       _group, _inv.id)
+    returning id into _request;
+  end if;
+
+  if not _counted then
+    insert into public.group_invite_uses (org_id, invite_id, group_id, email, outcome, access_request_id)
+    values (_org, _inv.id, _group, _email_norm, 'signup_sent', _request);
+  end if;
+
+  return query select _org, _group, _gname, _request;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."group_invite_redeem"("_token" "uuid", "_name" "text", "_email" "text", "_signup_token" "text", "_token_expires_at" timestamp with time zone) OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."group_invite_redeem"("_token" "uuid", "_name" "text", "_email" "text", "_signup_token" "text", "_token_expires_at" timestamp with time zone) IS 'New-person redemption of a group invite. Tenant anchor: the group_invites row the token selects (locked for update), never a parameter; the approved access_requests row and the use row carry its org_id. A repeat submission by the same address re-mints the setup token without a new use. service_role only. GI001 dead link, GI002 bad input, GI003 address cannot sign up, GI004 denied by an admin, GI006 signed-in caller.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."group_member_removed_leaves_teams"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO ''
@@ -765,6 +959,10 @@ declare
   _org_id uuid;
   _hint_org_id uuid;
   _role text;
+  _request_id uuid;
+  _invite_group_id uuid;
+  _invite_id uuid;
+  _voucher uuid;
 begin
   -- Email matches are case-insensitive: GoTrue lowercases auth emails while
   -- access_requests / family_invites store them as typed, so an exact
@@ -830,11 +1028,32 @@ begin
   values (_org_id, new.id)
   on conflict do nothing;
 
+  -- The approved request that admits this person may name a group — an
+  -- invite link. Its composite FK pins that group to _org_id.
+  select ar.id, ar.group_id, ar.group_invite_id
+    into _request_id, _invite_group_id, _invite_id
+  from public.access_requests ar
+  where lower(ar.email) = lower(new.email)
+    and ar.status = 'approved'
+    and ar.org_id = _org_id
+  order by ar.group_id is null, ar.created_at desc
+  limit 1;
+
+  if _role <> 'pending' and _invite_group_id is not null then
+    select gi.created_by into _voucher
+    from public.group_invites gi
+    where gi.id = _invite_id and gi.org_id = _org_id;
+    insert into public.group_members (org_id, group_id, profile_id, role, added_by)
+    values (_org_id, _invite_group_id, new.id, 'member', _voucher)
+    on conflict (group_id, profile_id) do nothing;
+    update public.group_invite_uses
+      set profile_id = new.id
+      where access_request_id = _request_id and org_id = _org_id;
   -- One-group orgs: enrol on signup, mirroring group_model_backfill(). With
   -- zero or several groups there is no right answer, so nobody is enrolled.
   -- A family-invite signup lands as 'pending' and is promoted later by the
   -- claim route, which does not enrol.
-  if _role <> 'pending'
+  elsif _role <> 'pending'
      and (select count(*) from public.groups g where g.org_id = _org_id) = 1 then
     insert into public.group_members (org_id, group_id, profile_id, role)
     select _org_id, g.id, new.id, 'member'
@@ -1237,40 +1456,19 @@ COMMENT ON FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") I
 
 
 
-CREATE OR REPLACE FUNCTION "public"."provision_organization"("_name" "text", "_slug" "text", "_owner_email" "text") RETURNS "uuid"
+CREATE OR REPLACE FUNCTION "public"."provision_organization"("_name" "text", "_owner_email" "text") RETURNS "uuid"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO ''
-    AS $_$
+    AS $$
 declare
   _org_id uuid;
 begin
-  if _slug !~ '^[a-z0-9][a-z0-9-]{1,62}$' then
-    raise exception 'invalid organization slug: %', _slug using errcode = 'TN003';
-  end if;
-
-  -- Reserved subdomain labels: slugs become host
-  -- labels once wildcard/custom-domain routing ships, so any of these would
-  -- shadow a platform host. 'default' is deliberately absent — it is the
-  -- slug of the one org that exists today (20260730010000_org_spine.sql);
-  -- add it once that org is renamed or retired. Mirrored in lib/org.ts's
-  -- RESERVED_ORG_SLUGS — keep both lists in sync. _slug is already
-  -- lowercase-only here (the TN003 regex has no case-insensitive flag), so a
-  -- plain equality match is correct.
-  if _slug = any(array[
-    'www', 'app', 'api', 'admin', 'platform', 'auth', 'mail', 'email',
-    'static', 'assets', 'cdn', 'status', 'docs', 'blog', 'help', 'support',
-    'dev', 'staging', 'preview', 'test'
-  ]) then
-    raise exception 'organization slug % is reserved', _slug using errcode = 'TN006';
-  end if;
-
   -- 1. The org itself. branding carries only the tenant-overridable keys
   -- from docs/design/DESIGN.md: display_name, logo_url, accent,
   -- reply_to.
-  insert into public.organizations (name, slug, branding, status)
+  insert into public.organizations (name, branding, status)
   values (
     _name,
-    _slug,
     jsonb_build_object('display_name', _name, 'logo_url', null, 'accent', null, 'reply_to', null),
     'active'
   )
@@ -1338,10 +1536,14 @@ begin
 
   return _org_id;
 end;
-$_$;
+$$;
 
 
-ALTER FUNCTION "public"."provision_organization"("_name" "text", "_slug" "text", "_owner_email" "text") OWNER TO "postgres";
+ALTER FUNCTION "public"."provision_organization"("_name" "text", "_owner_email" "text") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."provision_organization"("_name" "text", "_owner_email" "text") IS 'Builds a complete org in one transaction: the organizations row, the two org-level giving settings and the approved owner access request (approved_role = admin). TN004 when the owner email already has a profile, TN005 when it is approved or invited in another org. service_role only.';
+
 
 
 CREATE OR REPLACE FUNCTION "public"."review_group_join_request"("_request_id" "uuid", "_approve" boolean) RETURNS "text"
@@ -1768,6 +1970,8 @@ CREATE TABLE IF NOT EXISTS "public"."access_requests" (
     "invite_token" "uuid",
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
     "approved_role" "text",
+    "group_id" "uuid",
+    "group_invite_id" "uuid",
     CONSTRAINT "access_requests_approved_role_check" CHECK ((("approved_role" IS NULL) OR ("approved_role" = ANY (ARRAY['member'::"text", 'admin'::"text"])))),
     CONSTRAINT "access_requests_status_check" CHECK (("status" = ANY (ARRAY['pending'::"text", 'approved'::"text", 'denied'::"text"])))
 );
@@ -1777,6 +1981,10 @@ ALTER TABLE "public"."access_requests" OWNER TO "postgres";
 
 
 COMMENT ON COLUMN "public"."access_requests"."approved_role" IS 'Role handle_new_user() grants when this approved request resolves a signup. NULL means the pre-Phase-4 behavior (member). Set to admin only by provision_organization() for the founding owner, or by an org admin within their own org.';
+
+
+
+COMMENT ON COLUMN "public"."access_requests"."group_id" IS 'The group an invite link admits this person into. handle_new_user() enrols them there instead of falling back to the one-group rule.';
 
 
 
@@ -2145,6 +2353,49 @@ CREATE TABLE IF NOT EXISTS "public"."giving_funds" (
 ALTER TABLE "public"."giving_funds" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."group_invite_uses" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "invite_id" "uuid" NOT NULL,
+    "group_id" "uuid" NOT NULL,
+    "used_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "email" "text",
+    "outcome" "text" NOT NULL,
+    "profile_id" "uuid",
+    "access_request_id" "uuid",
+    CONSTRAINT "group_invite_uses_outcome_check" CHECK (("outcome" = ANY (ARRAY['signup_sent'::"text", 'joined'::"text", 'requested'::"text"]))),
+    CONSTRAINT "group_invite_uses_signup_has_email" CHECK ((("outcome" <> 'signup_sent'::"text") OR ("email" IS NOT NULL)))
+);
+
+
+ALTER TABLE "public"."group_invite_uses" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."group_invite_uses" IS 'One row per redemption of a group invite. Written only by group_invite_redeem() and group_invite_join(); profile_id is stamped by handle_new_user() when a signup_sent row''s person signs up. The count per invite is what max_uses is compared against.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."group_invites" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "group_id" "uuid" NOT NULL,
+    "token" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "created_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "expires_at" timestamp with time zone,
+    "max_uses" integer,
+    "revoked_at" timestamp with time zone,
+    CONSTRAINT "group_invites_max_uses_positive" CHECK ((("max_uses" IS NULL) OR ("max_uses" > 0)))
+);
+
+
+ALTER TABLE "public"."group_invites" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."group_invites" IS 'A link into one group. token is the plaintext the link carries; the row is read by the service client on /join/<token> and is the org anchor for everything that follows. Dead when revoked_at is set, expires_at has passed, or group_invite_uses holds max_uses rows. Never deleted by the app.';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."group_join_requests" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
@@ -2402,7 +2653,7 @@ CREATE TABLE IF NOT EXISTS "public"."organizations" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "name" "text" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "slug" "text" NOT NULL,
+    "slug" "text",
     "branding" "jsonb" DEFAULT '{}'::"jsonb" NOT NULL,
     "status" "public"."org_status" DEFAULT 'active'::"public"."org_status" NOT NULL,
     "custom_email_domain_enabled" boolean DEFAULT false NOT NULL,
@@ -2720,6 +2971,11 @@ ALTER TABLE ONLY "public"."about_page"
 
 
 ALTER TABLE ONLY "public"."access_requests"
+    ADD CONSTRAINT "access_requests_id_org_unique" UNIQUE ("id", "org_id");
+
+
+
+ALTER TABLE ONLY "public"."access_requests"
     ADD CONSTRAINT "access_requests_pkey" PRIMARY KEY ("id");
 
 
@@ -2846,6 +3102,31 @@ ALTER TABLE ONLY "public"."giving_funds"
 
 ALTER TABLE ONLY "public"."giving_funds"
     ADD CONSTRAINT "giving_funds_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."group_invite_uses"
+    ADD CONSTRAINT "group_invite_uses_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."group_invites"
+    ADD CONSTRAINT "group_invites_id_group_org_unique" UNIQUE ("id", "group_id", "org_id");
+
+
+
+ALTER TABLE ONLY "public"."group_invites"
+    ADD CONSTRAINT "group_invites_id_org_unique" UNIQUE ("id", "org_id");
+
+
+
+ALTER TABLE ONLY "public"."group_invites"
+    ADD CONSTRAINT "group_invites_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."group_invites"
+    ADD CONSTRAINT "group_invites_token_key" UNIQUE ("token");
 
 
 
@@ -3073,6 +3354,10 @@ CREATE INDEX "about_page_group_id_idx" ON "public"."about_page" USING "btree" ("
 
 
 
+CREATE INDEX "access_requests_group_invite_id_idx" ON "public"."access_requests" USING "btree" ("group_invite_id");
+
+
+
 CREATE INDEX "access_requests_invite_token_idx" ON "public"."access_requests" USING "btree" ("invite_token");
 
 
@@ -3170,6 +3455,22 @@ CREATE INDEX "giving_funds_group_id_idx" ON "public"."giving_funds" USING "btree
 
 
 CREATE INDEX "giving_funds_org_id_idx" ON "public"."giving_funds" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "group_invite_uses_invite_id_idx" ON "public"."group_invite_uses" USING "btree" ("invite_id");
+
+
+
+CREATE INDEX "group_invite_uses_org_id_idx" ON "public"."group_invite_uses" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "group_invites_group_org_idx" ON "public"."group_invites" USING "btree" ("group_id", "org_id");
+
+
+
+CREATE INDEX "group_invites_org_id_idx" ON "public"."group_invites" USING "btree" ("org_id");
 
 
 
@@ -3502,6 +3803,16 @@ ALTER TABLE ONLY "public"."about_page"
 
 
 ALTER TABLE ONLY "public"."access_requests"
+    ADD CONSTRAINT "access_requests_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."groups"("id", "org_id") ON DELETE SET NULL ("group_id");
+
+
+
+ALTER TABLE ONLY "public"."access_requests"
+    ADD CONSTRAINT "access_requests_group_invite_id_fkey" FOREIGN KEY ("group_invite_id", "org_id") REFERENCES "public"."group_invites"("id", "org_id") ON DELETE SET NULL ("group_invite_id");
+
+
+
+ALTER TABLE ONLY "public"."access_requests"
     ADD CONSTRAINT "access_requests_invite_token_fkey" FOREIGN KEY ("invite_token", "org_id") REFERENCES "public"."family_invites"("token", "org_id") ON DELETE SET NULL ("invite_token");
 
 
@@ -3683,6 +3994,41 @@ ALTER TABLE ONLY "public"."giving_funds"
 
 ALTER TABLE ONLY "public"."giving_funds"
     ADD CONSTRAINT "giving_funds_steward_id_fkey" FOREIGN KEY ("steward_id", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."group_invite_uses"
+    ADD CONSTRAINT "group_invite_uses_access_request_id_fkey" FOREIGN KEY ("access_request_id", "org_id") REFERENCES "public"."access_requests"("id", "org_id") ON DELETE SET NULL ("access_request_id");
+
+
+
+ALTER TABLE ONLY "public"."group_invite_uses"
+    ADD CONSTRAINT "group_invite_uses_invite_id_fkey" FOREIGN KEY ("invite_id", "group_id", "org_id") REFERENCES "public"."group_invites"("id", "group_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."group_invite_uses"
+    ADD CONSTRAINT "group_invite_uses_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."group_invite_uses"
+    ADD CONSTRAINT "group_invite_uses_profile_id_fkey" FOREIGN KEY ("profile_id", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE SET NULL ("profile_id");
+
+
+
+ALTER TABLE ONLY "public"."group_invites"
+    ADD CONSTRAINT "group_invites_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."group_invites"
+    ADD CONSTRAINT "group_invites_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."groups"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."group_invites"
+    ADD CONSTRAINT "group_invites_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
 
 
 
@@ -4165,10 +4511,6 @@ CREATE POLICY "Anon can read public settings" ON "public"."site_settings" FOR SE
 
 
 
-CREATE POLICY "Anyone can submit access request" ON "public"."access_requests" FOR INSERT TO "authenticated", "anon" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("status" = 'pending'::"text") AND ("reviewed_by" IS NULL) AND ("reviewed_at" IS NULL) AND ("signup_token" IS NULL) AND ("token_expires_at" IS NULL) AND ("approved_role" IS NULL)));
-
-
-
 CREATE POLICY "Fund managers can add methods" ON "public"."giving_fund_methods" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."giving_can_manage_fund"("fund_id")));
 
 
@@ -4381,6 +4723,10 @@ CREATE POLICY "Group members can view visible prayer requests" ON "public"."pray
 
 
 
+CREATE POLICY "Leaders and admins can create group invites" ON "public"."group_invites" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("created_by" = ( SELECT "auth"."uid"() AS "uid")) AND ("revoked_at" IS NULL) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("group_id"))));
+
+
+
 CREATE POLICY "Leaders and admins can delete group labels" ON "public"."group_labels" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("group_id"))));
 
 
@@ -4425,6 +4771,10 @@ CREATE POLICY "Leaders and admins can insert teams" ON "public"."teams" FOR INSE
 
 
 
+CREATE POLICY "Leaders and admins can revoke group invites" ON "public"."group_invites" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("group_id")))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("revoked_at" IS NOT NULL) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("group_id"))));
+
+
+
 CREATE POLICY "Leaders and admins can update group labels" ON "public"."group_labels" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("group_id")))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("group_id"))));
 
 
@@ -4446,6 +4796,14 @@ CREATE POLICY "Leaders and admins can update team members" ON "public"."team_mem
 
 
 CREATE POLICY "Leaders and admins can update teams" ON "public"."teams" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("group_id")))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("group_id"))));
+
+
+
+CREATE POLICY "Leaders and admins can view group invite uses" ON "public"."group_invite_uses" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("group_id"))));
+
+
+
+CREATE POLICY "Leaders and admins can view group invites" ON "public"."group_invites" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("group_id"))));
 
 
 
@@ -4650,6 +5008,12 @@ ALTER TABLE "public"."giving_fund_methods" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."giving_funds" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."group_invite_uses" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."group_invites" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."group_join_requests" ENABLE ROW LEVEL SECURITY;
 
 
@@ -4730,6 +5094,14 @@ CREATE POLICY "org isolation" ON "public"."giving_fund_methods" AS RESTRICTIVE T
 
 
 CREATE POLICY "org isolation" ON "public"."giving_funds" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."group_invite_uses" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."group_invites" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
 
@@ -5006,6 +5378,16 @@ REVOKE ALL ON FUNCTION "public"."group_create_for"("_org" "uuid", "_name" "text"
 
 
 
+REVOKE ALL ON FUNCTION "public"."group_invite_join"("_token" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."group_invite_join"("_token" "uuid") TO "authenticated";
+
+
+
+REVOKE ALL ON FUNCTION "public"."group_invite_redeem"("_token" "uuid", "_name" "text", "_email" "text", "_signup_token" "text", "_token_expires_at" timestamp with time zone) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."group_invite_redeem"("_token" "uuid", "_name" "text", "_email" "text", "_signup_token" "text", "_token_expires_at" timestamp with time zone) TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."group_member_removed_leaves_teams"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."group_member_removed_leaves_teams"() TO "service_role";
 
@@ -5129,8 +5511,8 @@ GRANT ALL ON FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid")
 
 
 
-REVOKE ALL ON FUNCTION "public"."provision_organization"("_name" "text", "_slug" "text", "_owner_email" "text") FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."provision_organization"("_name" "text", "_slug" "text", "_owner_email" "text") TO "service_role";
+REVOKE ALL ON FUNCTION "public"."provision_organization"("_name" "text", "_owner_email" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."provision_organization"("_name" "text", "_owner_email" "text") TO "service_role";
 
 
 
@@ -5278,6 +5660,20 @@ GRANT ALL ON TABLE "public"."giving_fund_methods" TO "service_role";
 GRANT ALL ON TABLE "public"."giving_funds" TO "anon";
 GRANT ALL ON TABLE "public"."giving_funds" TO "authenticated";
 GRANT ALL ON TABLE "public"."giving_funds" TO "service_role";
+
+
+
+GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."group_invite_uses" TO "authenticated";
+GRANT ALL ON TABLE "public"."group_invite_uses" TO "service_role";
+
+
+
+GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."group_invites" TO "authenticated";
+GRANT ALL ON TABLE "public"."group_invites" TO "service_role";
+
+
+
+GRANT UPDATE("revoked_at") ON TABLE "public"."group_invites" TO "authenticated";
 
 
 
