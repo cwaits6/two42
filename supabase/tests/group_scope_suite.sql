@@ -719,8 +719,8 @@ do $$
 declare
   org uuid; cal uuid; n int; err text := 'ok';
 begin
-  insert into public.organizations (name, slug, branding, status)
-    values ('Groupless', 'groupless-' || substr(gen_random_uuid()::text, 1, 8), '{}'::jsonb, 'active')
+  insert into public.organizations (name, branding, status)
+    values ('Groupless', '{}'::jsonb, 'active')
     returning id into org;
   alter table public.event_calendars alter column group_id drop not null;
   insert into public.event_calendars (org_id, name, color) values (org, 'Prayer Calls', '#2F6BA8');

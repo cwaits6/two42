@@ -352,7 +352,7 @@ grant from `anon` and `authenticated`, grants `update
 can set org settings", whole-row `id = app_request_org_id() and
 is_admin()` (created as "Admins can set directory visibility" and renamed
 when `group_creation_policy` joined it). The column grants, not the policy,
-are what keep an org admin away from `name`, `slug`, `status` and
+are what keep an org admin away from `name`, `status` and
 `custom_email_domain_enabled`; `branding_rls_suite.sql` pins both halves
 and `directory_visibility_suite.sql` pins the read matrix, the helper
 truth table, the signup enrolment rule and the admin-only write.
@@ -711,8 +711,8 @@ giving settings, and an **approved access request for the owner** — so self-se
 onboarding is org-first: provision, then create the auth user, and the
 fail-closed trigger needs no special case. Phase 4 must NOT solve
 onboarding by adding a fallback branch to `handle_new_user()`. Nothing
-routes by slug any more, so provisioning takes none and writes none;
-`organizations.slug` is nullable and awaits its drop.
+routes by slug any more, so provisioning takes none, and
+`organizations.slug` is dropped (`20261028000000_drop_org_slug.sql`).
 
 An approved access request may name a `group_id` (and `group_invite_id`):
 the group an invite link admits the person into. `handle_new_user()` enrols
@@ -852,13 +852,13 @@ platform seam).
 - The permissive `organizations` SELECT policy is written whole-row, but the
   column privileges beneath it are not: `20260801000002` revoked the
   table-level grant and re-granted a column list, and `20260802000001`
-  narrowed `anon` further to `select (id, slug, branding)` — `anon` can no
+  narrowed `anon` further to `select (id, branding)` — `anon` can no
   longer read `name`; `authenticated` keeps
-  `select (id, name, slug, branding)`. Neither role can select `status`,
+  `select (id, name, branding)`. Neither role can select `status`,
   `created_at`, or any column a later phase adds — `ADD COLUMN` grants
   nothing, so a new column is unreadable until someone lists it there on
-  purpose. An anonymous caller now resolves no org and reads no row at all;
-  the `anon` grant stays until the slug column is dropped.
+  purpose. An anonymous caller now resolves no org and reads no row at all, so
+  the remaining `anon` grant is inert; revoking it is a separate cleanup.
   Remaining gap: `branding` is a single jsonb value, so `reply_to` rides along
   with the three keys the app shell needs; column privileges cannot reach
   inside jsonb, and excluding it needs a SECURITY DEFINER projection.

@@ -158,7 +158,7 @@ invite yourself, then promote yourself.
    ```sql
    insert into public.access_requests (org_id, name, email, status, reviewed_at)
    values (
-     (select id from public.organizations where slug = 'default'),
+     (select id from public.organizations order by created_at limit 1),
      'Your Name', 'you@example.com', 'approved', now()
    );
    ```

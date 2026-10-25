@@ -176,11 +176,10 @@ select is(
     where lower(email) in ('unclaimed-owner@leak.example.test', 'pending-invitee@leak.example.test')),
   1, 'the TN005-rejected calls left no second approved access request behind');
 
--- Nothing routes by slug any more, so provisioning writes none and the
--- three-argument form is gone.
-select is(
-  (select slug from public.organizations where id = current_setting('su.org_a')::uuid),
-  null, 'provisioning writes no slug');
+-- Nothing routes by slug any more: the column and the three-argument form
+-- are both gone.
+select hasnt_column('public', 'organizations', 'slug',
+  'organizations.slug no longer exists');
 select hasnt_function('public', 'provision_organization', array['text', 'text', 'text'],
   'the three-argument provision_organization(name, slug, owner_email) no longer exists');
 

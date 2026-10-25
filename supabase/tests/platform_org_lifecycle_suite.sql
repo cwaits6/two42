@@ -30,7 +30,7 @@ select throws_ok(
   '22P02', null,
   'a status outside the enum is rejected');
 
--- ── #318: anon column grant narrowed to (id, slug, branding) ────────────────
+-- ── anon column grant narrowed to (id, branding) ─────────────────────────────
 
 select ok(
   not has_column_privilege('anon', 'public.organizations', 'name', 'select'),
@@ -38,9 +38,6 @@ select ok(
 select ok(
   has_column_privilege('anon', 'public.organizations', 'id', 'select'),
   'anon may read organizations.id');
-select ok(
-  has_column_privilege('anon', 'public.organizations', 'slug', 'select'),
-  'anon may read organizations.slug');
 select ok(
   has_column_privilege('anon', 'public.organizations', 'branding', 'select'),
   'anon may read organizations.branding');

@@ -48,9 +48,11 @@ must be set to the canonical origin; its in-code fallback is
 
 ## What was removed
 
-- The `org_domains` registry, its `org_domain_status` enum, the
-  `org_domain_worker_events` outcome log, and the `app_org_slug_for_host()`
-  resolver (`20260920000000_retire_org_domains.sql`).
+- The `org_domains` registry, its `org_domain_status` enum and the
+  `org_domain_worker_events` outcome log are retired from use
+  (`20260920000000_retire_org_domains.sql`) and still await their drop; the
+  `app_org_slug_for_host()` resolver went with `organizations.slug`
+  (`20261028000000_drop_org_slug.sql`).
 - The `attach-org-domains` edge function, its pg_cron job, and its Vercel
   API client.
 - The org-admin custom-domain page and API, and the `/platform/domains`
