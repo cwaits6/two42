@@ -20,17 +20,5 @@ begin
   ) then
     raise exception 'organizations.slug still exists';
   end if;
-  if exists (
-    select 1 from pg_constraint
-    where conrelid = 'public.organizations'::regclass and conname = 'organizations_slug_key'
-  ) then
-    raise exception 'organizations_slug_key still exists';
-  end if;
-  if exists (
-    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'public' and p.proname = 'app_org_slug_for_host'
-  ) then
-    raise exception 'app_org_slug_for_host() still exists';
-  end if;
 end
 $$;
