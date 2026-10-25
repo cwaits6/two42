@@ -1,13 +1,8 @@
 // The reminder's event time must read in the org's zone, not the runtime's
-// (UTC), and a zone the runtime cannot format in must fall back rather than
-// stop the send.
+// (UTC).
 
-import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
-import {
-  formatReminderDate,
-  intlKnowsTimeZone,
-  reminderTimeZone,
-} from "../_shared/event-time.ts";
+import { assertStringIncludes } from "jsr:@std/assert@1";
+import { formatReminderDate } from "../_shared/event-time.ts";
 
 // 7:00 PM on Tuesday 29 September 2026 in New York, as the database stores it.
 const SEVEN_PM_NY = "2026-09-29T23:00:00.000Z";
@@ -31,18 +26,4 @@ Deno.test("formatReminderDate in UTC is the stored instant", () => {
   const utc = formatReminderDate(SEVEN_PM_NY, "UTC");
   assertStringIncludes(utc, "September 29");
   assertStringIncludes(utc, "11:00 PM");
-});
-
-Deno.test("intlKnowsTimeZone accepts IANA names and refuses what Intl cannot format", () => {
-  assert(intlKnowsTimeZone("America/New_York"));
-  assert(intlKnowsTimeZone("Asia/Kolkata"));
-  assert(intlKnowsTimeZone("UTC"));
-  assertEquals(intlKnowsTimeZone("Nowhere/Bogus"), false);
-  assertEquals(intlKnowsTimeZone("posix/America/New_York"), false);
-  assertEquals(intlKnowsTimeZone(""), false);
-});
-
-Deno.test("reminderTimeZone keeps a known zone and falls back to UTC otherwise", () => {
-  assertEquals(reminderTimeZone("America/Chicago"), "America/Chicago");
-  assertEquals(reminderTimeZone("Nowhere/Bogus"), "UTC");
 });

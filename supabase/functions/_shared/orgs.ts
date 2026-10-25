@@ -18,9 +18,8 @@
 export interface Org {
   id: string;
   name: string;
-  // The IANA zone every event time is shown in. The database stores only
-  // names it knows, but this runtime's ICU may not know every one of them:
-  // format through _shared/event-time.ts, which falls back instead of throwing.
+  // The IANA zone every event time is shown in; the database stores only
+  // exact pg_timezone_names entries, so it is passed to Intl as is.
   timezone: string;
   // The raw organizations.branding jsonb. Deliberately `unknown`, not a typed
   // shape: _shared/branding.ts is the sole validator of this column, and this

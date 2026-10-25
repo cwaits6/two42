@@ -455,12 +455,12 @@ gate on what the column holds: a `before insert or update` trigger,
 `organizations_timezone_check()`, refuses with a `check_violation` anything
 but an exact, case-sensitive `pg_timezone_names` entry outside the `posix/`
 tree — the set `Intl` formats in — so a POSIX rule string, an offset or a
-case variant that `at time zone` would take never reaches a reader. The
-readers accept at least that set: `isValidTimeZone()` in `lib/time/zone.ts`
-and `intlKnowsTimeZone()` in `supabase/functions/_shared/event-time.ts` each
-ask `Intl` directly, and each falls back (to `siteConfig.timeZone`, to UTC)
-with a logged error for the one gap that remains — a zone added to the IANA
-database after the runtime's ICU was built. The Settings picker lists
+case variant that `at time zone` would take never reaches a reader, and the
+readers pass the stored name to `Intl` as is. On the web side
+`isValidTimeZone()` in `lib/time/zone.ts` asks `Intl` directly and
+`getOrgTimeZone()` falls back to `siteConfig.timeZone` with a logged error,
+so a page render cannot fail over its zone; the reminder edge function
+formats in the stored zone with no second check. The Settings picker lists
 `Intl.supportedValuesOf()`, which can run ahead of the database's zone data;
 a name the database does not yet know fails the save with an error toast
 rather than being stored. `supabase/tests/org_timezone_suite.sql` pins the
