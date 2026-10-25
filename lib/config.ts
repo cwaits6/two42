@@ -2,11 +2,7 @@ export const siteConfig = {
   name: process.env.NEXT_PUBLIC_APP_NAME || "two42",
   description:
     process.env.NEXT_PUBLIC_APP_DESCRIPTION ||
-    "A welcoming community of faith, growing together in God's Word.",
-  tagline:
-    process.env.NEXT_PUBLIC_APP_TAGLINE ||
-    "To be the body of Christ through fellowship, discipleship and the faithful study of the Word of God.",
-  logoMonogram: process.env.NEXT_PUBLIC_LOGO_MONOGRAM || "42",
+    "Software for a church's groups: one shared calendar, serving schedule, directory, announcements and prayer requests, with one sign-in for every member.",
   url: process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
   // Server components format dates in this zone; the server itself runs in UTC.
   timeZone: process.env.NEXT_PUBLIC_TIME_ZONE || "America/New_York",

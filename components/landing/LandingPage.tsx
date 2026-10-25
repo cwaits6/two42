@@ -100,6 +100,7 @@ export function LandingPage() {
             width={2360}
             height={1640}
             priority
+            fetchPriority="high"
             sizes="(min-width: 1024px) 600px, 100vw"
             className={`${SHOT} max-w-[600px]`}
           />

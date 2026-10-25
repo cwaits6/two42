@@ -12,6 +12,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { SidebarNav } from "./SidebarNav";
 import { isSidebarRoute } from "./AppShell";
 import { useSidebarModel } from "./useSidebarModel";
+import { LANDING_SECTIONS } from "@/components/landing/sections";
 import type { Profile } from "@/lib/types";
 
 interface HeaderProps {
@@ -129,15 +130,29 @@ export function Header({ profile, hasServingAccess, isPlatformAdmin = false, org
               Sign Out
             </Button>
           ) : (
-            <Button
-              variant="ghost"
-              size="lg"
-              className="text-base text-slate-600 hover:text-brand-primary"
-              nativeButton={false}
-              render={<Link href="/login" />}
-            >
-              Sign In
-            </Button>
+            <>
+              {pathname === "/" && (
+                <nav aria-label="Page sections" className="mr-2 hidden items-center gap-1 md:flex">
+                  {LANDING_SECTIONS.map((s) => (
+                    <a
+                      key={s.id}
+                      href={`#${s.id}`}
+                      className="inline-flex min-h-12 items-center rounded-lg px-3.5 text-lg font-medium text-foreground hover:text-brand-primary"
+                    >
+                      {s.label}
+                    </a>
+                  ))}
+                </nav>
+              )}
+              <Button
+                size="lg"
+                className="px-6 text-lg font-semibold"
+                nativeButton={false}
+                render={<Link href="/login" />}
+              >
+                Sign in
+              </Button>
+            </>
           )}
         </div>
       </div>
