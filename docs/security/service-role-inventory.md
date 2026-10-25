@@ -587,7 +587,8 @@ org-anchored read: `send-event-reminders` formats each reminder's event time
 through `_shared/event-time.ts` in that zone, so the mail shows the org's
 wall clock rather than the runtime's (UTC). The database stores only exact
 IANA names (`organizations_timezone_check()`), so the function passes the
-stored name to `Intl` as is. No new query and no new service-role call site.
+stored name to `Intl` as is; a name `Intl` rejects fails that org's groups into
+`failedItems[]`, never a wrong time. No new query and no new service-role call site.
 
 Both entry points additionally call `email_quota_consume()` per team/event
 batch via `_shared/quota.ts` (CWA-72), passing the org id from the

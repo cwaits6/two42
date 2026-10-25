@@ -157,6 +157,10 @@ async function runForOrg(
       if (!events?.length) continue;
 
       for (const event of events) {
+        // Before the quota reservation: a zone Intl rejects throws here and
+        // fails the group, rather than spending the org's cap on no sends.
+        const eventDate = formatReminderDate(event.start_time, org.timezone);
+
         const recipients = await resolveEventReminderRecipients(
           supabase as unknown as EventRecipientClient,
           org.id,
@@ -181,8 +185,6 @@ async function runForOrg(
         }
 
         for (const profile of recipients) {
-          const eventDate = formatReminderDate(event.start_time, org.timezone);
-
           if (await sendEmail({
             to: profile.email,
             refId: profile.id,
