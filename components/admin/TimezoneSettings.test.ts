@@ -9,11 +9,11 @@ const JULY = DateTime.fromISO("2026-07-01T12:00:00Z");
 
 describe("timeZoneLabel", () => {
   it("names the zone with its UTC offset at that moment", () => {
-    expect(timeZoneLabel("America/New_York", JULY)).toBe("America/New_York (UTC-04:00)");
+    expect(timeZoneLabel("America/New_York", JULY)).toBe("America/New York (UTC-04:00)");
     expect(timeZoneLabel("America/Phoenix", JULY)).toBe("America/Phoenix (UTC-07:00)");
     expect(timeZoneLabel("Asia/Kolkata", JULY)).toBe("Asia/Kolkata (UTC+05:30)");
     expect(timeZoneLabel("America/New_York", DateTime.fromISO("2026-12-01T12:00:00Z"))).toBe(
-      "America/New_York (UTC-05:00)"
+      "America/New York (UTC-05:00)"
     );
   });
 });
@@ -26,7 +26,7 @@ describe("timeZoneOptions", () => {
     expect(new Set(values).size).toBe(values.length);
     expect(values).toContain("Europe/London");
     expect(values).toContain("Asia/Tokyo");
-    expect(options[0].label).toBe("America/New_York (UTC-04:00)");
+    expect(options[0].label).toBe("America/New York (UTC-04:00)");
   });
 
   it("keeps the current zone listed even when the runtime's list lacks it", () => {

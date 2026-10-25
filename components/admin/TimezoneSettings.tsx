@@ -11,7 +11,9 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -31,9 +33,9 @@ export const US_TIME_ZONES = [
 
 export type TimeZoneOption = { value: string; label: string };
 
-/** "America/New_York (UTC-04:00)": the name with its offset at `now`. */
+/** "America/New York (UTC-04:00)": the name, underscores read as spaces, with its offset at `now`. */
 export function timeZoneLabel(zone: string, now: DateTime = DateTime.now()): string {
-  return `${zone} (UTC${now.setZone(zone).toFormat("ZZ")})`;
+  return `${zone.replaceAll("_", " ")} (UTC${now.setZone(zone).toFormat("ZZ")})`;
 }
 
 /**
@@ -81,6 +83,8 @@ export function TimezoneSettings({ orgId, timezone }: TimezoneSettingsProps) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const options = useMemo(() => timeZoneOptions(saved), [saved]);
+  const usOptions = options.filter((o) => US_TIME_ZONES.includes(o.value));
+  const otherOptions = options.filter((o) => !US_TIME_ZONES.includes(o.value));
   const selectedLabel = options.find((o) => o.value === selected)?.label ?? selected;
 
   async function save() {
@@ -111,15 +115,26 @@ export function TimezoneSettings({ orgId, timezone }: TimezoneSettingsProps) {
       </p>
       <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
         <Select items={options} value={selected} onValueChange={(value) => value && setSelected(value)}>
-          <SelectTrigger id="org-timezone" className="w-full text-base sm:flex-1" aria-label="Time zone">
+          <SelectTrigger id="org-timezone" className="w-full text-base sm:flex-1">
             <SelectValue>{selectedLabel}</SelectValue>
           </SelectTrigger>
           <SelectContent>
-            {options.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
+            <SelectGroup>
+              <SelectLabel>United States</SelectLabel>
+              {usOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value} className="text-base">
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+            <SelectGroup>
+              <SelectLabel>All zones</SelectLabel>
+              {otherOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value} className="text-base">
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
           </SelectContent>
         </Select>
         <Button
