@@ -43,9 +43,11 @@ interface EventsPageClientProps {
   allEvents: Event[];
   userRsvps: Record<string, Rsvp>;
   userId: string;
+  /** The org's zone, resolved by the server; every view formats in it. */
+  timeZone: string;
 }
 
-export function EventsPageClient({ groups, allEvents, userRsvps, userId }: EventsPageClientProps) {
+export function EventsPageClient({ groups, allEvents, userRsvps, userId, timeZone }: EventsPageClientProps) {
   const router = useRouter();
   const [{ view, visibleGroupIds }, dispatch] = useReducer(
     calendarViewReducer,
@@ -236,10 +238,16 @@ export function EventsPageClient({ groups, allEvents, userRsvps, userId }: Event
           events={allEvents}
           visibleGroupIds={visibleGroupIds}
           onDateClick={onDateClick}
+          timeZone={timeZone}
         />
       )}
       {view === "week" && (
-        <EventWeekView groups={groups} events={allEvents} visibleGroupIds={visibleGroupIds} />
+        <EventWeekView
+          groups={groups}
+          events={allEvents}
+          visibleGroupIds={visibleGroupIds}
+          timeZone={timeZone}
+        />
       )}
       {view === "list" && (
         <EventListView
@@ -248,6 +256,7 @@ export function EventsPageClient({ groups, allEvents, userRsvps, userId }: Event
           userRsvps={userRsvps}
           userId={userId}
           createHref={ledVisible.length === 1 ? newEventHref(ledVisible[0].id) : null}
+          timeZone={timeZone}
         />
       )}
 

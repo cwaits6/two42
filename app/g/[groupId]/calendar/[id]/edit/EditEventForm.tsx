@@ -22,7 +22,8 @@ import { GoogleMapsScript } from "@/components/GoogleMapsScript";
 import { LocationInput } from "@/components/events/LocationInput";
 import { MeetingFieldsSection } from "@/components/events/MeetingFieldsSection";
 import { groupPath } from "@/lib/groups/active";
-import { addHour, formatDateTimeLocal, isValidEndTime } from "@/lib/datetime-local";
+import { addHour, isValidEndTime } from "@/lib/datetime-local";
+import { formatEventDate, isoToLocalInput, localToUTCISO } from "@/lib/time/zone";
 import type { Event } from "@/lib/types";
 
 type EditScope = "all" | "this";
@@ -32,7 +33,16 @@ const SCOPE_ITEMS = [
   { value: "all", label: "All events in series" },
 ];
 
-export function EditEventForm({ groupId, eventId }: { groupId: string; eventId: string }) {
+export function EditEventForm({
+  groupId,
+  eventId,
+  timeZone,
+}: {
+  groupId: string;
+  eventId: string;
+  /** The org's zone, resolved by the server; the form's times are its wall clock. */
+  timeZone: string;
+}) {
   const [event, setEvent] = useState<Event | null>(null);
   const [isRsvpEnabled, setIsRsvpEnabled] = useState(true);
   const [location, setLocation] = useState("");
@@ -80,24 +90,27 @@ export function EditEventForm({ groupId, eventId }: { groupId: string; eventId: 
       let nextStartTime: string;
       let nextEndTime: string;
       if (occurrenceISO) {
-        nextStartTime = formatDateTimeLocal(new Date(occurrenceISO));
+        nextStartTime = isoToLocalInput(occurrenceISO, timeZone);
         if (eventData.end_time) {
           const duration =
             new Date(eventData.end_time).getTime() - new Date(eventData.start_time).getTime();
-          nextEndTime = formatDateTimeLocal(new Date(new Date(occurrenceISO).getTime() + duration));
+          nextEndTime = isoToLocalInput(
+            new Date(new Date(occurrenceISO).getTime() + duration).toISOString(),
+            timeZone
+          );
         } else {
           nextEndTime = "";
         }
       } else {
-        nextStartTime = formatDateTimeLocal(new Date(eventData.start_time));
-        nextEndTime = eventData.end_time ? formatDateTimeLocal(new Date(eventData.end_time)) : "";
+        nextStartTime = isoToLocalInput(eventData.start_time, timeZone);
+        nextEndTime = eventData.end_time ? isoToLocalInput(eventData.end_time, timeZone) : "";
       }
       setStartTime(nextStartTime);
       setEndTime(isValidEndTime(nextStartTime, nextEndTime) ? nextEndTime : addHour(nextStartTime));
       setLoadState("ready");
     }
     load();
-  }, [occurrenceISO, eventId, groupId, supabase]);
+  }, [occurrenceISO, eventId, groupId, supabase, timeZone]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -184,9 +197,9 @@ export function EditEventForm({ groupId, eventId }: { groupId: string; eventId: 
         title,
         description,
         location: nextLocation || null,
-        start_time: new Date(formData.get("start_time") as string).toISOString(),
+        start_time: localToUTCISO(formData.get("start_time") as string, timeZone),
         end_time: (formData.get("end_time") as string)
-          ? new Date(formData.get("end_time") as string).toISOString()
+          ? localToUTCISO(formData.get("end_time") as string, timeZone)
           : null,
         is_rsvp_enabled: isRsvpEnabled,
         meeting_url: trimmedMeetingUrl || null,
@@ -263,14 +276,7 @@ export function EditEventForm({ groupId, eventId }: { groupId: string; eventId: 
   const isRecurringSeries = !!event.recurrence_frequency && !event.series_id;
   const showScopeChoice = isRecurringSeries && !!occurrenceISO;
 
-  const occurrenceLabel = occurrenceISO
-    ? new Date(occurrenceISO).toLocaleDateString("en-US", {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-      })
-    : null;
+  const occurrenceLabel = occurrenceISO ? formatEventDate(occurrenceISO, timeZone) : null;
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-2xl">

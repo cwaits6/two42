@@ -5,6 +5,7 @@ import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
 import type { HomeData } from "@/lib/groups/home";
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({}) }));
+vi.mock("@/lib/time/orgZone", () => ({ getOrgTimeZone: async () => "America/New_York" }));
 
 const loadHomeCards = vi.fn<() => Promise<HomeData | null>>();
 vi.mock("@/lib/groups/home", () => ({

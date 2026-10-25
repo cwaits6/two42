@@ -6,6 +6,7 @@ import { getGroupCalendar } from "@/lib/groups/calendar";
 import { requireGroupLeader } from "@/lib/groups/server";
 import { siteConfig } from "@/lib/config";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
 
 export const metadata = { title: `Create Event | ${siteConfig.name}` };
 
@@ -27,7 +28,10 @@ export default async function NewEventPage({
     .single();
   if (!profile) redirect("/dashboard");
 
-  const calendar = await getGroupCalendar(supabase, profile.org_id, group.id);
+  const [calendar, timeZone] = await Promise.all([
+    getGroupCalendar(supabase, profile.org_id, group.id),
+    getOrgTimeZone(),
+  ]);
 
   return (
     <Suspense fallback={<div className="container mx-auto px-4 py-12 max-w-2xl">Loading...</div>}>
@@ -36,6 +40,7 @@ export default async function NewEventPage({
         groupName={group.name}
         orgId={profile.org_id}
         calendarId={calendar?.id ?? null}
+        timeZone={timeZone}
       />
     </Suspense>
   );

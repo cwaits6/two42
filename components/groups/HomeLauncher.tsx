@@ -2,30 +2,28 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { groupPath, type ActiveGroup } from "@/lib/groups/active";
 import { loadHomeCards, type HomeCard, type HomeEvent } from "@/lib/groups/home";
-import { siteConfig } from "@/lib/config";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
+import { formatEventTime, formatInZone } from "@/lib/time/zone";
 
-const timeZone = siteConfig.timeZone;
+// Every time below is the org's wall clock: `timeZone` is the org zone the
+// component resolves once per request.
 
-function getGreeting() {
-  const h = Number(new Date().toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone }));
+function getGreeting(timeZone: string) {
+  const h = Number(formatInZone(new Date().toISOString(), timeZone, { hour: "numeric", hour12: false }));
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   return "Good evening";
 }
 
-function nextLine(event: HomeEvent | null): string {
+function nextLine(event: HomeEvent | null, timeZone: string): string {
   if (!event) return "No upcoming events";
-  const d = new Date(event.start_time);
-  const weekday = d.toLocaleDateString("en-US", { weekday: "long", timeZone });
-  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone });
-  return `Next: ${weekday} · ${time}`;
+  const weekday = formatInZone(event.start_time, timeZone, { weekday: "long" });
+  return `Next: ${weekday} · ${formatEventTime(event.start_time, timeZone)}`;
 }
 
-function weekRowLabel(event: HomeEvent): string {
-  const d = new Date(event.start_time);
-  const day = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone });
-  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone });
-  return `${day} · ${time}`;
+function weekRowLabel(event: HomeEvent, timeZone: string): string {
+  const day = formatInZone(event.start_time, timeZone, { weekday: "short", month: "short", day: "numeric" });
+  return `${day} · ${formatEventTime(event.start_time, timeZone)}`;
 }
 
 function plural(n: number, word: string) {
@@ -35,7 +33,15 @@ function plural(n: number, word: string) {
 type CardActivity = Pick<HomeCard, "nextEvent" | "announcementCount" | "prayerCount">;
 
 /** A group card; without activity it is only the link into the group. */
-function GroupCard({ group, activity }: { group: ActiveGroup; activity: CardActivity | null }) {
+function GroupCard({
+  group,
+  activity,
+  timeZone,
+}: {
+  group: ActiveGroup;
+  activity: CardActivity | null;
+  timeZone: string;
+}) {
   return (
     <Link
       href={groupPath(group.id, "/dashboard")}
@@ -58,7 +64,9 @@ function GroupCard({ group, activity }: { group: ActiveGroup; activity: CardActi
       </div>
       {activity && (
         <>
-          <p className="mt-3 font-sans text-base text-foreground">{nextLine(activity.nextEvent)}</p>
+          <p className="mt-3 font-sans text-base text-foreground">
+            {nextLine(activity.nextEvent, timeZone)}
+          </p>
           <p className="mt-1 font-sans text-base text-muted-foreground">
             {plural(activity.announcementCount, "announcement")} ·{" "}
             {plural(activity.prayerCount, "prayer request")}
@@ -86,7 +94,10 @@ export async function HomeLauncher({
   orgId: string;
 }) {
   const supabase = await createClient();
-  const home = await loadHomeCards(supabase, { orgId, groups: memberships });
+  const [home, timeZone] = await Promise.all([
+    loadHomeCards(supabase, { orgId, groups: memberships }),
+    getOrgTimeZone(),
+  ]);
   const cards = home
     ? home.cards.map((card) => ({ group: card.group, activity: card }))
     : memberships.map((group) => ({ group, activity: null }));
@@ -96,7 +107,7 @@ export async function HomeLauncher({
     <div className="min-h-screen bg-background">
       <section className="px-4 pt-14 pb-10 md:px-14">
         <h1 className="font-serif text-5xl md:text-6xl font-medium leading-none tracking-tight text-foreground mb-9">
-          {getGreeting()}, <em className="text-brand-primary italic">{displayName}</em>.
+          {getGreeting(timeZone)}, <em className="text-brand-primary italic">{displayName}</em>.
         </h1>
 
         {!home && (
@@ -121,7 +132,7 @@ export async function HomeLauncher({
 
         <div className="grid gap-5 md:grid-cols-2">
           {cards.map(({ group, activity }) => (
-            <GroupCard key={group.id} group={group} activity={activity} />
+            <GroupCard key={group.id} group={group} activity={activity} timeZone={timeZone} />
           ))}
         </div>
       </section>
@@ -144,7 +155,7 @@ export async function HomeLauncher({
                     style={i > 0 ? { borderTop: "1px solid var(--color-border)" } : undefined}
                   >
                     <span className="font-mono text-base text-muted-foreground">
-                      {weekRowLabel(event)}
+                      {weekRowLabel(event, timeZone)}
                     </span>
                     <span className="font-serif text-xl font-medium text-foreground">
                       {event.title}

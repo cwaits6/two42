@@ -15,6 +15,8 @@ import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 import type { Event, Rsvp } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
+import { dayKey, formatEventTime, formatInZone } from "@/lib/time/zone";
 
 export async function generateMetadata({
   params,
@@ -76,6 +78,7 @@ export default async function EventDetailPage({
   const lecturesHref = groupPath(group.id, "/lectures");
   const { occurrence } = await searchParams;
   const supabase = await createClient();
+  const timeZone = await getOrgTimeZone();
 
   // A cross-group id is not found, never a different status.
   const { data: eventRaw } = await supabase
@@ -181,25 +184,17 @@ export default async function EventDetailPage({
     hasLectures = (count ?? 0) > 0;
   }
 
-  const startDate = new Date(displayStartTime);
-  const endDate = displayEndTime ? new Date(displayEndTime) : null;
   const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
   // Short date for meta strip
-  const shortDate = startDate.toLocaleDateString("en-US", {
+  const shortDate = formatInZone(displayStartTime, timeZone, {
     weekday: "short",
     month: "short",
     day: "numeric",
-    timeZone: "America/New_York",
   });
-
-  const shortYear = startDate.toLocaleDateString("en-US", {
-    year: "numeric",
-    timeZone: "America/New_York",
-  });
-
-  const formatTime = (d: Date) =>
-    d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+  const shortYear = formatInZone(displayStartTime, timeZone, { year: "numeric" });
+  const startLabel = formatEventTime(displayStartTime, timeZone);
+  const endLabel = displayEndTime ? formatEventTime(displayEndTime, timeZone) : null;
 
   // Build the edit URL — include the occurrence param for recurring series so the
   // edit page knows which occurrence is being modified.
@@ -211,18 +206,11 @@ export default async function EventDetailPage({
   );
 
   // Breadcrumb date label
-  const breadcrumbDate = startDate.toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    timeZone: "America/New_York",
-  });
+  const breadcrumbDate = formatInZone(displayStartTime, timeZone, { month: "long", day: "numeric" });
 
-  // Upcoming pill: compute days until event
-  const now = new Date();
-  // Compare dates only (strip time) in America/New_York
-  const todayNY = new Date(now.toLocaleDateString("en-US", { timeZone: "America/New_York" }));
-  const eventNY = new Date(startDate.toLocaleDateString("en-US", { timeZone: "America/New_York" }));
-  const diffMs = eventNY.getTime() - todayNY.getTime();
+  // Upcoming pill: whole calendar days until the event, by the org's calendar.
+  const diffMs =
+    Date.parse(dayKey(displayStartTime, timeZone)) - Date.parse(dayKey(new Date().toISOString(), timeZone));
   const diffDays = Math.round(diffMs / 86400000);
   let upcomingLabel: string | null = null;
   if (diffDays === 0) upcomingLabel = "Today";
@@ -321,8 +309,8 @@ export default async function EventDetailPage({
               />
               <MetaCell
                 label="Time"
-                value={formatTime(startDate)}
-                sub={endDate ? `Until ${formatTime(endDate)}` : null}
+                value={startLabel}
+                sub={endLabel ? `Until ${endLabel}` : null}
               />
               {event.location && (
                 <MetaCell
@@ -385,6 +373,7 @@ export default async function EventDetailPage({
                         startTime={displayStartTime}
                         endTime={displayEndTime}
                         leadMinutes={meeting.meeting_lead_minutes}
+                        timeZone={timeZone}
                         recordingsHref={hasLectures ? lecturesHref : null}
                       />
                     </div>
@@ -402,6 +391,7 @@ export default async function EventDetailPage({
                       endTime={displayEndTime}
                       location={event.location}
                       description={event.description}
+                      timeZone={timeZone}
                     />
                     <SubscribeToEventButton eventId={event.id} />
                   </div>
@@ -427,6 +417,7 @@ export default async function EventDetailPage({
                     startTime={displayStartTime}
                     endTime={displayEndTime}
                     leadMinutes={meeting.meeting_lead_minutes}
+                    timeZone={timeZone}
                     recordingsHref={hasLectures ? lecturesHref : null}
                   />
                 </div>
@@ -443,6 +434,7 @@ export default async function EventDetailPage({
                   endTime={displayEndTime}
                   location={event.location}
                   description={event.description}
+                  timeZone={timeZone}
                 />
                 <SubscribeToEventButton eventId={event.id} />
               </div>

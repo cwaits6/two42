@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
+import luxonPlugin from "@fullcalendar/luxon3";
 import type { EventClickArg, EventInput } from "@fullcalendar/core";
 import type { DateClickArg } from "@fullcalendar/interaction";
 import { groupTextColor } from "@/lib/groups/settings";
@@ -19,6 +20,8 @@ interface EventCalendarViewProps {
   visibleGroupIds: ReadonlySet<string>;
   /** A day click creates an event when the viewer leads exactly one visible group. */
   onDateClick?: (date: string) => void;
+  /** The org's zone, resolved by the server. The luxon plugin is what lets FullCalendar honour a named zone. */
+  timeZone: string;
 }
 
 export default function EventCalendarView({
@@ -26,6 +29,7 @@ export default function EventCalendarView({
   events,
   visibleGroupIds,
   onDateClick,
+  timeZone,
 }: EventCalendarViewProps) {
   const router = useRouter();
   const calendarRef = useRef<FullCalendar>(null);
@@ -79,10 +83,10 @@ export default function EventCalendarView({
 
         <FullCalendar
           ref={calendarRef}
-          plugins={[dayGridPlugin, interactionPlugin]}
+          plugins={[dayGridPlugin, interactionPlugin, luxonPlugin]}
           initialView="dayGridMonth"
           headerToolbar={{ left: "today", center: "title", right: "" }}
-          timeZone="local"
+          timeZone={timeZone}
           events={filteredEvents}
           eventClick={handleEventClick}
           dateClick={handleDateClick}

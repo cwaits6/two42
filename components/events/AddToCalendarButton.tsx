@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { AddToCalendarButton as AtcButton } from "add-to-calendar-button-react";
+import { isoToLocalInput } from "@/lib/time/zone";
 
 interface AddToCalendarButtonProps {
   eventTitle: string;
@@ -9,11 +10,11 @@ interface AddToCalendarButtonProps {
   endTime?: string | null;
   location?: string | null;
   description?: string | null;
+  /** The org's zone, resolved by the server; the wall-clock fields and the TZID handed to the calendar apps. */
+  timeZone: string;
   compact?: boolean;
   instance?: string | number;
 }
-
-const TZ = "America/New_York";
 const detailButtonStyle = [
   "--btn-background:var(--card)",
   "--btn-hover-background:var(--color-brand-warm)",
@@ -67,29 +68,10 @@ const compactButtonStyle = [
   "--list-padding:0.8em 1em",
 ].join(";");
 
-function formatDate(iso: string): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date(iso));
-  const y = parts.find(p => p.type === "year")!.value;
-  const m = parts.find(p => p.type === "month")!.value;
-  const d = parts.find(p => p.type === "day")!.value;
-  return `${y}-${m}-${d}`;
-}
-
-function formatTime(iso: string): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: TZ,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(new Date(iso));
-  const h = parts.find(p => p.type === "hour")!.value;
-  const min = parts.find(p => p.type === "minute")!.value;
-  return `${h}:${min}`;
+/** The wall-clock date and time in `zone`, in the `YYYY-MM-DD` / `HH:mm` shapes the button takes. */
+function wallClock(iso: string, zone: string): { date: string; time: string } {
+  const [date, time] = isoToLocalInput(iso, zone).split("T");
+  return { date, time };
 }
 
 export function AddToCalendarButton({
@@ -98,6 +80,7 @@ export function AddToCalendarButton({
   endTime,
   location,
   description,
+  timeZone,
   compact,
   instance,
 }: AddToCalendarButtonProps) {
@@ -123,15 +106,18 @@ export function AddToCalendarButton({
     );
   }
 
+  const start = wallClock(startTime, timeZone);
+  const end = wallClock(effectiveEndTime, timeZone);
+
   return (
     <AtcButton
       instance={instance}
       name={eventTitle}
-      startDate={formatDate(startTime)}
-      startTime={formatTime(startTime)}
-      endDate={formatDate(effectiveEndTime)}
-      endTime={formatTime(effectiveEndTime)}
-      timeZone={TZ}
+      startDate={start.date}
+      startTime={start.time}
+      endDate={end.date}
+      endTime={end.time}
+      timeZone={timeZone}
       location={location || undefined}
       description={description ?? undefined}
       options={["Apple", "Google", "iCal", "Outlook.com", "Microsoft365"]}
