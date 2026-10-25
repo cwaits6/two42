@@ -27,16 +27,17 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * The cards and "This week" rows for Home: one read per table across the
  * member's groups, then split per group. The client is a parameter and so
  * untyped as to privilege; every chain carries the caller's validated
- * `orgId` and the member's group ids.
+ * `orgId` and the member's group ids. Series expand in `timeZone`, the org's
+ * zone, so the server's clock never shifts an occurrence's hour.
  *
  * Resolves to null when any read fails: an empty week and zero counts would
  * read as a confident "nothing happening", so the caller renders the failure.
  */
 export async function loadHomeCards(
   client: SupabaseClient<Database>,
-  opts: { orgId: string; groups: ActiveGroup[] }
+  opts: { orgId: string; groups: ActiveGroup[]; timeZone: string }
 ): Promise<HomeData | null> {
-  const { orgId, groups } = opts;
+  const { orgId, groups, timeZone } = opts;
   const groupIds = groups.map((g) => g.id);
   const now = new Date();
   const nowISO = now.toISOString();
@@ -81,7 +82,7 @@ export async function loadHomeCards(
     return null;
   }
 
-  const occurrences = expandUpcomingEvents((events.data ?? []) as Event[], windowStart);
+  const occurrences = expandUpcomingEvents((events.data ?? []) as Event[], timeZone, windowStart);
   const thisWeek: ThisWeekRow[] = occurrences
     .filter((e) => {
       const start = new Date(e.start_time).getTime();

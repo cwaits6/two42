@@ -94,10 +94,8 @@ export async function HomeLauncher({
   orgId: string;
 }) {
   const supabase = await createClient();
-  const [home, timeZone] = await Promise.all([
-    loadHomeCards(supabase, { orgId, groups: memberships }),
-    getOrgTimeZone(),
-  ]);
+  const timeZone = await getOrgTimeZone();
+  const home = await loadHomeCards(supabase, { orgId, groups: memberships, timeZone });
   const cards = home
     ? home.cards.map((card) => ({ group: card.group, activity: card }))
     : memberships.map((group) => ({ group, activity: null }));

@@ -162,7 +162,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
 
   // Keep the current occurrence on the hero through its live window plus a
   // short grace period (ended state points to the recording), then roll over.
-  const occurrences = expandUpcomingEvents((rawEvents ?? []) as Event[], windowStart);
+  const occurrences = expandUpcomingEvents((rawEvents ?? []) as Event[], timeZone, windowStart);
   const nextEvent =
     occurrences.find(
       (e) => meetingEndMs(e.start_time, e.end_time) + ENDED_GRACE_MS > nowDate.getTime()

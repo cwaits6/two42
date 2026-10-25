@@ -37,7 +37,7 @@ export default function EventCalendarView({
   const colors = useMemo(() => new Map(groups.map((g) => [g.id, g.color])), [groups]);
 
   const filteredEvents: EventInput[] = useMemo(() => {
-    return expandVisibleEvents(events, visibleGroupIds).map((e) => {
+    return expandVisibleEvents(events, visibleGroupIds, timeZone).map((e) => {
       const color = colors.get(e.group_id) ?? "var(--color-brand-primary)";
       return {
         id: e.id,
@@ -50,7 +50,7 @@ export default function EventCalendarView({
         extendedProps: { event: e },
       };
     });
-  }, [events, visibleGroupIds, colors]);
+  }, [events, visibleGroupIds, timeZone, colors]);
 
   const handleEventClick = (info: EventClickArg) => {
     router.push(eventDetailHref(info.event.extendedProps.event as Event));

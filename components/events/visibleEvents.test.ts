@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { expandVisibleEvents } from "./visibleEvents";
 import type { Event } from "@/lib/types";
 
+const NY = "America/New_York";
+
 const event = (overrides: Partial<Event>): Event =>
   ({
     id: "e",
@@ -20,7 +22,7 @@ describe("expandVisibleEvents", () => {
       event({ id: "a", group_id: "g1" }),
       event({ id: "b", group_id: "g2" }),
     ];
-    expect(expandVisibleEvents(events, new Set(["g1"])).map((e) => e.id)).toEqual(["a"]);
+    expect(expandVisibleEvents(events, new Set(["g1"]), NY).map((e) => e.id)).toEqual(["a"]);
   });
 
   it("lets an exception row of a hidden group still suppress its series occurrence", () => {
@@ -40,8 +42,8 @@ describe("expandVisibleEvents", () => {
       start_time: "2026-09-09T18:00:00.000Z",
     });
     const visibleOnly = new Set(["g1"]);
-    const withException = expandVisibleEvents([series, exception], visibleOnly);
-    const without = expandVisibleEvents([series], visibleOnly);
+    const withException = expandVisibleEvents([series, exception], visibleOnly, NY);
+    const without = expandVisibleEvents([series], visibleOnly, NY);
     expect(without.some((e) => e.start_time.startsWith("2026-09-08"))).toBe(true);
     expect(withException.some((e) => e.start_time.startsWith("2026-09-08"))).toBe(false);
   });

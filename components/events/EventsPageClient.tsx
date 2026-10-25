@@ -97,8 +97,8 @@ export function EventsPageClient({ groups, allEvents, userRsvps, userId, timeZon
   // For the list view, expand recurring events from the ±1-year window and
   // keep upcoming occurrences of the visible groups.
   const upcomingVisible = useMemo(
-    () => expandUpcomingEvents(allEvents.filter((e) => visibleGroupIds.has(e.group_id))),
-    [allEvents, visibleGroupIds]
+    () => expandUpcomingEvents(allEvents.filter((e) => visibleGroupIds.has(e.group_id)), timeZone),
+    [allEvents, visibleGroupIds, timeZone]
   );
 
   // Add event targets a group the viewer leads. One such visible group is a

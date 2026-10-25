@@ -67,7 +67,7 @@ export default function EventWeekView({ groups, events, visibleGroupIds, timeZon
     selectedKey && inWeek(selectedKey) ? selectedKey : inWeek(todayKey) ? todayKey : dayKey(days[0]);
 
   const columns = useMemo(
-    () => buildColumns(days, groups, expandVisibleEvents(events, visibleGroupIds), timeZone),
+    () => buildColumns(days, groups, expandVisibleEvents(events, visibleGroupIds, timeZone), timeZone),
     [days, groups, events, visibleGroupIds, timeZone]
   );
   const phoneColumn = columns.find((c) => c.key === phoneKey) ?? columns[0];
