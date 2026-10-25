@@ -52,7 +52,9 @@ BEGIN
     RAISE EXCEPTION 'first-redeemer.sql holds well-known development logins and only runs on the local Supabase stack';
   END IF;
 
-  SELECT id INTO _org FROM public.organizations WHERE name = 'First Redeemer Church';
+  -- The demo's own group id is the rerun marker: a same-named organization
+  -- that this script did not create is never adopted.
+  SELECT org_id INTO _org FROM public.groups WHERE id = 'de3c0000-0000-0000-0000-00000000c001';
   IF _org IS NULL THEN
     _org := public.provision_organization('First Redeemer Church', 'susan.anderson@example.test');
   END IF;
