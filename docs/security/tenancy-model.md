@@ -441,6 +441,24 @@ org switch says — private can only hide more, never less) and
 still reads no `groups` row, so `/g/<id>` stays a 404 for them, and a
 private group is not a new kind of row but a flag on one.
 
+### Org time zone
+
+`organizations.timezone text not null default 'America/New_York'`
+(`20261029000000_org_timezone.sql`) is the one zone every event time is
+entered and displayed in; it is a display setting, read by no policy and no
+definer function. Same grant shape as the other org settings: `anon` has no
+grant on the column, `authenticated` reads it (every signed-in member's
+event surfaces format in it, through the request-scoped
+`getOrgTimeZone()` in `lib/time/orgZone.ts`), and the org's own admin writes
+it through the single org-settings UPDATE policy. A `before insert or update`
+trigger, `organizations_timezone_check()`, refuses a name Postgres does not
+know with a `check_violation`, so the app's `Intl.supportedValuesOf()` list
+and the database agree on what a zone is. `supabase/tests/org_timezone_suite.sql`
+pins the default, the grants, the admin-only write (a member's and another
+org's admin's UPDATE each touch zero rows) and the rejection. The edge
+functions read the same column on `listActiveOrgs()`'s org-anchored select
+(see `service-role-inventory.md`, Edge Functions).
+
 `discoverable_groups()` is the one read behind Find a group and
 Directory › Groups. Tenant anchor: the caller's own `profiles` row
 (`auth.uid()`, not pending); it returns the caller's own groups always,

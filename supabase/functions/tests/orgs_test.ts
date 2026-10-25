@@ -56,18 +56,21 @@ function makeFakeClient(result: {
 const orgA: Org = {
   id: "a-id",
   name: "Org A",
+  timezone: "America/New_York",
   branding: { display_name: "Org A Fellowship", accent: "#2E6F5E" },
   org_email_domains: [{ domain: "org-a.example", status: "verified" }],
 };
 const orgB: Org = {
   id: "b-id",
   name: "Org B",
+  timezone: "America/Chicago",
   branding: {},
   org_email_domains: [],
 };
 const orgC: Org = {
   id: "c-id",
   name: "Org C",
+  timezone: "America/New_York",
   branding: null,
   org_email_domains: [],
 };
@@ -76,7 +79,7 @@ Deno.test("listActiveOrgs filters on status = active and orders by id", async ()
   const { client, recorded } = makeFakeClient({ data: [orgA, orgB], error: null });
   const orgs = await listActiveOrgs(client);
   assertEquals(recorded.from, "organizations");
-  assertEquals(recorded.select, "id, name, branding, org_email_domains(domain, status)");
+  assertEquals(recorded.select, "id, name, branding, timezone, org_email_domains(domain, status)");
   assertEquals(recorded.eq, ["status", "active"]);
   assertEquals(recorded.order, "id");
   assertEquals(orgs, [orgA, orgB]);

@@ -180,12 +180,14 @@ async function runForOrg(
         }
 
         for (const profile of recipients) {
+          // The org's wall clock, not the runtime's (UTC).
           const eventDate = new Date(event.start_time).toLocaleDateString("en-US", {
             weekday: "long",
             month: "long",
             day: "numeric",
             hour: "numeric",
             minute: "2-digit",
+            timeZone: org.timezone,
           });
 
           if (await sendEmail({
