@@ -5,8 +5,8 @@
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4-06B6D4?style=flat-square&logo=tailwindcss)](https://tailwindcss.com/)
 [![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=flat-square&logo=supabase)](https://supabase.com/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](./LICENSE)
-[![Deploy with Vercel](https://img.shields.io/badge/Deploy%20with-Vercel-black?style=flat-square&logo=vercel)](https://vercel.com/new/clone?repository-url=https://github.com/codyhinz/incouragers)
-[![Open Source](https://img.shields.io/badge/Open-Source-orange?style=flat-square&logo=opensourceinitiative)](https://github.com/codyhinz/incouragers)
+[![Deploy with Vercel](https://img.shields.io/badge/Deploy%20with-Vercel-black?style=flat-square&logo=vercel)](https://vercel.com/new/clone?repository-url=https://github.com/cwaits6/two42)
+[![Open Source](https://img.shields.io/badge/Open-Source-orange?style=flat-square&logo=opensourceinitiative)](https://github.com/cwaits6/two42)
 
 **A purpose-built web app for church connection groups — replacing Facebook groups with a warm, simple community platform.**
 
@@ -91,8 +91,8 @@ two42 was built to solve exactly that. It has since been open-sourced so other g
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/codyhinz/incouragers.git
-   cd incouragers
+   git clone https://github.com/cwaits6/two42.git
+   cd two42
    npm install
    ```
 
@@ -210,7 +210,7 @@ panel at runtime.
 
 ## Deploying to Production
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/codyhinz/incouragers)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/cwaits6/two42)
 
 1. Push your code to GitHub
 2. Connect the repo at [vercel.com/new](https://vercel.com/new)

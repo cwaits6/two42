@@ -8,8 +8,8 @@ const html = renderToStaticMarkup(createElement(Footer));
 const hrefs = [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1]);
 
 describe("Footer", () => {
-  it("links to GitHub, the self-host guide and the contact address, nothing else", () => {
-    expect(hrefs).toEqual([GITHUB_URL, SELF_HOST_URL, `mailto:${CONTACT_EMAIL}`]);
+  it("links to GitHub, the self-host guide, Privacy, Terms and the contact address, nothing else", () => {
+    expect(hrefs).toEqual([GITHUB_URL, SELF_HOST_URL, "/privacy", "/terms", `mailto:${CONTACT_EMAIL}`]);
   });
 
   it("carries the wordmark and the current year", () => {

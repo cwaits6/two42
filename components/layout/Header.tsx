@@ -100,6 +100,8 @@ export function Header({ profile, hasServingAccess, isPlatformAdmin = false, org
             <img
               src="/brand/two42-wordmark.svg"
               alt={siteConfig.name}
+              width={108}
+              height={28}
               className="h-7 w-auto"
             />
           </Link>
@@ -242,6 +244,8 @@ function NavDrawer({
             <img
               src="/brand/two42-wordmark.svg"
               alt={siteConfig.name}
+              width={108}
+              height={28}
               className="h-7 w-auto"
             />
           </div>

@@ -63,7 +63,7 @@ const ALSO_INCLUDED = [
 export function LandingPage() {
   return (
     <div className="flex flex-col text-lg leading-normal">
-      <section id="top" className={`${WRAP} flex flex-wrap items-center gap-14 py-16 md:py-20`}>
+      <section id="top" className={`${WRAP} flex flex-wrap items-center gap-10 py-12 md:gap-14 md:py-20`}>
         <div className="flex min-w-0 flex-[1_1_520px] flex-col items-start gap-6">
           <Eyebrow>For churches and their groups</Eyebrow>
           <h1 className={`${DISPLAY} text-[clamp(2.5rem,5.2vw,3.875rem)] leading-[1.05]`}>
@@ -108,7 +108,7 @@ export function LandingPage() {
       </section>
 
       <section id={SECTION_IDS.features} className="scroll-mt-20 border-y border-border bg-white">
-        <div className={`${WRAP} flex flex-col gap-20 py-20`}>
+        <div className={`${WRAP} flex flex-col gap-14 py-14 md:gap-20 md:py-20`}>
           <div className="flex max-w-[680px] flex-col gap-3">
             <Eyebrow rule="none">What&rsquo;s inside</Eyebrow>
             <h2 className={`${DISPLAY} text-[clamp(1.875rem,3.4vw,2.625rem)] leading-[1.1]`}>
@@ -116,7 +116,7 @@ export function LandingPage() {
             </h2>
           </div>
           {FEATURES.map((f) => (
-            <div key={f.title} className="grid items-center gap-12 md:grid-cols-2">
+            <div key={f.title} className="grid items-center gap-6 md:grid-cols-2 md:gap-12">
               <div className="flex flex-col gap-3.5">
                 <h3 className={`${DISPLAY} text-3xl leading-[1.1] md:text-[2.125rem]`}>{f.title}</h3>
                 <p className="text-xl leading-relaxed text-muted-foreground">{f.text}</p>
@@ -134,7 +134,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section className={`${WRAP} flex flex-col items-center gap-5 py-24 text-center`}>
+      <section className={`${WRAP} flex flex-col items-center gap-5 py-16 text-center md:py-24`}>
         <figure className="flex flex-col items-center gap-5">
           <blockquote
             className={`${DISPLAY} max-w-[920px] text-[clamp(1.625rem,3vw,2.375rem)] italic leading-[1.3]`}
@@ -149,7 +149,7 @@ export function LandingPage() {
       </section>
 
       <section className="bg-foreground text-background">
-        <div className={`${WRAP} flex flex-col gap-6 py-22`}>
+        <div className={`${WRAP} flex flex-col gap-6 py-16 md:py-22`}>
           <h2 className={`${DISPLAY} max-w-[880px] text-[clamp(2rem,3.6vw,2.75rem)] leading-[1.1]`}>
             Everything in one place
           </h2>
@@ -167,7 +167,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section className={`${WRAP} flex flex-wrap gap-x-16 gap-y-10 py-20`}>
+      <section className={`${WRAP} flex flex-wrap gap-x-16 gap-y-6 py-14 md:gap-y-10 md:py-20`}>
         <h2 className={`${DISPLAY} flex-[0_1_280px] text-[2.125rem] leading-[1.1]`}>Also included</h2>
         <ul className="grid min-w-0 flex-[1_1_560px] grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-x-10 text-lg">
           {ALSO_INCLUDED.map((item) => (
@@ -179,7 +179,7 @@ export function LandingPage() {
       </section>
 
       <section id={SECTION_IDS.members} className="scroll-mt-20 border-y border-border bg-white">
-        <div className={`${WRAP} flex flex-wrap items-center justify-between gap-8 py-18`}>
+        <div className={`${WRAP} flex flex-wrap items-center justify-between gap-8 py-14 md:py-18`}>
           <div className="flex min-w-0 flex-[1_1_520px] flex-col items-start gap-3">
             <Eyebrow rule="none">For members</Eyebrow>
             <h2 className={`${DISPLAY} text-[clamp(1.875rem,3.2vw,2.375rem)] leading-[1.1]`}>
@@ -194,7 +194,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section id={SECTION_IDS.open} className={`${WRAP} flex scroll-mt-20 flex-col gap-4 py-20`}>
+      <section id={SECTION_IDS.open} className={`${WRAP} flex scroll-mt-20 flex-col gap-4 py-14 md:py-20`}>
         <h2 className={`${DISPLAY} text-[2.125rem] leading-[1.1]`}>Open source</h2>
         <p className="max-w-[760px] text-xl leading-relaxed text-muted-foreground">
           two42 is open source under AGPL-3.0, so a church never has to wonder what the software
@@ -212,7 +212,7 @@ export function LandingPage() {
       </section>
 
       <section id="contact" className="scroll-mt-20 border-t border-border bg-white">
-        <div className={`${WRAP} flex flex-col items-start gap-5 pt-20 pb-22`}>
+        <div className={`${WRAP} flex flex-col items-start gap-5 pt-14 pb-16 md:pt-20 md:pb-22`}>
           <h2 className={`${DISPLAY} max-w-[760px] text-[clamp(2rem,3.6vw,2.75rem)] leading-[1.1]`}>
             Bring your church&rsquo;s groups onto two42.
           </h2>

@@ -1,8 +1,11 @@
+import Link from "next/link";
 import { CONTACT_EMAIL, GITHUB_URL, SELF_HOST_URL } from "@/components/landing/sections";
 
 const LINKS = [
   { href: GITHUB_URL, label: "GitHub" },
   { href: SELF_HOST_URL, label: "Self-host guide" },
+  { href: "/privacy", label: "Privacy" },
+  { href: "/terms", label: "Terms" },
   { href: `mailto:${CONTACT_EMAIL}`, label: "Contact" },
 ];
 
@@ -15,13 +18,13 @@ export function Footer() {
         </span>
         <nav aria-label="Footer" className="flex flex-wrap gap-x-6 gap-y-1">
           {LINKS.map((link) => (
-            <a
+            <Link
               key={link.label}
               href={link.href}
               className="inline-flex min-h-11 items-center text-base hover:text-brand-accent"
             >
               {link.label}
-            </a>
+            </Link>
           ))}
         </nav>
         <span className="text-base text-background/80">&copy; {new Date().getFullYear()} two42</span>
