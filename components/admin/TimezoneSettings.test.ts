@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { DateTime } from "luxon";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
@@ -82,11 +82,5 @@ describe("saveTimeZone", () => {
     expect(
       await saveTimeZone(client({ data: null, error: { message: "boom" } }, {}), "org-1", "America/Chicago")
     ).toBe(false);
-  });
-
-  it("does not touch the client when only reading labels", () => {
-    const spy = vi.fn();
-    timeZoneOptions("America/New_York", JULY);
-    expect(spy).not.toHaveBeenCalled();
   });
 });
