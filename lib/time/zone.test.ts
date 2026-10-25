@@ -8,6 +8,7 @@ import {
   isValidTimeZone,
   isoToLocalInput,
   localToUTCISO,
+  relativeDay,
 } from "./zone";
 
 const NY = "America/New_York";
@@ -113,5 +114,32 @@ describe.each([
     expect(formatEventTime(SEVEN_PM_NY, NY)).toBe("7:00 PM");
     expect(formatEventDate(SEVEN_PM_NY, NY)).toBe("Tuesday, September 29, 2026");
     expect(dayKey(SEVEN_PM_NY, NY)).toBe("2026-09-29");
+  });
+});
+
+describe("relativeDay", () => {
+  const LA = "America/Los_Angeles";
+
+  it("calls the next calendar date tomorrow on the autumn change-over day", () => {
+    // 12:30 AM PDT on 1 November 2026; the day has 25 hours, so now + 24 h is still the 1st.
+    const now = new Date("2026-11-01T07:30:00.000Z");
+    expect(relativeDay("2026-11-01T20:00:00.000Z", LA, now)).toBe("today");
+    expect(relativeDay("2026-11-02T20:00:00.000Z", LA, now)).toBe("tomorrow");
+    expect(relativeDay("2026-11-03T20:00:00.000Z", LA, now)).toBe("in 2 days");
+  });
+});
+
+describe("the repeated hour on the autumn change-over day", () => {
+  const FIRST_130 = "2026-11-01T08:30:00.000Z"; // 1:30 AM PDT
+  const SECOND_130 = "2026-11-01T09:30:00.000Z"; // 1:30 AM PST
+
+  it("shows both instants as the same local value on the same day", () => {
+    expect(isoToLocalInput(FIRST_130, "America/Los_Angeles")).toBe("2026-11-01T01:30");
+    expect(isoToLocalInput(SECOND_130, "America/Los_Angeles")).toBe("2026-11-01T01:30");
+    expect(dayKey(SECOND_130, "America/Los_Angeles")).toBe("2026-11-01");
+  });
+
+  it("reads the local value back as the first occurrence, so the second cannot round-trip", () => {
+    expect(localToUTCISO("2026-11-01T01:30", "America/Los_Angeles")).toBe(FIRST_130);
   });
 });

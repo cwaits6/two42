@@ -11,7 +11,7 @@ import { meetingEndMs, ENDED_GRACE_MS, type MeetingFields } from "@/lib/meetings
 import type { Event, Rsvp } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
-import { dayKey, formatEventTime, formatInZone } from "@/lib/time/zone";
+import { formatEventTime, formatInZone, relativeDay } from "@/lib/time/zone";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -48,18 +48,6 @@ function todayLabel(timeZone: string): string {
   const weekday = formatInZone(now, timeZone, { weekday: "long" });
   const date = formatInZone(now, timeZone, { month: "short", day: "numeric" });
   return `${weekday} · ${date}`;
-}
-
-function relativeDay(startTime: string, timeZone: string): string {
-  const today = new Date();
-  const startKey = dayKey(startTime, timeZone);
-  if (startKey === dayKey(today.toISOString(), timeZone)) return "today";
-  const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-  if (startKey === dayKey(tomorrow.toISOString(), timeZone)) return "tomorrow";
-  const days = Math.round(
-    (Date.parse(startKey) - Date.parse(dayKey(today.toISOString(), timeZone))) / (24 * 60 * 60 * 1000)
-  );
-  return days > 1 ? `in ${days} days` : eventWeekday(startTime, timeZone);
 }
 
 function excerpt(content: string): string {

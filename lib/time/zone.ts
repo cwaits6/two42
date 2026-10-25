@@ -67,3 +67,18 @@ export function formatEventRange(startIso: string, endIso: string | null, zone: 
 export function dayKey(iso: string, zone: string): string {
   return zoned(iso, zone).toISODate() ?? "";
 }
+
+/**
+ * "today", "tomorrow", "in N days", or the weekday, by calendar day in `zone`.
+ * Tomorrow is the next calendar date, not now + 24 h, which lands on the same
+ * date on the autumn change-over day.
+ */
+export function relativeDay(startIso: string, zone: string, now: Date = new Date()): string {
+  const startKey = dayKey(startIso, zone);
+  const todayKey = dayKey(now.toISOString(), zone);
+  if (startKey === todayKey) return "today";
+  const tomorrowKey = zoned(todayKey, zone).plus({ days: 1 }).toISODate();
+  if (startKey === tomorrowKey) return "tomorrow";
+  const days = Math.round((Date.parse(startKey) - Date.parse(todayKey)) / (24 * 60 * 60 * 1000));
+  return days > 1 ? `in ${days} days` : formatInZone(startIso, zone, { weekday: "long" });
+}
