@@ -14,6 +14,7 @@ import { siteConfig } from "@/lib/config";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 import type { Event, Rsvp } from "@/lib/types";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 
 export async function generateMetadata({
   params,
@@ -88,9 +89,7 @@ export default async function EventDetailPage({
 
   const event = eventRaw as Event;
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getOptionalUser();
 
   // requireActiveGroup() admitted only an approved member of this group.
   const isLeader = group.role === "leader";

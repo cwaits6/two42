@@ -5,15 +5,14 @@ import { DisplayCard } from "./DisplayCard";
 import { SignInSecurityCard } from "./SignInSecurityCard";
 import { NotificationsCard } from "./NotificationsCard";
 import { FeedbackCard } from "./FeedbackCard";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 
 export const metadata = { title: `Settings | ${siteConfig.name}` };
 
 export default async function SettingsPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getOptionalUser();
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase

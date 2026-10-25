@@ -10,6 +10,7 @@ import { JoinMeetingBlock } from "@/components/events/JoinMeetingBlock";
 import { expandUpcomingEvents } from "@/lib/recurrence";
 import { meetingEndMs, ENDED_GRACE_MS, type MeetingFields } from "@/lib/meetings";
 import type { Event, Rsvp } from "@/lib/types";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -90,9 +91,7 @@ function prayerCategoryLabel(category: string | null): string {
 /** One group's dashboard: its next meeting, your serving turns, its announcements and prayer. */
 export async function GroupDashboard({ group }: { group: ActiveGroup }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getOptionalUser();
   if (!user) redirect("/login");
 
   const nowDate = new Date();

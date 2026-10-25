@@ -16,11 +16,13 @@ type MockClientConfig = {
   };
 };
 
-const getUser = vi.fn(async () => ({ data: { user: null } }));
+const getClaims = vi.fn<
+  () => Promise<{ data: { claims: { sub: string } } | null }>
+>(async () => ({ data: null }));
 const createServerClient = vi.fn<
   (url: string, key: string, config: MockClientConfig) => unknown
 >(() => ({
-  auth: { getUser },
+  auth: { getClaims },
   rpc: vi.fn(async () => ({ data: null, error: null })),
   from: vi.fn(),
 }));
@@ -127,9 +129,7 @@ describe("legacy group routes and the group cookie", () => {
     profile?: Row | null;
     memberships?: Row[];
   }) {
-    getUser.mockResolvedValue({
-      data: { user: { id: "user-1" } as unknown as null },
-    });
+    getClaims.mockResolvedValue({ data: { claims: { sub: "user-1" } } });
     const profile =
       opts.profile === undefined ? { role: "member", org_id: "org-1" } : opts.profile;
     from.mockImplementation((table: string) => {
@@ -161,10 +161,10 @@ describe("legacy group routes and the group cookie", () => {
 
   beforeEach(() => {
     from.mockReset();
-    getUser.mockReset();
-    getUser.mockResolvedValue({ data: { user: null } });
+    getClaims.mockReset();
+    getClaims.mockResolvedValue({ data: null });
     createServerClient.mockImplementation(() => ({
-      auth: { getUser },
+      auth: { getClaims },
       rpc: vi.fn(async () => ({ data: null, error: null })),
       from,
     }));
@@ -200,7 +200,7 @@ describe("legacy group routes and the group cookie", () => {
     signedIn({ memberships: membershipRows });
     expect(location(await updateSession(get("/serving/go?token=x")))).toBeNull();
 
-    getUser.mockResolvedValue({ data: { user: null } });
+    getClaims.mockResolvedValue({ data: null });
     expect(location(await updateSession(get("/serving/go?token=x")))).toBeNull();
   });
 
@@ -268,7 +268,7 @@ describe("cookie scope regression", () => {
           { name: "sb-access-token", value: "x", options: { path: "/" } },
         ]);
         return {
-          auth: { getUser },
+          auth: { getClaims },
           rpc: vi.fn(async () => ({ data: null, error: null })),
           from: vi.fn(),
         };

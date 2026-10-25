@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 import { siteConfig } from "@/lib/config";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 
 export const metadata = { title: `Group settings | ${siteConfig.name}` };
 
@@ -72,9 +73,7 @@ export default async function GroupSettingsPage({
   if (group.role !== "leader") redirect(groupPath(group.id, "/dashboard"));
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getOptionalUser();
   if (!user) redirect("/login");
 
   const { data: details } = await supabase

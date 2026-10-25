@@ -12,14 +12,13 @@ import { getDiscoveryOn } from "@/lib/groups/discovery";
 import { getPendingJoinRequests } from "@/lib/groups/pendingJoinRequests";
 import { PENDING_GROUP_REQUEST_SELECT, toPendingGroupRequest } from "@/lib/groups/requests";
 import { siteConfig } from "@/lib/config";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 
 export const metadata = { title: `Groups | Admin | ${siteConfig.name}` };
 
 export default async function AdminGroupsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getOptionalUser();
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase

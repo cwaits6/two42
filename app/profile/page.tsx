@@ -7,15 +7,14 @@ import { ProfileHouseholdTabs } from "@/components/profile/ProfileHouseholdTabs"
 import { siteConfig } from "@/lib/config";
 import { canEditSpouseProfiles as computeCanEditSpouseProfiles, type HouseholdSummary } from "@/lib/household";
 import type { Profile, FamilyUnit, FamilyMember } from "@/lib/types";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 
 export const metadata = { title: `My Profile | ${siteConfig.name}` };
 
 export default async function ProfilePage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getOptionalUser();
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase
