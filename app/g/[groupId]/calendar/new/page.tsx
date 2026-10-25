@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getGroupCalendar } from "@/lib/groups/calendar";
 import { requireGroupLeader } from "@/lib/groups/server";
 import { siteConfig } from "@/lib/config";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 
 export const metadata = { title: `Create Event | ${siteConfig.name}` };
 
@@ -16,9 +17,7 @@ export default async function NewEventPage({
   const { groupId } = await params;
   const group = await requireGroupLeader(groupId);
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getOptionalUser();
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase

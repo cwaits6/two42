@@ -8,14 +8,13 @@ import { GivingSettings } from "@/components/giving/GivingSettings";
 import { getDirectoryVisibility } from "@/lib/directory/visibility";
 import { getGivingSettings } from "@/lib/giving/server";
 import { siteConfig } from "@/lib/config";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 
 export const metadata = { title: `Org settings | Admin | ${siteConfig.name}` };
 
 export default async function SettingsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getOptionalUser();
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase

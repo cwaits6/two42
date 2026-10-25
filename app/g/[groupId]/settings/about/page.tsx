@@ -7,6 +7,7 @@ import { requireGroupLeader } from "@/lib/groups/server";
 import { getGroupSettings } from "@/lib/groups/settings";
 import { AboutEditor } from "./AboutEditor";
 import type { AboutPage, ClassTeacherWithProfile } from "@/lib/types";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 
 export const metadata = { title: `Edit About Page | ${siteConfig.name}` };
 
@@ -18,9 +19,7 @@ export default async function GroupAboutSettingsPage({
   const { groupId } = await params;
   const group = await requireGroupLeader(groupId);
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getOptionalUser();
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase

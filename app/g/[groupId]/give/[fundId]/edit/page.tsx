@@ -9,6 +9,7 @@ import {
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 import type { GivingFund, GivingFundMethod } from "@/lib/types";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 
 export const metadata = { title: `Edit Fund | ${siteConfig.name}` };
 
@@ -21,9 +22,7 @@ export default async function EditFundPage({
   const group = await requireActiveGroup(groupId);
   const giveHref = groupPath(group.id, "/give");
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getOptionalUser();
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase

@@ -13,6 +13,7 @@ import { StaticBlockContent } from "@/components/editor/StaticBlockContent";
 import { parseStoredBlocks } from "@/components/editor/normalizeBlocks";
 import type { AboutPage, ClassTeacherWithProfile } from "@/lib/types";
 import { requireActiveGroup } from "@/lib/groups/server";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 
 export const metadata = { title: `About | ${siteConfig.name}` };
 
@@ -24,9 +25,7 @@ export default async function AboutGroupPage({
   const { groupId } = await params;
   const group = await requireActiveGroup(groupId);
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getOptionalUser();
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase

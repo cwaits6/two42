@@ -14,6 +14,7 @@ import {
 import { ServingHistory, type HistoryEntry } from "@/components/serving/ServingHistory";
 import { EmailTeamButton } from "@/components/serving/EmailTeamButton";
 import { ServingSettingsDialog } from "@/components/serving/ServingSettingsDialog";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 
 export const metadata = { title: `Serving | ${siteConfig.name}` };
 
@@ -33,9 +34,7 @@ export default async function ServingSchedulePage({
   const group = await requireActiveGroup(groupId);
   const servingHref = groupPath(group.id, "/serving");
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getOptionalUser();
 
   if (!user) redirect("/login");
 

@@ -7,6 +7,7 @@ import { ArrowLeft } from "lucide-react";
 import { siteConfig } from "@/lib/config";
 import { displayName } from "@/lib/names";
 import type { Profile, FamilyUnit } from "@/lib/types";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 
 export const metadata = { title: `Edit Member | ${siteConfig.name}` };
 
@@ -18,9 +19,7 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
   const { id } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getOptionalUser();
   if (!user) redirect("/login");
 
   const { data: currentProfile } = await supabase

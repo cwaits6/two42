@@ -8,6 +8,7 @@ import { getGroupSettings } from "@/lib/groups/settings";
 import { PrayerBoard } from "@/components/prayer/PrayerBoard";
 import type { PrayerCallSession, PrayerWallRow } from "@/lib/types";
 import { requireActiveGroup } from "@/lib/groups/server";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 
 export const metadata = { title: `Prayer | ${siteConfig.name}` };
 
@@ -19,9 +20,7 @@ export default async function PrayerPage({
   const { groupId } = await params;
   const group = await requireActiveGroup(groupId);
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getOptionalUser();
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase

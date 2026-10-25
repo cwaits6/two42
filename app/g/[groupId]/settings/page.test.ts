@@ -19,9 +19,12 @@ vi.mock("@/lib/groups/server", () => ({
   requireActiveGroup: (groupId: string) => requireActiveGroup(groupId),
 }));
 
+vi.mock("@/lib/supabase/current-user", () => ({
+  getOptionalUser: async () => ({ id: "user-1", email: undefined }),
+}));
+
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
-    auth: { getUser: async () => ({ data: { user: { id: "user-1" } } }) },
     from: (table: string) => ({
       select: () => ({
         eq: () => ({

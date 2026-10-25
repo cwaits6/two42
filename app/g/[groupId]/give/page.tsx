@@ -13,6 +13,7 @@ import { GiveList, type FundView } from "@/components/giving/GiveList";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 import type { GivingFund, GivingFundMethod } from "@/lib/types";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 
 export const metadata = { title: `Give | ${siteConfig.name}` };
 
@@ -52,9 +53,7 @@ export default async function GivePage({
   const group = await requireActiveGroup(groupId);
   const newFundHref = groupPath(group.id, "/give/new");
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getOptionalUser();
   if (!user) redirect("/login");
 
   const isLeader = group.role === "leader";

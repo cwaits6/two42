@@ -4,6 +4,7 @@ import { getGroupMemberships, requireActiveGroup } from "@/lib/groups/server";
 import { EventsPageClient, type CalendarGroup } from "@/components/events/EventsPageClient";
 import { PageContainer } from "@/components/layout/PageContainer";
 import type { Event, Rsvp } from "@/lib/types";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 
 /**
  * The calendar at both levels. With `pinnedGroupId` it is that group's
@@ -18,9 +19,7 @@ export async function CalendarPage({ pinnedGroupId }: { pinnedGroupId?: string }
   if (memberships.length === 0) redirect("/dashboard");
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getOptionalUser();
   if (!user) redirect("/login");
 
   const groups: CalendarGroup[] = memberships.map((g) => ({

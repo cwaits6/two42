@@ -4,15 +4,14 @@ import { redirect } from "next/navigation";
 import { siteConfig } from "@/lib/config";
 import type { Profile } from "@/lib/types";
 import { SetupWizard } from "./SetupWizard";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 
 export const metadata = { title: `Profile Setup | ${siteConfig.name}` };
 
 export default async function ProfileSetupPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getOptionalUser();
 
   if (!user) redirect("/login");
 

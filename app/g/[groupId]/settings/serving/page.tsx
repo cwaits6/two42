@@ -8,6 +8,7 @@ import { AdminServingSetup } from "@/components/serving/AdminServingSetup";
 import { ServingLinkModeForm } from "@/components/groups/ServingLinkModeForm";
 import { ServingStats } from "./ServingStats";
 import type { MemberGroup } from "@/lib/types";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 
 export const metadata = { title: `Serving | Group settings | ${siteConfig.name}` };
 
@@ -19,9 +20,7 @@ export default async function GroupServingSettingsPage({
   const { groupId } = await params;
   const group = await requireGroupLeader(groupId);
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getOptionalUser();
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase

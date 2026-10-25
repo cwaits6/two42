@@ -8,8 +8,9 @@ import { Footer } from "@/components/layout/Footer";
 import { AppShell } from "@/components/layout/AppShell";
 import { SidebarProvider } from "@/components/layout/SidebarContext";
 import { GroupProvider } from "@/components/groups/GroupProvider";
-import { cookies, headers } from "next/headers";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 import { siteConfig } from "@/lib/config";
 import { getRequestBranding } from "@/lib/branding";
 import { getDiscoveryOn } from "@/lib/groups/discovery";
@@ -54,13 +55,10 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Skip the getUser() call entirely when there are no auth cookies.
-  // This avoids noisy "Invalid Refresh Token" errors for unauthenticated visitors.
-  const cookieStore = await cookies();
   // CSP allows inline scripts only with the per-request nonce
   const requestHeaders = await headers();
   const nonce = requestHeaders.get("x-nonce") ?? undefined;
-  const hasAuthCookie = cookieStore.getAll().some((c) => c.name.includes("auth-token"));
+  const user = await getOptionalUser();
 
   let profile = null;
   let hasServingAccess = false;
@@ -68,49 +66,46 @@ export default async function RootLayout({
   let memberships: ActiveGroup[] = [];
   let discoveryOn = false;
   let creationPolicy: GroupCreationPolicy = "approval";
-  if (hasAuthCookie) {
+  if (user) {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const [{ data, error }, { data: groupData, error: groupError }, { data: platformAdmin }] = await Promise.all([
-        supabase.from("profiles").select("*").eq("id", user.id).single(),
-        supabase.from("team_members").select("team_id").eq("profile_id", user.id),
-        // Nav affordance only — every /platform surface re-checks
-        // server-side; an RPC error just hides the link (fail closed).
-        supabase.rpc("is_platform_admin"),
-      ]);
-      isPlatformAdmin = platformAdmin === true;
-      // Neither failure can render an error page — the layout wraps every
-      // route — but both degrade silently otherwise: a null profile renders
-      // an authenticated member with the logged-out Header/AppShell, and a
-      // null groupData silently denies serving access.
-      if (error) console.error("Layout: failed to load profile:", error);
-      if (groupError) console.error("Layout: failed to load team memberships:", groupError);
-      profile = data;
+    const [{ data, error }, { data: groupData, error: groupError }, { data: platformAdmin }] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", user.id).single(),
+      supabase.from("team_members").select("team_id").eq("profile_id", user.id),
+      // Nav affordance only — every /platform surface re-checks
+      // server-side; an RPC error just hides the link (fail closed).
+      supabase.rpc("is_platform_admin"),
+    ]);
+    isPlatformAdmin = platformAdmin === true;
+    // Neither failure can render an error page — the layout wraps every
+    // route — but both degrade silently otherwise: a null profile renders
+    // an authenticated member with the logged-out Header/AppShell, and a
+    // null groupData silently denies serving access.
+    if (error) console.error("Layout: failed to load profile:", error);
+    if (groupError) console.error("Layout: failed to load team memberships:", groupError);
+    profile = data;
 
-      const loadServingAccess = async () => {
-        if (!groupData?.length) return false;
-        const { count } = await supabase
-          .from("serving_team_settings")
-          .select("team_id", { count: "exact", head: true })
-          .eq("enabled", true)
-          .in("team_id", groupData.map((g) => g.team_id as string));
-        return (count ?? 0) > 0;
-      };
-      // The layout has no error boundary of its own, so a failed membership
-      // read hides the group nav and lets the page surface the error.
-      const loadNavMemberships = () =>
-        getGroupMemberships().catch((e: unknown) => {
-          console.error("Layout: failed to load group memberships:", e);
-          return [];
-        });
-      [hasServingAccess, memberships, discoveryOn, creationPolicy] = await Promise.all([
-        loadServingAccess(),
-        loadNavMemberships(),
-        getDiscoveryOn(),
-        getGroupCreationPolicy(),
-      ]);
-    }
+    const loadServingAccess = async () => {
+      if (!groupData?.length) return false;
+      const { count } = await supabase
+        .from("serving_team_settings")
+        .select("team_id", { count: "exact", head: true })
+        .eq("enabled", true)
+        .in("team_id", groupData.map((g) => g.team_id as string));
+      return (count ?? 0) > 0;
+    };
+    // The layout has no error boundary of its own, so a failed membership
+    // read hides the group nav and lets the page surface the error.
+    const loadNavMemberships = () =>
+      getGroupMemberships().catch((e: unknown) => {
+        console.error("Layout: failed to load group memberships:", e);
+        return [];
+      });
+    [hasServingAccess, memberships, discoveryOn, creationPolicy] = await Promise.all([
+      loadServingAccess(),
+      loadNavMemberships(),
+      getDiscoveryOn(),
+      getGroupCreationPolicy(),
+    ]);
   }
 
   // Free on every path: generateMetadata() above already awaited this, and

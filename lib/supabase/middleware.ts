@@ -92,11 +92,13 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Verified locally against the cached signing keys; no Auth server round
+  // trip on every request.
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const sub = claimsData?.claims?.sub;
+  const user = sub ? { id: sub } : null;
 
-  // getUser() may refresh the session, in which case setAll() has written the
+  // getClaims() may refresh the session, in which case setAll() has written the
   // rotated auth cookies onto supabaseResponse. A bare NextResponse.redirect()
   // starts from an empty cookie jar and drops them, so the browser keeps
   // replaying the stale refresh token. Every early return below goes through

@@ -10,14 +10,13 @@ import { PendingGroupRequests } from "@/components/admin/PendingGroupRequests";
 import { PENDING_GROUP_REQUEST_SELECT, toPendingGroupRequest } from "@/lib/groups/requests";
 import { pendingJoinRequestsSummary } from "@/lib/groups/joinQueue";
 import { getPendingJoinRequests } from "@/lib/groups/pendingJoinRequests";
+import { getOptionalUser } from "@/lib/supabase/current-user";
 
 export const metadata = { title: `Admin | ${siteConfig.name}` };
 
 export default async function AdminPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getOptionalUser();
 
   if (!user) redirect("/login");
 
