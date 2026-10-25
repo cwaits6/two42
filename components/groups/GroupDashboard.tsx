@@ -37,7 +37,7 @@ function eventMonth(startTime: string, timeZone: string): string {
 }
 
 function greeting(timeZone: string): string {
-  const h = Number(formatInZone(new Date().toISOString(), timeZone, { hour: "numeric", hour12: false }));
+  const h = Number(formatInZone(new Date().toISOString(), timeZone, { hour: "numeric", hourCycle: "h23" }));
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   return "Good evening";

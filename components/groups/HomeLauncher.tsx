@@ -9,7 +9,7 @@ import { formatEventTime, formatInZone } from "@/lib/time/zone";
 // component resolves once per request.
 
 function getGreeting(timeZone: string) {
-  const h = Number(formatInZone(new Date().toISOString(), timeZone, { hour: "numeric", hour12: false }));
+  const h = Number(formatInZone(new Date().toISOString(), timeZone, { hour: "numeric", hourCycle: "h23" }));
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   return "Good evening";
