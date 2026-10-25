@@ -40,7 +40,7 @@ afterEach(() => {
 });
 
 describe("EmailDomainSettingsPage", () => {
-  it("renders the app's 404 before any data read while custom sending domains are off", () => {
+  it("renders the app's 404 while custom sending domains are off", () => {
     sendingDomains.CUSTOM_SENDING_DOMAINS_ENABLED = false;
 
     expect(() => EmailDomainSettingsPage()).toThrow(NotFoundSentinel);

@@ -192,10 +192,11 @@ defaults, used when an org's branding row is empty or unreadable.
 email leaves from it, with the org's name as the display name and the org's
 `reply_to` for replies, since SPF/DKIM are configured for that domain. The
 schema and send path still support a per-org **verified** sending domain
-(`org_email_domains`, sending from `noreply@<their-domain>`), gated per org by
-`organizations.custom_email_domain_enabled` — which a platform operator sets
-under `/platform` → organization detail — and capped platform-wide by Resend's
-account-level domain limit (`ORG_EMAIL_DOMAIN_CAP` in `.env.example`). The
+(`org_email_domains`, sending from `noreply@<their-domain>`); a domain can be
+claimed only for an org whose `custom_email_domain_enabled` a platform operator
+has set under `/platform` → organization detail, and claims are capped
+platform-wide by Resend's account-level domain limit (`ORG_EMAIL_DOMAIN_CAP` in
+`.env.example`). The
 admin surface for claiming one is hidden behind `CUSTOM_SENDING_DOMAINS_ENABLED`
 in `lib/email/sendingDomains.ts` until there is a paid tier, so no org can set
 one up today and the operator toggle has no reachable effect until that flag

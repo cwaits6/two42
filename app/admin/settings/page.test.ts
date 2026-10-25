@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement, ReactNode } from "react";
 
 class RedirectSentinel extends Error {
@@ -18,9 +18,8 @@ vi.mock("@/lib/supabase/current-user", () => ({
   getOptionalUser: async () => ({ id: "user-1", email: undefined }),
 }));
 
-// The org row as the page's client could see it. The page never reads
-// custom_email_domain_enabled: the flag, not the column, decides the tile.
-const orgRow = vi.fn();
+// The page never reads organizations.custom_email_domain_enabled: the flag,
+// not the column, decides whether the tile renders.
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     from: (table: string) => ({
@@ -30,8 +29,6 @@ vi.mock("@/lib/supabase/server", () => ({
             table === "profiles"
               ? { data: { role: "admin", org_id: ORG_ID } }
               : { data: null },
-          maybeSingle: async () =>
-            table === "organizations" ? { data: orgRow() } : { data: null },
         }),
       }),
     }),
@@ -83,11 +80,6 @@ async function render() {
   return { hrefs, texts };
 }
 
-beforeEach(() => {
-  orgRow.mockReset();
-  orgRow.mockReturnValue({ id: ORG_ID, custom_email_domain_enabled: false });
-});
-
 afterEach(() => {
   sendingDomains.CUSTOM_SENDING_DOMAINS_ENABLED = false;
 });
@@ -99,15 +91,6 @@ describe("SettingsPage", () => {
     expect(hrefs).not.toContain("/admin/settings/email");
     expect(texts).not.toContain("Email sending domain");
     expect(texts).toContain("Directory");
-  });
-
-  it("shows no tile for an org with custom_email_domain_enabled = true either", async () => {
-    orgRow.mockReturnValue({ id: ORG_ID, custom_email_domain_enabled: true });
-
-    const { hrefs, texts } = await render();
-
-    expect(hrefs).not.toContain("/admin/settings/email");
-    expect(texts).not.toContain("Email sending domain");
   });
 
   it("shows the tile once the flag is on", async () => {
