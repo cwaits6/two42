@@ -7,11 +7,17 @@ import { DateTime } from "luxon";
 const LOCALE = "en-US";
 
 /**
- * A zone name Intl knows, exactly as spelled. Intl's list omits "UTC", which
- * the database, Intl.DateTimeFormat and luxon all accept.
+ * A zone this runtime's Intl can format in. The database is the gate on what
+ * gets stored (an exact IANA name); this accepts everything it stores plus
+ * what Intl tolerates on its own, so a stored zone is never refused on read.
  */
 export function isValidTimeZone(zone: string): boolean {
-  return zone === "UTC" || Intl.supportedValuesOf("timeZone").includes(zone);
+  try {
+    new Intl.DateTimeFormat(LOCALE, { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** An instant read in `zone`. */

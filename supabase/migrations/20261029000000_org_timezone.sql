@@ -6,23 +6,30 @@ alter table public.organizations
   add column timezone text not null default 'America/New_York';
 
 comment on column public.organizations.timezone is
-  'IANA zone every event time is entered and displayed in. organizations_timezone_check() refuses a name Postgres does not know; the app falls back to its configured default only when no org row resolves.';
+  'IANA zone every event time is entered and displayed in. organizations_timezone_check() refuses anything but an exact IANA name; the app falls back to its configured default only when no org row resolves.';
 
 -- ── 2. The validator ──────────────────────────────────────────────────────
--- Postgres carries the IANA database, so `at time zone` is the check: an
--- unknown name raises invalid_parameter_value, re-raised as a
--- check_violation so a client sees one SQLSTATE for a refused value. A
--- trigger rather than a CHECK constraint because the probe is not immutable.
+-- Postgres carries the IANA database, so pg_timezone_names is the check: an
+-- exact, case-sensitive name, excluding the posix/ duplicates and the
+-- Factory placeholder — the set Intl formats in, so the app and the edge
+-- functions never meet a stored value they cannot read. `at time zone` is not
+-- the check because it also takes POSIX rule strings, offsets and
+-- case variants that Intl refuses. A trigger rather than a CHECK constraint
+-- because the catalog lookup is not immutable; it raises check_violation so
+-- a client sees one SQLSTATE for a refused value.
 create function public.organizations_timezone_check() returns trigger
   language plpgsql set search_path = ''
 as $$
 begin
-  begin
-    perform now() at time zone new.timezone;
-  exception when invalid_parameter_value then
+  if not exists (
+    select 1 from pg_catalog.pg_timezone_names
+    where name = new.timezone
+      and name not like 'posix/%'
+      and name <> 'Factory'
+  ) then
     raise exception 'organizations.timezone: unknown time zone "%"', new.timezone
       using errcode = 'check_violation';
-  end;
+  end if;
   return new;
 end $$;
 
@@ -64,11 +71,17 @@ begin
     raise exception 'organizations: expected exactly one permissive write policy, found %', _writes;
   end if;
 
-  -- The probe row never commits: the trigger aborts the subtransaction, and
+  -- The probe rows never commit: the trigger aborts the subtransaction, and
   -- a probe that survives is itself the failure.
   begin
     insert into public.organizations (name, timezone) values ('timezone probe', 'Nowhere/Bogus');
     raise exception 'organizations.timezone: the validator accepted an unknown zone';
+  exception when check_violation then
+    null;
+  end;
+  begin
+    insert into public.organizations (name, timezone) values ('timezone probe', 'posix/America/New_York');
+    raise exception 'organizations.timezone: the validator accepted a name that is not an IANA zone';
   exception when check_violation then
     null;
   end;

@@ -19,17 +19,21 @@ afterEach(() => {
 });
 
 describe("isValidTimeZone", () => {
-  it("accepts IANA names Intl knows, spelled exactly", () => {
+  it("accepts every name the database can store, including current IANA spellings", () => {
     expect(isValidTimeZone("America/New_York")).toBe(true);
     expect(isValidTimeZone("Asia/Tokyo")).toBe(true);
     expect(isValidTimeZone("UTC")).toBe(true);
+    // Current IANA names Intl.supportedValuesOf() may list under their old spelling.
+    expect(isValidTimeZone("Asia/Kolkata")).toBe(true);
+    expect(isValidTimeZone("Europe/Kyiv")).toBe(true);
+    // Backward-compatible IANA links the database also accepts.
+    expect(isValidTimeZone("US/Eastern")).toBe(true);
   });
 
-  it("rejects unknown names, abbreviations, aliases and other spellings", () => {
+  it("rejects what Intl cannot format in", () => {
     expect(isValidTimeZone("Nowhere/Bogus")).toBe(false);
-    expect(isValidTimeZone("EST")).toBe(false);
-    expect(isValidTimeZone("US/Eastern")).toBe(false);
-    expect(isValidTimeZone("america/new_york")).toBe(false);
+    expect(isValidTimeZone("posix/America/New_York")).toBe(false);
+    expect(isValidTimeZone("UTC+5")).toBe(false);
     expect(isValidTimeZone("")).toBe(false);
   });
 });

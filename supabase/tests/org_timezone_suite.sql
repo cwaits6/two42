@@ -8,7 +8,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(21);
+select plan(29);
 
 -- ── Probe helpers: run one statement as an authenticated actor ──────────────
 create function pg_temp.as_text(_actor uuid, _query text) returns text
@@ -138,6 +138,38 @@ select is(
   (select timezone from public.organizations where id = current_setting('tz.org_a')::uuid),
   'America/Chicago', 'the refused write changed nothing');
 
+-- Names `at time zone` would take but Intl cannot format in: a POSIX rule
+-- string, an offset, the posix/ duplicate tree, a case variant and the
+-- Factory placeholder. The stored set must be exactly what every reader can use.
+select is(
+  pg_temp.as_write(current_setting('tz.owner_a')::uuid,
+    format('update public.organizations set timezone = %L where id = %L',
+      'EST5EDT,M3.2.0,M11.1.0', current_setting('tz.org_a'))),
+  '23514', 'a POSIX rule string is refused');
+select is(
+  pg_temp.as_write(current_setting('tz.owner_a')::uuid,
+    format('update public.organizations set timezone = %L where id = %L',
+      'UTC+5', current_setting('tz.org_a'))),
+  '23514', 'an offset is refused');
+select is(
+  pg_temp.as_write(current_setting('tz.owner_a')::uuid,
+    format('update public.organizations set timezone = %L where id = %L',
+      'posix/America/New_York', current_setting('tz.org_a'))),
+  '23514', 'the posix/ duplicate of a zone is refused');
+select is(
+  pg_temp.as_write(current_setting('tz.owner_a')::uuid,
+    format('update public.organizations set timezone = %L where id = %L',
+      'america/chicago', current_setting('tz.org_a'))),
+  '23514', 'a case variant is refused');
+select is(
+  pg_temp.as_write(current_setting('tz.owner_a')::uuid,
+    format('update public.organizations set timezone = %L where id = %L',
+      'Factory', current_setting('tz.org_a'))),
+  '23514', 'the Factory placeholder is refused');
+select is(
+  (select timezone from public.organizations where id = current_setting('tz.org_a')::uuid),
+  'America/Chicago', 'none of the refused writes changed anything');
+
 reset role;
 select throws_ok(
   format('update public.organizations set timezone = %L where id = %L',
@@ -148,6 +180,14 @@ select lives_ok(
   format('update public.organizations set timezone = %L where id = %L',
     'America/Chicago', current_setting('tz.org_b')),
   'the validator accepts America/Chicago');
+select lives_ok(
+  format('update public.organizations set timezone = %L where id = %L',
+    'Asia/Kolkata', current_setting('tz.org_b')),
+  'the validator accepts a current IANA name Intl.supportedValuesOf() may list under an older spelling');
+select lives_ok(
+  format('update public.organizations set timezone = %L where id = %L',
+    'UTC', current_setting('tz.org_b')),
+  'the validator accepts UTC');
 
 select * from finish();
 rollback;
