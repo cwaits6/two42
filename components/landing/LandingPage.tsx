@@ -96,7 +96,7 @@ export function LandingPage() {
         <div className="flex min-w-0 flex-[1_1_400px] justify-center">
           <Image
             src="/landing/dashboard.png"
-            alt="The group dashboard: a greeting, the next meeting with RSVP and a one-tap Zoom join, and the latest announcements and prayer requests"
+            alt="The group dashboard: the group's navigation, a greeting, and the next meeting with RSVP and a one-tap Zoom join"
             width={2360}
             height={1640}
             priority

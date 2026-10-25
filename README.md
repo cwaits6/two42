@@ -40,7 +40,7 @@ two42 was built to solve exactly that. It has since been open-sourced so other g
 
 ### For Members
 
-- **Public Home Page** — Welcoming hero, upcoming events, latest announcement, and a donation button
+- **Front Door** — Public page at `/` explaining what two42 is, with Sign in and a way to get in touch
 - **Events Calendar** — Browse upcoming gatherings and RSVP (Going / Maybe / Can't Go)
 - **Lecture Library** — Watch past teachings with embedded YouTube videos
 - **Magic Link Sign-In** — No passwords to remember; sign in with just your email
