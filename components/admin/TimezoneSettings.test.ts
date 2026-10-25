@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DateTime } from "luxon";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
@@ -30,9 +30,14 @@ describe("timeZoneOptions", () => {
   });
 
   it("keeps the current zone listed even when the runtime's list lacks it", () => {
-    const values = timeZoneOptions("UTC", JULY).map((o) => o.value);
-    expect(values[0]).toBe("UTC");
-    expect(values.filter((v) => v === "UTC")).toHaveLength(1);
+    const supported = vi.spyOn(Intl, "supportedValuesOf").mockReturnValue(["Europe/London"]);
+    try {
+      const values = timeZoneOptions("UTC", JULY).map((o) => o.value);
+      expect(values[0]).toBe("UTC");
+      expect(values.filter((v) => v === "UTC")).toHaveLength(1);
+    } finally {
+      supported.mockRestore();
+    }
   });
 });
 
