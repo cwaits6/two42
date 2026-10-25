@@ -195,16 +195,17 @@ export function EditEventForm({
     // Edit all events in the series (or a one-off / exception event). A
     // zero-row match is a stale or cross-group id, not a success.
     // An input value reads back as the first occurrence of a repeated autumn
-    // hour, so times the leader did not touch keep their stored instants.
+    // hour, so each time the leader did not touch keeps its stored instant.
     const startValue = formData.get("start_time") as string;
     const endValue = (formData.get("end_time") as string) || "";
-    const timeChanges =
-      startValue === loadedTimes.current?.start && endValue === loadedTimes.current?.end
-        ? {}
-        : {
-            start_time: localToUTCISO(startValue, timeZone),
-            end_time: endValue ? localToUTCISO(endValue, timeZone) : null,
-          };
+    const timeChanges = {
+      ...(startValue !== loadedTimes.current?.start
+        ? { start_time: localToUTCISO(startValue, timeZone) }
+        : {}),
+      ...(endValue !== loadedTimes.current?.end
+        ? { end_time: endValue ? localToUTCISO(endValue, timeZone) : null }
+        : {}),
+    };
     const { data: updated, error } = await supabase
       .from("events")
       .update({

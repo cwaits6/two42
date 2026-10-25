@@ -8,7 +8,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(35);
+select plan(37);
 
 -- ── Probe helpers: run one statement as an authenticated actor ──────────────
 create function pg_temp.as_text(_actor uuid, _query text) returns text
@@ -211,6 +211,16 @@ select throws_ok(
     'Nowhere/Bogus', current_setting('tz.org_b')),
   '23514', 'organizations.timezone: unknown time zone "Nowhere/Bogus"',
   'the validator refuses Nowhere/Bogus regardless of role');
+select throws_ok(
+  format('update public.organizations set timezone = %L where id = %L',
+    'localtime', current_setting('tz.org_b')),
+  '23514', 'organizations.timezone: unknown time zone "localtime"',
+  'the validator refuses localtime, a Postgres-only name');
+select throws_ok(
+  format('update public.organizations set timezone = %L where id = %L',
+    'posixrules', current_setting('tz.org_b')),
+  '23514', 'organizations.timezone: unknown time zone "posixrules"',
+  'the validator refuses posixrules, a Postgres-only name');
 select lives_ok(
   format('update public.organizations set timezone = %L where id = %L',
     'America/Chicago', current_setting('tz.org_b')),

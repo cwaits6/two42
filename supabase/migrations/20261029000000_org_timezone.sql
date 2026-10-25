@@ -25,7 +25,7 @@ begin
     select 1 from pg_catalog.pg_timezone_names
     where name = new.timezone
       and name not like 'posix/%'
-      and name <> 'Factory'
+      and name not in ('Factory', 'localtime', 'posixrules')
   ) then
     raise exception 'organizations.timezone: unknown time zone "%"', new.timezone
       using errcode = 'check_violation';
@@ -34,7 +34,7 @@ begin
 end $$;
 
 comment on function public.organizations_timezone_check() is
-  'Trigger function: refuses an organizations.timezone that is not an exact IANA name in pg_timezone_names (no posix/ duplicates, no Factory). SECURITY INVOKER; raises check_violation.';
+  'Trigger function: refuses an organizations.timezone that is not an exact IANA name in pg_timezone_names (no posix/ duplicates; no Factory, localtime or posixrules, which Postgres lists but Intl does not know). SECURITY INVOKER; raises check_violation.';
 
 create trigger organizations_timezone_check
   before insert or update of timezone on public.organizations
@@ -89,6 +89,12 @@ begin
   begin
     insert into public.organizations (name, timezone) values ('timezone probe', 'posix/America/New_York');
     raise exception 'organizations.timezone: the validator accepted a name that is not an IANA zone';
+  exception when check_violation then
+    null;
+  end;
+  begin
+    insert into public.organizations (name, timezone) values ('timezone probe', 'posixrules');
+    raise exception 'organizations.timezone: the validator accepted a Postgres-only zone name';
   exception when check_violation then
     null;
   end;
