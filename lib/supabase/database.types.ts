@@ -985,14 +985,14 @@ isOneToOne: false
                   ]
                 },"organizations": {
                   Row: {
-                    "branding": NonNullable<Json>,"created_at": string,"custom_email_domain_enabled": boolean,"directory_visibility": string,"group_creation_policy": string,"group_discovery": boolean,"id": string,"name": string,"slug": string | null,"status": Database["public"]['Enums']["org_status"]
+                    "branding": NonNullable<Json>,"created_at": string,"custom_email_domain_enabled": boolean,"directory_visibility": string,"group_creation_policy": string,"group_discovery": boolean,"id": string,"name": string,"status": Database["public"]['Enums']["org_status"]
                   }
                   ComputedFields: never
                   Insert: {
-                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"group_creation_policy"?: string,"group_discovery"?: boolean,"id"?: string,"name": string,"slug"?: string | null,"status"?: Database["public"]['Enums']["org_status"]
+                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"group_creation_policy"?: string,"group_discovery"?: boolean,"id"?: string,"name": string,"status"?: Database["public"]['Enums']["org_status"]
                   }
                   Update: {
-                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"group_creation_policy"?: string,"group_discovery"?: boolean,"id"?: string,"name"?: string,"slug"?: string | null,"status"?: Database["public"]['Enums']["org_status"]
+                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"group_creation_policy"?: string,"group_discovery"?: boolean,"id"?: string,"name"?: string,"status"?: Database["public"]['Enums']["org_status"]
                   }
                   Relationships: [
                     
@@ -1561,9 +1561,6 @@ isOneToOne: false
           Functions: {
             "app_current_org_id":
 { Args: Record<PropertyKey, never>; Returns: string
-                           },
-"app_org_slug_for_host":
-{ Args: { "_host": string }; Returns: string
                            },
 "app_request_org_id":
 { Args: Record<PropertyKey, never>; Returns: string

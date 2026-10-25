@@ -114,8 +114,8 @@ select ok(
 -- The write side: the only permissive write policy is the org admin's
 -- whole-row UPDATE, and the column grants confine it to the org settings
 -- columns (directory_visibility, group_creation_policy, group_discovery) —
--- table-level UPDATE is revoked, so the policy cannot reach name, slug,
--- status or custom_email_domain_enabled. Both halves are pinned: a second
+-- table-level UPDATE is revoked, so the policy cannot reach name, status
+-- or custom_email_domain_enabled. Both halves are pinned: a second
 -- write policy, or a table-level re-grant, would hand the flag to the org's
 -- own admin.
 select is(
