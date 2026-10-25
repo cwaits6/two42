@@ -13,6 +13,7 @@ import { getPendingJoinRequests } from "@/lib/groups/pendingJoinRequests";
 import { PENDING_GROUP_REQUEST_SELECT, toPendingGroupRequest } from "@/lib/groups/requests";
 import { siteConfig } from "@/lib/config";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
 
 export const metadata = { title: `Groups | Admin | ${siteConfig.name}` };
 
@@ -50,6 +51,7 @@ export default async function AdminGroupsPage() {
   if (requestsError) console.error("Failed to load group requests:", requestsError);
   if (groupsError) console.error("Failed to load groups:", groupsError);
 
+  const timeZone = await getOrgTimeZone();
   const pending = (requests ?? []).map(toPendingGroupRequest);
   const groupRows = (groups ?? []).map((g) => ({
     id: g.id,
@@ -74,7 +76,7 @@ export default async function AdminGroupsPage() {
 
       <section className="mb-10">
         <h2 className="mb-4 text-2xl font-bold text-brand-primary">Pending group requests</h2>
-        <PendingGroupRequests initialRequests={pending} />
+        <PendingGroupRequests initialRequests={pending} timeZone={timeZone} />
       </section>
 
       <section className="mb-10">
@@ -84,7 +86,7 @@ export default async function AdminGroupsPage() {
             Couldn&apos;t load the join requests. Reload the page to try again.
           </p>
         ) : (
-          <PendingJoinRequests initialRequests={joinRequests} />
+          <PendingJoinRequests initialRequests={joinRequests} timeZone={timeZone} />
         )}
       </section>
 

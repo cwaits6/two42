@@ -13,7 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { siteConfig } from "@/lib/config";
 import { createClient } from "@/lib/supabase/client";
 import {
   NO_PENDING_JOIN_REQUESTS_TEXT,
@@ -27,8 +26,10 @@ import { displayName } from "@/lib/names";
 /** Every group's pending join requests, reviewed from one page by an org admin. */
 export function PendingJoinRequests({
   initialRequests,
+  timeZone,
 }: {
   initialRequests: PendingJoinRequest[];
+  timeZone: string;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -94,7 +95,7 @@ export function PendingJoinRequests({
                 id: r.id,
                 title: displayName(r.requester),
                 subtitle: r.email ?? undefined,
-                meta: `Requested ${requestedOn(r.created_at, siteConfig.timeZone)}`,
+                meta: `Requested ${requestedOn(r.created_at, timeZone)}`,
               }))}
               onApprove={(id) => {
                 const request = byId(id);

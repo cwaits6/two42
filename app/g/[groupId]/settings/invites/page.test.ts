@@ -9,6 +9,9 @@ vi.mock("@/lib/groups/server", () => ({
   requireGroupLeader: (groupId: string) => requireGroupLeader(groupId),
 }));
 
+const getOrgTimeZone = vi.fn();
+vi.mock("@/lib/time/orgZone", () => ({ getOrgTimeZone: () => getOrgTimeZone() }));
+
 vi.mock("./InviteLinksManager", () => ({ InviteLinksManager: () => null }));
 
 const { InviteLinksManager } = await import("./InviteLinksManager");
@@ -19,6 +22,8 @@ const leader: ActiveGroup = { id: A_ID, name: "Grace", color: GROUP_DEFAULT_COLO
 
 beforeEach(() => {
   requireGroupLeader.mockReset();
+  getOrgTimeZone.mockReset();
+  getOrgTimeZone.mockResolvedValue("America/Chicago");
 });
 
 describe("GroupInviteLinksSettingsPage", () => {
@@ -37,6 +42,6 @@ describe("GroupInviteLinksSettingsPage", () => {
     const element = await GroupInviteLinksSettingsPage({ params: Promise.resolve({ groupId: A_ID }) });
 
     expect(element.type).toBe(InviteLinksManager);
-    expect(element.props).toEqual({ groupId: A_ID, groupName: "Grace" });
+    expect(element.props).toEqual({ groupId: A_ID, groupName: "Grace", timeZone: "America/Chicago" });
   });
 });

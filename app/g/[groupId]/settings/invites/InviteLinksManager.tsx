@@ -52,11 +52,12 @@ const EMPTY_TEXT = "No invite links yet. Create one and share it by text or emai
 interface InviteLinksManagerProps {
   groupId: string;
   groupName: string;
+  timeZone: string;
 }
 
 type Creator = { id: string; first_name: string | null; last_name: string | null; preferred_name: string | null };
 
-export function InviteLinksManager({ groupId, groupName }: InviteLinksManagerProps) {
+export function InviteLinksManager({ groupId, groupName, timeZone }: InviteLinksManagerProps) {
   const supabase = useMemo(() => createClient(), []);
   const [invites, setInvites] = useState<GroupInvite[]>([]);
   const [useCounts, setUseCounts] = useState<Record<string, number>>({});
@@ -211,7 +212,7 @@ export function InviteLinksManager({ groupId, groupName }: InviteLinksManagerPro
   function meta(invite: GroupInvite): string {
     const creator = invite.created_by ? creators[invite.created_by] : undefined;
     return [
-      expiryLabel(invite.expires_at, siteConfig.timeZone),
+      expiryLabel(invite.expires_at, timeZone),
       usesLabel(useCounts[invite.id] ?? 0, invite.max_uses),
       `Created by ${creator ? displayName(creator) : "a leader"}`,
     ].join(" · ");
