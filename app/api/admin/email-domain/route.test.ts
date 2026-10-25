@@ -21,6 +21,13 @@ vi.mock("@/lib/supabase/server", () => ({
   createServiceClient: () => createServiceClient(),
 }));
 
+// The surface is hidden in production; these tests cover the enabled
+// behaviour, with one test flipping the flag back off.
+const sendingDomains = vi.hoisted(() => ({
+  CUSTOM_SENDING_DOMAINS_ENABLED: true,
+}));
+vi.mock("@/lib/email/sendingDomains", () => sendingDomains);
+
 const domainsCreate = vi.fn();
 const domainsRemove = vi.fn();
 vi.mock("resend", () => ({
@@ -206,6 +213,20 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env.ORG_EMAIL_DOMAIN_CAP;
+  sendingDomains.CUSTOM_SENDING_DOMAINS_ENABLED = true;
+});
+
+describe("/api/admin/email-domain — hidden surface", () => {
+  it("404s every method before auth or any data work while custom sending domains are off", async () => {
+    sendingDomains.CUSTOM_SENDING_DOMAINS_ENABLED = false;
+
+    const responses = await Promise.all([GET(), POST(claimRequest()), DELETE()]);
+
+    expect(responses.map((res) => res.status)).toEqual([404, 404, 404]);
+    expect(requireOrgAdmin).not.toHaveBeenCalled();
+    expect(createServiceClient).not.toHaveBeenCalled();
+    expect(domainsCreate).not.toHaveBeenCalled();
+  });
 });
 
 describe("POST /api/admin/email-domain — gates", () => {

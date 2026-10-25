@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { requireOrgAdmin } from "@/lib/members/access";
+import { CUSTOM_SENDING_DOMAINS_ENABLED } from "@/lib/email/sendingDomains";
 
 /**
  * POST /api/admin/email-domain/verify — ask Resend to re-check the org's
@@ -27,6 +28,10 @@ const ROW_COLUMNS =
   "id, domain, status, dns_records, verified_at, last_checked_at, created_at";
 
 export async function POST() {
+  // Hidden surface: 404 before auth or any data work, like the sibling route.
+  if (!CUSTOM_SENDING_DOMAINS_ENABLED) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   const gate = await requireOrgAdmin();
   if (!gate.ok) {
     return NextResponse.json(
