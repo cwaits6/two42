@@ -1,20 +1,57 @@
-// Unit tests for the admin email-settings page's pure helpers.
+// Unit tests for the admin email-settings page: the flag gate on the page
+// itself, and the pure helpers of the client component behind it.
 // toDnsRecords is the boundary between an untyped `Json` DB column
 // (ultimately sourced from Resend's API) and rendered HTML — its own doc
 // comment claims a shape change on Resend's side degrades to a partial row,
 // never a crash; these tests pin that claim instead of leaving it asserted
 // only in prose.
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Tables } from "@/lib/supabase/database.types";
-import {
+
+class NotFoundSentinel extends Error {}
+vi.mock("next/navigation", () => ({
+  notFound: () => {
+    throw new NotFoundSentinel("notFound");
+  },
+}));
+
+// The surface is hidden in production; the gate tests flip the flag both ways.
+const sendingDomains = vi.hoisted(() => ({
+  CUSTOM_SENDING_DOMAINS_ENABLED: true,
+}));
+vi.mock("@/lib/email/sendingDomains", () => sendingDomains);
+
+const { default: EmailDomainSettingsPage } = await import(
+  "@/app/admin/settings/email/page"
+);
+const {
+  EmailDomainSettings,
   selectEmailDomainCardState,
   statusLabel,
   statusVariant,
   toDnsRecords,
-} from "@/app/admin/settings/email/page";
+} = await import("@/app/admin/settings/email/EmailDomainSettings");
 
 type EmailDomainRow = Tables<"org_email_domains">;
+
+afterEach(() => {
+  sendingDomains.CUSTOM_SENDING_DOMAINS_ENABLED = true;
+});
+
+describe("EmailDomainSettingsPage", () => {
+  it("renders the app's 404 while custom sending domains are off", () => {
+    sendingDomains.CUSTOM_SENDING_DOMAINS_ENABLED = false;
+
+    expect(() => EmailDomainSettingsPage()).toThrow(NotFoundSentinel);
+  });
+
+  it("renders the settings once the flag is on", () => {
+    const element = EmailDomainSettingsPage();
+
+    expect(element.type).toBe(EmailDomainSettings);
+  });
+});
 
 describe("toDnsRecords", () => {
   it("passes through well-formed records", () => {

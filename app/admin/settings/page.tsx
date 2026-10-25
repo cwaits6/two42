@@ -9,6 +9,7 @@ import { getDirectoryVisibility } from "@/lib/directory/visibility";
 import { getGivingSettings } from "@/lib/giving/server";
 import { siteConfig } from "@/lib/config";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { CUSTOM_SENDING_DOMAINS_ENABLED } from "@/lib/email/sendingDomains";
 
 export const metadata = { title: `Org settings | Admin | ${siteConfig.name}` };
 
@@ -36,17 +37,19 @@ export default async function SettingsPage() {
           <CardTitle className="text-3xl text-brand-primary">Org settings</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="mb-8 flex flex-col gap-3 sm:flex-row">
-            <Button
-              size="lg"
-              variant="outline"
-              className="text-lg"
-              nativeButton={false}
-              render={<Link href="/admin/settings/email" />}
-            >
-              Email sending domain
-            </Button>
-          </div>
+          {CUSTOM_SENDING_DOMAINS_ENABLED && (
+            <div className="mb-8 flex flex-col gap-3 sm:flex-row">
+              <Button
+                size="lg"
+                variant="outline"
+                className="text-lg"
+                nativeButton={false}
+                render={<Link href="/admin/settings/email" />}
+              >
+                Email sending domain
+              </Button>
+            </div>
+          )}
           <h2 className="mb-3 text-xl font-bold text-foreground">Directory</h2>
           {directoryVisibility ? (
             <DirectoryVisibilitySettings orgId={profile.org_id} visibility={directoryVisibility} />

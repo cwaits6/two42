@@ -8,7 +8,19 @@ rules this sits inside are in [`tenancy-model.md`](tenancy-model.md).
 This page is about **web hosting**. Per-org **email sending** domains
 (`org_email_domains`, `organizations.custom_email_domain_enabled`, the
 `SENDING_DOMAIN` gate in `lib/email/identity.ts`) are a separate mechanism
-and are unaffected.
+and are unaffected. Their admin surface — the Admin › Settings tile,
+`/admin/settings/email` and the `/api/admin/email-domain` routes — is hidden
+behind `CUSTOM_SENDING_DOMAINS_ENABLED` in `lib/email/sendingDomains.ts`,
+which stays `false` until there is a paid tier: a custom domain only changes
+the part of the `From:` address after the `@`, and keeping it working means a
+volunteer admin adding and maintaining SPF, DKIM and DMARC records — the most
+support-heavy thing we could hand them, for a benefit that matters mainly to
+large orgs. If it ships, it is a paid-tier feature. On the hosted service
+every email leaves from the platform address, with the org's name as the
+display name and the org's `reply_to` for replies. The schema, the
+`SENDING_DOMAIN` gate and its edge-function mirror, the pgTAP suite and the
+platform operator's per-org toggle are untouched, so flipping the flag
+re-enables the surface without a migration.
 
 ## How a request finds its org
 
