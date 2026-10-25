@@ -2,17 +2,17 @@ import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { MemberActions } from "./MemberActions";
-import { CONTACT_EMAIL, SELF_HOST_URL } from "./sections";
+import { CONTACT_EMAIL, SECTION_IDS, SELF_HOST_URL } from "./sections";
 
 const WRAP = "mx-auto w-full max-w-6xl px-6";
 const DISPLAY = "font-serif font-medium tracking-[-0.015em] text-balance";
 const SHOT =
-  "h-auto w-full rounded-2xl border border-border shadow-[0_16px_48px_rgba(42,33,26,0.12)]";
+  "h-auto w-full rounded-2xl border border-border shadow-xl";
 
 function Eyebrow({ children, rule = "left" }: { children: React.ReactNode; rule?: "left" | "both" | "none" }) {
   const bar = <span aria-hidden="true" className="inline-block h-0.5 w-7 bg-brand-accent" />;
   return (
-    <p className="inline-flex items-center gap-3 text-base font-semibold uppercase tracking-[0.14em] text-[#6B4A36]">
+    <p className="inline-flex items-center gap-3 text-base font-semibold uppercase tracking-[0.14em] text-muted-foreground">
       {rule !== "none" && bar}
       {children}
       {rule === "both" && bar}
@@ -67,7 +67,7 @@ export function LandingPage() {
         <div className="flex min-w-0 flex-[1_1_520px] flex-col items-start gap-6">
           <Eyebrow>For churches and their groups</Eyebrow>
           <h1 className={`${DISPLAY} text-[clamp(2.5rem,5.2vw,3.875rem)] leading-[1.05]`}>
-            Run your church&rsquo;s groups <span className="text-brand-primary">in one place.</span>
+            Run your church&rsquo;s groups <span className="text-secondary-foreground">in one place.</span>
           </h1>
           <p className="max-w-[580px] text-xl leading-normal text-muted-foreground md:text-2xl">
             Calendar, serving schedule, directory, announcements and prayer requests — one shared
@@ -107,7 +107,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section id="features" className="scroll-mt-20 border-y border-border bg-white">
+      <section id={SECTION_IDS.features} className="scroll-mt-20 border-y border-border bg-white">
         <div className={`${WRAP} flex flex-col gap-20 py-20`}>
           <div className="flex max-w-[680px] flex-col gap-3">
             <Eyebrow rule="none">What&rsquo;s inside</Eyebrow>
@@ -178,7 +178,7 @@ export function LandingPage() {
         </ul>
       </section>
 
-      <section id="members" className="scroll-mt-20 border-y border-border bg-white">
+      <section id={SECTION_IDS.members} className="scroll-mt-20 border-y border-border bg-white">
         <div className={`${WRAP} flex flex-wrap items-center justify-between gap-8 py-18`}>
           <div className="flex min-w-0 flex-[1_1_520px] flex-col items-start gap-3">
             <Eyebrow rule="none">For members</Eyebrow>
@@ -194,7 +194,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section id="open" className={`${WRAP} flex scroll-mt-20 flex-col gap-4 py-20`}>
+      <section id={SECTION_IDS.open} className={`${WRAP} flex scroll-mt-20 flex-col gap-4 py-20`}>
         <h2 className={`${DISPLAY} text-[2.125rem] leading-[1.1]`}>Open source</h2>
         <p className="max-w-[760px] text-xl leading-relaxed text-muted-foreground">
           two42 is open source under AGPL-3.0, so a church never has to wonder what the software

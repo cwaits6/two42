@@ -197,8 +197,8 @@ other org keeps `NEXT_PUBLIC_EMAIL_FROM`, since SPF/DKIM are only configured
 for that domain by default, and Resend's account-level domain limit
 (`ORG_EMAIL_DOMAIN_CAP` in `.env.example`) means it's opt-in per org rather
 than open to everyone. Branding otherwise varies only the display name and
-Reply-To. The remaining `NEXT_PUBLIC_COLOR_*` vars, `APP_DESCRIPTION`,
-`APP_TAGLINE`, and `LOGO_MONOGRAM` are likewise still platform-wide. Everything
+Reply-To. The remaining `NEXT_PUBLIC_COLOR_*` vars and `APP_DESCRIPTION` are
+likewise still platform-wide. Everything
 else — events, announcements, donation links — is managed through the admin
 panel at runtime.
 
