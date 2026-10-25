@@ -23,7 +23,7 @@ function Eyebrow({ children, rule = "left" }: { children: React.ReactNode; rule?
 const FEATURES = [
   {
     title: "Serving schedule",
-    text: "Each team's coming dates in one list. Members pick the ones they can take, and leaders see what's still uncovered at a glance.",
+    text: "Each team’s coming dates in one list. Members pick the ones they can take, and leaders see what’s still uncovered at a glance.",
     src: "/landing/serving.png",
     alt: "The Serving page: teams with how many of the coming dates are covered and who is on each",
     imageFirst: true,
@@ -44,9 +44,9 @@ const FEATURES = [
   },
   {
     title: "Prayer requests",
-    text: "Share a request with your group, by name or anonymously, and everyone sees what they've been asked to carry.",
+    text: "Share a request with your group, by name or anonymously, and everyone sees what they’ve been asked to carry.",
     src: "/landing/prayer.png",
-    alt: "The Prayer page: requests from the group with an I'm praying button, and a form to share one by name or anonymously",
+    alt: "The Prayer page: requests from the group, each with a You’re praying button, and a form to share one by name or anonymously",
     imageFirst: false,
   },
 ];
@@ -96,7 +96,7 @@ export function LandingPage() {
         <div className="flex min-w-0 flex-[1_1_400px] justify-center">
           <Image
             src="/landing/dashboard.png"
-            alt="The group dashboard: the group's navigation, a greeting, and the next meeting with RSVP and a one-tap Zoom join"
+            alt="The group dashboard: the group’s navigation, a greeting, and the next meeting with RSVP and a one-tap Zoom join"
             width={2360}
             height={1640}
             priority

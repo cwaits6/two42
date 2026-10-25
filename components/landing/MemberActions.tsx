@@ -33,7 +33,7 @@ export function MemberActions() {
           />
         </Collapsible.Trigger>
       </div>
-      <Collapsible.Panel className="max-w-xl rounded-xl border border-border bg-background p-5 text-lg leading-relaxed">
+      <Collapsible.Panel keepMounted className="max-w-xl rounded-xl border border-border bg-background p-5 text-lg leading-relaxed">
         Open the link from the message your leader sent you. It takes you
         straight to your group&rsquo;s sign-up page.
       </Collapsible.Panel>

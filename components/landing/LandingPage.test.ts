@@ -38,7 +38,7 @@ describe("LandingPage", () => {
 
   it("keeps the serving copy exact and offers no join request", () => {
     expect(html).toContain(
-      "Each team&#x27;s coming dates in one list. Members pick the ones they can take, and leaders see what&#x27;s still uncovered at a glance.",
+      "Each team’s coming dates in one list. Members pick the ones they can take, and leaders see what’s still uncovered at a glance.",
     );
     expect(html).not.toMatch(/request to join/i);
   });
