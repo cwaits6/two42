@@ -105,8 +105,8 @@ declare
   event_a uuid;
   event_b uuid;
 begin
-  org_a := public.provision_organization('Storage Suite Org A', 'storage-suite-org-a', 'owner-a@storage.example.test');
-  org_b := public.provision_organization('Storage Suite Org B', 'storage-suite-org-b', 'owner-b@storage.example.test');
+  org_a := public.provision_organization('Storage Suite Org A', 'owner-a@storage.example.test');
+  org_b := public.provision_organization('Storage Suite Org B', 'owner-b@storage.example.test');
 
   -- Owners sign up AFTER provisioning (the org-first contract):
   -- handle_new_user() resolves each into their org via the approved

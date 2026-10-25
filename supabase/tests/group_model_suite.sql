@@ -36,8 +36,8 @@ declare
   teams_before bigint;
   team_members_before bigint;
 begin
-  org_a := public.provision_organization('Group Model Org A', 'group-model-org-a', 'owner-a@group-model.example.test');
-  org_b := public.provision_organization('Group Model Org B', 'group-model-org-b', 'owner-b@group-model.example.test');
+  org_a := public.provision_organization('Group Model Org A', 'owner-a@group-model.example.test');
+  org_b := public.provision_organization('Group Model Org B', 'owner-b@group-model.example.test');
 
   insert into public.access_requests (org_id, name, email, status) values
     (org_a, 'Member A', 'member-a@group-model.example.test', 'approved'),

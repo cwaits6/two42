@@ -18,8 +18,10 @@ stack on `:54321`, whose seed is already applied. Nothing is reset. Set
 already up. `npx playwright show-report` opens the last HTML report.
 
 In CI the `e2e` job in `.github/workflows/test.yml` stands up an ephemeral
-stack with `npx supabase start` (the pinned CLI, never the remote project)
-and is the only sanctioned way to run the suite there. It runs when a change
+stack with `npx supabase start` (the pinned CLI, never the remote project),
+hands the build that stack's own service key (the token pages read their
+anchor row on the service client), and is the only sanctioned way to run the
+suite there. It runs when a change
 touches `app/`, `components/`, `lib/`, `supabase/migrations/`,
 `supabase/seed.sql`, `e2e/`, `playwright.config.ts`, `package.json`,
 `package-lock.json`, `next.config.ts`, `proxy.ts`, `instrumentation.ts`,
@@ -68,6 +70,7 @@ not covered here.
 | `group-creation-policy.spec.ts`      | The org's create policy decides whether a member sees "Request a group", "Create a group" or neither; restored to approval in afterAll |
 | `group-discovery.spec.ts`            | A private group is listed for its members and tagged for the org admin but absent for everyone else, and its deep link stays a 404; the org switch removes Find a group and every other group; both restored in afterAll |
 | `admin-join-queue.spec.ts`           | A join request for a group the org admin does not lead is counted on the Admin overview and listed under its group on Admin › Groups; Decline (confirmed in the dialog) removes it and leaves the requester out; a second request approved gains the requester the group in their switcher and clears the overview count; the request and membership rows are deleted in afterAll |
+| `group-invite.spec.ts`               | A leader's invite link names the group and offers the signup form to a stranger until it is revoked, after which the same URL shows the one dead-link message and no form; a non-member gets a 404 on the invites page; the created link is revoked in afterAll |
 
 ## Adding a spec
 

@@ -86,35 +86,31 @@ group row, the family-invite row, the caller's own RLS-scoped profile, or
 and filters every subsequent service-role query on that value. The interim
 default-org UUID constant is deleted from `lib/org.ts`.
 
-`app_request_org_id()` is the anchor for the one anonymous entry point that
-still resolves its org through it: the join form at `app/[orgSlug]/join`,
-which passes the URL slug as an explicit override of the env-pinned slug.
-It returns a signed-in caller's own org and ignores
-`x-two42-org`; only a genuinely anonymous request resolves the slug, and only
-to a real `organizations` row. It is the same value the `access_requests` RLS
-`WITH CHECK` evaluates, so the two cannot drift. The page fails closed on
-both failure modes — an RPC error and a NULL result (a slug matching no
-organization row) are each logged, then it renders a "Join requests
-unavailable" notice instead of a form whose every submission would die on a
-bare `42501`. It never falls back to an org. Since Phase 4b (CWA-48 / #314)
-that fail-closed resolution is the single `resolveRequestOrgId()` in
-`lib/org.ts` — the RPC call, the NULL narrowing, and the dual fail-closed
-logging live in one place. The route adds **no** service-role client, so it
-needs no row in the tables below.
+`app_request_org_id()` resolves the calling principal's org and nothing
+else: it is NULL for an anonymous request, whatever headers it carries. No
+anonymous surface resolves an org through it any more; the slug join page
+that did is retired. Its two app-layer callers — `lib/uploadImage.ts` and
+`lib/email/identity.ts`, through the single fail-closed
+`resolveRequestOrgId()` in `lib/org.ts` — run with a session, and both fail
+closed on an RPC error and on a NULL result (logged each time) rather than
+fall back to an org.
 
-The plain `/join` route is retired; every link into the join flow targets
-`/[orgSlug]/join` directly. `app/join/family/[token]/page.tsx` no longer
-calls `resolveRequestOrgId()` at all — like the `signup_token` lookup below,
-its `family_invites` row is looked up by token alone and is itself the org
-anchor, so an invite for org A resolves the correct org regardless of what
-path served the request. The generated join link names that org as a path
-segment (`/<org slug>/join`), so it lands on org A's own join page.
+**Anonymous entry points are token rows**, each read on the service client
+under an `// org-anchor:` marker and each the org anchor for everything that
+follows: `/setup-account` (the `access_requests.signup_token` row, via
+`verify-token` / `consume-token`), `/join/family/[token]` (the
+`family_invites` row, and its request route below), `/serving/go` (the
+HMAC-validated `teams` row) and `/join/[token]` (the `group_invites` row).
+Every one of them fails closed on both failure modes — a lookup error and no
+row each take the page's generic invalid path, never a fallback org.
 
-One lookup is deliberately unscoped: the initial `signup_token` read in
+Those initial lookups are deliberately unscoped: the `signup_token` read in
 `app/api/auth/consume-token/route.ts` and `app/api/auth/verify-token/route.ts`,
-where the token row is what resolves the org. Both fail closed if it yields
-no row or a NULL `org_id`, and every subsequent operation is scoped to the
-resolved row's `org_id`.
+the `family_invites` read in `app/join/family/[token]/page.tsx` and
+`app/api/family-invites/request/route.ts`, and the `group_invites` read in
+`app/join/[token]/page.tsx`, where the token row is what resolves the org.
+Each fails closed if it yields no row, and every subsequent operation is
+scoped to the resolved row's `org_id`.
 
 Two deliberate behaviour changes shipped with this pass:
 
@@ -374,6 +370,64 @@ as a ceiling, every direct write path and the cross-org floor are pinned
 by `supabase/tests/group_discovery_suite.sql`. No service-role client is
 involved anywhere in the feature.
 
+## Group invite RPCs — a definer-function bypass surface
+
+Group invite links (`20261027000000_group_invites.sql`) let a leader or org
+admin mint a link into one group that a stranger redeems before they have
+any session, and that a signed-in member follows to join. Both redemptions
+go through `SECURITY DEFINER` functions, so **the org resolution and the
+assertions in their bodies are the tenant boundary; no lint sees them**.
+`schema_tenancy_lint.sql` check 4 only proves the bodies mention `org_id`;
+`supabase/tests/group_invites_suite.sql` pins the behaviour.
+
+- `group_invite_redeem(_token, _name, _email, _signup_token, _token_expires_at)`
+  — the new-person path. Tenant anchor: the `group_invites` row the token
+  selects, locked `for update`, never a parameter; a signed-in caller is
+  refused (`GI006`). It refuses a dead link (`GI001`: unknown, revoked,
+  expired, used up — one code), bad input (`GI002`), an address that
+  already has an account anywhere or an approved request or unclaimed
+  family invite in another org (`GI003`, existence checks only — a setup
+  link could never work for it), and an address an org admin denied in
+  this org (`GI004`). It then writes the approved `access_requests` row
+  (`reviewed_by` = the link's creator, `group_id`, `group_invite_id`, the
+  minted `signup_token`) and one `group_invite_uses` row, both carrying the
+  invite's `org_id`. A repeat submission by the same lower-cased address
+  refreshes the token on the same request without a second use, so a lost
+  email never burns a one-use link. EXECUTE: `service_role` only — the
+  route holds the token it mailed; the browser never sees it.
+- `group_invite_join(_token)` — the member path. Tenant anchor: the
+  caller's own `profiles` row (`GI006` when none or pending); the invite
+  row, locked `for update`, must carry that org (`GI001` for a foreign,
+  missing, revoked, expired or used-up link alike). Already a member ⇒
+  `already_member` and no use row. A private group admits at once (the
+  link is the approval; `added_by` = the link's creator); otherwise it
+  delegates to the un-granted `join_group_apply()` core, which applies the
+  group's `join_policy` — `joined` or `requested`. One use row per person
+  per link. EXECUTE: `authenticated` only — revoked from `service_role`,
+  because the caller's own session is the anchor and a service caller has
+  none.
+- `handle_new_user()` — when the approved request that admits a signup
+  names a `group_id`, the trigger enrols that group (its composite FK pins
+  it to the signup's org) and stamps `profile_id` on the use row, ahead of
+  the one-group fallback.
+
+`group_invites` carries the restrictive isolation floor and three permissive
+policies for the group's leaders and org admins — SELECT, INSERT
+(`created_by` must be the caller, `revoked_at` null) and UPDATE confined by
+column grant to `revoked_at`, whose `WITH CHECK` refuses to clear it again.
+No DELETE policy and no DELETE privilege: links are the audit trail. `anon`
+holds no privilege on either table. `group_invite_uses` has one SELECT
+policy (the same readers) and no client write grant at all; only the
+functions above and the trigger write it.
+
+The app-side call sites: `app/api/join/[token]/route.ts` calls
+`group_invite_redeem` on the service client under a marker (the function
+resolves the org from the token; there is no `org_id` to pass) and scopes
+its one rollback write on `(id, org_id)`; `app/join/[token]/JoinGroupButton.tsx`
+calls `group_invite_join` on the browser client, which is not service-rooted;
+`app/g/[groupId]/settings/invites/InviteLinksManager.tsx` reads and writes
+`group_invites` on the browser client under the policies above.
+
 ## Email quota RPC — a definer-function bypass surface (CWA-72 / #365)
 
 The per-org daily send cap (`org_email_usage` + `org_email_limits`) is
@@ -429,7 +483,7 @@ argument, not for where that value came from. The compensating controls are
 the `service_role`-only grant, the grant-matrix and behaviour assertions in
 `supabase/tests/org_email_domains_suite.sql`, and the route's unit suite.
 
-## App routes and pages (23 sites)
+## App routes and pages (26 sites)
 
 | File | Why service-role is used | Org derived from | Scoped queries |
 |------|--------------------------|------------------|----------------|
@@ -441,7 +495,10 @@ the `service_role`-only grant, the grant-matrix and behaviour assertions in
 | `app/api/platform/organizations/[id]/invite-owner/route.ts` | Mints the founding admin's `signup_token`; the platform admin's own-org RLS could never reach the new org's request row | Platform-admin authority; org id from the route param | `access_requests` update `.eq("org_id", id).eq("approved_role", "admin").eq("email", ownerEmail)`; rollback update on the same filters + minted token; email branding via `resolveEmailBranding(id)` |
 | `app/serving/go/page.tsx` | Unauthenticated, HMAC-signed serving link; no session exists to satisfy RLS | HMAC-validated `teams` row (`org_id` and `group_id`); link rejected when `profiles.org_id` disagrees | `group_settings` (link mode, on the team's `group_id`), `serving_team_settings`, `team_members`, `serving_signups` (all on `team_id`), `profiles` (spouse), `family_units` (label) |
 | `app/g/[groupId]/serving/[teamId]/page.tsx` | Surfaces pending (never-logged-in) spouse profiles that RLS hides from the caller | Caller's own RLS-scoped profile | `profiles` (spouse lookup) |
-| `app/join/family/[token]/page.tsx` | Signed family-invite link resolved before login; no session | The `family_invites` row itself: looked up by `token` alone (unscoped by org — the row is what resolves it), `org_id` and the org's `slug` taken from that row | `family_invites`, `organizations` (`slug`, embedded via the `org_id` FK, for the link into `/[orgSlug]/join`) |
+| `app/join/family/[token]/page.tsx` | Signed family-invite link resolved before login; no session | The `family_invites` row itself: looked up by `token` alone (unscoped by org — the row is what resolves it); fails closed on a lookup error and on no row | `family_invites` (with its `family_members` / `family_units` embeds, reached by the row's own composite FKs) |
+| `app/api/family-invites/request/route.ts` | A household invitee files their access request before login; no session, and `access_requests` has no client INSERT policy | The `family_invites` row looked up by `token` alone (the org anchor); 404 on no row or an already-claimed invite, 500 on a lookup error | `access_requests` existing-request select `.eq("org_id", invite.org_id)` and insert carrying `org_id: invite.org_id` and `invite_token: invite.token` |
+| `app/join/[token]/page.tsx` | Group invite link resolved before login (and for a signed-in member, before the group's own policies can see them); no session | The `group_invites` row looked up by `token` alone (unscoped — the row is what resolves the org); a lookup error renders "Something went wrong", no row or a dead link renders the one invalid message | `group_invites` (with `groups` / `organizations` embeds by the row's own FKs); `group_invite_uses` count `.eq("invite_id", id).eq("org_id", org_id)`. The signed-in viewer's own `profiles` and `group_members` rows are read on the request client |
+| `app/api/join/[token]/route.ts` | `group_invite_redeem()` is EXECUTE-granted to `service_role` only, and the route holds the signup token it mails | The function resolves the org from the token row inside the transaction (`// org-anchor:` on the `.rpc()`); the returned `org_id` anchors the quota reservation, the branding read and the rollback | `rpc("group_invite_redeem")`; `access_requests` token-clearing update `.eq("id", access_request_id).eq("org_id", org_id)` when quota refuses or the send fails |
 | `app/api/serving/signups/route.ts` | Post-delete notification email lookups for affected members | The deleted signup row's own `org_id` (authorised by the RLS-checked delete); the link's group from its `teams` embed | `team_members` (leaders, on `team_id`), `family_units` (label) |
 | `app/api/serving/link-action/route.ts` | Same HMAC signed-link pattern as `serving/go`; no session | HMAC-validated `teams` row (`org_id` and `group_id`); link rejected when `profiles.org_id` disagrees | `group_settings` (link mode), `serving_team_settings`, `team_members`, `serving_signups` (read/delete — cancel path; all on `team_id`), `rpc(serving_signup_apply)` (the signup + attendee insert pair, one transaction; the function re-derives the org from the `teams` row and enforces it internally — CWA-47 / #313), `profiles` (spouse), `family_units` (label) |
 | `app/api/serving/broadcast/route.ts` | Fans out email to all team members regardless of caller's RLS visibility | RLS-scoped `teams` row (`org_id` and `group_id`); the caller must lead the team or its group (a `group_members` read on the request client) | `team_members` (recipients, on `team_id`), `group_settings` (link mode, on `org_id` + `group_id`) |
@@ -473,12 +530,11 @@ column below describes what a regression would cost, not a pending work item.
 uses the request-scoped `createClient()`, so RLS narrows `organizations` to the
 request org and no `.eq()` filter is needed. That contrast is exactly why
 `lib/email/identity.ts` above — which *does* use the service client — must
-carry `.eq("id", orgId)`. `getOrgBranding()` takes an optional `orgSlug`,
-threaded into `createClient(orgSlug)` as the `x-two42-org` header for the
-public `/[orgSlug]/**` routes; `getRequestBranding()` is the root layout's
-wrapper around it, gating on an authenticated session before ever calling
-`getOrgBranding()` so an anonymous request never resolves an org it did not
-name in its path.
+carry `.eq("id", orgId)`. `getOrgBranding()` takes no argument: the org is
+whatever the session resolves, and an anonymous request resolves none.
+`getRequestBranding()` is the root layout's wrapper around it, gating on an
+authenticated session before ever calling `getOrgBranding()` so an anonymous
+request is branded with the platform defaults without a query.
 
 ## Edge Functions (2 sites)
 

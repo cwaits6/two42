@@ -1,7 +1,7 @@
 import imageCompression from "browser-image-compression";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
-import { resolveOrgSlug, resolveRequestOrgId } from "@/lib/org";
+import { resolveRequestOrgId } from "@/lib/org";
 import {
   SIGNED_URL_TTL_SECONDS,
   groupPathsByBucket,
@@ -54,10 +54,7 @@ async function resolveOrgPrefixedPath(
   label: string,
   path: string,
 ): Promise<string> {
-  const orgId = await resolveRequestOrgId(supabase, {
-    label,
-    orgSlug: resolveOrgSlug(),
-  });
+  const orgId = await resolveRequestOrgId(supabase, { label });
   if (!orgId) {
     throw new Error(`${label} failed: could not resolve organization`);
   }

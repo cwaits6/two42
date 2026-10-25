@@ -59,7 +59,7 @@ if (!url || !key) {
 const supabase = createClient(url, key, { auth: { persistSession: false } });
 
 async function resolveOrgId() {
-  const { data, error } = await supabase.from("organizations").select("id, slug");
+  const { data, error } = await supabase.from("organizations").select("id, name");
   if (error) fail(`could not read organizations: ${error.message}`);
   if (orgOverride) {
     if (!data.some((o) => o.id === orgOverride)) {
@@ -70,7 +70,7 @@ async function resolveOrgId() {
   if (data.length === 0) fail("no organizations exist");
   if (data.length > 1) {
     fail(
-      `multiple organizations exist (${data.map((o) => o.slug).join(", ")}); ` +
+      `multiple organizations exist (${data.map((o) => o.id).join(", ")}); ` +
         "legacy keys carry no org marker, so pass --org <uuid> explicitly",
     );
   }

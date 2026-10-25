@@ -36,7 +36,7 @@ declare
   _member uuid;
 begin
   _org := public.provision_organization(
-    'Member Import Suite', 'member-import-suite', 'admin@member-import.example.test'
+    'Member Import Suite', 'admin@member-import.example.test'
   );
   -- The owner signs up AFTER provisioning, so handle_new_user() resolves them
   -- into the org through the approved access_requests row provisioning made,
@@ -191,11 +191,9 @@ begin
 end $$;
 
 -- ── Why v1 drops create_invite ──────────────────────────────────────────────
--- access_requests has exactly one INSERT policy — "Anyone can submit access
--- request" — whose WITH CHECK requires status = 'pending' and NULL for
--- reviewed_by / reviewed_at / signup_token / token_expires_at /
--- approved_role. There is no admin INSERT policy, so the approved invite row
--- an import would write cannot be inserted by anyone over PostgREST.
+-- access_requests has no INSERT policy at all (the anonymous join form's
+-- policy went with that form), so the approved invite row an import would
+-- write cannot be inserted by anyone over PostgREST.
 --
 -- Pinned as a NEGATIVE deliberately: when a follow-up adds the admin policy,
 -- this assertion fails, and that failure is the signal to re-enable the

@@ -172,7 +172,7 @@ async function runForOrg(
         if (!allowed) {
           console.warn(
             "[org %s] event %s: daily email cap reached, skipping %d reminder(s)",
-            org.slug,
+            org.id,
             event.id,
             recipients.length,
           );
@@ -220,7 +220,7 @@ async function runForOrg(
       // text (tenant content) and fragile as diagnostic keys.
       console.error(
         "[org %s] group %s failed, continuing with remaining groups:",
-        org.slug,
+        org.id,
         group.id,
         err,
       );
@@ -250,7 +250,7 @@ Deno.serve(async () => {
       runForOrg(
         supabase,
         org,
-        resolveEmailBranding(org.branding, BRANDING_DEFAULTS, org.slug, org.org_email_domains[0] ?? null),
+        resolveEmailBranding(org.branding, BRANDING_DEFAULTS, org.id, org.org_email_domains[0] ?? null),
       )));
     if (summary.failed.length > 0 || summary.failedItems.length > 0 || summary.emailsFailed > 0) {
       console.error(

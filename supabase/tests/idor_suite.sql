@@ -91,8 +91,8 @@ declare
   owner_b uuid := gen_random_uuid();
   member_b uuid := gen_random_uuid();
 begin
-  org_a := public.provision_organization('IDOR Suite Org A', 'idor-suite-org-a', 'owner-a@idor.example.test');
-  org_b := public.provision_organization('IDOR Suite Org B', 'idor-suite-org-b', 'owner-b@idor.example.test');
+  org_a := public.provision_organization('IDOR Suite Org A', 'owner-a@idor.example.test');
+  org_b := public.provision_organization('IDOR Suite Org B', 'owner-b@idor.example.test');
 
   -- Owners sign up AFTER provisioning (the org-first contract) and become
   -- founding admins via approved_role = 'admin'.

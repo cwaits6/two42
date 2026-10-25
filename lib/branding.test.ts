@@ -16,6 +16,7 @@ import {
   BRANDING_DEFAULTS,
   getOrgBranding,
   getRequestBranding,
+  orgDisplayName,
   resolveBranding,
 } from "@/lib/branding";
 
@@ -169,8 +170,8 @@ describe("getRequestBranding (root layout gate)", () => {
     mockOrganizationsRow({ accent: "#123abc" });
     const result = await getRequestBranding();
     expect(result.accent).toBe("#123abc");
-    // No explicit slug: the org comes from the session, never the URL.
-    expect(createClient).toHaveBeenCalledWith(undefined);
+    // The org comes from the session, never a URL or a header.
+    expect(createClient).toHaveBeenCalledWith();
   });
 
   it("falls back to platform defaults if getOptionalUser rejects, instead of throwing", async () => {
@@ -183,16 +184,16 @@ describe("getRequestBranding (root layout gate)", () => {
   });
 });
 
-describe("getOrgBranding(orgSlug)", () => {
+describe("getOrgBranding", () => {
   // Same mockReset() rationale as the describe block above.
   beforeEach(() => {
     vi.mocked(createClient).mockReset();
   });
 
-  it("threads an explicit orgSlug into createClient", async () => {
+  it("reads through the request-scoped client with no argument", async () => {
     mockOrganizationsRow({ accent: "#654321" });
-    const result = await getOrgBranding("acme");
-    expect(createClient).toHaveBeenCalledWith("acme");
+    const result = await getOrgBranding();
+    expect(createClient).toHaveBeenCalledWith();
     expect(result.accent).toBe("#654321");
   });
 
@@ -203,7 +204,7 @@ describe("getOrgBranding(orgSlug)", () => {
     vi.mocked(createClient).mockResolvedValue({ from } as never);
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const result = await getOrgBranding("acme");
+    const result = await getOrgBranding();
 
     expect(result).toEqual(BRANDING_DEFAULTS);
     expect(errorSpy).toHaveBeenCalledTimes(1);
@@ -216,7 +217,7 @@ describe("getOrgBranding(orgSlug)", () => {
     vi.mocked(createClient).mockResolvedValue({ from } as never);
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const result = await getOrgBranding("acme");
+    const result = await getOrgBranding();
 
     expect(result).toEqual(BRANDING_DEFAULTS);
     expect(warnSpy).toHaveBeenCalledTimes(1);
@@ -226,9 +227,27 @@ describe("getOrgBranding(orgSlug)", () => {
     vi.mocked(createClient).mockRejectedValue(new Error("connection refused"));
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const result = await getOrgBranding("acme");
+    const result = await getOrgBranding();
 
     expect(result).toEqual(BRANDING_DEFAULTS);
     expect(errorSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("orgDisplayName", () => {
+  it("prefers a set display_name, stripped of control characters", () => {
+    expect(orgDisplayName({ display_name: " Grace\u0000 Church " }, "Grace Fellowship")).toBe(
+      "Grace Church",
+    );
+  });
+
+  it.each([
+    ["a blank display_name", { display_name: "   " }],
+    ["a missing display_name", { accent: "#B85C38" }],
+    ["a non-string display_name", { display_name: 7 }],
+    ["null branding", null],
+    ["array branding", []],
+  ])("falls back to the org's own name for %s, never the platform name", (_label, raw) => {
+    expect(orgDisplayName(raw, "Grace Fellowship")).toBe("Grace Fellowship");
   });
 });

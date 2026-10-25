@@ -78,6 +78,7 @@ describe("GroupSettingsPage", () => {
     expect(links).toEqual([
       `/g/${A_ID}/settings/about`,
       `/g/${A_ID}/settings/privacy`,
+      `/g/${A_ID}/settings/invites`,
       `/g/${A_ID}/settings/announcements`,
       `/g/${A_ID}/settings/lectures`,
       `/g/${A_ID}/settings/giving`,

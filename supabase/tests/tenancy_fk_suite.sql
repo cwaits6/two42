@@ -42,8 +42,8 @@ declare
   v uuid;
   grp_b uuid;
 begin
-  org_a := public.provision_organization('FK Suite Org A', 'fk-suite-org-a', 'fk-owner-a@leak.example.test');
-  org_b := public.provision_organization('FK Suite Org B', 'fk-suite-org-b', 'fk-owner-b@leak.example.test');
+  org_a := public.provision_organization('FK Suite Org A', 'fk-owner-a@leak.example.test');
+  org_b := public.provision_organization('FK Suite Org B', 'fk-owner-b@leak.example.test');
 
   insert into auth.users (id, email) values
     (owner_a, 'fk-owner-a@leak.example.test'),

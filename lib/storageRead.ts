@@ -11,9 +11,7 @@
 // SupabaseClient parameter: storage signing has no org_id predicate for a
 // callee to re-validate, so a passed-in service client would mint
 // cross-tenant URLs with nothing to stop it (the Tier C shape in CLAUDE.md /
-// scripts/README.md). A caller that needs a specific org context (e.g. a
-// public per-org route) should grow an `orgSlug?: string` parameter threaded
-// to `createClient(orgSlug)` — never a client object.
+// scripts/README.md).
 
 import { createClient } from "@/lib/supabase/server";
 import {

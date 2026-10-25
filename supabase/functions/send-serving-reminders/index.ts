@@ -606,7 +606,7 @@ Deno.serve(async (req) => {
         const branding = resolveEmailBranding(
           org.branding,
           BRANDING_DEFAULTS,
-          org.slug,
+          org.id,
           org.org_email_domains[0] ?? null,
         );
         return mode === "monthly"

@@ -20,11 +20,8 @@
  *
  * Why v1 cannot create logins: the invite row an import would write is an
  * `access_requests` row with status='approved' and a signup_token, and
- * access_requests has exactly one INSERT policy — "Anyone can submit access
- * request" — whose WITH CHECK requires status='pending' and NULL for
- * reviewed_by, reviewed_at, signup_token, token_expires_at and
- * approved_role. There is no admin INSERT policy, so every such insert fails
- * RLS. Planning it as a row error keeps the failure inside "validate
+ * access_requests has no INSERT policy for any client role, so every such
+ * insert fails RLS. Planning it as a row error keeps the failure inside "validate
  * everything before writing anything"; attempting the write instead would
  * 500 the run *after* households, family members and profile updates had
  * already landed. An admin-scoped INSERT policy is the follow-up (it also

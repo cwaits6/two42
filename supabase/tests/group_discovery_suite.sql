@@ -50,8 +50,8 @@ declare
   grp_a3 uuid;
   grp_b1 uuid;
 begin
-  org_a := public.provision_organization('Group Discovery Org A', 'group-discovery-org-a', 'owner-a@group-discovery.example.test');
-  org_b := public.provision_organization('Group Discovery Org B', 'group-discovery-org-b', 'owner-b@group-discovery.example.test');
+  org_a := public.provision_organization('Group Discovery Org A', 'owner-a@group-discovery.example.test');
+  org_b := public.provision_organization('Group Discovery Org B', 'owner-b@group-discovery.example.test');
 
   insert into public.access_requests (org_id, name, email, status) values
     (org_a, 'Leader A1', 'leader-a1@group-discovery.example.test', 'approved'),

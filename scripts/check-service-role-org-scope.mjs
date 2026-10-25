@@ -133,8 +133,7 @@ const UUID_SWEEP_EXCLUDE = [
   // pgTAP suites run against the migrations-built database, where the seeded
   // org exists by definition — exercising it by its UUID is their job:
   "supabase/tests/branding_rls_suite.sql", // updates the seeded org's own row by PK
-  "supabase/tests/tenancy_leak_suite.sql", // asserts the seeded org still carries the default slug
-  "supabase/tests/platform_org_lifecycle_suite.sql", // asserts app_request_org_id() resolves the header org to it, and inserts access_requests into it
+  "supabase/tests/platform_org_lifecycle_suite.sql", // probes anon INSERT and approved_role against it by PK
 ];
 
 function gitLsFiles(...pathspecs) {

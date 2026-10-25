@@ -133,6 +133,60 @@ export async function sendFamilyInviteEmail(
   }
 }
 
+/**
+ * The setup link for a person who followed a group invite link. Branding is
+ * required: the caller holds the invite's org id, and a request-scoped
+ * fallback would resolve nothing for the anonymous visitor who triggered
+ * this send.
+ */
+export async function sendGroupInviteEmail(
+  email: string,
+  name: string,
+  groupName: string,
+  setupLink: string,
+  branding: EmailBranding
+) {
+  const b = branding;
+  const safeOrgName = escapeHtml(b.orgName);
+  const safeName = escapeHtml(name);
+  const safeGroupName = escapeHtml(groupName);
+  const safeSetupLink = sanitizeLink(setupLink);
+
+  const { error } = await getResend().emails.send({
+    from: formatFromHeader(b.orgName, b.fromAddress),
+    to: email,
+    ...(b.replyTo ? { replyTo: b.replyTo } : {}),
+    subject: `You're invited to ${headerText(groupName)} at ${b.orgName}`,
+    html: `
+      <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+        <h1 style="color: ${b.accent}; font-size: 28px;">Welcome, ${safeName}!</h1>
+        <p style="font-size: 18px; line-height: 1.6; color: #44403c;">
+          You've been invited to join <strong>${safeGroupName}</strong> at <strong>${safeOrgName}</strong>.
+        </p>
+        <p style="font-size: 18px; line-height: 1.6; color: #44403c;">
+          Click the button below to set up your password. You'll land in the group as soon as you're done.
+        </p>
+        <a href="${safeSetupLink}"
+           style="display: inline-block; background-color: ${b.accent}; color: white; padding: 16px 32px; text-decoration: none; border-radius: 8px; font-size: 18px; margin-top: 20px;">
+          Set up my account
+        </a>
+        <p style="font-size: 14px; color: #78716c; margin-top: 40px;">
+          If the button doesn't work, copy and paste this link into your browser:<br />
+          <a href="${safeSetupLink}" style="color: ${b.accentLight};">${safeSetupLink}</a>
+        </p>
+        <p style="font-size: 14px; color: #78716c; margin-top: 20px;">
+          &mdash; The ${safeOrgName} Team
+        </p>
+      </div>
+    `,
+  });
+
+  if (error) {
+    console.error("Failed to send group invite email:", error);
+    throw error;
+  }
+}
+
 export async function sendFeedbackEmail(
   to: string[],
   senderName: string,

@@ -8,7 +8,7 @@
  */
 import { siteConfig } from "@/lib/config";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { resolveOrgSlug, resolveRequestOrgId } from "@/lib/org";
+import { resolveRequestOrgId } from "@/lib/org";
 import { BRANDING_DEFAULTS, getOrgBranding, resolveBranding } from "@/lib/branding";
 import type { OrgBranding } from "@/lib/branding";
 
@@ -230,7 +230,6 @@ export async function resolveRequestEmailBranding(): Promise<EmailBranding> {
     const requestClient = await createClient();
     const resolvedOrgId = await resolveRequestOrgId(requestClient, {
       label: "resolveRequestEmailBranding",
-      orgSlug: resolveOrgSlug(),
     });
     if (!resolvedOrgId) {
       // No org resolvable — fail closed to the platform address.

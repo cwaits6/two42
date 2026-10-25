@@ -36,8 +36,8 @@ declare
   grp_b uuid;
   sunday1 date := current_date + (7 - extract(dow from current_date)::int);
 begin
-  org_a := public.provision_organization('Serving RPC Org A', 'serving-rpc-org-a', 'owner-a@serving-rpc.example.test');
-  org_b := public.provision_organization('Serving RPC Org B', 'serving-rpc-org-b', 'owner-b@serving-rpc.example.test');
+  org_a := public.provision_organization('Serving RPC Org A', 'owner-a@serving-rpc.example.test');
+  org_b := public.provision_organization('Serving RPC Org B', 'owner-b@serving-rpc.example.test');
 
   -- Approved requests so handle_new_user() resolves the extra org A signups.
   insert into public.access_requests (org_id, name, email, status) values

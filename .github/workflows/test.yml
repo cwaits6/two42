@@ -132,12 +132,18 @@ jobs:
 
       - name: Point the build at the local stack
         if: steps.changes.outputs.run == 'true'
+        # The service key is the ephemeral stack's own: the token pages the
+        # suite visits (/join/<token>) read their anchor row on the service
+        # client, and it is logged nowhere.
         run: |
           npx supabase status -o env | sed -n \
             -e 's/^API_URL="\(.*\)"$/NEXT_PUBLIC_SUPABASE_URL=\1/p' \
             -e 's/^ANON_KEY="\(.*\)"$/NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=\1/p' \
             | tee -a "$GITHUB_ENV"
+          npx supabase status -o env | sed -n \
+            -e 's/^SERVICE_ROLE_KEY="\(.*\)"$/SUPABASE_SECRET_KEY=\1/p' >> "$GITHUB_ENV"
           test "$(grep -c '^NEXT_PUBLIC_SUPABASE_' "$GITHUB_ENV")" -eq 2
+          test "$(grep -c '^SUPABASE_SECRET_KEY=' "$GITHUB_ENV")" -eq 1
 
       - name: Resolve the Playwright version
         if: steps.changes.outputs.run == 'true'

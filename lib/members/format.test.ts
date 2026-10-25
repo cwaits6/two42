@@ -6,12 +6,37 @@ import { describe, expect, it } from "vitest";
 import {
   HIDDEN_FIELD_TOKENS,
   MEMBER_CSV_COLUMNS,
+  filenameSlug,
   memberRowsFromSnapshot,
   parseMembers,
   serializeMembers,
   type MemberRow,
 } from "@/lib/members/format";
 import type { OrgSnapshot } from "@/lib/members/snapshot";
+
+describe("filenameSlug", () => {
+  it("lower-cases and joins words with single hyphens", () => {
+    expect(filenameSlug("Grace Chapel")).toBe("grace-chapel");
+    expect(filenameSlug("St. Mark's  —  Downtown")).toBe("st-mark-s-downtown");
+  });
+
+  it("trims leading and trailing hyphens", () => {
+    expect(filenameSlug("  (Grace)  ")).toBe("grace");
+  });
+
+  it("is empty when nothing survives", () => {
+    expect(filenameSlug("¡¡¡")).toBe("");
+    expect(filenameSlug("")).toBe("");
+  });
+
+  it("caps the length at 60 without ending on a hyphen", () => {
+    const long = Array.from({ length: 20 }, () => "word").join(" ");
+    const slug = filenameSlug(long);
+    expect(slug.length).toBeLessThanOrEqual(60);
+    expect(slug.endsWith("-")).toBe(false);
+    expect(slug.startsWith("word-word")).toBe(true);
+  });
+});
 
 function makeRow(overrides: Partial<MemberRow>): MemberRow {
   return {

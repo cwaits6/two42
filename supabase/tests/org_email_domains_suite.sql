@@ -35,8 +35,8 @@ declare
   owner_b uuid := gen_random_uuid();
   member_a uuid := gen_random_uuid();
 begin
-  org_a := public.provision_organization('Email Domain Suite Org A', 'email-domain-suite-org-a', 'owner-a@emaildomain.example.test');
-  org_b := public.provision_organization('Email Domain Suite Org B', 'email-domain-suite-org-b', 'owner-b@emaildomain.example.test');
+  org_a := public.provision_organization('Email Domain Suite Org A', 'owner-a@emaildomain.example.test');
+  org_b := public.provision_organization('Email Domain Suite Org B', 'owner-b@emaildomain.example.test');
 
   insert into auth.users (id, email) values
     (owner_a, 'owner-a@emaildomain.example.test'),
@@ -364,7 +364,7 @@ do $$
 declare
   org_c uuid;
 begin
-  org_c := public.provision_organization('Email Domain Suite Org C', 'email-domain-suite-org-c', 'owner-c@emaildomain.example.test');
+  org_c := public.provision_organization('Email Domain Suite Org C', 'owner-c@emaildomain.example.test');
   update public.organizations set custom_email_domain_enabled = true where id = org_c;
   perform set_config('oed.org_c', org_c::text, true);
 end $$;

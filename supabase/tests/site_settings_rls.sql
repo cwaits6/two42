@@ -19,9 +19,8 @@ declare
   member_private_count bigint;
   admin_id uuid := 'a0000000-0000-0000-0000-000000000001';
 begin
-  -- anon (no JWT) can read only rows explicitly marked is_public — and
-  -- since Phase 2 (CWA-9) only after resolving an org via the x-two42-org
-  -- header. With no header, anon reads nothing at all (fail-closed).
+  -- anon (no JWT) resolves no org at all, so it reads nothing — not even a
+  -- row marked is_public, and whatever x-two42-org header it sends.
   set local role anon;
   reset request.jwt.claims;
   perform set_config('request.headers', '{}', true);
@@ -36,8 +35,8 @@ begin
 
   select count(*) into anon_public_count
     from public.site_settings where key = 'site_name';
-  if anon_public_count <> 1 then
-    raise exception 'anon should read site_name (is_public = true), got % rows', anon_public_count;
+  if anon_public_count <> 0 then
+    raise exception 'anon with an x-two42-org header should still read nothing (no header path remains), got % rows', anon_public_count;
   end if;
 
   select count(*) into anon_private_count

@@ -16,7 +16,7 @@ const createServerClient = vi.fn<
   (
     url: string,
     key: string,
-    config: { global: { headers: Record<string, string> } }
+    config: { global?: { headers?: Record<string, string> } }
   ) => unknown
 >(() => ({}));
 
@@ -27,41 +27,25 @@ vi.mock("@supabase/ssr", () => ({
   createServerClient: (
     url: string,
     key: string,
-    config: { global: { headers: Record<string, string> } }
+    config: { global?: { headers?: Record<string, string> } }
   ) => createServerClient(url, key, config),
 }));
 
 // vi.mock is hoisted, so this import sees the mocks above.
 const { createClient } = await import("@/lib/supabase/server");
 
-describe("createClient — x-two42-org precedence", () => {
+describe("createClient — org resolution", () => {
   beforeEach(() => {
     headersMock.mockReset();
     createServerClient.mockClear();
-    delete process.env.NEXT_PUBLIC_ORG_SLUG;
   });
 
-  it("uses the explicit orgSlug argument over the env pin", async () => {
-    process.env.NEXT_PUBLIC_ORG_SLUG = "default";
-    await createClient("hope");
-    const config = createServerClient.mock.calls[0][2];
-    expect(config.global.headers["x-two42-org"]).toBe("hope");
-  });
-
-  it("falls back to the env pin when no orgSlug is passed", async () => {
-    process.env.NEXT_PUBLIC_ORG_SLUG = "default";
-    await createClient();
-    const config = createServerClient.mock.calls[0][2];
-    expect(config.global.headers["x-two42-org"]).toBe("default");
-  });
-
-  it("never takes the org from a request header", async () => {
-    process.env.NEXT_PUBLIC_ORG_SLUG = "default";
+  it("sends no x-two42-org header and ignores one on the request", async () => {
     headersMock.mockReturnValue({
       get: (name: string) => (name === "x-two42-org" ? "grace" : null),
     });
     await createClient();
     const config = createServerClient.mock.calls[0][2];
-    expect(config.global.headers["x-two42-org"]).toBe("default");
+    expect(config.global?.headers?.["x-two42-org"]).toBeUndefined();
   });
 });

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 type MockClientConfig = {
-  global: { headers: Record<string, string> };
+  global?: { headers?: Record<string, string> };
   cookies: {
     setAll: (
       cookies: {
@@ -45,17 +45,14 @@ import { updateSession } from "@/lib/supabase/middleware";
 describe("updateSession — expected host", () => {
   beforeEach(() => {
     createServerClient.mockClear();
-    process.env.NEXT_PUBLIC_ORG_SLUG = "default";
   });
 
-  it("serves the canonical host with the env-pinned org", async () => {
+  it("serves the canonical host", async () => {
     const req = new NextRequest("https://two42.io/", {
       headers: { host: "two42.io" },
     });
     const res = await updateSession(req);
     expect(res.status).not.toBe(404);
-    const config = createServerClient.mock.calls[0][2];
-    expect(config.global.headers["x-two42-org"]).toBe("default");
   });
 
   it("serves the canonical host regardless of case, port, or a trailing dot", async () => {
@@ -66,14 +63,12 @@ describe("updateSession — expected host", () => {
     expect(res.status).not.toBe(404);
   });
 
-  it("serves localhost with the env-pinned org", async () => {
+  it("serves localhost", async () => {
     const req = new NextRequest("http://localhost:3000/", {
       headers: { host: "localhost:3000" },
     });
     const res = await updateSession(req);
     expect(res.status).not.toBe(404);
-    const config = createServerClient.mock.calls[0][2];
-    expect(config.global.headers["x-two42-org"]).toBe("default");
   });
 
   it("404s on an org subdomain of the canonical host", async () => {
@@ -94,7 +89,7 @@ describe("updateSession — expected host", () => {
     expect(createServerClient).not.toHaveBeenCalled();
   });
 
-  it("never derives the org from a client-sent header", async () => {
+  it("sends no x-two42-org header, whatever the client sent", async () => {
     const req = new NextRequest("https://two42.io/", {
       headers: {
         host: "two42.io",
@@ -103,7 +98,7 @@ describe("updateSession — expected host", () => {
     });
     await updateSession(req);
     const config = createServerClient.mock.calls[0][2];
-    expect(config.global.headers["x-two42-org"]).toBe("default");
+    expect(config.global?.headers?.["x-two42-org"]).toBeUndefined();
   });
 });
 
@@ -173,7 +168,6 @@ describe("legacy group routes and the group cookie", () => {
       rpc: vi.fn(async () => ({ data: null, error: null })),
       from,
     }));
-    process.env.NEXT_PUBLIC_ORG_SLUG = "default";
   });
 
   it("redirects a legacy section under the cookie's group, query string preserved", async () => {
@@ -210,7 +204,7 @@ describe("legacy group routes and the group cookie", () => {
     expect(location(await updateSession(get("/serving/go?token=x")))).toBeNull();
   });
 
-  it("requires login for legacy and group paths but not for a slug starting with g", async () => {
+  it("requires login for legacy and group paths but not for a public path starting with g or a join link", async () => {
     expect(location(await updateSession(get("/announcements")))).toBe(
       "/login?redirect=%2Fannouncements"
     );
@@ -218,7 +212,7 @@ describe("legacy group routes and the group cookie", () => {
       `/login?redirect=%2Fg%2F${A}%2Fdashboard`
     );
     expect(location(await updateSession(get("/calendar")))).toBe("/login?redirect=%2Fcalendar");
-    expect(location(await updateSession(get("/grace/join")))).toBeNull();
+    expect(location(await updateSession(get(`/join/${Z}`)))).toBeNull();
     expect(location(await updateSession(get("/give-thanks")))).toBeNull();
   });
 

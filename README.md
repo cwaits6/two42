@@ -131,14 +131,10 @@ two42 was built to solve exactly that. It has since been open-sourced so other g
    NEXT_PUBLIC_SITE_URL=http://localhost:3000
    ```
 
-   `NEXT_PUBLIC_ORG_SLUG` is optional and defaults to `default`, which matches the
-   organization the migrations seed. It is sent as the `x-two42-org` header for
-   anonymous requests that carry no org path segment — if you set it, it must be
-   the slug of a real row in `organizations`. Routes that do carry an explicit org
-   slug (the `/[orgSlug]/join` form, public content) pass that path slug straight
-   to `createClient(orgSlug)` instead of the env pin, so a slug that matches no
-   organization makes those flows fail closed rather than fall back to another
-   tenant.
+   People join through group invite links: a group leader creates one under
+   Group settings › Invite links and shares it; the `/join/<token>` page it
+   opens resolves the organization from the link itself, so no environment
+   variable names a tenant.
 
    `NEXT_PUBLIC_SITE_URL` is also the app's one canonical host: a request
    whose `Host` is anything else (other than `localhost`, `127.0.0.1` or a
@@ -210,10 +206,7 @@ panel at runtime.
 1. Push your code to GitHub
 2. Connect the repo at [vercel.com/new](https://vercel.com/new)
 3. Add all 5 environment variables (same as `.env.local`, with your production domain for `NEXT_PUBLIC_SITE_URL`)
-4. Only set `NEXT_PUBLIC_ORG_SLUG` if you renamed the seeded organization or run a
-   different one — it must be the slug of a real `organizations` row, or the
-   anonymous `/[orgSlug]/join` page reports that join requests are unavailable
-5. Click **Deploy**
+4. Click **Deploy**
 
 Then update your Supabase redirect URLs to include your production domain.
 

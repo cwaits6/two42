@@ -146,11 +146,8 @@ export async function notifyLeadersOfCancel(
     excludeProfileId?: string;
   }
 ) {
-  // orgId is required rather than self-resolving: resolveEmailBranding() would
-  // otherwise fall back to the REQUEST org, and resolveOrgSlug() in lib/org.ts
-  // takes no arguments and returns NEXT_PUBLIC_ORG_SLUG. That is the right org
-  // today only because the deployment is single-tenant, and this function's
-  // anonymous signed-link caller has no session to resolve from. Both callers
+  // orgId is required rather than self-resolving: this function's anonymous
+  // signed-link caller has no session to resolve an org from. Both callers
   // hold an already-authorized org_id and pass it.
 
   // org_id filter is required: this is an email fan-out surface on a
