@@ -158,14 +158,15 @@ invite yourself, then promote yourself.
    ```sql
    insert into public.access_requests (org_id, name, email, status, reviewed_at)
    values (
-     '00000000-0000-0000-0000-000000000001',
+     (select id from public.organizations),
      'Your Name', 'you@example.com', 'approved', now()
    );
    ```
 
-   That id is the default organization every fresh project starts with. If you
-   provisioned your own organization instead, use its `id` from
-   **Table Editor → organizations**.
+   A fresh project has exactly one organization, so the subquery resolves to it.
+   If you have provisioned more, the statement stops with "more than one row
+   returned by a subquery" instead of guessing: replace the subquery with the
+   `id` of the organization you want from **Table Editor → organizations**.
 
 2. Go to **Supabase → Authentication → Users → Invite user** and invite that same email
 3. Click the magic link in the email to sign in
