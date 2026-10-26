@@ -4,24 +4,12 @@ import { useMemo, useState } from "react";
 import { Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
-import { displayName } from "@/lib/names";
-import { PRAYER_CATEGORIES, PRAYER_CATEGORY_KEYS } from "@/lib/prayer";
+import { prayerAuthorLabel } from "@/lib/prayer";
 import { PrayerCard } from "@/components/prayer/PrayerCard";
 import { PrayerComposer } from "@/components/prayer/PrayerComposer";
 import { PrayerCallCard } from "@/components/prayer/PrayerCallCard";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type { MemberOption } from "@/components/giving/FundForm";
-import type {
-  PrayerCallSession,
-  PrayerCategory,
-  PrayerWallRow,
-} from "@/lib/types";
+import type { PrayerCallSession, PrayerWallRow } from "@/lib/types";
 
 export interface Me {
   id: string;
@@ -30,22 +18,8 @@ export interface Me {
   avatarUrl: string | null;
 }
 
-const STATUS_FILTERS = [
-  "All",
-  "My requests",
-  "Everyone",
-  "Restricted",
-  "Answered",
-] as const;
+const STATUS_FILTERS = ["All", "My requests", "Answered"] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
-
-const TYPE_ITEMS = [
-  { value: "all", label: "All types" },
-  ...PRAYER_CATEGORY_KEYS.map((key) => ({
-    value: key,
-    label: PRAYER_CATEGORIES[key].label,
-  })),
-];
 
 export type PrayerGroup = { id: string; name: string; isLeader: boolean };
 
@@ -70,15 +44,10 @@ export function PrayerBoard({
 }) {
   const [requests, setRequests] = useState(initialRequests);
   const [status, setStatus] = useState<StatusFilter>("All");
-  const [category, setCategory] = useState<PrayerCategory | null>(null);
   const [query, setQuery] = useState("");
   const [prayPending, setPrayPending] = useState<Set<string>>(new Set());
 
-  const handlePost = async (draft: {
-    body: string;
-    category: PrayerCategory;
-    is_anonymous: boolean;
-  }) => {
+  const handlePost = async (draft: { body: string; is_anonymous: boolean }) => {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("prayer_requests")
@@ -94,9 +63,7 @@ export function PrayerBoard({
         id: data.id,
         group_id: group.id,
         body: draft.body,
-        category: draft.category,
         is_anonymous: draft.is_anonymous,
-        visible_to_warriors: false,
         is_answered: false,
         created_at: data.created_at,
         mine: true,
@@ -172,27 +139,14 @@ export function PrayerBoard({
     const q = query.trim().toLowerCase();
     return requests.filter((r) => {
       if (status === "My requests" && !r.mine) return false;
-      if (status === "Everyone" && r.visible_to_warriors) return false;
-      if (status === "Restricted" && !r.visible_to_warriors) return false;
       if (status === "Answered" && !r.is_answered) return false;
-      if (category && r.category !== category) return false;
       if (!q) return true;
-      const author = r.is_anonymous && !r.mine ? "anonymous" : displayName(r);
       return (
         r.body.toLowerCase().includes(q) ||
-        PRAYER_CATEGORIES[r.category].label.toLowerCase().includes(q) ||
-        author.toLowerCase().includes(q)
+        prayerAuthorLabel(r).toLowerCase().includes(q)
       );
     });
-  }, [requests, status, category, query]);
-
-  // RLS already trims the wall to what this member may see, so the chip only
-  // appears when at least one visible request is actually restricted.
-  const statusFilters = STATUS_FILTERS.filter(
-    (f) => f !== "Restricted" || requests.some((r) => r.visible_to_warriors)
-  );
-
-  const typeMeta = category ? PRAYER_CATEGORIES[category] : null;
+  }, [requests, status, query]);
 
   const wall = (
     <div>
@@ -218,9 +172,9 @@ export function PrayerBoard({
         )}
       </div>
 
-      {/* Status filters + prayer type dropdown */}
+      {/* Status filters */}
       <div className="mt-3.5 flex flex-wrap items-center gap-2">
-        {statusFilters.map((f) => {
+        {STATUS_FILTERS.map((f) => {
           const active = f === status;
           return (
             <button
@@ -237,56 +191,6 @@ export function PrayerBoard({
             </button>
           );
         })}
-        <Select
-          items={TYPE_ITEMS}
-          value={category ?? "all"}
-          onValueChange={(v) =>
-            setCategory(!v || v === "all" ? null : (v as PrayerCategory))
-          }
-        >
-          <SelectTrigger
-            aria-label="Filter by prayer type"
-            className={`h-auto! rounded-full! px-4 py-3 text-base transition-colors ${
-              typeMeta
-                ? "font-semibold [&_svg]:text-white"
-                : "border-border bg-card font-medium text-muted-foreground hover:text-foreground"
-            }`}
-            style={
-              typeMeta
-                ? {
-                    backgroundColor: typeMeta.color,
-                    borderColor: typeMeta.color,
-                    color: "var(--primary-foreground)",
-                  }
-                : undefined
-            }
-          >
-            {typeMeta && (
-              <span
-                aria-hidden="true"
-                className="h-1.5 w-1.5 shrink-0 rounded-full bg-white"
-              />
-            )}
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {TYPE_ITEMS.map((item) => (
-              <SelectItem key={item.value} value={item.value}>
-                {item.value !== "all" && (
-                  <span
-                    aria-hidden="true"
-                    className="h-1.5 w-1.5 shrink-0 self-center rounded-full"
-                    style={{
-                      backgroundColor:
-                        PRAYER_CATEGORIES[item.value as PrayerCategory].color,
-                    }}
-                  />
-                )}
-                {item.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         <span className="ml-auto text-sm text-muted-foreground">
           {shown.length} shown
         </span>

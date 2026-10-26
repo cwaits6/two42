@@ -8,6 +8,7 @@ import { RsvpSegmented } from "@/components/groups/RsvpSegmented";
 import { JoinMeetingBlock } from "@/components/events/JoinMeetingBlock";
 import { expandUpcomingEvents } from "@/lib/recurrence";
 import { meetingEndMs, ENDED_GRACE_MS, type MeetingFields } from "@/lib/meetings";
+import { prayerAuthorLabel } from "@/lib/prayer";
 import type { Event, Rsvp } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
@@ -62,11 +63,6 @@ function excerpt(content: string): string {
   } catch {
     return content.replace(/<[^>]+>/g, "").slice(0, 140);
   }
-}
-
-function prayerCategoryLabel(category: string | null): string {
-  if (!category) return "Prayer";
-  return category.charAt(0).toUpperCase() + category.slice(1);
 }
 
 // ── component ────────────────────────────────────────────────────────────────
@@ -131,7 +127,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
       .eq("group_id", group.id),
     supabase
       .from("prayer_wall")
-      .select("id, category, body, created_at")
+      .select("id, body, is_anonymous, first_name, last_name, preferred_name, created_at")
       .eq("group_id", group.id)
       .eq("is_answered", false)
       .order("created_at", { ascending: false })
@@ -444,8 +440,8 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
                     <HeartHandshake className="h-4 w-4 text-brand-primary" aria-hidden="true" />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="font-mono text-base text-muted-foreground uppercase tracking-wider">
-                      {prayerCategoryLabel(p.category)}
+                    <div className="font-sans text-base font-semibold text-muted-foreground">
+                      {prayerAuthorLabel(p)}
                     </div>
                     <div className="font-sans text-base text-foreground line-clamp-2">
                       {p.body}

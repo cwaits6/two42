@@ -409,19 +409,19 @@ ON CONFLICT (id) DO UPDATE
   WHERE announcements.org_id = excluded.org_id;
 
 -- Each request is posted in a group its author belongs to.
-INSERT INTO public.prayer_requests (id, org_id, group_id, author_id, body, category, is_anonymous)
-SELECT r.id, p.org_id, g.id, p.id, r.body, r.category, r.is_anonymous
+INSERT INTO public.prayer_requests (id, org_id, group_id, author_id, body, is_anonymous)
+SELECT r.id, p.org_id, g.id, p.id, r.body, r.is_anonymous
 FROM (VALUES
   ('b1000000-0000-0000-0000-000000000001'::uuid, 'zoe.dummyfield@example.test', 'Group B',
    'Ruth has a follow-up appointment Thursday after last month''s fall. Pray for a clear scan and steady steps.',
-   'health', false),
+   false),
   ('b1000000-0000-0000-0000-000000000002'::uuid, 'mia.fakeworth@example.test', 'Group A',
    'Grateful that the new job came through after a long search.',
-   'thanksgiving', false),
+   false),
   ('b1000000-0000-0000-0000-000000000003'::uuid, 'amelia.demoski@example.test', 'Group C',
    'Deciding whether to take a transfer out of state. Wisdom for the family.',
-   'guidance', true)
-) AS r (id, author_email, group_name, body, category, is_anonymous)
+   true)
+) AS r (id, author_email, group_name, body, is_anonymous)
 JOIN public.profiles p ON p.email = r.author_email
   AND p.org_id = '00000000-0000-0000-0000-000000000001'
 JOIN public.groups g ON g.name = r.group_name

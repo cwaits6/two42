@@ -427,27 +427,15 @@ export interface GivingFundMethod {
   display_order: number;
 }
 
-export type PrayerCategory =
-  | "health"
-  | "family"
-  | "thanksgiving"
-  | "prodigal"
-  | "guidance"
-  | "grief";
-
 /**
  * Row from the prayer_wall view. Author name/avatar come back null on
- * anonymous posts (unless it's the caller's own post — `mine` is true), and
- * warrior-restricted rows are filtered out by RLS for members who aren't
- * prayer warriors.
+ * anonymous posts (unless it's the caller's own post — `mine` is true).
  */
 export interface PrayerWallRow {
   id: string;
   group_id: string;
   body: string;
-  category: PrayerCategory;
   is_anonymous: boolean;
-  visible_to_warriors: boolean;
   is_answered: boolean;
   created_at: string;
   mine: boolean;

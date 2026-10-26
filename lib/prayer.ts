@@ -1,21 +1,18 @@
-import type { PrayerCategory, PrayerCallSession } from "@/lib/types";
+import { displayName } from "@/lib/names";
+import type { PrayerCallSession, PrayerWallRow } from "@/lib/types";
 
-/** Display metadata for each prayer category (the "prayer type") */
-export const PRAYER_CATEGORIES: Record<
-  PrayerCategory,
-  { label: string; color: string }
-> = {
-  health: { label: "Health", color: "#2F6BA8" },
-  family: { label: "Family", color: "#C4704A" },
-  thanksgiving: { label: "Thanksgiving", color: "#B8821F" },
-  prodigal: { label: "Prodigal", color: "#5F8A6E" },
-  guidance: { label: "Guidance", color: "#8A6BB5" },
-  grief: { label: "Grief", color: "#6E7E94" },
-};
-
-export const PRAYER_CATEGORY_KEYS = Object.keys(
-  PRAYER_CATEGORIES
-) as PrayerCategory[];
+/**
+ * The name shown on a wall row. Anonymous rows show no name to anyone (the
+ * poster still sees their own "You" badge); a null name on a by-name row
+ * means the author is unlisted in the directory.
+ */
+export function prayerAuthorLabel(
+  row: Pick<PrayerWallRow, "is_anonymous" | "first_name" | "last_name" | "preferred_name">
+): string {
+  if (row.is_anonymous) return "Anonymous";
+  const hasName = row.first_name || row.last_name || row.preferred_name;
+  return hasName ? displayName(row) : "A member";
+}
 
 /** Plural weekday names, indexed by PrayerCallSession.weekday (0 = Sunday) */
 export const WEEKDAY_LABELS = [

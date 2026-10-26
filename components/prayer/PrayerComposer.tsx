@@ -5,8 +5,6 @@ import { HandHeart, UserRound } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { PRAYER_CATEGORIES, PRAYER_CATEGORY_KEYS } from "@/lib/prayer";
-import type { PrayerCategory } from "@/lib/types";
 import type { Me } from "@/components/prayer/PrayerBoard";
 
 function SwitchRow({
@@ -62,14 +60,9 @@ export function PrayerComposer({
 }: {
   me: Me;
   groupName: string;
-  onPost: (draft: {
-    body: string;
-    category: PrayerCategory;
-    is_anonymous: boolean;
-  }) => Promise<boolean>;
+  onPost: (draft: { body: string; is_anonymous: boolean }) => Promise<boolean>;
 }) {
   const [body, setBody] = useState("");
-  const [category, setCategory] = useState<PrayerCategory>("health");
   const [anonymous, setAnonymous] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -80,18 +73,13 @@ export function PrayerComposer({
     setSubmitting(true);
     let ok = false;
     try {
-      ok = await onPost({
-        body: body.trim(),
-        category,
-        is_anonymous: anonymous,
-      });
+      ok = await onPost({ body: body.trim(), is_anonymous: anonymous });
     } finally {
       setSubmitting(false);
     }
     if (ok) {
       setBody("");
       setAnonymous(false);
-      setCategory("health");
     }
   };
 
@@ -121,32 +109,6 @@ export function PrayerComposer({
           maxLength={2000}
           className="bg-background text-base"
         />
-
-        <div className="mt-4 mb-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
-          Category
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {PRAYER_CATEGORY_KEYS.map((key) => {
-            const meta = PRAYER_CATEGORIES[key];
-            const active = key === category;
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setCategory(key)}
-                aria-pressed={active}
-                className="rounded-full border px-4 py-3 text-base font-semibold transition-colors"
-                style={
-                  active
-                    ? { backgroundColor: meta.color, borderColor: meta.color, color: "var(--primary-foreground)" }
-                    : undefined
-                }
-              >
-                {meta.label}
-              </button>
-            );
-          })}
-        </div>
       </div>
 
       <div className="flex flex-col gap-2 p-5">
