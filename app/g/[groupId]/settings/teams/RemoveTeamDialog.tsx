@@ -25,7 +25,7 @@ export function RemoveTeamDialog({
     <ConfirmDialog
       open={team !== null}
       onOpenChange={(open) => !open && onCancel()}
-      title={`Remove ${team?.name}?`}
+      title={team === null ? "" : `Remove ${team.name}?`}
       description={membersText(memberCount)}
       confirmLabel="Remove team"
       pendingLabel="Removing…"

@@ -677,7 +677,11 @@ export function AboutEditor({
       <ConfirmDialog
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}
-        title={`Remove ${removing ? displayName(removing.profiles) : ""} from the About page?`}
+        title={
+          removing === null
+            ? ""
+            : `Remove ${displayName(removing.profiles)} from the About page?`
+        }
         description="They stay in the group. Only their entry on this page goes."
         confirmLabel="Remove person"
         pendingLabel="Removing…"
