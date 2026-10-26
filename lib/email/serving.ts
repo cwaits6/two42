@@ -70,7 +70,7 @@ export async function sendServingConfirmationEmail(opts: {
       <p style="${footer}">
         Can&rsquo;t make it after all? No problem &mdash;
         <a href="${opts.cancelUrl}" style="color: ${b.accentLight};">click here to cancel</a>
-        and the Sunday will open back up for someone else.
+        and that date will open back up for someone else.
       </p>
     `, b.orgName),
     attachments: [
@@ -105,12 +105,12 @@ export async function sendServingCancelNoticeEmail(opts: {
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
     subject: `${opts.teamName}: ${dateLabel} is open again`,
     html: wrap(`
-      <h1 style="color: ${b.accent}; font-size: 28px;">A Sunday opened up</h1>
+      <h1 style="color: ${b.accent}; font-size: 28px;">A date opened up</h1>
       <p style="${bodyText}">
         Hi ${escapeHtml(opts.leaderName)},
         <strong>${escapeHtml(opts.memberLabel)}</strong> can no longer serve with the
         <strong>${escapeHtml(opts.teamName)}</strong> on <strong>${dateLabel}</strong>,
-        so that Sunday is open again.
+        so that date is open again.
       </p>
       <a href="${opts.servingUrl}" style="${bigButton(b.accent)}">View the Schedule</a>
     `, b.orgName),
@@ -156,13 +156,13 @@ export async function sendServingBroadcastEmail(opts: {
     from: formatFromHeader(b.orgName, b.fromAddress),
     to: opts.to,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
-    subject: `${opts.teamName}: Sundays that still need someone`,
+    subject: `${opts.teamName}: dates that still need someone`,
     html: wrap(`
-      <h1 style="color: ${b.accent}; font-size: 28px;">Can you take a Sunday?</h1>
+      <h1 style="color: ${b.accent}; font-size: 28px;">Can you take one of these dates?</h1>
       <p style="${bodyText}">
         Hi ${escapeHtml(opts.name)}, ${escapeHtml(opts.fromName)} is looking for
         volunteers from the <strong>${escapeHtml(opts.teamName)}</strong> for the
-        Sundays below. Tap a button and you&rsquo;re signed up &mdash; that&rsquo;s it.
+        dates below. Tap a button and you&rsquo;re signed up &mdash; that&rsquo;s it.
       </p>
       ${opts.message ? `<p style="${bodyText}">${escapeHtml(opts.message)}</p>` : ""}
       ${rows}

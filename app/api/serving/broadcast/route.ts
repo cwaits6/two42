@@ -261,7 +261,7 @@ export async function POST(request: Request) {
   const { error: logError } = await supabase.from("serving_broadcasts").insert({
     team_id: groupId,
     sent_by: user.id,
-    subject: `${group.name}: Sundays that still need someone`,
+    subject: `${group.name}: dates that still need someone`,
     open_dates: openDates,
     recipient_count: sent,
   });
