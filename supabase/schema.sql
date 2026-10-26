@@ -1412,6 +1412,31 @@ COMMENT ON FUNCTION "public"."org_group_creation_policy"() IS 'The caller''s own
 
 
 
+CREATE OR REPLACE FUNCTION "public"."organizations_timezone_check"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  if not exists (
+    select 1 from pg_catalog.pg_timezone_names
+    where name = new.timezone
+      and name not like 'posix/%'
+      and name not in ('Factory', 'localtime', 'posixrules')
+  ) then
+    raise exception 'organizations.timezone: unknown time zone "%"', new.timezone
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end $$;
+
+
+ALTER FUNCTION "public"."organizations_timezone_check"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."organizations_timezone_check"() IS 'Trigger function: refuses an organizations.timezone that is not an exact IANA name in pg_timezone_names (no posix/ duplicates; no Factory, localtime or posixrules, which Postgres lists but Intl does not know). SECURITY INVOKER; raises check_violation.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") RETURNS TABLE("id" "uuid", "created_at" timestamp with time zone, "first_name" "text", "last_name" "text", "preferred_name" "text", "email" "text")
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO ''
@@ -2639,6 +2664,7 @@ CREATE TABLE IF NOT EXISTS "public"."organizations" (
     "directory_visibility" "text" DEFAULT 'shared_groups'::"text" NOT NULL,
     "group_creation_policy" "text" DEFAULT 'approval'::"text" NOT NULL,
     "group_discovery" boolean DEFAULT true NOT NULL,
+    "timezone" "text" DEFAULT 'America/New_York'::"text" NOT NULL,
     CONSTRAINT "organizations_directory_visibility_check" CHECK (("directory_visibility" = ANY (ARRAY['shared_groups'::"text", 'org'::"text"]))),
     CONSTRAINT "organizations_group_creation_policy_check" CHECK (("group_creation_policy" = ANY (ARRAY['open'::"text", 'approval'::"text", 'admins'::"text"])))
 );
@@ -2660,6 +2686,10 @@ COMMENT ON COLUMN "public"."organizations"."group_creation_policy" IS 'Who may c
 
 
 COMMENT ON COLUMN "public"."organizations"."group_discovery" IS 'Ceiling for group discovery. false: members see only the groups they belong to and join_group() refuses every group. Read by discoverable_groups() and join_group(), never by a policy.';
+
+
+
+COMMENT ON COLUMN "public"."organizations"."timezone" IS 'IANA zone every event time is entered and displayed in. organizations_timezone_check() refuses anything but an exact IANA name; the app falls back to its configured default only when no org row resolves.';
 
 
 
@@ -3734,6 +3764,10 @@ CREATE OR REPLACE TRIGGER "group_members_leave_teams" AFTER DELETE OR UPDATE OF 
 
 
 CREATE OR REPLACE TRIGGER "groups_touch_updated_at" BEFORE UPDATE ON "public"."groups" FOR EACH ROW EXECUTE FUNCTION "public"."touch_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "organizations_timezone_check" BEFORE INSERT OR UPDATE OF "timezone" ON "public"."organizations" FOR EACH ROW EXECUTE FUNCTION "public"."organizations_timezone_check"();
 
 
 
@@ -5472,6 +5506,12 @@ GRANT ALL ON FUNCTION "public"."org_group_creation_policy"() TO "service_role";
 
 
 
+GRANT ALL ON FUNCTION "public"."organizations_timezone_check"() TO "anon";
+GRANT ALL ON FUNCTION "public"."organizations_timezone_check"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."organizations_timezone_check"() TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") TO "service_role";
@@ -5766,6 +5806,10 @@ GRANT SELECT("group_creation_policy"),UPDATE("group_creation_policy") ON TABLE "
 
 
 GRANT SELECT("group_discovery"),UPDATE("group_discovery") ON TABLE "public"."organizations" TO "authenticated";
+
+
+
+GRANT SELECT("timezone"),UPDATE("timezone") ON TABLE "public"."organizations" TO "authenticated";
 
 
 
