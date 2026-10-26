@@ -1,7 +1,9 @@
 // Pure placement math for the Week view. No React, no DOM: every rule here
-// is testable with plain Dates. All day arithmetic uses the local getters so
-// the grid, "today", and the event times agree with the List view, which
-// formats with the browser's own zone.
+// is testable with plain values. Times are luxon DateTimes in the org's
+// zone, so the grid, "today" and the event times agree with every other
+// event surface whatever zone the browser is in.
+
+import { DateTime } from "luxon";
 
 export const GRID_START_HOUR = 6;
 export const GRID_END_HOUR = 22;
@@ -15,6 +17,7 @@ export const MIN_BLOCK_PX = 44;
 
 const DEFAULT_DURATION_MINUTES = 60;
 const MIN_BLOCK_MINUTES = Math.ceil((MIN_BLOCK_PX / HOUR_HEIGHT_PX) * 60);
+const LOCALE = "en-US";
 
 export type Placement =
   | { kind: "timed"; topMinutes: number; durationMinutes: number }
@@ -27,13 +30,13 @@ export type Placement =
  * start is moved up until its minimum-length block ends at 10 pm; otherwise
  * the grid would clip it.
  */
-export function placeEvent(start: Date, end: Date | null): Placement {
-  const startMinutes = start.getHours() * 60 + start.getMinutes() - GRID_START_HOUR * 60;
+export function placeEvent(start: DateTime, end: DateTime | null): Placement {
+  const startMinutes = start.hour * 60 + start.minute - GRID_START_HOUR * 60;
   if (startMinutes < 0 || startMinutes >= GRID_MINUTES) return { kind: "allDay" };
 
   const top = Math.min(startMinutes, GRID_MINUTES - MIN_BLOCK_MINUTES);
   const rawDuration = end
-    ? Math.round((end.getTime() - start.getTime()) / 60_000)
+    ? Math.round(end.diff(start, "minutes").minutes)
     : DEFAULT_DURATION_MINUTES;
   const durationMinutes = Math.min(
     GRID_MINUTES - top,
@@ -43,30 +46,30 @@ export function placeEvent(start: Date, end: Date | null): Placement {
 }
 
 export type Segment = {
-  start: Date;
-  end: Date | null;
-  /** The event began on an earlier day, so this part starts at local midnight. */
+  start: DateTime;
+  end: DateTime | null;
+  /** The event began on an earlier day, so this part starts at midnight. */
   continuesBefore: boolean;
   /** The event runs on past this day's end. */
   continuesAfter: boolean;
 };
 
 /**
- * The part of an event that falls on the local calendar day `day`, or null
- * when none does. An event without an end, or whose end is not after its
- * start, belongs to its start day only; an end exactly at midnight does not
- * reach into the next day. Multi-day events are drawn once per day they touch.
+ * The part of an event that falls on the calendar day `day`, or null when
+ * none does. An event without an end, or whose end is not after its start,
+ * belongs to its start day only; an end exactly at midnight does not reach
+ * into the next day. Multi-day events are drawn once per day they touch.
  */
-export function segmentOn(start: Date, end: Date | null, day: Date): Segment | null {
-  const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
-  const dayEnd = addDays(dayStart, 1);
-  if (!end || end.getTime() <= start.getTime()) {
+export function segmentOn(start: DateTime, end: DateTime | null, day: DateTime): Segment | null {
+  const dayStart = day.startOf("day");
+  const dayEnd = dayStart.plus({ days: 1 });
+  if (!end || end.toMillis() <= start.toMillis()) {
     if (dayKey(start) !== dayKey(dayStart)) return null;
     return { start, end, continuesBefore: false, continuesAfter: false };
   }
-  if (start.getTime() >= dayEnd.getTime() || end.getTime() <= dayStart.getTime()) return null;
-  const continuesBefore = start.getTime() < dayStart.getTime();
-  const continuesAfter = end.getTime() > dayEnd.getTime();
+  if (start.toMillis() >= dayEnd.toMillis() || end.toMillis() <= dayStart.toMillis()) return null;
+  const continuesBefore = start.toMillis() < dayStart.toMillis();
+  const continuesAfter = end.toMillis() > dayEnd.toMillis();
   return {
     start: continuesBefore ? dayStart : start,
     end: continuesAfter ? dayEnd : end,
@@ -85,7 +88,7 @@ export function placeSegment(segment: Segment): Placement {
   if (!segment.continuesBefore || !segment.end) return placeEvent(segment.start, segment.end);
   if (segment.continuesAfter) return { kind: "allDay" };
   // Clock fields, not elapsed time since midnight: a day with a DST change is not 24 hours long.
-  const endMinutes = segment.end.getHours() * 60 + segment.end.getMinutes() - GRID_START_HOUR * 60;
+  const endMinutes = segment.end.hour * 60 + segment.end.minute - GRID_START_HOUR * 60;
   if (endMinutes <= 0 || endMinutes >= GRID_MINUTES) return { kind: "allDay" };
   return { kind: "timed", topMinutes: 0, durationMinutes: Math.max(MIN_BLOCK_MINUTES, endMinutes) };
 }
@@ -128,17 +131,14 @@ export function layoutLanes(spans: { topMinutes: number; durationMinutes: number
   return lanes;
 }
 
-/** Local calendar date as "YYYY-MM-DD", the key that buckets events into day columns. */
-export function dayKey(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+/** Calendar date as "YYYY-MM-DD", the key that buckets events into day columns. */
+export function dayKey(date: DateTime): string {
+  return date.toISODate() ?? "";
 }
 
-export function addDays(date: Date, days: number): Date {
-  const next = new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
-  return next;
+/** Midnight `days` calendar days from `date`'s day. */
+export function addDays(date: DateTime, days: number): DateTime {
+  return date.startOf("day").plus({ days });
 }
 
 /**
@@ -149,7 +149,7 @@ export function addDays(date: Date, days: number): Date {
  */
 export function localeWeekStart(locale: string | undefined): number {
   try {
-    const intlLocale = new Intl.Locale(locale ?? "en-US") as Intl.Locale & {
+    const intlLocale = new Intl.Locale(locale ?? LOCALE) as Intl.Locale & {
       getWeekInfo?: () => { firstDay: number };
       weekInfo?: { firstDay: number };
     };
@@ -161,26 +161,24 @@ export function localeWeekStart(locale: string | undefined): number {
   return 0;
 }
 
-/** The seven local-midnight dates of the week that contains `anchor`, starting on `firstDay`. */
-export function weekDays(anchor: Date, firstDay: number): Date[] {
-  const offset = (anchor.getDay() - firstDay + 7) % 7;
+/** The seven midnights of the week that contains `anchor`, starting on `firstDay` (0 = Sunday). */
+export function weekDays(anchor: DateTime, firstDay: number): DateTime[] {
+  const offset = ((anchor.weekday % 7) - firstDay + 7) % 7;
   const first = addDays(anchor, -offset);
   return Array.from({ length: 7 }, (_, i) => addDays(first, i));
 }
 
-const monthShort = (date: Date) => date.toLocaleDateString("en-US", { month: "short" });
+const monthShort = (date: DateTime) => date.setLocale(LOCALE).toFormat("LLL");
 
 /** "Sep 27 – Oct 3, 2026"; the month is repeated only when it changes, the year only across a year end. */
-export function weekTitle(days: Date[]): string {
+export function weekTitle(days: DateTime[]): string {
   const first = days[0];
   const last = days[days.length - 1];
-  if (first.getFullYear() !== last.getFullYear()) {
-    return `${monthShort(first)} ${first.getDate()}, ${first.getFullYear()} – ${monthShort(last)} ${last.getDate()}, ${last.getFullYear()}`;
+  if (first.year !== last.year) {
+    return `${monthShort(first)} ${first.day}, ${first.year} – ${monthShort(last)} ${last.day}, ${last.year}`;
   }
-  const end = first.getMonth() === last.getMonth()
-    ? `${last.getDate()}`
-    : `${monthShort(last)} ${last.getDate()}`;
-  return `${monthShort(first)} ${first.getDate()} – ${end}, ${last.getFullYear()}`;
+  const end = first.month === last.month ? `${last.day}` : `${monthShort(last)} ${last.day}`;
+  return `${monthShort(first)} ${first.day} – ${end}, ${last.year}`;
 }
 
 /** The grid's hour rows, 6 AM through 9 PM, each labelled at its top line. */
@@ -192,20 +190,25 @@ export function gridHours(): { hour: number; label: string }[] {
 }
 
 export function formatHour(hour: number): string {
-  return new Date(2000, 0, 1, hour).toLocaleTimeString("en-US", { hour: "numeric" });
+  return new Date(2000, 0, 1, hour).toLocaleTimeString(LOCALE, { hour: "numeric" });
 }
 
-export function formatTime(date: Date): string {
-  return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+export function formatTime(date: DateTime): string {
+  return date.setLocale(LOCALE).toLocaleString({ hour: "numeric", minute: "2-digit" });
+}
+
+/** "Tue" */
+export function weekdayShort(date: DateTime): string {
+  return date.setLocale(LOCALE).toLocaleString({ weekday: "short" });
 }
 
 /** "Fri 7:00 PM": the day is needed when a range crosses midnight. */
-export function formatDayTime(date: Date): string {
-  return `${date.toLocaleDateString("en-US", { weekday: "short" })} ${formatTime(date)}`;
+export function formatDayTime(date: DateTime): string {
+  return `${weekdayShort(date)} ${formatTime(date)}`;
 }
 
-/** True when the event's last moment falls on a later local day than its start. */
-export function spansDays(start: Date, end: Date | null): boolean {
-  if (!end || end.getTime() <= start.getTime()) return false;
-  return dayKey(new Date(end.getTime() - 1)) !== dayKey(start);
+/** True when the event's last moment falls on a later calendar day than its start. */
+export function spansDays(start: DateTime, end: DateTime | null): boolean {
+  if (!end || end.toMillis() <= start.toMillis()) return false;
+  return dayKey(end.minus({ milliseconds: 1 })) !== dayKey(start);
 }

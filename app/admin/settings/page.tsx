@@ -9,6 +9,8 @@ import { getDirectoryVisibility } from "@/lib/directory/visibility";
 import { getGivingSettings } from "@/lib/giving/server";
 import { siteConfig } from "@/lib/config";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { TimezoneSettings } from "@/components/admin/TimezoneSettings";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { CUSTOM_SENDING_DOMAINS_ENABLED } from "@/lib/email/sendingDomains";
 
 export const metadata = { title: `Org settings | Admin | ${siteConfig.name}` };
@@ -63,6 +65,8 @@ export default async function SettingsPage() {
             stewardsCanManage={givingSettings.stewardsCanManage}
             dashboardTile={givingSettings.dashboardTile}
           />
+          <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Time zone</h2>
+          <TimezoneSettings orgId={profile.org_id} timezone={await getOrgTimeZone()} />
         </CardContent>
       </Card>
     </div>

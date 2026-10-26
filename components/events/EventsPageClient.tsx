@@ -43,9 +43,11 @@ interface EventsPageClientProps {
   allEvents: Event[];
   userRsvps: Record<string, Rsvp>;
   userId: string;
+  /** The org's zone, resolved by the server; every view formats in it. */
+  timeZone: string;
 }
 
-export function EventsPageClient({ groups, allEvents, userRsvps, userId }: EventsPageClientProps) {
+export function EventsPageClient({ groups, allEvents, userRsvps, userId, timeZone }: EventsPageClientProps) {
   const router = useRouter();
   const [{ view, visibleGroupIds }, dispatch] = useReducer(
     calendarViewReducer,
@@ -95,8 +97,8 @@ export function EventsPageClient({ groups, allEvents, userRsvps, userId }: Event
   // For the list view, expand recurring events from the ±1-year window and
   // keep upcoming occurrences of the visible groups.
   const upcomingVisible = useMemo(
-    () => expandUpcomingEvents(allEvents.filter((e) => visibleGroupIds.has(e.group_id))),
-    [allEvents, visibleGroupIds]
+    () => expandUpcomingEvents(allEvents.filter((e) => visibleGroupIds.has(e.group_id)), timeZone),
+    [allEvents, visibleGroupIds, timeZone]
   );
 
   // Add event targets a group the viewer leads. One such visible group is a
@@ -236,10 +238,16 @@ export function EventsPageClient({ groups, allEvents, userRsvps, userId }: Event
           events={allEvents}
           visibleGroupIds={visibleGroupIds}
           onDateClick={onDateClick}
+          timeZone={timeZone}
         />
       )}
       {view === "week" && (
-        <EventWeekView groups={groups} events={allEvents} visibleGroupIds={visibleGroupIds} />
+        <EventWeekView
+          groups={groups}
+          events={allEvents}
+          visibleGroupIds={visibleGroupIds}
+          timeZone={timeZone}
+        />
       )}
       {view === "list" && (
         <EventListView
@@ -248,6 +256,7 @@ export function EventsPageClient({ groups, allEvents, userRsvps, userId }: Event
           userRsvps={userRsvps}
           userId={userId}
           createHref={ledVisible.length === 1 ? newEventHref(ledVisible[0].id) : null}
+          timeZone={timeZone}
         />
       )}
 

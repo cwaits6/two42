@@ -5,6 +5,7 @@ import { EventsPageClient, type CalendarGroup } from "@/components/events/Events
 import { PageContainer } from "@/components/layout/PageContainer";
 import type { Event, Rsvp } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
 
 /**
  * The calendar at both levels. With `pinnedGroupId` it is that group's
@@ -35,7 +36,7 @@ export async function CalendarPage({ pinnedGroupId }: { pinnedGroupId?: string }
 
   // A bounded window: non-recurring events starting in it, plus recurring
   // anchors whose series overlaps it (the anchor may start years earlier).
-  const [{ data: allEventsRaw, error: allEventsError }, { data: rsvps }] = await Promise.all([
+  const [{ data: allEventsRaw, error: allEventsError }, { data: rsvps }, timeZone] = await Promise.all([
     supabase
       .from("events")
       .select("*")
@@ -51,6 +52,7 @@ export async function CalendarPage({ pinnedGroupId }: { pinnedGroupId?: string }
       .order("start_time", { ascending: true })
       .limit(500),
     supabase.from("rsvps").select("*").eq("user_id", user.id),
+    getOrgTimeZone(),
   ]);
   if (allEventsError) {
     console.error("Failed to fetch events:", allEventsError);
@@ -67,6 +69,7 @@ export async function CalendarPage({ pinnedGroupId }: { pinnedGroupId?: string }
         allEvents={(allEventsRaw ?? []) as Event[]}
         userRsvps={userRsvps}
         userId={user.id}
+        timeZone={timeZone}
       />
     </PageContainer>
   );

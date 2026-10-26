@@ -18,6 +18,9 @@
 export interface Org {
   id: string;
   name: string;
+  // The IANA zone every event time is shown in; the database stores only
+  // exact pg_timezone_names entries, so it is passed to Intl as is.
+  timezone: string;
   // The raw organizations.branding jsonb. Deliberately `unknown`, not a typed
   // shape: _shared/branding.ts is the sole validator of this column, and this
   // module must not grow a second, weaker opinion about it.
@@ -53,9 +56,10 @@ export interface OrgListClient {
  * indistinguishable from "no orgs" at the call site, and would silently make
  * the whole run a no-op.
  *
- * branding rides along on this one query so per-org email branding
- * costs no extra round trip and no new service-role call site — and the
- * org_email_domains embed rides along the same way. The embed is safe
+ * branding and timezone ride along on this one query so per-org email
+ * branding and event-time formatting cost no extra round trip and no new
+ * service-role call site — and the org_email_domains embed rides along the
+ * same way. The embed is safe
  * without its own filter because it is reached by FK traversal from an
  * organizations row this same service-role query already selected — the
  * embed-from-an-already-filtered-parent exception, not a new unscoped
@@ -64,7 +68,7 @@ export interface OrgListClient {
 export async function listActiveOrgs(supabase: OrgListClient): Promise<Org[]> {
   const { data, error } = await supabase
     .from("organizations")
-    .select("id, name, branding, org_email_domains(domain, status)")
+    .select("id, name, branding, timezone, org_email_domains(domain, status)")
     .eq("status", "active")
     .order("id");
   if (error) throw new Error(`Failed to list organizations: ${error.message}`);

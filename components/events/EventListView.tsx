@@ -6,6 +6,7 @@ import { RsvpButton } from "@/components/events/RsvpButton";
 import { CalendarDays, Clock, MapPin, Pencil, Plus } from "lucide-react";
 import { groupPath } from "@/lib/groups/active";
 import { groupTextColor } from "@/lib/groups/settings";
+import { formatEventDate, formatEventRange, formatInZone } from "@/lib/time/zone";
 import type { CalendarGroup } from "@/components/events/EventsPageClient";
 import type { Event, Rsvp } from "@/lib/types";
 
@@ -16,9 +17,11 @@ interface EventListViewProps {
   userId: string;
   /** The create link for the empty state, when the viewer leads exactly one visible group. */
   createHref: string | null;
+  /** The org's zone, resolved by the server; every time here is its wall clock. */
+  timeZone: string;
 }
 
-export function EventListView({ groups, events, userRsvps, userId, createHref }: EventListViewProps) {
+export function EventListView({ groups, events, userRsvps, userId, createHref, timeZone }: EventListViewProps) {
   const byId = new Map(groups.map((g) => [g.id, g]));
   const showGroupName = groups.length >= 2;
 
@@ -50,18 +53,10 @@ export function EventListView({ groups, events, userRsvps, userId, createHref }:
         const group = byId.get(event.group_id);
         const color = group?.color ?? "var(--color-brand-primary)";
         const textColor = group ? groupTextColor(group.color) : "#FFFFFF";
-        const startDate = new Date(event.start_time);
-        const endDate = event.end_time ? new Date(event.end_time) : null;
-        const month = startDate.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
-        const dayNum = startDate.toLocaleDateString("en-US", { day: "numeric" });
-        const fullDate = startDate.toLocaleDateString("en-US", {
-          weekday: "long",
-          month: "long",
-          day: "numeric",
-          year: "numeric",
-        });
-        const formatTime = (date: Date) =>
-          date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+        const month = formatInZone(event.start_time, timeZone, { month: "short" }).toUpperCase();
+        const dayNum = formatInZone(event.start_time, timeZone, { day: "numeric" });
+        const fullDate = formatEventDate(event.start_time, timeZone);
+        const timeRange = formatEventRange(event.start_time, event.end_time, timeZone);
 
         // A recurring occurrence carries its date so the detail and edit
         // pages know which one is meant.
@@ -117,10 +112,7 @@ export function EventListView({ groups, events, userRsvps, userId, createHref }:
                       </div>
                       <div className="flex items-center gap-2">
                         <Clock className="h-4 w-4 shrink-0 text-brand-primary-light" />
-                        <span>
-                          {formatTime(startDate)}
-                          {endDate && <span className="text-slate-400"> – {formatTime(endDate)}</span>}
-                        </span>
+                        <span>{timeRange}</span>
                       </div>
                       {event.location && (
                         <a
@@ -165,6 +157,7 @@ export function EventListView({ groups, events, userRsvps, userId, createHref }:
                         endTime={event.end_time}
                         location={event.location}
                         description={event.description}
+                        timeZone={timeZone}
                         compact
                       />
                     </div>

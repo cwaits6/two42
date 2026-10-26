@@ -441,6 +441,34 @@ org switch says — private can only hide more, never less) and
 still reads no `groups` row, so `/g/<id>` stays a 404 for them, and a
 private group is not a new kind of row but a flag on one.
 
+### Org time zone
+
+`organizations.timezone text not null default 'America/New_York'`
+(`20261029000000_org_timezone.sql`) is the one zone every event time is
+entered and displayed in; it is a display setting, read by no policy and no
+definer function. Same grant shape as the other org settings: `anon` has no
+SELECT or UPDATE grant on the column (it holds only Supabase's pre-existing, inert table-level INSERT), `authenticated` reads it (every signed-in member's
+event surfaces format in it, through the request-scoped
+`getOrgTimeZone()` in `lib/time/orgZone.ts`), and the org's own admin writes
+it through the single org-settings UPDATE policy. The database is the one
+gate on what the column holds: a `before insert or update` trigger,
+`organizations_timezone_check()`, refuses with a `check_violation` anything
+but an exact, case-sensitive `pg_timezone_names` entry outside the `posix/`
+tree — the set `Intl` formats in — so a POSIX rule string, an offset or a
+case variant that `at time zone` would take never reaches a reader, and the
+readers pass the stored name to `Intl` as is. On the web side
+`isValidTimeZone()` in `lib/time/zone.ts` asks `Intl` directly and
+`getOrgTimeZone()` falls back to `siteConfig.timeZone` with a logged error,
+so a page render cannot fail over its zone; the reminder edge function
+formats in the stored zone with no second check. The Settings picker lists
+`Intl.supportedValuesOf()`, which can run ahead of the database's zone data;
+a name the database does not yet know fails the save with an error toast
+rather than being stored. `supabase/tests/org_timezone_suite.sql` pins the
+default, the grants, the admin-only write (a member's and another org's
+admin's UPDATE each touch zero rows), the rejections and the accepted
+spellings. The edge functions read the same column on `listActiveOrgs()`'s
+org-anchored select (see `service-role-inventory.md`, Edge Functions).
+
 `discoverable_groups()` is the one read behind Find a group and
 Directory › Groups. Tenant anchor: the caller's own `profiles` row
 (`auth.uid()`, not pending); it returns the caller's own groups always,

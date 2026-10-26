@@ -1,35 +1,51 @@
+import { DateTime } from "luxon";
+import { dayKey } from "@/lib/time/zone";
 import type { Event, EventCalendar } from "@/lib/types";
 
 const MAX_OCCURRENCES = 500;
 
+/**
+ * The instant `steps` intervals after `isoString`, keeping the wall-clock
+ * time in `zone`: a 7:00 PM series stays at 7:00 PM across a daylight-saving
+ * change in the org's zone, whatever zone the browser or server runs in.
+ */
 export function addRecurrenceInterval(
   isoString: string,
   frequency: string,
-  steps: number
+  steps: number,
+  zone: string
 ): string {
-  const d = new Date(isoString);
-  if (Number.isNaN(d.getTime())) return isoString;
+  const d = DateTime.fromISO(isoString, { zone });
+  if (!d.isValid) return isoString;
 
-  if (frequency === "daily") d.setDate(d.getDate() + steps);
-  else if (frequency === "weekly") d.setDate(d.getDate() + steps * 7);
-  else if (frequency === "monthly") d.setMonth(d.getMonth() + steps);
-  else d.setFullYear(d.getFullYear() + steps);
+  const stepped =
+    frequency === "daily"
+      ? d.plus({ days: steps })
+      : frequency === "weekly"
+        ? d.plus({ weeks: steps })
+        : frequency === "monthly"
+          ? d.plus({ months: steps })
+          : d.plus({ years: steps });
 
-  return d.toISOString();
+  return stepped.toJSDate().toISOString();
 }
 
 /**
- * Build a map of { series_id → Set<occurrence_date_ms> } from exception events.
- * Pass this to expandOccurrences so it can skip dates covered by exceptions.
+ * Build a map of { series_id → Set<calendar day in timeZone> } from exception
+ * events. Pass this to expandOccurrences so it can skip days covered by
+ * exceptions. A series has one occurrence per day, and the day survives what
+ * the exact instant does not: rows written under the earlier stepping
+ * (overflowed months) or from a browser outside the org zone.
  */
 export function buildExceptionMap(
-  events: (Event & { calendar?: EventCalendar | null })[]
-): Map<string, Set<number>> {
-  const map = new Map<string, Set<number>>();
+  events: (Event & { calendar?: EventCalendar | null })[],
+  timeZone: string
+): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>();
   for (const e of events) {
     if (e.series_id && e.series_occurrence_date) {
       if (!map.has(e.series_id)) map.set(e.series_id, new Set());
-      map.get(e.series_id)!.add(new Date(e.series_occurrence_date).getTime());
+      map.get(e.series_id)!.add(dayKey(e.series_occurrence_date, timeZone));
     }
   }
   return map;
@@ -60,16 +76,18 @@ function fastForwardIndex(
 }
 
 /**
- * Expand a recurring series anchor into its individual occurrences.
- * Occurrences whose date (ms) appears in excludedTimestamps are skipped —
- * those dates are covered by per-occurrence exception rows.
+ * Expand a recurring series anchor into its individual occurrences, stepping
+ * in `timeZone` (the org's zone). Occurrences whose calendar day in that zone
+ * appears in excludedDays are skipped — those days are covered by
+ * per-occurrence exception rows.
  *
  * Pass `now` to fast-forward past already-elapsed occurrences so the
  * maxCount budget applies to visible/upcoming instances, not past ones.
  */
 export function expandOccurrences(
   event: Event & { calendar?: EventCalendar | null },
-  excludedTimestamps?: Set<number>,
+  timeZone: string,
+  excludedDays?: Set<string>,
   windowEnd?: Date,
   now?: Date
 ): (Event & { calendar?: EventCalendar | null })[] {
@@ -98,18 +116,18 @@ export function expandOccurrences(
     const occStart =
       i === 0
         ? event.start_time
-        : addRecurrenceInterval(event.start_time, freq, interval * i);
+        : addRecurrenceInterval(event.start_time, freq, interval * i, timeZone);
     const occStartDate = new Date(occStart);
 
     if (occStartDate > end) break;
     if (untilDate && occStartDate > untilDate) break;
-    if (excludedTimestamps?.has(occStartDate.getTime())) continue;
+    if (excludedDays?.has(dayKey(occStart, timeZone))) continue;
 
     const occEnd =
       event.end_time
         ? i === 0
           ? event.end_time
-          : addRecurrenceInterval(event.end_time, freq, interval * i)
+          : addRecurrenceInterval(event.end_time, freq, interval * i, timeZone)
         : null;
 
     // Spread keeps the original `id` — all occurrences of a series navigate
@@ -126,10 +144,11 @@ export function expandOccurrences(
  */
 export function expandUpcomingEvents(
   allEvents: (Event & { calendar?: EventCalendar | null })[],
+  timeZone: string,
   now: Date = new Date(),
   windowEnd?: Date
 ): (Event & { calendar?: EventCalendar | null })[] {
-  const exceptions = buildExceptionMap(allEvents);
+  const exceptions = buildExceptionMap(allEvents, timeZone);
   const results: (Event & { calendar?: EventCalendar | null })[] = [];
 
   for (const e of allEvents) {
@@ -138,7 +157,7 @@ export function expandUpcomingEvents(
       if (new Date(e.start_time) >= now) results.push(e);
     } else if (e.recurrence_frequency) {
       // Expand series; keep only upcoming occurrences
-      const occurrences = expandOccurrences(e, exceptions.get(e.id), windowEnd, now);
+      const occurrences = expandOccurrences(e, timeZone, exceptions.get(e.id), windowEnd, now);
       for (const occ of occurrences) {
         if (new Date(occ.start_time) >= now) results.push(occ);
       }

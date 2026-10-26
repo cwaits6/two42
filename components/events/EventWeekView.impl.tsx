@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import { useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { DateTime } from "luxon";
 import { blockStyle } from "@/components/events/blockStyle";
 import type { CalendarGroup } from "@/components/events/EventsPageClient";
 import { eventDetailHref, expandVisibleEvents } from "@/components/events/visibleEvents";
@@ -23,14 +24,18 @@ import {
   spansDays,
   weekDays,
   weekTitle,
+  weekdayShort,
   type Lane,
 } from "@/components/events/weekGrid";
+import { zoned } from "@/lib/time/zone";
 import type { Event } from "@/lib/types";
 
 interface EventWeekViewProps {
   groups: CalendarGroup[];
   events: Event[];
   visibleGroupIds: ReadonlySet<string>;
+  /** The org's zone, resolved by the server; the grid's days and hours are its wall clock. */
+  timeZone: string;
 }
 
 type Block = {
@@ -44,25 +49,26 @@ type Block = {
 
 type TimedBlock = Block & { topMinutes: number; durationMinutes: number; lane: Lane };
 
-type DayColumn = { date: Date; key: string; allDay: Block[]; timed: TimedBlock[] };
+type DayColumn = { date: DateTime; key: string; allDay: Block[]; timed: TimedBlock[] };
 
 const navButtonClass =
   "flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition-colors hover:border-brand-primary/30 hover:text-brand-primary";
 
-export default function EventWeekView({ groups, events, visibleGroupIds }: EventWeekViewProps) {
+export default function EventWeekView({ groups, events, visibleGroupIds, timeZone }: EventWeekViewProps) {
   const firstDay = useMemo(() => localeWeekStart(navigator.language), []);
-  const [anchor, setAnchor] = useState(() => new Date());
+  const now = () => DateTime.now().setZone(timeZone);
+  const [anchor, setAnchor] = useState<DateTime>(now);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
-  const todayKey = dayKey(new Date());
+  const todayKey = dayKey(now());
   const days = useMemo(() => weekDays(anchor, firstDay), [anchor, firstDay]);
   const inWeek = (key: string) => days.some((d) => dayKey(d) === key);
   const phoneKey =
     selectedKey && inWeek(selectedKey) ? selectedKey : inWeek(todayKey) ? todayKey : dayKey(days[0]);
 
   const columns = useMemo(
-    () => buildColumns(days, groups, expandVisibleEvents(events, visibleGroupIds)),
-    [days, groups, events, visibleGroupIds]
+    () => buildColumns(days, groups, expandVisibleEvents(events, visibleGroupIds, timeZone), timeZone),
+    [days, groups, events, visibleGroupIds, timeZone]
   );
   const phoneColumn = columns.find((c) => c.key === phoneKey) ?? columns[0];
 
@@ -84,7 +90,7 @@ export default function EventWeekView({ groups, events, visibleGroupIds }: Event
     e.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]')[next]?.focus();
   };
 
-  const goTo = (date: Date) => {
+  const goTo = (date: DateTime) => {
     setAnchor(date);
     setSelectedKey(null);
   };
@@ -101,7 +107,7 @@ export default function EventWeekView({ groups, events, visibleGroupIds }: Event
           </button>
           <button
             type="button"
-            onClick={() => goTo(new Date())}
+            onClick={() => goTo(now())}
             className="h-12 cursor-pointer rounded-full border border-slate-200 bg-white px-5 text-base font-semibold text-slate-600 transition-colors hover:border-brand-primary/30 hover:text-brand-primary"
           >
             Today
@@ -140,10 +146,8 @@ export default function EventWeekView({ groups, events, visibleGroupIds }: Event
                         : "border-transparent bg-white text-slate-700 hover:border-slate-300"
                   }`}
                 >
-                  <span className="font-medium">
-                    {column.date.toLocaleDateString("en-US", { weekday: "short" })}
-                  </span>
-                  <span className="font-display text-xl font-bold">{column.date.getDate()}</span>
+                  <span className="font-medium">{weekdayShort(column.date)}</span>
+                  <span className="font-display text-xl font-bold">{column.date.day}</span>
                 </button>
               );
             })}
@@ -161,12 +165,17 @@ export default function EventWeekView({ groups, events, visibleGroupIds }: Event
   );
 }
 
-function buildColumns(days: Date[], groups: CalendarGroup[], occurrences: Event[]): DayColumn[] {
+function buildColumns(
+  days: DateTime[],
+  groups: CalendarGroup[],
+  occurrences: Event[],
+  timeZone: string
+): DayColumn[] {
   const byId = new Map(groups.map((g) => [g.id, g]));
   const columns: DayColumn[] = days.map((date) => ({ date, key: dayKey(date), allDay: [], timed: [] }));
   for (const event of occurrences) {
-    const start = new Date(event.start_time);
-    const end = event.end_time ? new Date(event.end_time) : null;
+    const start = zoned(event.start_time, timeZone);
+    const end = event.end_time ? zoned(event.end_time, timeZone) : null;
     const group = byId.get(event.group_id);
     const style = blockStyle(group?.color ?? "var(--color-brand-primary)");
     const when =
@@ -229,13 +238,11 @@ function WeekGrid({ columns, todayKey }: { columns: DayColumn[]; todayKey: strin
               column.key === todayKey ? "text-secondary-foreground" : "text-slate-700"
             }`}
           >
-            <span className="font-medium">
-              {column.date.toLocaleDateString("en-US", { weekday: "short" })}
-            </span>
+            <span className="font-medium">{weekdayShort(column.date)}</span>
             <span
               className={`font-display text-2xl font-bold ${column.key === todayKey ? "text-brand-primary" : ""}`}
             >
-              {column.date.getDate()}
+              {column.date.day}
             </span>
             {column.key === todayKey && <span className="sr-only">Today</span>}
           </div>

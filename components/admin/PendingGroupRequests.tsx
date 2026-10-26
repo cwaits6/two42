@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ApprovalQueue } from "@/components/admin/ApprovalQueue";
-import { siteConfig } from "@/lib/config";
 import { createClient } from "@/lib/supabase/client";
 import { groupCreationErrorMessage } from "@/lib/groups/creation";
 import { requestedOn } from "@/lib/groups/joinQueue";
@@ -13,8 +12,10 @@ import type { PendingGroupRequest } from "@/lib/groups/requests";
 
 export function PendingGroupRequests({
   initialRequests,
+  timeZone,
 }: {
   initialRequests: PendingGroupRequest[];
+  timeZone: string;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -86,7 +87,7 @@ export function PendingGroupRequests({
         id: r.id,
         title: r.name,
         subtitle: `Requested by ${displayName(r.requester)}`,
-        meta: [r.description, requestedOn(r.created_at, siteConfig.timeZone)]
+        meta: [r.description, requestedOn(r.created_at, timeZone)]
           .filter(Boolean)
           .join(" · "),
       }))}

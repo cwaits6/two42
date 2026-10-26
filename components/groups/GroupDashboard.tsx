@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Calendar, Clock, HandHelping, HeartHandshake, MapPin } from "lucide-react";
-import { siteConfig } from "@/lib/config";
 import { createClient } from "@/lib/supabase/server";
 import { groupPath, type ActiveGroup } from "@/lib/groups/active";
 import { formatServiceDate, toDateString } from "@/lib/serving/sundays";
@@ -11,6 +10,8 @@ import { expandUpcomingEvents } from "@/lib/recurrence";
 import { meetingEndMs, ENDED_GRACE_MS, type MeetingFields } from "@/lib/meetings";
 import type { Event, Rsvp } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
+import { formatEventTime, formatInZone, relativeDay } from "@/lib/time/zone";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -24,47 +25,29 @@ function timeAgo(iso: string): string {
   return `${Math.floor(days / 7)} weeks ago`;
 }
 
-const timeZone = siteConfig.timeZone;
+// Every time below is the org's wall clock: `timeZone` is the org zone the
+// component resolves once per request.
 
-function eventTime(startTime: string): string {
-  return new Date(startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone });
+function eventWeekday(startTime: string, timeZone: string): string {
+  return formatInZone(startTime, timeZone, { weekday: "long" });
 }
 
-function eventDayNumber(startTime: string): string {
-  return new Date(startTime).toLocaleDateString("en-US", { day: "numeric", timeZone });
+function eventMonth(startTime: string, timeZone: string): string {
+  return formatInZone(startTime, timeZone, { month: "short" }).toUpperCase();
 }
 
-function eventWeekday(startTime: string): string {
-  return new Date(startTime).toLocaleDateString("en-US", { weekday: "long", timeZone });
-}
-
-function eventMonth(startTime: string): string {
-  return new Date(startTime).toLocaleDateString("en-US", { month: "short", timeZone }).toUpperCase();
-}
-
-function greeting(): string {
-  const h = Number(new Date().toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone }));
+function greeting(timeZone: string): string {
+  const h = Number(formatInZone(new Date().toISOString(), timeZone, { hour: "numeric", hourCycle: "h23" }));
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   return "Good evening";
 }
 
-function todayLabel(): string {
-  const d = new Date();
-  const weekday = d.toLocaleDateString("en-US", { weekday: "long", timeZone });
-  const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone });
+function todayLabel(timeZone: string): string {
+  const now = new Date().toISOString();
+  const weekday = formatInZone(now, timeZone, { weekday: "long" });
+  const date = formatInZone(now, timeZone, { month: "short", day: "numeric" });
   return `${weekday} · ${date}`;
-}
-
-function relativeDay(startTime: string): string {
-  const dayKey = (d: Date) => d.toLocaleDateString("en-CA", { timeZone });
-  const start = new Date(startTime);
-  const today = new Date();
-  if (dayKey(start) === dayKey(today)) return "today";
-  const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-  if (dayKey(start) === dayKey(tomorrow)) return "tomorrow";
-  const days = Math.round((Date.parse(dayKey(start)) - Date.parse(dayKey(today))) / (24 * 60 * 60 * 1000));
-  return days > 1 ? `in ${days} days` : eventWeekday(startTime);
 }
 
 function excerpt(content: string): string {
@@ -113,6 +96,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
     { count: lectureCount },
     { data: prayers },
     { data: myServings },
+    timeZone,
   ] = await Promise.all([
     supabase
       .from("profiles")
@@ -161,11 +145,12 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
       .gte("service_date", toDateString(new Date()))
       .order("service_date", { ascending: true })
       .limit(3),
+    getOrgTimeZone(),
   ]);
 
   // Keep the current occurrence on the hero through its live window plus a
   // short grace period (ended state points to the recording), then roll over.
-  const occurrences = expandUpcomingEvents((rawEvents ?? []) as Event[], windowStart);
+  const occurrences = expandUpcomingEvents((rawEvents ?? []) as Event[], timeZone, windowStart);
   const nextEvent =
     occurrences.find(
       (e) => meetingEndMs(e.start_time, e.end_time) + ENDED_GRACE_MS > nowDate.getTime()
@@ -230,11 +215,11 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
         <div className="mb-4 flex items-center gap-3">
           <span aria-hidden="true" className="h-px w-8 bg-brand-accent" />
           <span className="font-sans text-[15px] font-bold uppercase tracking-[3px] text-brand-accent-text">
-            {todayLabel()}
+            {todayLabel(timeZone)}
           </span>
         </div>
         <h1 className="mb-7 font-serif text-[40px] font-medium leading-none tracking-[-0.02em] text-foreground md:text-[56px]">
-          {greeting()}, <em className="not-italic text-brand-primary">{displayName}</em>.
+          {greeting(timeZone)}, <em className="not-italic text-brand-primary">{displayName}</em>.
         </h1>
 
         {nextEvent ? (
@@ -248,7 +233,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
           >
             <div className="mb-[18px] flex items-center gap-2.5 font-sans text-sm font-bold uppercase tracking-[1.5px]">
               <span aria-hidden="true" className="h-2 w-2 rounded-full bg-brand-accent" />
-              Next meeting · {relativeDay(nextEvent.start_time)}
+              Next meeting · {relativeDay(nextEvent.start_time, timeZone)}
             </div>
 
             <div className="flex flex-wrap items-start gap-[22px]">
@@ -258,13 +243,13 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
                 style={{ background: "var(--color-brand-warm)", color: "var(--color-brand-navy)" }}
               >
                 <span className="font-sans text-[13px] font-bold uppercase leading-none tracking-[0.14em] text-secondary-foreground">
-                  {eventWeekday(nextEvent.start_time).slice(0, 3)}
+                  {eventWeekday(nextEvent.start_time, timeZone).slice(0, 3)}
                 </span>
                 <span className="font-serif text-4xl font-semibold leading-none">
-                  {eventDayNumber(nextEvent.start_time)}
+                  {formatInZone(nextEvent.start_time, timeZone, { day: "numeric" })}
                 </span>
                 <span className="font-sans text-[13px] font-semibold uppercase leading-none tracking-[0.08em] text-muted-foreground">
-                  {eventMonth(nextEvent.start_time)}
+                  {eventMonth(nextEvent.start_time, timeZone)}
                 </span>
               </div>
 
@@ -275,7 +260,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
                 <div className="mt-2.5 flex flex-wrap items-center gap-x-5 gap-y-2 font-sans text-[17px]">
                   <span className="inline-flex items-center gap-2">
                     <Clock className="h-[18px] w-[18px]" aria-hidden="true" />
-                    {eventTime(nextEvent.start_time)}
+                    {formatEventTime(nextEvent.start_time, timeZone)}
                   </span>
                   {nextEvent.location && (
                     <span className="inline-flex items-center gap-2">
@@ -328,6 +313,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
                   startTime={nextEvent.start_time}
                   endTime={nextEvent.end_time}
                   leadMinutes={meeting.meeting_lead_minutes}
+                  timeZone={timeZone}
                   recordingsHref={lectureCount && lectureCount > 0 ? href("/lectures") : null}
                 />
               </div>

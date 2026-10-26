@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { DateTime } from "luxon";
+import { zoned } from "@/lib/time/zone";
 import {
   GRID_MINUTES,
   HOUR_HEIGHT_PX,
@@ -7,6 +9,7 @@ import {
   dayKey,
   formatDayTime,
   formatHour,
+  formatTime,
   gridHours,
   layoutLanes,
   localeWeekStart,
@@ -16,10 +19,33 @@ import {
   spansDays,
   weekDays,
   weekTitle,
+  type Segment,
 } from "./weekGrid";
 
-// Local-time constructors keep these independent of the machine's zone.
-const at = (hour: number, minute = 0) => new Date(2026, 8, 29, hour, minute);
+const NY = "America/New_York";
+
+// Wall-clock constructors in the org zone keep these independent of the machine's zone.
+const dt = (year: number, month: number, day: number, hour = 0, minute = 0) =>
+  DateTime.fromObject({ year, month, day, hour, minute }, { zone: NY });
+const at = (hour: number, minute = 0) => dt(2026, 9, 29, hour, minute);
+
+/** DateTimes compare by instant, not by their lazily filled internals. */
+const plain = (segment: Segment | null) =>
+  segment && {
+    ...segment,
+    start: segment.start.toISO(),
+    end: segment.end?.toISO() ?? null,
+  };
+const expected = (start: DateTime, end: DateTime | null, continuesBefore: boolean, continuesAfter: boolean) => ({
+  start: start.toISO(),
+  end: end?.toISO() ?? null,
+  continuesBefore,
+  continuesAfter,
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe("placeEvent", () => {
   it("offsets a start time from 6 am in minutes", () => {
@@ -89,55 +115,35 @@ describe("placeEvent", () => {
 });
 
 describe("segmentOn", () => {
-  const day = (date: number) => new Date(2026, 8, date);
-  const on = (date: number, hour: number, minute = 0) => new Date(2026, 8, date, hour, minute);
+  const day = (date: number) => dt(2026, 9, date);
+  const on = (date: number, hour: number, minute = 0) => dt(2026, 9, date, hour, minute);
 
   it("keeps a same-day event whole, on its own day only", () => {
-    expect(segmentOn(at(19), at(20, 30), day(29))).toEqual({
-      start: at(19),
-      end: at(20, 30),
-      continuesBefore: false,
-      continuesAfter: false,
-    });
+    expect(plain(segmentOn(at(19), at(20, 30), day(29)))).toEqual(expected(at(19), at(20, 30), false, false));
     expect(segmentOn(at(19), at(20, 30), day(30))).toBeNull();
-    expect(segmentOn(at(19), null, day(29))).toMatchObject({ end: null, continuesAfter: false });
+    expect(plain(segmentOn(at(19), null, day(29)))).toMatchObject({ end: null, continuesAfter: false });
     expect(segmentOn(at(19), null, day(30))).toBeNull();
   });
 
   it("belongs to the start day alone when the end is not after the start", () => {
-    expect(segmentOn(at(12), at(11), day(29))).toMatchObject({ end: at(11), continuesAfter: false });
+    expect(plain(segmentOn(at(12), at(11), day(29)))).toMatchObject({ end: at(11).toISO(), continuesAfter: false });
     expect(segmentOn(at(12), at(11), day(28))).toBeNull();
   });
 
-  it("splits an overnight event at local midnight", () => {
+  it("splits an overnight event at midnight", () => {
     const start = on(29, 19);
     const end = on(30, 1);
-    expect(segmentOn(start, end, day(29))).toEqual({
-      start,
-      end: day(30),
-      continuesBefore: false,
-      continuesAfter: true,
-    });
-    expect(segmentOn(start, end, day(30))).toEqual({
-      start: day(30),
-      end,
-      continuesBefore: true,
-      continuesAfter: false,
-    });
+    expect(plain(segmentOn(start, end, day(29)))).toEqual(expected(start, day(30), false, true));
+    expect(plain(segmentOn(start, end, day(30)))).toEqual(expected(day(30), end, true, false));
     expect(segmentOn(start, end, day(28))).toBeNull();
-    expect(segmentOn(start, end, new Date(2026, 9, 1))).toBeNull();
+    expect(segmentOn(start, end, dt(2026, 10, 1))).toBeNull();
   });
 
   it("gives a three-day event a full middle day", () => {
     const start = on(27, 10);
     const end = on(29, 14);
-    expect(segmentOn(start, end, day(28))).toEqual({
-      start: day(28),
-      end: day(29),
-      continuesBefore: true,
-      continuesAfter: true,
-    });
-    expect(segmentOn(start, end, day(29))).toMatchObject({ start: day(29), end, continuesBefore: true });
+    expect(plain(segmentOn(start, end, day(28)))).toEqual(expected(day(28), day(29), true, true));
+    expect(plain(segmentOn(start, end, day(29)))).toMatchObject({ start: day(29).toISO(), end: end.toISO(), continuesBefore: true });
   });
 
   it("does not reach into the next day when the end is exactly midnight", () => {
@@ -146,22 +152,22 @@ describe("segmentOn", () => {
   });
 
   it("ignores the day argument's time of day", () => {
-    expect(segmentOn(at(19), at(20), new Date(2026, 8, 29, 23, 59))).not.toBeNull();
+    expect(segmentOn(at(19), at(20), dt(2026, 9, 29, 23, 59))).not.toBeNull();
   });
 });
 
 describe("placeSegment", () => {
-  const segment = (start: Date, end: Date | null, continuesBefore: boolean, continuesAfter: boolean) => ({
+  const segment = (start: DateTime, end: DateTime | null, continuesBefore: boolean, continuesAfter: boolean) => ({
     start,
     end,
     continuesBefore,
     continuesAfter,
   });
-  const midnight = new Date(2026, 8, 29);
+  const midnight = dt(2026, 9, 29);
 
   it("places a segment that starts today like the event itself", () => {
     expect(placeSegment(segment(at(19), at(20, 30), false, false))).toEqual(placeEvent(at(19), at(20, 30)));
-    expect(placeSegment(segment(at(19), new Date(2026, 8, 30), false, true))).toEqual({
+    expect(placeSegment(segment(at(19), dt(2026, 9, 30), false, true))).toEqual({
       kind: "timed",
       topMinutes: 13 * 60,
       durationMinutes: 3 * 60,
@@ -187,18 +193,18 @@ describe("placeSegment", () => {
 
   it("sends a continuation that covers the whole grid to the all-day row", () => {
     expect(placeSegment(segment(midnight, at(22), true, false))).toEqual({ kind: "allDay" });
-    expect(placeSegment(segment(midnight, new Date(2026, 8, 30), true, true))).toEqual({ kind: "allDay" });
+    expect(placeSegment(segment(midnight, dt(2026, 9, 30), true, true))).toEqual({ kind: "allDay" });
   });
 
   it("reads a continuation's end from the clock on a daylight-saving day", () => {
     // The US fall-back day is 25 hours long; the block must still end where the clock says.
-    const changeDay = new Date(2026, 10, 1);
-    expect(placeSegment(segment(changeDay, new Date(2026, 10, 1, 14), true, false))).toEqual({
+    const changeDay = dt(2026, 11, 1);
+    expect(placeSegment(segment(changeDay, dt(2026, 11, 1, 14), true, false))).toEqual({
       kind: "timed",
       topMinutes: 0,
       durationMinutes: 8 * 60,
     });
-    expect(placeSegment(segment(changeDay, new Date(2026, 10, 1, 21, 30), true, false))).toMatchObject({
+    expect(placeSegment(segment(changeDay, dt(2026, 11, 1, 21, 30), true, false))).toMatchObject({
       kind: "timed",
       durationMinutes: 930,
     });
@@ -209,8 +215,8 @@ describe("spansDays", () => {
   it("is true only when the event's last moment is on a later day", () => {
     expect(spansDays(at(19), at(20))).toBe(false);
     expect(spansDays(at(19), null)).toBe(false);
-    expect(spansDays(at(19), new Date(2026, 8, 30, 1))).toBe(true);
-    expect(spansDays(at(19), new Date(2026, 8, 30))).toBe(false);
+    expect(spansDays(at(19), dt(2026, 9, 30, 1))).toBe(true);
+    expect(spansDays(at(19), dt(2026, 9, 30))).toBe(false);
     expect(spansDays(at(12), at(11))).toBe(false);
   });
 });
@@ -281,7 +287,7 @@ describe("layoutLanes", () => {
 });
 
 describe("weekDays", () => {
-  const tuesday = new Date(2026, 8, 29, 15, 42);
+  const tuesday = dt(2026, 9, 29, 15, 42);
 
   it("starts on Sunday for a Sunday-first locale", () => {
     const days = weekDays(tuesday, 0);
@@ -294,7 +300,7 @@ describe("weekDays", () => {
       "2026-10-02",
       "2026-10-03",
     ]);
-    expect(days.every((d) => d.getHours() === 0 && d.getMinutes() === 0)).toBe(true);
+    expect(days.every((d) => d.hour === 0 && d.minute === 0)).toBe(true);
   });
 
   it("starts on Monday for a Monday-first locale", () => {
@@ -311,12 +317,12 @@ describe("weekDays", () => {
 
   it("starts on Saturday for a Saturday-first locale", () => {
     expect(weekDays(tuesday, 6).map(dayKey)[0]).toBe("2026-09-26");
-    expect(weekDays(new Date(2026, 8, 26), 6).map(dayKey)[0]).toBe("2026-09-26");
+    expect(weekDays(dt(2026, 9, 26), 6).map(dayKey)[0]).toBe("2026-09-26");
   });
 
   it("keeps the anchor's own day when it is the first day", () => {
-    expect(weekDays(new Date(2026, 8, 27), 0).map(dayKey)[0]).toBe("2026-09-27");
-    expect(weekDays(new Date(2026, 8, 28), 1).map(dayKey)[0]).toBe("2026-09-28");
+    expect(weekDays(dt(2026, 9, 27), 0).map(dayKey)[0]).toBe("2026-09-27");
+    expect(weekDays(dt(2026, 9, 28), 1).map(dayKey)[0]).toBe("2026-09-28");
   });
 });
 
@@ -335,15 +341,15 @@ describe("localeWeekStart", () => {
 
 describe("weekTitle", () => {
   it("names both months when the week crosses one", () => {
-    expect(weekTitle(weekDays(new Date(2026, 8, 29), 0))).toBe("Sep 27 – Oct 3, 2026");
+    expect(weekTitle(weekDays(dt(2026, 9, 29), 0))).toBe("Sep 27 – Oct 3, 2026");
   });
 
   it("names the month once inside one month", () => {
-    expect(weekTitle(weekDays(new Date(2026, 9, 7), 0))).toBe("Oct 4 – 10, 2026");
+    expect(weekTitle(weekDays(dt(2026, 10, 7), 0))).toBe("Oct 4 – 10, 2026");
   });
 
   it("names both years across a year end", () => {
-    expect(weekTitle(weekDays(new Date(2026, 11, 30), 0))).toBe("Dec 27, 2026 – Jan 2, 2027");
+    expect(weekTitle(weekDays(dt(2026, 12, 30), 0))).toBe("Dec 27, 2026 – Jan 2, 2027");
   });
 });
 
@@ -360,8 +366,29 @@ describe("gridHours", () => {
 
 describe("addDays", () => {
   it("steps across a daylight-saving change by calendar day", () => {
-    const beforeChange = new Date(2026, 10, 1);
+    const beforeChange = dt(2026, 11, 1);
     expect(dayKey(addDays(beforeChange, 7))).toBe("2026-11-08");
     expect(dayKey(addDays(beforeChange, -7))).toBe("2026-10-25");
+  });
+});
+
+// The acceptance case: a 7:00 PM event stored in UTC lands in the 7 PM row of
+// Tuesday's column for a viewer whose machine is in Tokyo or in UTC.
+describe.each([
+  { tz: "Asia/Tokyo", offsetMinutes: -540 },
+  { tz: "UTC", offsetMinutes: 0 },
+])("with the browser in $tz", ({ tz, offsetMinutes }) => {
+  it("places the org's 7:00 PM in the 7 PM row of its own day", () => {
+    vi.stubEnv("TZ", tz);
+    expect(new Date(2026, 0, 15).getTimezoneOffset()).toBe(offsetMinutes);
+
+    const start = zoned("2026-09-29T23:00:00.000Z", NY);
+    const end = zoned("2026-09-30T00:30:00.000Z", NY);
+    expect(dayKey(start)).toBe("2026-09-29");
+    expect(formatTime(start)).toBe("7:00 PM");
+    expect(placeEvent(start, end)).toEqual({ kind: "timed", topMinutes: 13 * 60, durationMinutes: 90 });
+    expect(segmentOn(start, end, dt(2026, 9, 29))).not.toBeNull();
+    expect(segmentOn(start, end, dt(2026, 9, 30))).toBeNull();
+    expect(weekDays(start, 0).map(dayKey)[2]).toBe("2026-09-29");
   });
 });

@@ -985,14 +985,14 @@ isOneToOne: false
                   ]
                 },"organizations": {
                   Row: {
-                    "branding": NonNullable<Json>,"created_at": string,"custom_email_domain_enabled": boolean,"directory_visibility": string,"group_creation_policy": string,"group_discovery": boolean,"id": string,"name": string,"status": Database["public"]['Enums']["org_status"]
+                    "branding": NonNullable<Json>,"created_at": string,"custom_email_domain_enabled": boolean,"directory_visibility": string,"group_creation_policy": string,"group_discovery": boolean,"id": string,"name": string,"status": Database["public"]['Enums']["org_status"],"timezone": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"group_creation_policy"?: string,"group_discovery"?: boolean,"id"?: string,"name": string,"status"?: Database["public"]['Enums']["org_status"]
+                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"group_creation_policy"?: string,"group_discovery"?: boolean,"id"?: string,"name": string,"status"?: Database["public"]['Enums']["org_status"],"timezone"?: string
                   }
                   Update: {
-                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"group_creation_policy"?: string,"group_discovery"?: boolean,"id"?: string,"name"?: string,"status"?: Database["public"]['Enums']["org_status"]
+                    "branding"?: NonNullable<Json>,"created_at"?: string,"custom_email_domain_enabled"?: boolean,"directory_visibility"?: string,"group_creation_policy"?: string,"group_discovery"?: boolean,"id"?: string,"name"?: string,"status"?: Database["public"]['Enums']["org_status"],"timezone"?: string
                   }
                   Relationships: [
                     

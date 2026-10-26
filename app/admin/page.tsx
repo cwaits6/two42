@@ -11,6 +11,7 @@ import { PENDING_GROUP_REQUEST_SELECT, toPendingGroupRequest } from "@/lib/group
 import { pendingJoinRequestsSummary } from "@/lib/groups/joinQueue";
 import { getPendingJoinRequests } from "@/lib/groups/pendingJoinRequests";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
 
 export const metadata = { title: `Admin | ${siteConfig.name}` };
 
@@ -30,6 +31,7 @@ export default async function AdminPage() {
     redirect("/dashboard");
   }
   const isAdminRole = profile.role === "admin";
+  const timeZone = await getOrgTimeZone();
 
   // access_requests and group_requests SELECT are admin-only under RLS, and
   // pending_group_join_requests() returns nothing to a content_editor; skip
@@ -82,7 +84,7 @@ export default async function AdminPage() {
         {isAdminRole && (
           <>
             <h3 className="mb-3 mt-8 text-xl font-semibold text-foreground">Group requests</h3>
-            <PendingGroupRequests initialRequests={pendingGroupRequests} />
+            <PendingGroupRequests initialRequests={pendingGroupRequests} timeZone={timeZone} />
             <h3 className="mb-3 mt-8 text-xl font-semibold text-foreground">Join requests</h3>
             {pendingJoinRequests === null ? (
               <p role="alert" className="text-lg text-muted-foreground">

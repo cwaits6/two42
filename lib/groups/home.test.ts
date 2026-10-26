@@ -43,7 +43,7 @@ function makeClient(results: Record<string, Result>) {
 const NOW = new Date("2026-10-09T12:00:00Z");
 
 async function loadOrFail(client: SupabaseClient<Database>, groups: ActiveGroup[]) {
-  const result = await loadHomeCards(client, { orgId: "org-1", groups });
+  const result = await loadHomeCards(client, { orgId: "org-1", timeZone: "America/New_York", groups });
   if (!result) throw new Error("loadHomeCards reported a failed read");
   return result;
 }
@@ -81,7 +81,7 @@ describe("loadHomeCards", () => {
       prayer_wall: { data: [], error: null },
     });
 
-    await loadHomeCards(client, { orgId: "org-1", groups: [A, B] });
+    await loadHomeCards(client, { orgId: "org-1", timeZone: "America/New_York", groups: [A, B] });
 
     for (const table of ["events", "announcements", "prayer_wall"]) {
       expect(eqs[table]).toContainEqual(["org_id", "org-1"]);
@@ -162,7 +162,7 @@ describe("loadHomeCards", () => {
       prayer_wall: { data: [], error: null },
     });
 
-    const result = await loadHomeCards(client, { orgId: "org-1", groups: [A] });
+    const result = await loadHomeCards(client, { orgId: "org-1", timeZone: "America/New_York", groups: [A] });
 
     expect(result).toBeNull();
     expect(console.error).toHaveBeenCalledWith("Home %s read failed:", "announcements", { message: "boom" });

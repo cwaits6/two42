@@ -8,6 +8,7 @@ import {
   joinButtonLabel,
   type JoinState,
 } from "@/lib/meetings";
+import { formatEventTime } from "@/lib/time/zone";
 
 interface JoinMeetingBlockProps {
   meetingUrl: string;
@@ -17,6 +18,8 @@ interface JoinMeetingBlockProps {
   startTime: string;
   endTime: string | null;
   leadMinutes: number;
+  /** The org's zone, resolved by the server; the "opens at" time is its wall clock. */
+  timeZone: string;
   /** Where "Watch the recording" points after the event ends; omit to hide. */
   recordingsHref?: string | null;
 }
@@ -76,6 +79,7 @@ export function JoinMeetingBlock({
   startTime,
   endTime,
   leadMinutes,
+  timeZone,
   recordingsHref,
 }: JoinMeetingBlockProps) {
   const [state, setState] = useState<JoinState>(() =>
@@ -97,13 +101,10 @@ export function JoinMeetingBlock({
   const provider = providerName(meetingUrl);
   const buttonLabel = joinButtonLabel(meetingUrl);
 
-  const opensAt = new Date(
-    new Date(startTime).getTime() - leadMinutes * 60 * 1000
-  ).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "America/New_York",
-  });
+  const opensAt = formatEventTime(
+    new Date(new Date(startTime).getTime() - leadMinutes * 60 * 1000).toISOString(),
+    timeZone
+  );
 
   const creds = (meetingId || passcode) && (
     <div className="flex gap-2 mt-3">

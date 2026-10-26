@@ -24,30 +24,7 @@ import { PostingTo } from "@/components/groups/PostingTo";
 import { ensureGroupCalendar } from "@/lib/groups/calendar";
 import { groupPath } from "@/lib/groups/active";
 import { addHour, isValidEndTime } from "@/lib/datetime-local";
-
-const APP_TIMEZONE = "America/New_York";
-
-/** Parse a datetime-local string (YYYY-MM-DDTHH:mm) as wall-clock time in
- *  APP_TIMEZONE and return a UTC ISO string. */
-function localToUTCISO(localStr: string): string {
-  const [datePart, timePart] = localStr.split("T");
-  const [year, month, day] = datePart.split("-").map(Number);
-  const [hour, minute] = timePart.split(":").map(Number);
-  // Treat the desired local time as UTC (arbitrary reference)
-  const ref = new Date(Date.UTC(year, month - 1, day, hour, minute));
-  // Ask Intl what APP_TIMEZONE shows for that UTC moment
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: APP_TIMEZONE,
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-    hour12: false,
-  }).formatToParts(ref);
-  const p: Record<string, number> = {};
-  for (const part of parts) if (part.type !== "literal") p[part.type] = Number(part.value);
-  // delta = how far UTC is ahead of APP_TIMEZONE at this moment
-  const shownAsUTC = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
-  return new Date(ref.getTime() + (ref.getTime() - shownAsUTC)).toISOString();
-}
+import { localToUTCISO } from "@/lib/time/zone";
 
 type RecurrenceFrequency = "daily" | "weekly" | "monthly" | "yearly";
 type RecurrenceEndMode = "never" | "count" | "until";
@@ -79,9 +56,11 @@ interface NewEventFormProps {
   orgId: string;
   /** The group's calendar, or null when the group has none yet. */
   calendarId: string | null;
+  /** The org's zone, resolved by the server; the form's times are its wall clock. */
+  timeZone: string;
 }
 
-export function NewEventForm({ groupId, groupName, orgId, calendarId }: NewEventFormProps) {
+export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }: NewEventFormProps) {
   const [loading, setLoading] = useState(false);
   const [isRsvpEnabled, setIsRsvpEnabled] = useState(true);
   const [isRecurring, setIsRecurring] = useState(false);
@@ -175,8 +154,8 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId }: NewEvent
       title,
       description,
       location: nextLocation || null,
-      start_time: localToUTCISO(startTime),
-      end_time: endTime ? localToUTCISO(endTime) : null,
+      start_time: localToUTCISO(startTime, timeZone),
+      end_time: endTime ? localToUTCISO(endTime, timeZone) : null,
       group_id: groupId,
       calendar_id: resolvedCalendarId,
       is_rsvp_enabled: isRsvpEnabled,
@@ -187,7 +166,7 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId }: NewEvent
       recurrence_count: isRecurring && recurrenceEndMode === "count" ? parsedRecurrenceCount : null,
       recurrence_until:
         isRecurring && recurrenceEndMode === "until"
-          ? localToUTCISO(recurrenceUntil)
+          ? localToUTCISO(recurrenceUntil, timeZone)
           : null,
       meeting_url: trimmedMeetingUrl || null,
       meeting_id: meetingId.trim() || null,

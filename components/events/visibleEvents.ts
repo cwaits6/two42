@@ -8,13 +8,17 @@ import type { Event } from "@/lib/types";
  * event before filtering, so an exception row of a hidden group still
  * suppresses its series occurrence.
  */
-export function expandVisibleEvents(events: Event[], visibleGroupIds: ReadonlySet<string>): Event[] {
-  const exceptions = buildExceptionMap(events);
+export function expandVisibleEvents(
+  events: Event[],
+  visibleGroupIds: ReadonlySet<string>,
+  timeZone: string
+): Event[] {
+  const exceptions = buildExceptionMap(events, timeZone);
   const expanded: Event[] = [];
   for (const e of events) {
     if (!visibleGroupIds.has(e.group_id)) continue;
     if (!e.series_id && e.recurrence_frequency) {
-      expanded.push(...expandOccurrences(e, exceptions.get(e.id)));
+      expanded.push(...expandOccurrences(e, timeZone, exceptions.get(e.id)));
     } else {
       expanded.push(e);
     }
