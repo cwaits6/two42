@@ -14,32 +14,31 @@ function rootClasses(size: "sm" | "default"): string[] {
   return match[1].split(/\s+/);
 }
 
-function arbitraryPx(classes: string[], prefix: string): number {
-  const re = new RegExp(`^${prefix.replace(/[[\]]/g, "\\$&")}\\[([\\d.]+)px\\]$`);
+function scalePx(classes: string[], prefix: string): number {
+  const re = new RegExp(`^${prefix}-(\\d+(?:\\.\\d+)?)$`);
   const hit = classes.map((c) => c.match(re)).find(Boolean);
-  if (!hit) throw new Error(`no ${prefix}[...px] class`);
-  return Number(hit[1]);
-}
-
-function negativeInset(classes: string[], axis: "x" | "y"): number {
-  const re = new RegExp(`^after:-inset-${axis}-([\\d.]+)$`);
-  const hit = classes.map((c) => c.match(re)).find(Boolean);
-  if (!hit) throw new Error(`no after:-inset-${axis} class`);
+  if (!hit) throw new Error(`no ${prefix}-<n> class`);
   return Number(hit[1]) * SPACING_PX;
 }
 
-describe("Switch hit area", () => {
-  it("extends the hit area with a positioned pseudo-element", () => {
+describe("Switch touch target", () => {
+  it.each(["default", "sm"] as const)(
+    "reserves a 44 px box in layout at size %s",
+    (size) => {
+      const classes = rootClasses(size);
+      expect(scalePx(classes, "h")).toBeGreaterThanOrEqual(FLOOR_PX);
+      expect(scalePx(classes, "min-w")).toBeGreaterThanOrEqual(FLOOR_PX);
+    },
+  );
+
+  it("does not reach past its own box into neighbouring controls", () => {
     const classes = rootClasses("default");
-    expect(classes).toContain("relative");
-    expect(classes).toContain("after:absolute");
+    expect(classes.some((c) => c.startsWith("after:"))).toBe(false);
+    expect(classes).not.toContain("absolute");
   });
 
-  it.each(["default", "sm"] as const)("reaches the 44 px floor at size %s", (size) => {
-    const classes = rootClasses(size);
-    const height = arbitraryPx(classes, `data-[size=${size}]:h-`);
-    const width = arbitraryPx(classes, `data-[size=${size}]:w-`);
-    expect(height + 2 * negativeInset(classes, "y")).toBeGreaterThanOrEqual(FLOOR_PX);
-    expect(width + 2 * negativeInset(classes, "x")).toBeGreaterThanOrEqual(FLOOR_PX);
+  it("keeps the track inside the target", () => {
+    const html = renderToStaticMarkup(createElement(Switch, {}));
+    expect(html).toMatch(/role="switch"[\s\S]*data-slot="switch-track"[\s\S]*data-slot="switch-thumb"/);
   });
 });
