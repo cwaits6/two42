@@ -147,8 +147,8 @@ export default async function ServingPage({
         Serving
       </h1>
       <p className="text-lg text-muted-foreground mb-10">
-        Sign up to serve on a Sunday, and see the teams and roles that keep our
-        class running.
+        Sign up for a week to serve, and see the teams and roles that keep your
+        group running.
       </p>
 
       {signupTeams.length > 0 && (
@@ -182,7 +182,7 @@ export default async function ServingPage({
                             )}
                           </p>
                           <p className="text-muted-foreground">
-                            {covered} of the next {settings.window_weeks} Sundays
+                            {covered} of the next {settings.window_weeks} weeks
                             covered
                             {isMember && !isTeamLead ? " · You're on this team" : ""}
                             {!isMember && !isLeader ? " · Members sign up" : ""}

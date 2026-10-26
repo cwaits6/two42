@@ -47,8 +47,8 @@ export function AdminServingSetup({ groups }: AdminServingSetupProps) {
       </CardHeader>
       <CardContent>
         <p className="text-sm text-muted-foreground mb-4">
-          Turn on Sunday signups for a team. Members of the team will be able
-          to claim upcoming Sundays.
+          Turn on serving signups for a team. Members of the team will be able
+          to claim upcoming dates.
         </p>
         <div className="divide-y">
           {groups.map((g) => (

@@ -244,7 +244,7 @@ export function EditLectureForm({
                 id="summary"
                 name="summary"
                 rows={4}
-                placeholder="Post-class summary..."
+                placeholder="Summary of the teaching..."
                 defaultValue={lecture.summary ?? ""}
                 className="text-lg"
               />

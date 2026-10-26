@@ -132,7 +132,7 @@ export async function POST(request: Request) {
   if (payload.a === "signup") {
     if (!isValidServiceDate(payload.d)) {
       return NextResponse.json(
-        { error: "That Sunday has already passed" },
+        { error: "That date has already passed" },
         { status: 400 }
       );
     }
@@ -214,7 +214,7 @@ export async function POST(request: Request) {
       switch (rpcError?.code) {
         case "SV001":
           return NextResponse.json(
-            { error: "Someone just signed up for that Sunday — thank you anyway!" },
+            { error: "Someone just signed up for that date — thank you anyway!" },
             { status: 409 }
           );
         case "SV002":
@@ -304,7 +304,7 @@ export async function POST(request: Request) {
     attendeeProfiles.some((a) => a.id === profile.id);
   if (!involved) {
     return NextResponse.json(
-      { error: "This Sunday is covered by someone else now" },
+      { error: "This date is covered by someone else now" },
       { status: 403 }
     );
   }

@@ -151,7 +151,7 @@ export async function POST(request: Request) {
 
   if (openDates.length === 0) {
     return NextResponse.json(
-      { error: "Every upcoming Sunday is covered — nothing to ask for!" },
+      { error: "Every upcoming date is covered — nothing to ask for!" },
       { status: 400 }
     );
   }

@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   }
   if (!isValidServiceDate(serviceDate)) {
     return NextResponse.json(
-      { error: "Signups are for upcoming Sundays only" },
+      { error: "Signups are for upcoming service dates only" },
       { status: 400 }
     );
   }
@@ -147,7 +147,7 @@ export async function POST(request: Request) {
     switch (rpcError?.code) {
       case "SV001":
         return NextResponse.json(
-          { error: "Someone just signed up for that Sunday — thank you anyway!" },
+          { error: "Someone just signed up for that date — thank you anyway!" },
           { status: 409 }
         );
       case "SV002":

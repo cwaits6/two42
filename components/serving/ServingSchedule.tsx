@@ -80,7 +80,7 @@ export function ServingSchedule({
   async function cancel(entry: ScheduleEntry) {
     const mine = entry.attendeeIds.includes(userId) || entry.createdBy === userId;
     const message = mine
-      ? `Cancel your signup for ${formatServiceDate(entry.date)}? The Sunday will open back up for someone else.`
+      ? `Cancel your signup for ${formatServiceDate(entry.date)}? That date will open back up for someone else.`
       : `Remove ${entry.label} from ${formatServiceDate(entry.date)}?`;
     if (!confirm(message)) return;
 
