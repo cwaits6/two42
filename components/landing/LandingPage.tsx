@@ -1,7 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { MemberActions } from "./MemberActions";
 import { CONTACT_EMAIL, SECTION_IDS, SELF_HOST_URL } from "./sections";
 
 const WRAP = "mx-auto w-full max-w-6xl px-6";
@@ -49,15 +48,6 @@ const FEATURES = [
     alt: "The Prayer page: requests from the group, each with a You’re praying button, and a form to share one by name or anonymously",
     imageFirst: false,
   },
-];
-
-const ALSO_INCLUDED = [
-  "Announcements, in the app",
-  "Lecture and teaching library",
-  "Giving links: Venmo, PayPal, Zelle. No money moves through the app.",
-  "Member import from a spreadsheet",
-  "Several groups per church, one sign-in",
-  "Adjustable text size",
 ];
 
 export function LandingPage() {
@@ -167,34 +157,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section className={`${WRAP} flex flex-wrap gap-x-16 gap-y-6 py-14 md:gap-y-10 md:py-20`}>
-        <h2 className={`${DISPLAY} flex-[0_1_280px] text-[2.125rem] leading-[1.1]`}>Also included</h2>
-        <ul className="grid min-w-0 flex-[1_1_560px] grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-x-10 text-lg">
-          {ALSO_INCLUDED.map((item) => (
-            <li key={item} className="border-b border-border py-3.5">
-              {item}
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section id={SECTION_IDS.members} className="scroll-mt-20 border-y border-border bg-white">
-        <div className={`${WRAP} flex flex-wrap items-center justify-between gap-8 py-14 md:py-18`}>
-          <div className="flex min-w-0 flex-[1_1_520px] flex-col items-start gap-3">
-            <Eyebrow rule="none">For members</Eyebrow>
-            <h2 className={`${DISPLAY} text-[clamp(1.875rem,3.2vw,2.375rem)] leading-[1.1]`}>
-              Already in a group on two42?
-            </h2>
-            <p className="text-xl text-muted-foreground">
-              Your leader sends you a link. Open it, choose a password, and you&rsquo;re in — your
-              group, its calendar and its people are waiting. Signed up before? Just sign in.
-            </p>
-          </div>
-          <MemberActions />
-        </div>
-      </section>
-
-      <section id={SECTION_IDS.open} className={`${WRAP} flex scroll-mt-20 flex-col gap-4 py-14 md:py-20`}>
+      <section className={`${WRAP} flex flex-col gap-4 py-14 md:py-20`}>
         <h2 className={`${DISPLAY} text-[2.125rem] leading-[1.1]`}>Open source</h2>
         <p className="max-w-[760px] text-xl leading-relaxed text-muted-foreground">
           two42 is open source under AGPL-3.0, so a church never has to wonder what the software

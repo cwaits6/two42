@@ -1,13 +1,12 @@
 import React from "react";
 import Link from "next/link";
-import { siteConfig } from "@/lib/config";
 
 export interface AuthShellProps {
   eyebrow: string;
   title: string;
   /** Italic brand-primary emphasis word that follows the title */
   em: string;
-  kicker: string;
+  kicker?: string;
   altPrompt?: string;
   altLabel?: string;
   altHref?: string;
@@ -15,12 +14,13 @@ export interface AuthShellProps {
 }
 
 /**
- * Full-bleed two-column auth layout shell.
+ * Two-column auth layout body, rendered between the global Header and Footer.
  *
- * Left column: brand panel (espresso ground, wordmark + devotional quote).
+ * Left column: verse panel (espresso ground). The wordmark lives in the
+ * Header, so the panel carries no brand mark of its own.
  * Right column: form area (warm paper background).
  *
- * Mobile: stacks to single column with a short brand banner on top.
+ * Mobile: stacks to single column with the verse as a short banner on top.
  */
 export function AuthShell({
   eyebrow,
@@ -34,40 +34,24 @@ export function AuthShell({
 }: AuthShellProps) {
   return (
     <div className="min-h-screen grid grid-cols-1 md:grid-cols-2">
-      {/* ── LEFT — brand panel ── */}
-      <div
-        className="relative bg-brand-navy text-white flex flex-col justify-between px-8 py-12 md:px-14 md:py-14 overflow-hidden"
-        // On mobile: cap height so it reads as a banner, not a half-page
-      >
-        {/* Top: wordmark */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/brand/two42-wordmark-dark.svg"
-          alt={siteConfig.name}
-          className="relative h-8 w-auto"
-        />
-
-        {/* Middle: devotional quote — hidden on mobile to keep banner compact */}
-        <div className="relative hidden md:block max-w-[460px]">
+      {/* ── LEFT — verse panel ── */}
+      <div className="relative flex flex-col justify-center bg-brand-navy px-8 py-10 text-white md:px-14 md:py-14">
+        <figure className="relative max-w-[460px]">
           <div
-            className="font-serif text-[5rem] leading-none text-brand-accent font-semibold"
+            className="hidden font-serif text-[5rem] font-semibold leading-none text-brand-accent md:block"
             style={{ marginBottom: "0.35rem" }}
             aria-hidden
           >
             &ldquo;
           </div>
-          <p className="font-serif italic text-[2rem] leading-[1.25] tracking-[-0.025em] text-white">
-            Encourage one another and build each other up.
-          </p>
-          <p className="font-sans text-base font-bold tracking-[0.2em] uppercase text-brand-accent mt-4">
-            1 Thessalonians 5:11
-          </p>
-        </div>
-
-        {/* Bottom: micro-tagline — hidden on mobile */}
-        <div className="relative hidden md:block font-sans text-base text-white/70 leading-relaxed">
-          A Sunday class for every season of life — come as you are.
-        </div>
+          <blockquote className="font-serif text-2xl italic leading-[1.3] tracking-[-0.025em] text-white md:text-[2rem] md:leading-[1.25]">
+            They devoted themselves to the apostles&rsquo; teaching and to fellowship, to the
+            breaking of bread and to prayer.
+          </blockquote>
+          <figcaption className="mt-4 font-sans text-base font-bold uppercase tracking-[0.2em] text-brand-accent">
+            Acts 2:42
+          </figcaption>
+        </figure>
       </div>
 
       {/* ── RIGHT — form panel ── */}
@@ -87,10 +71,11 @@ export function AuthShell({
             <em className="not-italic italic text-brand-primary">{em}</em>.
           </h1>
 
-          {/* Kicker */}
-          <p className="font-sans text-base text-muted-foreground leading-[1.6] mt-3.5 mb-0">
-            {kicker}
-          </p>
+          {kicker && (
+            <p className="font-sans text-base text-muted-foreground leading-[1.6] mt-3.5 mb-0">
+              {kicker}
+            </p>
+          )}
 
           {/* Form / children */}
           <div className="mt-8">{children}</div>

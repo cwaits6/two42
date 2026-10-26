@@ -40,11 +40,18 @@ describe("Header signed out", () => {
   });
 
   it("drops the section links on every other route", () => {
-    pathname = "/login";
+    pathname = "/privacy";
     const html = render(null);
     expect(html).not.toContain('aria-label="Page sections"');
     expect(html).not.toContain('href="#');
     expect(html).toContain('href="/login"');
+  });
+
+  it("drops the sign-in button on the sign-in page itself", () => {
+    pathname = "/login";
+    const html = render(null);
+    expect(html).not.toContain('href="/login"');
+    expect(html).toContain("two42-wordmark.svg");
   });
 });
 

@@ -1,8 +1,7 @@
 /**
- * Auth route-group layout — intentionally minimal.
- * Omits the global Header / AppShell / Footer so that
- * the full-bleed two-column AuthShell design can take
- * over the entire viewport.
+ * Auth route-group layout — intentionally minimal. The root layout still
+ * wraps these pages in the global Header and Footer; AuthShell supplies the
+ * two-column body between them.
  */
 export default function AuthLayout({
   children,

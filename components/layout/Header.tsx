@@ -146,14 +146,16 @@ export function Header({ profile, hasServingAccess, isPlatformAdmin = false, org
                   ))}
                 </nav>
               )}
-              <Button
-                size="lg"
-                className="px-6 text-lg font-semibold"
-                nativeButton={false}
-                render={<Link href="/login" />}
-              >
-                Sign in
-              </Button>
+              {pathname !== "/login" && (
+                <Button
+                  size="lg"
+                  className="px-6 text-lg font-semibold"
+                  nativeButton={false}
+                  render={<Link href="/login" />}
+                >
+                  Sign in
+                </Button>
+              )}
             </>
           )}
         </div>
