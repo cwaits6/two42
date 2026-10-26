@@ -66,8 +66,8 @@ export function ServingSettingsDialog({ teamId, settings }: ServingSettingsDialo
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
-        <Settings className="h-4 w-4" />
+      <Button variant="outline" onClick={() => setOpen(true)}>
+        <Settings aria-hidden="true" />
         Team settings
       </Button>
       <DialogContent className="max-w-sm">
@@ -91,7 +91,7 @@ export function ServingSettingsDialog({ teamId, settings }: ServingSettingsDialo
           {/* Reminder days */}
           <div className="space-y-2">
             <Label className="text-base">Reminder days</Label>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-base text-muted-foreground">
               Send reminder emails on these days of the week.
             </p>
             <div className="flex flex-wrap gap-2 pt-1">
@@ -101,7 +101,7 @@ export function ServingSettingsDialog({ teamId, settings }: ServingSettingsDialo
                   type="button"
                   aria-pressed={reminderDays.includes(dow)}
                   onClick={() => toggleDay(dow)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                  className={`h-12 min-w-12 rounded-lg border px-3 text-base font-medium transition-colors ${
                     reminderDays.includes(dow)
                       ? "bg-brand-primary text-white border-brand-primary"
                       : "border-border text-muted-foreground hover:border-brand-primary/50"
@@ -118,8 +118,8 @@ export function ServingSettingsDialog({ teamId, settings }: ServingSettingsDialo
             <Label htmlFor="st-weeks" className="text-base">
               Schedule window (weeks)
             </Label>
-            <p className="text-sm text-muted-foreground">
-              How many upcoming Sundays to show (1–26).
+            <p className="text-base text-muted-foreground">
+              How many upcoming weeks to show (1–26).
             </p>
             <input
               id="st-weeks"
@@ -128,7 +128,7 @@ export function ServingSettingsDialog({ teamId, settings }: ServingSettingsDialo
               max={26}
               value={windowWeeks}
               onChange={(e) => setWindowWeeks(Number(e.target.value))}
-              className="w-24 rounded-md border border-border bg-background px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-brand-primary"
+              className="h-12 w-24 rounded-md border border-border bg-background px-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-primary"
             />
           </div>
 
