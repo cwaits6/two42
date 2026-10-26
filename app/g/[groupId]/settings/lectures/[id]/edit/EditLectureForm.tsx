@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { groupPath } from "@/lib/groups/active";
 import { PostingTo } from "@/components/groups/PostingTo";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -46,6 +47,7 @@ export function EditLectureForm({
 }) {
   const [lecture, setLecture] = useState<Lecture | null>(null);
   const [loading, setLoading] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "not-found">(
     "loading",
   );
@@ -123,8 +125,6 @@ export function EditLectureForm({
   };
 
   const handleDelete = async () => {
-    if (!confirm("Are you sure you want to delete this lecture?")) return;
-
     const { data, error } = await supabase
       .from("lectures")
       .delete()
@@ -292,7 +292,7 @@ export function EditLectureForm({
                 size="lg"
                 variant="destructive"
                 className="text-lg py-6"
-                onClick={handleDelete}
+                onClick={() => setConfirmingDelete(true)}
               >
                 Delete
               </Button>
@@ -300,6 +300,15 @@ export function EditLectureForm({
           </form>
         </CardContent>
       </Card>
+      <ConfirmDialog
+        open={confirmingDelete}
+        onOpenChange={setConfirmingDelete}
+        title="Delete this lecture?"
+        description="This can't be undone."
+        confirmLabel="Delete lecture"
+        pendingLabel="Deleting…"
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

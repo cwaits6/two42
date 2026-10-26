@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { groupPath } from "@/lib/groups/active";
 import { PostingTo } from "@/components/groups/PostingTo";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -35,6 +36,7 @@ export function EditAnnouncementForm({
 }) {
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
   const [loading, setLoading] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "not-found">(
     "loading",
   );
@@ -111,8 +113,6 @@ export function EditAnnouncementForm({
   };
 
   const handleDelete = async () => {
-    if (!confirm("Are you sure you want to delete this announcement?")) return;
-
     const { data, error } = await supabase
       .from("announcements")
       .delete()
@@ -230,13 +230,22 @@ export function EditAnnouncementForm({
               size="lg"
               variant="destructive"
               className="text-lg py-6"
-              onClick={handleDelete}
+              onClick={() => setConfirmingDelete(true)}
             >
               Delete
             </Button>
           </div>
         </CardContent>
       </Card>
+      <ConfirmDialog
+        open={confirmingDelete}
+        onOpenChange={setConfirmingDelete}
+        title="Delete this announcement?"
+        description="This can't be undone."
+        confirmLabel="Delete announcement"
+        pendingLabel="Deleting…"
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

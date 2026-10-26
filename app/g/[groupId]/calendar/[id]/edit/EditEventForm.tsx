@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -54,6 +55,7 @@ export function EditEventForm({
   const [meetingShowOnDashboard, setMeetingShowOnDashboard] = useState(true);
   const [meetingLeadMinutes, setMeetingLeadMinutes] = useState("15");
   const [loading, setLoading] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "not-found">("loading");
   const [editScope, setEditScope] = useState<EditScope>("all");
   const router = useRouter();
@@ -246,8 +248,6 @@ export function EditEventForm({
   };
 
   const handleDelete = async () => {
-    if (!confirm("Are you sure you want to delete this event?")) return;
-
     const { data: deleted, error } = await supabase
       .from("events")
       .delete()
@@ -428,7 +428,7 @@ export function EditEventForm({
                 size="lg"
                 variant="destructive"
                 className="text-lg py-6"
-                onClick={handleDelete}
+                onClick={() => setConfirmingDelete(true)}
               >
                 Delete
               </Button>
@@ -436,6 +436,15 @@ export function EditEventForm({
           </form>
         </CardContent>
       </Card>
+      <ConfirmDialog
+        open={confirmingDelete}
+        onOpenChange={setConfirmingDelete}
+        title="Delete this event?"
+        description="This can't be undone."
+        confirmLabel="Delete event"
+        pendingLabel="Deleting…"
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

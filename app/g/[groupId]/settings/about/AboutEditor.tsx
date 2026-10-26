@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { mintSignedUrl, mintSignedUrls } from "@/lib/uploadImage";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -188,6 +189,7 @@ export function AboutEditor({
   const [candidates, setCandidates] = useState<MemberOption[] | null>(null);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<ClassTeacherWithProfile | null>(null);
+  const [removing, setRemoving] = useState<ClassTeacherWithProfile | null>(null);
   const [busy, setBusy] = useState(false);
 
   const openAdd = async () => {
@@ -264,13 +266,9 @@ export function AboutEditor({
     setEditing(added);
   };
 
-  const handleRemove = async (teacher: ClassTeacherWithProfile) => {
-    if (
-      !confirm(
-        `Remove ${displayName(teacher.profiles)} from the About page?`,
-      )
-    )
-      return;
+  const handleRemove = async () => {
+    if (!removing) return;
+    const teacher = removing;
     const { data, error } = await supabase
       .from("class_teachers")
       .delete()
@@ -282,6 +280,7 @@ export function AboutEditor({
       return;
     }
     setTeachers((prev) => prev.filter((t) => t.id !== teacher.id));
+    setRemoving(null);
     toast.success("Person removed.");
   };
 
@@ -553,7 +552,7 @@ export function AboutEditor({
                     variant="ghost"
                     size="icon-sm"
                     disabled={busy}
-                    onClick={() => handleRemove(teacher)}
+                    onClick={() => setRemoving(teacher)}
                     aria-label={`Remove ${displayName(teacher.profiles)}`}
                     className="text-muted-foreground hover:text-destructive"
                   >
@@ -675,6 +674,15 @@ export function AboutEditor({
           )}
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={(open) => !open && setRemoving(null)}
+        title={`Remove ${removing ? displayName(removing.profiles) : ""} from the About page?`}
+        description="They stay in the group. Only their entry on this page goes."
+        confirmLabel="Remove person"
+        pendingLabel="Removing…"
+        onConfirm={handleRemove}
+      />
     </PageContainer>
   );
 }

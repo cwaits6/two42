@@ -1,15 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import type { MemberGroup } from "@/lib/types";
 
 interface RemoveTeamDialogProps {
@@ -30,35 +21,15 @@ export function RemoveTeamDialog({
   onCancel,
   onConfirm,
 }: RemoveTeamDialogProps) {
-  const [removing, setRemoving] = useState(false);
-
-  async function handleConfirm() {
-    setRemoving(true);
-    try {
-      await onConfirm();
-    } finally {
-      setRemoving(false);
-    }
-  }
-
   return (
-    <Dialog open={team !== null} onOpenChange={(open) => !open && onCancel()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Remove {team?.name}?</DialogTitle>
-          <DialogDescription className="text-base">
-            {membersText(memberCount)}
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" onClick={onCancel} disabled={removing}>
-            Cancel
-          </Button>
-          <Button variant="destructive" onClick={handleConfirm} disabled={removing}>
-            {removing ? "Removing…" : "Remove team"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <ConfirmDialog
+      open={team !== null}
+      onOpenChange={(open) => !open && onCancel()}
+      title={`Remove ${team?.name}?`}
+      description={membersText(memberCount)}
+      confirmLabel="Remove team"
+      pendingLabel="Removing…"
+      onConfirm={onConfirm}
+    />
   );
 }
