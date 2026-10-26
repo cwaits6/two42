@@ -5,8 +5,8 @@
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4-06B6D4?style=flat-square&logo=tailwindcss)](https://tailwindcss.com/)
 [![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=flat-square&logo=supabase)](https://supabase.com/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](./LICENSE)
-[![Deploy with Vercel](https://img.shields.io/badge/Deploy%20with-Vercel-black?style=flat-square&logo=vercel)](https://vercel.com/new/clone?repository-url=https://github.com/codyhinz/incouragers)
-[![Open Source](https://img.shields.io/badge/Open-Source-orange?style=flat-square&logo=opensourceinitiative)](https://github.com/codyhinz/incouragers)
+[![Deploy with Vercel](https://img.shields.io/badge/Deploy%20with-Vercel-black?style=flat-square&logo=vercel)](https://vercel.com/new/clone?repository-url=https://github.com/cwaits6/two42)
+[![Open Source](https://img.shields.io/badge/Open-Source-orange?style=flat-square&logo=opensourceinitiative)](https://github.com/cwaits6/two42)
 
 **A purpose-built web app for church connection groups — replacing Facebook groups with a warm, simple community platform.**
 
@@ -40,7 +40,7 @@ two42 was built to solve exactly that. It has since been open-sourced so other g
 
 ### For Members
 
-- **Public Home Page** — Welcoming hero, upcoming events, latest announcement, and a donation button
+- **Front Door** — Public page at `/` explaining what two42 is, with Sign in and a way to get in touch
 - **Events Calendar** — Browse upcoming gatherings and RSVP (Going / Maybe / Can't Go)
 - **Lecture Library** — Watch past teachings with embedded YouTube videos
 - **Magic Link Sign-In** — No passwords to remember; sign in with just your email
@@ -91,8 +91,8 @@ two42 was built to solve exactly that. It has since been open-sourced so other g
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/codyhinz/incouragers.git
-   cd incouragers
+   git clone https://github.com/cwaits6/two42.git
+   cd two42
    npm install
    ```
 
@@ -201,8 +201,8 @@ admin surface for claiming one is hidden behind `CUSTOM_SENDING_DOMAINS_ENABLED`
 in `lib/email/sendingDomains.ts` until there is a paid tier, so no org can set
 one up today and the operator toggle has no reachable effect until that flag
 is on. Branding otherwise varies only the display name and
-Reply-To. The remaining `NEXT_PUBLIC_COLOR_*` vars, `APP_DESCRIPTION`,
-`APP_TAGLINE`, and `LOGO_MONOGRAM` are likewise still platform-wide. Everything
+Reply-To. The remaining `NEXT_PUBLIC_COLOR_*` vars and `APP_DESCRIPTION` are
+likewise still platform-wide. Everything
 else — events, announcements, donation links — is managed through the admin
 panel at runtime.
 
@@ -210,7 +210,7 @@ panel at runtime.
 
 ## Deploying to Production
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/codyhinz/incouragers)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/cwaits6/two42)
 
 1. Push your code to GitHub
 2. Connect the repo at [vercel.com/new](https://vercel.com/new)

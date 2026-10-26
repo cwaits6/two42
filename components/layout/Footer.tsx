@@ -1,63 +1,33 @@
 import Link from "next/link";
-import { siteConfig } from "@/lib/config";
-import { Heart } from "lucide-react";
+import { CONTACT_EMAIL, GITHUB_URL, SELF_HOST_URL } from "@/components/landing/sections";
+
+const LINKS = [
+  { href: GITHUB_URL, label: "GitHub" },
+  { href: SELF_HOST_URL, label: "Self-host guide" },
+  { href: "/privacy", label: "Privacy" },
+  { href: "/terms", label: "Terms" },
+  { href: `mailto:${CONTACT_EMAIL}`, label: "Contact" },
+];
 
 export function Footer() {
   return (
-    <footer className="bg-brand-primary">
-      <div className="container mx-auto px-4 py-12">
-        <div className="grid md:grid-cols-3 gap-10 mb-10">
-          {/* Brand */}
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-                <span className="text-white font-bold text-base font-display">{siteConfig.logoMonogram}</span>
-              </div>
-              <span className="text-2xl font-bold font-display text-white">{siteConfig.name}</span>
-            </div>
-            <p className="text-white/70 text-base leading-relaxed">
-              {siteConfig.description}
-            </p>
-          </div>
-
-          {/* Quick links */}
-          <div>
-            <h4 className="text-white font-bold text-lg mb-4 font-display">Quick Links</h4>
-            <ul className="space-y-2">
-              {[
-                { href: "/calendar", label: "Calendar" },
-                { href: "/lectures", label: "Lecture Library" },
-                { href: "/login", label: "Member Sign In" },
-              ].map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="text-white/60 hover:text-white transition-colors text-base"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Tagline / verse */}
-          <div>
-            <h4 className="text-white font-bold text-lg mb-4 font-display">Our Mission</h4>
-            <p className="text-white/70 text-base leading-relaxed">
-              {siteConfig.tagline}
-            </p>
-          </div>
-        </div>
-
-        <div className="border-t border-white/10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-white/60 text-base">
-            &copy; {new Date().getFullYear()} {siteConfig.name}
-          </p>
-          <p className="text-white/50 text-sm flex items-center gap-1">
-            Made with <Heart className="h-3.5 w-3.5 text-brand-accent fill-brand-accent" /> for our community
-          </p>
-        </div>
+    <footer className="mt-auto bg-foreground text-background">
+      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-5 px-6 py-9">
+        <span className="font-serif text-[1.75rem] font-medium leading-none">
+          two<span className="text-brand-accent">42</span>
+        </span>
+        <nav aria-label="Footer" className="flex flex-wrap gap-x-6 gap-y-1">
+          {LINKS.map((link) => (
+            <Link
+              key={link.label}
+              href={link.href}
+              className="inline-flex min-h-11 items-center text-base hover:text-brand-accent"
+            >
+              {link.label}
+            </Link>
+          ))}
+        </nav>
+        <span className="text-base text-background/80">&copy; {new Date().getFullYear()} two42</span>
       </div>
     </footer>
   );

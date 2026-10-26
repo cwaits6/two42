@@ -99,6 +99,8 @@ export function Header({ profile, hasServingAccess, isPlatformAdmin = false, org
             <img
               src="/brand/two42-wordmark.svg"
               alt={siteConfig.name}
+              width={108}
+              height={28}
               className="h-7 w-auto"
             />
           </Link>
@@ -129,15 +131,18 @@ export function Header({ profile, hasServingAccess, isPlatformAdmin = false, org
               Sign Out
             </Button>
           ) : (
-            <Button
-              variant="ghost"
-              size="lg"
-              className="text-base text-slate-600 hover:text-brand-primary"
-              nativeButton={false}
-              render={<Link href="/login" />}
-            >
-              Sign In
-            </Button>
+            <>
+              {pathname !== "/login" && (
+                <Button
+                  size="lg"
+                  className="px-6 text-lg font-semibold"
+                  nativeButton={false}
+                  render={<Link href="/login" />}
+                >
+                  Sign in
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -227,6 +232,8 @@ function NavDrawer({
             <img
               src="/brand/two42-wordmark.svg"
               alt={siteConfig.name}
+              width={108}
+              height={28}
               className="h-7 w-auto"
             />
           </div>

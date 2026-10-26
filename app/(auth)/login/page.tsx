@@ -62,7 +62,6 @@ export default function LoginPage() {
       eyebrow="Sign in"
       title="Sign in to"
       em={siteConfig.name}
-      kicker="Sign in to see what's happening, who's coming, and what we're studying."
     >
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-1.5">
