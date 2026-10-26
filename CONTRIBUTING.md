@@ -11,6 +11,7 @@ Thanks for your interest — contributions are welcome. two42 is open source und
 
 - **Conventional Commits.** Only `fix`, `feat`, `perf`, and breaking changes trigger a release. Use `chore:` / `docs:` / `ci:` for everything else.
 - Keep pull requests focused and reviewable.
+- Issue titles, labels, and PR templates: [`docs/contributing/issues-and-prs.md`](./docs/contributing/issues-and-prs.md). Product vocabulary: [`CONTEXT.md`](./CONTEXT.md).
 - Match the surrounding code — its naming, structure, and comment density.
 
 ## Database & migrations

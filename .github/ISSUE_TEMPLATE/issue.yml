@@ -1,0 +1,58 @@
+name: Issue
+description: A bug, a rough edge, or something new. Mirrors the template in docs/contributing/issues-and-prs.md.
+title: "<type>(<scope>): <imperative summary>"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Title format: `fix(directory): keep member rows on one line at phone width`.
+        Types: `fix` (bugs and polish), `feat`, `perf`, `refactor`, `chore`, `docs`, `ci`.
+        Use the words in [CONTEXT.md](../blob/main/CONTEXT.md) — household, church admin, leader, event, lesson.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What's wrong or missing, from the person's side. One paragraph.
+    validations:
+      required: true
+  - type: dropdown
+    id: who
+    attributes:
+      label: Who
+      description: Whose experience this changes.
+      multiple: true
+      options:
+        - member
+        - leader
+        - church admin
+        - operator
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: Route or area of the app.
+      placeholder: /directory
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: The change, plainly. Leave blank if you're only reporting a problem.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance
+      description: Outcomes someone can check by looking — copy, counts, states, at 390 and 1280 wide.
+      value: |
+        - [ ]
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: Optional. Adjacent changes this deliberately doesn't make.
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Related issues, PRs, files, screenshots.

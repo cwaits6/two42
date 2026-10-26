@@ -10,7 +10,7 @@ A living design system for two42. Changes come via PR. When guidance conflicts, 
 
 **What it is:** software for church **connection groups**. Each **church is an organization** that contains its **groups**. Open source under **AGPL-3.0** and self-hostable; the hosted service is the business. Every feature is open — nothing is gated behind a paid tier.
 
-**Voice:** plain, functional copy — verb+noun labels, no salesy subtitles or cute metaphors. The audience runs from adults in their 30s–50s (the core) up to their 80s; design for the oldest members (large type, high contrast, generous touch targets) without feeling dated to the youngest. See [Accessibility floor](#accessibility-floor).
+**Voice:** quiet and confident — plain, functional copy, verb+noun labels, one primary action per screen, nothing explained twice; no salesy subtitles or cute metaphors. Warmth is reserved for empty states and first-run moments. It is a modern product for the people in a connection group, not a tool for developers or administrators: anyone in the group should be able to use it without help, so type stays large, contrast high, and touch targets generous — without the UI feeling dated. See [Accessibility floor](#accessibility-floor).
 
 ---
 
