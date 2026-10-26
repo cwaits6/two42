@@ -15,10 +15,12 @@ function rootClasses(size: "sm" | "default"): string[] {
 }
 
 function scalePx(classes: string[], prefix: string): number {
-  const re = new RegExp(`^${prefix}-(\\d+(?:\\.\\d+)?)$`);
-  const hit = classes.map((c) => c.match(re)).find(Boolean);
-  if (!hit) throw new Error(`no ${prefix}-<n> class`);
-  return Number(hit[1]) * SPACING_PX;
+  const units = classes
+    .filter((c) => c.startsWith(`${prefix}-`))
+    .map((c) => Number(c.slice(prefix.length + 1)))
+    .find(Number.isFinite);
+  if (units === undefined) throw new Error(`no ${prefix}-<n> class`);
+  return units * SPACING_PX;
 }
 
 describe("Switch touch target", () => {
