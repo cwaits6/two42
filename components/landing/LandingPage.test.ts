@@ -2,19 +2,13 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { LandingPage } from "./LandingPage";
-import { CONTACT_EMAIL, GITHUB_URL, LANDING_SECTIONS } from "./sections";
+import { CONTACT_EMAIL, GITHUB_URL } from "./sections";
 
 const html = renderToStaticMarkup(createElement(LandingPage));
 const hrefs = [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1]);
 const ids = new Set([...html.matchAll(/ id="([^"]*)"/g)].map((m) => m[1]));
 
 describe("LandingPage", () => {
-  it("renders every section the Header's signed-out nav links to", () => {
-    for (const section of LANDING_SECTIONS) {
-      expect(ids.has(section.id), `missing id="${section.id}"`).toBe(true);
-    }
-  });
-
   it("resolves every in-page anchor to a rendered id", () => {
     const anchors = hrefs.filter((h) => h.startsWith("#"));
     expect(anchors.length).toBeGreaterThan(0);

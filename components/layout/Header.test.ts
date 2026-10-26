@@ -15,7 +15,6 @@ vi.mock("@/components/layout/useSidebarModel", () => ({
 vi.mock("@/components/layout/SidebarNav", () => ({ SidebarNav: () => null }));
 
 const { Header } = await import("./Header");
-const { LANDING_SECTIONS } = await import("@/components/landing/sections");
 
 const member = { id: "user-1", role: "member" } as Profile;
 
@@ -30,20 +29,16 @@ beforeEach(() => {
 });
 
 describe("Header signed out", () => {
-  it("links to every landing section from the front door", () => {
+  it("offers only the wordmark and sign-in on the front door", () => {
     const html = render(null);
-    expect(html).toContain('aria-label="Page sections"');
-    for (const section of LANDING_SECTIONS) {
-      expect(html).toContain(`href="#${section.id}"`);
-    }
+    expect(html).toContain("two42-wordmark.svg");
     expect(html).toContain('href="/login"');
+    expect(html).not.toContain('href="#');
   });
 
-  it("drops the section links on every other route", () => {
+  it("keeps sign-in on every other route", () => {
     pathname = "/privacy";
     const html = render(null);
-    expect(html).not.toContain('aria-label="Page sections"');
-    expect(html).not.toContain('href="#');
     expect(html).toContain('href="/login"');
   });
 
@@ -56,9 +51,8 @@ describe("Header signed out", () => {
 });
 
 describe("Header signed in", () => {
-  it("shows no section links or sign-in on the front door", () => {
+  it("shows no sign-in on the front door", () => {
     const html = render(member);
-    expect(html).not.toContain('aria-label="Page sections"');
     expect(html).not.toContain('href="/login"');
     expect(html).toContain("Sign Out");
   });

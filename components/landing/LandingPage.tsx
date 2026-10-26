@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { CONTACT_EMAIL, SECTION_IDS, SELF_HOST_URL } from "./sections";
+import { CONTACT_EMAIL, SELF_HOST_URL } from "./sections";
 
 const WRAP = "mx-auto w-full max-w-6xl px-6";
 const DISPLAY = "font-serif font-medium tracking-[-0.015em] text-balance";
@@ -97,7 +97,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section id={SECTION_IDS.features} className="scroll-mt-20 border-y border-border bg-white">
+      <section className="border-y border-border bg-white">
         <div className={`${WRAP} flex flex-col gap-14 py-14 md:gap-20 md:py-20`}>
           <div className="flex max-w-[680px] flex-col gap-3">
             <Eyebrow rule="none">What&rsquo;s inside</Eyebrow>
