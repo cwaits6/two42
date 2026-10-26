@@ -23,7 +23,9 @@ interface ConfirmDialogProps {
 }
 
 // The caller closes the dialog once its action succeeds; a failed action
-// leaves it open so the person can retry or back out.
+// leaves it open so the person can retry or back out. Escape and the overlay
+// are ignored while the action runs, so the caller never sees a cancel for an
+// action that then completes.
 export function ConfirmDialog({
   open,
   onOpenChange,
@@ -46,7 +48,13 @@ export function ConfirmDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && pending) return;
+        onOpenChange(next);
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
