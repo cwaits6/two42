@@ -39,7 +39,7 @@ export default async function NewFundPage({
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-5xl">
-      <h1 className="text-3xl md:text-4xl font-bold text-brand-primary mb-10">
+      <h1 className="text-3xl md:text-4xl font-bold text-brand-primary-text mb-10">
         New Fund
       </h1>
       <FundForm

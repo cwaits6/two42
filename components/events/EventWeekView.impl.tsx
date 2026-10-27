@@ -240,7 +240,7 @@ function WeekGrid({ columns, todayKey }: { columns: DayColumn[]; todayKey: strin
           >
             <span className="font-medium">{weekdayShort(column.date)}</span>
             <span
-              className={`font-display text-2xl font-bold ${column.key === todayKey ? "text-brand-primary" : ""}`}
+              className={`font-display text-2xl font-bold ${column.key === todayKey ? "text-brand-primary-text" : ""}`}
             >
               {column.date.day}
             </span>

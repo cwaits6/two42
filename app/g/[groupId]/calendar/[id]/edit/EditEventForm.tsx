@@ -295,7 +295,7 @@ export function EditEventForm({
       <GoogleMapsScript />
       <Card>
         <CardHeader>
-          <CardTitle className="text-3xl text-brand-primary">Edit Event</CardTitle>
+          <CardTitle className="text-3xl text-brand-primary-text">Edit Event</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">

@@ -242,7 +242,7 @@ export default function BulkInvitePage() {
   return (
     <div className="container mx-auto px-4 py-12 max-w-4xl">
       <div className="mb-8">
-        <h1 className="text-3xl md:text-4xl font-bold text-brand-primary">
+        <h1 className="text-3xl md:text-4xl font-bold text-brand-primary-text">
           Bulk Invite Members
         </h1>
         <p className="text-base text-muted-foreground mt-2">

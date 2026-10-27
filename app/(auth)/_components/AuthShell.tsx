@@ -68,7 +68,7 @@ export function AuthShell({
           {/* Title */}
           <h1 className="font-serif text-4xl md:text-5xl font-medium text-foreground tracking-tight leading-[1.05] mb-0">
             {title}{" "}
-            <em className="not-italic italic text-brand-primary">{em}</em>.
+            <em className="not-italic italic text-brand-primary-text">{em}</em>.
           </h1>
 
           {kicker && (

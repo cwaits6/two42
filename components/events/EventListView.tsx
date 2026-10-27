@@ -91,7 +91,7 @@ export function EventListView({ groups, events, userRsvps, userId, createHref, t
                     <div className="flex flex-wrap items-center gap-2">
                       <Link
                         href={viewHref}
-                        className="font-display text-xl font-bold leading-tight text-slate-800 hover:text-brand-primary"
+                        className="font-display text-xl font-bold leading-tight text-slate-800 hover:text-brand-primary-text"
                       >
                         {event.title}
                       </Link>

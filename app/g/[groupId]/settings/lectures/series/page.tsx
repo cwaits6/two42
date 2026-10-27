@@ -27,7 +27,7 @@ export default async function ManageSeriesPage({
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold text-brand-primary">Lecture Series</h1>
+        <h1 className="text-3xl font-bold text-brand-primary-text">Lecture Series</h1>
         <Button nativeButton={false} render={<Link href={`${base}/series/new`} />}>
           New series
         </Button>

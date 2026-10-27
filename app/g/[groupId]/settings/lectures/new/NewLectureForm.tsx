@@ -93,7 +93,7 @@ function NewLectureFormInner({ groupId, groupName }: Props) {
     <div className="container mx-auto px-4 py-12 max-w-2xl">
       <Card>
         <CardHeader>
-          <CardTitle className="text-3xl text-brand-primary">Add Lecture</CardTitle>
+          <CardTitle className="text-3xl text-brand-primary-text">Add Lecture</CardTitle>
           <PostingTo groupName={groupName} />
         </CardHeader>
         <CardContent>

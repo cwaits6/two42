@@ -21,7 +21,7 @@ export function NoGroupCard({ discoveryOn }: { discoveryOn: boolean }) {
     <div className="container mx-auto px-4 py-20 max-w-lg text-center">
       <Card className="p-8 border-border">
         <CardContent className="pt-6">
-          <h1 className="font-serif text-3xl text-brand-primary mb-4">No group yet</h1>
+          <h1 className="font-serif text-3xl text-brand-primary-text mb-4">No group yet</h1>
           <p className="text-lg text-muted-foreground">{COPY[action?.kind ?? "none"]}</p>
           <div className="mt-6 flex flex-col items-center gap-3">
             {discoveryOn && (

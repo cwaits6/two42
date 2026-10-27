@@ -200,7 +200,7 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
       <GoogleMapsScript />
       <Card>
         <CardHeader>
-          <CardTitle className="text-3xl text-brand-primary">Create Event</CardTitle>
+          <CardTitle className="text-3xl text-brand-primary-text">Create Event</CardTitle>
           <PostingTo groupName={groupName} />
         </CardHeader>
         <CardContent>

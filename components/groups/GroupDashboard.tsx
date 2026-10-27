@@ -215,7 +215,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
           </span>
         </div>
         <h1 className="mb-7 font-serif text-[40px] font-medium leading-none tracking-[-0.02em] text-foreground md:text-[56px]">
-          {greeting(timeZone)}, <em className="not-italic text-brand-primary">{displayName}</em>.
+          {greeting(timeZone)}, <em className="not-italic text-brand-primary-text">{displayName}</em>.
         </h1>
 
         {nextEvent ? (

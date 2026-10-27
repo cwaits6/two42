@@ -227,7 +227,7 @@ export default async function ServingSchedulePage({
           className="inline-block w-4 h-4 rounded-full shrink-0"
           style={{ backgroundColor: team.color ?? "var(--color-brand-primary)" }}
         />
-        <h1 className="text-3xl md:text-4xl font-bold text-brand-primary">
+        <h1 className="text-3xl md:text-4xl font-bold text-brand-primary-text">
           {team.name}
         </h1>
       </div>

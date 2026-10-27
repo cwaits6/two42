@@ -24,7 +24,7 @@ function ErrorCard({
     <div className="container mx-auto px-4 py-20 max-w-lg">
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl text-brand-primary">{title}</CardTitle>
+          <CardTitle className="text-2xl text-brand-primary-text">{title}</CardTitle>
           <CardDescription className="text-base">{description}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">{children}</CardContent>
@@ -104,7 +104,7 @@ export default async function FamilyJoinPage({ params }: PageProps) {
       <div className="container mx-auto px-4 py-20 max-w-lg">
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl text-brand-primary">
+            <CardTitle className="text-2xl text-brand-primary-text">
               Invite Already Used
             </CardTitle>
             <CardDescription className="text-base">

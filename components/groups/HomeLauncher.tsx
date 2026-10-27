@@ -105,7 +105,7 @@ export async function HomeLauncher({
     <div className="min-h-screen bg-background">
       <section className="px-4 pt-14 pb-10 md:px-14">
         <h1 className="font-serif text-5xl md:text-6xl font-medium leading-none tracking-tight text-foreground mb-9">
-          {getGreeting(timeZone)}, <em className="text-brand-primary italic">{displayName}</em>.
+          {getGreeting(timeZone)}, <em className="text-brand-primary-text italic">{displayName}</em>.
         </h1>
 
         {!home && (

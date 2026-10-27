@@ -95,7 +95,7 @@ A tenant may not change layout, typography, structural or semantic colors, or th
 ## Accessibility floor
 
 - Body text ≥ 16px; never below 14px for meaningful content.
-- Text contrast ≥ 4.5:1 (≥ 3:1 for large text). On light grounds, Clay text is `text-brand-primary-text` and Marigold text is `text-brand-accent-text`; Clay itself is acceptable only as large text (headings at 24px and up, or bold at 18.66px and up).
+- Text contrast ≥ 4.5:1 (≥ 3:1 for large text). On light grounds, Clay text is `text-brand-primary-text` and Marigold text is `text-brand-accent-text`, headings included; Clay and Marigold themselves are fills, and the large-text allowance is not used for brand colors.
 - Touch targets ≥ 44×44px, with generous spacing.
 - Never encode meaning in color alone; pair it with a label or icon.
 - Assignment/roster UIs show current members by default with an explicit "add" mode — never full toggle lists.

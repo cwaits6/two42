@@ -159,7 +159,7 @@ export function ServingStats({ groupId }: { groupId: string }) {
     <section>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-brand-primary">Serving stats</h2>
+          <h2 className="text-2xl font-bold text-brand-primary-text">Serving stats</h2>
           <p className="text-muted-foreground mt-1">
             Who has served, and how often, across all active teams.
           </p>

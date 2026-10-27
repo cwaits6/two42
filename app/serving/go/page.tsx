@@ -22,7 +22,7 @@ function Message({ title, body }: { title: string; body: string }) {
     <div className="container mx-auto px-4 py-20 max-w-lg text-center">
       <Card className="p-8">
         <CardContent className="pt-6">
-          <h1 className="font-serif text-3xl text-brand-primary mb-4">{title}</h1>
+          <h1 className="font-serif text-3xl text-brand-primary-text mb-4">{title}</h1>
           <p className="text-lg text-muted-foreground">{body}</p>
           <Link
             href="/serving"

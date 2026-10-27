@@ -166,7 +166,7 @@ export function EditLectureForm({
     <div className="container mx-auto px-4 py-12 max-w-2xl">
       <Card>
         <CardHeader>
-          <CardTitle className="text-3xl text-brand-primary">Edit Lecture</CardTitle>
+          <CardTitle className="text-3xl text-brand-primary-text">Edit Lecture</CardTitle>
           <PostingTo groupName={groupName} />
         </CardHeader>
         <CardContent>

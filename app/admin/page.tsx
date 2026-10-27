@@ -76,7 +76,7 @@ export default async function AdminPage() {
       <PageHeader title="Admin" />
 
       <section className="mb-10">
-        <h2 className="text-2xl font-bold text-brand-primary mb-4">
+        <h2 className="text-2xl font-bold text-brand-primary-text mb-4">
           Needs attention
         </h2>
         <h3 className="mb-3 text-xl font-semibold text-foreground">Access requests</h3>
@@ -114,7 +114,7 @@ export default async function AdminPage() {
 
       {quickActions.length > 0 && (
         <section>
-          <h2 className="text-2xl font-bold text-brand-primary mb-4">
+          <h2 className="text-2xl font-bold text-brand-primary-text mb-4">
             Quick actions
           </h2>
           <div className="flex flex-wrap gap-3">

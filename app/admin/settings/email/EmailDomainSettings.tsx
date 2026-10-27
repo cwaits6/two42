@@ -286,7 +286,7 @@ export function EmailDomainSettings() {
       ) : cardState === "not-enabled" ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl text-brand-primary">
+            <CardTitle className="text-2xl text-brand-primary-text">
               Custom sending domain
             </CardTitle>
           </CardHeader>
@@ -300,7 +300,7 @@ export function EmailDomainSettings() {
       ) : cardState === "claim-form" ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl text-brand-primary">
+            <CardTitle className="text-2xl text-brand-primary-text">
               Claim domain
             </CardTitle>
           </CardHeader>
@@ -340,7 +340,7 @@ export function EmailDomainSettings() {
       ) : row ? (
         <Card>
           <CardHeader>
-            <CardTitle className="flex flex-wrap items-center gap-3 text-2xl text-brand-primary">
+            <CardTitle className="flex flex-wrap items-center gap-3 text-2xl text-brand-primary-text">
               <span className="break-all">{row.domain}</span>
               <Badge
                 variant={statusVariant(row.status)}

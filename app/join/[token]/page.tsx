@@ -98,7 +98,7 @@ function Notice({
     <div className="container mx-auto max-w-lg px-4 py-20">
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl text-brand-primary">{title}</CardTitle>
+          <CardTitle className="text-2xl text-brand-primary-text">{title}</CardTitle>
           <CardDescription className="text-base">{description}</CardDescription>
         </CardHeader>
         {children ? <CardContent className="space-y-4">{children}</CardContent> : null}

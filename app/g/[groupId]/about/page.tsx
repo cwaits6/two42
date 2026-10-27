@@ -67,7 +67,7 @@ export default async function AboutGroupPage({
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-4xl">
-      <h1 className="text-3xl md:text-4xl font-bold text-brand-primary mb-8">
+      <h1 className="text-3xl md:text-4xl font-bold text-brand-primary-text mb-8">
         About {group.name}
       </h1>
 
@@ -84,7 +84,7 @@ export default async function AboutGroupPage({
           <CardContent className="py-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <h2 className="flex items-center gap-2 text-2xl font-bold text-brand-primary">
+                <h2 className="flex items-center gap-2 text-2xl font-bold text-brand-primary-text">
                   <Video className="h-6 w-6" aria-hidden="true" />
                   Weekly video call
                 </h2>
@@ -111,7 +111,7 @@ export default async function AboutGroupPage({
       )}
 
       <div className="mt-12">
-        <h2 className="text-2xl md:text-3xl font-bold text-brand-primary mb-6">
+        <h2 className="text-2xl md:text-3xl font-bold text-brand-primary-text mb-6">
           Leadership
         </h2>
 

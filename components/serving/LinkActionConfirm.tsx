@@ -58,7 +58,7 @@ export function LinkActionConfirm({
           {done ? (
             <>
               <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto mb-4" />
-              <h1 className="font-serif text-3xl text-brand-primary mb-4">
+              <h1 className="font-serif text-3xl text-brand-primary-text mb-4">
                 {action === "signup" ? "You're all set!" : "Signup cancelled"}
               </h1>
               <p className="text-lg text-muted-foreground">
@@ -69,7 +69,7 @@ export function LinkActionConfirm({
             </>
           ) : (
             <>
-              <h1 className="font-serif text-3xl text-brand-primary mb-4">
+              <h1 className="font-serif text-3xl text-brand-primary-text mb-4">
                 {action === "signup" ? `Serve on ${dateLabel}?` : "Can't make it?"}
               </h1>
               <p className="text-lg text-muted-foreground mb-8">

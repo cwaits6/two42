@@ -65,7 +65,7 @@ export default async function GroupGivingPage({
     <div className="container mx-auto px-4 py-12 max-w-4xl">
       <div className="flex items-start justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold text-brand-primary mb-2">
+          <h1 className="text-3xl md:text-4xl font-bold text-brand-primary-text mb-2">
             Giving
           </h1>
           <p className="text-lg text-muted-foreground">

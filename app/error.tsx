@@ -20,7 +20,7 @@ export default function ErrorPage({
     <div className="container mx-auto px-4 py-20 max-w-lg text-center">
       <Card className="p-8 border-border">
         <CardContent className="pt-6">
-          <h1 className="font-serif text-3xl text-brand-primary mb-4">Something went wrong</h1>
+          <h1 className="font-serif text-3xl text-brand-primary-text mb-4">Something went wrong</h1>
           <p className="text-lg text-muted-foreground">
             This page could not be loaded. Try again, or go back to Home.
           </p>
