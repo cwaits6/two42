@@ -2077,6 +2077,8 @@ CREATE TABLE IF NOT EXISTS "public"."events" (
     "meeting_lead_minutes" integer DEFAULT 15 NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
     "group_id" "uuid" NOT NULL,
+    "is_cancelled" boolean DEFAULT false NOT NULL,
+    CONSTRAINT "events_is_cancelled_exception_only" CHECK (((NOT "is_cancelled") OR (("series_id" IS NOT NULL) AND ("series_occurrence_date" IS NOT NULL)))),
     CONSTRAINT "events_meeting_lead_minutes_check" CHECK ((("meeting_lead_minutes" >= 0) AND ("meeting_lead_minutes" <= 1440))),
     CONSTRAINT "events_recurrence_end_mode_check" CHECK (("recurrence_end_mode" = ANY (ARRAY['never'::"text", 'count'::"text", 'until'::"text"]))),
     CONSTRAINT "events_recurrence_frequency_check" CHECK (("recurrence_frequency" = ANY (ARRAY['daily'::"text", 'weekly'::"text", 'monthly'::"text", 'yearly'::"text"])))
