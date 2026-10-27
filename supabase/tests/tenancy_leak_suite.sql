@@ -614,8 +614,10 @@ declare
   plain_user uuid := current_setting('leak_suite.owner_b')::uuid;
   admin_visible_count int;
   plain_visible_count int;
+  total_count int;
 begin
   insert into public.platform_admins (profile_id) values (admin_user);
+  select count(*) into total_count from public.platform_admins;
 
   set local role authenticated;
 
@@ -628,7 +630,7 @@ begin
   reset role;
 
   insert into tenancy_leak_results
-    select ok(admin_visible_count = 1, 'a platform admin can see platform_admins rows');
+    select ok(admin_visible_count = total_count, 'a platform admin can see every platform_admins row');
   insert into tenancy_leak_results
     select ok(plain_visible_count = 0, 'a non-admin cannot see platform_admins rows');
 end $$;
