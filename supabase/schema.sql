@@ -2731,16 +2731,13 @@ CREATE TABLE IF NOT EXISTS "public"."prayer_requests" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "author_id" "uuid" NOT NULL,
     "body" "text" NOT NULL,
-    "category" "text" NOT NULL,
     "is_anonymous" boolean DEFAULT false NOT NULL,
-    "visible_to_warriors" boolean DEFAULT false NOT NULL,
     "is_answered" boolean DEFAULT false NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
     "group_id" "uuid" NOT NULL,
-    CONSTRAINT "prayer_requests_body_check" CHECK ((("char_length"("body") >= 1) AND ("char_length"("body") <= 2000))),
-    CONSTRAINT "prayer_requests_category_check" CHECK (("category" = ANY (ARRAY['health'::"text", 'family'::"text", 'thanksgiving'::"text", 'prodigal'::"text", 'guidance'::"text", 'grief'::"text"])))
+    CONSTRAINT "prayer_requests_body_check" CHECK ((("char_length"("body") >= 1) AND ("char_length"("body") <= 2000)))
 );
 
 
@@ -2762,9 +2759,7 @@ ALTER TABLE "public"."prayer_responses" OWNER TO "postgres";
 CREATE OR REPLACE VIEW "public"."prayer_wall" WITH ("security_invoker"='true') AS
  SELECT "r"."id",
     "r"."body",
-    "r"."category",
     "r"."is_anonymous",
-    "r"."visible_to_warriors",
     "r"."is_answered",
     "r"."created_at",
     ("r"."author_id" = ( SELECT "auth"."uid"() AS "uid")) AS "mine",
@@ -4701,6 +4696,10 @@ CREATE POLICY "Group members can view prayer call sessions" ON "public"."prayer_
 
 
 
+CREATE POLICY "Group members can view prayer requests" ON "public"."prayer_requests" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id")));
+
+
+
 CREATE POLICY "Group members can view prayer responses" ON "public"."prayer_responses" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id") AND (EXISTS ( SELECT 1
    FROM "public"."prayer_requests" "r"
   WHERE ("r"."id" = "prayer_responses"."request_id")))));
@@ -4724,10 +4723,6 @@ CREATE POLICY "Group members can view serving settings" ON "public"."serving_tea
 CREATE POLICY "Group members can view serving signups" ON "public"."serving_signups" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (EXISTS ( SELECT 1
    FROM "public"."teams" "t"
   WHERE (("t"."id" = "serving_signups"."team_id") AND ("t"."org_id" = "serving_signups"."org_id") AND "public"."is_group_member"("t"."group_id"))))));
-
-
-
-CREATE POLICY "Group members can view visible prayer requests" ON "public"."prayer_requests" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id") AND (("author_id" = ( SELECT "auth"."uid"() AS "uid")) OR (NOT "visible_to_warriors"))));
 
 
 
