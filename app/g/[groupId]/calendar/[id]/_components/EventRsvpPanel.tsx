@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useRsvp } from "@/components/events/useRsvp";
 import type { RsvpStatus } from "@/lib/types";
 
 interface EventRsvpPanelProps {
@@ -17,36 +16,7 @@ const OPTIONS: { value: RsvpStatus; label: string }[] = [
 ];
 
 export function EventRsvpPanel({ eventId, userId, initialStatus }: EventRsvpPanelProps) {
-  const [status, setStatus] = useState<RsvpStatus | null>(initialStatus);
-  const [loading, setLoading] = useState(false);
-  const supabase = createClient();
-
-  const handleRsvp = async (newStatus: RsvpStatus) => {
-    if (loading) return;
-    const prev = status;
-    const next = prev === newStatus ? null : newStatus;
-    setStatus(next);
-    setLoading(true);
-    try {
-      const { error } =
-        next === null
-          ? await supabase
-              .from("rsvps")
-              .delete()
-              .eq("event_id", eventId)
-              .eq("user_id", userId)
-          : await supabase.from("rsvps").upsert(
-              { event_id: eventId, user_id: userId, status: next },
-              { onConflict: "event_id,user_id" }
-            );
-      if (error) throw error;
-    } catch (err) {
-      console.error("Failed to update RSVP", err);
-      setStatus(prev);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { status, saving, error, choose } = useRsvp({ eventId, userId, initialStatus });
 
   let label = "Have you decided?";
   let accent = false;
@@ -72,8 +42,9 @@ export function EventRsvpPanel({ eventId, userId, initialStatus }: EventRsvpPane
           return (
             <button
               key={opt.value}
-              onClick={() => handleRsvp(opt.value)}
-              disabled={loading}
+              onClick={() => choose(opt.value)}
+              disabled={saving}
+              aria-pressed={active}
               className="rounded-[7px] px-3 py-2 text-center text-[13px] font-bold transition-colors disabled:opacity-60"
               style={{
                 background: active ? "var(--color-brand-accent)" : "transparent",
@@ -85,6 +56,11 @@ export function EventRsvpPanel({ eventId, userId, initialStatus }: EventRsvpPane
           );
         })}
       </div>
+      {error && (
+        <p role="alert" className="mt-2 text-base font-semibold text-white">
+          {error}
+        </p>
+      )}
     </>
   );
 }
