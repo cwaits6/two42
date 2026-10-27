@@ -121,8 +121,8 @@ begin
 
   insert into public.prayer_call_sessions (org_id, group_id, weekday, start_time, leader_id, event_id)
     values (_org, _group, 2, '07:00', _owner, _event);
-  insert into public.prayer_requests (org_id, group_id, author_id, body, category)
-    values (_org, _group, _owner, _tag || ' prayer', 'health');
+  insert into public.prayer_requests (org_id, group_id, author_id, body)
+    values (_org, _group, _owner, _tag || ' prayer');
   insert into public.prayer_responses (org_id, group_id, request_id, profile_id)
     select _org, _group, id, _owner from public.prayer_requests
       where org_id = _org and author_id = _owner limit 1;
@@ -495,8 +495,8 @@ begin
 
   -- INSERT tagged into org B → rejected by the restrictive WITH CHECK
   begin
-    insert into public.prayer_requests (org_id, group_id, author_id, body, category)
-    values (org_b, (select id from public.groups where org_id = org_b limit 1), owner_a, 'cross-org write', 'health');
+    insert into public.prayer_requests (org_id, group_id, author_id, body)
+    values (org_b, (select id from public.groups where org_id = org_b limit 1), owner_a, 'cross-org write');
   exception when others then
     insert_err := sqlstate;
   end;

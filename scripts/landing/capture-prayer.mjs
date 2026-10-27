@@ -26,25 +26,6 @@ await page.locator("form").getByRole("button", { name: "Sign In" }).click();
 await page.waitForURL((u) => u.pathname !== "/login");
 
 await page.goto(`${base}/g/${YF}/prayer`, { waitUntil: "networkidle" });
-// Prayer categories are being removed from the product; the shot shows the
-// page as it will look without them. Delete this block, and re-shoot, once
-// the category chips and filter are gone from the Prayer page.
-const removed = await page.evaluate(() => {
-  const labels = new Set(["Health", "Family", "Thanksgiving", "Prodigal", "Guidance", "Grief"]);
-  let n = 0;
-  for (const el of Array.from(document.querySelectorAll("span"))) {
-    if (labels.has(el.textContent.trim()) && el.getAttribute("style")) { el.remove(); n++; }
-  }
-  const filter = document.querySelector('[aria-label="Filter by prayer type"]');
-  if (filter) { filter.remove(); n++; }
-  for (const el of Array.from(document.querySelectorAll("div"))) {
-    if (el.textContent.trim() === "Category" && el.className.includes("uppercase")) {
-      el.nextElementSibling?.remove(); el.remove(); n++;
-    }
-  }
-  return n;
-});
-console.log("removed", removed);
 await page.addStyleTag({ content: HIDE });
 await page.waitForTimeout(700);
 await page.screenshot({ path: `${out}/prayer.png`, clip: CONTENT });

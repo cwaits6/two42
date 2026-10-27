@@ -107,10 +107,10 @@ begin
   insert into public.class_teachers (org_id, group_id, profile_id, title) values
     (org, grp_a, owner, 'Teacher'), (org, grp_b, leader_b, 'Host');
 
-  insert into public.prayer_requests (org_id, group_id, author_id, body, category)
-    values (org, grp_a, member_a, 'A prayer', 'health') returning id into request_a;
-  insert into public.prayer_requests (org_id, group_id, author_id, body, category)
-    values (org, grp_b, leader_b, 'B prayer', 'health') returning id into request_b;
+  insert into public.prayer_requests (org_id, group_id, author_id, body)
+    values (org, grp_a, member_a, 'A prayer') returning id into request_a;
+  insert into public.prayer_requests (org_id, group_id, author_id, body)
+    values (org, grp_b, leader_b, 'B prayer') returning id into request_b;
   insert into public.prayer_responses (org_id, group_id, request_id, profile_id) values
     (org, grp_a, request_a, owner), (org, grp_b, request_b, leader_b);
   insert into public.prayer_call_sessions (org_id, group_id, weekday, start_time, event_id) values
@@ -404,8 +404,8 @@ declare
   grp_b uuid := current_setting('gs.grp_b')::uuid;
   req uuid; fund uuid; err text; n int;
 begin
-  insert into public.prayer_requests (org_id, group_id, author_id, body, category)
-    values (org, grp_a, member_a, 'movable', 'health') returning id into req;
+  insert into public.prayer_requests (org_id, group_id, author_id, body)
+    values (org, grp_a, member_a, 'movable') returning id into req;
   insert into public.giving_funds (org_id, group_id, name, steward_id, created_by)
     values (org, grp_a, 'movable', member_a, member_a) returning id into fund;
 

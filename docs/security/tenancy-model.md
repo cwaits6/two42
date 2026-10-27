@@ -206,7 +206,7 @@ The permissive arms compose on the org floor as:
 
 - read: `org_id = (select app_request_org_id()) and
   is_group_member(group_id)` — published announcements for members, drafts
-  for leaders; `prayer_requests` keeps its author / warrior arm on top;
+  for leaders; a prayer request is readable by every member of its group;
 - write: `org_id = (select app_request_org_id()) and
   is_group_leader(group_id)`, or the existing author rule
   (`prayer_requests`, `prayer_responses`) or steward rule (`giving_funds`,

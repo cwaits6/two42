@@ -286,16 +286,16 @@ BEGIN
   ON CONFLICT (id) DO NOTHING;
 
   -- Prayer
-  INSERT INTO public.prayer_requests (id, org_id, group_id, author_id, body, category, is_anonymous, created_at)
-  SELECT r.id, _org, _yf, p.id, r.body, r.category, r.is_anonymous, r.created_at
+  INSERT INTO public.prayer_requests (id, org_id, group_id, author_id, body, is_anonymous, created_at)
+  SELECT r.id, _org, _yf, p.id, r.body, r.is_anonymous, r.created_at
   FROM (VALUES
     ('de3c0000-0000-0000-0000-00000000b101'::uuid, 'susan.anderson@example.test',
-     'My dad''s surgery is Thursday morning. Pray for the surgeon''s hands and for Mom''s peace while she waits.', 'health', false, now() - interval '1 day'),
+     'My dad''s surgery is Thursday morning. Pray for the surgeon''s hands and for Mom''s peace while she waits.', false, now() - interval '1 day'),
     ('de3c0000-0000-0000-0000-00000000b102'::uuid, 'brian.hall@example.test',
-     'Job interview Friday. Praying for clarity about whether it''s the right move for us.', 'guidance', true, now() - interval '3 days'),
+     'Job interview Friday. Praying for clarity about whether it''s the right move for us.', true, now() - interval '3 days'),
     ('de3c0000-0000-0000-0000-00000000b103'::uuid, 'lisa.martin@example.test',
-     'Thankful — Noah slept through the night for the first time, and so did we.', 'thanksgiving', false, now() - interval '4 days')
-  ) AS r (id, author_email, body, category, is_anonymous, created_at)
+     'Thankful — Noah slept through the night for the first time, and so did we.', false, now() - interval '4 days')
+  ) AS r (id, author_email, body, is_anonymous, created_at)
   JOIN public.profiles p ON p.org_id = _org AND p.email = r.author_email
   ON CONFLICT (id) DO NOTHING;
   -- "praying" counts

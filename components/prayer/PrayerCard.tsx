@@ -1,9 +1,9 @@
 "use client";
 
-import { Check, HandHeart, Lock, UserRound } from "lucide-react";
+import { Check, HandHeart, UserRound } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { displayName, initials } from "@/lib/names";
-import { PRAYER_CATEGORIES, timeAgo } from "@/lib/prayer";
+import { initials } from "@/lib/names";
+import { prayerAuthorLabel, timeAgo } from "@/lib/prayer";
 import type { PrayerWallRow } from "@/lib/types";
 
 const ANSWERED = "var(--color-brand-success)";
@@ -19,65 +19,45 @@ export function PrayerCard({
   onPray: () => void;
   onToggleAnswered: () => void;
 }) {
-  const meta = PRAYER_CATEGORIES[row.category];
-  const anonToOthers = row.is_anonymous;
   const hasName = row.first_name || row.last_name || row.preferred_name;
-  // Anonymous rows show no name to anyone; the poster still sees the "You"
-  // badge. A null name on a non-anonymous row means the author is unlisted.
-  const authorName = anonToOthers
-    ? "Anonymous"
-    : hasName
-      ? displayName(row)
-      : "A member";
-  const restricted = row.visible_to_warriors;
-  const barColor = row.is_answered ? ANSWERED : restricted ? "var(--color-brand-accent)" : null;
+  const showAvatar = !row.is_anonymous && hasName;
 
   return (
     <div
       className={`relative overflow-hidden rounded-2xl border bg-card p-5 ${
-        row.is_answered
-          ? "border-brand-success/40"
-          : restricted
-            ? "border-brand-accent/50"
-            : "border-border"
+        row.is_answered ? "border-brand-success/40" : "border-border"
       }`}
     >
-      {barColor && (
+      {row.is_answered && (
         <div
           aria-hidden="true"
           className="absolute inset-y-0 left-0 w-1"
-          style={{ backgroundColor: barColor }}
+          style={{ backgroundColor: ANSWERED }}
         />
       )}
 
       <div className="flex items-center gap-3">
-        {anonToOthers || !hasName ? (
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-dashed border-muted-foreground/40 bg-background text-muted-foreground">
-            <UserRound className="h-5 w-5" aria-hidden="true" />
-          </div>
-        ) : (
+        {showAvatar ? (
           <Avatar size="lg" className="shrink-0">
             {row.avatar_url && <AvatarImage src={row.avatar_url} alt="" />}
             <AvatarFallback className="bg-brand-warm font-semibold text-brand-primary">
               {initials(row)}
             </AvatarFallback>
           </Avatar>
+        ) : (
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-dashed border-muted-foreground/40 bg-background text-muted-foreground">
+            <UserRound className="h-5 w-5" aria-hidden="true" />
+          </div>
         )}
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-lg font-semibold text-foreground">
-              {authorName}
+              {prayerAuthorLabel(row)}
             </span>
             {row.mine && (
               <span className="rounded-full bg-brand-warm px-2 py-0.5 text-xs font-bold text-brand-primary">
                 You
-              </span>
-            )}
-            {restricted && (
-              <span className="flex items-center gap-1 rounded-full bg-brand-bg-light px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-brand-accent-text">
-                <Lock className="h-2.5 w-2.5" aria-hidden="true" />
-                Prayer warriors
               </span>
             )}
             {row.is_answered && (
@@ -94,13 +74,6 @@ export function PrayerCard({
             {timeAgo(row.created_at)}
           </div>
         </div>
-
-        <span
-          className="shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold"
-          style={{ backgroundColor: `${meta.color}18`, color: meta.color }}
-        >
-          {meta.label}
-        </span>
       </div>
 
       <p className="mt-3 whitespace-pre-wrap text-base leading-relaxed text-foreground/80">

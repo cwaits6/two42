@@ -67,8 +67,8 @@ begin
   insert into public.giving_funds (org_id, group_id, name, steward_id, created_by)
     values (_org, _group, _tag || ' fund', _owner, _owner) returning id into _fund;
 
-  insert into public.prayer_requests (org_id, group_id, author_id, body, category)
-    values (_org, _group, _owner, _tag || ' prayer', 'health');
+  insert into public.prayer_requests (org_id, group_id, author_id, body)
+    values (_org, _group, _owner, _tag || ' prayer');
   insert into public.prayer_responses (org_id, group_id, request_id, profile_id)
     select _org, _group, id, _owner from public.prayer_requests
       where org_id = _org and author_id = _owner limit 1;

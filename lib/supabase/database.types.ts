@@ -1057,14 +1057,14 @@ isOneToOne: false
                   ]
                 },"prayer_requests": {
                   Row: {
-                    "author_id": string,"body": string,"category": string,"created_at": string,"group_id": string,"id": string,"is_anonymous": boolean,"is_answered": boolean,"org_id": string,"updated_at": string,"visible_to_warriors": boolean
+                    "author_id": string,"body": string,"created_at": string,"group_id": string,"id": string,"is_anonymous": boolean,"is_answered": boolean,"org_id": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "author_id": string,"body": string,"category": string,"created_at"?: string,"group_id": string,"id"?: string,"is_anonymous"?: boolean,"is_answered"?: boolean,"org_id"?: string,"updated_at"?: string,"visible_to_warriors"?: boolean
+                    "author_id": string,"body": string,"created_at"?: string,"group_id": string,"id"?: string,"is_anonymous"?: boolean,"is_answered"?: boolean,"org_id"?: string,"updated_at"?: string
                   }
                   Update: {
-                    "author_id"?: string,"body"?: string,"category"?: string,"created_at"?: string,"group_id"?: string,"id"?: string,"is_anonymous"?: boolean,"is_answered"?: boolean,"org_id"?: string,"updated_at"?: string,"visible_to_warriors"?: boolean
+                    "author_id"?: string,"body"?: string,"created_at"?: string,"group_id"?: string,"id"?: string,"is_anonymous"?: boolean,"is_answered"?: boolean,"org_id"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -1506,7 +1506,7 @@ isOneToOne: false
                   ]
                 },"prayer_wall": {
                   Row: {
-                    "avatar_url": string | null,"body": string | null,"category": string | null,"created_at": string | null,"first_name": string | null,"group_id": string | null,"i_am_praying": boolean | null,"id": string | null,"is_anonymous": boolean | null,"is_answered": boolean | null,"last_name": string | null,"mine": boolean | null,"org_id": string | null,"praying_count": number | null,"preferred_name": string | null,"visible_to_warriors": boolean | null
+                    "avatar_url": string | null,"body": string | null,"created_at": string | null,"first_name": string | null,"group_id": string | null,"i_am_praying": boolean | null,"id": string | null,"is_anonymous": boolean | null,"is_answered": boolean | null,"last_name": string | null,"mine": boolean | null,"org_id": string | null,"praying_count": number | null,"preferred_name": string | null
                   }
                   ComputedFields: never
                   Relationships: [

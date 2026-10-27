@@ -79,8 +79,8 @@ begin
   perform set_config('fk.family_b', v::text, true);
   insert into public.giving_funds (org_id, group_id, name, steward_id) values (org_b, grp_b, 'B fund', owner_b) returning id into v;
   perform set_config('fk.fund_b', v::text, true);
-  insert into public.prayer_requests (org_id, group_id, author_id, body, category)
-    values (org_b, grp_b, owner_b, 'B prayer', 'health') returning id into v;
+  insert into public.prayer_requests (org_id, group_id, author_id, body)
+    values (org_b, grp_b, owner_b, 'B prayer') returning id into v;
   perform set_config('fk.request_b', v::text, true);
   insert into public.teams (org_id, group_id, name, is_serving_role)
     values (org_b, grp_b, 'B serving team', true) returning id into v;
