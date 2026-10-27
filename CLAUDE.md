@@ -87,6 +87,7 @@ Full rationale, the helper inventory, and the deviations register: [`docs/securi
 - Conventional commits. Only `fix`, `feat`, `perf`, and breaking changes trigger a release. Use `ci:` / `ci(scope):` commits on `ci/` branches for CI/infra changes; `docs:` / `chore:` for other non-release changes.
 - **Merge a PR only when the maintainer explicitly and directly tells you to merge that specific PR** (e.g. "merge #123", "merge it in now"). Never infer or assume merge intent — green CI, "looks good", "ship it", an approved plan, or an implied next step do NOT authorize a merge. Default to opening the PR (draft is fine) and stopping. If it's at all ambiguous whether an instruction is an explicit merge directive, leave the PR open and ask.
 - Do not include Claude/AI session links in PR titles or bodies.
+- Tickets live in Linear (team key `T42`). Ticket titles, labels, project names, and which PR template to use are specified in [`docs/contributing/issues-and-prs.md`](docs/contributing/issues-and-prs.md). Ticket titles are plain English; the PR title is the conventional-commit form, `<type>(<scope>): <ticket title>`, with the type taken from the ticket's Type label. The body follows the template for the ticket's Type label — GitHub does not apply templates to PRs opened through the API, so copy its structure yourself.
 
 ## Local dev
 
@@ -97,7 +98,8 @@ Full rationale, the helper inventory, and the deviations register: [`docs/securi
 
 - The brand and design system — wordmark, typography, and the canonical color palette (Clay / Marigold / Espresso / Warm Paper) — is specified in [`docs/design/DESIGN.md`](docs/design/DESIGN.md). Treat it as the source of truth; keep it and any theme tokens in sync.
 - Plain, functional copy: verb+noun labels, no salesy subtitles or cute metaphors.
-- The audience spans adults 18+ through members in their late 80s. Design for the oldest members — large type, high contrast, generous touch targets — without making the UI feel dated to younger ones.
+- Product vocabulary is defined in [`CONTEXT.md`](CONTEXT.md) — household (not family), church admin, leader, event, lesson, and the Add / Delete / Remove verbs. Copy, tickets, and docs use those terms and avoid the alternatives it lists; routes and database names may differ.
+- Anyone in a connection group should be able to use every member-facing screen without help — large type, high contrast, generous touch targets — without the UI feeling dated. Never describe the audience by age, in copy or in docs.
 - Assignment/roster UIs show current members by default with an explicit "add" mode — never render full toggle lists of every person.
 - Base UI `Select` components must receive the `items` prop, or the trigger renders raw values.
 - Per-org branding (`organizations.branding`) is admin-supplied free text reaching CSS and RFC 5322 headers. `HEX` in `lib/contrast.ts`, the `CONTROL` control-character strip in `lib/branding.ts`, `PLAIN_NAME` in `lib/email/identity.ts`, and `SENDING_DOMAIN` in `lib/email/identity.ts` (the `org_email_domains.domain` gate on the `From:` address, verified-status-gated) are the injection boundary — not style choices. Do not relax them to support richer names or color formats; add a new validated key instead. `supabase/functions/_shared/branding.ts` mirrors all four byte-for-byte; a change lands on both sides. Emailed links are built on the one canonical host (`siteConfig.url`, or the `SITE_URL` secret in the edge functions), never on a per-org value — see [`docs/security/domains.md`](docs/security/domains.md).

@@ -1,0 +1,73 @@
+name: Issue
+description: A bug, a rough edge, or something new. Mirrors the template in docs/contributing/issues-and-prs.md.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Title: plain English, the change to make — `Keep member rows on one line on phones`. No type prefix; the PR adds it.
+        Use the words in [CONTEXT.md](../blob/main/CONTEXT.md) — household, church admin, leader, event, lesson.
+        Type and Who don't apply labels on their own; triage adds the matching Type and Surface labels before work starts.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What's wrong or missing, from the person's side. One paragraph.
+    validations:
+      required: true
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      description: What kind of work it is. See the Labels table in docs/contributing/issues-and-prs.md.
+      options:
+        - bug
+        - polish
+        - feature
+        - perf
+        - refactor
+        - chore
+        - docs
+        - ci
+    validations:
+      required: true
+  - type: dropdown
+    id: who
+    attributes:
+      label: Who
+      description: Whose experience this changes.
+      multiple: true
+      options:
+        - member
+        - leader
+        - church admin
+        - operator
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: Route or area of the app.
+      placeholder: /directory
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: The change, plainly. Leave blank if you're only reporting a problem.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance
+      description: Outcomes someone can check by looking — copy, counts, states, at 390 and 1280 wide.
+      value: |
+        - [ ]
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: Optional. Adjacent changes this deliberately doesn't make.
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Related issues, PRs, files, screenshots.
