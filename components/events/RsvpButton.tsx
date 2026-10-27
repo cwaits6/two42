@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
+import { useRsvp } from "@/components/events/useRsvp";
 import { Check, X, HelpCircle } from "lucide-react";
 import type { RsvpStatus } from "@/lib/types";
 
@@ -13,33 +12,11 @@ interface RsvpButtonProps {
 }
 
 export function RsvpButton({ eventId, userId, currentStatus }: RsvpButtonProps) {
-  const [status, setStatus] = useState<RsvpStatus | null>(currentStatus);
-  const [loading, setLoading] = useState(false);
-  const supabase = createClient();
-
-  const handleRsvp = async (newStatus: RsvpStatus) => {
-    setLoading(true);
-    try {
-      if (status === newStatus) {
-        // Un-RSVP
-        await supabase
-          .from("rsvps")
-          .delete()
-          .eq("event_id", eventId)
-          .eq("user_id", userId);
-        setStatus(null);
-      } else {
-        // Upsert RSVP
-        await supabase.from("rsvps").upsert(
-          { event_id: eventId, user_id: userId, status: newStatus },
-          { onConflict: "event_id,user_id" }
-        );
-        setStatus(newStatus);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { status, saving, error, choose } = useRsvp({
+    eventId,
+    userId,
+    initialStatus: currentStatus,
+  });
 
   const options: { value: RsvpStatus; label: string; icon: React.ReactNode }[] = [
     { value: "yes", label: "Going", icon: <Check className="h-5 w-5" /> },
@@ -48,20 +25,28 @@ export function RsvpButton({ eventId, userId, currentStatus }: RsvpButtonProps) 
   ];
 
   return (
-    <div className="flex flex-wrap gap-3 pt-3">
-      {options.map((option) => (
-        <Button
-          key={option.value}
-          variant={status === option.value ? "default" : "outline"}
-          size="lg"
-          className={`gap-2 px-4 text-base ${status === option.value ? "bg-brand-primary hover:bg-brand-primary/90 text-white" : "text-slate-700 hover:border-brand-primary/30 hover:text-brand-primary"}`}
-          onClick={() => handleRsvp(option.value)}
-          disabled={loading}
-        >
-          {option.icon}
-          <span>{option.label}</span>
-        </Button>
-      ))}
+    <div className="pt-3">
+      <div className="flex flex-wrap gap-3">
+        {options.map((option) => (
+          <Button
+            key={option.value}
+            variant={status === option.value ? "default" : "outline"}
+            size="lg"
+            className={`gap-2 px-4 text-base ${status === option.value ? "bg-brand-primary hover:bg-brand-primary/90 text-white" : "text-slate-700 hover:border-brand-primary/30 hover:text-brand-primary"}`}
+            onClick={() => choose(option.value)}
+            disabled={saving}
+            aria-pressed={status === option.value}
+          >
+            {option.icon}
+            <span>{option.label}</span>
+          </Button>
+        ))}
+      </div>
+      {error && (
+        <p role="alert" className="mt-2 text-base text-destructive">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
