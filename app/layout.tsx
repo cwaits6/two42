@@ -13,7 +13,6 @@ import { createClient } from "@/lib/supabase/server";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { siteConfig } from "@/lib/config";
 import { getRequestBranding } from "@/lib/branding";
-import { accentHover } from "@/lib/contrast";
 import { getDiscoveryOn } from "@/lib/groups/discovery";
 import { getGroupCreationPolicy } from "@/lib/groups/creationPolicy";
 import { getGroupMemberships } from "@/lib/groups/server";
@@ -140,7 +139,6 @@ export default async function RootLayout({
                 --color-brand-bg-light: ${siteConfig.colors.backgroundLight};
                 --color-brand-bg-muted: ${siteConfig.colors.backgroundMuted};
                 --primary: ${b.accent};
-                --primary-hover: ${accentHover(b.accent)};
                 --ring: ${b.accent};
                 --sidebar-primary: ${b.accent};
                 --sidebar-ring: ${b.accent};

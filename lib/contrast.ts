@@ -23,9 +23,10 @@ export const HEX = /^#[0-9a-fA-F]{6}$/;
  * `text-brand-primary-text`) for body text on light grounds. Do not "fix"
  * this by changing the reference.
  *
- * Scope: the SOLID fill. The hover fill is accentHover() below, which only
- * ever darkens, so an accent that passes here yields a hover that passes
- * too; there is nothing further to validate.
+ * Scope: the SOLID fill. The hover fill is `--primary-hover` in
+ * app/globals.css, a color-mix of the accent toward black, which only ever
+ * darkens, so an accent that passes here yields a hover that passes too;
+ * there is nothing further to validate.
  */
 export const ACCENT_CONTRAST_REFERENCE = "#FFFFFF";
 export const ACCENT_CONTRAST_MIN = 4.5;
@@ -55,23 +56,6 @@ export function contrastRatio(a: string, b: string): number {
 export type AccentValidation =
   | { ok: true; accent: string; ratio: number }
   | { ok: false; reason: string };
-
-/**
- * The solid hover fill for a validated accent: the accent mixed 90% with
- * black in sRGB, the same composite as `color-mix(in srgb, accent 90%,
- * black)`. Darkening strictly lowers relative luminance, so against white
- * text the hover always scores higher than the accent it came from — Clay
- * #B85C38 (4.54:1) hovers as #A65332 (5.38:1). A 90% alpha composite over a
- * light card, the previous hover, went the other way (3.84:1).
- */
-export function accentHover(hex: string): string {
-  const n = parseInt(hex.slice(1), 16);
-  const channel = (shift: number) =>
-    Math.round(((n >> shift) & 0xff) * 0.9)
-      .toString(16)
-      .padStart(2, "0");
-  return `#${channel(16)}${channel(8)}${channel(0)}`.toUpperCase();
-}
 
 /**
  * Write-path guard for branding.accent. Rejects anything HEX rejects (the

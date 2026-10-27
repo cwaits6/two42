@@ -69,10 +69,10 @@
   --popover-foreground: #2A211A;
   --primary: #B85C38;
   --primary-foreground: #FFFFFF;
-  /* Resolved from the org accent in app/layout.tsx; this is the platform
-     default. Solid, not alpha: a 90% composite over a light card drops white
-     text below 4.5:1. */
-  --primary-hover: #A65332;
+  /* Follows the org accent app/layout.tsx writes into --primary. Solid, not
+     alpha: a 90% composite over a light card drops white text below 4.5:1,
+     while mixing toward black only ever raises it. */
+  --primary-hover: color-mix(in srgb, var(--primary) 90%, black);
   --secondary: #EFE0D3;
   --secondary-foreground: #8A4227;
   --muted: #E8DECF;
