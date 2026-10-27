@@ -59,7 +59,7 @@ Warm and earthen — deliberately not the church-tech default blue. Four brand c
 | **Espresso** | `#2A211A` | ink on light grounds / dark-mode ground |
 | **Warm Paper** | `#F4EEE2` | light-mode ground / text on dark grounds |
 
-Semantic colors (success / warning / danger) are separate from these four. The destructive red `#B42318` (`--destructive`) is chosen as *text*: it holds 4.5:1 on Warm Paper (5.7:1), card (6.2:1), brand-warm (5.4:1), and on its own 10% tint over brand-warm (4.6:1), so form errors and the destructive Button variant read on every light ground.
+Semantic colors (success / warning / danger) are separate from these four. The destructive red `#B42318` (`--destructive`) is chosen as *text*: it holds 4.5:1 on Warm Paper (5.7:1), card (6.2:1), brand-warm (5.4:1), and on its own 10% tint over brand-warm (4.6:1), so form errors and the destructive Button variant read on every light ground. The destructive Button hovers to the solid red with white text (6.6:1), not a deeper tint: a 20% tint drops the red text to 3.9:1 on brand-warm.
 
 Clay (the primary accent) is the one color a tenant can override (see [Theming](#theming-multi-tenant)).
 

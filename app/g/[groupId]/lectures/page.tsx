@@ -344,7 +344,7 @@ function FeaturedCard({
         </div>
 
         {/* Most recent badge */}
-        <span className="font-sans text-base tracking-widest text-brand-accent-text font-bold uppercase absolute bottom-3 left-3">
+        <span className="font-sans text-base tracking-widest text-brand-accent-text font-bold uppercase absolute bottom-3 left-3 rounded-md bg-background px-2.5 py-1">
           MOST RECENT
         </span>
       </Link>
@@ -370,7 +370,7 @@ function FeaturedCard({
           href={`${libraryHref}/${lecture.id}`}
           className="group"
         >
-          <h2 className="font-display text-4xl font-medium text-foreground leading-tight tracking-tight mb-2 group-hover:text-brand-primary transition-colors">
+          <h2 className="font-display text-4xl font-medium text-foreground leading-tight tracking-tight mb-2 group-hover:text-brand-primary-text transition-colors">
             {lecture.title}
           </h2>
         </Link>

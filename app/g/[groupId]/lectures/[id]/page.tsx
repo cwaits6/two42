@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { siteConfig } from "@/lib/config";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 
@@ -206,14 +207,14 @@ export default async function LectureDetailPage({
 
           <div className="flex flex-col gap-4">
             {safeVideoUrl ? (
-              <a
-                href={safeVideoUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-brand-primary text-white font-sans text-lg font-bold tracking-[0.1em] uppercase px-6 py-4 rounded-xl inline-flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
+              <Button
+                size="lg"
+                nativeButton={false}
+                render={<a href={safeVideoUrl} target="_blank" rel="noopener noreferrer" />}
+                className="rounded-xl font-sans text-lg font-bold tracking-[0.1em] uppercase"
               >
                 Watch the recording →
-              </a>
+              </Button>
             ) : (
               <span className="bg-muted text-muted-foreground font-sans text-lg font-bold tracking-[0.1em] uppercase px-6 py-4 rounded-xl inline-flex items-center justify-center gap-2 cursor-not-allowed">
                 Recording unavailable
