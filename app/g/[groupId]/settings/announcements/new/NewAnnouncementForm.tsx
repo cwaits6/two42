@@ -124,7 +124,7 @@ export function NewAnnouncementForm({
             type="submit"
             form="announcement-form"
             size="lg"
-            className="w-full text-lg py-6 bg-brand-primary hover:bg-brand-primary/90 text-white"
+            className="w-full text-lg py-6"
             disabled={loading}
           >
             {loading

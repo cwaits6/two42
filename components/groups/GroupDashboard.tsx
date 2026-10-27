@@ -341,7 +341,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
                 <Link
                   key={s.id}
                   href={href(`/serving/${s.team_id}`)}
-                  className="flex items-center justify-between gap-4 py-2 border-t border-border first:border-0 hover:text-brand-primary transition-colors"
+                  className="flex items-center justify-between gap-4 py-2 border-t border-border first:border-0 hover:text-brand-primary-text transition-colors"
                 >
                   <div>
                     <div className="font-sans text-sm font-semibold text-foreground">
@@ -351,7 +351,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
                       {formatServiceDate(s.service_date)}
                     </div>
                   </div>
-                  <span className="font-sans text-xs font-semibold text-brand-primary shrink-0">
+                  <span className="font-sans text-xs font-semibold text-brand-primary-text shrink-0">
                     View →
                   </span>
                 </Link>
@@ -370,7 +370,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
             </h2>
             <Link
               href={href("/announcements")}
-              className="font-sans text-base font-semibold text-brand-primary hover:underline"
+              className="font-sans text-base font-semibold text-brand-primary-text hover:underline"
             >
               See all →
             </Link>
@@ -402,7 +402,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
                     </div>
                     <Link
                       href={href(`/announcements#${a.id}`)}
-                      className="font-sans text-base font-semibold text-brand-primary hover:underline whitespace-nowrap pt-1"
+                      className="font-sans text-base font-semibold text-brand-primary-text hover:underline whitespace-nowrap pt-1"
                     >
                       Read →
                     </Link>
@@ -422,7 +422,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
             </h2>
             <Link
               href={href("/prayer")}
-              className="font-sans text-base font-semibold text-brand-primary hover:underline"
+              className="font-sans text-base font-semibold text-brand-primary-text hover:underline"
             >
               See all →
             </Link>

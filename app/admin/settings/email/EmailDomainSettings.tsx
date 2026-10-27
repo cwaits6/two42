@@ -329,7 +329,7 @@ export function EmailDomainSettings() {
               <Button
                 type="submit"
                 size="lg"
-                className="w-full text-lg py-6 bg-brand-primary hover:bg-brand-primary/90 text-white"
+                className="w-full text-lg py-6"
                 disabled={busy || domainInput.trim().length === 0}
               >
                 {busy ? "Claiming..." : "Claim domain"}
@@ -440,7 +440,7 @@ export function EmailDomainSettings() {
                 <Button
                   type="button"
                   size="lg"
-                  className="flex-1 text-lg py-6 bg-brand-primary hover:bg-brand-primary/90 text-white"
+                  className="flex-1 text-lg py-6"
                   onClick={handleVerify}
                   disabled={busy}
                 >

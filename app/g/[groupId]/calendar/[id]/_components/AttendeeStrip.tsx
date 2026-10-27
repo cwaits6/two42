@@ -56,7 +56,7 @@ export function AttendeeStrip({ attendees }: AttendeeStripProps) {
         </h2>
         <span className="font-sans text-xs text-muted-foreground font-medium">
           {going.length > 0 && (
-            <strong className="text-brand-primary">{going.length} going</strong>
+            <strong className="text-brand-primary-text">{going.length} going</strong>
           )}
           {going.length > 0 && maybe.length > 0 && " · "}
           {maybe.length > 0 && `${maybe.length} maybe`}

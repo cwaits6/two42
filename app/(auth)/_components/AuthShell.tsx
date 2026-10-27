@@ -60,7 +60,7 @@ export function AuthShell({
           {/* Eyebrow */}
           <div className="flex items-center gap-2.5 mb-5">
             <div className="w-5 h-px bg-brand-accent" aria-hidden />
-            <span className="font-sans text-base font-bold tracking-[0.2em] uppercase text-brand-accent">
+            <span className="font-sans text-base font-bold tracking-[0.2em] uppercase text-brand-accent-text">
               {eyebrow}
             </span>
           </div>
@@ -87,7 +87,7 @@ export function AuthShell({
                 {altPrompt}{" "}
                 <Link
                   href={altHref}
-                  className="text-brand-primary font-semibold hover:underline"
+                  className="text-brand-primary-text font-semibold hover:underline"
                 >
                   {altLabel}
                 </Link>

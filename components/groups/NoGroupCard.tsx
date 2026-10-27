@@ -27,7 +27,6 @@ export function NoGroupCard({ discoveryOn }: { discoveryOn: boolean }) {
             {discoveryOn && (
               <Button
                 size="lg"
-                className="bg-brand-primary hover:bg-brand-primary/90 text-white"
                 nativeButton={false}
                 render={<Link href="/find-a-group" />}
               >

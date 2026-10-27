@@ -30,13 +30,13 @@ export function RoleRoster({ members }: { members: RosterMember[] }) {
         >
           <Avatar size="sm">
             {m.avatar_url && <AvatarImage src={m.avatar_url} alt="" />}
-            <AvatarFallback className="bg-brand-warm text-xs font-semibold text-brand-primary">
+            <AvatarFallback className="bg-brand-warm text-xs font-semibold text-brand-primary-text">
               {initials(m)}
             </AvatarFallback>
           </Avatar>
           <span className="text-foreground">{displayName(m)}</span>
           {m.is_leader && (
-            <span className="text-xs font-bold uppercase tracking-wide text-brand-accent">
+            <span className="text-xs font-bold uppercase tracking-wide text-brand-accent-text">
               Leader
             </span>
           )}

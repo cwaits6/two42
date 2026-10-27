@@ -36,7 +36,6 @@ export function EventListView({ groups, events, userRsvps, userId, createHref, t
             <Button
               nativeButton={false}
               render={<Link href={createHref} />}
-              className="bg-brand-primary hover:bg-brand-primary/90 text-white"
             >
               <Plus className="mr-1.5 h-4 w-4" />
               Create event
@@ -99,7 +98,7 @@ export function EventListView({ groups, events, userRsvps, userId, createHref, t
                       {showGroupName && group && (
                         <Badge
                           variant="secondary"
-                          className="bg-brand-bg-light text-brand-primary border-brand-primary/20 text-base"
+                          className="bg-brand-bg-light text-brand-primary-text border-brand-primary/20 text-base"
                         >
                           {group.name}
                         </Badge>
@@ -119,7 +118,7 @@ export function EventListView({ groups, events, userRsvps, userId, createHref, t
                           href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex min-w-0 items-center gap-2 hover:text-brand-primary"
+                          className="flex min-w-0 items-center gap-2 hover:text-brand-primary-text"
                         >
                           <MapPin className="h-4 w-4 shrink-0 text-brand-primary-light" />
                           <span className="truncate">{event.location}</span>

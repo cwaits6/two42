@@ -32,7 +32,7 @@ export function PageHeader({
       {backHref && (
         <Link
           href={backHref}
-          className="mb-3 inline-flex min-h-11 items-center gap-2 text-base font-semibold text-brand-primary underline underline-offset-4 hover:text-brand-primary/80"
+          className="mb-3 inline-flex min-h-11 items-center gap-2 text-base font-semibold text-brand-primary-text underline underline-offset-4 hover:text-foreground"
         >
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
           {backLabel ?? "Back"}

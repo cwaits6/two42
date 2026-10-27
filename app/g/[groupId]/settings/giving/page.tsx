@@ -75,7 +75,7 @@ export default async function GroupGivingPage({
         <Button
           nativeButton={false}
           render={<Link href={groupPath(group.id, "/give/new")} />}
-          className="shrink-0 bg-brand-primary hover:bg-brand-primary/90 text-white"
+          className="shrink-0"
         >
           <Plus className="mr-1.5 h-4 w-4" />
           New fund
@@ -102,7 +102,7 @@ export default async function GroupGivingPage({
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wide ${
                         status.live
-                          ? "bg-brand-warm text-brand-primary"
+                          ? "bg-brand-warm text-brand-primary-text"
                           : "bg-muted text-muted-foreground"
                       }`}
                     >

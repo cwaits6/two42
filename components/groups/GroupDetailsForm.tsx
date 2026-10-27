@@ -80,7 +80,6 @@ export function GroupDetailsForm({
         type="submit"
         size="lg"
         disabled={saving}
-        className="bg-brand-primary hover:bg-brand-primary/90 text-white"
       >
         {saving ? "Saving…" : "Save changes"}
       </Button>

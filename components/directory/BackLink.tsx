@@ -19,7 +19,7 @@ export function BackLink({ href, onClick, children, className }: BackLinkProps) 
       {children}
     </>
   );
-  const cls = `inline-flex items-center gap-2 text-sm font-semibold text-brand-primary underline underline-offset-4 hover:text-brand-primary/80 ${className ?? ""}`;
+  const cls = `inline-flex items-center gap-2 text-sm font-semibold text-brand-primary-text underline underline-offset-4 hover:text-foreground ${className ?? ""}`;
 
   if (href) {
     return (

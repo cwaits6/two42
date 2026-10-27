@@ -26,7 +26,7 @@ function Message({ title, body }: { title: string; body: string }) {
           <p className="text-lg text-muted-foreground">{body}</p>
           <Link
             href="/serving"
-            className="inline-block mt-6 text-brand-primary hover:underline text-lg"
+            className="inline-block mt-6 text-brand-primary-text hover:underline text-lg"
           >
             Go to the serving page
           </Link>

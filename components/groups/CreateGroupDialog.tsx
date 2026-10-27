@@ -284,7 +284,6 @@ export function CreateGroupDialog({
               type="submit"
               size="lg"
               disabled={saving}
-              className="bg-brand-primary text-white hover:bg-brand-primary/90"
             >
               {saving ? "Saving…" : creating ? "Create group" : "Send request"}
             </Button>

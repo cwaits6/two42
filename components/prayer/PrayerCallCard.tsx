@@ -182,7 +182,7 @@ export function PrayerCallCard({
   return (
     <div className="overflow-hidden rounded-2xl bg-foreground p-6 text-background">
       <div className="flex items-start justify-between gap-3">
-        <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-brand-accent">
+        <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-brand-accent-text">
           <span aria-hidden="true" className="h-px w-5 bg-brand-accent" />
           Weekly prayer
         </div>

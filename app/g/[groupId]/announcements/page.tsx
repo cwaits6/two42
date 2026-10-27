@@ -49,7 +49,6 @@ export default async function AnnouncementsPage({
               <Button
                 nativeButton={false}
                 render={<Link href={groupPath(group.id, "/settings/announcements/new")} />}
-                className="bg-brand-primary hover:bg-brand-primary/90 text-white"
               >
                 <Plus className="mr-1.5 h-4 w-4" />
                 Create announcement

@@ -242,7 +242,7 @@ export default async function EventDetailPage({
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5 text-muted-foreground hover:border-brand-primary/30 hover:text-brand-primary"
+              className="gap-1.5 text-muted-foreground hover:border-brand-primary/30 hover:text-brand-primary-text"
               nativeButton={false}
               render={<Link href={editHref} />}
             >
@@ -327,7 +327,7 @@ export default async function EventDetailPage({
                 {/* Eyebrow */}
                 <div className="flex items-center gap-3 mb-4">
                   <div className="h-px w-6 bg-brand-accent" />
-                  <span className="font-sans text-base font-bold uppercase tracking-[2px] text-brand-accent">
+                  <span className="font-sans text-base font-bold uppercase tracking-[2px] text-brand-accent-text">
                     About this event
                   </span>
                 </div>
@@ -490,7 +490,7 @@ export default async function EventDetailPage({
                     href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="ml-3 inline-flex min-h-12 shrink-0 items-center whitespace-nowrap font-sans text-base font-semibold text-brand-primary hover:underline"
+                    className="ml-3 inline-flex min-h-12 shrink-0 items-center whitespace-nowrap font-sans text-base font-semibold text-brand-primary-text hover:underline"
                   >
                     Directions →
                   </a>

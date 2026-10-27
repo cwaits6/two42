@@ -40,7 +40,7 @@ export function PrayerCard({
         {showAvatar ? (
           <Avatar size="lg" className="shrink-0">
             {row.avatar_url && <AvatarImage src={row.avatar_url} alt="" />}
-            <AvatarFallback className="bg-brand-warm font-semibold text-brand-primary">
+            <AvatarFallback className="bg-brand-warm font-semibold text-brand-primary-text">
               {initials(row)}
             </AvatarFallback>
           </Avatar>
@@ -56,7 +56,7 @@ export function PrayerCard({
               {prayerAuthorLabel(row)}
             </span>
             {row.mine && (
-              <span className="rounded-full bg-brand-warm px-2 py-0.5 text-xs font-bold text-brand-primary">
+              <span className="rounded-full bg-brand-warm px-2 py-0.5 text-xs font-bold text-brand-primary-text">
                 You
               </span>
             )}
@@ -90,7 +90,7 @@ export function PrayerCard({
             className={`flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold transition-colors ${
               row.i_am_praying
                 ? "bg-brand-primary text-white"
-                : "bg-brand-warm text-brand-primary hover:bg-brand-primary/15"
+                : "bg-brand-warm text-brand-primary-text hover:bg-brand-primary/15"
             }`}
           >
             <HandHeart className="h-4 w-4" aria-hidden="true" />

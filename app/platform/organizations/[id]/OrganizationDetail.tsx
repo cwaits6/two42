@@ -310,7 +310,7 @@ export function OrganizationDetail({
           )}
           <Button
             size="lg"
-            className="bg-brand-primary hover:bg-brand-primary/90 text-lg"
+            className="text-lg"
             disabled={busy === "branding"}
             onClick={() => {
               // page.tsx defaults an absent display_name to "", and the PATCH
@@ -362,7 +362,7 @@ export function OrganizationDetail({
               </div>
               <Button
                 size="lg"
-                className="bg-brand-primary hover:bg-brand-primary/90 text-lg"
+                className="text-lg"
                 disabled={busy === "invite"}
                 onClick={() => void handleSendInvite()}
               >
@@ -416,7 +416,7 @@ export function OrganizationDetail({
               )}
               <Button
                 size="lg"
-                className="bg-brand-primary hover:bg-brand-primary/90 text-lg"
+                className="text-lg"
                 disabled={busy === "emailCap"}
                 onClick={() => void handleSaveEmailCap()}
               >
@@ -484,7 +484,7 @@ export function OrganizationDetail({
           ) : (
             <Button
               size="lg"
-              className="bg-brand-primary hover:bg-brand-primary/90 text-lg"
+              className="text-lg"
               disabled={busy === "customDomain"}
               onClick={() =>
                 void patchOrg({ custom_email_domain_enabled: true }, "customDomain")
@@ -515,7 +515,7 @@ export function OrganizationDetail({
             </p>
             <Button
               size="lg"
-              className="bg-brand-primary hover:bg-brand-primary/90 text-lg"
+              className="text-lg"
               disabled={busy === "domainCleanup"}
               onClick={() => void handleRetryDomainCleanup()}
             >
@@ -555,7 +555,7 @@ export function OrganizationDetail({
           ) : (
             <Button
               size="lg"
-              className="bg-brand-primary hover:bg-brand-primary/90 text-lg"
+              className="text-lg"
               disabled={busy === "status"}
               onClick={() => handleStatusChange("active")}
             >

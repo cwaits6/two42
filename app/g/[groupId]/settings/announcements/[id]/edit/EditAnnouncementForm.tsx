@@ -142,7 +142,7 @@ export function EditAnnouncementForm({
       <div className="container mx-auto px-4 py-12">
         <p className="text-xl text-muted-foreground">
           Announcement not found.{" "}
-          <Link href={listHref} className="text-brand-primary hover:underline">
+          <Link href={listHref} className="text-brand-primary-text hover:underline">
             Back to announcements
           </Link>
         </p>
@@ -220,7 +220,7 @@ export function EditAnnouncementForm({
               type="submit"
               form="announcement-form"
               size="lg"
-              className="flex-1 text-lg py-6 bg-brand-primary hover:bg-brand-primary/90 text-white"
+              className="flex-1 text-lg py-6"
               disabled={loading}
             >
               {loading ? "Saving..." : "Save Changes"}

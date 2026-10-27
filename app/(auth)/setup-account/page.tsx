@@ -236,7 +236,7 @@ export default function SetupAccountPage() {
         <Button
           type="submit"
           size="lg"
-          className="w-full bg-brand-primary hover:bg-brand-primary/90 text-white font-semibold"
+          className="w-full font-semibold"
           disabled={loading}
         >
           {loading ? "Creating account…" : "Create Account"}

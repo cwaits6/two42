@@ -427,7 +427,7 @@ export function FundForm({
                           className="font-mono text-sm"
                         />
                         {missing && (
-                          <p className="mt-1.5 text-sm font-medium text-brand-accent">
+                          <p className="mt-1.5 text-sm font-medium text-brand-accent-text">
                             Enter a handle for {meta.name}{' '}or this method won&apos;t be saved.
                           </p>
                         )}
@@ -443,7 +443,6 @@ export function FundForm({
             <Button
               onClick={save}
               disabled={saving}
-              className="bg-brand-primary hover:bg-brand-primary/90 text-white"
             >
               {saving ? "Saving…" : fund ? "Save changes" : "Create fund"}
             </Button>
@@ -473,7 +472,7 @@ export function FundForm({
 
       {/* Live preview — how the fund reads on the Give page */}
       <div className="lg:sticky lg:top-6">
-        <p className="mb-3 flex items-center gap-2.5 text-xs font-bold uppercase tracking-widest text-brand-accent">
+        <p className="mb-3 flex items-center gap-2.5 text-xs font-bold uppercase tracking-widest text-brand-accent-text">
           <span className="h-px w-6 bg-brand-accent" aria-hidden="true" />
           How members see it
         </p>

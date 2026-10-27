@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { siteConfig } from "@/lib/config";
 import { groupPath } from "@/lib/groups/active";
@@ -27,12 +28,9 @@ export default async function ManageSeriesPage({
     <div className="container mx-auto px-4 py-12">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold text-brand-primary">Lecture Series</h1>
-        <Link
-          href={`${base}/series/new`}
-          className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium bg-brand-primary text-white hover:bg-brand-primary/90 transition-colors"
-        >
+        <Button nativeButton={false} render={<Link href={`${base}/series/new`} />}>
           New series
-        </Link>
+        </Button>
       </div>
 
       <Card>
@@ -70,7 +68,7 @@ export default async function ManageSeriesPage({
                         <div className="flex items-center gap-4">
                           <Link
                             href={`${base}/new?series=${s.id}`}
-                            className="text-brand-primary hover:underline font-medium text-base"
+                            className="text-brand-primary-text hover:underline font-medium text-base"
                           >
                             + Add lecture
                           </Link>
@@ -89,7 +87,7 @@ export default async function ManageSeriesPage({
                   <tr>
                     <td colSpan={5} className="py-8 text-center text-muted-foreground">
                       No series yet.{" "}
-                      <Link href={`${base}/series/new`} className="text-brand-primary hover:underline">
+                      <Link href={`${base}/series/new`} className="text-brand-primary-text hover:underline">
                         Create one →
                       </Link>
                     </td>

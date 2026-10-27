@@ -223,7 +223,7 @@ export function ServingStats({ groupId }: { groupId: string }) {
                         {t.name}
                       </th>
                     ))}
-                    <th className="text-right px-6 py-3 font-semibold text-brand-primary">
+                    <th className="text-right px-6 py-3 font-semibold text-brand-primary-text">
                       Total
                     </th>
                   </tr>
@@ -247,7 +247,7 @@ export function ServingStats({ groupId }: { groupId: string }) {
                           {row.counts[t.team_id] ?? "—"}
                         </td>
                       ))}
-                      <td className="px-6 py-3 text-right tabular-nums font-bold text-brand-primary">
+                      <td className="px-6 py-3 text-right tabular-nums font-bold text-brand-primary-text">
                         {row.total}
                       </td>
                     </tr>
@@ -273,7 +273,7 @@ export function ServingStats({ groupId }: { groupId: string }) {
                         </td>
                       );
                     })}
-                    <td className="px-6 py-3 text-right tabular-nums font-bold text-brand-primary">
+                    <td className="px-6 py-3 text-right tabular-nums font-bold text-brand-primary-text">
                       {totalServings}
                     </td>
                   </tr>

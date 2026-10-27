@@ -49,7 +49,7 @@ function ContactLine({
 }
 
 const telLink =
-  "text-brand-primary font-semibold underline underline-offset-4 hover:text-brand-primary/80";
+  "text-brand-primary-text font-semibold underline underline-offset-4 hover:text-foreground";
 
 interface PersonCardProps {
   profile: DirectoryProfile;
@@ -118,7 +118,7 @@ export function PersonCard({ profile, family }: PersonCardProps) {
             <span className="text-base text-muted-foreground">mobile</span>
             <a
               href={`sms:${profile.phone_mobile}`}
-              className="ml-auto flex items-center gap-1.5 text-brand-primary hover:text-brand-primary/80"
+              className="ml-auto flex items-center gap-1.5 text-brand-primary-text hover:text-foreground"
             >
               <MessageSquare className="h-5 w-5" aria-hidden="true" />
               <span className="text-base font-medium">Text</span>
@@ -202,7 +202,7 @@ export function PersonCard({ profile, family }: PersonCardProps) {
         <Button
           variant="outline"
           onClick={() => downloadVCard(profile.id)}
-          className="gap-2 text-brand-primary"
+          className="gap-2 text-brand-primary-text"
         >
           <Download className="h-4 w-4" />
           Save to my phone contacts

@@ -97,7 +97,7 @@ export function PendingRequestsList({ initialRequests }: PendingRequestsListProp
               <div className="flex gap-2 shrink-0">
                 <Button
                   size="lg"
-                  className="bg-brand-primary hover:bg-brand-primary/90 text-lg"
+                  className="text-lg"
                   disabled={busyId === req.id}
                   onClick={() => handleRequest(req.id, "approved")}
                 >

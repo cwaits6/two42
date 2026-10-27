@@ -313,7 +313,7 @@ export default function BulkInvitePage() {
                 <p className="text-base font-semibold">
                   {rows.length} contact{rows.length !== 1 ? "s" : ""} found
                   {" — "}
-                  <span className="text-brand-primary">{newCount} new</span>
+                  <span className="text-brand-primary-text">{newCount} new</span>
                   {rows.length - newCount > 0 && (
                     <span className="text-muted-foreground">
                       , {rows.length - newCount} already joined
@@ -328,7 +328,6 @@ export default function BulkInvitePage() {
               <Button
                 onClick={handleSendInvites}
                 disabled={sending || selectedCount === 0}
-                className="bg-brand-primary hover:bg-brand-primary/90 text-white"
               >
                 <Mail className="mr-2 h-4 w-4" />
                 {sending ? "Sending..." : `Send Invites (${selectedCount})`}
@@ -393,7 +392,7 @@ export default function BulkInvitePage() {
                         ) : (
                           <Badge
                             variant="outline"
-                            className="border-brand-primary/30 text-brand-primary bg-brand-bg-light"
+                            className="border-brand-primary/30 text-brand-primary-text bg-brand-bg-light"
                           >
                             New
                           </Badge>
@@ -410,7 +409,7 @@ export default function BulkInvitePage() {
 
       {/* Result summary */}
       {result && (
-        <div className="flex items-start gap-3 rounded-lg border border-brand-primary/20 bg-brand-bg-light p-4 text-brand-primary">
+        <div className="flex items-start gap-3 rounded-lg border border-brand-primary/20 bg-brand-bg-light p-4 text-brand-primary-text">
           <CheckCircle2 className="h-5 w-5 mt-0.5 shrink-0" />
           <div>
             <p className="font-medium">

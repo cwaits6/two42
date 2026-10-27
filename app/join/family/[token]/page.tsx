@@ -114,7 +114,7 @@ export default async function FamilyJoinPage({ params }: PageProps) {
           <CardContent className="space-y-4">
             <p className="text-muted-foreground">
               If you already created your account, you can{" "}
-              <Link href="/login" className="text-brand-primary underline">
+              <Link href="/login" className="text-brand-primary-text underline">
                 log in here
               </Link>
               .

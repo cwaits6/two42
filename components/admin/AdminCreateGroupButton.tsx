@@ -16,7 +16,6 @@ export function AdminCreateGroupButton() {
       <Button
         size="lg"
         onClick={() => setOpen(true)}
-        className="bg-brand-primary text-white hover:bg-brand-primary/90"
       >
         <Plus aria-hidden="true" />
         Create group

@@ -52,7 +52,7 @@ type TimedBlock = Block & { topMinutes: number; durationMinutes: number; lane: L
 type DayColumn = { date: DateTime; key: string; allDay: Block[]; timed: TimedBlock[] };
 
 const navButtonClass =
-  "flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition-colors hover:border-brand-primary/30 hover:text-brand-primary";
+  "flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition-colors hover:border-brand-primary/30 hover:text-brand-primary-text";
 
 export default function EventWeekView({ groups, events, visibleGroupIds, timeZone }: EventWeekViewProps) {
   const firstDay = useMemo(() => localeWeekStart(navigator.language), []);
@@ -108,7 +108,7 @@ export default function EventWeekView({ groups, events, visibleGroupIds, timeZon
           <button
             type="button"
             onClick={() => goTo(now())}
-            className="h-12 cursor-pointer rounded-full border border-slate-200 bg-white px-5 text-base font-semibold text-slate-600 transition-colors hover:border-brand-primary/30 hover:text-brand-primary"
+            className="h-12 cursor-pointer rounded-full border border-slate-200 bg-white px-5 text-base font-semibold text-slate-600 transition-colors hover:border-brand-primary/30 hover:text-brand-primary-text"
           >
             Today
           </button>

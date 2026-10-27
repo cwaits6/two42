@@ -121,7 +121,7 @@ export async function HomeLauncher({
           {discoveryOn && (
             <Link
               href="/find-a-group"
-              className="font-sans text-base font-semibold text-brand-primary hover:underline"
+              className="font-sans text-base font-semibold text-brand-primary-text hover:underline"
             >
               Find a group →
             </Link>

@@ -99,7 +99,7 @@ export default function LoginPage() {
         <Button
           type="submit"
           size="lg"
-          className="w-full bg-brand-primary hover:bg-brand-primary/90 text-white font-semibold"
+          className="w-full font-semibold"
           disabled={loading}
         >
           {loading ? "Signing in…" : "Sign In"}
@@ -107,7 +107,7 @@ export default function LoginPage() {
         <p className="text-sm text-muted-foreground text-center">
           <Link
             href="/forgot-password"
-            className="text-brand-primary hover:underline font-medium"
+            className="text-brand-primary-text hover:underline font-medium"
           >
             Forgot your password?
           </Link>

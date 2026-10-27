@@ -370,7 +370,7 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
             <Button
               type="submit"
               size="lg"
-              className="w-full text-lg py-6 bg-brand-primary hover:bg-brand-primary/90 text-white"
+              className="w-full text-lg py-6"
               disabled={loading}
             >
               {loading ? "Creating..." : "Create Event"}

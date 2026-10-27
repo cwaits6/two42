@@ -110,7 +110,7 @@ export function FamilyCard({ family, profileMap, onOpenPerson }: FamilyCardProps
               <Home className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
               <a
                 href={`tel:${family.phone_home}`}
-                className="text-brand-primary font-semibold underline underline-offset-4 hover:text-brand-primary/80"
+                className="text-brand-primary-text font-semibold underline underline-offset-4 hover:text-foreground"
               >
                 {formatPhone(family.phone_home)}
               </a>

@@ -35,7 +35,7 @@ export type CalendarGroup = {
 };
 
 const outlineButtonClass =
-  "h-12 gap-2 rounded-xl border-slate-200 bg-white px-5 text-base font-medium text-slate-600 shadow-sm hover:border-brand-primary/30 hover:bg-white hover:text-brand-primary";
+  "h-12 gap-2 rounded-xl border-slate-200 bg-white px-5 text-base font-medium text-slate-600 shadow-sm hover:border-brand-primary/30 hover:bg-white hover:text-brand-primary-text";
 
 interface EventsPageClientProps {
   /** The groups this page spans, in membership order. */
@@ -178,11 +178,9 @@ export function EventsPageClient({ groups, allEvents, userRsvps, userId, timeZon
                 aria-checked={checked}
                 tabIndex={checked ? 0 : -1}
                 onClick={() => setView(option.value)}
-                variant="ghost"
+                variant={checked ? "default" : "ghost"}
                 className={`h-12 rounded-lg px-5 text-base font-semibold ${
-                  checked
-                    ? "bg-brand-primary text-white shadow-sm hover:bg-brand-primary/90 hover:text-white"
-                    : "text-slate-600 hover:bg-slate-50 hover:text-brand-primary"
+                  checked ? "shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-brand-primary-text"
                 }`}
               >
                 {option.label}
@@ -292,7 +290,7 @@ export function EventsPageClient({ groups, allEvents, userRsvps, userId, timeZon
             <button
               type="button"
               onClick={showAll}
-              className="inline-flex min-h-11 items-center rounded-full px-4 text-base font-semibold text-brand-primary hover:underline"
+              className="inline-flex min-h-11 items-center rounded-full px-4 text-base font-semibold text-brand-primary-text hover:underline"
             >
               Show all
             </button>

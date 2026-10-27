@@ -81,7 +81,6 @@ export function GroupJoinAction({
           size="lg"
           disabled={busy}
           onClick={join}
-          className="bg-brand-primary text-white hover:bg-brand-primary/90"
         >
           Join
         </Button>

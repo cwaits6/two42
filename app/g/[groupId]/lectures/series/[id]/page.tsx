@@ -113,7 +113,7 @@ export default async function SeriesDetailPage({
           {/* Eyebrow */}
           <div className="flex items-center gap-3 mb-5">
             <div className="w-7 h-px bg-brand-accent" />
-            <span className="text-brand-accent text-base font-semibold font-sans tracking-[0.2em] uppercase">
+            <span className="text-brand-accent-text text-base font-semibold font-sans tracking-[0.2em] uppercase">
               {series.is_archived ? "Past Series" : "Current Series"}
             </span>
           </div>
@@ -184,7 +184,7 @@ function SeriesLectureRow({
       href={`${libraryHref}/${lecture.id}`}
       className="grid grid-cols-[80px_1fr_auto] items-center gap-6 border-t border-border py-5 hover:bg-background -mx-2 px-2 transition-colors"
     >
-      <span className="font-sans text-base text-brand-accent tracking-[0.15em] uppercase font-bold">
+      <span className="font-sans text-base text-brand-accent-text tracking-[0.15em] uppercase font-bold">
         Week {String(lecture.weekNumber).padStart(2, "0")}
       </span>
       <div>

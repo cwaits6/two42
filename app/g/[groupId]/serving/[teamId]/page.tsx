@@ -237,7 +237,7 @@ export default async function ServingSchedulePage({
       </p>
 
       {!settings?.enabled && isLeader && (
-        <p className="text-sm text-brand-accent mb-6">
+        <p className="text-sm text-brand-accent-text mb-6">
           Serving signups are not enabled for this team yet — enable them from
           the Serving page.
         </p>

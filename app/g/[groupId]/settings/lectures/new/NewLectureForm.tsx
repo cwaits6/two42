@@ -104,7 +104,7 @@ function NewLectureFormInner({ groupId, groupName }: Props) {
                 <Label htmlFor="series_id" className="text-lg">Series</Label>
                 <Link
                   href={`${base}/series/new`}
-                  className="text-sm font-medium text-brand-primary hover:opacity-80"
+                  className="text-sm font-medium text-brand-primary-text hover:underline"
                 >
                   + Create new series
                 </Link>
@@ -188,7 +188,7 @@ function NewLectureFormInner({ groupId, groupName }: Props) {
             <Button
               type="submit"
               size="lg"
-              className="w-full text-lg py-6 bg-brand-primary hover:bg-brand-primary/90 text-white"
+              className="w-full text-lg py-6"
               disabled={loading}
             >
               {loading ? "Adding..." : "Add Lecture"}

@@ -27,7 +27,6 @@ export default function ErrorPage({
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Button
               size="lg"
-              className="bg-brand-primary hover:bg-brand-primary/90 text-white"
               onClick={() => reset()}
             >
               Try again

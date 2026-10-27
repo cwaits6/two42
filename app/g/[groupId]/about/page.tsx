@@ -100,7 +100,7 @@ export default async function AboutGroupPage({
                   size="lg"
                   nativeButton={false}
                   render={<Link href={videoCallUrl} target="_blank" rel="noopener noreferrer" />}
-                  className="shrink-0 bg-brand-primary text-white hover:bg-brand-primary/90"
+                  className="shrink-0"
                 >
                   Join video call
                 </Button>
@@ -140,7 +140,7 @@ export default async function AboutGroupPage({
                       <h3 className="text-xl font-semibold">
                         {displayName(teacher.profiles)}
                       </h3>
-                      <p className="text-base font-medium uppercase tracking-wider text-brand-primary mb-2">
+                      <p className="text-base font-medium uppercase tracking-wider text-brand-primary-text mb-2">
                         {teacher.title}
                       </p>
                       {teacher.bio ? (

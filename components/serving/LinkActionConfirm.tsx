@@ -85,7 +85,7 @@ export function LinkActionConfirm({
                       size="lg"
                       disabled={busy}
                       onClick={() => submit(false)}
-                      className="text-lg py-6 bg-brand-primary hover:bg-brand-primary/90 text-white"
+                      className="text-lg py-6"
                     >
                       {spouseName ? "Just me" : "Yes, I'll serve"}
                     </Button>
@@ -94,7 +94,7 @@ export function LinkActionConfirm({
                         size="lg"
                         disabled={busy}
                         onClick={() => submit(true)}
-                        className="text-lg py-6 bg-brand-primary hover:bg-brand-primary/90 text-white"
+                        className="text-lg py-6"
                       >
                         Me &amp; {spouseName}
                       </Button>
@@ -119,7 +119,7 @@ export function LinkActionConfirm({
 
           <Link
             href="/serving"
-            className="inline-block mt-8 text-brand-primary hover:underline text-lg"
+            className="inline-block mt-8 text-brand-primary-text hover:underline text-lg"
           >
             See the full serving schedule
           </Link>

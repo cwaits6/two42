@@ -180,7 +180,7 @@ export default async function JoinByInvitePage({ params }: PageProps) {
       <Notice title={`You're already in ${invite.groupName}.`} description="Nothing more to do here.">
         <Button
           size="lg"
-          className="w-full bg-brand-primary text-white hover:bg-brand-primary/90"
+          className="w-full"
           nativeButton={false}
           render={<Link href={groupPath(invite.groupId, "/dashboard")} />}
         >

@@ -135,7 +135,7 @@ export default async function LectureDetailPage({
                 </Link>
               )}
               {weekNumber !== null && (
-                <span className="text-brand-accent text-base font-bold font-sans tracking-[0.2em] uppercase">
+                <span className="text-brand-accent-text text-base font-bold font-sans tracking-[0.2em] uppercase">
                   Week {String(weekNumber).padStart(2, "0")}
                 </span>
               )}
@@ -231,7 +231,7 @@ export default async function LectureDetailPage({
         <div className="px-6 md:px-14 py-14 md:py-16 max-w-3xl">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-7 h-px bg-brand-accent" />
-            <span className="text-brand-accent text-base font-bold font-sans tracking-[0.2em] uppercase">
+            <span className="text-brand-accent-text text-base font-bold font-sans tracking-[0.2em] uppercase">
               Class Summary
             </span>
           </div>
@@ -263,7 +263,7 @@ export default async function LectureDetailPage({
               </div>
               <Link
                 href={`${libraryHref}/series/${series.id}`}
-                className="font-sans text-sm font-semibold text-brand-primary hover:opacity-80 transition-opacity"
+                className="font-sans text-sm font-semibold text-brand-primary-text hover:underline"
               >
                 View full series →
               </Link>
@@ -295,7 +295,7 @@ function SiblingRow({
       href={`${libraryHref}/${sib.id}`}
       className="grid grid-cols-[80px_1fr_auto] items-center gap-6 border-t border-border py-4 hover:bg-background transition-colors -mx-2 px-2 rounded"
     >
-      <span className="font-sans text-base text-brand-accent tracking-[0.15em] uppercase font-bold">
+      <span className="font-sans text-base text-brand-accent-text tracking-[0.15em] uppercase font-bold">
         Week {String(weekNumber).padStart(2, "0")}
       </span>
       <span className="font-display text-lg font-medium text-foreground tracking-tight">

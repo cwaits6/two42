@@ -143,7 +143,7 @@ export function GroupSwitcher({
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              className="min-h-11 rounded-lg px-2.5 text-base font-semibold text-brand-primary"
+              className="min-h-11 rounded-lg px-2.5 text-base font-semibold text-brand-primary-text"
               render={<Link href="/find-a-group" onClick={onNavigate} />}
             >
               Find a group

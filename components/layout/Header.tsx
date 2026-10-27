@@ -111,7 +111,7 @@ export function Header({ profile, hasServingAccess, isPlatformAdmin = false, org
             <Button
               variant="ghost"
               size="lg"
-              className="text-base text-slate-600 hover:text-brand-primary"
+              className="text-base text-slate-600 hover:text-brand-primary-text"
               nativeButton={false}
               render={<Link href="/platform" />}
             >
