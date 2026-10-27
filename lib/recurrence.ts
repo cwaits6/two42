@@ -4,6 +4,8 @@ import type { Event, EventCalendar } from "@/lib/types";
 
 const MAX_OCCURRENCES = 500;
 
+type Series = Event & { calendar?: EventCalendar | null };
+
 /**
  * The instant `steps` intervals after `isoString`, keeping the wall-clock
  * time in `zone`: a 7:00 PM series stays at 7:00 PM across a daylight-saving
@@ -38,7 +40,7 @@ export function addRecurrenceInterval(
  * (overflowed months) or from a browser outside the org zone.
  */
 export function buildExceptionMap(
-  events: (Event & { calendar?: EventCalendar | null })[],
+  events: Series[],
   timeZone: string
 ): Map<string, Set<string>> {
   const map = new Map<string, Set<string>>();
@@ -51,28 +53,70 @@ export function buildExceptionMap(
   return map;
 }
 
+/** The repeat rule of a series anchor; null for a one-off or an exception row. */
+type Rule = Pick<Event, "start_time" | "recurrence_end_mode" | "recurrence_count" | "recurrence_until"> & {
+  frequency: NonNullable<Event["recurrence_frequency"]>;
+  interval: number;
+};
+
+function seriesRule(event: Event): Rule | null {
+  if (event.series_id || !event.recurrence_frequency) return null;
+  return {
+    start_time: event.start_time,
+    recurrence_end_mode: event.recurrence_end_mode,
+    recurrence_count: event.recurrence_count,
+    recurrence_until: event.recurrence_until,
+    frequency: event.recurrence_frequency,
+    interval: event.recurrence_interval ?? 1,
+  };
+}
+
+/** `iso` moved `index` intervals along the rule in `timeZone`; index 0 is the row's own value. */
+function stepAlong(rule: Rule, iso: string, index: number, timeZone: string): string {
+  return index === 0 ? iso : addRecurrenceInterval(iso, rule.frequency, rule.interval * index, timeZone);
+}
+
 /**
- * Compute the approximate number of recurrence intervals between two dates.
- * Returns a conservative (floor - 1) estimate so callers can safely start
- * one step early and let the window/until checks trim the leading edge.
+ * A conservative estimate (floor - 1) of the index of the date at `instant`,
+ * so callers can start there and step forward to the exact one. Month and
+ * year lengths are averaged slightly high, which keeps the estimate low.
  */
-function fastForwardIndex(
-  startIso: string,
-  freq: string,
-  interval: number,
-  now: Date
-): number {
-  const seriesStart = new Date(startIso);
-  const msElapsed = now.getTime() - seriesStart.getTime();
+function fastForwardIndex(rule: Rule, instant: Date): number {
+  const msElapsed = instant.getTime() - new Date(rule.start_time).getTime();
   if (msElapsed <= 0) return 0;
 
-  let msPerStep: number;
-  if (freq === "daily") msPerStep = interval * 24 * 60 * 60 * 1000;
-  else if (freq === "weekly") msPerStep = interval * 7 * 24 * 60 * 60 * 1000;
-  else if (freq === "monthly") msPerStep = interval * 30.44 * 24 * 60 * 60 * 1000;
-  else msPerStep = interval * 365.25 * 24 * 60 * 60 * 1000; // yearly
+  const day = 24 * 60 * 60 * 1000;
+  const msPerStep =
+    rule.frequency === "daily"
+      ? rule.interval * day
+      : rule.frequency === "weekly"
+        ? rule.interval * 7 * day
+        : rule.frequency === "monthly"
+          ? rule.interval * 30.44 * day
+          : rule.interval * 365.25 * day;
 
   return Math.max(0, Math.floor(msElapsed / msPerStep) - 1);
+}
+
+/**
+ * How many dates of the series start before `instant`. Steps from the
+ * estimated index, so a far-off instant costs a few steps, not one per date.
+ */
+function occurrencesBefore(rule: Rule, instant: Date, timeZone: string): number {
+  let i = fastForwardIndex(rule, instant);
+  while (new Date(stepAlong(rule, rule.start_time, i, timeZone)) < instant) i++;
+  return i;
+}
+
+/** How many dates the series has in all; null when it never ends. */
+function seriesLength(rule: Rule, timeZone: string): number | null {
+  if (rule.recurrence_end_mode === "count") return rule.recurrence_count ?? 1;
+  if (rule.recurrence_end_mode === "until" && rule.recurrence_until) {
+    // A date starting exactly at the until instant still belongs to the series.
+    const justAfterUntil = new Date(new Date(rule.recurrence_until).getTime() + 1);
+    return occurrencesBefore(rule, justAfterUntil, timeZone);
+  }
+  return null;
 }
 
 /**
@@ -82,53 +126,38 @@ function fastForwardIndex(
  * per-occurrence exception rows.
  *
  * Pass `now` to fast-forward past already-elapsed occurrences so the
- * maxCount budget applies to visible/upcoming instances, not past ones.
+ * MAX_OCCURRENCES budget applies to visible/upcoming instances, not past ones.
  */
 export function expandOccurrences(
-  event: Event & { calendar?: EventCalendar | null },
+  event: Series,
   timeZone: string,
   excludedDays?: Set<string>,
   windowEnd?: Date,
   now?: Date
-): (Event & { calendar?: EventCalendar | null })[] {
-  if (event.series_id) return [event];
-  const { recurrence_frequency: freq, recurrence_end_mode: endMode } = event;
-  if (!freq) return [event];
+): Series[] {
+  const rule = seriesRule(event);
+  if (!rule) return [event];
 
   const end = windowEnd ?? new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000);
-  const interval = event.recurrence_interval ?? 1;
-  const untilDate =
-    endMode === "until" && event.recurrence_until
-      ? new Date(event.recurrence_until)
-      : null;
-  const maxCount =
-    endMode === "count" ? (event.recurrence_count ?? 1) : MAX_OCCURRENCES;
+  const iStart = now ? fastForwardIndex(rule, now) : 0;
+  const length = seriesLength(rule, timeZone);
+  // A series that ends after a count expands every date the leader asked for
+  // (the input allows more than the budget); the budget bounds the others.
+  const iEnd =
+    length === null
+      ? iStart + MAX_OCCURRENCES
+      : rule.recurrence_end_mode === "count"
+        ? length
+        : Math.min(length, iStart + MAX_OCCURRENCES);
 
-  // Fast-forward: skip intervals that are already in the past.
-  // For count-mode, iEnd is the absolute series cap so we don't overshoot it.
-  // For other modes, iEnd lets us generate maxCount upcoming occurrences.
-  const iStart = now ? fastForwardIndex(event.start_time, freq, interval, now) : 0;
-  const iEnd = endMode === "count" ? maxCount : iStart + maxCount;
-
-  const results: (Event & { calendar?: EventCalendar | null })[] = [];
+  const results: Series[] = [];
 
   for (let i = iStart; i < iEnd; i++) {
-    const occStart =
-      i === 0
-        ? event.start_time
-        : addRecurrenceInterval(event.start_time, freq, interval * i, timeZone);
-    const occStartDate = new Date(occStart);
-
-    if (occStartDate > end) break;
-    if (untilDate && occStartDate > untilDate) break;
+    const occStart = stepAlong(rule, rule.start_time, i, timeZone);
+    if (new Date(occStart) > end) break;
     if (excludedDays?.has(dayKey(occStart, timeZone))) continue;
 
-    const occEnd =
-      event.end_time
-        ? i === 0
-          ? event.end_time
-          : addRecurrenceInterval(event.end_time, freq, interval * i, timeZone)
-        : null;
+    const occEnd = event.end_time ? stepAlong(rule, event.end_time, i, timeZone) : null;
 
     // Spread keeps the original `id` — all occurrences of a series navigate
     // to the same event detail page, distinguished only by ?occurrence= param.
@@ -151,36 +180,18 @@ export function occurrenceEndTime(
 /**
  * How many dates of a series start at or after `now`, by the series rule
  * alone: a date already removed from the series still counts. Null when the
- * series has no end. Steps the rule itself rather than expanding it, because
- * expandOccurrences stops at its budget and a long until-bounded series would
- * come back short.
+ * series has no end.
  */
 export function countUpcomingOccurrences(
   series: Event,
   timeZone: string,
   now: Date = new Date()
 ): number | null {
-  const { recurrence_frequency: freq, recurrence_end_mode: endMode } = series;
-  if (!freq || series.series_id) return null;
-  const total = endMode === "count" ? (series.recurrence_count ?? 1) : null;
-  const untilDate =
-    endMode === "until" && series.recurrence_until ? new Date(series.recurrence_until) : null;
-  if (total === null && !untilDate) return null;
-
-  const interval = series.recurrence_interval ?? 1;
-  let count = 0;
-  for (
-    let i = fastForwardIndex(series.start_time, freq, interval, now);
-    total === null || i < total;
-    i++
-  ) {
-    const occStart = new Date(
-      i === 0 ? series.start_time : addRecurrenceInterval(series.start_time, freq, interval * i, timeZone)
-    );
-    if (untilDate && occStart > untilDate) break;
-    if (occStart >= now) count++;
-  }
-  return count;
+  const rule = seriesRule(series);
+  if (!rule) return null;
+  const length = seriesLength(rule, timeZone);
+  if (length === null) return null;
+  return Math.max(0, length - occurrencesBefore(rule, now, timeZone));
 }
 
 /**
@@ -188,13 +199,13 @@ export function countUpcomingOccurrences(
  * upcoming occurrences suitable for a list view, sorted by start_time.
  */
 export function expandUpcomingEvents(
-  allEvents: (Event & { calendar?: EventCalendar | null })[],
+  allEvents: Series[],
   timeZone: string,
   now: Date = new Date(),
   windowEnd?: Date
-): (Event & { calendar?: EventCalendar | null })[] {
+): Series[] {
   const exceptions = buildExceptionMap(allEvents, timeZone);
-  const results: (Event & { calendar?: EventCalendar | null })[] = [];
+  const results: Series[] = [];
 
   for (const e of allEvents) {
     if (e.series_id) {

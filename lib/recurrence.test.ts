@@ -238,6 +238,47 @@ describe("countUpcomingOccurrences", () => {
     expect(countUpcomingOccurrences(daily, NY, now)).toBe(1094);
   });
 
+  it("counts a series that ends thousands of years out without stepping every date", () => {
+    // Daily at 7:00 PM New York until noon UTC on 31 December 9999: the last
+    // date is 30 December, the first still to come is 30 October 2026.
+    const daily = series({
+      recurrence_frequency: "daily",
+      recurrence_end_mode: "until",
+      recurrence_count: null,
+      recurrence_until: "9999-12-31T12:00:00.000Z",
+    });
+    const day = 24 * 60 * 60 * 1000;
+    const expected = (Date.UTC(9999, 11, 30) - Date.UTC(2026, 9, 30)) / day + 1;
+
+    const started = performance.now();
+    expect(countUpcomingOccurrences(daily, NY, now)).toBe(expected);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  it.each([
+    ["every other week for a count", { recurrence_interval: 2, recurrence_count: 40 }],
+    ["every third day until a date", {
+      recurrence_frequency: "daily" as const,
+      recurrence_interval: 3,
+      recurrence_end_mode: "until" as const,
+      recurrence_count: null,
+      recurrence_until: "2027-06-01T00:00:00.000Z",
+    }],
+    ["monthly for a count", { recurrence_frequency: "monthly" as const, recurrence_count: 24 }],
+    ["weekly until a date already passed", {
+      recurrence_end_mode: "until" as const,
+      recurrence_count: null,
+      recurrence_until: "2026-10-29T00:00:00.000Z",
+    }],
+  ])("agrees with the expanded calendar for a series %s", (_label, overrides) => {
+    const anchor = series(overrides);
+    const farEnd = new Date("2100-01-01T00:00:00.000Z");
+    const shown = expandOccurrences(anchor, NY, undefined, farEnd, now).filter(
+      (o) => new Date(o.start_time) >= now
+    );
+    expect(countUpcomingOccurrences(anchor, NY, now)).toBe(shown.length);
+  });
+
   it("is null for a series with no end, a one-off, and an exception row", () => {
     expect(countUpcomingOccurrences(series({ recurrence_end_mode: "never", recurrence_count: null }), NY, now)).toBeNull();
     expect(countUpcomingOccurrences(series({ recurrence_frequency: null }), NY, now)).toBeNull();
