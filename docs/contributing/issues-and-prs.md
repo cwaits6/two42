@@ -42,6 +42,8 @@ Every ticket gets exactly one **Type**, at least one **Surface**, and any **Risk
 
 **Surface** — whose experience it changes: `member` · `leader` · `admin` (church admin) · `platform` (operator). When surfaces compete, they're prioritized in that order.
 
+A GitHub issue opened from the form records Type and Who as text, not labels. Triage adds the Type label and the matching Surface labels (member → `member`, leader → `leader`, church admin → `admin`, operator → `platform`) before work starts.
+
 **Risk** — `migration` (adds a file under `supabase/migrations/`; only one in-flight branch may, so filter open `migration` tickets before starting one) · `tenancy` (touches an `org_id` boundary, a service-role client, or a `SECURITY DEFINER` function) · `security`.
 
 ---

@@ -6,11 +6,28 @@ body:
       value: |
         Title: plain English, the change to make — `Keep member rows on one line on phones`. No type prefix; the PR adds it.
         Use the words in [CONTEXT.md](../blob/main/CONTEXT.md) — household, church admin, leader, event, lesson.
+        Type and Who don't apply labels on their own; triage adds the matching Type and Surface labels before work starts.
   - type: textarea
     id: problem
     attributes:
       label: Problem
       description: What's wrong or missing, from the person's side. One paragraph.
+    validations:
+      required: true
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      description: What kind of work it is. See the Labels table in docs/contributing/issues-and-prs.md.
+      options:
+        - bug
+        - polish
+        - feature
+        - perf
+        - refactor
+        - chore
+        - docs
+        - ci
     validations:
       required: true
   - type: dropdown
