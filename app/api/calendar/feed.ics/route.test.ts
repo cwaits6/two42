@@ -98,6 +98,7 @@ function event(id: string, groupId: string, title: string): Row {
     location: null,
     start_time: "2030-01-05T15:00:00.000Z",
     end_time: null,
+    is_cancelled: false,
   };
 }
 
@@ -116,7 +117,11 @@ function makeServiceClient(opts: { memberships: Row[] | "error" }) {
   const record = (table: string) => (filter: [string, unknown]) => {
     (predicates[table] ??= []).push(filter);
   };
-  const events = [event("event-a", GROUP_A, "A event"), event("event-b", GROUP_B, "B event")];
+  const events = [
+    event("event-a", GROUP_A, "A event"),
+    event("event-b", GROUP_B, "B event"),
+    { ...event("event-x", GROUP_A, "Cancelled date"), is_cancelled: true },
+  ];
   const signups = [
     signup("signup-a", GROUP_A, "Greeters A"),
     signup("signup-b", GROUP_B, "Greeters B"),
@@ -176,6 +181,7 @@ describe("GET /api/calendar/feed.ics — group boundary", () => {
     expect(body).toContain("SUMMARY:Group A: Serving: Greeters A");
     expect(body).not.toContain("B event");
     expect(body).not.toContain("Greeters B");
+    expect(body).not.toContain("Cancelled date");
     expect(predicates.events).toEqual(
       expect.arrayContaining([["eq", { org_id: ORG }], ["in", { group_id: [GROUP_A] }]])
     );
