@@ -17,7 +17,9 @@ export async function cancelOccurrence(
   const occurrenceStart = new Date(occurrenceISO).toISOString();
   const {
     data: { user },
+    error: userError,
   } = await supabase.auth.getUser();
+  if (userError || !user) return false;
 
   const { data: inserted, error } = await supabase
     .from("events")
@@ -27,7 +29,7 @@ export async function cancelOccurrence(
       end_time: occurrenceEndTime(series, occurrenceStart),
       group_id: series.group_id,
       calendar_id: series.calendar_id,
-      created_by: user?.id,
+      created_by: user.id,
       series_id: series.id,
       series_occurrence_date: occurrenceStart,
       is_cancelled: true,

@@ -227,6 +227,17 @@ describe("countUpcomingOccurrences", () => {
     expect(countUpcomingOccurrences(untilSeries, NY, now)).toBe(3);
   });
 
+  it("counts every remaining date of a long series, past the expansion budget", () => {
+    // Daily for three years from 27 October 2026: 1,097 dates, three of them before `now`.
+    const daily = series({
+      recurrence_frequency: "daily",
+      recurrence_end_mode: "until",
+      recurrence_count: null,
+      recurrence_until: "2029-10-28T12:00:00.000Z",
+    });
+    expect(countUpcomingOccurrences(daily, NY, now)).toBe(1094);
+  });
+
   it("is null for a series with no end, a one-off, and an exception row", () => {
     expect(countUpcomingOccurrences(series({ recurrence_end_mode: "never", recurrence_count: null }), NY, now)).toBeNull();
     expect(countUpcomingOccurrences(series({ recurrence_frequency: null }), NY, now)).toBeNull();

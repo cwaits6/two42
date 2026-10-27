@@ -32,7 +32,10 @@ type Response = { data: { id: string }[] | null; error: { message: string } | nu
 
 // Records every write the helpers issue; `select` ends the chain and answers
 // with the given response, the way the real client resolves a query.
-function stubClient(respond: (call: Call) => Response) {
+function stubClient(
+  respond: (call: Call) => Response,
+  getUser: () => Promise<unknown> = async () => ({ data: { user: { id: LEADER } }, error: null })
+) {
   const calls: Call[] = [];
   const chain = (call: Call) => {
     const self = {
@@ -48,7 +51,7 @@ function stubClient(respond: (call: Call) => Response) {
     return self;
   };
   const client = {
-    auth: { getUser: async () => ({ data: { user: { id: LEADER } } }) },
+    auth: { getUser },
     from(table: string) {
       return {
         insert(values: Record<string, unknown>) {
@@ -108,6 +111,15 @@ describe("cancelOccurrence", () => {
 
     const empty = stubClient(() => ({ data: [], error: null }));
     expect(await cancelOccurrence(empty.client, series, NY_7PM)).toBe(false);
+  });
+
+  it("writes nothing when the signed-in user cannot be resolved", async () => {
+    const signedOut = stubClient(
+      () => oneRow,
+      async () => ({ data: { user: null }, error: { message: "session expired" } })
+    );
+    expect(await cancelOccurrence(signedOut.client, series, NY_7PM)).toBe(false);
+    expect(signedOut.calls).toEqual([]);
   });
 });
 

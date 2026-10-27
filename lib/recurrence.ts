@@ -151,19 +151,36 @@ export function occurrenceEndTime(
 /**
  * How many dates of a series start at or after `now`, by the series rule
  * alone: a date already removed from the series still counts. Null when the
- * series has no end.
+ * series has no end. Steps the rule itself rather than expanding it, because
+ * expandOccurrences stops at its budget and a long until-bounded series would
+ * come back short.
  */
 export function countUpcomingOccurrences(
   series: Event,
   timeZone: string,
   now: Date = new Date()
 ): number | null {
-  if (!series.recurrence_frequency || series.series_id) return null;
-  if (series.recurrence_end_mode !== "count" && series.recurrence_end_mode !== "until") return null;
-  const farFuture = new Date(now.getTime() + 100 * 365 * 24 * 60 * 60 * 1000);
-  return expandOccurrences(series, timeZone, undefined, farFuture, now).filter(
-    (o) => new Date(o.start_time) >= now
-  ).length;
+  const { recurrence_frequency: freq, recurrence_end_mode: endMode } = series;
+  if (!freq || series.series_id) return null;
+  const total = endMode === "count" ? (series.recurrence_count ?? 1) : null;
+  const untilDate =
+    endMode === "until" && series.recurrence_until ? new Date(series.recurrence_until) : null;
+  if (total === null && !untilDate) return null;
+
+  const interval = series.recurrence_interval ?? 1;
+  let count = 0;
+  for (
+    let i = fastForwardIndex(series.start_time, freq, interval, now);
+    total === null || i < total;
+    i++
+  ) {
+    const occStart = new Date(
+      i === 0 ? series.start_time : addRecurrenceInterval(series.start_time, freq, interval * i, timeZone)
+    );
+    if (untilDate && occStart > untilDate) break;
+    if (occStart >= now) count++;
+  }
+  return count;
 }
 
 /**
