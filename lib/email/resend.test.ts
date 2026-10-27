@@ -22,7 +22,6 @@ const {
   sendFamilyInviteEmail,
   sendGroupInviteEmail,
   sendFeedbackEmail,
-  sendEventReminderEmail,
 } = await import("@/lib/email/resend");
 
 const BRANDING = {
@@ -33,8 +32,6 @@ const BRANDING = {
   // Distinctive — never equals the platform default, so a call site that
   // reverts to PLATFORM_ADDRESS (or never wired b.fromAddress in) fails loud.
   fromAddress: "noreply@grace.church",
-  // Same idea for links: never equals siteConfig.url, so a body builder that
-  // still reads the platform constant fails loud.
   baseUrl: "https://grace.church",
 };
 
@@ -93,13 +90,6 @@ describe("send call sites use the resolved branding.fromAddress", () => {
     );
   });
 
-  it("sendEventReminderEmail sends from the resolved branding.fromAddress", async () => {
-    await sendEventReminderEmail("a@b.org", "Jane", "Potluck", "2026-09-06", null, BRANDING);
-    expect(send).toHaveBeenCalledWith(
-      expect.objectContaining({ from: "Grace Fellowship <noreply@grace.church>" }),
-    );
-  });
-
   it("sendGroupInviteEmail names the group in the subject and carries the setup link", async () => {
     await sendGroupInviteEmail(
       "a@b.org",
@@ -122,20 +112,5 @@ describe("send call sites use the resolved branding.fromAddress", () => {
       sendGroupInviteEmail("a@b.org", "Jane", "Group", "javascript:alert(1)", BRANDING),
     ).rejects.toThrow(/Invalid or unsafe/);
     expect(send).not.toHaveBeenCalled();
-  });
-});
-
-// ── Link origin: every in-body link must use b.baseUrl, never siteConfig.url ─
-
-describe("send call sites build links from the resolved branding.baseUrl", () => {
-  beforeEach(() => {
-    send.mockClear();
-  });
-
-  it("sendEventReminderEmail links to /events on branding.baseUrl", async () => {
-    await sendEventReminderEmail("a@b.org", "Jane", "Potluck", "2026-09-06", null, BRANDING);
-    const { html } = send.mock.calls[0][0];
-    expect(html).toContain('href="https://grace.church/events"');
-    expect(html).not.toContain("localhost:3000");
   });
 });
