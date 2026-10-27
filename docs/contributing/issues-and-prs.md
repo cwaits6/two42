@@ -48,14 +48,12 @@ Every ticket gets exactly one **Type**, at least one **Surface**, and any **Risk
 
 ## Issue template
 
-The title becomes the squash-merge commit, so it is written as one:
+**Title** — plain English, written as the change to make:
 
-```
-<type>(<scope>): <imperative summary>
-fix(directory): keep member rows on one line at phone width
-```
-
-`<scope>` is the area of the app (`directory`, `calendar`, `serving`, `giving`, `lessons`, `admin`, `shell`, `ui`, …).
+- Imperative, sentence case, no trailing period, under ~70 characters.
+- Says what changes for the person, not how the code changes: `Keep member rows on one line on phones`, not `Fix flex-wrap in DirectoryRow`.
+- Bugs name the correct behavior, so the fix reads as the title: `Delete only the chosen date of a repeating event`, not `Series delete bug`.
+- No type prefix, scope, ticket id, or `[WIP]` — the Type label carries the type, and the PR adds the prefix.
 
 ```markdown
 ## Problem
@@ -90,7 +88,20 @@ Rules:
 
 ## Pull requests
 
-**Title** = the ticket's title, verbatim. **Body** starts with `Closes T42-NN`.
+**Title** is a conventional commit built from the ticket, because it becomes the squash-merge commit that release-please reads:
+
+```
+<type>(<scope>): <ticket title, first letter lowercased>
+
+T42-114  Keep member rows on one line on phones   (polish)
+PR       fix(directory): keep member rows on one line on phones
+```
+
+- `<type>` comes from the ticket's Type label (table above).
+- `<scope>` is the area of the app: `directory`, `calendar`, `events`, `serving`, `giving`, `lessons`, `announcements`, `profile`, `auth`, `admin`, `platform`, `email`, `shell`, `ui`, `db`. Reuse an existing scope from `git log` before inventing one.
+- Breaking changes add `!` after the scope and a `BREAKING CHANGE:` footer.
+
+**Body** starts with `Closes T42-NN`.
 
 Pick the template by the ticket's Type label:
 

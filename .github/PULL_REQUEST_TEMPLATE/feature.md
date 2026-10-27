@@ -1,6 +1,6 @@
 Closes T42-
 
-<!-- Title = the ticket title: feat(<scope>): <imperative summary> -->
+<!-- Title: feat(<scope>): <ticket title, first letter lowercased> -->
 
 ## What someone can do now
 

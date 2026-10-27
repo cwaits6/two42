@@ -1,6 +1,6 @@
 Closes T42-
 
-<!-- Title = the ticket title: <type>(<scope>): <imperative summary>
+<!-- Title: <type>(<scope>): <ticket title, first letter lowercased>
      Bug, feature, or polish ticket? Use that template instead:
      docs/contributing/issues-and-prs.md#pull-requests -->
 

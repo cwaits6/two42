@@ -1,6 +1,6 @@
 Closes T42-
 
-<!-- Title = the ticket title: fix(<scope>): <imperative summary> -->
+<!-- Title: fix(<scope>): <ticket title, first letter lowercased> -->
 
 ## What changes for the person using it
 

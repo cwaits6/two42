@@ -1,12 +1,10 @@
 name: Issue
 description: A bug, a rough edge, or something new. Mirrors the template in docs/contributing/issues-and-prs.md.
-title: "<type>(<scope>): <imperative summary>"
 body:
   - type: markdown
     attributes:
       value: |
-        Title format: `fix(directory): keep member rows on one line at phone width`.
-        Types: `fix` (bugs and polish), `feat`, `perf`, `refactor`, `chore`, `docs`, `ci`.
+        Title: plain English, the change to make — `Keep member rows on one line on phones`. No type prefix; the PR adds it.
         Use the words in [CONTEXT.md](../blob/main/CONTEXT.md) — household, church admin, leader, event, lesson.
   - type: textarea
     id: problem

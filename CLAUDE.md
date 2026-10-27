@@ -87,7 +87,7 @@ Full rationale, the helper inventory, and the deviations register: [`docs/securi
 - Conventional commits. Only `fix`, `feat`, `perf`, and breaking changes trigger a release. Use `ci:` / `ci(scope):` commits on `ci/` branches for CI/infra changes; `docs:` / `chore:` for other non-release changes.
 - **Merge a PR only when the maintainer explicitly and directly tells you to merge that specific PR** (e.g. "merge #123", "merge it in now"). Never infer or assume merge intent — green CI, "looks good", "ship it", an approved plan, or an implied next step do NOT authorize a merge. Default to opening the PR (draft is fine) and stopping. If it's at all ambiguous whether an instruction is an explicit merge directive, leave the PR open and ask.
 - Do not include Claude/AI session links in PR titles or bodies.
-- Tickets live in Linear (team key `T42`). Ticket titles, labels, project names, and which PR template to use are specified in [`docs/contributing/issues-and-prs.md`](docs/contributing/issues-and-prs.md). The PR title is the ticket title verbatim, and the body follows the template for the ticket's Type label — GitHub does not apply templates to PRs opened through the API, so copy its structure yourself.
+- Tickets live in Linear (team key `T42`). Ticket titles, labels, project names, and which PR template to use are specified in [`docs/contributing/issues-and-prs.md`](docs/contributing/issues-and-prs.md). Ticket titles are plain English; the PR title is the conventional-commit form, `<type>(<scope>): <ticket title>`, with the type taken from the ticket's Type label. The body follows the template for the ticket's Type label — GitHub does not apply templates to PRs opened through the API, so copy its structure yourself.
 
 ## Local dev
 
