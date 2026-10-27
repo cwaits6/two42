@@ -16,19 +16,16 @@ export const HEX = /^#[0-9a-fA-F]{6}$/;
 /**
  * WCAG 4.5:1 is enforced on the WRITE path only. accent is rendered as
  * a button BACKGROUND carrying the hardcoded --primary-foreground: #FFFFFF
- * (app/globals.css:68-69), so white is the reference — and by symmetry the
+ * (app/globals.css), so white is the reference — and by symmetry the
  * same ratio covers accent-as-link-text on white. It is deliberately NOT
  * measured against Warm Paper (#F4EEE2): the platform's own Clay default
- * scores 3.93:1 there, which is why DESIGN.md reserves deep clay (#8A4227)
- * for body text on light grounds. Do not "fix" this by changing the
- * reference.
+ * scores 3.93:1 there, which is why DESIGN.md reserves deep clay (#8A4227,
+ * `text-brand-primary-text`) for body text on light grounds. Do not "fix"
+ * this by changing the reference.
  *
- * Scope: the SOLID fill only. Buttons darken on hover by compositing the
- * accent at 90% alpha (`hover:bg-brand-primary/90`, and the shadcn Button
- * default variant), and that composite is NOT validated here — Clay's is
- * ~3.84:1 over a white card. Validating it would reject Clay itself; the fix
- * is a solid darkened hover token, tracked as an accepted limit in
- * docs/design/DESIGN.md. Do not raise ACCENT_CONTRAST_MIN to cover it.
+ * Scope: the SOLID fill. The hover fill is accentHover() below, which only
+ * ever darkens, so an accent that passes here yields a hover that passes
+ * too; there is nothing further to validate.
  */
 export const ACCENT_CONTRAST_REFERENCE = "#FFFFFF";
 export const ACCENT_CONTRAST_MIN = 4.5;
@@ -58,6 +55,23 @@ export function contrastRatio(a: string, b: string): number {
 export type AccentValidation =
   | { ok: true; accent: string; ratio: number }
   | { ok: false; reason: string };
+
+/**
+ * The solid hover fill for a validated accent: the accent mixed 90% with
+ * black in sRGB, the same composite as `color-mix(in srgb, accent 90%,
+ * black)`. Darkening strictly lowers relative luminance, so against white
+ * text the hover always scores higher than the accent it came from — Clay
+ * #B85C38 (4.54:1) hovers as #A65332 (5.38:1). A 90% alpha composite over a
+ * light card, the previous hover, went the other way (3.84:1).
+ */
+export function accentHover(hex: string): string {
+  const n = parseInt(hex.slice(1), 16);
+  const channel = (shift: number) =>
+    Math.round(((n >> shift) & 0xff) * 0.9)
+      .toString(16)
+      .padStart(2, "0");
+  return `#${channel(16)}${channel(8)}${channel(0)}`.toUpperCase();
+}
 
 /**
  * Write-path guard for branding.accent. Rejects anything HEX rejects (the
