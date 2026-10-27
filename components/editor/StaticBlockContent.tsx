@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import DOMPurify from "dompurify";
-import { renderBlocksToFullHTML } from "./renderBlocks";
 import type { CuratedPartialBlock } from "./schema";
 import "./BlockContent.css";
 import "./StaticBlockContent.css";
@@ -18,7 +17,9 @@ export function StaticBlockContent({ blocks }: StaticBlockContentProps) {
   useEffect(() => {
     let cancelled = false;
     setError(false);
-    renderBlocksToFullHTML(blocks)
+    // Loaded on demand so the editor library stays out of the page bundle.
+    import("./renderBlocks")
+      .then(({ renderBlocksToFullHTML }) => renderBlocksToFullHTML(blocks))
       .then((raw) => {
         if (!cancelled) setHtml(DOMPurify.sanitize(raw));
       })

@@ -1,13 +1,15 @@
+// @vitest-environment jsdom
+// The renderer runs in the browser; jsdom stands in for its DOM.
 import { describe, expect, it } from "vitest";
+import { BlockNoteEditor } from "@blocknote/core";
 import { HEADING_LEVELS, KEPT_STYLES, TEXT_BLOCK_TYPES } from "./curated";
-import { ServerBlockNoteEditor } from "@blocknote/server-util";
 import { normalizeBlocks } from "./normalizeBlocks";
 import { renderBlocksToFullHTML } from "./renderBlocks";
 import { curatedSchema, type CuratedPartialBlock } from "./schema";
 import groupASummary from "./fixtures/group-a-summary.json";
 
-// A server action receives whatever the network sends; the cast stands in for
-// that untyped payload so the renderer's own normalisation is what is tested.
+// Stored documents are untyped JSON; the cast stands in for that payload so
+// the renderer's own normalisation is what is tested.
 const asPayload = (blocks: unknown[]) => blocks as CuratedPartialBlock[];
 
 const text = (t: string, styles: Record<string, unknown> = {}) => ({ type: "text", text: t, styles });
@@ -27,8 +29,8 @@ describe("the curated schema and the normaliser agree", () => {
 });
 
 describe("renderBlocksToFullHTML on the stored Group A summary", () => {
-  it("renders the leading level-1 heading as an h2 and nothing as an h1", async () => {
-    const html = await renderBlocksToFullHTML(asPayload(groupASummary));
+  it("renders the leading level-1 heading as an h2 and nothing as an h1", () => {
+    const html = renderBlocksToFullHTML(asPayload(groupASummary));
     expect(html).toMatch(/<h2[^>]*>Our Class: A Story of Faith, Fellowship, and Growth<\/h2>/);
     expect(html).not.toMatch(/<h1\b/);
     expect(html.match(/data-content-type="numberedListItem"/g)).toHaveLength(3);
@@ -62,19 +64,19 @@ describe("renderBlocksToFullHTML on legacy content", () => {
     { type: "bulletListItem", content: [text("First point")] },
   ];
 
-  it("resolves instead of throwing", async () => {
-    await expect(renderBlocksToFullHTML(asPayload(legacy))).resolves.toEqual(expect.any(String));
+  it("renders instead of throwing", () => {
+    expect(renderBlocksToFullHTML(asPayload(legacy))).toEqual(expect.any(String));
   });
 
-  it("renders headings as h2 and h3 only", async () => {
-    const html = await renderBlocksToFullHTML(asPayload(legacy));
+  it("renders headings as h2 and h3 only", () => {
+    const html = renderBlocksToFullHTML(asPayload(legacy));
     expect(html).toMatch(/<h2[^>]*>Welcome<\/h2>/);
     expect(html).toMatch(/<h3[^>]*>Deep heading<\/h3>/);
     expect(html).not.toMatch(/<h[1456]\b/);
   });
 
-  it("keeps bold, italic and links and drops the other styles", async () => {
-    const html = await renderBlocksToFullHTML(asPayload(legacy));
+  it("keeps bold, italic and links and drops the other styles", () => {
+    const html = renderBlocksToFullHTML(asPayload(legacy));
     expect(html).toMatch(/<strong>bold<\/strong>/);
     expect(html).toMatch(/<a [^>]*href="https:\/\/example.com\/"[^>]*>(<em>)?a link/);
     expect(html).toContain("underlined");
@@ -82,8 +84,8 @@ describe("renderBlocksToFullHTML on legacy content", () => {
     expect(html).not.toMatch(/data-text-color|data-background-color|data-text-alignment/);
   });
 
-  it("renders dropped block types as plain paragraphs holding their text", async () => {
-    const html = await renderBlocksToFullHTML(asPayload(legacy));
+  it("renders dropped block types as plain paragraphs holding their text", () => {
+    const html = renderBlocksToFullHTML(asPayload(legacy));
     for (const kept of ["const answer = 42;", "Bring bread", "Sunday picnic", "Name", "Role"]) {
       expect(html).toContain(kept);
     }
@@ -94,9 +96,9 @@ describe("renderBlocksToFullHTML on legacy content", () => {
 });
 
 describe("pasted HTML parsed by the editor's own parser", () => {
-  it("is curated to a level-2 heading and a paragraph without colour or alignment", async () => {
-    const editor = ServerBlockNoteEditor.create({ schema: curatedSchema });
-    const parsed = await editor.tryParseHTMLToBlocks(
+  it("is curated to a level-2 heading and a paragraph without colour or alignment", () => {
+    const editor = BlockNoteEditor.create({ schema: curatedSchema });
+    const parsed = editor.tryParseHTMLToBlocks(
       '<h1>Big</h1><p style="color:red;text-align:center">x</p>',
     );
     const [heading, paragraph] = normalizeBlocks(parsed);
