@@ -1,5 +1,55 @@
 # Changelog
 
+## [0.31.0](https://github.com/cwaits6/two42/compare/v0.30.0...v0.31.0) (2026-10-27)
+
+
+### Features
+
+* add the group model foundation with the one-group backfill ([#428](https://github.com/cwaits6/two42/issues/428)) ([f194244](https://github.com/cwaits6/two42/commit/f194244ffd02db90748a50756d056b21dc56a8cd))
+* **admin:** hide the email sending domain settings until there is a paid tier ([#491](https://github.com/cwaits6/two42/issues/491)) ([07ffeb0](https://github.com/cwaits6/two42/commit/07ffeb02f6a861e834cb4fd4868863495f95fc30))
+* **admin:** review pending join requests for every group from Admin › Groups ([#484](https://github.com/cwaits6/two42/issues/484)) ([6a98d60](https://github.com/cwaits6/two42/commit/6a98d60d958a5ae02273367c74f0e9eff481159a))
+* **calendar:** add a Week view to the calendar page ([#458](https://github.com/cwaits6/two42/issues/458)) ([ee89d42](https://github.com/cwaits6/two42/commit/ee89d426150f611755b714f091174186097a8783))
+* **db:** drop organizations.slug ([#487](https://github.com/cwaits6/two42/issues/487)) ([bdf3411](https://github.com/cwaits6/two42/commit/bdf34114146bb8112199a4d93ee89efb2e24074f))
+* **editor:** curate the block editor to brand-safe blocks ([#477](https://github.com/cwaits6/two42/issues/477)) ([764d275](https://github.com/cwaits6/two42/commit/764d27577a8f9f44302c8d9c151275ada0315275))
+* **events:** one per-org time zone for every event time ([#493](https://github.com/cwaits6/two42/issues/493)) ([e794cb9](https://github.com/cwaits6/two42/commit/e794cb919f4dbd62ad98cce73b832e0da5fd7360))
+* group directory with a scope filter and an org-wide visibility setting ([#441](https://github.com/cwaits6/two42/issues/441)) ([234a830](https://github.com/cwaits6/two42/commit/234a83044cc33bf833a4a1799ae2b9c8b3dc24a3))
+* group invite links replace the slug join page ([#485](https://github.com/cwaits6/two42/issues/485)) ([c3c7beb](https://github.com/cwaits6/two42/commit/c3c7beb1b0ede9b4dc435aae63a74de885b37715))
+* **groups:** group discovery, private groups and a per-group join policy ([#480](https://github.com/cwaits6/two42/issues/480)) ([c103583](https://github.com/cwaits6/two42/commit/c103583712f4fd015bf5db2914b3f55a2eb1b1be))
+* **groups:** self-serve group creation with a per-org approval setting ([#476](https://github.com/cwaits6/two42/issues/476)) ([8b146fa](https://github.com/cwaits6/two42/commit/8b146fa33172f6b62688ec4c52fee2b7cdad46cf))
+* **landing:** two42 front door replaces the single-church landing page ([#492](https://github.com/cwaits6/two42/issues/492)) ([8ead294](https://github.com/cwaits6/two42/commit/8ead2942906b426d5f69a366d46cf266b3257b5d))
+* make the group switcher the app frame ([#437](https://github.com/cwaits6/two42/issues/437)) ([1f74d27](https://github.com/cwaits6/two42/commit/1f74d277a272a0c44fc2339f6cde0a439dc84899))
+* **prayer:** a request is the request, by name or anonymous ([#495](https://github.com/cwaits6/two42/issues/495)) ([5793ab8](https://github.com/cwaits6/two42/commit/5793ab83d9813d787c48c9452d48a9ddb612d599))
+* remove custom pages feature ([#427](https://github.com/cwaits6/two42/issues/427)) ([c6f1a17](https://github.com/cwaits6/two42/commit/c6f1a17bc2d1c7309d7473584b33ea7d3253e98a))
+* require group_id on every content table, one calendar per group, calendar at two levels ([#440](https://github.com/cwaits6/two42/issues/440)) ([d60128d](https://github.com/cwaits6/two42/commit/d60128dbf3c7356cf6b0124a848d112debebd59d))
+* teams and labels inside a group; roster filters ([#459](https://github.com/cwaits6/two42/issues/459)) ([46a622c](https://github.com/cwaits6/two42/commit/46a622cb8baab6efa85e3dcc7de2748adaf9c4a1))
+
+
+### Bug Fixes
+
+* **about:** render the group summary again by externalising @blocknote/server-util ([#470](https://github.com/cwaits6/two42/issues/470)) ([6c11842](https://github.com/cwaits6/two42/commit/6c11842c64c650b3344f52599b73833ac1419433))
+* **announcements:** render legacy HTML bodies without crashing the server ([#478](https://github.com/cwaits6/two42/issues/478)) ([ed43ae8](https://github.com/cwaits6/two42/commit/ed43ae8d2c70ef0a78970c6746cf25f496743945))
+* **branding:** stop resolving anonymous branding from the request host ([#402](https://github.com/cwaits6/two42/issues/402)) ([d95e2e9](https://github.com/cwaits6/two42/commit/d95e2e9f993a35f01595dc4a91ad6a907df06bdc))
+* **calendar:** render the Month view in the viewer's local time ([#468](https://github.com/cwaits6/two42/issues/468)) ([9c08c03](https://github.com/cwaits6/two42/commit/9c08c03e7fb1731e6a129e699a878643f8c86f1d))
+* consolidate anonymous join flow onto path-based org resolution ([#403](https://github.com/cwaits6/two42/issues/403)) ([10551c8](https://github.com/cwaits6/two42/commit/10551c8d550a2fd00e56a94f7cea9ced3bd8b4aa))
+* **csp:** allow the configured Supabase origin in connect-src ([#461](https://github.com/cwaits6/two42/issues/461)) ([e881165](https://github.com/cwaits6/two42/commit/e881165fbbc3af62e8e5d3c21dfe86b5fbc799dd))
+* **deps:** update undici to 7.30.1 for CVE-2026-109869 ([#469](https://github.com/cwaits6/two42/issues/469)) ([b64fe3a](https://github.com/cwaits6/two42/commit/b64fe3acd8a47b374f6b96ecefeac3d5677a00aa))
+* **editor:** render rich-text content in the browser, not through jsdom ([#490](https://github.com/cwaits6/two42/issues/490)) ([18062cd](https://github.com/cwaits6/two42/commit/18062cd40c02139bfc2cc65134bf468c2d296c39))
+* **groups:** bring the teams manager and switch primitive up to the touch-target floor ([#496](https://github.com/cwaits6/two42/issues/496)) ([be748ea](https://github.com/cwaits6/two42/commit/be748ea60809c7bdf6bbbb7df3945bc9e614ab7f))
+* **groups:** read complete rosters and exact counts past the API row cap ([#471](https://github.com/cwaits6/two42/issues/471)) ([fb1b1e1](https://github.com/cwaits6/two42/commit/fb1b1e1ba95a6325bd36aabc7dd1db056055a6d5))
+* keep OpenTelemetry auto-instrumentations out of the Turbopack bundle ([#450](https://github.com/cwaits6/two42/issues/450)) ([7db7b5e](https://github.com/cwaits6/two42/commit/7db7b5ed74ed8ce0117343ab5ee2316d9213df2b))
+* **tenancy:** org-scope the public content pages route ([#401](https://github.com/cwaits6/two42/issues/401)) ([c39ae4c](https://github.com/cwaits6/two42/commit/c39ae4c3c69192e985122f533e1e2ada4c2a7b6f))
+
+
+### Performance
+
+* **auth:** verify sessions locally with getClaims() during renders ([#489](https://github.com/cwaits6/two42/issues/489)) ([357e7db](https://github.com/cwaits6/two42/commit/357e7dbf66fd423d1720c7474ecee45b62824122))
+* **deploy:** run functions in pdx1, next to the Supabase project ([#488](https://github.com/cwaits6/two42/issues/488)) ([3b0d112](https://github.com/cwaits6/two42/commit/3b0d1121b5630d867ca8e20b42a84d98c65e6c0f))
+
+
+### Dependencies
+
+* bump transitive packages flagged by Trivy ([#434](https://github.com/cwaits6/two42/issues/434)) ([938b02d](https://github.com/cwaits6/two42/commit/938b02d17555bcc2d81f649643c003cafaa2cb7f))
+
 ## [0.30.0](https://github.com/cwaits6/two42/compare/v0.29.0...v0.30.0) (2026-09-12)
 
 
