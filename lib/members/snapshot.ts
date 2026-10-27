@@ -21,6 +21,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
+import { toUserRole } from "@/lib/roles";
 
 export interface SnapshotProfile {
   id: string;
@@ -157,7 +158,10 @@ export async function loadOrgSnapshot(
   if (requests.error) throw new Error("Failed to load access_requests");
 
   return {
-    profiles: profiles.data ?? [],
+    profiles: (profiles.data ?? []).map((p) => ({
+      ...p,
+      role: toUserRole(p.role),
+    })),
     families: families.data ?? [],
     familyMembers: familyMembers.data ?? [],
     groups: groups.data ?? [],

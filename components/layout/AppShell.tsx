@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import type { Profile } from "@/lib/types";
+import { isMemberRole } from "@/lib/roles";
 
 interface AppShellProps {
   profile: Profile | null;
@@ -31,8 +32,7 @@ export function isSidebarRoute(pathname: string): boolean {
 
 export function AppShell({ profile, hasServingAccess, orgName, children }: AppShellProps) {
   const pathname = usePathname();
-  const isMember =
-    profile && ["member", "content_editor", "admin"].includes(profile.role);
+  const isMember = profile && isMemberRole(profile.role);
   const showSidebar = isMember && isSidebarRoute(pathname);
 
   if (!showSidebar) {

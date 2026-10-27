@@ -30,6 +30,7 @@ import { groupPath } from "@/lib/groups/active";
 import { ensureGroupCalendar } from "@/lib/groups/calendar";
 import { validateGroupColor, type GroupSettingsValues } from "@/lib/groups/settings";
 import type { ClassTeacherWithProfile } from "@/lib/types";
+import { STORED_MEMBER_ROLES } from "@/lib/roles";
 
 type MemberOption = {
   id: string;
@@ -200,7 +201,7 @@ export function AboutEditor({
     const { data, error } = await supabase
       .from("profiles")
       .select("id, first_name, last_name, preferred_name, avatar_url")
-      .in("role", ["member", "content_editor", "admin"])
+      .in("role", STORED_MEMBER_ROLES)
       .order("last_name")
       .order("first_name");
     if (error) {

@@ -15,7 +15,6 @@ const base: SidebarInput = {
   discoveryOn: false,
   isLeader: false,
   isOrgAdmin: false,
-  isContentEditor: false,
   hasServingAccess: true,
   collapsed: false,
   phone: false,
@@ -63,13 +62,8 @@ describe("buildSidebar — no group", () => {
     ]);
   });
 
-  it("adds Admin for an org admin and for a content editor", () => {
+  it("adds Admin for an org admin", () => {
     expect(outline(buildSidebar(input({ isOrgAdmin: true })).items)).toEqual([
-      "Home /dashboard",
-      ...ACCOUNT,
-      ...ADMIN,
-    ]);
-    expect(outline(buildSidebar(input({ isContentEditor: true })).items)).toEqual([
       "Home /dashboard",
       ...ACCOUNT,
       ...ADMIN,

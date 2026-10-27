@@ -8,6 +8,7 @@ import {
   normalizeState,
   normalizePostalCode,
 } from "@/lib/sanitize";
+import { isMemberRole } from "@/lib/roles";
 
 async function getHouseholdContext(supabase: Awaited<ReturnType<typeof createClient>>) {
   const {
@@ -23,7 +24,7 @@ async function getHouseholdContext(supabase: Awaited<ReturnType<typeof createCli
 
   if (
     !profile ||
-    !["member", "content_editor", "admin"].includes(profile.role) ||
+    !isMemberRole(profile.role) ||
     !profile.setup_completed ||
     !profile.family_id
   ) {

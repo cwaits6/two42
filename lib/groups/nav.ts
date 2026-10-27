@@ -64,7 +64,6 @@ export type SidebarInput = {
   /** The viewer leads the active group. */
   isLeader: boolean;
   isOrgAdmin: boolean;
-  isContentEditor: boolean;
   hasServingAccess: boolean;
   collapsed: boolean;
   phone: boolean;
@@ -180,7 +179,7 @@ export function buildSidebar(input: SidebarInput): SidebarModel {
     { kind: "link", href: "/settings", label: "Settings", icon: "settings" }
   );
 
-  if (input.isOrgAdmin || input.isContentEditor) {
+  if (input.isOrgAdmin) {
     items.push(
       { kind: "separator" },
       { kind: "link", href: "/admin", label: "Admin", icon: "admin" }

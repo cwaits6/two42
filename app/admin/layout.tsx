@@ -19,13 +19,13 @@ export default async function AdminLayout({
     .eq("id", user.id)
     .single();
 
-  if (!profile || !["admin", "content_editor"].includes(profile.role)) {
+  if (!profile || profile.role !== "admin") {
     redirect("/dashboard");
   }
 
   return (
     <div className="flex min-w-0 flex-1 flex-col md:flex-row">
-      <AdminSidebarNav role={profile.role} />
+      <AdminSidebarNav />
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   );

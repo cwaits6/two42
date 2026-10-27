@@ -6,6 +6,7 @@ import { SignInSecurityCard } from "./SignInSecurityCard";
 import { NotificationsCard } from "./NotificationsCard";
 import { FeedbackCard } from "./FeedbackCard";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { isMemberRole } from "@/lib/roles";
 
 export const metadata = { title: `Settings | ${siteConfig.name}` };
 
@@ -21,7 +22,7 @@ export default async function SettingsPage() {
     .eq("id", user.id)
     .single();
 
-  if (!profile || !["member", "content_editor", "admin"].includes(profile.role)) {
+  if (!profile || !isMemberRole(profile.role)) {
     redirect("/dashboard");
   }
 

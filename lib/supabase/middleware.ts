@@ -1,6 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { isContentEditorAllowed } from "@/lib/admin-access";
 import {
   GROUP_COOKIE,
   LEGACY_GROUP_PREFIXES,
@@ -151,15 +150,10 @@ export async function updateSession(request: NextRequest) {
     profile = data;
   }
 
-  if (isAdmin && user) {
-    const contentEditorAllowed =
-      profile?.role === "content_editor" && isContentEditorAllowed(pathname);
-
-    if (profile?.role !== "admin" && !contentEditorAllowed) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/dashboard";
-      return redirectTo(url);
-    }
+  if (isAdmin && user && profile?.role !== "admin") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/dashboard";
+    return redirectTo(url);
   }
 
   // Legacy unprefixed content routes (old bookmarks, links still in emails)

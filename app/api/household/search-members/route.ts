@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { mintSignedUrls } from "@/lib/storageRead";
 import { NextResponse } from "next/server";
+import { isMemberRole, STORED_MEMBER_ROLES } from "@/lib/roles";
 
 /**
  * GET /api/household/search-members?q=name
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
 
   if (
     !currentProfile ||
-    !["member", "content_editor", "admin"].includes(currentProfile.role) ||
+    !isMemberRole(currentProfile.role) ||
     !currentProfile.setup_completed ||
     !currentProfile.family_id
   ) {
@@ -52,7 +53,7 @@ export async function GET(request: Request) {
     .select("id, first_name, last_name, preferred_name, avatar_url, email, hide_email")
     .is("family_id", null)
     .neq("id", user.id)
-    .in("role", ["member", "content_editor", "admin"])
+    .in("role", STORED_MEMBER_ROLES)
     .eq("setup_completed", true)
     .or(`first_name.ilike.%${safe}%,last_name.ilike.%${safe}%,preferred_name.ilike.%${safe}%`)
     .order("first_name")

@@ -5,25 +5,11 @@ import { usePathname } from "next/navigation";
 import { Fragment, type ComponentType } from "react";
 import { ArrowLeft, LayoutDashboard } from "lucide-react";
 import { adminNavGroups } from "@/lib/admin-nav";
-import type { UserRole } from "@/lib/types";
-
-interface AdminSidebarNavProps {
-  role: UserRole;
-}
 
 const overviewItem = { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true };
 
-export function AdminSidebarNav({ role }: AdminSidebarNavProps) {
+export function AdminSidebarNav() {
   const pathname = usePathname();
-  const isAdmin = role === "admin";
-
-  const groups = adminNavGroups
-    .map((group) => ({
-      ...group,
-      items: isAdmin ? group.items : group.items.filter((item) => item.contentEditorVisible),
-    }))
-    .filter((group) => group.items.length > 0);
-
   const isActive = (href: string, exact = false) =>
     exact ? pathname === href : pathname === href || pathname.startsWith(href + "/");
 
@@ -72,7 +58,7 @@ export function AdminSidebarNav({ role }: AdminSidebarNavProps) {
         {backLink}
         <div className="border-t border-border my-2" role="separator" />
         {renderLink(overviewItem)}
-        {groups.map((group) => (
+        {adminNavGroups.map((group) => (
           <Fragment key={group.key}>
             <p className="px-3 pt-4 pb-1 text-xs font-semibold uppercase text-slate-400 tracking-wider">
               {group.label}
@@ -94,7 +80,7 @@ export function AdminSidebarNav({ role }: AdminSidebarNavProps) {
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
           Back
         </Link>
-        {[overviewItem, ...groups.flatMap((group) => group.items)].map((item) => {
+        {[overviewItem, ...adminNavGroups.flatMap((group) => group.items)].map((item) => {
           const active = isActive(item.href, "exact" in item ? item.exact : undefined);
           return (
             <Link

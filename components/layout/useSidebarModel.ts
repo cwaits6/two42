@@ -25,7 +25,6 @@ export function useSidebarModel(input: {
     discoveryOn,
     isLeader: activeGroup?.role === "leader",
     isOrgAdmin: input.profile.role === "admin",
-    isContentEditor: input.profile.role === "content_editor",
     hasServingAccess: input.hasServingAccess,
     collapsed: input.collapsed,
     phone: input.phone,

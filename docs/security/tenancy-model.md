@@ -219,8 +219,14 @@ group's content only as a member of it and edits it only as a leader of it.
 The admin arm survives on `groups`, `group_members`, `group_labels`,
 `group_member_labels`, `teams` and `team_members` only — the people layer.
 Org admins manage people from Admin; the only UI for teams and labels is
-Group settings, which a leader of the group reaches. The `content_editor` role therefore no longer reaches
-any content editor; it keeps the admin overview only.
+Group settings, which a leader of the group reaches.
+
+**`content_editor` is retired.** The app reads a stored `content_editor` as
+`member` (`toUserRole()` in `lib/roles.ts`), offers it nowhere, and lets only
+`admin` into `/admin`. The database still accepts the value and
+`is_member()`, `is_household_manager()` and the directory arms still list it,
+so a former content editor keeps exactly a member's access until the contract
+migration moves the rows to `member` and drops the value.
 
 Rows that reach a group through a parent do so under the caller's own RLS
 rather than carrying a column: `rsvps` through `exists (select 1 from

@@ -195,7 +195,6 @@ export interface ImportPlan {
 const ROLES: ReadonlySet<string> = new Set<UserRole>([
   "pending",
   "member",
-  "content_editor",
   "admin",
 ]);
 

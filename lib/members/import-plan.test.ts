@@ -122,7 +122,7 @@ const emptySnapshot: OrgSnapshot = {
 
 /**
  * The full-org fixture the round-trip proof runs against: an admin, a
- * content_editor, a pending member, every-hide-flag and no-hide-flag
+ * member, a pending member, every-hide-flag and no-hide-flag
  * members, a null last name, a household with two profiles and a
  * family_members child, a member in two groups (leader of one), an unhoused
  * member, and a name containing a comma, a double quote, and a leading `=`.
@@ -168,7 +168,7 @@ function makeFixtureSnapshot(): OrgSnapshot {
       profile({
         id: "p2",
         email: "bea@example.org",
-        role: "content_editor",
+        role: "member",
         relationship: "spouse",
         first_name: "Bea",
         last_name: "Alpha",
@@ -368,13 +368,13 @@ describe("planImport error codes", () => {
           email: "bea@example.org",
           has_login: true,
           first_name: "Bea",
-          role: "member",
+          role: "pending",
         }),
       ],
       makeFixtureSnapshot()
     );
     expect(plan.rows[0].action).toBe("update_profile");
-    expect(plan.rows[0].changes?.role).toEqual(["content_editor", "member"]);
+    expect(plan.rows[0].changes?.role).toEqual(["member", "pending"]);
   });
 
   it("reports HAS_LOGIN_CHANGE when a family member row claims a login", () => {

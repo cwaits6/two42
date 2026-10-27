@@ -5,6 +5,7 @@ import { siteConfig } from "@/lib/config";
 import type { Profile } from "@/lib/types";
 import { SetupWizard } from "./SetupWizard";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { isMemberRole } from "@/lib/roles";
 
 export const metadata = { title: `Profile Setup | ${siteConfig.name}` };
 
@@ -24,7 +25,7 @@ export default async function ProfileSetupPage() {
   if (!profile) redirect("/dashboard");
 
   // Only approved members should be doing setup
-  if (!["member", "content_editor", "admin"].includes(profile.role)) {
+  if (!isMemberRole(profile.role)) {
     redirect("/dashboard");
   }
 
