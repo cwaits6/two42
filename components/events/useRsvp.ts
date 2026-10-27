@@ -14,8 +14,8 @@ interface UseRsvpArgs {
 
 /**
  * Holds one member's reply to one event. Choosing the current reply again
- * clears it. The reply shown is only ever one the database confirmed, so a
- * failed write puts the previous reply back and sets `error`.
+ * clears it. The picked reply shows at once; a failed write puts the
+ * previous reply back and sets `error`.
  */
 export function useRsvp({ eventId, userId, initialStatus }: UseRsvpArgs) {
   const [status, setStatus] = useState<RsvpStatus | null>(initialStatus);

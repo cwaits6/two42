@@ -20,8 +20,9 @@ export const writeSaved = (): WriteResult => ({ data: [{ user_id: "user-1" }], e
 export const writeTouchedNoRow = (): WriteResult => ({ data: [], error: null });
 
 /**
- * The stub resolves the same result whether the chain ends in `.select()`
- * or is awaited directly, so it is honest about both write shapes.
+ * Like supabase-js, the stub returns rows only when the chain ends in
+ * `.select()`; a chain awaited directly resolves `data: null`, so a control
+ * that drops `.select()` fails the success tests here as it would in use.
  */
 export function stubRsvpClient(result: () => WriteResult) {
   const writes: RsvpWrite[] = [];
@@ -39,7 +40,7 @@ export function stubRsvpClient(result: () => WriteResult) {
     },
     select: async () => result(),
     then<T>(onFulfilled: (value: WriteResult) => T) {
-      return Promise.resolve(result()).then(onFulfilled);
+      return Promise.resolve({ data: null, error: result().error }).then(onFulfilled);
     },
   };
   return { client: { from: () => chain }, writes };
