@@ -138,6 +138,34 @@ export function expandOccurrences(
   return results;
 }
 
+/** The end instant of the occurrence starting at `occurrenceStart`, keeping the series' duration. */
+export function occurrenceEndTime(
+  series: Pick<Event, "start_time" | "end_time">,
+  occurrenceStart: string
+): string | null {
+  if (!series.end_time) return null;
+  const duration = new Date(series.end_time).getTime() - new Date(series.start_time).getTime();
+  return new Date(new Date(occurrenceStart).getTime() + duration).toISOString();
+}
+
+/**
+ * How many dates of a series start at or after `now`, by the series rule
+ * alone: a date already removed from the series still counts. Null when the
+ * series has no end.
+ */
+export function countUpcomingOccurrences(
+  series: Event,
+  timeZone: string,
+  now: Date = new Date()
+): number | null {
+  if (!series.recurrence_frequency || series.series_id) return null;
+  if (series.recurrence_end_mode !== "count" && series.recurrence_end_mode !== "until") return null;
+  const farFuture = new Date(now.getTime() + 100 * 365 * 24 * 60 * 60 * 1000);
+  return expandOccurrences(series, timeZone, undefined, farFuture, now).filter(
+    (o) => new Date(o.start_time) >= now
+  ).length;
+}
+
 /**
  * Given a list of all events (anchor rows + exception rows), return expanded
  * upcoming occurrences suitable for a list view, sorted by start_time.
@@ -153,8 +181,9 @@ export function expandUpcomingEvents(
 
   for (const e of allEvents) {
     if (e.series_id) {
-      // It's an exception — include directly if upcoming
-      if (new Date(e.start_time) >= now) results.push(e);
+      // An exception row stands in for its series date; a cancelled one
+      // only removes it.
+      if (!e.is_cancelled && new Date(e.start_time) >= now) results.push(e);
     } else if (e.recurrence_frequency) {
       // Expand series; keep only upcoming occurrences
       const occurrences = expandOccurrences(e, timeZone, exceptions.get(e.id), windowEnd, now);

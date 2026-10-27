@@ -118,6 +118,7 @@ export async function GET(request: Request) {
         .select("*")
         .eq("org_id", sub.org_id)
         .in("group_id", groupIds)
+        .eq("is_cancelled", false)
         .gte("start_time", thirtyDaysAgo)
         .order("start_time", { ascending: true })
         .limit(500),

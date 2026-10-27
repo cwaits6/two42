@@ -151,6 +151,7 @@ async function runForOrg(
         .select("id, title, start_time, location")
         .eq("org_id", org.id)
         .eq("group_id", group.id)
+        .eq("is_cancelled", false)
         .gte("start_time", now.toISOString())
         .lte("start_time", tomorrow.toISOString());
       if (eventsError) throw new Error(`events query failed: ${eventsError.message}`);

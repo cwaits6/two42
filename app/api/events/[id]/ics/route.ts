@@ -82,11 +82,13 @@ export async function GET(
 
   // A cross-org event id falls out as "not found" — the 404 below is the
   // correct answer (a distinguishing status would be an org-existence oracle).
+  // A cancelled date is not found either: there is nothing to put on a calendar.
   const { data: event, error } = await supabase
     .from("events")
     .select("*")
     .eq("id", id)
     .eq("org_id", sub.org_id)
+    .eq("is_cancelled", false)
     .single();
 
   if (error || !event) {

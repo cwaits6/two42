@@ -177,6 +177,7 @@ export interface Event {
   // Per-occurrence exception support
   series_id: string | null;           // set on exception events; points to the anchor series
   series_occurrence_date: string | null; // the original occurrence ISO date this row replaces
+  is_cancelled: boolean;                 // an exception row that removes its date instead of replacing it
   // Meeting / video call (set on the series anchor; exceptions inherit)
   meeting_url: string | null;
   meeting_id: string | null;
