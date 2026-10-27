@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -24,8 +23,11 @@ import { LocationInput } from "@/components/events/LocationInput";
 import { MeetingFieldsSection } from "@/components/events/MeetingFieldsSection";
 import { groupPath } from "@/lib/groups/active";
 import { addHour, isValidEndTime } from "@/lib/datetime-local";
+import { countUpcomingOccurrences, occurrenceEndTime } from "@/lib/recurrence";
 import { formatEventDate, isoToLocalInput, localToUTCISO } from "@/lib/time/zone";
 import type { Event } from "@/lib/types";
+import { DeleteEventDialog } from "./DeleteEventDialog";
+import { cancelOccurrence, deleteEvent } from "./deleteEvent";
 
 type EditScope = "all" | "this";
 
@@ -71,6 +73,11 @@ export function EditEventForm({
   const rawOccurrence = searchParams.get("occurrence");
   const occurrenceISO = rawOccurrence ? decodeURIComponent(rawOccurrence) : null;
 
+  const upcomingCount = useMemo(
+    () => (event ? countUpcomingOccurrences(event, timeZone) : null),
+    [event, timeZone]
+  );
+
   useEffect(() => {
     async function load() {
       const { data: eventData, error: eventError } = await supabase
@@ -95,16 +102,8 @@ export function EditEventForm({
       let nextEndTime: string;
       if (occurrenceISO) {
         nextStartTime = isoToLocalInput(occurrenceISO, timeZone);
-        if (eventData.end_time) {
-          const duration =
-            new Date(eventData.end_time).getTime() - new Date(eventData.start_time).getTime();
-          nextEndTime = isoToLocalInput(
-            new Date(new Date(occurrenceISO).getTime() + duration).toISOString(),
-            timeZone
-          );
-        } else {
-          nextEndTime = "";
-        }
+        const occurrenceEnd = occurrenceEndTime(eventData, occurrenceISO);
+        nextEndTime = occurrenceEnd ? isoToLocalInput(occurrenceEnd, timeZone) : "";
       } else {
         nextStartTime = isoToLocalInput(eventData.start_time, timeZone);
         nextEndTime = eventData.end_time ? isoToLocalInput(eventData.end_time, timeZone) : "";
@@ -156,19 +155,12 @@ export function EditEventForm({
         data: { user },
       } = await supabase.auth.getUser();
 
-      let occurrenceEnd: string | null = null;
-      if (event.end_time) {
-        const duration =
-          new Date(event.end_time).getTime() - new Date(event.start_time).getTime();
-        occurrenceEnd = new Date(new Date(occurrenceISO).getTime() + duration).toISOString();
-      }
-
       const { error } = await supabase.from("events").insert({
         title,
         description,
         location: nextLocation || null,
         start_time: new Date(occurrenceISO).toISOString(),
-        end_time: occurrenceEnd,
+        end_time: occurrenceEndTime(event, occurrenceISO),
         group_id: groupId,
         calendar_id: event.calendar_id,
         is_rsvp_enabled: isRsvpEnabled,
@@ -247,19 +239,21 @@ export function EditEventForm({
     }
   };
 
-  const handleDelete = async () => {
-    const { data: deleted, error } = await supabase
-      .from("events")
-      .delete()
-      .eq("id", eventId)
-      .eq("group_id", groupId)
-      .select("id");
+  const handleDeleteDate = async () => {
+    if (!event || !occurrenceISO) return;
+    if (!(await cancelOccurrence(supabase, event, occurrenceISO))) {
+      toast.error("Failed to delete this date.");
+      return;
+    }
+    toast.success("This date has been deleted.");
+    router.push(calendarHref);
+  };
 
-    if (error || !deleted?.length) {
+  const handleDeleteAll = async () => {
+    if (!(await deleteEvent(supabase, eventId, groupId))) {
       toast.error("Failed to delete event.");
       return;
     }
-
     toast.success("Event deleted.");
     router.push(calendarHref);
   };
@@ -436,14 +430,13 @@ export function EditEventForm({
           </form>
         </CardContent>
       </Card>
-      <ConfirmDialog
+      <DeleteEventDialog
         open={confirmingDelete}
         onOpenChange={setConfirmingDelete}
-        title="Delete this event?"
-        description="This can't be undone."
-        confirmLabel="Delete event"
-        pendingLabel="Deleting…"
-        onConfirm={handleDelete}
+        series={isRecurringSeries ? { upcomingCount } : null}
+        occurrenceLabel={showScopeChoice ? occurrenceLabel : null}
+        onDeleteDate={handleDeleteDate}
+        onDeleteAll={handleDeleteAll}
       />
     </div>
   );

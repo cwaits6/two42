@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { addRecurrenceInterval, expandOccurrences, expandUpcomingEvents } from "./recurrence";
+import {
+  addRecurrenceInterval,
+  countUpcomingOccurrences,
+  expandOccurrences,
+  expandUpcomingEvents,
+  occurrenceEndTime,
+} from "./recurrence";
 import { formatEventTime } from "@/lib/time/zone";
 import type { Event } from "@/lib/types";
 
@@ -179,6 +185,104 @@ describe("exception rows are matched by calendar day", () => {
     const now = new Date("2026-10-01T00:00:00.000Z");
     const rows = [anchor, exception("2026-11-05T00:00:00.000Z")];
     expect(starts(rows, now)).toHaveLength(3);
+  });
+
+  it("drops a cancelled date without showing the cancelled row itself", () => {
+    const anchor = series({ recurrence_count: 3 });
+    const now = new Date("2026-10-01T00:00:00.000Z");
+    const cancelled = { ...exception("2026-11-04T00:00:00.000Z"), is_cancelled: true };
+    const upcoming = expandUpcomingEvents([anchor, cancelled], NY, now);
+    expect(upcoming.map((o) => o.start_time)).toEqual([
+      SEVEN_PM_BEFORE_CHANGE,
+      "2026-11-11T00:00:00.000Z",
+    ]);
+    expect(upcoming.some((o) => o.id === "x")).toBe(false);
+  });
+});
+
+describe("occurrenceEndTime", () => {
+  it("keeps the series' duration from the occurrence start", () => {
+    expect(occurrenceEndTime(series(), "2026-11-04T00:00:00.000Z")).toBe("2026-11-04T01:30:00.000Z");
+  });
+
+  it("is null for a series with no end time", () => {
+    expect(occurrenceEndTime(series({ end_time: null }), "2026-11-04T00:00:00.000Z")).toBeNull();
+  });
+});
+
+describe("countUpcomingOccurrences", () => {
+  const now = new Date("2026-10-30T12:00:00.000Z");
+
+  it("counts the dates still to come of a series that ends after a count", () => {
+    expect(countUpcomingOccurrences(series(), NY, now)).toBe(2);
+    expect(countUpcomingOccurrences(series({ recurrence_count: 1 }), NY, now)).toBe(0);
+  });
+
+  it("counts the dates still to come of a series that ends on a date", () => {
+    const untilSeries = series({
+      recurrence_end_mode: "until",
+      recurrence_count: null,
+      recurrence_until: "2026-11-20T00:00:00.000Z",
+    });
+    expect(countUpcomingOccurrences(untilSeries, NY, now)).toBe(3);
+  });
+
+  it("counts every remaining date of a long series, past the expansion budget", () => {
+    // Daily for three years from 27 October 2026: 1,097 dates, three of them before `now`.
+    const daily = series({
+      recurrence_frequency: "daily",
+      recurrence_end_mode: "until",
+      recurrence_count: null,
+      recurrence_until: "2029-10-28T12:00:00.000Z",
+    });
+    expect(countUpcomingOccurrences(daily, NY, now)).toBe(1094);
+  });
+
+  it("counts a series that ends thousands of years out without stepping every date", () => {
+    // Daily at 7:00 PM New York until noon UTC on 31 December 9999: the last
+    // date is 30 December, the first still to come is 30 October 2026.
+    const daily = series({
+      recurrence_frequency: "daily",
+      recurrence_end_mode: "until",
+      recurrence_count: null,
+      recurrence_until: "9999-12-31T12:00:00.000Z",
+    });
+    const day = 24 * 60 * 60 * 1000;
+    const expected = (Date.UTC(9999, 11, 30) - Date.UTC(2026, 9, 30)) / day + 1;
+
+    const started = performance.now();
+    expect(countUpcomingOccurrences(daily, NY, now)).toBe(expected);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  it.each([
+    ["every other week for a count", { recurrence_interval: 2, recurrence_count: 40 }],
+    ["every third day until a date", {
+      recurrence_frequency: "daily" as const,
+      recurrence_interval: 3,
+      recurrence_end_mode: "until" as const,
+      recurrence_count: null,
+      recurrence_until: "2027-06-01T00:00:00.000Z",
+    }],
+    ["monthly for a count", { recurrence_frequency: "monthly" as const, recurrence_count: 24 }],
+    ["weekly until a date already passed", {
+      recurrence_end_mode: "until" as const,
+      recurrence_count: null,
+      recurrence_until: "2026-10-29T00:00:00.000Z",
+    }],
+  ])("agrees with the expanded calendar for a series %s", (_label, overrides) => {
+    const anchor = series(overrides);
+    const farEnd = new Date("2100-01-01T00:00:00.000Z");
+    const shown = expandOccurrences(anchor, NY, undefined, farEnd, now).filter(
+      (o) => new Date(o.start_time) >= now
+    );
+    expect(countUpcomingOccurrences(anchor, NY, now)).toBe(shown.length);
+  });
+
+  it("is null for a series with no end, a one-off, and an exception row", () => {
+    expect(countUpcomingOccurrences(series({ recurrence_end_mode: "never", recurrence_count: null }), NY, now)).toBeNull();
+    expect(countUpcomingOccurrences(series({ recurrence_frequency: null }), NY, now)).toBeNull();
+    expect(countUpcomingOccurrences(series({ series_id: "other" }), NY, now)).toBeNull();
   });
 });
 

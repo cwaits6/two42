@@ -30,6 +30,7 @@ export async function generateMetadata({
     .select("title")
     .eq("id", id)
     .eq("group_id", groupId)
+    .eq("is_cancelled", false)
     .maybeSingle();
 
   if (!event) {
@@ -80,12 +81,14 @@ export default async function EventDetailPage({
   const supabase = await createClient();
   const timeZone = await getOrgTimeZone();
 
-  // A cross-group id is not found, never a different status.
+  // A cross-group id is not found, never a different status; so is a
+  // cancelled date of a repeating event.
   const { data: eventRaw } = await supabase
     .from("events")
     .select("*")
     .eq("id", id)
     .eq("group_id", group.id)
+    .eq("is_cancelled", false)
     .maybeSingle();
 
   if (!eventRaw) notFound();

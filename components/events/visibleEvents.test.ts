@@ -47,4 +47,27 @@ describe("expandVisibleEvents", () => {
     expect(without.some((e) => e.start_time.startsWith("2026-09-08"))).toBe(true);
     expect(withException.some((e) => e.start_time.startsWith("2026-09-08"))).toBe(false);
   });
+
+  it("removes a cancelled date from the calendar and draws nothing in its place", () => {
+    const series = event({
+      id: "s",
+      start_time: "2026-09-01T18:00:00.000Z",
+      recurrence_frequency: "weekly",
+      recurrence_end_mode: "count",
+      recurrence_count: 3,
+    });
+    const cancelled = event({
+      id: "x",
+      series_id: "s",
+      series_occurrence_date: "2026-09-08T18:00:00.000Z",
+      start_time: "2026-09-08T18:00:00.000Z",
+      is_cancelled: true,
+    });
+    const drawn = expandVisibleEvents([series, cancelled], new Set(["g1"]), NY);
+    expect(drawn.map((e) => e.start_time)).toEqual([
+      "2026-09-01T18:00:00.000Z",
+      "2026-09-15T18:00:00.000Z",
+    ]);
+    expect(drawn.some((e) => e.id === "x")).toBe(false);
+  });
 });
