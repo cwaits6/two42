@@ -31,6 +31,7 @@ import type { MemberGroup, ServingTeamSettings } from "@/lib/types";
 import { siteConfig } from "@/lib/config";
 import { ServingSettingsDialog } from "@/components/serving/ServingSettingsDialog";
 import { TeamRosterDialog } from "./TeamRosterDialog";
+import { RemoveTeamDialog } from "./RemoveTeamDialog";
 import { IconPicker } from "./IconPicker";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -63,6 +64,10 @@ function fromTeam(t: MemberGroup): TeamFormState {
 
 type TeamSettings = Pick<ServingTeamSettings, "team_id" | "enabled" | "reminder_days" | "window_weeks">;
 
+function memberCountText(n: number): string {
+  return `${n} member${n === 1 ? "" : "s"}`;
+}
+
 interface TeamsManagerProps {
   groupId: string;
   groupName: string;
@@ -74,6 +79,7 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<MemberGroup | null>(null);
   const [rosterTeam, setRosterTeam] = useState<MemberGroup | null>(null);
+  const [removing, setRemoving] = useState<MemberGroup | null>(null);
   const [form, setForm] = useState<TeamFormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [memberCounts, setMemberCounts] = useState<Record<string, number>>({});
@@ -213,27 +219,34 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
     loadTeams();
   }
 
-  async function handleDelete(team: MemberGroup) {
-    const count = memberCounts[team.id] || 0;
-    const warning =
-      count > 0
-        ? `"${team.name}" has ${count} member(s). They will be removed from this team. `
-        : "";
-    if (!confirm(`${warning}Delete "${team.name}"?`)) return;
+  // The remove confirmation takes the edit dialog's place; cancelling returns
+  // to the edit dialog with the form untouched.
+  function openRemove(team: MemberGroup) {
+    setDialogOpen(false);
+    setRemoving(team);
+  }
 
+  function cancelRemove() {
+    setRemoving(null);
+    setDialogOpen(true);
+  }
+
+  async function handleRemove() {
+    if (!removing) return;
     const { data, error } = await supabase
       .from("teams")
       .delete()
-      .eq("id", team.id)
+      .eq("id", removing.id)
       .eq("group_id", groupId)
       .select("id");
 
     if (error || !data?.length) {
-      toast.error("Failed to delete team.");
+      toast.error("Failed to remove team.");
       return;
     }
-    toast.success("Team deleted.");
-    setDialogOpen(false);
+    toast.success("Team removed.");
+    setRemoving(null);
+    setEditing(null);
     loadTeams();
   }
 
@@ -307,80 +320,78 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
               onClick={() => setRosterTeam(team)}
               className="cursor-pointer transition-shadow hover:shadow-md"
             >
-              <CardContent className="pt-5 pb-5">
+              <CardContent className="space-y-4 pt-5 pb-5">
                 <div className="flex items-center gap-4">
                   <div
-                    className="w-4 h-4 rounded-full shrink-0"
+                    className="h-4 w-4 shrink-0 rounded-full"
                     style={{ backgroundColor: team.color || "var(--color-brand-neutral)" }}
+                    aria-hidden="true"
                   />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
                       <p className="font-semibold">{team.name}</p>
                       {team.is_serving_role && (
-                        <Badge variant="secondary" className="text-xs gap-1">
-                          <HandHeart className="h-3 w-3" />
+                        <Badge variant="secondary" className="h-8 gap-1 text-base">
+                          <HandHeart aria-hidden="true" />
                           Serving role
                         </Badge>
                       )}
                     </div>
                     {team.description && (
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-base text-muted-foreground">
                         {team.description}
                       </p>
                     )}
-                    <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
-                      <Users className="h-3 w-3" />
-                      <span>
-                        {memberCounts[team.id] || 0} member
-                        {(memberCounts[team.id] || 0) !== 1 ? "s" : ""}
-                      </span>
-                    </div>
+                    <p className="mt-1 flex items-center gap-1 text-base text-muted-foreground">
+                      <Users className="h-4 w-4" aria-hidden="true" />
+                      {memberCountText(memberCounts[team.id] || 0)}
+                    </p>
                   </div>
-                  <div
-                    className="flex items-center gap-1 shrink-0 flex-wrap justify-end"
-                    onClick={(e) => e.stopPropagation()}
+                </div>
+                <div
+                  className="flex flex-wrap items-center gap-2 pl-8"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Button
+                    variant="outline"
+                    disabled={idx === 0}
+                    onClick={() => moveTeam(team, "up")}
+                    aria-label={`Move ${team.name} up`}
                   >
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      disabled={idx === 0}
-                      onClick={() => moveTeam(team, "up")}
-                      aria-label="Move up"
-                    >
-                      <ArrowUp className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      disabled={idx === teams.length - 1}
-                      onClick={() => moveTeam(team, "down")}
-                      aria-label="Move down"
-                    >
-                      <ArrowDown className="h-4 w-4" />
-                    </Button>
-                    {team.is_serving_role && (
-                      <ServingSettingsDialog
-                        teamId={team.id}
-                        settings={settingsByTeam[team.id] ?? null}
-                      />
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setRosterTeam(team)}
-                    >
-                      <Users className="mr-1 h-4 w-4" />
-                      Members
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openEdit(team)}
-                    >
-                      <Pencil className="mr-1 h-4 w-4" />
-                      Edit
-                    </Button>
-                  </div>
+                    <ArrowUp aria-hidden="true" />
+                    Move up
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={idx === teams.length - 1}
+                    onClick={() => moveTeam(team, "down")}
+                    aria-label={`Move ${team.name} down`}
+                  >
+                    <ArrowDown aria-hidden="true" />
+                    Move down
+                  </Button>
+                  {team.is_serving_role && (
+                    <ServingSettingsDialog
+                      teamId={team.id}
+                      settings={settingsByTeam[team.id] ?? null}
+                    />
+                  )}
+                  <Button
+                    variant="outline"
+                    onClick={() => setRosterTeam(team)}
+                    aria-label={`Members of ${team.name}`}
+                  >
+                    <Users aria-hidden="true" />
+                    Members
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => openEdit(team)}
+                    aria-label={`Edit ${team.name}`}
+                  >
+                    <Pencil aria-hidden="true" />
+                    Edit
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -398,8 +409,15 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
         }
       />
 
+      <RemoveTeamDialog
+        team={removing}
+        memberCount={removing ? memberCounts[removing.id] || 0 : 0}
+        onCancel={cancelRemove}
+        onConfirm={handleRemove}
+      />
+
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>
               {editing ? "Edit team" : "New team"}
@@ -440,7 +458,7 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
                   onChange={(e) =>
                     setForm({ ...form, color: e.target.value })
                   }
-                  className="h-9 w-9 cursor-pointer rounded border border-input"
+                  className="h-12 w-12 cursor-pointer rounded border border-input"
                 />
                 <Input
                   value={form.color}
@@ -448,7 +466,8 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
                     setForm({ ...form, color: e.target.value })
                   }
                   placeholder={siteConfig.colors.primary}
-                  className="font-mono text-sm w-32"
+                  aria-label="Color hex value"
+                  className="w-32 font-mono"
                 />
               </div>
             </div>
@@ -461,12 +480,12 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
               />
             </div>
 
-            <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
               <div className="space-y-0.5">
                 <Label htmlFor="t_serving">Serving role</Label>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-base text-muted-foreground">
                   Lists this team on the Serving page with a roster everyone
-                  can see. Turn on Sunday signups separately from that page.
+                  can see. Turn on serving signups separately from that page.
                 </p>
               </div>
               <Switch
@@ -481,13 +500,9 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
 
           <DialogFooter className="flex sm:justify-between">
             {editing && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => handleDelete(editing)}
-              >
-                <Trash2 className="mr-1 h-4 w-4" />
-                Delete
+              <Button variant="destructive" onClick={() => openRemove(editing)}>
+                <Trash2 aria-hidden="true" />
+                Remove team
               </Button>
             )}
             <div className="flex gap-2 sm:ml-auto">

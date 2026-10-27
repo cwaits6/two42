@@ -119,7 +119,7 @@ export default async function LecturesPage({
 
           {/* Subtext */}
           <p className="font-sans text-base md:text-lg text-muted-foreground max-w-xl leading-relaxed mb-10">
-            Every Sunday&apos;s teaching, searchable and available to watch
+            Every week&apos;s teaching, searchable and available to watch
             anytime.
           </p>
 

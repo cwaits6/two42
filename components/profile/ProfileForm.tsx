@@ -886,7 +886,7 @@ export function ProfileForm({
             </div>
           </div>
           <p className="text-sm text-muted-foreground">
-            Sharing what you do helps others in the class find help from
+            Sharing what you do helps others in your group find help from
             someone they know.
           </p>
           {(state.occupation || state.employer) && (

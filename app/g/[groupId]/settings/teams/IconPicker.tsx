@@ -138,11 +138,11 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
           </div>
 
           {results.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-3 text-center">
+            <p className="text-base text-muted-foreground py-3 text-center">
               No icons match &ldquo;{query.trim()}&rdquo;.
             </p>
           ) : (
-            <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
+            <div className="grid max-h-64 grid-cols-5 gap-1 overflow-y-auto sm:grid-cols-8">
               {results.map((n) => (
                 <button
                   key={n}
@@ -152,17 +152,17 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
                   aria-pressed={n === value}
                   onClick={() => pick(n)}
                   className={cn(
-                    "flex h-9 items-center justify-center rounded-md hover:bg-accent transition-colors",
+                    "flex h-12 items-center justify-center rounded-md hover:bg-accent transition-colors",
                     n === value && "bg-accent ring-1 ring-brand-primary",
                   )}
                 >
-                  <DynamicIcon name={n} className="h-4 w-4" />
+                  <DynamicIcon name={n} className="h-5 w-5" />
                 </button>
               ))}
             </div>
           )}
 
-          <p className="text-xs text-muted-foreground">
+          <p className="text-base text-muted-foreground">
             {query.trim()
               ? total > MAX_RESULTS
                 ? `Showing ${MAX_RESULTS} of ${total} matches — keep typing to narrow down.`

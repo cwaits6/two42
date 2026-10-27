@@ -404,7 +404,7 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
                 Attends small group
               </Label>
               <p className="text-sm text-muted-foreground">
-                Mark this if they attend the small group class themselves.
+                Mark this if they attend the group themselves.
               </p>
             </div>
             <Switch

@@ -88,7 +88,7 @@ export function EmailTeamButton({
           ) : (
             <p className="text-sm text-muted-foreground">
               Everyone on the team ({memberCount} member{memberCount !== 1 ? "s" : ""})
-              will get an email listing the open Sundays below, each with a
+              will get an email listing the open dates below, each with a
               one-tap signup button.
             </p>
           )}
@@ -108,7 +108,7 @@ export function EmailTeamButton({
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               maxLength={1000}
-              placeholder="e.g. We especially need help the last two Sundays of the month."
+              placeholder="e.g. We especially need help the last two weeks of the month."
             />
           </div>
 

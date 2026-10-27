@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { groupPath } from "@/lib/groups/active";
 import { PostingTo } from "@/components/groups/PostingTo";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -31,6 +32,7 @@ export function EditSeriesForm({
 }) {
   const [series, setSeries] = useState<LectureSeries | null>(null);
   const [loading, setLoading] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [isArchived, setIsArchived] = useState(false);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "not-found">(
     "loading",
@@ -86,8 +88,6 @@ export function EditSeriesForm({
   };
 
   const handleDelete = async () => {
-    if (!confirm("Delete this series? Lectures in it will be unlinked but not deleted.")) return;
-
     const { data, error } = await supabase
       .from("lecture_series")
       .delete()
@@ -184,7 +184,7 @@ export function EditSeriesForm({
                 size="lg"
                 variant="destructive"
                 className="text-lg py-6"
-                onClick={handleDelete}
+                onClick={() => setConfirmingDelete(true)}
               >
                 Delete
               </Button>
@@ -192,6 +192,15 @@ export function EditSeriesForm({
           </form>
         </CardContent>
       </Card>
+      <ConfirmDialog
+        open={confirmingDelete}
+        onOpenChange={setConfirmingDelete}
+        title="Delete this series?"
+        description="Lectures in it stay, but are no longer grouped together."
+        confirmLabel="Delete series"
+        pendingLabel="Deleting…"
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
@@ -49,6 +50,7 @@ export function ServingSchedule({
 }: ServingScheduleProps) {
   const [pickerDate, setPickerDate] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [cancelling, setCancelling] = useState<ScheduleEntry | null>(null);
   const router = useRouter();
 
   async function signUp(date: string, attendeeProfileIds: string[]) {
@@ -77,13 +79,13 @@ export function ServingSchedule({
     router.refresh();
   }
 
-  async function cancel(entry: ScheduleEntry) {
-    const mine = entry.attendeeIds.includes(userId) || entry.createdBy === userId;
-    const message = mine
-      ? `Cancel your signup for ${formatServiceDate(entry.date)}? The Sunday will open back up for someone else.`
-      : `Remove ${entry.label} from ${formatServiceDate(entry.date)}?`;
-    if (!confirm(message)) return;
+  function isMine(entry: ScheduleEntry) {
+    return entry.attendeeIds.includes(userId) || entry.createdBy === userId;
+  }
 
+  async function cancel() {
+    if (!cancelling) return;
+    const entry = cancelling;
     setBusy(true);
     try {
       const res = await fetch("/api/serving/signups", {
@@ -93,6 +95,7 @@ export function ServingSchedule({
       });
 
       if (res.ok) {
+        setCancelling(null);
         toast.success("Signup cancelled.");
       } else {
         const body = await res.json().catch(() => null);
@@ -114,13 +117,13 @@ export function ServingSchedule({
     }
   }
 
+  const cancellingMine = cancelling !== null && isMine(cancelling);
+
   return (
     <div className="space-y-3">
       {sundays.map((date) => {
         const entry = entries[date];
-        const mine =
-          entry &&
-          (entry.attendeeIds.includes(userId) || entry.createdBy === userId);
+        const mine = entry && isMine(entry);
         const days = daysUntilService(date);
 
         return (
@@ -165,7 +168,7 @@ export function ServingSchedule({
                 <Button
                   variant="outline"
                   disabled={busy}
-                  onClick={() => cancel(entry)}
+                  onClick={() => setCancelling(entry)}
                   className="shrink-0"
                 >
                   Can&apos;t make it?
@@ -177,7 +180,7 @@ export function ServingSchedule({
                   variant="ghost"
                   size="icon"
                   disabled={busy}
-                  onClick={() => cancel(entry)}
+                  onClick={() => setCancelling(entry)}
                   aria-label={`Remove ${entry.label}`}
                   className="text-muted-foreground hover:text-destructive shrink-0"
                 >
@@ -224,6 +227,23 @@ export function ServingSchedule({
           </div>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={cancelling !== null}
+        onOpenChange={(open) => !open && !busy && setCancelling(null)}
+        title={
+          cancelling === null
+            ? ""
+            : cancellingMine
+              ? `Cancel your signup for ${formatServiceDate(cancelling.date)}?`
+              : `Remove ${cancelling.label} from ${formatServiceDate(cancelling.date)}?`
+        }
+        description={cancellingMine ? "That date will open back up for someone else." : undefined}
+        confirmLabel={cancellingMine ? "Cancel signup" : "Remove signup"}
+        pendingLabel="Cancelling…"
+        cancelLabel="Keep signup"
+        onConfirm={cancel}
+      />
     </div>
   );
 }

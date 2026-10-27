@@ -213,18 +213,18 @@ export function TeamRosterDialog({
 
   return (
     <Dialog open={!!team} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md max-h-[85vh] flex flex-col">
+      <DialogContent className="flex max-h-[85vh] flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {mode === "add" && (
               <Button
                 variant="ghost"
-                size="icon-sm"
+                size="icon"
                 onClick={() => switchMode("roster")}
                 aria-label="Back to members"
                 className="-ml-2 shrink-0"
               >
-                <ArrowLeft className="h-4 w-4" />
+                <ArrowLeft aria-hidden="true" />
               </Button>
             )}
             {team?.color && (
@@ -241,8 +241,8 @@ export function TeamRosterDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="relative flex-1">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <div className="relative min-w-48 flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
@@ -256,11 +256,10 @@ export function TeamRosterDialog({
           </div>
           {mode === "roster" && (
             <Button
-              size="sm"
               onClick={() => switchMode("add")}
               className="bg-brand-primary hover:bg-brand-primary/90 text-white shrink-0"
             >
-              <Plus className="mr-1 h-4 w-4" />
+              <Plus aria-hidden="true" />
               Add to team
             </Button>
           )}
@@ -274,11 +273,11 @@ export function TeamRosterDialog({
 
         <div className="overflow-y-auto flex-1 -mx-1 px-1">
           {loading ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
+            <p className="text-base text-muted-foreground py-4 text-center">
               Loading members...
             </p>
           ) : visible.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-6 text-center">
+            <p className="text-base text-muted-foreground py-6 text-center">
               {query.trim()
                 ? "No one matches your search."
                 : mode === "roster"
@@ -288,19 +287,19 @@ export function TeamRosterDialog({
           ) : (
             <div className="divide-y">
               {visible.map((p) => (
-                <div key={p.id} className="flex items-center gap-3 py-2.5">
-                  <Avatar className="h-8 w-8 shrink-0">
+                <div key={p.id} className="flex items-center gap-3 py-2">
+                  <Avatar className="h-10 w-10 shrink-0">
                     {p.avatar_url && (
                       <AvatarImage src={p.avatar_url} alt={displayName(p)} />
                     )}
-                    <AvatarFallback className="bg-brand-primary text-white text-xs">
+                    <AvatarFallback className="bg-brand-primary text-white">
                       {initials(p)}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="flex-1 min-w-0 text-sm font-medium truncate">
+                  <span className="flex-1 min-w-0 truncate text-base font-medium">
                     {displayName(p)}
                     {leaders.has(p.id) && (
-                      <span className="ml-2 text-xs font-medium uppercase tracking-wider text-brand-accent">
+                      <span className="ml-2 font-medium text-brand-accent">
                         Team lead
                       </span>
                     )}
@@ -309,7 +308,7 @@ export function TeamRosterDialog({
                     <>
                       <Button
                         variant="ghost"
-                        size="icon-sm"
+                        size="icon"
                         disabled={busy === p.id}
                         onClick={() => handleLeaderChange(p, !leaders.has(p.id))}
                         aria-label={
@@ -324,29 +323,29 @@ export function TeamRosterDialog({
                         }
                       >
                         <Star
-                          className="h-4 w-4"
+                          aria-hidden="true"
                           fill={leaders.has(p.id) ? "currentColor" : "none"}
                         />
                       </Button>
                       <Button
                         variant="ghost"
-                        size="icon-sm"
+                        size="icon"
                         disabled={busy === p.id}
                         onClick={() => handleChange(p, false)}
                         aria-label={`Remove ${displayName(p)} from ${team?.name}`}
                         className="text-muted-foreground hover:text-destructive"
                       >
-                        <X className="h-4 w-4" />
+                        <X aria-hidden="true" />
                       </Button>
                     </>
                   ) : (
                     <Button
                       variant="outline"
-                      size="sm"
                       disabled={busy === p.id}
                       onClick={() => handleChange(p, true)}
+                      aria-label={`Add ${displayName(p)} to ${team?.name}`}
                     >
-                      <Plus className="mr-1 h-3.5 w-3.5" />
+                      <Plus aria-hidden="true" />
                       Add
                     </Button>
                   )}

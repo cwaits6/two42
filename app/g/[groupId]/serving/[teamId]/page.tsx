@@ -233,7 +233,7 @@ export default async function ServingSchedulePage({
       </div>
       <p className="text-lg text-muted-foreground mb-8">
         {team.description ||
-          "Pick a Sunday below — one signup covers the whole morning."}
+          "Pick a date below — one signup covers the whole service."}
       </p>
 
       {!settings?.enabled && isLeader && (

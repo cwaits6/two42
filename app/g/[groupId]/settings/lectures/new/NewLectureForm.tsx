@@ -159,7 +159,7 @@ function NewLectureFormInner({ groupId, groupName }: Props) {
                 id="summary"
                 name="summary"
                 rows={4}
-                placeholder="Post-class summary..."
+                placeholder="Summary of the teaching..."
                 className="text-lg"
               />
             </div>
