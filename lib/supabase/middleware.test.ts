@@ -216,6 +216,26 @@ describe("legacy group routes and the group cookie", () => {
     expect(location(await updateSession(get("/give-thanks")))).toBeNull();
   });
 
+  it.each(["member", "content_editor", "pending"])(
+    "sends a stored %s away from /admin to Home",
+    async (role) => {
+      signedIn({ profile: { role, org_id: "org-1" } });
+      expect(location(await updateSession(get("/admin")))).toBe("/dashboard");
+      expect(location(await updateSession(get("/admin/members")))).toBe("/dashboard");
+    }
+  );
+
+  it("sends a signed-in visitor with no profile away from /admin", async () => {
+    signedIn({ profile: null });
+    expect(location(await updateSession(get("/admin")))).toBe("/dashboard");
+  });
+
+  it("lets an admin through to /admin", async () => {
+    signedIn({ profile: { role: "admin", org_id: "org-1" } });
+    expect(location(await updateSession(get("/admin")))).toBeNull();
+    expect(location(await updateSession(get("/admin/members")))).toBeNull();
+  });
+
   it("writes the host-scoped group cookie on a group page and nowhere else", async () => {
     signedIn({ memberships: membershipRows });
     const res = await updateSession(get(`/g/${A}/calendar`));

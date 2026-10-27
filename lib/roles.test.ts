@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isMemberRole, toUserRole } from "@/lib/roles";
+import { isMemberRole, STORED_MEMBER_ROLES, toUserRole } from "@/lib/roles";
 
 describe("toUserRole", () => {
   it.each(["pending", "member", "admin"] as const)("keeps %s", (role) => {
@@ -13,6 +13,7 @@ describe("toUserRole", () => {
   it("reads an unrecognized value as pending", () => {
     expect(toUserRole("owner")).toBe("pending");
     expect(toUserRole("")).toBe("pending");
+    expect(toUserRole("toString")).toBe("pending");
   });
 });
 
@@ -26,5 +27,11 @@ describe("isMemberRole", () => {
   it("refuses pending and unrecognized values", () => {
     expect(isMemberRole("pending")).toBe(false);
     expect(isMemberRole("owner")).toBe(false);
+  });
+});
+
+describe("STORED_MEMBER_ROLES", () => {
+  it("lists exactly the stored values that read as members", () => {
+    expect([...STORED_MEMBER_ROLES].sort()).toEqual(["admin", "content_editor", "member"]);
   });
 });
