@@ -272,10 +272,7 @@ export default async function EventDetailPage({
                   className="w-1.5 h-1.5 rounded-full flex-shrink-0"
                   style={{ background: "var(--color-brand-accent)" }}
                 />
-                <span
-                  className="font-sans text-base font-bold uppercase tracking-[1.5px]"
-                  style={{ color: "var(--color-brand-accent)" }}
-                >
+                <span className="font-sans text-base font-bold uppercase tracking-[1.5px] text-brand-accent-text">
                   {diffDays <= 1
                     ? upcomingLabel
                     : `This week · ${upcomingLabel.toLowerCase()}`}
@@ -289,10 +286,7 @@ export default async function EventDetailPage({
             </h1>
 
             {/* The group as serif-italic subtitle */}
-            <p
-              className="font-serif italic text-[22px] mt-2 leading-snug tracking-tight"
-              style={{ color: "var(--color-brand-primary)" }}
-            >
+            <p className="font-serif italic text-[22px] mt-2 leading-snug tracking-tight text-brand-primary-text">
               {group.name}
             </p>
 

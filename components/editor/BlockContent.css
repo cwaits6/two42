@@ -22,7 +22,7 @@
 
 .bn-editor [data-content-type="heading"],
 .bn-static [data-content-type="heading"] {
-  color: var(--color-brand-primary);
+  color: var(--color-brand-primary-text);
   font-family: var(--font-serif, Georgia, serif);
   font-size: var(--text-2xl) !important;
   font-weight: 700;
@@ -54,5 +54,5 @@
 
 .bn-editor a:hover,
 .bn-static a:hover {
-  color: var(--color-brand-primary);
+  color: var(--color-brand-primary-text);
 }
