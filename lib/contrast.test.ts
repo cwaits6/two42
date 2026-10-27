@@ -15,10 +15,14 @@ import {
 
 describe("brand text tokens in app/globals.css", () => {
   const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+  const hexTokens = new Map<string, string>();
+  for (const [, name, hex] of css.matchAll(/(--[\w-]+):\s*(#[0-9a-fA-F]{6});/g)) {
+    if (!hexTokens.has(name)) hexTokens.set(name, hex);
+  }
   const token = (name: string): string => {
-    const match = css.match(new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6});`));
-    if (!match) throw new Error(`${name} is not declared as a 6-digit hex in app/globals.css`);
-    return match[1];
+    const hex = hexTokens.get(name);
+    if (!hex) throw new Error(`${name} is not declared as a 6-digit hex in app/globals.css`);
+    return hex;
   };
 
   // `over` composited at `alpha` onto `under`, the way a 10% background tint
