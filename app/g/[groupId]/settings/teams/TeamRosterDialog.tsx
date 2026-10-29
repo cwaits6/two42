@@ -257,7 +257,7 @@ export function TeamRosterDialog({
           {mode === "roster" && (
             <Button
               onClick={() => switchMode("add")}
-              className="bg-brand-primary hover:bg-brand-primary/90 text-white shrink-0"
+              className="shrink-0"
             >
               <Plus aria-hidden="true" />
               Add to team
@@ -299,7 +299,7 @@ export function TeamRosterDialog({
                   <span className="flex-1 min-w-0 truncate text-base font-medium">
                     {displayName(p)}
                     {leaders.has(p.id) && (
-                      <span className="ml-2 font-medium text-brand-accent">
+                      <span className="ml-2 font-medium text-brand-accent-text">
                         Team lead
                       </span>
                     )}

@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { HandHeart, UserRound } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { Me } from "@/components/prayer/PrayerBoard";
@@ -133,15 +134,10 @@ export function PrayerComposer({
             </strong>
           </span>
         </p>
-        <button
-          type="button"
-          onClick={submit}
-          disabled={!canPost}
-          className="flex items-center gap-2 rounded-lg bg-brand-primary px-4 py-2.5 text-sm font-bold text-white transition-opacity disabled:opacity-40"
-        >
-          <HandHeart className="h-4 w-4" aria-hidden="true" />
+        <Button type="button" onClick={submit} disabled={!canPost} className="font-bold">
+          <HandHeart aria-hidden="true" />
           {submitting ? "Posting…" : "Post request"}
-        </button>
+        </Button>
       </div>
     </div>
   );

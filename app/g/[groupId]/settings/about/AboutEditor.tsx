@@ -350,7 +350,7 @@ export function AboutEditor({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl text-brand-primary">
+          <CardTitle className="text-2xl text-brand-primary-text">
             Summary
           </CardTitle>
         </CardHeader>
@@ -367,7 +367,6 @@ export function AboutEditor({
           <Button
             onClick={handleSaveSummary}
             disabled={savingSummary}
-            className="bg-brand-primary hover:bg-brand-primary/90 text-white"
           >
             {savingSummary ? "Saving..." : "Save summary"}
           </Button>
@@ -376,7 +375,7 @@ export function AboutEditor({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl text-brand-primary">Group color</CardTitle>
+          <CardTitle className="text-2xl text-brand-primary-text">Group color</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-base text-muted-foreground">
@@ -405,7 +404,6 @@ export function AboutEditor({
             <Button
               onClick={handleSaveColor}
               disabled={savingColor}
-              className="bg-brand-primary hover:bg-brand-primary/90 text-white"
             >
               {savingColor ? "Saving..." : "Save color"}
             </Button>
@@ -415,7 +413,7 @@ export function AboutEditor({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl text-brand-primary">Weekly calls</CardTitle>
+          <CardTitle className="text-2xl text-brand-primary-text">Weekly calls</CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="grid gap-5 sm:grid-cols-2">
@@ -465,7 +463,6 @@ export function AboutEditor({
           <Button
             onClick={handleSaveCalls}
             disabled={savingCalls}
-            className="bg-brand-primary hover:bg-brand-primary/90 text-white"
           >
             {savingCalls ? "Saving..." : "Save weekly calls"}
           </Button>
@@ -475,13 +472,12 @@ export function AboutEditor({
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-2xl text-brand-primary">
+            <CardTitle className="text-2xl text-brand-primary-text">
               Leadership
             </CardTitle>
             <Button
               size="sm"
               onClick={openAdd}
-              className="bg-brand-primary hover:bg-brand-primary/90 text-white"
             >
               <Plus className="mr-1 h-4 w-4" />
               Add person
@@ -666,7 +662,6 @@ export function AboutEditor({
                 <Button
                   type="submit"
                   disabled={busy}
-                  className="bg-brand-primary hover:bg-brand-primary/90 text-white"
                 >
                   {busy ? "Saving..." : "Save"}
                 </Button>

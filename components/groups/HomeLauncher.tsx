@@ -105,7 +105,7 @@ export async function HomeLauncher({
     <div className="min-h-screen bg-background">
       <section className="px-4 pt-14 pb-10 md:px-14">
         <h1 className="font-serif text-5xl md:text-6xl font-medium leading-none tracking-tight text-foreground mb-9">
-          {getGreeting(timeZone)}, <em className="text-brand-primary italic">{displayName}</em>.
+          {getGreeting(timeZone)}, <em className="text-brand-primary-text italic">{displayName}</em>.
         </h1>
 
         {!home && (
@@ -121,7 +121,7 @@ export async function HomeLauncher({
           {discoveryOn && (
             <Link
               href="/find-a-group"
-              className="font-sans text-base font-semibold text-brand-primary hover:underline"
+              className="font-sans text-base font-semibold text-brand-primary-text hover:underline"
             >
               Find a group →
             </Link>

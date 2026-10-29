@@ -234,7 +234,7 @@ export default async function LecturesPage({
                 </div>
                 <Link
                   href={`${libraryHref}/series/${series.id}`}
-                  className="font-sans text-sm font-semibold text-brand-primary hover:opacity-80 transition-opacity"
+                  className="font-sans text-sm font-semibold text-brand-primary-text hover:underline"
                 >
                   View full series →
                 </Link>
@@ -344,7 +344,7 @@ function FeaturedCard({
         </div>
 
         {/* Most recent badge */}
-        <span className="font-sans text-base tracking-widest text-brand-accent font-bold uppercase absolute bottom-3 left-3">
+        <span className="font-sans text-base tracking-widest text-brand-accent-text font-bold uppercase absolute bottom-3 left-3 rounded-md bg-background px-2.5 py-1">
           MOST RECENT
         </span>
       </Link>
@@ -359,7 +359,7 @@ function FeaturedCard({
               </span>
             )}
             {weekNumber !== null && (
-              <span className="font-sans text-base text-brand-accent tracking-[0.15em] uppercase font-bold">
+              <span className="font-sans text-base text-brand-accent-text tracking-[0.15em] uppercase font-bold">
                 Week {String(weekNumber).padStart(2, "0")}
               </span>
             )}
@@ -370,7 +370,7 @@ function FeaturedCard({
           href={`${libraryHref}/${lecture.id}`}
           className="group"
         >
-          <h2 className="font-display text-4xl font-medium text-foreground leading-tight tracking-tight mb-2 group-hover:text-brand-primary transition-colors">
+          <h2 className="font-display text-4xl font-medium text-foreground leading-tight tracking-tight mb-2 group-hover:text-brand-primary-text transition-colors">
             {lecture.title}
           </h2>
         </Link>
@@ -383,7 +383,7 @@ function FeaturedCard({
 
         {lecture.summary ? (
           <div className="mt-2">
-            <p className="font-sans text-base text-brand-accent tracking-[0.15em] uppercase font-bold mb-2">
+            <p className="font-sans text-base text-brand-accent-text tracking-[0.15em] uppercase font-bold mb-2">
               Class Summary
             </p>
             <p className="font-sans text-lg text-foreground leading-relaxed line-clamp-4 whitespace-pre-wrap">
@@ -391,7 +391,7 @@ function FeaturedCard({
             </p>
             <Link
               href={`${libraryHref}/${lecture.id}`}
-              className="font-sans text-sm font-semibold text-brand-primary hover:opacity-80 transition-opacity mt-2 inline-block"
+              className="font-sans text-sm font-semibold text-brand-primary-text hover:underline mt-2 inline-block"
             >
               Read full summary →
             </Link>
@@ -399,7 +399,7 @@ function FeaturedCard({
         ) : (
           <Link
             href={`${libraryHref}/${lecture.id}`}
-            className="font-sans text-sm font-semibold text-brand-primary hover:opacity-80 transition-opacity mt-2 inline-block"
+            className="font-sans text-sm font-semibold text-brand-primary-text hover:underline mt-2 inline-block"
           >
             View lecture details →
           </Link>
@@ -426,13 +426,13 @@ function LectureRow({
       className="group grid grid-cols-[72px_1fr_auto_auto] items-center gap-6 border-t border-border py-5 -mx-2 px-2 hover:bg-background transition-colors"
     >
       {/* Col 1: Auto week number */}
-      <span className="font-sans text-base text-brand-accent tracking-[0.15em] uppercase font-bold">
+      <span className="font-sans text-base text-brand-accent-text tracking-[0.15em] uppercase font-bold">
         {`Week ${String(weekNumber).padStart(2, "0")}`}
       </span>
 
       {/* Col 2: Title + description */}
       <div>
-        <p className="font-display text-xl font-medium text-foreground tracking-tight group-hover:text-brand-primary transition-colors">
+        <p className="font-display text-xl font-medium text-foreground tracking-tight group-hover:text-brand-primary-text transition-colors">
           {lecture.title}
         </p>
         {lecture.description && (
@@ -491,7 +491,7 @@ function AllLectureRow({
 
       {/* Col 2: Title + series */}
       <div>
-        <p className="font-display text-xl font-medium text-foreground tracking-tight group-hover:text-brand-primary transition-colors">
+        <p className="font-display text-xl font-medium text-foreground tracking-tight group-hover:text-brand-primary-text transition-colors">
           {lecture.title}
         </p>
         {(seriesName || weekNumber !== null) && (
@@ -502,7 +502,7 @@ function AllLectureRow({
               </span>
             )}
             {weekNumber !== null && (
-              <span className="font-sans text-base text-brand-accent tracking-[0.12em] uppercase font-bold">
+              <span className="font-sans text-base text-brand-accent-text tracking-[0.12em] uppercase font-bold">
                 Week {String(weekNumber).padStart(2, "0")}
               </span>
             )}
@@ -526,8 +526,8 @@ function AllLectureRow({
 // ── PastSeriesCard ────────────────────────────────────────────────────────────
 
 const PAST_SERIES_COLORS = [
-  { bar: "bg-brand-primary", text: "text-brand-primary" },
-  { bar: "bg-brand-accent", text: "text-brand-accent" },
+  { bar: "bg-brand-primary", text: "text-brand-primary-text" },
+  { bar: "bg-brand-accent", text: "text-brand-accent-text" },
   { bar: "bg-foreground", text: "text-foreground" },
 ];
 
@@ -556,7 +556,7 @@ function PastSeriesCard({
         </p>
       )}
 
-      <h3 className="font-display text-xl font-medium text-foreground mb-4 group-hover:text-brand-primary transition-colors">
+      <h3 className="font-display text-xl font-medium text-foreground mb-4 group-hover:text-brand-primary-text transition-colors">
         {series.name}
       </h3>
 

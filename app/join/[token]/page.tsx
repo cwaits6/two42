@@ -98,7 +98,7 @@ function Notice({
     <div className="container mx-auto max-w-lg px-4 py-20">
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl text-brand-primary">{title}</CardTitle>
+          <CardTitle className="text-2xl text-brand-primary-text">{title}</CardTitle>
           <CardDescription className="text-base">{description}</CardDescription>
         </CardHeader>
         {children ? <CardContent className="space-y-4">{children}</CardContent> : null}
@@ -180,7 +180,7 @@ export default async function JoinByInvitePage({ params }: PageProps) {
       <Notice title={`You're already in ${invite.groupName}.`} description="Nothing more to do here.">
         <Button
           size="lg"
-          className="w-full bg-brand-primary text-white hover:bg-brand-primary/90"
+          className="w-full"
           nativeButton={false}
           render={<Link href={groupPath(invite.groupId, "/dashboard")} />}
         >

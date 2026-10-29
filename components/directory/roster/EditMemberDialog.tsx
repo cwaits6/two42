@@ -159,7 +159,6 @@ export function EditMemberDialog({
           <Button
             onClick={save}
             disabled={saving}
-            className="bg-brand-primary text-white hover:bg-brand-primary/90"
           >
             {saving ? "Saving…" : "Save"}
           </Button>

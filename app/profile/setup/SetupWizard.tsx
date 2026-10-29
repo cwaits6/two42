@@ -216,7 +216,6 @@ function MemberAddForm({
         <Button
           type="button"
           size="sm"
-          className="bg-brand-primary hover:bg-brand-primary/90 text-white"
           onClick={() => {
             if (onAdd(relationship, form)) {
               onAdded();
@@ -629,7 +628,7 @@ export function SetupWizard({ profile, userEmail }: SetupWizardProps) {
                 {done ? <Check className="h-4 w-4" /> : num}
               </div>
               <span
-                className={`text-base mt-1 text-center hidden sm:block ${active ? "text-brand-primary font-medium" : "text-muted-foreground"}`}
+                className={`text-base mt-1 text-center hidden sm:block ${active ? "text-brand-primary-text font-medium" : "text-muted-foreground"}`}
               >
                 {label}
               </span>
@@ -665,15 +664,16 @@ export function SetupWizard({ profile, userEmail }: SetupWizardProps) {
                     {initials}
                   </AvatarFallback>
                 </Avatar>
-                <button
+                <Button
                   type="button"
+                  size="icon"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingAvatar}
-                  className="absolute -bottom-1 -right-1 flex h-12 w-12 items-center justify-center rounded-full bg-brand-primary text-white shadow-md transition-colors hover:bg-brand-primary/90 disabled:opacity-50"
+                  className="absolute -bottom-1 -right-1 rounded-full shadow-md"
                   aria-label="Upload photo"
                 >
                   <Camera className="h-5 w-5" />
-                </button>
+                </Button>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -965,7 +965,6 @@ export function SetupWizard({ profile, userEmail }: SetupWizardProps) {
                   <Button
                     type="button"
                     onClick={resolveFamily}
-                    className="bg-brand-primary hover:bg-brand-primary/90 text-white"
                   >
                     <Users className="h-4 w-4 mr-2" />
                     Search for a {titleCaseName(lastName) ?? lastName} Family
@@ -994,7 +993,6 @@ export function SetupWizard({ profile, userEmail }: SetupWizardProps) {
                           type="button"
                           size="sm"
                           onClick={() => claimFamily(match.id)}
-                          className="bg-brand-primary hover:bg-brand-primary/90 text-white"
                         >
                           Yes, this is my family
                         </Button>
@@ -1019,7 +1017,6 @@ export function SetupWizard({ profile, userEmail }: SetupWizardProps) {
                     <Button
                       type="button"
                       onClick={createNewFamily}
-                      className="bg-brand-primary hover:bg-brand-primary/90 text-white"
                     >
                       Create {titleCaseName(lastName) ?? lastName} Family
                     </Button>
@@ -1030,12 +1027,12 @@ export function SetupWizard({ profile, userEmail }: SetupWizardProps) {
               <div className="rounded-lg bg-brand-bg-light border border-brand-primary/20 p-4 flex items-center gap-3">
                 <Check className="h-5 w-5 text-brand-primary shrink-0" />
                 <div>
-                  <p className="font-medium text-brand-primary">
+                  <p className="font-medium text-brand-primary-text">
                     {familyDeclined
                       ? `Created a new household for you`
                       : `Joined your existing household`}
                   </p>
-                  <p className="text-sm text-brand-primary-light">
+                  <p className="text-sm text-brand-primary-text">
                     {titleCaseName(lastName) ?? lastName} Family
                   </p>
                 </div>
@@ -1320,7 +1317,7 @@ export function SetupWizard({ profile, userEmail }: SetupWizardProps) {
           <Button
             type="button"
             onClick={goNext}
-            className="flex items-center gap-2 bg-brand-primary hover:bg-brand-primary/90 text-white"
+            className="flex items-center gap-2"
           >
             Continue
             <ChevronRight className="h-4 w-4" />
@@ -1330,7 +1327,7 @@ export function SetupWizard({ profile, userEmail }: SetupWizardProps) {
             type="button"
             onClick={handleComplete}
             disabled={saving}
-            className="bg-brand-primary hover:bg-brand-primary/90 text-white flex items-center gap-2"
+            className="flex items-center gap-2"
           >
             {saving ? "Saving..." : "Complete Setup"}
             {!saving && <Check className="h-4 w-4" />}

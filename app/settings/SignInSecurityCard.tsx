@@ -41,7 +41,7 @@ function PasswordInput({
       <button
         type="button"
         onClick={() => setShow((s) => !s)}
-        className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md bg-brand-warm px-3 py-1.5 text-sm font-semibold text-brand-primary"
+        className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md bg-brand-warm px-3 py-1.5 text-sm font-semibold text-brand-primary-text"
       >
         {show ? "Hide" : "Show"}
       </button>
@@ -195,7 +195,7 @@ export function SignInSecurityCard({ currentEmail }: SignInSecurityCardProps) {
                 Can&apos;t remember it?{" "}
                 <Link
                   href="/forgot-password"
-                  className="font-semibold text-brand-primary underline underline-offset-2"
+                  className="font-semibold text-brand-primary-text underline underline-offset-2"
                 >
                   We&apos;ll email you a link to reset it.
                 </Link>

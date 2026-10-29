@@ -67,7 +67,7 @@ export default async function AdminGroupsPage() {
       <PageHeader title="Groups" actions={<AdminCreateGroupButton />} />
 
       <section className="mb-10">
-        <h2 className="mb-4 text-2xl font-bold text-brand-primary">Group settings</h2>
+        <h2 className="mb-4 text-2xl font-bold text-brand-primary-text">Group settings</h2>
         <div className="space-y-4">
           <GroupDiscoverySettings orgId={profile.org_id} discoveryOn={discoveryOn} />
           <OrgGroupControls orgId={profile.org_id} policy={policy} />
@@ -75,12 +75,12 @@ export default async function AdminGroupsPage() {
       </section>
 
       <section className="mb-10">
-        <h2 className="mb-4 text-2xl font-bold text-brand-primary">Pending group requests</h2>
+        <h2 className="mb-4 text-2xl font-bold text-brand-primary-text">Pending group requests</h2>
         <PendingGroupRequests initialRequests={pending} timeZone={timeZone} />
       </section>
 
       <section className="mb-10">
-        <h2 className="mb-4 text-2xl font-bold text-brand-primary">Pending join requests</h2>
+        <h2 className="mb-4 text-2xl font-bold text-brand-primary-text">Pending join requests</h2>
         {joinRequests === null ? (
           <p role="alert" className="text-lg text-muted-foreground">
             Couldn&apos;t load the join requests. Reload the page to try again.
@@ -91,7 +91,7 @@ export default async function AdminGroupsPage() {
       </section>
 
       <section>
-        <h2 className="mb-4 text-2xl font-bold text-brand-primary">Groups</h2>
+        <h2 className="mb-4 text-2xl font-bold text-brand-primary-text">Groups</h2>
         {groupRows.length === 0 ? (
           <p className="text-lg text-muted-foreground">No groups yet.</p>
         ) : (

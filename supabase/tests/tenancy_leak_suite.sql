@@ -614,8 +614,17 @@ declare
   plain_user uuid := current_setting('leak_suite.owner_b')::uuid;
   admin_visible_count int;
   plain_visible_count int;
+  other_admin uuid := gen_random_uuid();
+  total_count int;
 begin
-  insert into public.platform_admins (profile_id) values (admin_user);
+  -- A second, org-less admin, so an own-row-only policy cannot pass the
+  -- equality below on a table that would otherwise hold one row.
+  set local session_replication_role = replica;
+  insert into auth.users (id, email) values (other_admin, 'other-admin@leak.example.test');
+  set local session_replication_role = origin;
+
+  insert into public.platform_admins (profile_id) values (admin_user), (other_admin);
+  select count(*) into total_count from public.platform_admins;
 
   set local role authenticated;
 
@@ -628,7 +637,8 @@ begin
   reset role;
 
   insert into tenancy_leak_results
-    select ok(admin_visible_count = 1, 'a platform admin can see platform_admins rows');
+    select ok(total_count >= 2 and admin_visible_count = total_count,
+      'a platform admin can see every platform_admins row, not only their own');
   insert into tenancy_leak_results
     select ok(plain_visible_count = 0, 'a non-admin cannot see platform_admins rows');
 end $$;

@@ -53,7 +53,7 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
         <ArrowLeft className="mr-2 h-4 w-4" />
         Back to members
       </Button>
-      <h1 className="text-3xl md:text-4xl font-bold text-brand-primary mb-2">
+      <h1 className="text-3xl md:text-4xl font-bold text-brand-primary-text mb-2">
         Edit Member
       </h1>
       <p className="text-base text-muted-foreground mb-8">

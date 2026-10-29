@@ -145,7 +145,6 @@ export default async function GivePage({
             <Button
               nativeButton={false}
               render={<Link href={newFundHref} />}
-              className="bg-brand-primary hover:bg-brand-primary/90 text-white"
             >
               <Plus className="mr-1.5 h-4 w-4" />
               Add fund
@@ -163,7 +162,7 @@ export default async function GivePage({
             <p className="mt-2 text-muted-foreground">
               <Link
                 href={newFundHref}
-                className="font-semibold text-brand-primary hover:underline"
+                className="font-semibold text-brand-primary-text hover:underline"
               >
                 Add the first fund
               </Link>

@@ -286,7 +286,7 @@ export function EmailDomainSettings() {
       ) : cardState === "not-enabled" ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl text-brand-primary">
+            <CardTitle className="text-2xl text-brand-primary-text">
               Custom sending domain
             </CardTitle>
           </CardHeader>
@@ -300,7 +300,7 @@ export function EmailDomainSettings() {
       ) : cardState === "claim-form" ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl text-brand-primary">
+            <CardTitle className="text-2xl text-brand-primary-text">
               Claim domain
             </CardTitle>
           </CardHeader>
@@ -329,7 +329,7 @@ export function EmailDomainSettings() {
               <Button
                 type="submit"
                 size="lg"
-                className="w-full text-lg py-6 bg-brand-primary hover:bg-brand-primary/90 text-white"
+                className="w-full text-lg py-6"
                 disabled={busy || domainInput.trim().length === 0}
               >
                 {busy ? "Claiming..." : "Claim domain"}
@@ -340,7 +340,7 @@ export function EmailDomainSettings() {
       ) : row ? (
         <Card>
           <CardHeader>
-            <CardTitle className="flex flex-wrap items-center gap-3 text-2xl text-brand-primary">
+            <CardTitle className="flex flex-wrap items-center gap-3 text-2xl text-brand-primary-text">
               <span className="break-all">{row.domain}</span>
               <Badge
                 variant={statusVariant(row.status)}
@@ -440,7 +440,7 @@ export function EmailDomainSettings() {
                 <Button
                   type="button"
                   size="lg"
-                  className="flex-1 text-lg py-6 bg-brand-primary hover:bg-brand-primary/90 text-white"
+                  className="flex-1 text-lg py-6"
                   onClick={handleVerify}
                   disabled={busy}
                 >

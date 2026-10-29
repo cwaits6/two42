@@ -16,19 +16,17 @@ export const HEX = /^#[0-9a-fA-F]{6}$/;
 /**
  * WCAG 4.5:1 is enforced on the WRITE path only. accent is rendered as
  * a button BACKGROUND carrying the hardcoded --primary-foreground: #FFFFFF
- * (app/globals.css:68-69), so white is the reference — and by symmetry the
+ * (app/globals.css), so white is the reference — and by symmetry the
  * same ratio covers accent-as-link-text on white. It is deliberately NOT
  * measured against Warm Paper (#F4EEE2): the platform's own Clay default
- * scores 3.93:1 there, which is why DESIGN.md reserves deep clay (#8A4227)
- * for body text on light grounds. Do not "fix" this by changing the
- * reference.
+ * scores 3.93:1 there, which is why DESIGN.md reserves deep clay (#8A4227,
+ * `text-brand-primary-text`) for body text on light grounds. Do not "fix"
+ * this by changing the reference.
  *
- * Scope: the SOLID fill only. Buttons darken on hover by compositing the
- * accent at 90% alpha (`hover:bg-brand-primary/90`, and the shadcn Button
- * default variant), and that composite is NOT validated here — Clay's is
- * ~3.84:1 over a white card. Validating it would reject Clay itself; the fix
- * is a solid darkened hover token, tracked as an accepted limit in
- * docs/design/DESIGN.md. Do not raise ACCENT_CONTRAST_MIN to cover it.
+ * Scope: the SOLID fill. The hover fill is `--primary-hover` in
+ * app/globals.css, a color-mix of the accent toward black, which only ever
+ * darkens, so an accent that passes here yields a hover that passes too;
+ * there is nothing further to validate.
  */
 export const ACCENT_CONTRAST_REFERENCE = "#FFFFFF";
 export const ACCENT_CONTRAST_MIN = 4.5;

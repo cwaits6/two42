@@ -60,7 +60,7 @@ export function AuthShell({
           {/* Eyebrow */}
           <div className="flex items-center gap-2.5 mb-5">
             <div className="w-5 h-px bg-brand-accent" aria-hidden />
-            <span className="font-sans text-base font-bold tracking-[0.2em] uppercase text-brand-accent">
+            <span className="font-sans text-base font-bold tracking-[0.2em] uppercase text-brand-accent-text">
               {eyebrow}
             </span>
           </div>
@@ -68,7 +68,7 @@ export function AuthShell({
           {/* Title */}
           <h1 className="font-serif text-4xl md:text-5xl font-medium text-foreground tracking-tight leading-[1.05] mb-0">
             {title}{" "}
-            <em className="not-italic italic text-brand-primary">{em}</em>.
+            <em className="not-italic italic text-brand-primary-text">{em}</em>.
           </h1>
 
           {kicker && (
@@ -87,7 +87,7 @@ export function AuthShell({
                 {altPrompt}{" "}
                 <Link
                   href={altHref}
-                  className="text-brand-primary font-semibold hover:underline"
+                  className="text-brand-primary-text font-semibold hover:underline"
                 >
                   {altLabel}
                 </Link>

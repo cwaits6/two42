@@ -10,6 +10,7 @@
 --
 -- Accounts (all sign in with password123):
 --   admin@local.dev                 org admin, leads Group A, member of Group B
+--   platform@local.dev              platform admin, belongs to no org
 --   <first>.<surname>@example.test  one per adult listed with an account below
 
 -- Only the CLI's local stack runs on its published default JWT secret; a
@@ -97,6 +98,35 @@ ON CONFLICT (id) DO NOTHING;
 UPDATE public.profiles
 SET role = 'admin', setup_completed = true, approved_at = now()
 WHERE id = 'a0000000-0000-0000-0000-000000000001';
+
+-- ── Platform admin ──────────────────────────────────────────────────────────
+
+-- A platform admin belongs to no org, but handle_new_user() either rejects a
+-- signup or resolves it into one. Replica mode skips that trigger for this
+-- one insert, so the account gets no profile and no membership.
+SET session_replication_role = replica;
+
+INSERT INTO auth.users (
+  id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+  created_at, updated_at, confirmation_token, recovery_token, email_change,
+  email_change_token_new, email_change_token_current, email_change_confirm_status,
+  phone, phone_change, phone_change_token, raw_app_meta_data, raw_user_meta_data
+) VALUES (
+  'a0000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated', 'platform@local.dev',
+  crypt('password123', gen_salt('bf', 10)), now(),
+  now(), now(), '', '', '',
+  '', '', 0,
+  NULL, '', '', '{"provider": "email", "providers": ["email"]}',
+  '{"full_name": "Local Platform Admin"}'
+)
+ON CONFLICT (id) DO NOTHING;
+
+RESET session_replication_role;
+
+INSERT INTO public.platform_admins (profile_id)
+VALUES ('a0000000-0000-0000-0000-000000000002')
+ON CONFLICT (profile_id) DO NOTHING;
 
 -- ── Groups ──────────────────────────────────────────────────────────────────
 

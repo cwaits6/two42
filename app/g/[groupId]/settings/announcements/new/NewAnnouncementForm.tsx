@@ -72,7 +72,7 @@ export function NewAnnouncementForm({
     <div className="container mx-auto px-4 py-12 max-w-4xl">
       <Card>
         <CardHeader>
-          <CardTitle className="text-3xl text-brand-primary">New Announcement</CardTitle>
+          <CardTitle className="text-3xl text-brand-primary-text">New Announcement</CardTitle>
           <PostingTo groupName={groupName} />
         </CardHeader>
         <CardContent className="space-y-6">
@@ -124,7 +124,7 @@ export function NewAnnouncementForm({
             type="submit"
             form="announcement-form"
             size="lg"
-            className="w-full text-lg py-6 bg-brand-primary hover:bg-brand-primary/90 text-white"
+            className="w-full text-lg py-6"
             disabled={loading}
           >
             {loading

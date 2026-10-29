@@ -426,7 +426,6 @@ export function HouseholdClient({
               <Button
                 type="submit"
                 disabled={savingInfo}
-                className="bg-brand-primary hover:bg-brand-primary/90 text-white"
               >
                 {savingInfo ? "Saving..." : "Save Household Info"}
               </Button>
@@ -514,7 +513,7 @@ export function HouseholdClient({
             <button
               type="button"
               onClick={() => setAddDialogOpen(true)}
-              className="underline underline-offset-2 text-foreground hover:text-brand-primary"
+              className="underline underline-offset-2 text-foreground hover:text-brand-primary-text"
             >
               Link member
             </button>{" "}
@@ -650,7 +649,6 @@ export function HouseholdClient({
                   size="sm"
                   disabled={linkingId === r.id}
                   onClick={() => handleLinkMember(r.id)}
-                  className="bg-brand-primary hover:bg-brand-primary/90 text-white"
                 >
                   {linkingId === r.id ? "Linking..." : "Add"}
                 </Button>

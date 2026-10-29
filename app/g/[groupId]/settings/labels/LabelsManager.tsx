@@ -182,7 +182,6 @@ export function LabelsManager({ groupId, groupName }: LabelsManagerProps) {
           <Button
             size="lg"
             onClick={openCreate}
-            className="bg-brand-primary text-white hover:bg-brand-primary/90"
           >
             <Plus className="mr-2 h-5 w-5" />
             New label
@@ -288,7 +287,6 @@ export function LabelsManager({ groupId, groupName }: LabelsManagerProps) {
             <Button
               onClick={handleSave}
               disabled={saving}
-              className="bg-brand-primary text-white hover:bg-brand-primary/90"
             >
               {saving ? "Saving…" : editing ? "Save changes" : "Create"}
             </Button>

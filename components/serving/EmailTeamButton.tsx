@@ -123,7 +123,6 @@ export function EmailTeamButton({
             <Button
               disabled={sending || memberCount === 0}
               onClick={send}
-              className="bg-brand-primary hover:bg-brand-primary/90 text-white"
             >
               {sending ? "Sending..." : `Send to ${memberCount} member${memberCount !== 1 ? "s" : ""}`}
             </Button>

@@ -32,6 +32,7 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  --color-brand-primary-hover: var(--primary-hover);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -44,6 +45,7 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --color-brand-primary: #B85C38;
   --color-brand-primary-light: #C97A54;
+  --color-brand-primary-text: #8A4227;
   --color-brand-accent: #E8A33D;
   --color-brand-accent-text: #7A5411;
   --color-brand-warm: #F3E7D9;
@@ -67,6 +69,10 @@
   --popover-foreground: #2A211A;
   --primary: #B85C38;
   --primary-foreground: #FFFFFF;
+  /* Follows the org accent app/layout.tsx writes into --primary. Solid, not
+     alpha: a 90% composite over a light card drops white text below 4.5:1,
+     while mixing toward black only ever raises it. */
+  --primary-hover: color-mix(in srgb, var(--primary) 90%, black);
   --secondary: #EFE0D3;
   --secondary-foreground: #8A4227;
   --muted: #E8DECF;
@@ -75,7 +81,9 @@
   --muted-foreground: #5C5044;
   --accent: #E8A33D;
   --accent-foreground: #2A211A;
-  --destructive: #EF4444;
+  /* Red that holds 4.5:1 as text on Warm Paper, card, and the destructive
+     10% tint over brand-warm. */
+  --destructive: #B42318;
   --border: #DED3C3;
   --input: #DED3C3;
   --ring: #B85C38;

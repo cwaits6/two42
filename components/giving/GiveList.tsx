@@ -96,7 +96,7 @@ export function GiveList({ funds, groupId }: { funds: FundView[]; groupId: strin
                   <div className="mt-3.5 flex justify-end text-sm">
                     <Link
                       href={groupPath(groupId, `/give/${fund.id}/edit`)}
-                      className="flex items-center gap-1 font-semibold text-brand-primary hover:underline"
+                      className="flex items-center gap-1 font-semibold text-brand-primary-text hover:underline"
                     >
                       <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                       Edit

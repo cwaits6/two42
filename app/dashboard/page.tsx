@@ -30,7 +30,7 @@ export default async function DashboardPage() {
       <div className="container mx-auto px-4 py-20 max-w-lg text-center">
         <Card className="p-8 border-border">
           <CardContent className="pt-6">
-            <h1 className="font-serif text-3xl text-brand-primary mb-4">
+            <h1 className="font-serif text-3xl text-brand-primary-text mb-4">
               Pending Approval
             </h1>
             <p className="text-lg text-muted-foreground">

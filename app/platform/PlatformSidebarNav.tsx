@@ -15,8 +15,8 @@ export function PlatformSidebarNav() {
   const linkClass = (active: boolean) =>
     `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm border-l-4 transition-colors ${
       active
-        ? "bg-brand-warm text-brand-primary font-bold border-brand-primary"
-        : "border-transparent font-medium text-slate-600 hover:text-brand-primary hover:bg-brand-warm/50"
+        ? "bg-brand-warm text-brand-primary-text font-bold border-brand-primary"
+        : "border-transparent font-medium text-slate-600 hover:text-brand-primary-text hover:bg-brand-warm/50"
     }`;
 
   const renderLink = (item: PlatformNavItem) => {
@@ -43,7 +43,7 @@ export function PlatformSidebarNav() {
       >
         <Link
           href="/dashboard"
-          className="inline-flex min-h-11 items-center gap-2 px-3 text-base font-semibold text-brand-primary underline underline-offset-4 hover:text-brand-primary/80"
+          className="inline-flex min-h-11 items-center gap-2 px-3 text-base font-semibold text-brand-primary-text underline underline-offset-4 hover:text-foreground"
         >
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
           Back to app
@@ -59,7 +59,7 @@ export function PlatformSidebarNav() {
       >
         <Link
           href="/dashboard"
-          className="inline-flex min-h-11 shrink-0 items-center gap-2 pr-1 text-base font-semibold text-brand-primary underline underline-offset-4"
+          className="inline-flex min-h-11 shrink-0 items-center gap-2 pr-1 text-base font-semibold text-brand-primary-text underline underline-offset-4"
         >
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
           Back
@@ -73,8 +73,8 @@ export function PlatformSidebarNav() {
               aria-current={active ? "page" : undefined}
               className={`inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-full border px-4 text-sm transition-colors ${
                 active
-                  ? "border-brand-primary bg-brand-warm font-bold text-brand-primary"
-                  : "border-border font-medium text-slate-600 hover:text-brand-primary"
+                  ? "border-brand-primary bg-brand-warm font-bold text-brand-primary-text"
+                  : "border-border font-medium text-slate-600 hover:text-brand-primary-text"
               }`}
             >
               {item.label}

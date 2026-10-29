@@ -37,7 +37,7 @@ function HelperText({ sentence, inviteHref }: { sentence: HelperSentence; invite
     <>
       {sentence.before}
       {sentence.link ? (
-        <Link href={inviteHref} className="font-medium text-brand-primary underline">
+        <Link href={inviteHref} className="font-medium text-brand-primary-text underline">
           {sentence.link}
         </Link>
       ) : null}
@@ -233,7 +233,6 @@ export function PrivacyAndJoiningManager({
                 type="submit"
                 size="lg"
                 disabled={savingPolicy || policy === savedPolicy}
-                className="bg-brand-primary text-white hover:bg-brand-primary/90"
               >
                 {savingPolicy ? "Saving…" : "Save join policy"}
               </Button>

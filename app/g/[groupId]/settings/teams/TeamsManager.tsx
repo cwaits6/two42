@@ -298,7 +298,6 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
           <Button
             size="lg"
             onClick={openCreate}
-            className="bg-brand-primary hover:bg-brand-primary/90 text-white"
           >
             <Plus className="mr-2 h-5 w-5" />
             New team
@@ -512,7 +511,6 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
               <Button
                 onClick={handleSave}
                 disabled={saving}
-                className="bg-brand-primary hover:bg-brand-primary/90 text-white"
               >
                 {saving ? "Saving..." : editing ? "Save changes" : "Create"}
               </Button>

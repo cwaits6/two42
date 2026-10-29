@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { siteConfig } from "@/lib/config";
 import { groupPath } from "@/lib/groups/active";
@@ -76,13 +77,10 @@ export default async function ManageLecturesPage({
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
-        <h1 className="text-3xl font-bold text-brand-primary">Lectures</h1>
-        <Link
-          href={`${base}/new`}
-          className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium bg-brand-primary text-white hover:bg-brand-primary/90 transition-colors"
-        >
+        <h1 className="text-3xl font-bold text-brand-primary-text">Lectures</h1>
+        <Button nativeButton={false} render={<Link href={`${base}/new`} />}>
           Add lecture
-        </Link>
+        </Button>
       </div>
 
       {/* Tab filter */}
@@ -152,7 +150,7 @@ export default async function ManageLecturesPage({
                       <td className="py-3 pr-4 font-medium">
                         <Link
                           href={`${base}/${lecture.id}/edit`}
-                          className="text-foreground hover:text-brand-primary transition-colors"
+                          className="text-foreground hover:text-brand-primary-text transition-colors"
                         >
                           {lecture.title}
                         </Link>
@@ -166,7 +164,7 @@ export default async function ManageLecturesPage({
                       </td>
                       <td className="py-3 pr-4">
                         {missingSummary ? (
-                          <span className="inline-flex items-center text-base font-bold text-brand-accent uppercase tracking-[0.1em]">
+                          <span className="inline-flex items-center text-base font-bold text-brand-accent-text uppercase tracking-[0.1em]">
                             Needs summary
                           </span>
                         ) : (
@@ -186,7 +184,7 @@ export default async function ManageLecturesPage({
                           No lectures yet.{" "}
                           <Link
                             href={`${base}/new`}
-                            className="text-brand-primary hover:underline"
+                            className="text-brand-primary-text hover:underline"
                           >
                             Add one →
                           </Link>

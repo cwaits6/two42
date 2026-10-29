@@ -28,7 +28,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="container mx-auto max-w-3xl px-4 py-12">
-      <h1 className="mb-2 text-3xl font-bold text-brand-primary md:text-4xl">
+      <h1 className="mb-2 text-3xl font-bold text-brand-primary-text md:text-4xl">
         Settings
       </h1>
       <p className="mb-8 text-muted-foreground">

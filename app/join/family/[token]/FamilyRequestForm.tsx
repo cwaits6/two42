@@ -109,7 +109,7 @@ export function FamilyRequestForm({ token, email }: FamilyRequestFormProps) {
       <Button
         type="submit"
         size="lg"
-        className="w-full bg-brand-primary text-white hover:bg-brand-primary/90 font-semibold"
+        className="w-full font-semibold"
         disabled={sending}
       >
         {sending ? "Sending…" : "Request access"}

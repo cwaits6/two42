@@ -590,7 +590,7 @@ export function ProfileForm({
                 To change your email, use the{" "}
                 <Link
                   href="/settings"
-                  className="text-brand-primary underline underline-offset-4"
+                  className="text-brand-primary-text underline underline-offset-4"
                 >
                   Settings page
                 </Link>
@@ -948,7 +948,7 @@ export function ProfileForm({
                   Manage families on the{" "}
                   <Link
                     href="/admin/families"
-                    className="text-brand-primary underline"
+                    className="text-brand-primary-text underline"
                   >
                     Families page
                   </Link>
@@ -963,7 +963,7 @@ export function ProfileForm({
               type="submit"
               size="lg"
               disabled={saving}
-              className="bg-brand-primary text-base text-white hover:bg-brand-primary/90"
+              className="text-base"
             >
               <Check className="mr-2 h-4 w-4" />
               {saving ? "Saving..." : "Save my changes"}

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { siteConfig } from "@/lib/config";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 
@@ -135,7 +136,7 @@ export default async function LectureDetailPage({
                 </Link>
               )}
               {weekNumber !== null && (
-                <span className="text-brand-accent text-base font-bold font-sans tracking-[0.2em] uppercase">
+                <span className="text-brand-accent-text text-base font-bold font-sans tracking-[0.2em] uppercase">
                   Week {String(weekNumber).padStart(2, "0")}
                 </span>
               )}
@@ -206,14 +207,14 @@ export default async function LectureDetailPage({
 
           <div className="flex flex-col gap-4">
             {safeVideoUrl ? (
-              <a
-                href={safeVideoUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-brand-primary text-white font-sans text-lg font-bold tracking-[0.1em] uppercase px-6 py-4 rounded-xl inline-flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
+              <Button
+                size="lg"
+                nativeButton={false}
+                render={<a href={safeVideoUrl} target="_blank" rel="noopener noreferrer" />}
+                className="rounded-xl font-sans text-lg font-bold tracking-[0.1em] uppercase"
               >
                 Watch the recording →
-              </a>
+              </Button>
             ) : (
               <span className="bg-muted text-muted-foreground font-sans text-lg font-bold tracking-[0.1em] uppercase px-6 py-4 rounded-xl inline-flex items-center justify-center gap-2 cursor-not-allowed">
                 Recording unavailable
@@ -231,7 +232,7 @@ export default async function LectureDetailPage({
         <div className="px-6 md:px-14 py-14 md:py-16 max-w-3xl">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-7 h-px bg-brand-accent" />
-            <span className="text-brand-accent text-base font-bold font-sans tracking-[0.2em] uppercase">
+            <span className="text-brand-accent-text text-base font-bold font-sans tracking-[0.2em] uppercase">
               Class Summary
             </span>
           </div>
@@ -263,7 +264,7 @@ export default async function LectureDetailPage({
               </div>
               <Link
                 href={`${libraryHref}/series/${series.id}`}
-                className="font-sans text-sm font-semibold text-brand-primary hover:opacity-80 transition-opacity"
+                className="font-sans text-sm font-semibold text-brand-primary-text hover:underline"
               >
                 View full series →
               </Link>
@@ -295,7 +296,7 @@ function SiblingRow({
       href={`${libraryHref}/${sib.id}`}
       className="grid grid-cols-[80px_1fr_auto] items-center gap-6 border-t border-border py-4 hover:bg-background transition-colors -mx-2 px-2 rounded"
     >
-      <span className="font-sans text-base text-brand-accent tracking-[0.15em] uppercase font-bold">
+      <span className="font-sans text-base text-brand-accent-text tracking-[0.15em] uppercase font-bold">
         Week {String(weekNumber).padStart(2, "0")}
       </span>
       <span className="font-display text-lg font-medium text-foreground tracking-tight">

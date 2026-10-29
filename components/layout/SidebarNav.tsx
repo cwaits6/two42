@@ -70,8 +70,8 @@ export function SidebarNav({ model, onNavigate }: SidebarNavProps) {
   const linkClass = (active: boolean) =>
     `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm border-l-4 transition-colors ${
       active
-        ? "bg-brand-warm text-brand-primary font-bold border-brand-primary"
-        : "border-transparent font-medium text-slate-600 hover:text-brand-primary hover:bg-brand-warm/50"
+        ? "bg-brand-warm text-brand-primary-text font-bold border-brand-primary"
+        : "border-transparent font-medium text-slate-600 hover:text-brand-primary-text hover:bg-brand-warm/50"
     }`;
 
   const renderLink = (item: SidebarLink) => {
@@ -109,8 +109,8 @@ export function SidebarNav({ model, onNavigate }: SidebarNavProps) {
             href={item.href}
             className={`flex flex-1 min-w-0 items-center gap-3 px-3 py-2.5 text-sm transition-colors ${
               active
-                ? "text-brand-primary font-bold"
-                : "font-medium text-slate-600 hover:text-brand-primary"
+                ? "text-brand-primary-text font-bold"
+                : "font-medium text-slate-600 hover:text-brand-primary-text"
             }`}
             aria-current={active ? "page" : undefined}
             onClick={onNavigate}
@@ -124,7 +124,7 @@ export function SidebarNav({ model, onNavigate }: SidebarNavProps) {
             aria-label={directoryOpen ? "Collapse directory menu" : "Expand directory menu"}
             aria-expanded={directoryOpen}
             className={`self-stretch px-2.5 transition-colors ${
-              active ? "text-brand-primary" : "text-slate-600 hover:text-brand-primary"
+              active ? "text-brand-primary-text" : "text-slate-600 hover:text-brand-primary-text"
             }`}
           >
             <ChevronDown
@@ -143,8 +143,8 @@ export function SidebarNav({ model, onNavigate }: SidebarNavProps) {
                 href={child.href}
                 className={`flex items-center pl-11 pr-3 py-2 rounded-lg text-sm border-l-4 transition-colors ${
                   childActive
-                    ? "bg-brand-warm text-brand-primary font-bold border-brand-primary"
-                    : "border-transparent font-medium text-slate-600 hover:text-brand-primary hover:bg-brand-warm/50"
+                    ? "bg-brand-warm text-brand-primary-text font-bold border-brand-primary"
+                    : "border-transparent font-medium text-slate-600 hover:text-brand-primary-text hover:bg-brand-warm/50"
                 }`}
                 aria-current={childActive ? "page" : undefined}
                 onClick={onNavigate}

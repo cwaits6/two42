@@ -68,7 +68,6 @@ export function CreateGroupAction({ className }: { className?: string }) {
       <Button
         size="lg"
         onClick={() => setOpen(true)}
-        className="bg-brand-primary text-white hover:bg-brand-primary/90"
       >
         <Plus aria-hidden="true" />
         {action.label}

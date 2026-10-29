@@ -56,7 +56,7 @@ export function JoinGroupButton({ token, groupId, groupName }: JoinGroupButtonPr
       ) : null}
       <Button
         size="lg"
-        className="w-full bg-brand-primary text-white hover:bg-brand-primary/90 font-semibold"
+        className="w-full font-semibold"
         onClick={join}
         disabled={busy}
       >

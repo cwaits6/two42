@@ -232,15 +232,16 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
                     {initials}
                   </AvatarFallback>
                 </Avatar>
-                <button
+                <Button
                   type="button"
+                  size="icon"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingAvatar}
-                  className="absolute -bottom-1 -right-1 flex h-12 w-12 items-center justify-center rounded-full bg-brand-primary text-white shadow-md transition-colors hover:bg-brand-primary/90 disabled:opacity-50"
+                  className="absolute -bottom-1 -right-1 rounded-full shadow-md"
                   aria-label="Upload photo"
                 >
                   <Camera className="h-5 w-5" />
-                </button>
+                </Button>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -427,7 +428,6 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
         <Button
           type="submit"
           disabled={saving}
-          className="bg-brand-primary hover:bg-brand-primary/90 text-white"
         >
           {saving ? "Saving..." : isNew ? "Add Family Member" : "Save Changes"}
         </Button>
