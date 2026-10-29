@@ -53,8 +53,8 @@
     // node-runtime-guard: watched by .github/workflows/vercel-node-watch.yml.
     // CI, engines.node and @types/node track the Node major Vercel runs in
     // production; a newer major passes CI and then fails on the deployed
-    // runtime. Lift it by raising allowedVersions once Vercel offers the next
-    // major, and move engines.node in the same PR.
+    // runtime. Lift it once Vercel offers the next major: raise allowedVersions
+    // and move engines.node, @types/node and CI node-version together in one PR.
     {
       "description": "Keep Node and @types/node on the major Vercel runs in production",
       "matchPackageNames": ["node", "@types/node"],
