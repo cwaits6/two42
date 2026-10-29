@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SegmentedLinks } from "@/components/ui/segmented";
 import { siteConfig } from "@/lib/config";
 import { groupPath } from "@/lib/groups/active";
 import { requireGroupLeader } from "@/lib/groups/server";
@@ -83,40 +84,33 @@ export default async function ManageLecturesPage({
         </Button>
       </div>
 
-      {/* Tab filter */}
-      <div className="flex items-center gap-2 mb-6 flex-wrap">
-        <Link
-          href={base}
-          className={`text-sm font-semibold px-4 py-2 rounded-full transition-colors ${
-            !isNeedsSummaryView
-              ? "bg-foreground text-background"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          All Lectures ({allLectures.length})
-        </Link>
-        <Link
-          href={`${base}?filter=needs-summary`}
-          className={`text-sm font-semibold px-4 py-2 rounded-full transition-colors inline-flex items-center gap-2 ${
-            isNeedsSummaryView
-              ? "bg-foreground text-background"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Awaiting Summary
-          {awaitingCount > 0 && (
-            <span
-              className={`text-xs font-bold rounded-full px-2 py-0.5 ${
-                isNeedsSummaryView
-                  ? "bg-background text-foreground"
-                  : "bg-brand-accent text-foreground"
-              }`}
-            >
-              {awaitingCount}
-            </span>
-          )}
-        </Link>
-      </div>
+      <SegmentedLinks
+        label="Lecture filter"
+        className="mb-6"
+        options={[
+          { href: base, label: `All Lectures (${allLectures.length})`, current: !isNeedsSummaryView },
+          {
+            href: `${base}?filter=needs-summary`,
+            current: isNeedsSummaryView,
+            label: (
+              <>
+                Awaiting Summary
+                {awaitingCount > 0 && (
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-sm font-bold ${
+                      isNeedsSummaryView
+                        ? "bg-background text-foreground"
+                        : "bg-brand-accent text-foreground"
+                    }`}
+                  >
+                    {awaitingCount}
+                  </span>
+                )}
+              </>
+            ),
+          },
+        ]}
+      />
 
       <Card>
         <CardHeader>

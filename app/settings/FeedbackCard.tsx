@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Send } from "lucide-react";
 import { toast } from "sonner";
-import { Segmented } from "./Segmented";
+import { Segmented } from "@/components/ui/segmented";
 
 type FeedbackType = "idea" | "problem";
 

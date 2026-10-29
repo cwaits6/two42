@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Segmented } from "./Segmented";
+import { Segmented } from "@/components/ui/segmented";
 
 type TextSize = "normal" | "large" | "larger";
 
