@@ -53,6 +53,19 @@
       "description": "Group all non-major npm dependency updates into a single PR",
       "matchUpdateTypes": ["minor", "patch"],
       "groupName": "non-major dependencies"
+    },
+    // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age
+    // minimumReleaseAge is inherited from local>cwaits6/renovate-config.
+    //
+    // OpenTelemetry releases as one family with exact peer ranges on
+    // @opentelemetry/api (resources 3.x needs ">=1.10.0 <1.11.0"), so a package
+    // bumped on its own fails npm's peer resolution. Listed after the non-major
+    // rule so this groupName wins for minor and patch bumps too.
+    {
+      "description": "Update every @opentelemetry package together, majors included",
+      "matchPackageNames": ["@opentelemetry/**"],
+      "groupName": "opentelemetry",
+      "separateMajorMinor": false
     }
   ]
 }
