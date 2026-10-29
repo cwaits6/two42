@@ -72,7 +72,7 @@ export default async function PrayerPage({
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-6xl">
-      <h1 className="text-3xl md:text-4xl font-bold text-brand-primary mb-2">
+      <h1 className="text-3xl md:text-4xl font-bold text-brand-primary-text mb-2">
         Prayer
       </h1>
       <p className="text-lg text-muted-foreground max-w-2xl">

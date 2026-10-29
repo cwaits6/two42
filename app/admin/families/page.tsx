@@ -500,7 +500,6 @@ export default function FamiliesPage() {
           <Button
             size="lg"
             onClick={openCreate}
-            className="bg-brand-primary hover:bg-brand-primary/90 text-white"
           >
             <Plus className="mr-2 h-5 w-5" />
             New Family
@@ -552,7 +551,7 @@ export default function FamiliesPage() {
                           <li key={m.id}>
                             <Link
                               href={`/admin/members/${m.id}`}
-                              className="text-brand-primary hover:underline"
+                              className="text-brand-primary-text hover:underline"
                             >
                               {displayName(m)}
                             </Link>
@@ -982,7 +981,6 @@ export default function FamiliesPage() {
                           size="sm"
                           disabled={savingMember}
                           onClick={handleSaveMember}
-                          className="bg-brand-primary hover:bg-brand-primary/90 text-white"
                         >
                           {savingMember ? "Saving..." : editingMember ? "Update" : "Add"}
                         </Button>
@@ -1016,7 +1014,6 @@ export default function FamiliesPage() {
               <Button
                 onClick={handleSave}
                 disabled={saving}
-                className="bg-brand-primary hover:bg-brand-primary/90 text-white"
               >
                 {saving ? "Saving..." : editing ? "Save Changes" : "Create"}
               </Button>

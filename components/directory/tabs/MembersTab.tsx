@@ -227,7 +227,6 @@ function MembersTabInner() {
           )}
           <Button
             onClick={() => setMode("add")}
-            className="bg-brand-primary text-white hover:bg-brand-primary/90"
           >
             Add member
           </Button>

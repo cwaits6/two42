@@ -36,7 +36,7 @@ export function SubscribeToEventButton({ eventId }: SubscribeToEventButtonProps)
       disabled={loading}
       variant="outline"
       size="lg"
-      className="h-10 gap-2 border-slate-200 bg-white px-6 text-base text-slate-600 shadow-sm hover:border-brand-primary/30 hover:bg-white hover:text-brand-primary"
+      className="h-10 gap-2 border-slate-200 bg-white px-6 text-base text-slate-600 shadow-sm hover:border-brand-primary/30 hover:bg-white hover:text-brand-primary-text"
     >
       <Rss className="h-4 w-4" />
       {loading ? "Preparing…" : "Subscribe to Event"}

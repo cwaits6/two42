@@ -83,7 +83,7 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
       <div className="flex justify-end">
         <Button
           size="lg"
-          className="bg-brand-primary hover:bg-brand-primary/90 text-lg"
+          className="text-lg"
           onClick={() => setDialogOpen(true)}
         >
           <Plus className="mr-1 h-5 w-5" />
@@ -180,7 +180,6 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
             <Button
               onClick={handleCreate}
               disabled={creating}
-              className="bg-brand-primary hover:bg-brand-primary/90 text-white"
             >
               {creating ? "Creating..." : "Create organization"}
             </Button>

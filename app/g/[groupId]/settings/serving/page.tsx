@@ -53,7 +53,7 @@ export default async function GroupServingSettingsPage({
   return (
     <div className="container mx-auto px-4 py-12 max-w-4xl">
       <div className="mb-8">
-        <h1 className="text-3xl md:text-4xl font-bold text-brand-primary mb-2">
+        <h1 className="text-3xl md:text-4xl font-bold text-brand-primary-text mb-2">
           Serving
         </h1>
         <p className="text-lg text-muted-foreground">

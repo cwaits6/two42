@@ -158,7 +158,7 @@ export function ServingSchedule({
                   size="lg"
                   disabled={busy}
                   onClick={() => handleTake(date)}
-                  className="text-lg px-6 py-6 bg-brand-primary hover:bg-brand-primary/90 text-white shrink-0"
+                  className="text-lg px-6 py-6 shrink-0"
                 >
                   I&apos;ll do it
                 </Button>
@@ -208,7 +208,7 @@ export function ServingSchedule({
               size="lg"
               disabled={busy}
               onClick={() => pickerDate && signUp(pickerDate, [userId])}
-              className="text-lg py-6 bg-brand-primary hover:bg-brand-primary/90 text-white"
+              className="text-lg py-6"
             >
               Just me
             </Button>
@@ -219,7 +219,7 @@ export function ServingSchedule({
                 onClick={() =>
                   pickerDate && signUp(pickerDate, [userId, spouse.id])
                 }
-                className="text-lg py-6 bg-brand-primary hover:bg-brand-primary/90 text-white"
+                className="text-lg py-6"
               >
                 Me &amp; {spouse.name}
               </Button>

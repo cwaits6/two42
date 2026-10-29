@@ -67,14 +67,14 @@ export default function EventCalendarView({
         <div className="mb-3 flex items-center gap-2">
           <button
             onClick={() => calendarRef.current?.getApi().prev()}
-            className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition-colors hover:border-brand-primary/30 hover:text-brand-primary"
+            className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition-colors hover:border-brand-primary/30 hover:text-brand-primary-text"
             aria-label="Previous month"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
           <button
             onClick={() => calendarRef.current?.getApi().next()}
-            className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition-colors hover:border-brand-primary/30 hover:text-brand-primary"
+            className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition-colors hover:border-brand-primary/30 hover:text-brand-primary-text"
             aria-label="Next month"
           >
             <ChevronRight className="h-5 w-5" />

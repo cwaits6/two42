@@ -56,7 +56,7 @@ export default async function PlatformOverviewPage() {
       <p className="mt-8">
         <Link
           href="/platform/organizations"
-          className="inline-flex min-h-11 items-center text-base font-semibold text-brand-primary underline underline-offset-4 hover:text-brand-primary/80"
+          className="inline-flex min-h-11 items-center text-base font-semibold text-brand-primary-text underline underline-offset-4 hover:text-foreground"
         >
           Manage organizations
         </Link>

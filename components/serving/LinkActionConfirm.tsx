@@ -58,7 +58,7 @@ export function LinkActionConfirm({
           {done ? (
             <>
               <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto mb-4" />
-              <h1 className="font-serif text-3xl text-brand-primary mb-4">
+              <h1 className="font-serif text-3xl text-brand-primary-text mb-4">
                 {action === "signup" ? "You're all set!" : "Signup cancelled"}
               </h1>
               <p className="text-lg text-muted-foreground">
@@ -69,7 +69,7 @@ export function LinkActionConfirm({
             </>
           ) : (
             <>
-              <h1 className="font-serif text-3xl text-brand-primary mb-4">
+              <h1 className="font-serif text-3xl text-brand-primary-text mb-4">
                 {action === "signup" ? `Serve on ${dateLabel}?` : "Can't make it?"}
               </h1>
               <p className="text-lg text-muted-foreground mb-8">
@@ -85,7 +85,7 @@ export function LinkActionConfirm({
                       size="lg"
                       disabled={busy}
                       onClick={() => submit(false)}
-                      className="text-lg py-6 bg-brand-primary hover:bg-brand-primary/90 text-white"
+                      className="text-lg py-6"
                     >
                       {spouseName ? "Just me" : "Yes, I'll serve"}
                     </Button>
@@ -94,7 +94,7 @@ export function LinkActionConfirm({
                         size="lg"
                         disabled={busy}
                         onClick={() => submit(true)}
-                        className="text-lg py-6 bg-brand-primary hover:bg-brand-primary/90 text-white"
+                        className="text-lg py-6"
                       >
                         Me &amp; {spouseName}
                       </Button>
@@ -119,7 +119,7 @@ export function LinkActionConfirm({
 
           <Link
             href="/serving"
-            className="inline-block mt-8 text-brand-primary hover:underline text-lg"
+            className="inline-block mt-8 text-brand-primary-text hover:underline text-lg"
           >
             See the full serving schedule
           </Link>

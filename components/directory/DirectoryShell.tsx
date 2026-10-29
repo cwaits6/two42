@@ -53,7 +53,7 @@ function TabStrip({ basePath }: { basePath: string }) {
                 className={cn(
                   "inline-flex min-h-12 items-center border-b-4 px-3 text-base font-semibold transition-colors",
                   active
-                    ? "border-brand-primary text-brand-primary"
+                    ? "border-brand-primary text-brand-primary-text"
                     : "border-transparent text-muted-foreground hover:border-border hover:text-foreground"
                 )}
               >

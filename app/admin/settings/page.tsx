@@ -36,7 +36,7 @@ export default async function SettingsPage() {
     <div className="container mx-auto px-4 py-12 max-w-2xl">
       <Card>
         <CardHeader>
-          <CardTitle className="text-3xl text-brand-primary">Org settings</CardTitle>
+          <CardTitle className="text-3xl text-brand-primary-text">Org settings</CardTitle>
         </CardHeader>
         <CardContent>
           {CUSTOM_SENDING_DOMAINS_ENABLED && (

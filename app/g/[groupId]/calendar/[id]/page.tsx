@@ -245,7 +245,7 @@ export default async function EventDetailPage({
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5 text-muted-foreground hover:border-brand-primary/30 hover:text-brand-primary"
+              className="gap-1.5 text-muted-foreground hover:border-brand-primary/30 hover:text-brand-primary-text"
               nativeButton={false}
               render={<Link href={editHref} />}
             >
@@ -275,10 +275,7 @@ export default async function EventDetailPage({
                   className="w-1.5 h-1.5 rounded-full flex-shrink-0"
                   style={{ background: "var(--color-brand-accent)" }}
                 />
-                <span
-                  className="font-sans text-base font-bold uppercase tracking-[1.5px]"
-                  style={{ color: "var(--color-brand-accent)" }}
-                >
+                <span className="font-sans text-base font-bold uppercase tracking-[1.5px] text-brand-accent-text">
                   {diffDays <= 1
                     ? upcomingLabel
                     : `This week · ${upcomingLabel.toLowerCase()}`}
@@ -292,10 +289,7 @@ export default async function EventDetailPage({
             </h1>
 
             {/* The group as serif-italic subtitle */}
-            <p
-              className="font-serif italic text-[22px] mt-2 leading-snug tracking-tight"
-              style={{ color: "var(--color-brand-primary)" }}
-            >
+            <p className="font-serif italic text-[22px] mt-2 leading-snug tracking-tight text-brand-primary-text">
               {group.name}
             </p>
 
@@ -330,7 +324,7 @@ export default async function EventDetailPage({
                 {/* Eyebrow */}
                 <div className="flex items-center gap-3 mb-4">
                   <div className="h-px w-6 bg-brand-accent" />
-                  <span className="font-sans text-base font-bold uppercase tracking-[2px] text-brand-accent">
+                  <span className="font-sans text-base font-bold uppercase tracking-[2px] text-brand-accent-text">
                     About this event
                   </span>
                 </div>
@@ -493,7 +487,7 @@ export default async function EventDetailPage({
                     href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="ml-3 inline-flex min-h-12 shrink-0 items-center whitespace-nowrap font-sans text-base font-semibold text-brand-primary hover:underline"
+                    className="ml-3 inline-flex min-h-12 shrink-0 items-center whitespace-nowrap font-sans text-base font-semibold text-brand-primary-text hover:underline"
                   >
                     Directions →
                   </a>

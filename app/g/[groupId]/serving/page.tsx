@@ -143,7 +143,7 @@ export default async function ServingPage({
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-3xl">
-      <h1 className="text-3xl md:text-4xl font-bold text-brand-primary mb-2">
+      <h1 className="text-3xl md:text-4xl font-bold text-brand-primary-text mb-2">
         Serving
       </h1>
       <p className="text-lg text-muted-foreground mb-10">
@@ -176,7 +176,7 @@ export default async function ServingPage({
                           <p className="text-xl font-semibold flex items-center gap-2">
                             {team.name}
                             {isTeamLead && (
-                              <span className="text-xs font-medium uppercase tracking-wider text-brand-accent border border-brand-accent/40 rounded px-1.5 py-0.5">
+                              <span className="text-xs font-medium uppercase tracking-wider text-brand-accent-text border border-brand-accent/40 rounded px-1.5 py-0.5">
                                 Leader
                               </span>
                             )}
@@ -225,7 +225,7 @@ export default async function ServingPage({
                         <p className="text-xl font-semibold flex items-center gap-2">
                           {team.name}
                           {isMember && (
-                            <span className="text-xs font-medium uppercase tracking-wider text-brand-accent border border-brand-accent/40 rounded px-1.5 py-0.5">
+                            <span className="text-xs font-medium uppercase tracking-wider text-brand-accent-text border border-brand-accent/40 rounded px-1.5 py-0.5">
                               You&apos;re in this group
                             </span>
                           )}

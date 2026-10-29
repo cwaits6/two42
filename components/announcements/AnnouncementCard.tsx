@@ -55,7 +55,7 @@ export function AnnouncementCard({ announcement }: AnnouncementCardProps) {
         ) : (
           <SanitizedHtml
             html={announcement.content}
-            className="text-base text-slate-600 leading-relaxed [&_a]:text-brand-accent [&_a]:underline [&_a:hover]:text-brand-accent/90 [&_strong]:font-semibold [&_strong]:text-slate-800"
+            className="text-base text-slate-600 leading-relaxed [&_a]:text-brand-accent-text [&_a]:underline [&_a:hover]:text-foreground [&_strong]:font-semibold [&_strong]:text-slate-800"
           />
         )}
       </div>

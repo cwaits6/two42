@@ -135,7 +135,7 @@ export function ServingSettingsDialog({ teamId, settings }: ServingSettingsDialo
           <Button
             onClick={save}
             disabled={saving}
-            className="w-full bg-brand-primary hover:bg-brand-primary/90 text-white"
+            className="w-full"
           >
             {saving ? "Saving…" : "Save settings"}
           </Button>

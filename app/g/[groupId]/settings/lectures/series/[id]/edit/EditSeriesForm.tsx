@@ -119,7 +119,7 @@ export function EditSeriesForm({
           Series not found.{" "}
           <Link
             href={listHref}
-            className="text-brand-primary hover:underline"
+            className="text-brand-primary-text hover:underline"
           >
             Back to series
           </Link>
@@ -132,7 +132,7 @@ export function EditSeriesForm({
     <div className="container mx-auto px-4 py-12 max-w-2xl">
       <Card>
         <CardHeader>
-          <CardTitle className="text-3xl text-brand-primary">Edit Series</CardTitle>
+          <CardTitle className="text-3xl text-brand-primary-text">Edit Series</CardTitle>
           <PostingTo groupName={groupName} />
         </CardHeader>
         <CardContent>
@@ -174,7 +174,7 @@ export function EditSeriesForm({
               <Button
                 type="submit"
                 size="lg"
-                className="flex-1 text-lg py-6 bg-brand-primary hover:bg-brand-primary/90 text-white"
+                className="flex-1 text-lg py-6"
                 disabled={loading}
               >
                 {loading ? "Saving..." : "Save Changes"}

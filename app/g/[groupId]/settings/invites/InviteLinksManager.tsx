@@ -237,7 +237,6 @@ export function InviteLinksManager({ groupId, groupName, timeZone }: InviteLinks
           <Button
             size="lg"
             onClick={() => setCreateOpen(true)}
-            className="bg-brand-primary text-white hover:bg-brand-primary/90"
           >
             <Plus className="mr-2 h-5 w-5" />
             Create link
@@ -278,7 +277,6 @@ export function InviteLinksManager({ groupId, groupName, timeZone }: InviteLinks
                               copyButtons.current[invite.id] = el;
                             }}
                             onClick={() => copyLink(invite)}
-                            className="bg-brand-primary text-white hover:bg-brand-primary/90"
                           >
                             <Copy className="mr-2 h-5 w-5" />
                             Copy link
@@ -382,7 +380,6 @@ export function InviteLinksManager({ groupId, groupName, timeZone }: InviteLinks
               size="lg"
               onClick={createLink}
               disabled={creating}
-              className="bg-brand-primary text-white hover:bg-brand-primary/90"
             >
               {creating ? "Creating…" : "Create link"}
             </Button>
