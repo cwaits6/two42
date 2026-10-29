@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/lib/supabase/server";
 import { groupPath, type ActiveGroup } from "@/lib/groups/active";
 import { loadHomeCards, type HomeCard, type HomeEvent } from "@/lib/groups/home";
@@ -57,9 +58,7 @@ function GroupCard({
           {group.name}
         </span>
         {group.role === "leader" && (
-          <span className="shrink-0 rounded border border-brand-accent/40 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wider text-brand-accent-text">
-            Leader
-          </span>
+          <Badge variant="role">Leader</Badge>
         )}
       </div>
       {activity && (

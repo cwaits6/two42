@@ -15,7 +15,7 @@ export function AdminSidebarNav() {
 
   // Soft-blue active state with a primary left bar, per the design system
   const linkClass = (active: boolean) =>
-    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm border-l-4 transition-colors ${
+    `flex min-h-11 items-center gap-3 px-3 py-2.5 rounded-lg text-base border-l-4 transition-colors ${
       active
         ? "bg-brand-warm text-brand-primary-text font-bold border-brand-primary"
         : "border-transparent font-medium text-slate-600 hover:text-brand-primary-text hover:bg-brand-warm/50"
@@ -60,7 +60,7 @@ export function AdminSidebarNav() {
         {renderLink(overviewItem)}
         {adminNavGroups.map((group) => (
           <Fragment key={group.key}>
-            <p className="px-3 pt-4 pb-1 text-xs font-semibold uppercase text-slate-400 tracking-wider">
+            <p className="px-3 pt-4 pb-1 text-sm font-semibold uppercase text-muted-foreground tracking-wider">
               {group.label}
             </p>
             {group.items.map(renderLink)}
@@ -87,7 +87,7 @@ export function AdminSidebarNav() {
               key={item.href}
               href={item.href}
               aria-current={active ? "page" : undefined}
-              className={`inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-full border px-4 text-sm transition-colors ${
+              className={`inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-full border px-4 text-base transition-colors ${
                 active
                   ? "border-brand-primary bg-brand-warm font-bold text-brand-primary-text"
                   : "border-border font-medium text-slate-600 hover:text-brand-primary-text"
