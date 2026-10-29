@@ -1,0 +1,68 @@
+name: Watch Vercel Node.js runtimes
+
+# Opens a tracking issue when Vercel lists a Node major newer than the one
+# renovate.json5's node-runtime-guard holds CI, engines.node and @types/node
+# to, or when the guard passes its review date without that happening.
+# Self-deactivates once the guard is lifted.
+
+on:
+  schedule:
+    - cron: '0 8 * * 1' # Mondays 08:00 UTC
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Check Vercel Node.js versions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Notify when Vercel offers a newer Node major
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Open a re-check issue on this date even if Vercel has not moved.
+          REVIEW_BY: '2027-04-01'
+        run: |
+          set -euo pipefail
+
+          if ! grep -q 'node-runtime-guard' renovate.json5; then
+            echo "Node runtime guard already lifted — nothing to watch."
+            exit 0
+          fi
+
+          held="$(jq -r '.engines.node' package.json)"
+          held_major="${held%%.*}"
+
+          # Fail loudly if the page moves or changes shape, rather than go quiet.
+          page="$(curl -fsSL https://vercel.com/docs/functions/runtimes/node-js/node-js-versions.md)"
+          listed="$(printf '%s\n' "$page" | grep -oE '\*\*[0-9]+\.x\*\*' | tr -d '*' | sort -u)"
+          [ -n "$listed" ] || { echo "No versions found on the Vercel page; the format changed." >&2; exit 1; }
+          printf 'Vercel lists:\n%s\nengines.node: %s\n' "$listed" "$held"
+
+          open_issue() {
+            # A separate assignment, so a failed search stops the step under set -e.
+            local open_count
+            open_count="$(gh issue list --state open --search "$1 in:title" --json number --jq 'length')"
+            if [ "$open_count" != "0" ]; then
+              echo "Tracking issue already open."
+              return
+            fi
+            gh issue create --title "$1" --body "$2"
+          }
+
+          newest="$(printf '%s\n' "$listed" | cut -d. -f1 | sort -n | tail -1)"
+          if [ "$newest" -gt "$held_major" ]; then
+            next_major="$newest"
+            open_issue "Vercel now runs Node ${next_major} — lift the node-runtime-guard" \
+              "$(printf 'Vercel'\''s [supported Node.js versions](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions) now include **%s.x**.\n\n**To upgrade:** in one PR, raise the node-runtime-guard rule'\''s `allowedVersions` in `renovate.json5`, set `engines.node` in `package.json` to `"%s.x"`, move `@types/node` to the same major, and set every `setup-node` `node-version` in `.github/workflows/` to it. Renovate reads its config from `main`, so it cannot make those bumps inside this PR. Merge only once CI is green on the new major, so Vercel never deploys a runtime CI has not tested.\n\n_Opened automatically by the vercel-node-watch workflow._' "$next_major" "$next_major")"
+            exit 0
+          fi
+
+          if [ "$(date -u +%F)" \> "$REVIEW_BY" ] || [ "$(date -u +%F)" = "$REVIEW_BY" ]; then
+            open_issue "Review the Node ${held_major} runtime guard" \
+              "$(printf 'The node-runtime-guard in `renovate.json5` passed its review date (%s), and Vercel still lists nothing newer than Node %s.\n\nCheck whether Node %s is still the right target (its support window, and Vercel'\''s changelog). Then either move `REVIEW_BY` in `.github/workflows/vercel-node-watch.yml` to a new date, or upgrade.\n\n_Opened automatically by the vercel-node-watch workflow._' "$REVIEW_BY" "$held_major" "$held_major")"
+          fi
