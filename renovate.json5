@@ -80,6 +80,38 @@
       "matchPackageNames": ["@opentelemetry/**"],
       "groupName": "opentelemetry",
       "separateMajorMinor": false
+    },
+    // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age
+    // minimumReleaseAge is inherited from local>cwaits6/renovate-config.
+    //
+    // otel-3-guard: the 3.x family (sdk-node 0.300, resources 3.0) ships
+    // bundled ESM that Next's output file tracing cannot follow, so the
+    // deployed function lacked forwarded-parse and every request 500'd. Lift
+    // these caps only once a `next build` lists forwarded-parse (and the rest
+    // of the family's runtime deps) in .next/server/instrumentation.js.nft.json,
+    // and check a preview deployment with OTEL_EXPORTER_OTLP_ENDPOINT set.
+    {
+      "description": "Hold @opentelemetry/api below the 3.x family's peer range",
+      "matchPackageNames": ["@opentelemetry/api"],
+      "allowedVersions": "<1.10.0"
+    },
+    {
+      "description": "Hold the 0.x OpenTelemetry packages below the 3.x family",
+      "matchPackageNames": [
+        "@opentelemetry/sdk-node",
+        "@opentelemetry/exporter-trace-otlp-http"
+      ],
+      "allowedVersions": "<0.300.0"
+    },
+    {
+      "description": "Hold auto-instrumentations-node below its 3.x-family release",
+      "matchPackageNames": ["@opentelemetry/auto-instrumentations-node"],
+      "allowedVersions": "<0.82.0"
+    },
+    {
+      "description": "Hold @opentelemetry/resources on 2.x",
+      "matchPackageNames": ["@opentelemetry/resources"],
+      "allowedVersions": "<3.0.0"
     }
   ]
 }
