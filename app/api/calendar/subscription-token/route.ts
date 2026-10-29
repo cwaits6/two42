@@ -5,6 +5,7 @@ import {
   hashSubscriptionToken,
   subscriptionTokenExpiryDate,
 } from "@/lib/calendar/subscription-token";
+import { isMemberRole } from "@/lib/roles";
 
 export async function POST() {
   const supabase = await createClient();
@@ -22,12 +23,7 @@ export async function POST() {
     .eq("id", user.id)
     .single();
 
-  const isMember =
-    profile?.role === "member" ||
-    profile?.role === "content_editor" ||
-    profile?.role === "admin";
-
-  if (!isMember) {
+  if (!profile || !isMemberRole(profile.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

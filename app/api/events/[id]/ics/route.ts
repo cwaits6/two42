@@ -5,6 +5,7 @@ import {
   subscriptionTokenExpiryDate,
 } from "@/lib/calendar/subscription-token";
 import type { Event } from "@/lib/types";
+import { isMemberRole } from "@/lib/roles";
 
 export async function GET(
   request: Request,
@@ -63,7 +64,7 @@ export async function GET(
     return new Response("Something went wrong", { status: 500 });
   }
 
-  if (!owner || !["member", "content_editor", "admin"].includes(owner.role)) {
+  if (!owner || !isMemberRole(owner.role)) {
     return new Response("Unauthorized", { status: 401 });
   }
 

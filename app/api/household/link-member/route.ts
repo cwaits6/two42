@@ -1,5 +1,6 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { isMemberRole } from "@/lib/roles";
 
 /**
  * POST /api/household/link-member
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
 
   if (
     !currentProfile ||
-    !["member", "content_editor", "admin"].includes(currentProfile.role) ||
+    !isMemberRole(currentProfile.role) ||
     !currentProfile.setup_completed ||
     !currentProfile.family_id
   ) {
@@ -88,7 +89,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Member not found." }, { status: 404 });
   }
 
-  if (!["member", "content_editor", "admin"].includes(target.role)) {
+  if (!isMemberRole(target.role)) {
     return NextResponse.json({ error: "This person is not an enrolled member." }, { status: 400 });
   }
 

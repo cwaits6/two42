@@ -94,14 +94,6 @@ describe("requireOrgAdmin", () => {
     expect(await requireOrgAdmin()).toEqual({ ok: false, status: 403 });
   });
 
-  it("403s for a content_editor — the closest role to admin", async () => {
-    stubClient({
-      user: { id: "u1" },
-      profile: { role: "content_editor", org_id: "o1" },
-    });
-    expect(await requireOrgAdmin()).toEqual({ ok: false, status: 403 });
-  });
-
   it("403s for pending", async () => {
     stubClient({ user: { id: "u1" }, profile: { role: "pending", org_id: "o1" } });
     expect(await requireOrgAdmin()).toEqual({ ok: false, status: 403 });

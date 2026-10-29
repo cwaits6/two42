@@ -8,6 +8,7 @@ import { siteConfig } from "@/lib/config";
 import { canEditSpouseProfiles as computeCanEditSpouseProfiles, type HouseholdSummary } from "@/lib/household";
 import type { Profile, FamilyUnit, FamilyMember } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { isMemberRole } from "@/lib/roles";
 
 export const metadata = { title: `My Profile | ${siteConfig.name}` };
 
@@ -24,7 +25,7 @@ export default async function ProfilePage() {
     .single<Profile>();
 
   if (!profile) redirect("/dashboard");
-  if (!["member", "content_editor", "admin"].includes(profile.role)) {
+  if (!isMemberRole(profile.role)) {
     redirect("/dashboard");
   }
 

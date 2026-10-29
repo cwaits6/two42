@@ -13,6 +13,7 @@ import { SidebarNav } from "./SidebarNav";
 import { isSidebarRoute } from "./AppShell";
 import { useSidebarModel } from "./useSidebarModel";
 import type { Profile } from "@/lib/types";
+import { isMemberRole } from "@/lib/roles";
 
 interface HeaderProps {
   profile: Profile | null;
@@ -50,9 +51,7 @@ export function Header({ profile, hasServingAccess, isPlatformAdmin = false, org
     router.refresh();
   };
 
-  const isAdmin = profile?.role === "admin";
-  const isMember =
-    profile?.role === "member" || profile?.role === "content_editor" || isAdmin;
+  const isMember = !!profile && isMemberRole(profile.role);
 
   // The desktop sidebar pane is only rendered on these routes; elsewhere
   // (e.g. /household) the menu button stays available at all breakpoints.

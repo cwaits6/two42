@@ -4,6 +4,7 @@ import { resolveEmailBranding } from "@/lib/email/identity";
 import { reserveEmailQuota } from "@/lib/email/quota";
 import { displayName } from "@/lib/names";
 import { NextResponse, after } from "next/server";
+import { isMemberRole } from "@/lib/roles";
 
 // Per-user submission cap. Feedback is a low-volume form; this keeps a
 // stuck client or a hostile script from flooding the table and admin inboxes.
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
 
   if (
     !profile ||
-    !["member", "content_editor", "admin"].includes(profile.role)
+    !isMemberRole(profile.role)
   ) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

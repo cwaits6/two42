@@ -18,13 +18,13 @@ import { toast } from "sonner";
 import { Check, X, UserCog, Clock, Pencil } from "lucide-react";
 import type { AccessRequest, Profile, UserRole } from "@/lib/types";
 import { displayName } from "@/lib/names";
+import { toUserRole } from "@/lib/roles";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 
 const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: "pending", label: "Pending" },
   { value: "member", label: "Member" },
-  { value: "content_editor", label: "Content Editor" },
   { value: "admin", label: "Admin" },
 ];
 
@@ -48,7 +48,7 @@ export default function MembersPage() {
         .order("first_name", { ascending: true }),
     ]);
     setRequests(reqs || []);
-    setMembers(mems || []);
+    setMembers((mems || []).map((m) => ({ ...m, role: toUserRole(m.role) })));
     setLoading(false);
   }, [supabase]);
 

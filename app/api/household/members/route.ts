@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { titleCaseName } from "@/lib/sanitize";
+import { isMemberRole } from "@/lib/roles";
 
 async function getMemberContext(supabase: Awaited<ReturnType<typeof createClient>>) {
   const {
@@ -16,7 +17,7 @@ async function getMemberContext(supabase: Awaited<ReturnType<typeof createClient
 
   if (
     !profile ||
-    !["member", "content_editor", "admin"].includes(profile.role) ||
+    !isMemberRole(profile.role) ||
     !profile.setup_completed ||
     !profile.family_id
   ) {

@@ -1,6 +1,6 @@
 import type { Tables } from "@/lib/supabase/database.types";
 
-export type UserRole = "pending" | "member" | "content_editor" | "admin";
+export type UserRole = "pending" | "member" | "admin";
 
 export type AccessRequestStatus = "pending" | "approved" | "denied";
 

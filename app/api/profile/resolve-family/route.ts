@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { isMemberRole } from "@/lib/roles";
 
 /**
  * POST /api/profile/resolve-family
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
           role: string;
         }>) ?? []
       ).filter((p) =>
-        ["member", "content_editor", "admin"].includes(p.role),
+        isMemberRole(p.role),
       );
 
       return {

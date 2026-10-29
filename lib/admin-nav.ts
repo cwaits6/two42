@@ -5,8 +5,6 @@ export interface AdminNavItem {
   href: string;
   label: string;
   icon: ComponentType<{ className?: string }>;
-  /** Visible to content_editor as well as admin. Defaults to admin-only. */
-  contentEditorVisible?: boolean;
 }
 
 export interface AdminNavGroup {

@@ -3,6 +3,7 @@ import { sendFamilyInviteEmail } from "@/lib/email/resend";
 import { resolveEmailBranding } from "@/lib/email/identity";
 import { NextResponse } from "next/server";
 import { siteConfig } from "@/lib/config";
+import { isMemberRole } from "@/lib/roles";
 
 /**
  * POST /api/family-invites
@@ -42,9 +43,7 @@ export async function POST(request: Request) {
   }
 
   const isAdmin = callerProfile.role === "admin";
-  const isMember = ["member", "content_editor", "admin"].includes(
-    callerProfile.role,
-  );
+  const isMember = isMemberRole(callerProfile.role);
 
   if (!isMember) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
