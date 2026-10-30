@@ -24,6 +24,9 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: false,
   poweredByHeader: false,
+  // On by default, `next dev` appends a managed block to the tracked AGENTS.md
+  // whenever it detects a coding agent, dirtying every worktree that runs it.
+  agentRules: false,
   // Loaded from node_modules at runtime, not bundled: its per-framework
   // instrumentations dynamically require packages this app does not install
   // (e.g. @nestjs/core), which Turbopack treats as a build error.
