@@ -265,7 +265,7 @@ async function runDaily(
       // inside this tenant. See the note in _shared/orgs.ts.
       const { data: signup, error: signupError } = await supabase
         .from("serving_signups")
-        .select("id, serving_signup_attendees(profiles(id, first_name, preferred_name, email))")
+        .select("id, serving_signup_attendees(profiles(id, first_name, preferred_name, email, role))")
         .eq("org_id", orgId)
         .eq("team_id", team_id)
         .eq("service_date", sunday)
@@ -277,7 +277,13 @@ async function runDaily(
       if (!signup) continue; // open Sunday — no reminder to send
 
       const attendees = (signup.serving_signup_attendees ?? []) as unknown as Array<{
-        profiles: { id: string; first_name: string | null; preferred_name: string | null; email: string | null } | null;
+        profiles: {
+          id: string;
+          first_name: string | null;
+          preferred_name: string | null;
+          email: string | null;
+          role: string;
+        } | null;
       }>;
 
       // Filter to the final sendable set first, then reserve once per team
@@ -287,7 +293,10 @@ async function runDaily(
       // the run's HTTP status to 500.
       const recipients = attendees
         .map((a) => a.profiles)
-        .filter((p): p is NonNullable<typeof p> & { email: string } => !!p?.email);
+        .filter(
+          (p): p is NonNullable<typeof p> & { email: string } =>
+            !!p?.email && p.role !== "pending",
+        );
       if (recipients.length === 0) continue;
 
       const allowed = await reserveEmailQuota(supabase, orgId, recipients.length);
@@ -429,9 +438,11 @@ async function runMonthly(
 
       // Get all team members. The profiles embed is org-safe by FK traversal
       // from the org-filtered team_members parent — see _shared/orgs.ts.
+      // Someone moved back to pending keeps their team_members row but has
+      // lost the team, so the filter below drops them.
       const { data: members, error: membersError } = await supabase
         .from("team_members")
-        .select("profiles(id, first_name, preferred_name, email, email_announcements)")
+        .select("profiles(id, first_name, preferred_name, email, email_announcements, role)")
         .eq("org_id", orgId)
         .eq("team_id", team_id);
       if (membersError) {
@@ -452,11 +463,12 @@ async function runMonthly(
               preferred_name: string | null;
               email: string | null;
               email_announcements: boolean;
+              role: string;
             } | null,
         )
         .filter(
           (m): m is NonNullable<typeof m> & { email: string } =>
-            !!m?.email && m.email_announcements !== false,
+            !!m?.email && m.email_announcements !== false && m.role !== "pending",
         );
 
       // reserveEmailQuota returns true without an RPC round trip for an

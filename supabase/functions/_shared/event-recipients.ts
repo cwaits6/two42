@@ -3,7 +3,8 @@
 // through forEachOrg() — see _shared/orgs.ts for why the filter text is the
 // boundary — and the membership step carries the event's group_id, so an
 // RSVP from someone who has since left the group is dropped rather than
-// mailed.
+// mailed. A member moved back to pending keeps their group_members row but
+// has lost the group, so the profile step drops them too.
 //
 // Deliberately free of any @supabase/supabase-js import so it can be unit
 // tested offline against the structural type below.
@@ -75,11 +76,16 @@ export async function resolveEventReminderRecipients(
   for (const ids of chunk(memberIds, IN_CHUNK_SIZE)) {
     const { data: profiles, error: profilesError } = await supabase
       .from("profiles")
-      .select("id, first_name, preferred_name, email")
+      .select("id, first_name, preferred_name, email, role")
       .eq("org_id", orgId)
       .in("id", ids);
     if (profilesError) throw new Error(`profiles query failed: ${profilesError.message}`);
-    for (const p of (profiles ?? []) as unknown as Array<Omit<EventRecipient, "email"> & { email: string | null }>) {
+    for (
+      const p of (profiles ?? []) as unknown as Array<
+        Omit<EventRecipient, "email"> & { email: string | null; role: string }
+      >
+    ) {
+      if (p.role === "pending") continue;
       // Pending profiles (e.g. spouses who have never logged in) can have no
       // email — skip, don't throw. Log the id, never the address.
       if (!p.email) {
