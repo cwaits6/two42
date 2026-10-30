@@ -22,6 +22,9 @@ schedule. Every layer below the church is a membership row, not a field on
 the person, so a person can lead one group and be a plain member of
 another. A church admin is **not** an implicit member of any group: they
 read a group's content only by joining it and edit it only by leading it.
+The church admins who existed when groups were introduced do lead the one
+backfilled group, through real leader rows that `group_model_backfill()`
+wrote.
 Around those four roles sit a handful of attributes that grant something
 narrower — the household primary or spouse, the person a fund goes to — and
 a set of church and group settings that widen or narrow what a role can do.
