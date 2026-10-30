@@ -9,7 +9,7 @@ interface PageContainerProps {
 }
 
 const sizeClasses: Record<PageContainerSize, string> = {
-  /** Forms, settings and other single-column reading */
+  /** Forms and other single-column reading */
   reading: "max-w-2xl",
   /** Standard content pages */
   default: "max-w-4xl",
