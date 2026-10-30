@@ -111,13 +111,13 @@ begin
   -- Owners sign up AFTER provisioning (the org-first contract):
   -- handle_new_user() resolves each into their org via the approved
   -- access_requests row provisioning created (approved_role = 'admin', so
-  -- both owners satisfy is_admin(), is_content_editor() and is_member()).
+  -- both owners satisfy is_admin() and is_member()).
   insert into auth.users (id, email) values
     (owner_a, 'owner-a@storage.example.test'),
     (owner_b, 'owner-b@storage.example.test');
 
   -- A plain (non-admin, household-less) org-B member. The founding owners
-  -- satisfy is_admin()/is_content_editor()/is_member() all at once, so they
+  -- satisfy is_admin()/is_member() all at once, so they
   -- can never make a role predicate fail — an intra-org denial needs a
   -- principal the permissive arms actually reject.
   insert into public.access_requests (org_id, name, email, status)
@@ -280,8 +280,8 @@ begin
 end $$;
 
 -- ── The two headline CVEs, asserted by name ─────────────────────────────────
--- owner_b is a founding admin (approved_role = 'admin'), so is_admin() and
--- is_content_editor() are both true for them — exactly the principal the
+-- owner_b is a founding admin (approved_role = 'admin'), so is_admin() is
+-- true for them — exactly the principal the
 -- legacy policies wrongly trusted platform-wide.
 
 do $$

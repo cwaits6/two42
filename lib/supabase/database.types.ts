@@ -1620,9 +1620,6 @@ isOneToOne: false
 "is_admin":
 { Args: Record<PropertyKey, never>; Returns: boolean
                            },
-"is_content_editor":
-{ Args: Record<PropertyKey, never>; Returns: boolean
-                           },
 "is_group_leader":
 { Args: { "_group_id": string }; Returns: boolean
                            },
