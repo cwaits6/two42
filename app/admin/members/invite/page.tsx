@@ -17,7 +17,7 @@ export default async function InvitePersonPage() {
   }
 
   return (
-    <PageContainer size="narrow">
+    <PageContainer size="reading">
       <PageHeader
         title="Invite person"
         subtitle="Send one person an email invite to set up their account."
