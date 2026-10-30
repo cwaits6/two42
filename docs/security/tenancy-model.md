@@ -213,20 +213,20 @@ The permissive arms compose on the org floor as:
   `giving_fund_methods` through `giving_can_manage_fund()`, which now reads
   the fund's group).
 
-**Org admins are not implicit members.** `is_admin()` and
-`is_content_editor()` appear in no content policy: an org admin reads a
+**Org admins are not implicit members.** `is_admin()` appears in no content
+policy: an org admin reads a
 group's content only as a member of it and edits it only as a leader of it.
 The admin arm survives on `groups`, `group_members`, `group_labels`,
 `group_member_labels`, `teams` and `team_members` only — the people layer.
 Org admins manage people from Admin; the only UI for teams and labels is
 Group settings, which a leader of the group reaches.
 
-**`content_editor` is retired.** The app reads a stored `content_editor` as
-`member` (`toUserRole()` in `lib/roles.ts`), offers it nowhere, and lets only
-`admin` into `/admin`. The database still accepts the value and
-`is_member()`, `is_household_manager()` and the directory arms still list it,
-so a former content editor keeps exactly a member's access until the contract
-migration moves the rows to `member` and drops the value.
+**`content_editor` is retired.** `profiles_role_check` allows only `pending`,
+`member` and `admin`; the rows that held `content_editor` were moved to
+`member`, and `is_content_editor()` is gone. No policy, function or view
+names the value (`retired_content_editor_suite.sql`). `toUserRole()` in
+`lib/roles.ts` still maps a stored `content_editor` to `member`; that entry
+can go once this migration is live, since no row can hold the value after it.
 
 Rows that reach a group through a parent do so under the caller's own RLS
 rather than carrying a column: `rsvps` through `exists (select 1 from
@@ -305,8 +305,7 @@ would not be one.
 The three SELECT policies keep their names and their `ORG AND (arms)`
 shape. `profiles` ("Profiles are visible per access rules"): self, org
 admin, own household (`is_member()`-gated, as before), or the directory
-arm — `is_member() and is_unlisted = false and role in (member,
-content_editor, admin)` **and**
+arm — `is_member() and is_unlisted = false and role in (member, admin)` **and**
 `(org_directory_visible() or shares_group_with(id))`. `family_units`
 ("Members can view family units") and `family_members` ("Members can view
 family members"): org admin, own household (`is_member()`-gated, so a
