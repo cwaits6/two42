@@ -86,8 +86,8 @@ export async function resolveEventReminderRecipients(
       >
     ) {
       if (p.role === "pending") continue;
-      // Pending profiles (e.g. spouses who have never logged in) can have no
-      // email — skip, don't throw. Log the id, never the address.
+      // A profile can have no email — skip, don't throw. Log the id, never
+      // the address.
       if (!p.email) {
         console.error(
           "[org %s] skipping reminder: profile %s has no email (event %s)",
