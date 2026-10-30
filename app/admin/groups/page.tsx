@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AdminCreateGroupButton } from "@/components/admin/AdminCreateGroupButton";
+import { AdminGroupList } from "@/components/admin/AdminGroupList";
 import { OrgGroupControls } from "@/components/admin/OrgGroupControls";
 import { PendingGroupRequests } from "@/components/admin/PendingGroupRequests";
 import { PendingJoinRequests } from "@/components/admin/PendingJoinRequests";
@@ -12,6 +13,7 @@ import { getDiscoveryOn } from "@/lib/groups/discovery";
 import { getPendingJoinRequests } from "@/lib/groups/pendingJoinRequests";
 import { PENDING_GROUP_REQUEST_SELECT, toPendingGroupRequest } from "@/lib/groups/requests";
 import { siteConfig } from "@/lib/config";
+import { displayName } from "@/lib/names";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 
@@ -45,7 +47,10 @@ export default async function AdminGroupsPage() {
       .order("created_at", { ascending: true }),
     supabase
       .from("groups")
-      .select("id, name, description, group_members(count)")
+      .select(
+        "id, name, description, members:group_members(count), leaders:group_members(profiles(first_name, last_name, preferred_name))",
+      )
+      .eq("leaders.role", "leader")
       .order("name", { ascending: true }),
   ]);
   if (requestsError) console.error("Failed to load group requests:", requestsError);
@@ -57,7 +62,10 @@ export default async function AdminGroupsPage() {
     id: g.id,
     name: g.name,
     description: g.description,
-    memberCount: g.group_members[0]?.count ?? 0,
+    memberCount: g.members[0]?.count ?? 0,
+    leaderNames: g.leaders
+      .map((l) => displayName(Array.isArray(l.profiles) ? l.profiles[0] : l.profiles))
+      .sort((a, b) => a.localeCompare(b)),
   }));
   // Without the groups there is nothing to read, and an empty queue would misreport the failure.
   const joinRequests = groupsError ? null : await getPendingJoinRequests(groupRows);
@@ -92,24 +100,12 @@ export default async function AdminGroupsPage() {
 
       <section>
         <h2 className="mb-4 text-2xl font-bold text-brand-primary-text">Groups</h2>
-        {groupRows.length === 0 ? (
-          <p className="text-lg text-muted-foreground">No groups yet.</p>
+        {groupsError ? (
+          <p role="alert" className="text-lg text-muted-foreground">
+            Couldn&apos;t load the groups. Reload the page to try again.
+          </p>
         ) : (
-          <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
-            {groupRows.map((g) => (
-              <li key={g.id} className="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-baseline sm:justify-between">
-                <div className="min-w-0">
-                  <p className="text-xl font-semibold">{g.name}</p>
-                  {g.description && (
-                    <p className="text-base text-muted-foreground">{g.description}</p>
-                  )}
-                </div>
-                <p className="shrink-0 text-base text-muted-foreground">
-                  {g.memberCount} member{g.memberCount !== 1 ? "s" : ""}
-                </p>
-              </li>
-            ))}
-          </ul>
+          <AdminGroupList groups={groupRows} />
         )}
       </section>
     </PageContainer>
