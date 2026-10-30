@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, ChevronsUpDown } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,14 +34,6 @@ function BlockText({ block }: { block: GroupBlock }) {
       <span className="block truncate font-serif text-xl font-semibold leading-tight text-foreground">
         {block.group.name}
       </span>
-    </span>
-  );
-}
-
-function LeaderBadge() {
-  return (
-    <span className="ml-auto shrink-0 rounded border border-brand-accent/40 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-brand-accent-text">
-      Leader
     </span>
   );
 }
@@ -136,7 +129,11 @@ export function GroupSwitcher({
             <span className="min-w-0 flex-1 truncate" title={row.group.name}>
               {row.group.name}
             </span>
-            {row.group.role === "leader" && <LeaderBadge />}
+            {row.group.role === "leader" && (
+              <Badge variant="role" className="ml-auto">
+                Leader
+              </Badge>
+            )}
           </DropdownMenuItem>
         ))}
         {block.findAGroupFooter && (

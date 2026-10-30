@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { siteConfig } from "@/lib/config";
 import Link from "next/link";
 import { groupPath } from "@/lib/groups/active";
+import { SegmentedLinks } from "@/components/ui/segmented";
 import { requireActiveGroup } from "@/lib/groups/server";
 
 export const metadata = { title: `Lectures | ${siteConfig.name}` };
@@ -144,26 +145,13 @@ export default async function LecturesPage({
       {/* ── View toggle ── */}
       {!isEmpty && (
         <div className="border-t border-border bg-background px-6 md:px-14 py-4 flex items-center gap-2">
-          <Link
-            href={libraryHref}
-            className={`font-sans text-sm font-semibold px-4 py-2 rounded-full transition-colors ${
-              !isAllView
-                ? "bg-foreground text-background"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            By Series
-          </Link>
-          <Link
-            href={`${libraryHref}?view=all`}
-            className={`font-sans text-sm font-semibold px-4 py-2 rounded-full transition-colors ${
-              isAllView
-                ? "bg-foreground text-background"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            All Lectures
-          </Link>
+          <SegmentedLinks
+            label="Lecture view"
+            options={[
+              { href: libraryHref, label: "By Series", current: !isAllView },
+              { href: `${libraryHref}?view=all`, label: "All Lectures", current: isAllView },
+            ]}
+          />
         </div>
       )}
 

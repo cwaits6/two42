@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Segmented } from "@/components/ui/segmented";
 import { displayName } from "@/lib/names";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -165,23 +166,12 @@ export function ServingStats({ groupId }: { groupId: string }) {
           </p>
         </div>
 
-        {/* Range filter */}
-        <div className="flex gap-2 flex-wrap">
-          {RANGES.map((r) => (
-            <button
-              key={r.value}
-              type="button"
-              onClick={() => setRange(r.value)}
-              className={`px-4 py-3 rounded-lg text-base font-medium border transition-colors ${
-                range === r.value
-                  ? "bg-brand-primary text-white border-brand-primary"
-                  : "border-border text-muted-foreground hover:border-brand-primary/50"
-              }`}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          label="Date range"
+          options={RANGES}
+          value={range}
+          onChange={setRange}
+        />
       </div>
 
       {loading ? (

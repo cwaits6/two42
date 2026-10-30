@@ -23,6 +23,7 @@ import {
   Users,
 } from "lucide-react";
 import { Fragment, useEffect, useState, type ComponentType } from "react";
+import { Badge } from "@/components/ui/badge";
 import type { IconName, SidebarItem, SidebarLink, SidebarModel } from "@/lib/groups/nav";
 import { GroupSwitcher } from "./GroupSwitcher";
 import { useSidebar } from "./SidebarContext";
@@ -68,7 +69,7 @@ export function SidebarNav({ model, onNavigate }: SidebarNavProps) {
 
   // Soft-blue active state with a primary left bar, per the design system
   const linkClass = (active: boolean) =>
-    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm border-l-4 transition-colors ${
+    `flex min-h-11 items-center gap-3 px-3 py-2.5 rounded-lg text-base border-l-4 transition-colors ${
       active
         ? "bg-brand-warm text-brand-primary-text font-bold border-brand-primary"
         : "border-transparent font-medium text-slate-600 hover:text-brand-primary-text hover:bg-brand-warm/50"
@@ -107,7 +108,7 @@ export function SidebarNav({ model, onNavigate }: SidebarNavProps) {
         >
           <Link
             href={item.href}
-            className={`flex flex-1 min-w-0 items-center gap-3 px-3 py-2.5 text-sm transition-colors ${
+            className={`flex min-h-11 flex-1 min-w-0 items-center gap-3 px-3 py-2.5 text-base transition-colors ${
               active
                 ? "text-brand-primary-text font-bold"
                 : "font-medium text-slate-600 hover:text-brand-primary-text"
@@ -123,12 +124,12 @@ export function SidebarNav({ model, onNavigate }: SidebarNavProps) {
             onClick={() => setDirectoryOpen((open) => !open)}
             aria-label={directoryOpen ? "Collapse directory menu" : "Expand directory menu"}
             aria-expanded={directoryOpen}
-            className={`self-stretch px-2.5 transition-colors ${
+            className={`flex min-w-11 items-center justify-center self-stretch transition-colors ${
               active ? "text-brand-primary-text" : "text-slate-600 hover:text-brand-primary-text"
             }`}
           >
             <ChevronDown
-              className={`h-4 w-4 transition-transform ${directoryOpen ? "" : "-rotate-90"}`}
+              className={`h-5 w-5 transition-transform ${directoryOpen ? "" : "-rotate-90"}`}
               aria-hidden="true"
             />
           </button>
@@ -141,7 +142,7 @@ export function SidebarNav({ model, onNavigate }: SidebarNavProps) {
               <Link
                 key={child.href}
                 href={child.href}
-                className={`flex items-center pl-11 pr-3 py-2 rounded-lg text-sm border-l-4 transition-colors ${
+                className={`flex min-h-11 items-center pl-11 pr-3 py-2 rounded-lg text-base border-l-4 transition-colors ${
                   childActive
                     ? "bg-brand-warm text-brand-primary-text font-bold border-brand-primary"
                     : "border-transparent font-medium text-slate-600 hover:text-brand-primary-text hover:bg-brand-warm/50"
@@ -181,9 +182,7 @@ export function SidebarNav({ model, onNavigate }: SidebarNavProps) {
             <>
               <span className="min-w-0 flex-1 truncate">{row.group.name}</span>
               {row.group.role === "leader" && (
-                <span className="shrink-0 rounded border border-brand-accent/40 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-brand-accent-text">
-                  Leader
-                </span>
+                <Badge variant="role">Leader</Badge>
               )}
             </>
           )}

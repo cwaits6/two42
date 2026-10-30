@@ -11,11 +11,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Segmented } from "@/components/ui/segmented";
 import { Switch } from "@/components/ui/switch";
 import { Settings } from "lucide-react";
 import { toast } from "sonner";
 
-const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAY_OPTIONS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label, dow) => ({
+  value: dow,
+  label,
+}));
 
 interface ServingSettingsDialogProps {
   teamId: string;
@@ -34,12 +38,6 @@ export function ServingSettingsDialog({ teamId, settings }: ServingSettingsDialo
   const [saving, setSaving] = useState(false);
   const router = useRouter();
   const supabase = createClient();
-
-  function toggleDay(dow: number) {
-    setReminderDays((prev) =>
-      prev.includes(dow) ? prev.filter((d) => d !== dow) : [...prev, dow].sort()
-    );
-  }
 
   async function save() {
     setSaving(true);
@@ -94,23 +92,13 @@ export function ServingSettingsDialog({ teamId, settings }: ServingSettingsDialo
             <p className="text-base text-muted-foreground">
               Send reminder emails on these days of the week.
             </p>
-            <div className="flex flex-wrap gap-2 pt-1">
-              {DAY_LABELS.map((label, dow) => (
-                <button
-                  key={dow}
-                  type="button"
-                  aria-pressed={reminderDays.includes(dow)}
-                  onClick={() => toggleDay(dow)}
-                  className={`h-12 min-w-12 rounded-lg border px-3 text-base font-medium transition-colors ${
-                    reminderDays.includes(dow)
-                      ? "bg-brand-primary text-white border-brand-primary"
-                      : "border-border text-muted-foreground hover:border-brand-primary/50"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <Segmented
+              label="Reminder days"
+              multiple
+              options={DAY_OPTIONS}
+              value={reminderDays}
+              onChange={(days) => setReminderDays(days.sort((a, b) => a - b))}
+            />
           </div>
 
           {/* Window weeks */}

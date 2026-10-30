@@ -4,6 +4,14 @@ import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
+// Errors are mostly shown only as toasts, so every toast stays long enough to
+// read and act on; Sonner also pauses the timer while a toast is hovered.
+const TOAST_DURATION_MS = 10_000
+
+// Clears the sticky header, so a toast never covers a page's primary action
+// at the bottom of a phone screen or the menu button at the top.
+const BELOW_HEADER = { top: 80 }
+
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme()
 
@@ -11,6 +19,10 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      position="top-center"
+      offset={BELOW_HEADER}
+      mobileOffset={BELOW_HEADER}
+      duration={TOAST_DURATION_MS}
       icons={{
         success: (
           <CircleCheckIcon className="size-4" />
@@ -38,7 +50,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }
       toastOptions={{
         classNames: {
-          toast: "cn-toast",
+          // Sonner's own stylesheet is unlayered and sets 13px, so the type
+          // scale has to win with !important to follow Settings → Text size.
+          toast: "cn-toast text-base!",
         },
       }}
       {...props}
