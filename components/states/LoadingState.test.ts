@@ -10,11 +10,6 @@ describe("LoadingState", () => {
     expect(html).toContain('<p role="status" class="sr-only">Loading the calendar</p>');
     expect(html).toMatch(/<div class="[^"]*" aria-hidden="true">/);
   });
-
-  it("draws the number of skeleton rows asked for", () => {
-    const html = renderToStaticMarkup(createElement(LoadingState, { thing: "x", rows: 3 }));
-    expect(html.match(/rounded-full bg-muted animate-pulse/g)).toHaveLength(3);
-  });
 });
 
 describe("PageLoading", () => {

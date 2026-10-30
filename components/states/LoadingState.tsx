@@ -4,18 +4,19 @@ import { PageHeader } from "@/components/layout/PageHeader";
 interface LoadingStateProps {
   /** What is loading, as it finishes "Loading …", e.g. "the calendar" */
   thing: string;
-  rows?: number;
 }
 
+const SKELETON_ROWS = 6;
+
 /** A skeleton of the content area, announced once to screen readers. */
-export function LoadingState({ thing, rows = 6 }: LoadingStateProps) {
+export function LoadingState({ thing }: LoadingStateProps) {
   return (
     <div>
       <p role="status" className="sr-only">
         Loading {thing}
       </p>
       <div className="space-y-2.5" aria-hidden="true">
-        {Array.from({ length: rows }).map((_, i) => (
+        {Array.from({ length: SKELETON_ROWS }).map((_, i) => (
           <div
             key={i}
             className="flex items-center gap-4 min-h-16 px-4 py-3 rounded-xl border border-border bg-card"
