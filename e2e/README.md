@@ -31,11 +31,13 @@ On a shared local stack the specs assume the seed defaults for
 `directory_visibility`, `group_creation_policy` (`approval`) and
 `group_discovery` (on), and that no group is private; the three specs that
 change those settings normalise them back in `beforeAll` and `afterAll`.
-`admin-join-queue.spec.ts` is the one spec that writes rows — a join request
+`admin-join-queue.spec.ts` is the one spec that inserts rows — a join request
 and the membership its approval creates — and it deletes both in `beforeAll`
 and `afterAll` through the stack's Postgres container
 (`supabase_db_small-group-hub`, the name `supabase start` derives from
-`config.toml`), because no UI deletes a reviewed request.
+`config.toml`), because no UI deletes a reviewed request. `pending-group-access.spec.ts`
+moves Isaac to pending and back through the same container, and sets him
+back to member in `beforeAll` and `afterAll`.
 
 ## Personas
 
@@ -71,6 +73,7 @@ not covered here.
 | `group-discovery.spec.ts`            | A private group is listed for its members and tagged for the org admin but absent for everyone else, and its deep link stays a 404; the org switch removes Find a group and every other group; both restored in afterAll |
 | `admin-join-queue.spec.ts`           | A join request for a group the org admin does not lead is counted on the Admin overview and listed under its group on Admin › Groups; Decline (confirmed in the dialog) removes it and leaves the requester out; a second request approved gains the requester the group in their switcher and clears the overview count; the request and membership rows are deleted in afterAll |
 | `group-invite.spec.ts`               | A leader's invite link names the group and offers the signup form to a stranger until it is revoked, after which the same URL shows the one dead-link message and no form; a non-member gets a 404 on the invites page; the created link is revoked in afterAll |
+| `pending-group-access.spec.ts`       | A member moved back to pending gets a 404 on their group's pages and the pending card at Home; approved again, the same group's announcements show with no re-adding; set back to member in afterAll |
 
 ## Adding a spec
 
