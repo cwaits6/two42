@@ -79,3 +79,9 @@
 # User Agent Fuzzer: informational active-scan check that confirms the app responds
 # consistently to unusual User-Agent strings. Not a vulnerability.
 10104	IGNORE	# User Agent Fuzzer
+
+# Source Code Disclosure - File Inclusion (active probe) on /_next/image: both probes
+# get the same plain-text error, differing only by Vercel's per-request ID; the
+# optimizer serves image content types only. A URL-scoped OUTOFSCOPE row would not
+# reach the alert issue, which filters by rule ID alone, so the whole rule is ignored.
+43	IGNORE	# Source Code Disclosure - File Inclusion (image optimizer error bodies)
