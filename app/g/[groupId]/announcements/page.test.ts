@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement, ReactNode } from "react";
 
 let result: { data: unknown[] | null; error: { code: string; message: string } | null };
+let role: "leader" | "member" = "leader";
 
 function query() {
   const chain = {
@@ -17,7 +18,7 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ from: () => query() }),
 }));
 vi.mock("@/lib/groups/server", () => ({
-  requireActiveGroup: async (id: string) => ({ id, name: "Grace", role: "leader" }),
+  requireActiveGroup: async (id: string) => ({ id, name: "Grace", role }),
 }));
 vi.mock("@/components/states/ErrorState", () => ({ ErrorState: () => null }));
 vi.mock("@/components/announcements/AnnouncementCard", () => ({ AnnouncementCard: () => null }));
@@ -39,12 +40,24 @@ function flatten(node: ReactNode, out: ReactElement[] = []): ReactElement[] {
   return out;
 }
 
-async function renderedTypes() {
+async function rendered() {
   const element = await AnnouncementsPage({ params: Promise.resolve({ groupId: "g1" }) });
-  return flatten(element).map((e) => e.type);
+  return flatten(element);
+}
+
+async function renderedTypes() {
+  return (await rendered()).map((e) => e.type);
+}
+
+async function emptyStateAction() {
+  const empty = (await rendered()).find((e) => e.type === EmptyState) as
+    | ReactElement<{ action?: ReactNode }>
+    | undefined;
+  return empty?.props.action;
 }
 
 beforeEach(() => {
+  role = "leader";
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -61,6 +74,17 @@ describe("AnnouncementsPage", () => {
     const types = await renderedTypes();
     expect(types).toContain(EmptyState);
     expect(types).not.toContain(ErrorState);
+  });
+
+  it("offers a leader the action to add an announcement", async () => {
+    result = { data: [], error: null };
+    expect(await emptyStateAction()).toBeTruthy();
+  });
+
+  it("offers a member no action on the empty state", async () => {
+    role = "member";
+    result = { data: [], error: null };
+    expect(await emptyStateAction()).toBeFalsy();
   });
 
   it("lists the announcements the read returned", async () => {
