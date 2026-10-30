@@ -243,7 +243,7 @@ export default function BulkInvitePage() {
     <div className="container mx-auto px-4 py-12 max-w-4xl">
       <div className="mb-8">
         <h1 className="text-3xl md:text-4xl font-bold text-brand-primary-text">
-          Bulk Invite Members
+          Import members
         </h1>
         <p className="text-base text-muted-foreground mt-2">
           Upload a CSV from Instant Church Directory and send join invites to all.

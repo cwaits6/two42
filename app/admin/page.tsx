@@ -60,7 +60,7 @@ export default async function AdminPage() {
     ]);
 
   const quickActions = [
-    { href: "/admin/invite", label: "Invite member" },
+    { href: "/admin/members/invite", label: "Invite member" },
     { href: "/admin/groups", label: "Manage groups" },
   ];
 

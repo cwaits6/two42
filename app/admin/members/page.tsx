@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Check, X, UserCog, Clock, Pencil } from "lucide-react";
+import { Check, X, UserCog, Clock, Pencil, UserPlus } from "lucide-react";
 import type { AccessRequest, Profile, UserRole } from "@/lib/types";
 import { displayName } from "@/lib/names";
 import { toUserRole } from "@/lib/roles";
@@ -127,7 +127,31 @@ export default function MembersPage() {
 
   return (
     <PageContainer>
-      <PageHeader title="Manage Members" />
+      <PageHeader
+        title="Manage Members"
+        actions={
+          <>
+            <Button
+              size="lg"
+              className="text-lg"
+              nativeButton={false}
+              render={<Link href="/admin/members/invite" />}
+            >
+              <UserPlus className="mr-1 h-5 w-5" />
+              Invite person
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="text-lg"
+              nativeButton={false}
+              render={<Link href="/admin/invite" />}
+            >
+              Import members
+            </Button>
+          </>
+        }
+      />
 
       <Tabs defaultValue="requests">
         <TabsList className="mb-6">
