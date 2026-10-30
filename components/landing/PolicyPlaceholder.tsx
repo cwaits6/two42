@@ -16,7 +16,7 @@ export function PolicyPlaceholder({
   status: string;
 }) {
   return (
-    <PageContainer size="narrow">
+    <PageContainer size="reading">
       <PageHeader title={title} subtitle={summary} backHref="/" backLabel="Home" />
       <div className="flex flex-col gap-5 text-xl leading-relaxed">
         <p>

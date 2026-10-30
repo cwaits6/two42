@@ -256,7 +256,7 @@ export function EmailDomainSettings() {
 
   if (loading) {
     return (
-      <PageContainer size="narrow">
+      <PageContainer size="reading">
         <p className="text-xl text-muted-foreground">Loading...</p>
       </PageContainer>
     );
@@ -266,7 +266,7 @@ export function EmailDomainSettings() {
   const cardState = selectEmailDomainCardState(row, enabled);
 
   return (
-    <PageContainer size="narrow">
+    <PageContainer size="reading">
       <PageHeader
         title="Email sending domain"
         subtitle="Claim a domain, publish its DNS records, then verify it. Email sends from the platform address until the domain is verified, then switches to a noreply@ address on your domain."

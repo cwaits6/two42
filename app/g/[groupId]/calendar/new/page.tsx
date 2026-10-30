@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { PageContainer } from "@/components/layout/PageContainer";
 import { NewEventForm } from "@/components/events/NewEventForm";
 import { createClient } from "@/lib/supabase/server";
 import { getGroupCalendar } from "@/lib/groups/calendar";
@@ -8,7 +9,7 @@ import { siteConfig } from "@/lib/config";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 
-export const metadata = { title: `Create Event | ${siteConfig.name}` };
+export const metadata = { title: `Add event | ${siteConfig.name}` };
 
 export default async function NewEventPage({
   params,
@@ -34,7 +35,7 @@ export default async function NewEventPage({
   ]);
 
   return (
-    <Suspense fallback={<div className="container mx-auto px-4 py-12 max-w-2xl">Loading...</div>}>
+    <Suspense fallback={<PageContainer size="reading">Loading...</PageContainer>}>
       <NewEventForm
         groupId={group.id}
         groupName={group.name}

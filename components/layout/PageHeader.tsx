@@ -2,22 +2,27 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface PageHeaderProps {
+/** A back link names the page it returns to, so href and label travel together. */
+type BackLink =
+  | {
+      backHref: string;
+      /** "Back to {parent page name}", e.g. "Back to Group settings" */
+      backLabel: string;
+    }
+  | { backHref?: undefined; backLabel?: undefined };
+
+type PageHeaderProps = BackLink & {
   title: React.ReactNode;
-  /** Plain, functional copy — one sentence describing what the page does */
+  /** Plain, functional copy — one line describing what the page does */
   subtitle?: React.ReactNode;
-  /** Right-aligned action buttons */
+  /** The page's primary action: right of the title on desktop, full width below the subtitle on phone */
   actions?: React.ReactNode;
-  backHref?: string;
-  /** Visible label next to the back arrow, e.g. "Back to Directory" */
-  backLabel?: string;
   className?: string;
-}
+};
 
 /**
- * Canonical page heading: one H1 type ramp, optional subtitle, optional
- * right-aligned actions, and one back-nav affordance (arrow + visible text
- * label, 44px touch target). Replaces per-page bespoke headers.
+ * Canonical page heading: back link above the title (44px target), one H1
+ * type ramp, optional subtitle and primary action.
  */
 export function PageHeader({
   title,
@@ -35,10 +40,10 @@ export function PageHeader({
           className="mb-3 inline-flex min-h-11 items-center gap-2 text-base font-semibold text-brand-primary-text underline underline-offset-4 hover:text-foreground"
         >
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
-          {backLabel ?? "Back"}
+          {backLabel}
         </Link>
       )}
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <h1 className="font-serif text-4xl font-medium tracking-tight text-foreground md:text-5xl">
             {title}
@@ -50,7 +55,10 @@ export function PageHeader({
           )}
         </div>
         {actions && (
-          <div className="flex shrink-0 flex-wrap items-center gap-3">
+          <div
+            data-slot="page-header-actions"
+            className="flex flex-col gap-3 *:w-full md:shrink-0 md:flex-row md:items-center md:*:w-auto"
+          >
             {actions}
           </div>
         )}

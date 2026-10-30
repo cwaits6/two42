@@ -8,7 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
 import {
   Select,
   SelectContent,
@@ -20,7 +22,6 @@ import { toast } from "sonner";
 import { GoogleMapsScript } from "@/components/GoogleMapsScript";
 import { LocationInput } from "@/components/events/LocationInput";
 import { MeetingFieldsSection } from "@/components/events/MeetingFieldsSection";
-import { PostingTo } from "@/components/groups/PostingTo";
 import { ensureGroupCalendar } from "@/lib/groups/calendar";
 import { groupPath } from "@/lib/groups/active";
 import { addHour, isValidEndTime } from "@/lib/datetime-local";
@@ -77,6 +78,7 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
+  const calendarHref = groupPath(groupId, "/calendar");
 
   const rawDate = searchParams.get("date");
   const prefillDate = rawDate ? rawDate.split("T")[0] : null;
@@ -183,7 +185,7 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
     }
 
     toast.success("Event created!");
-    router.push(groupPath(groupId, "/calendar"));
+    router.push(calendarHref);
   };
 
   const handleStartTimeChange = (nextStartTime: string) => {
@@ -196,13 +198,15 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
   };
 
   return (
-    <div className="container mx-auto px-4 py-12 max-w-2xl">
+    <PageContainer size="reading">
       <GoogleMapsScript />
+      <PageHeader
+        title="Add event"
+        subtitle={`Posting to ${groupName}`}
+        backHref={calendarHref}
+        backLabel="Back to Calendar"
+      />
       <Card>
-        <CardHeader>
-          <CardTitle className="text-3xl text-brand-primary-text">Create Event</CardTitle>
-          <PostingTo groupName={groupName} />
-        </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
@@ -367,17 +371,23 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
               isRecurring={isRecurring}
             />
 
-            <Button
-              type="submit"
-              size="lg"
-              className="w-full text-lg py-6"
-              disabled={loading}
-            >
-              {loading ? "Creating..." : "Create Event"}
-            </Button>
+            <div className="flex flex-col gap-3 border-t border-border pt-5 sm:flex-row">
+              <Button type="submit" size="lg" disabled={loading}>
+                {loading ? "Saving…" : "Save event"}
+              </Button>
+              <Button
+                type="button"
+                size="lg"
+                variant="outline"
+                onClick={() => router.push(calendarHref)}
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+            </div>
           </form>
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 }

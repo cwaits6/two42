@@ -92,6 +92,35 @@ A tenant may not change layout, typography, structural or semantic colors, or th
 
 ---
 
+## Page frame
+
+Every page is built from the same frame, so moving between sibling pages never makes the layout jump.
+
+![Invite links on the page frame at 1280 wide](page-frame/invites-after-1280.webp)
+
+**`PageContainer`** (`components/layout/PageContainer.tsx`) sets the content width. It has three named widths and one gutter (16px on phone, 24px from `sm`, 32px from `lg`) at every width:
+
+| Width | Max | Use for |
+|---|---|---|
+| `reading` | `max-w-2xl` | forms and single-column reading |
+| `default` | `max-w-4xl` | standard content pages, settings |
+| `wide` | `max-w-6xl` | tables, boards, wide grids |
+
+**`PageHeader`** (`components/layout/PageHeader.tsx`) is the page's one heading:
+
+- **Title** — espresso Fraunces, the page's only `h1`.
+- **Subtitle** — optional, one line of plain copy.
+- **Back link** — optional, above the title, labelled `Back to {parent page name}` ("Back to Group settings", "Back to Calendar"), at a 44px target. A back link always names its parent page; there is no bare "Back".
+- **Primary action** — optional, right of the title on desktop and full width below the subtitle on phone.
+
+**Form pages** take their title from `PageHeader`, never from a `CardTitle`, and end with Save + Cancel: the primary Save first, Cancel returning to the back link's page.
+
+![Add event on the page frame at 390 wide](page-frame/add-event-after-390.webp)
+
+**Cards** own their vertical inset: `CardContent` drops its own padding at the card's top and bottom edges, so a card with no header is as deep at the top as at the bottom. For a roomier card, pad the `Card`, not its content.
+
+---
+
 ## Accessibility floor
 
 - Body text ≥ 16px; never below 14px for meaningful content.

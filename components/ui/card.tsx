@@ -69,11 +69,17 @@ function CardAction({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+// The card owns its vertical inset: content at either edge drops its own
+// padding there, so a card with no header is as deep at the top as the bottom.
+// For a roomier card, pad the Card, not its content.
 function CardContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-content"
-      className={cn("px-4 group-data-[size=sm]/card:px-3", className)}
+      className={cn(
+        "px-4 group-data-[size=sm]/card:px-3 first:pt-0 last:pb-0",
+        className
+      )}
       {...props}
     />
   )
