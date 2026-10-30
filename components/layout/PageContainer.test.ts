@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { PageContainer } from "./PageContainer";
 
 function classesFor(size?: "reading" | "default" | "wide"): string[] {
-  const html = renderToStaticMarkup(createElement(PageContainer, { size }, "content"));
+  const html = renderToStaticMarkup(createElement(PageContainer, { size, children: "content" }));
   return (html.match(/class="([^"]*)"/)?.[1] ?? "").split(" ");
 }
 
