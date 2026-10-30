@@ -129,9 +129,9 @@ export function ServingSchedule({
         return (
           <Card
             key={date}
-            className={entry ? "bg-muted/40" : "border-brand-primary/30"}
+            className={entry ? "bg-muted/40 py-8" : "border-brand-primary/30 py-8"}
           >
-            <CardContent className="py-4 flex items-center gap-4">
+            <CardContent className="flex items-center gap-4">
               <div className="flex-1 min-w-0">
                 <p className="text-lg font-semibold">{formatServiceDate(date)}</p>
                 {entry ? (

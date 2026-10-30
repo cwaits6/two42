@@ -198,8 +198,8 @@ export function LabelsManager({ groupId, groupName }: LabelsManagerProps) {
       ) : (
         <div className="space-y-3">
           {labels.map((label) => (
-            <Card key={label.id}>
-              <CardContent className="flex items-center gap-4 pt-5 pb-5">
+            <Card key={label.id} className="py-9">
+              <CardContent className="flex items-center gap-4">
                 <span
                   className="h-4 w-4 shrink-0 rounded-full"
                   style={{ backgroundColor: label.color ?? "var(--color-brand-neutral)" }}

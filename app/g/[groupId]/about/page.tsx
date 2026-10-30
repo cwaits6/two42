@@ -80,8 +80,8 @@ export default async function AboutGroupPage({
       )}
 
       {(videoCallUrl || settings.zoom_meeting_time) && (
-        <Card className="mt-12">
-          <CardContent className="py-6">
+        <Card className="mt-12 py-10">
+          <CardContent>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <h2 className="flex items-center gap-2 text-2xl font-bold text-brand-primary-text">
@@ -122,8 +122,8 @@ export default async function AboutGroupPage({
         ) : (
           <div className="space-y-6">
             {teacherList.map((teacher) => (
-              <Card key={teacher.id}>
-                <CardContent className="py-6">
+              <Card key={teacher.id} className="py-10">
+                <CardContent>
                   <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
                     <Avatar className="h-24 w-24 shrink-0 border-2 border-brand-accent">
                       {teacher.profiles?.avatar_url && (

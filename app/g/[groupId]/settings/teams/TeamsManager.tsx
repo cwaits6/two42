@@ -317,9 +317,9 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
             <Card
               key={team.id}
               onClick={() => setRosterTeam(team)}
-              className="cursor-pointer transition-shadow hover:shadow-md"
+              className="cursor-pointer py-9 transition-shadow hover:shadow-md"
             >
-              <CardContent className="space-y-4 pt-5 pb-5">
+              <CardContent className="space-y-4">
                 <div className="flex items-center gap-4">
                   <div
                     className="h-4 w-4 shrink-0 rounded-full"

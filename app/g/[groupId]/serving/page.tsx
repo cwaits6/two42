@@ -165,8 +165,8 @@ export default async function ServingPage({
               const members = rosters.get(team.id) ?? [];
               return (
                 <Link key={team.id} href={groupPath(group.id, `/serving/${team.id}`)}>
-                  <Card className="mb-4 hover:border-brand-primary/50 transition-colors">
-                    <CardContent className="py-5">
+                  <Card className="mb-4 py-9 hover:border-brand-primary/50 transition-colors">
+                    <CardContent>
                       <div className="flex items-center gap-4">
                         <span
                           className="inline-block w-4 h-4 rounded-full shrink-0"
@@ -214,8 +214,8 @@ export default async function ServingPage({
               const members = rosters.get(team.id) ?? [];
               const isMember = membershipMap.has(team.id);
               return (
-                <Card key={team.id}>
-                  <CardContent className="py-5">
+                <Card key={team.id} className="py-9">
+                  <CardContent>
                     <div className="flex items-center gap-4">
                       <span
                         className="inline-block w-4 h-4 rounded-full shrink-0"
