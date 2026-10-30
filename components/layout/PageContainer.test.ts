@@ -1,10 +1,9 @@
-import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { PageContainer } from "./PageContainer";
 
 function classesFor(size?: "reading" | "default" | "wide"): string[] {
-  const html = renderToStaticMarkup(createElement(PageContainer, { size, children: "content" }));
+  const html = renderToStaticMarkup(PageContainer({ size, children: "content" }));
   return (html.match(/class="([^"]*)"/)?.[1] ?? "").split(" ");
 }
 
