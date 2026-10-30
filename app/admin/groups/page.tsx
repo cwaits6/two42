@@ -4,6 +4,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AdminCreateGroupButton } from "@/components/admin/AdminCreateGroupButton";
 import { AdminGroupList } from "@/components/admin/AdminGroupList";
+import { listAdminGroups } from "@/components/admin/adminGroups";
 import { OrgGroupControls } from "@/components/admin/OrgGroupControls";
 import { PendingGroupRequests } from "@/components/admin/PendingGroupRequests";
 import { PendingJoinRequests } from "@/components/admin/PendingJoinRequests";
@@ -13,7 +14,6 @@ import { getDiscoveryOn } from "@/lib/groups/discovery";
 import { getPendingJoinRequests } from "@/lib/groups/pendingJoinRequests";
 import { PENDING_GROUP_REQUEST_SELECT, toPendingGroupRequest } from "@/lib/groups/requests";
 import { siteConfig } from "@/lib/config";
-import { displayName } from "@/lib/names";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 
@@ -36,7 +36,7 @@ export default async function AdminGroupsPage() {
     policy,
     discoveryOn,
     { data: requests, error: requestsError },
-    { data: groups, error: groupsError },
+    groupRows,
   ] = await Promise.all([
     getGroupCreationPolicy(),
     getDiscoveryOn(),
@@ -45,30 +45,14 @@ export default async function AdminGroupsPage() {
       .select(PENDING_GROUP_REQUEST_SELECT)
       .eq("status", "pending")
       .order("created_at", { ascending: true }),
-    supabase
-      .from("groups")
-      .select(
-        "id, name, description, members:group_members(count), leaders:group_members(profiles(first_name, last_name, preferred_name))",
-      )
-      .eq("leaders.role", "leader")
-      .order("name", { ascending: true }),
+    listAdminGroups(supabase),
   ]);
   if (requestsError) console.error("Failed to load group requests:", requestsError);
-  if (groupsError) console.error("Failed to load groups:", groupsError);
 
   const timeZone = await getOrgTimeZone();
   const pending = (requests ?? []).map(toPendingGroupRequest);
-  const groupRows = (groups ?? []).map((g) => ({
-    id: g.id,
-    name: g.name,
-    description: g.description,
-    memberCount: g.members[0]?.count ?? 0,
-    leaderNames: g.leaders
-      .map((l) => displayName(Array.isArray(l.profiles) ? l.profiles[0] : l.profiles))
-      .sort((a, b) => a.localeCompare(b)),
-  }));
   // Without the groups there is nothing to read, and an empty queue would misreport the failure.
-  const joinRequests = groupsError ? null : await getPendingJoinRequests(groupRows);
+  const joinRequests = groupRows ? await getPendingJoinRequests(groupRows) : null;
 
   return (
     <PageContainer size="wide">
@@ -100,12 +84,12 @@ export default async function AdminGroupsPage() {
 
       <section>
         <h2 className="mb-4 text-2xl font-bold text-brand-primary-text">Groups</h2>
-        {groupsError ? (
+        {groupRows ? (
+          <AdminGroupList groups={groupRows} />
+        ) : (
           <p role="alert" className="text-lg text-muted-foreground">
             Couldn&apos;t load the groups. Reload the page to try again.
           </p>
-        ) : (
-          <AdminGroupList groups={groupRows} />
         )}
       </section>
     </PageContainer>

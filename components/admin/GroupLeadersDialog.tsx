@@ -101,7 +101,7 @@ export function GroupLeadersView({
 
       {loadFailed ? (
         <p role="alert" className="py-4 text-base text-muted-foreground">
-          Couldn&apos;t load this group&apos;s leaders. Close this and try again.
+          Couldn&apos;t load this group&apos;s leaders. Close this and open it again.
         </p>
       ) : !roster ? (
         <p className="py-4 text-base text-muted-foreground">Loading leaders...</p>
@@ -283,10 +283,17 @@ export function GroupLeadersDialog({
     };
   }, [supabase, groupId]);
 
-  async function refresh(id: string) {
+  /**
+   * Re-read the roster after a committed write. A failed read drops the
+   * stale list rather than keep showing it: acting on it would hit rows the
+   * write already changed. Resolves false when the read failed.
+   */
+  async function refresh(id: string): Promise<boolean> {
     const loaded = await loadLeaderRoster(supabase, id);
-    if (loaded) setRoster(loaded);
+    setRoster(loaded);
+    setLoadFailed(loaded === null);
     onChanged();
+    return loaded !== null;
   }
 
   function changeMode(next: LeadersMode) {
@@ -309,11 +316,12 @@ export function GroupLeadersDialog({
       if (replacing) {
         const removeError = await removeLeader(supabase, group.id, replacing.id);
         if (removeError) {
-          await refresh(group.id);
+          const reloaded = await refresh(group.id);
           setMode({ kind: "leaders" });
           setQuery("");
           setError(
-            `${displayName(person)} is a leader now, but ${displayName(replacing)} is still one. Remove them below.`,
+            `${displayName(person)} is a leader now, but ${displayName(replacing)} is still one. ` +
+              (reloaded ? "Remove them below." : "Close this and open it again to remove them."),
           );
           return;
         }

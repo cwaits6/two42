@@ -5,15 +5,8 @@ import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GroupLeadersDialog, type LeaderGroup } from "@/components/admin/GroupLeadersDialog";
+import type { AdminGroupRow } from "@/components/admin/adminGroups";
 
-export interface AdminGroupRow {
-  id: string;
-  name: string;
-  description: string | null;
-  memberCount: number;
-  /** Display names of the group's leaders, sorted. */
-  leaderNames: string[];
-}
 
 /** Every group in the church, with its leaders and the way to change them. */
 export function AdminGroupList({ groups }: { groups: AdminGroupRow[] }) {
