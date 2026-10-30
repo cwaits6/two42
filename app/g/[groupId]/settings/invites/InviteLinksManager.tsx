@@ -250,7 +250,7 @@ export function InviteLinksManager({ groupId, groupName, timeZone }: InviteLinks
         </p>
       ) : invites.length === 0 ? (
         <Card>
-          <CardContent className="pt-6 text-center">
+          <CardContent className="text-center">
             <p className="text-base text-muted-foreground">{EMPTY_TEXT}</p>
           </CardContent>
         </Card>
@@ -265,7 +265,7 @@ export function InviteLinksManager({ groupId, groupName, timeZone }: InviteLinks
                 {active.map(({ invite }) => (
                   <li key={invite.id}>
                     <Card>
-                      <CardContent className="space-y-4 pt-5 pb-5">
+                      <CardContent className="space-y-4">
                         <p className="break-all font-mono text-base text-foreground">
                           {inviteUrl(siteConfig.url, invite.token)}
                         </p>
@@ -300,7 +300,7 @@ export function InviteLinksManager({ groupId, groupName, timeZone }: InviteLinks
                 {past.map(({ invite, status }) => (
                   <li key={invite.id}>
                     <Card>
-                      <CardContent className="space-y-2 pt-5 pb-5">
+                      <CardContent className="space-y-2">
                         <p className="text-base font-semibold text-foreground">
                           {INVITE_STATUS_LABELS[status]}
                         </p>
