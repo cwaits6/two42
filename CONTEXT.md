@@ -25,7 +25,7 @@ _Avoid_: family (as the name of the thing)
 ### Roles
 
 **Leader**:
-A member who runs a group: approves requests to join it, publishes its content, and manages its teams. Say "group leader" only where "leader" alone is ambiguous.
+A member who runs a group: approves requests to join it, publishes its content, and manages its teams. Say "group leader" only where "leader" alone is ambiguous. A group can have several leaders, each with the same rights; "co-leader" describes one of them, not a separate role.
 _Avoid_: group admin, organizer, host, teacher
 
 **Church admin**:
@@ -35,6 +35,14 @@ _Avoid_: org admin, admin (alone, in member-facing copy), group admin
 **Team lead**:
 A member who leads one serving team within a group.
 _Avoid_: team leader, captain
+
+**Pending**:
+A person who has signed in but whom the church has not approved yet, or whom a church admin has moved back to pending. Someone awaiting first approval sees only their own profile.
+_Avoid_: unapproved, guest
+
+**Operator**:
+A person on the two42 team who sets up churches and keeps the platform running. Being an operator grants nothing inside a church.
+_Avoid_: platform admin, superuser (in copy)
 
 ### Life of a group
 
