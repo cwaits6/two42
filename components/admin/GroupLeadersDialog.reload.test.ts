@@ -13,12 +13,17 @@ const people = [
 ];
 const failed: Result = { data: null, error: { message: "permission denied for table group_members" } };
 
-/** Membership reads are answered in order; profile reads and writes always succeed. */
-function stubClient(memberReads: Result[]) {
+const saved: Result = { data: [{ id: "row" }], error: null };
+
+/**
+ * Membership reads and writes are each answered in order; profile reads
+ * always succeed, and so does a write with no queued answer.
+ */
+function stubClient(memberReads: Result[], writes: Result[] = []) {
   const from = (table: string) => {
     let writing = false;
     const chain = {
-      select: () => (writing ? Promise.resolve({ data: [{ id: "row" }], error: null }) : chain),
+      select: () => (writing ? Promise.resolve(writes.shift() ?? saved) : chain),
       update: () => {
         writing = true;
         return chain;
@@ -74,6 +79,18 @@ async function click(label: string) {
   await act(async () => button.click());
 }
 
+function render() {
+  return act(async () =>
+    root.render(
+      createElement(GroupLeadersDialog, {
+        group: { id: "g", name: "Tuesday Group" },
+        onClose: () => {},
+        onChanged: () => {},
+      }),
+    ),
+  );
+}
+
 describe("GroupLeadersDialog after a saved write", () => {
   it("drops the stale leaders when the reload fails", async () => {
     client = stubClient([{ data: [{ profile_id: "a", role: "leader" }], error: null }, failed]);
@@ -102,19 +119,61 @@ describe("GroupLeadersDialog after a saved write", () => {
       { data: [{ profile_id: "a", role: "leader" }], error: null },
       { data: [{ profile_id: "a", role: "member" }], error: null },
     ]);
-    await act(async () =>
-      root.render(
-        createElement(GroupLeadersDialog, {
-          group: { id: "g", name: "Tuesday Group" },
-          onClose: () => {},
-          onChanged: () => {},
-        }),
-      ),
-    );
+    await render();
 
     await click("Remove Ada Lovelace as leader");
 
     expect(container.textContent).toContain("This group has no leader yet.");
     expect(container.textContent).not.toContain("Couldn't load");
+  });
+});
+
+describe("GroupLeadersDialog when a replace saves the new leader but not the removal", () => {
+  const before: Result = {
+    data: [
+      { profile_id: "a", role: "leader" },
+      { profile_id: "b", role: "member" },
+    ],
+    error: null,
+  };
+  const removalFailed: Result = { data: [], error: null };
+
+  async function replaceAdaWithBen() {
+    await click("Replace Ada Lovelace");
+    await click("Make Ben Okafor a leader");
+  }
+
+  it("says both are leaders and points to the list when the reload succeeds", async () => {
+    const after: Result = {
+      data: [
+        { profile_id: "a", role: "leader" },
+        { profile_id: "b", role: "leader" },
+      ],
+      error: null,
+    };
+    client = stubClient([before, after], [saved, removalFailed]);
+    await render();
+
+    await replaceAdaWithBen();
+
+    expect(container.textContent).toContain(
+      "Ben Okafor is a leader now, but Ada Lovelace is still one. Remove them below.",
+    );
+    expect(container.querySelector('button[aria-label="Remove Ada Lovelace as leader"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="Remove Ben Okafor as leader"]')).not.toBeNull();
+  });
+
+  it("says both are leaders and asks to reopen when the reload fails", async () => {
+    client = stubClient([before, failed], [saved, removalFailed]);
+    await render();
+
+    await replaceAdaWithBen();
+
+    expect(container.textContent).toContain(
+      "Ben Okafor is a leader now, but Ada Lovelace is still one. " +
+        "Close this and open it again to remove them.",
+    );
+    expect(container.querySelector('button[aria-label="Remove Ada Lovelace as leader"]')).toBeNull();
+    expect(container.textContent).not.toContain("Remove them below.");
   });
 });
