@@ -46,7 +46,7 @@ a set of church and group settings that widen or narrow what a role can do.
 | Team lead | `team_members.is_leader` (`supabase/migrations/20260705000000_serving_schedule.sql`); read by `is_team_lead()` | Their team's serving broadcasts (`"Team leads and group leaders can view serving broadcasts"`) | Turn serving on and set reminders for their team (`serving_team_settings` insert/update); add and remove signups on their team; "Email the team" (`app/api/serving/broadcast/route.ts`). **Not** add or remove team members: `team_members` writes are leader and church admin only | A leader or church admin (`TeamRosterDialog.tsx`, the member import) |
 | Household primary or spouse | `profiles.relationship in ('primary', 'spouse')` (`supabase/migrations/20260422000001_profiles_relationships.sql`); read by `is_household_manager()` | Their household's members, as any member of a household does | Edit other profiles in their household (`"Profiles are updatable per access rules"`), add and remove household members (`"Admins and household leaders can insert/update/delete family members"`), update household info (`app/api/household/route.ts`), invite to the household (`"Admins and household primary can insert family invites"`, `app/api/family-invites/route.ts`), link an existing member (`app/api/household/link-member/route.ts`), sign their household up for serving (`app/api/serving/signups/route.ts`) | `handle_new_user()` sets `relationship = 'primary'` on every signup; a church admin (`app/api/admin/family-members/route.ts`) or the household's primary or spouse sets it when adding someone |
 | Person a fund goes to | `giving_funds.steward_id` (`supabase/migrations/20260707000000_giving.sql`) | — | When the church's `giving_manage_mode` is `stewards` (the default), add a fund naming themselves and edit or delete their own fund and its methods (`giving_can_manage_fund()`, `"Group leaders and self-stewards can create funds"`) | Self, or the leader who adds the fund |
-| Second person a fund goes to | `giving_funds.co_steward_id` | — | Nothing: shown on the fund (`app/g/[groupId]/give/page.tsx`) but read by no policy and no `giving_can_manage_fund()` arm. The comment in `supabase/migrations/20260731000013_composite_fks.sql` calling it a capability is wrong | Whoever adds or edits the fund |
+| Second person a fund goes to | `giving_funds.co_steward_id` | — | Nothing: shown on the fund (`app/g/[groupId]/give/page.tsx`) and readable by every group member, like the rest of the row, but no policy and no `giving_can_manage_fund()` arm grants anything on it. The comment in `supabase/migrations/20260731000013_composite_fks.sql` calling it a capability is wrong | Whoever adds or edits the fund |
 | Operator | `platform_admins` (`supabase/migrations/20260730010000_org_spine.sql`); read by `is_platform_admin()` | `/platform`: every church, its status, email cap and email domains (service-role reads behind `requirePlatformAdmin()` in `lib/platform-access.ts`); nothing inside a church through RLS | Provision a church and invite its founding admin (`app/api/platform/organizations/route.ts`, `app/api/platform/organizations/[id]/invite-owner/route.ts`); suspend or reactivate it (`app/api/platform/organizations/[id]/route.ts`); set the email cap and clean up email domains. Gate: `lib/supabase/middleware.ts`, `app/platform/layout.tsx` and every route handler, each failing closed on an RPC error | A migration or service-role write only: the table has no write policy. Locally, `supabase/seed.sql` |
 
 ### Settings that change what a role can do
@@ -68,11 +68,11 @@ Bearer links — group invite links (`group_invites`), household invites
 grant one narrow action to whoever holds them. They are not roles and are
 covered in `tenancy-model.md` and `service-role-inventory.md`.
 
-### Table with no reader: `organization_members`
+### No application reader: `organization_members`
 
 `handle_new_user()` still writes an `organization_members` row per signup,
 and the `"org members can view their orgs"` policy on `organizations` reads it
-through `is_org_member()`. Nothing in the app reads either, profiles predating
+through `is_org_member()`; members can also read their own rows (`"members can view their own org memberships"`). Nothing in the app reads either, profiles predating
 `20260730010000_org_spine` were never backfilled, and `profiles.org_id` is the one membership anchor every other
 helper uses (`app_current_org_id()`). It was kept as a hook for one person
 belonging to several churches, which the group model did not adopt.
