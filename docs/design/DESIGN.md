@@ -121,6 +121,28 @@ Every page is built from the same frame, so moving between sibling pages never m
 
 ---
 
+## Page states
+
+Loading, empty and failed must never be mistaken for each other. Each has one look and one wording, from `components/states/`.
+
+**Loading** — `PageLoading` in a route's `loading.tsx` keeps the page frame and the page's own `PageHeader`, and draws a skeleton of the content area (`LoadingState`). A screen reader hears "Loading {thing}" once; the skeleton is hidden from it. When the title depends on the data (Home's greeting), or routes under the segment carry different titles, a title-shaped placeholder holds its place instead of a wrong title.
+
+![Calendar loading at 1280 wide](page-states/loading-calendar-1280.webp)
+
+**Empty** — `EmptyState` is for a read that succeeded and found nothing: a dashed box, a Clay icon on a warm tile, one line in the page's own terms ("No announcements yet"), and for people who can act, the action ("Add announcement"). This is the one state where warmth is allowed.
+
+![Announcements empty at 390 wide](page-states/empty-390.webp)
+
+**Failed** — `ErrorState` is for a read that failed: a solid card with a red alert icon, "Couldn't load {thing}." and a **Try again** button that re-runs the page's server reads. It is announced as an alert and never reuses the empty-state copy.
+
+![Announcements failed at 1280 wide](page-states/error-1280.webp)
+
+A server page splits a list read three ways with `readList()` (`lib/supabase/readList.ts`): rows, an empty list, or `null` when the read failed. Render `ErrorState` on `null` and `EmptyState` only on an empty list.
+
+**Not found** — `app/not-found.tsx` is the branded 404 for any unknown URL and every `notFound()`: a `PageHeader` reading "Page not found" and a **Go to Home** button.
+
+---
+
 ## Accessibility floor
 
 - Body text ≥ 16px; never below 14px for meaningful content.
