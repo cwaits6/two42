@@ -177,14 +177,14 @@ export function ServingStats({ groupId }: { groupId: string }) {
       {loading ? (
         <p className="text-muted-foreground">Loading…</p>
       ) : teams.length === 0 ? (
-        <Card className="py-14">
-          <CardContent className="text-center text-muted-foreground">
+        <Card>
+          <CardContent className="py-10 text-center text-muted-foreground">
             No serving teams are enabled yet. Enable a team from the Serving page.
           </CardContent>
         </Card>
       ) : rows.length === 0 ? (
-        <Card className="py-14">
-          <CardContent className="text-center text-muted-foreground">
+        <Card>
+          <CardContent className="py-10 text-center text-muted-foreground">
             No serving data for this period.
           </CardContent>
         </Card>
