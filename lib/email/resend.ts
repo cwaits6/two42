@@ -53,6 +53,55 @@ export async function sendInviteEmail(
   }
 }
 
+/**
+ * The invitation a church admin sends, one person at a time or from the
+ * importer. Unlike sendInviteEmail() there was no request to approve, so the
+ * copy never says there was.
+ */
+export async function sendMemberInviteEmail(
+  email: string,
+  setupLink: string,
+  branding: EmailBranding
+) {
+  const b = branding;
+  const safeOrgName = escapeHtml(b.orgName);
+  const safeSetupLink = sanitizeLink(setupLink);
+
+  const { error } = await getResend().emails.send({
+    from: formatFromHeader(b.orgName, b.fromAddress),
+    to: email,
+    ...(b.replyTo ? { replyTo: b.replyTo } : {}),
+    subject: `You're invited to join ${b.orgName}!`,
+    html: `
+      <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+        <h1 style="color: ${b.accent}; font-size: 28px;">You're invited!</h1>
+        <p style="font-size: 18px; line-height: 1.6; color: #44403c;">
+          <strong>${safeOrgName}</strong> has invited you to join our online community.
+        </p>
+        <p style="font-size: 18px; line-height: 1.6; color: #44403c;">
+          Click the button below to create your account and get started.
+        </p>
+        <a href="${safeSetupLink}"
+           style="display: inline-block; background-color: ${b.accent}; color: white; padding: 16px 32px; text-decoration: none; border-radius: 8px; font-size: 18px; margin-top: 20px;">
+          Join ${safeOrgName}
+        </a>
+        <p style="font-size: 14px; color: #78716c; margin-top: 40px;">
+          If the button doesn't work, copy and paste this link into your browser:<br />
+          <a href="${safeSetupLink}" style="color: ${b.accentLight};">${safeSetupLink}</a>
+        </p>
+        <p style="font-size: 14px; color: #78716c; margin-top: 20px;">
+          &mdash; The ${safeOrgName} Team
+        </p>
+      </div>
+    `,
+  });
+
+  if (error) {
+    console.error("Failed to send member invite email:", error);
+    throw error;
+  }
+}
+
 export function escapeHtml(str: string): string {
   return str
     .replace(/&/g, "&amp;")

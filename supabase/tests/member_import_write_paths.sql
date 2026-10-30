@@ -197,8 +197,8 @@ end $$;
 --
 -- Pinned as a NEGATIVE deliberately: when a follow-up adds the admin policy,
 -- this assertion fails, and that failure is the signal to re-enable the
--- planner's create_invite path (and to fix invite-bulk, which issues the same
--- insert and is broken today for the same reason).
+-- planner's create_invite path. invite-bulk and the single invite write
+-- this row on the service client, so they do not depend on the policy.
 do $$
 declare
   _admin uuid := current_setting('member_import.admin')::uuid;
@@ -226,15 +226,14 @@ begin
       'access_requests: an org admin CANNOT insert the approved invite row — this is why import plans LOGIN_CREATE_UNSUPPORTED instead of writing it'
     );
 
-  -- The rollback path invite-bulk uses is equally unavailable: there is no
-  -- DELETE policy on access_requests at all. Fold this into the same
-  -- follow-up migration.
+  -- No client can delete the row either, so a planner rollback would need the
+  -- same follow-up migration.
   insert into member_import_results
     select is(
       (select count(*)::int from pg_policies
        where schemaname = 'public' and tablename = 'access_requests' and cmd = 'DELETE'),
       0,
-      'access_requests has no DELETE policy — invite-bulk''s rollback cannot work either'
+      'access_requests has no DELETE policy — a client-side rollback of the invite row cannot work either'
     );
 end $$;
 

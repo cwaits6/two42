@@ -21,6 +21,7 @@ const {
   sendInviteEmail,
   sendFamilyInviteEmail,
   sendGroupInviteEmail,
+  sendMemberInviteEmail,
   sendFeedbackEmail,
 } = await import("@/lib/email/resend");
 
@@ -105,6 +106,18 @@ describe("send call sites use the resolved branding.fromAddress", () => {
     expect(call.html).toContain("Tuesday Table &amp; Friends");
     expect(call.html).toContain("Jane &lt;script&gt;");
     expect(call.html).not.toContain("<script>");
+  });
+
+  it("sendMemberInviteEmail sends from the resolved branding.fromAddress and escapes the org name", async () => {
+    await sendMemberInviteEmail("a@b.org", "https://grace.church/setup-account?token=abc", {
+      ...BRANDING,
+      orgName: "Grace <b>Fellowship</b>",
+    });
+    const call = send.mock.calls[0][0];
+    expect(call.from).toContain("<noreply@grace.church>");
+    expect(call.html).toContain('href="https://grace.church/setup-account?token=abc"');
+    expect(call.html).toContain("Grace &lt;b&gt;Fellowship&lt;/b&gt;");
+    expect(call.html).not.toContain("<b>Fellowship");
   });
 
   it("sendGroupInviteEmail refuses a setup link that is not http(s)", async () => {

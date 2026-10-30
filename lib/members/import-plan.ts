@@ -24,8 +24,8 @@
  * insert fails RLS. Planning it as a row error keeps the failure inside "validate
  * everything before writing anything"; attempting the write instead would
  * 500 the run *after* households, family members and profile updates had
- * already landed. An admin-scoped INSERT policy is the follow-up (it also
- * fixes invite-bulk, which issues the same insert and is broken today).
+ * already landed. Single invites and invite-bulk write that row through the
+ * service client in lib/members/invite.ts instead.
  */
 import type { HiddenFieldToken, MemberRow } from "@/lib/members/format";
 import { HIDDEN_FIELD_COLUMNS, HIDDEN_FIELD_TOKENS } from "@/lib/members/format";
