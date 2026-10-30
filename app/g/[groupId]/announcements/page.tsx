@@ -46,7 +46,7 @@ export default async function AnnouncementsPage({
       ) : announcements.length === 0 ? (
         <EmptyState
           icon={Megaphone}
-          message="No announcements yet"
+          message="No announcements yet."
           action={
             group.role === "leader" && (
               <Button

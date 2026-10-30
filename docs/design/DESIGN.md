@@ -129,7 +129,7 @@ Loading, empty and failed must never be mistaken for each other. Each has one lo
 
 ![Calendar loading at 1280 wide](page-states/loading-calendar-1280.webp)
 
-**Empty** — `EmptyState` is for a read that succeeded and found nothing: a dashed box, a Clay icon on a warm tile, one line in the page's own terms ("No announcements yet"), and for people who can act, the action ("Add announcement"). This is the one state where warmth is allowed.
+**Empty** — `EmptyState` is for a read that succeeded and found nothing: a dashed box, a Clay icon on a warm tile, one line in the page's own terms ("No announcements yet."), and for people who can act, the action ("Add announcement"). This is the one state where warmth is allowed.
 
 ![Announcements empty at 390 wide](page-states/empty-390.webp)
 
