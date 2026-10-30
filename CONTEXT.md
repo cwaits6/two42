@@ -37,7 +37,7 @@ A member who leads one serving team within a group.
 _Avoid_: team leader, captain
 
 **Pending**:
-A person who has signed in but whom the church has not approved yet. They see only their own profile.
+A person who has signed in but whom the church has not approved yet. The app shows them only their own profile.
 _Avoid_: unapproved, guest
 
 **Operator**:
