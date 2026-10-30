@@ -24,6 +24,16 @@ function errorSummary(err: unknown) {
   return { name, code, message };
 }
 
+/**
+ * access_requests stores emails as typed, so matching is case-insensitive.
+ * The value is a LIKE pattern inside an array literal, so both sets of
+ * metacharacters are escaped; postgrest-js quotes neither.
+ */
+function exactIlikeElement(email: string): string {
+  const pattern = email.replace(/[\\%_]/g, "\\$&");
+  return `"${pattern.replace(/[\\"]/g, "\\$&")}"`;
+}
+
 export interface ExistingInvitees {
   /** Emails that already belong to a profile in the org. */
   accounts: Set<string>;
@@ -41,17 +51,18 @@ export async function findExistingInvitees(
   emails: string[]
 ): Promise<ExistingInvitees> {
   const service = await createServiceClient();
+  const patterns = emails.map(exactIlikeElement);
   const [profiles, requests] = await Promise.all([
     service
       .from("profiles")
       .select("email")
       .eq("org_id", orgId)
-      .in("email", emails),
+      .ilikeAnyOf("email", patterns),
     service
       .from("access_requests")
       .select("email")
       .eq("org_id", orgId)
-      .in("email", emails),
+      .ilikeAnyOf("email", patterns),
   ]);
   if (profiles.error) throw profiles.error;
   if (requests.error) throw requests.error;

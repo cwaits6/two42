@@ -158,6 +158,26 @@ describe("POST /api/admin/members/invite", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it("matches an earlier request whose email was typed in another case", async () => {
+    const fake = fakeServiceClient({
+      existing: { access_requests: [{ email: "Ana_O@Example.COM" }] },
+    });
+    createServiceClient.mockResolvedValue(fake.client);
+
+    const res = await POST(inviteRequest({ ...person, email: "ana_o@example.com" }));
+
+    expect(res.status).toBe(409);
+    const lookup = fake.calls.find(
+      (c) => c.table === "access_requests" && c.op === "select"
+    );
+    expect(lookup?.filters).toContainEqual([
+      "ilikeAnyOf",
+      "email",
+      ['"ana\\\\_o@example.com"'],
+    ]);
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it("reports every invalid field before touching the database", async () => {
     const res = await POST(
       inviteRequest({ email: "ana@", firstName: " ", lastName: "", householdId: "x" })

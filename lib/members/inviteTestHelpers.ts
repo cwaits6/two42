@@ -27,8 +27,8 @@ export function fakeServiceClient(options: FakeServiceOptions = {}) {
         call.filters.push(["eq", column, value]);
         return builder;
       },
-      in(column: string, value: unknown) {
-        call.filters.push(["in", column, value]);
+      ilikeAnyOf(column: string, value: unknown) {
+        call.filters.push(["ilikeAnyOf", column, value]);
         return builder;
       },
       single: async () => result(),
