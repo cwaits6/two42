@@ -1065,21 +1065,6 @@ $$;
 ALTER FUNCTION "public"."is_admin"() OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."is_content_editor"() RETURNS boolean
-    LANGUAGE "sql" STABLE SECURITY DEFINER
-    SET "search_path" TO ''
-    AS $$
-  select exists (
-    select 1 from public.profiles
-    where id = auth.uid() and role in ('content_editor', 'admin')
-      and org_id = public.app_current_org_id()
-  );
-$$;
-
-
-ALTER FUNCTION "public"."is_content_editor"() OWNER TO "postgres";
-
-
 CREATE OR REPLACE FUNCTION "public"."is_group_leader"("_group_id" "uuid") RETURNS boolean
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO ''
@@ -1129,7 +1114,7 @@ CREATE OR REPLACE FUNCTION "public"."is_household_manager"() RETURNS boolean
     select 1 from public.profiles
     where id = auth.uid()
       and relationship in ('primary', 'spouse')
-      and role in ('member', 'content_editor', 'admin')
+      and role in ('member', 'admin')
       and org_id = public.app_current_org_id()
   );
 $$;
@@ -1144,7 +1129,7 @@ CREATE OR REPLACE FUNCTION "public"."is_member"() RETURNS boolean
     AS $$
   select exists (
     select 1 from public.profiles
-    where id = auth.uid() and role in ('member', 'content_editor', 'admin')
+    where id = auth.uid() and role in ('member', 'admin')
       and org_id = public.app_current_org_id()
   );
 $$;
@@ -2222,7 +2207,7 @@ CREATE TABLE IF NOT EXISTS "public"."profiles" (
     CONSTRAINT "profiles_birth_month_check" CHECK ((("birth_month" >= 1) AND ("birth_month" <= 12))),
     CONSTRAINT "profiles_birth_year_check" CHECK ((("birth_year" >= 1900) AND ("birth_year" <= 2100))),
     CONSTRAINT "profiles_relationship_check" CHECK (("relationship" = ANY (ARRAY['primary'::"text", 'spouse'::"text", 'child'::"text", 'parent'::"text", 'sibling'::"text", 'other'::"text"]))),
-    CONSTRAINT "profiles_role_check" CHECK (("role" = ANY (ARRAY['pending'::"text", 'member'::"text", 'content_editor'::"text", 'admin'::"text"])))
+    CONSTRAINT "profiles_role_check" CHECK (("role" = ANY (ARRAY['pending'::"text", 'member'::"text", 'admin'::"text"])))
 );
 
 
@@ -2278,7 +2263,7 @@ CREATE OR REPLACE VIEW "public"."families_directory_full" WITH ("security_invoke
                     ELSE "p"."birth_year"
                 END) ORDER BY "p"."relationship") AS "jsonb_agg"
            FROM "public"."profiles" "p"
-          WHERE (("p"."family_id" = "f"."id") AND ("p"."org_id" = "f"."org_id") AND ("p"."is_unlisted" = false) AND ("p"."role" = ANY (ARRAY['member'::"text", 'content_editor'::"text", 'admin'::"text"])))), '[]'::"jsonb") AS "members",
+          WHERE (("p"."family_id" = "f"."id") AND ("p"."org_id" = "f"."org_id") AND ("p"."is_unlisted" = false) AND ("p"."role" = ANY (ARRAY['member'::"text", 'admin'::"text"])))), '[]'::"jsonb") AS "members",
     COALESCE(( SELECT "jsonb_agg"("jsonb_build_object"('id', "fm"."id", 'first_name', "fm"."first_name", 'last_name', "fm"."last_name", 'preferred_name', "fm"."preferred_name", 'avatar_url', "fm"."avatar_url", 'relationship', "fm"."relationship", 'is_class_member', "fm"."is_class_member", 'birth_month', "fm"."birth_month", 'birth_day', "fm"."birth_day", 'birth_year', "fm"."birth_year", 'claimed_profile_id', "fm"."claimed_profile_id") ORDER BY "fm"."relationship") AS "jsonb_agg"
            FROM "public"."family_members" "fm"
           WHERE (("fm"."family_id" = "f"."id") AND ("fm"."org_id" = "f"."org_id"))), '[]'::"jsonb") AS "family_members_list",
@@ -3743,7 +3728,7 @@ CREATE OR REPLACE VIEW "public"."profiles_directory" WITH ("security_invoker"='t
    FROM (("public"."profiles" "p"
      LEFT JOIN "public"."team_members" "pg" ON ((("p"."id" = "pg"."profile_id") AND ("pg"."org_id" = "p"."org_id"))))
      LEFT JOIN "public"."teams" "mg" ON ((("pg"."team_id" = "mg"."id") AND ("mg"."org_id" = "p"."org_id"))))
-  WHERE (("p"."is_unlisted" = false) AND ("p"."role" = ANY (ARRAY['member'::"text", 'content_editor'::"text", 'admin'::"text"])) AND ("p"."org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")))
+  WHERE (("p"."is_unlisted" = false) AND ("p"."role" = ANY (ARRAY['member'::"text", 'admin'::"text"])) AND ("p"."org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")))
   GROUP BY "p"."id";
 
 
@@ -4920,7 +4905,7 @@ CREATE POLICY "Profiles are updatable per access rules" ON "public"."profiles" F
 
 
 
-CREATE POLICY "Profiles are visible per access rules" ON "public"."profiles" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ((( SELECT "auth"."uid"() AS "uid") = "id") OR ( SELECT "public"."is_admin"() AS "is_admin") OR (("family_id" IS NOT NULL) AND ("family_id" = ( SELECT "public"."current_family_id"() AS "current_family_id")) AND (( SELECT "auth"."uid"() AS "uid") <> "id") AND ( SELECT "public"."is_member"() AS "is_member")) OR (( SELECT "public"."is_member"() AS "is_member") AND ("is_unlisted" = false) AND ("role" = ANY (ARRAY['member'::"text", 'content_editor'::"text", 'admin'::"text"])) AND (( SELECT "public"."org_directory_visible"() AS "org_directory_visible") OR "public"."shares_group_with"("id"))))));
+CREATE POLICY "Profiles are visible per access rules" ON "public"."profiles" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ((( SELECT "auth"."uid"() AS "uid") = "id") OR ( SELECT "public"."is_admin"() AS "is_admin") OR (("family_id" IS NOT NULL) AND ("family_id" = ( SELECT "public"."current_family_id"() AS "current_family_id")) AND (( SELECT "auth"."uid"() AS "uid") <> "id") AND ( SELECT "public"."is_member"() AS "is_member")) OR (( SELECT "public"."is_member"() AS "is_member") AND ("is_unlisted" = false) AND ("role" = ANY (ARRAY['member'::"text", 'admin'::"text"])) AND (( SELECT "public"."org_directory_visible"() AS "org_directory_visible") OR "public"."shares_group_with"("id"))))));
 
 
 
@@ -5416,12 +5401,6 @@ GRANT ALL ON FUNCTION "public"."handle_new_user"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."is_admin"() TO "anon";
 GRANT ALL ON FUNCTION "public"."is_admin"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."is_admin"() TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."is_content_editor"() TO "anon";
-GRANT ALL ON FUNCTION "public"."is_content_editor"() TO "authenticated";
-GRANT ALL ON FUNCTION "public"."is_content_editor"() TO "service_role";
 
 
 
