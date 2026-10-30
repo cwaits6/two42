@@ -37,7 +37,7 @@ A member who leads one serving team within a group.
 _Avoid_: team leader, captain
 
 **Pending**:
-A person who has signed in but whom the church has not approved yet, or whom a church admin has moved back to pending. Someone awaiting first approval sees only their own profile.
+A person who has signed in but whom the church has not approved yet, or whom a church admin has moved back to pending. A pending person sees only their own profile and their own requests; someone moved back keeps their groups and teams, which return when they are approved again.
 _Avoid_: unapproved, guest
 
 **Operator**:

@@ -173,7 +173,9 @@ org. Every permissive policy on the four group tables composes as
 `is_group_member(_group_id)` and `is_group_leader(_group_id)` read
 `group_members` for `auth.uid()` **only** — the argument names the group,
 never the principal — and carry `org_id = app_current_org_id()` so a
-membership row in another org never counts. They are `SECURITY DEFINER`,
+membership row in another org never counts. Both, and `is_team_lead()`, also
+require the caller's profile to be non-pending, so a person moved back to
+pending keeps their rows but loses group access until approved again. They are `SECURITY DEFINER`,
 `set search_path = ''`, EXECUTE granted to `authenticated` and revoked from
 `anon`. They take a row-dependent argument, so unlike the zero-argument
 helpers they cannot be InitPlan-hoisted and are called bare in policy

@@ -200,6 +200,12 @@ policies resolve membership through three `SECURITY DEFINER` helpers, each
   `serving_broadcasts` view/log, `serving_team_settings` insert/update) and
   `serving_signup_create()` call it.
 
+Each also joins the caller's `profiles` row and requires `role <> 'pending'`
+(`20261102000000_pending_ends_group_access.sql`): a person moved back to
+pending keeps their rows but passes no arm until they are approved again,
+and `serving_signup_create()` applies the same check to its direct
+`team_members` arm.
+
 Every body carries `org_id = public.app_current_org_id()`, so a membership
 row in another org never counts — `schema_tenancy_lint.sql` check 4 sees
 that predicate; the org equality itself is what keeps a caller-supplied id
