@@ -127,6 +127,8 @@ Loading, empty and failed must never be mistaken for each other. Each has one lo
 
 **Loading** — `PageLoading` in a route's `loading.tsx` keeps the page frame and the page's own `PageHeader`, and draws a skeleton of the content area (`LoadingState`). A screen reader hears "Loading {thing}" once; the skeleton is hidden from it. When the title depends on the data (Home's greeting), or routes under the segment carry different titles, a title-shaped placeholder holds its place instead of a wrong title.
 
+A `loading.tsx` streams the response, so the HTTP status is sent before the page runs: a `notFound()` below it answers 200, and a `redirect()` happens in the browser. Never put one above a route that guards access with `notFound()` — the group pages (`/g/…`) and `/find-a-group` among them — which is why there is no root `app/loading.tsx`.
+
 ![Calendar loading at 1280 wide](page-states/loading-calendar-1280.webp)
 
 **Empty** — `EmptyState` is for a read that succeeded and found nothing: a dashed box, a Clay icon on a warm tile, one line in the page's own terms ("No announcements yet."), and for people who can act, the action ("Add announcement"). This is the one state where warmth is allowed.
