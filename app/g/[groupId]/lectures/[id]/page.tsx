@@ -83,7 +83,12 @@ export default async function LessonPage({
           .eq("id", lesson.series_id)
           .eq("group_id", group.id)
           .maybeSingle()
-          .then(({ data }) => data),
+          .then(({ data, error }) => {
+            if (error) {
+              console.error("Failed to load lesson series: code=%s message=%s", error.code, error.message);
+            }
+            return data;
+          }),
         supabase
           .from("lectures")
           .select("id, title, lecture_date, series_id")

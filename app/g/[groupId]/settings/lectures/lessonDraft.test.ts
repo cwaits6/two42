@@ -67,8 +67,8 @@ describe("validateLesson", () => {
       video_url: "youtu.be/abc",
       thumbnail_url: "javascript:x",
     });
-    expect(errors.video_url).toBe("Enter a link that starts with https://");
-    expect(errors.thumbnail_url).toBe("Enter an image link that starts with https://");
+    expect(errors.video_url).toBe("Enter a link that starts with http:// or https://");
+    expect(errors.thumbnail_url).toBe("Enter an image link that starts with http:// or https://");
   });
 });
 

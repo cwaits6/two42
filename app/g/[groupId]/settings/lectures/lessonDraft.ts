@@ -63,10 +63,10 @@ export function validateLesson(draft: LessonDraft): LessonFieldErrors {
   if (!draft.title.trim()) errors.title = "Enter a title.";
   const video = draft.video_url.trim();
   if (!video) errors.video_url = "Enter a link to the recording.";
-  else if (!safeHttpUrl(video)) errors.video_url = "Enter a link that starts with https://";
+  else if (!safeHttpUrl(video)) errors.video_url = "Enter a link that starts with http:// or https://";
   const thumbnail = draft.thumbnail_url.trim();
   if (thumbnail && !safeHttpUrl(thumbnail)) {
-    errors.thumbnail_url = "Enter an image link that starts with https://";
+    errors.thumbnail_url = "Enter an image link that starts with http:// or https://";
   }
   return errors;
 }
