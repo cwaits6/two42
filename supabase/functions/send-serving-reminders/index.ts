@@ -29,6 +29,7 @@ import { escapeHtml } from "../_shared/html.ts";
 import { nextSunday, upcomingSundays } from "../_shared/sundays.ts";
 import { resolveServiceKey } from "../_shared/service-key.ts";
 import { reserveEmailQuota } from "../_shared/quota.ts";
+import { isOpenDatesRecipient, isServingReminderRecipient } from "../_shared/serving-recipients.ts";
 import {
   forEachOrg,
   listActiveOrgs,
@@ -293,10 +294,7 @@ async function runDaily(
       // the run's HTTP status to 500.
       const recipients = attendees
         .map((a) => a.profiles)
-        .filter(
-          (p): p is NonNullable<typeof p> & { email: string } =>
-            !!p?.email && p.role !== "pending",
-        );
+        .filter(isServingReminderRecipient);
       if (recipients.length === 0) continue;
 
       const allowed = await reserveEmailQuota(supabase, orgId, recipients.length);
@@ -438,8 +436,6 @@ async function runMonthly(
 
       // Get all team members. The profiles embed is org-safe by FK traversal
       // from the org-filtered team_members parent — see _shared/orgs.ts.
-      // Someone moved back to pending keeps their team_members row but has
-      // lost the team, so the filter below drops them.
       const { data: members, error: membersError } = await supabase
         .from("team_members")
         .select("profiles(id, first_name, preferred_name, email, email_announcements, role)")
@@ -466,10 +462,7 @@ async function runMonthly(
               role: string;
             } | null,
         )
-        .filter(
-          (m): m is NonNullable<typeof m> & { email: string } =>
-            !!m?.email && m.email_announcements !== false && m.role !== "pending",
-        );
+        .filter(isOpenDatesRecipient);
 
       // reserveEmailQuota returns true without an RPC round trip for an
       // empty batch, so no length guard is needed here.
