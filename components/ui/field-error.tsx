@@ -1,4 +1,4 @@
-export function fieldErrorId(fieldId: string): string {
+function fieldErrorId(fieldId: string): string {
   return `${fieldId}-error`;
 }
 
