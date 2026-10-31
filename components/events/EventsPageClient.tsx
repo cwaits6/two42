@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
@@ -133,28 +134,30 @@ export function EventsPageClient({ groups, allEvents, userRsvps, userId, timeZon
         </Button>
       } />
       <DropdownMenuContent align="end" className="w-72 rounded-2xl">
-        <DropdownMenuLabel className="text-base font-normal text-muted-foreground">
-          A new link replaces your earlier one, and the earlier link stops working.
-        </DropdownMenuLabel>
-        {groups.length >= 2 && (
-          <DropdownMenuItem className="min-h-11 text-base" onClick={() => openCalendarFeed()}>
-            All my groups
-          </DropdownMenuItem>
-        )}
-        {groups.map((group) => (
-          <DropdownMenuItem
-            key={group.id}
-            className="min-h-11 gap-2 text-base"
-            onClick={() => openCalendarFeed(group.id)}
-          >
-            <span
-              aria-hidden="true"
-              className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: group.color }}
-            />
-            {group.name}
-          </DropdownMenuItem>
-        ))}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="text-base font-normal text-muted-foreground">
+            A new link replaces your earlier one, and the earlier link stops working.
+          </DropdownMenuLabel>
+          {groups.length >= 2 && (
+            <DropdownMenuItem className="min-h-11 text-base" onClick={() => openCalendarFeed()}>
+              All my groups
+            </DropdownMenuItem>
+          )}
+          {groups.map((group) => (
+            <DropdownMenuItem
+              key={group.id}
+              className="min-h-11 gap-2 text-base"
+              onClick={() => openCalendarFeed(group.id)}
+            >
+              <span
+                aria-hidden="true"
+                className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: group.color }}
+              />
+              {group.name}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -175,22 +178,24 @@ export function EventsPageClient({ groups, allEvents, userRsvps, userId, timeZon
           </Button>
         } />
         <DropdownMenuContent align="end" className="w-60 rounded-2xl">
-          <DropdownMenuLabel className="text-base">Add to</DropdownMenuLabel>
-          {ledVisible.map((group) => (
-            <DropdownMenuItem
-              key={group.id}
-              className="min-h-11 gap-2 text-base"
-              nativeButton={false}
-              render={<Link href={newEventHref(group.id)} />}
-            >
-              <span
-                aria-hidden="true"
-                className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{ backgroundColor: group.color }}
-              />
-              {group.name}
-            </DropdownMenuItem>
-          ))}
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="text-base">Add to</DropdownMenuLabel>
+            {ledVisible.map((group) => (
+              <DropdownMenuItem
+                key={group.id}
+                className="min-h-11 gap-2 text-base"
+                nativeButton={false}
+                render={<Link href={newEventHref(group.id)} />}
+              >
+                <span
+                  aria-hidden="true"
+                  className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: group.color }}
+                />
+                {group.name}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
     ) : null;

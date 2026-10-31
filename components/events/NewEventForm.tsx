@@ -88,6 +88,8 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
   const [meetingLeadMinutes, setMeetingLeadMinutes] = useState("15");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [focusTarget, setFocusTarget] = useState<{ id: string } | null>(null);
+  const clearError = (key: keyof FieldErrors) =>
+    setErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev));
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
@@ -243,7 +245,10 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
               startTime={startTime}
               endTime={endTime}
               onStartTimeChange={handleStartTimeChange}
-              onEndTimeChange={setEndTime}
+              onEndTimeChange={(value) => {
+                setEndTime(value);
+                clearError("end_time");
+              }}
               timeZone={timeZone}
               endError={errors.end_time}
             />
@@ -322,11 +327,12 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
                       <Input
                         id="recurrence_count"
                         type="number"
-                        min="2"
-                        max="999"
-                        step="1"
+                        inputMode="numeric"
                         value={recurrenceCount}
-                        onChange={(e) => setRecurrenceCount(e.target.value)}
+                        onChange={(e) => {
+                          setRecurrenceCount(e.target.value);
+                          clearError("recurrence_count");
+                        }}
                         className="text-lg"
                         {...invalidFieldProps("recurrence_count", errors.recurrence_count)}
                       />
@@ -340,9 +346,11 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
                       <Input
                         id="recurrence_until"
                         type="datetime-local"
-                        min={startTime || undefined}
                         value={recurrenceUntil}
-                        onChange={(e) => setRecurrenceUntil(e.target.value)}
+                        onChange={(e) => {
+                          setRecurrenceUntil(e.target.value);
+                          clearError("recurrence_until");
+                        }}
                         className="text-lg"
                         {...invalidFieldProps("recurrence_until", errors.recurrence_until)}
                       />
@@ -355,7 +363,10 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
 
             <MeetingFieldsSection
               meetingUrl={meetingUrl}
-              onMeetingUrlChange={setMeetingUrl}
+              onMeetingUrlChange={(value) => {
+                setMeetingUrl(value);
+                clearError("meeting_url");
+              }}
               meetingId={meetingId}
               onMeetingIdChange={setMeetingId}
               passcode={meetingPasscode}

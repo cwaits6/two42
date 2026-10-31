@@ -94,6 +94,8 @@ export function EditEventForm({
   const [editScope, setEditScope] = useState<EditScope>("all");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [focusTarget, setFocusTarget] = useState<{ id: string } | null>(null);
+  const clearError = (key: keyof FieldErrors) =>
+    setErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev));
 
   const calendarHref = groupPath(groupId, "/calendar");
   const detailHref = groupPath(
@@ -318,7 +320,10 @@ export function EditEventForm({
               startTime={startTime}
               endTime={endTime}
               onStartTimeChange={handleStartTimeChange}
-              onEndTimeChange={setEndTime}
+              onEndTimeChange={(value) => {
+                setEndTime(value);
+                clearError("end_time");
+              }}
               timeZone={timeZone}
               endError={errors.end_time}
             />
@@ -337,7 +342,10 @@ export function EditEventForm({
             {!(showScopeChoice && editScope === "this") && (
               <MeetingFieldsSection
                 meetingUrl={meetingUrl}
-                onMeetingUrlChange={setMeetingUrl}
+                onMeetingUrlChange={(value) => {
+                  setMeetingUrl(value);
+                  clearError("meeting_url");
+                }}
                 meetingId={meetingId}
                 onMeetingIdChange={setMeetingId}
                 passcode={meetingPasscode}

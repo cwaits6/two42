@@ -50,7 +50,6 @@ export function EventTimeFields({
             name="end_time"
             type="datetime-local"
             className="text-lg"
-            min={startTime || undefined}
             value={endTime}
             onChange={(e) => onEndTimeChange(e.target.value)}
             {...endInvalid}

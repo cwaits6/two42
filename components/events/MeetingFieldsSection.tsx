@@ -85,7 +85,8 @@ export function MeetingFieldsSection({
         <Label htmlFor="meeting_url" className="text-lg">Meeting link</Label>
         <Input
           id="meeting_url"
-          type="url"
+          type="text"
+          inputMode="url"
           placeholder="https://us02web.zoom.us/j/…"
           value={meetingUrl}
           onChange={(e) => onMeetingUrlChange(e.target.value)}
