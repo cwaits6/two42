@@ -14,6 +14,8 @@ interface DirRowProps {
   subtitle?: ReactNode;
   /** Pill or other content between the text and the chevron */
   trailing?: ReactNode;
+  /** Below a 32rem row, drop `trailing` under the text instead of squeezing the text beside it */
+  stackTrailing?: boolean;
   /** Soft-blue emphasis for the selected item in a two-pane list */
   selected?: boolean;
   /** Selected background without aria-current, for rows whose state a separate control owns */
@@ -37,6 +39,7 @@ export function DirRow({
   title,
   subtitle,
   trailing,
+  stackTrailing,
   selected,
   highlighted,
   highlight,
@@ -49,6 +52,7 @@ export function DirRow({
     selected || highlighted || highlight ? "bg-brand-warm border-brand-primary/40" : "border-border",
     interactive && "hover:border-brand-primary/60",
     (actions || leading) && "flex-1 min-w-0",
+    stackTrailing && "@container flex-wrap gap-y-3",
   );
 
   const inner = (
@@ -60,7 +64,14 @@ export function DirRow({
           <span className="block text-base text-muted-foreground">{subtitle}</span>
         )}
       </span>
-      {trailing}
+      {stackTrailing && trailing ? (
+        // pl-16 lines the stacked content up with the text past the 3rem avatar.
+        <span className="order-last basis-full pl-16 @lg:order-none @lg:basis-auto @lg:pl-0">
+          {trailing}
+        </span>
+      ) : (
+        trailing
+      )}
       {interactive && (
         <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
       )}
