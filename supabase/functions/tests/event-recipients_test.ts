@@ -62,7 +62,9 @@ function makeFakeClient(
 
 // a, b: RSVPed, still members, have an email — the recipients.
 // c: RSVPed but no longer a member — dropped by the membership gate.
-// d: RSVPed and a member, but a pending profile with no email — skipped.
+// d: RSVPed and a member, but a profile with no email — skipped.
+// e: RSVPed and still has a membership row, but moved back to pending —
+//    dropped without a log line.
 // x: a member who never RSVPed — never reached.
 const TABLES: Record<string, Row[]> = {
   rsvps: [
@@ -70,17 +72,20 @@ const TABLES: Record<string, Row[]> = {
     { user_id: "b", status: "maybe" },
     { user_id: "c", status: "yes" },
     { user_id: "d", status: "yes" },
+    { user_id: "e", status: "yes" },
   ],
   group_members: [
     { profile_id: "a" },
     { profile_id: "b" },
     { profile_id: "x" },
     { profile_id: "d" },
+    { profile_id: "e" },
   ],
   profiles: [
-    { id: "a", first_name: "Ann", preferred_name: null, email: "a@example.com" },
-    { id: "b", first_name: "Bob", preferred_name: "Rob", email: "b@example.com" },
-    { id: "d", first_name: "Dee", preferred_name: null, email: null },
+    { id: "a", first_name: "Ann", preferred_name: null, email: "a@example.com", role: "member" },
+    { id: "b", first_name: "Bob", preferred_name: "Rob", email: "b@example.com", role: "admin" },
+    { id: "d", first_name: "Dee", preferred_name: null, email: null, role: "member" },
+    { id: "e", first_name: "Eve", preferred_name: null, email: "e@example.com", role: "pending" },
   ],
 };
 
@@ -92,7 +97,7 @@ function withSilencedConsoleError<T>(fn: () => Promise<T>): Promise<T> {
   });
 }
 
-Deno.test("resolves RSVPs through current group membership to profiles with an email", async () => {
+Deno.test("resolves RSVPs through current group membership to approved profiles with an email", async () => {
   const { client, chains } = makeFakeClient(TABLES);
   const recipients = await withSilencedConsoleError(() =>
     resolveEventReminderRecipients(client, ORG, GROUP, EVENT)
@@ -112,10 +117,10 @@ Deno.test("resolves RSVPs through current group membership to profiles with an e
   assertEquals(rsvps.in, ["status", ["yes", "maybe"]]);
   assertEquals(members.select, "profile_id");
   assertEquals(members.eq, [["org_id", ORG], ["group_id", GROUP]]);
-  assertEquals(members.in, ["profile_id", ["a", "b", "c", "d"]]);
-  assertEquals(profiles.select, "id, first_name, preferred_name, email");
+  assertEquals(members.in, ["profile_id", ["a", "b", "c", "d", "e"]]);
+  assertEquals(profiles.select, "id, first_name, preferred_name, email, role");
   assertEquals(profiles.eq, [["org_id", ORG]]);
-  assertEquals(profiles.in, ["id", ["a", "b", "d"]]);
+  assertEquals(profiles.in, ["id", ["a", "b", "d", "e"]]);
 });
 
 Deno.test("logs each skipped profile by id, never by address", async () => {
@@ -152,7 +157,7 @@ Deno.test("chunks id lists so no single .in() exceeds 200 values", async () => {
   const { client, chains } = makeFakeClient({
     rsvps: ids.map((id) => ({ user_id: id, status: "yes" })),
     group_members: ids.map((id) => ({ profile_id: id })),
-    profiles: ids.map((id) => ({ id, first_name: null, preferred_name: null, email: `${id}@example.com` })),
+    profiles: ids.map((id) => ({ id, first_name: null, preferred_name: null, email: `${id}@example.com`, role: "member" })),
   });
   const recipients = await resolveEventReminderRecipients(client, ORG, GROUP, EVENT);
   assertEquals(recipients.length, 450);

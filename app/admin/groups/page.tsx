@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AdminCreateGroupButton } from "@/components/admin/AdminCreateGroupButton";
+import { AdminGroupList } from "@/components/admin/AdminGroupList";
+import { listAdminGroups } from "@/components/admin/adminGroups";
 import { OrgGroupControls } from "@/components/admin/OrgGroupControls";
 import { PendingGroupRequests } from "@/components/admin/PendingGroupRequests";
 import { PendingJoinRequests } from "@/components/admin/PendingJoinRequests";
@@ -34,7 +36,7 @@ export default async function AdminGroupsPage() {
     policy,
     discoveryOn,
     { data: requests, error: requestsError },
-    { data: groups, error: groupsError },
+    groupRows,
   ] = await Promise.all([
     getGroupCreationPolicy(),
     getDiscoveryOn(),
@@ -43,24 +45,14 @@ export default async function AdminGroupsPage() {
       .select(PENDING_GROUP_REQUEST_SELECT)
       .eq("status", "pending")
       .order("created_at", { ascending: true }),
-    supabase
-      .from("groups")
-      .select("id, name, description, group_members(count)")
-      .order("name", { ascending: true }),
+    listAdminGroups(supabase),
   ]);
   if (requestsError) console.error("Failed to load group requests:", requestsError);
-  if (groupsError) console.error("Failed to load groups:", groupsError);
 
   const timeZone = await getOrgTimeZone();
   const pending = (requests ?? []).map(toPendingGroupRequest);
-  const groupRows = (groups ?? []).map((g) => ({
-    id: g.id,
-    name: g.name,
-    description: g.description,
-    memberCount: g.group_members[0]?.count ?? 0,
-  }));
   // Without the groups there is nothing to read, and an empty queue would misreport the failure.
-  const joinRequests = groupsError ? null : await getPendingJoinRequests(groupRows);
+  const joinRequests = groupRows ? await getPendingJoinRequests(groupRows) : null;
 
   return (
     <PageContainer size="wide">
@@ -92,24 +84,12 @@ export default async function AdminGroupsPage() {
 
       <section>
         <h2 className="mb-4 text-2xl font-bold text-brand-primary-text">Groups</h2>
-        {groupRows.length === 0 ? (
-          <p className="text-lg text-muted-foreground">No groups yet.</p>
+        {groupRows ? (
+          <AdminGroupList groups={groupRows} />
         ) : (
-          <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
-            {groupRows.map((g) => (
-              <li key={g.id} className="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-baseline sm:justify-between">
-                <div className="min-w-0">
-                  <p className="text-xl font-semibold">{g.name}</p>
-                  {g.description && (
-                    <p className="text-base text-muted-foreground">{g.description}</p>
-                  )}
-                </div>
-                <p className="shrink-0 text-base text-muted-foreground">
-                  {g.memberCount} member{g.memberCount !== 1 ? "s" : ""}
-                </p>
-              </li>
-            ))}
-          </ul>
+          <p role="alert" className="text-lg text-muted-foreground">
+            Couldn&apos;t load the groups. Reload the page to try again.
+          </p>
         )}
       </section>
     </PageContainer>

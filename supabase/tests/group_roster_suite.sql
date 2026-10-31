@@ -458,5 +458,173 @@ select cmp_ok(
   (select count(*)::int from public.group_labels where org_id = current_setting('gr.org_a')::uuid),
   '>=', 1, 'non-vacuity: org A holds labels the org-B admin could not see');
 
+-- ── 9. Moving someone back to pending ends group access; approval restores it ──
+-- In A1: leader_a1 leads the group, member_a3 leads its serving team and
+-- member_a1 is a plain member of that team. The same probe runs with all
+-- three pending, then again once they are approved, and no membership or
+-- team row is touched in between.
+do $$
+declare
+  org_a uuid := current_setting('gr.org_a')::uuid;
+  grp_a1 uuid := current_setting('gr.grp_a1')::uuid;
+  leader_a1 uuid := current_setting('gr.leader_a1')::uuid;
+  member_a1 uuid := current_setting('gr.member_a1')::uuid;
+  member_a3 uuid := current_setting('gr.member_a3')::uuid;
+  team_a1 uuid;
+begin
+  insert into public.teams (org_id, group_id, name, is_serving_role)
+    values (org_a, grp_a1, 'Greeters', true) returning id into team_a1;
+  insert into public.team_members (org_id, team_id, profile_id, is_leader) values
+    (org_a, team_a1, member_a3, true),
+    (org_a, team_a1, member_a1, false);
+  insert into public.serving_team_settings (org_id, team_id, enabled) values (org_a, team_a1, true);
+  insert into public.announcements (org_id, group_id, title, content, is_published, published_at)
+    values (org_a, grp_a1, 'Bring a chair', 'Folding chairs by the door.', true, now());
+  perform set_config('gr.team_a1', team_a1::text, true);
+  perform set_config('gr.rows_before',
+    ((select count(*) from public.group_members where group_id = grp_a1)
+      + (select count(*) from public.team_members where team_id = team_a1))::text, true);
+end $$;
+
+create function pg_temp.probe_group_access(_phase text, _sunday date) returns void
+  language plpgsql
+as $$
+declare
+  org_a uuid := current_setting('gr.org_a')::uuid;
+  grp_a1 uuid := current_setting('gr.grp_a1')::uuid;
+  team_a1 uuid := current_setting('gr.team_a1')::uuid;
+  leader_a1 uuid := current_setting('gr.leader_a1')::uuid;
+  member_a1 uuid := current_setting('gr.member_a1')::uuid;
+  member_a3 uuid := current_setting('gr.member_a3')::uuid;
+  n bigint;
+  err text;
+begin
+  set local role authenticated;
+  perform set_config('request.headers', '{}', true);
+
+  -- Plain member: reads and the serving signup paths.
+  perform set_config('request.jwt.claims', json_build_object('sub', member_a1)::text, true);
+  perform set_config('gr.' || _phase || '_is_member', public.is_group_member(grp_a1)::text, true);
+  select count(*) into n from public.groups where id = grp_a1;
+  perform set_config('gr.' || _phase || '_groups', n::text, true);
+  select count(*) into n from public.group_members where group_id = grp_a1 and profile_id <> member_a1;
+  perform set_config('gr.' || _phase || '_roster', n::text, true);
+  select count(*) into n from public.announcements where group_id = grp_a1;
+  perform set_config('gr.' || _phase || '_announcements', n::text, true);
+  select count(*) into n from public.teams where id = team_a1;
+  perform set_config('gr.' || _phase || '_teams', n::text, true);
+  select count(*) into n from public.serving_team_settings where team_id = team_a1;
+  perform set_config('gr.' || _phase || '_serving', n::text, true);
+  err := 'none';
+  begin
+    perform public.serving_signup_create(team_a1, _sunday, array[member_a1]);
+  exception when others then
+    err := sqlstate;
+  end;
+  perform set_config('gr.' || _phase || '_rpc_err', err, true);
+  err := 'none';
+  begin
+    insert into public.serving_signups (org_id, team_id, service_date, created_by)
+      values (org_a, team_a1, _sunday + 7, member_a1);
+  exception when others then
+    err := sqlstate;
+  end;
+  perform set_config('gr.' || _phase || '_direct_err', err, true);
+
+  -- Group leader: leader writes.
+  perform set_config('request.jwt.claims', json_build_object('sub', leader_a1)::text, true);
+  perform set_config('gr.' || _phase || '_is_leader', public.is_group_leader(grp_a1)::text, true);
+  update public.groups set description = _phase where id = grp_a1;
+  get diagnostics n = row_count;
+  perform set_config('gr.' || _phase || '_group_updated', n::text, true);
+  err := 'none';
+  begin
+    insert into public.announcements (org_id, group_id, title, content)
+      values (org_a, grp_a1, 'Draft ' || _phase, 'Draft.');
+  exception when others then
+    err := sqlstate;
+  end;
+  perform set_config('gr.' || _phase || '_announce_err', err, true);
+
+  -- Team lead: team-lead writes.
+  perform set_config('request.jwt.claims', json_build_object('sub', member_a3)::text, true);
+  perform set_config('gr.' || _phase || '_is_lead', public.is_team_lead(team_a1)::text, true);
+  update public.serving_team_settings set window_weeks = 6 where team_id = team_a1;
+  get diagnostics n = row_count;
+  perform set_config('gr.' || _phase || '_settings_updated', n::text, true);
+
+  reset role;
+end;
+$$;
+
+update public.profiles set role = 'pending'
+  where id in (current_setting('gr.leader_a1')::uuid, current_setting('gr.member_a1')::uuid,
+               current_setting('gr.member_a3')::uuid);
+select pg_temp.probe_group_access('pend', date '2030-01-06');
+
+select is(current_setting('gr.pend_is_member'), 'false',
+  'a pending person with a group row is not a group member');
+select is(current_setting('gr.pend_groups')::int, 0,
+  'a pending person cannot read their group');
+select is(current_setting('gr.pend_roster')::int, 0,
+  'a pending person cannot read their group''s roster');
+select is(current_setting('gr.pend_announcements')::int, 0,
+  'a pending person cannot read their group''s announcements');
+select is(current_setting('gr.pend_teams')::int, 0,
+  'a pending person cannot read their group''s teams');
+select is(current_setting('gr.pend_serving')::int, 0,
+  'a pending person cannot read their team''s serving settings');
+select is(current_setting('gr.pend_rpc_err'), 'SV004',
+  'a pending team member cannot sign up to serve through the RPC');
+select is(current_setting('gr.pend_direct_err'), '42501',
+  'a pending team member cannot insert a serving signup directly');
+select is(current_setting('gr.pend_is_leader'), 'false',
+  'a pending person with a leader row is not a group leader');
+select is(current_setting('gr.pend_group_updated')::int, 0,
+  'a pending former leader cannot edit the group');
+select is(current_setting('gr.pend_announce_err'), '42501',
+  'a pending former leader cannot post an announcement');
+select is(current_setting('gr.pend_is_lead'), 'false',
+  'a pending person with a team-lead row is not a team lead');
+select is(current_setting('gr.pend_settings_updated')::int, 0,
+  'a pending former team lead cannot change serving settings');
+
+update public.profiles set role = 'member'
+  where id in (current_setting('gr.leader_a1')::uuid, current_setting('gr.member_a1')::uuid,
+               current_setting('gr.member_a3')::uuid);
+select pg_temp.probe_group_access('back', date '2030-02-03');
+
+select is(
+  ((select count(*) from public.group_members where group_id = current_setting('gr.grp_a1')::uuid)
+    + (select count(*) from public.team_members where team_id = current_setting('gr.team_a1')::uuid))::text,
+  current_setting('gr.rows_before'),
+  'the group and team rows are unchanged across the move to pending and back');
+select is(current_setting('gr.back_is_member'), 'true',
+  'approved again, the person is a group member with no re-adding');
+select is(current_setting('gr.back_groups')::int, 1,
+  'approved again, the person reads their group');
+select cmp_ok(current_setting('gr.back_roster')::int, '>=', 1,
+  'approved again, the person reads their group''s roster');
+select is(current_setting('gr.back_announcements')::int, 1,
+  'approved again, the person reads their group''s announcements');
+select is(current_setting('gr.back_teams')::int, 1,
+  'approved again, the person reads their group''s teams');
+select is(current_setting('gr.back_serving')::int, 1,
+  'approved again, the person reads their team''s serving settings');
+select is(current_setting('gr.back_rpc_err'), 'none',
+  'approved again, the team member signs up to serve through the RPC');
+select is(current_setting('gr.back_direct_err'), 'none',
+  'approved again, the team member inserts a serving signup directly');
+select is(current_setting('gr.back_is_leader'), 'true',
+  'approved again, the person is a group leader with no re-adding');
+select is(current_setting('gr.back_group_updated')::int, 1,
+  'approved again, the leader edits the group');
+select is(current_setting('gr.back_announce_err'), 'none',
+  'approved again, the leader posts an announcement');
+select is(current_setting('gr.back_is_lead'), 'true',
+  'approved again, the person is a team lead with no re-adding');
+select is(current_setting('gr.back_settings_updated')::int, 1,
+  'approved again, the team lead changes serving settings');
+
 select * from finish();
 rollback;
