@@ -10,6 +10,7 @@ import { CalendarDays, Clock, MapPin, Pencil, Plus } from "lucide-react";
 import { groupPath } from "@/lib/groups/active";
 import { groupTextColor } from "@/lib/groups/settings";
 import { formatEventDate, formatEventRange, formatInZone } from "@/lib/time/zone";
+import { notesWithMeeting } from "@/lib/meetings";
 import type { CalendarGroup } from "@/components/events/EventsPageClient";
 import type { Event, Rsvp } from "@/lib/types";
 
@@ -168,7 +169,7 @@ export function EventListView({
                           startTime={event.start_time}
                           endTime={event.end_time}
                           location={event.location}
-                          description={event.description}
+                          description={notesWithMeeting(event.description, event)}
                           timeZone={timeZone}
                         />
                       </div>

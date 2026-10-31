@@ -61,6 +61,30 @@ export function hasMeeting(m: Pick<Event, "meeting_url" | "meeting_id">): boolea
   return Boolean(m.meeting_url?.trim() || m.meeting_id?.trim());
 }
 
+export type MeetingDetails = Pick<Event, "meeting_url" | "meeting_id" | "meeting_passcode">;
+
+/**
+ * An event's notes with its meeting appended, for calendar apps: they show
+ * notes but never open two42, so the join details have to travel with them.
+ */
+export function notesWithMeeting(
+  description: string | null,
+  meeting: MeetingDetails | null
+): string | null {
+  const block =
+    meeting && hasMeeting(meeting)
+      ? [
+          "Online meeting",
+          meeting.meeting_url && `Join: ${meeting.meeting_url}`,
+          meeting.meeting_id && `Meeting ID: ${meeting.meeting_id}`,
+          meeting.meeting_passcode && `Passcode: ${meeting.meeting_passcode}`,
+        ]
+          .filter(Boolean)
+          .join("\n")
+      : null;
+  return [description, block].filter(Boolean).join("\n\n") || null;
+}
+
 /**
  * The meeting fields for an occurrence. Exception rows (series_id set) don't
  * carry their own meeting — they inherit from the series anchor, which the

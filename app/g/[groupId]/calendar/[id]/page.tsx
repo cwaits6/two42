@@ -10,7 +10,7 @@ import { AttendeeStrip, type Attendee } from "./_components/AttendeeStrip";
 import { JoinMeetingBlock } from "@/components/events/JoinMeetingBlock";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { hasMeeting, type MeetingFields } from "@/lib/meetings";
+import { hasMeeting, notesWithMeeting, type MeetingFields } from "@/lib/meetings";
 import { Button } from "@/components/ui/button";
 import { Pencil } from "lucide-react";
 import { groupPath } from "@/lib/groups/active";
@@ -308,7 +308,7 @@ export default async function EventDetailPage({
               startTime={displayStartTime}
               endTime={displayEndTime}
               location={event.location}
-              description={event.description}
+              description={notesWithMeeting(event.description, meeting)}
               timeZone={timeZone}
             />
             <SubscribeToEventButton eventId={event.id} />
