@@ -50,7 +50,7 @@ export function GivingSettings({
       () => setManageOn(!next),
       next
         ? "Members can now add their own funds."
-        : "Funds are now admin-managed only."
+        : "Only leaders can now add and edit funds."
     );
   }
 
@@ -74,8 +74,9 @@ export function GivingSettings({
             Members can add their own funds
           </Label>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            When off, only admins can create and edit giving funds. Existing
-            funds stay visible either way.
+            When off, only leaders can add and edit funds. When on, members
+            can also add and edit a fund that goes to them. Existing funds
+            stay visible either way.
           </p>
         </div>
         <Switch id="giving-mode" checked={manageOn} onCheckedChange={toggleManage} />

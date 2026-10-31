@@ -87,7 +87,7 @@ belonging to several churches, which the group model did not adopt.
 | Co-leader | Leader (any number per group, equal rights) | Fits. **Gap:** nothing keeps a group from losing its last leader — a church admin can remove them, a leader can demote another leader, and a deleted profile takes its row with it — and Admin › Groups (`app/admin/groups/page.tsx`) lists groups without a way to name a leader for an existing one. The admin RLS arm on `group_members` allows it; only the UI is missing |
 | Teacher who posts lessons but runs nothing else | Leader | **Overlap.** Posting a lesson needs full leadership of the group, including the roster. `class_teachers` is a display list on the About page and grants nothing. The retired content editor was the church-wide version of this job and is not coming back |
 | Team lead | Team lead | Fits for the schedule. **Gap:** a team lead cannot add or remove people on their own team; they ask a leader |
-| Treasurer — keeps the giving funds accurate | Leader per group; the church admin's `giving_manage_mode` switch | **Gap, low stakes.** No money moves through two42 — a fund only points at an outside giving method — and no one role sees every group's funds. The switch is church-wide although funds belong to groups. The second person a fund goes to has no rights at all. Separately, the switch's help text says "When off, only admins can create and edit giving funds", but when it is off only leaders can |
+| Treasurer — keeps the giving funds accurate | Leader per group; the church admin's `giving_manage_mode` switch | **Gap, low stakes.** No money moves through two42 — a fund only points at an outside giving method — and no one role sees every group's funds. The switch is church-wide although funds belong to groups. The second person a fund goes to has no rights at all |
 | Read-only staff — sees the directory and rosters, changes nothing | Member (with `directory_visibility = 'org'`) | Partial fit. A member sees the directory; no one but a church admin sees every group's roster |
 | Head of a household | Household primary or spouse | Fits |
 | Operator | Operator | Fits. Kept out of every church on purpose: an operator who also needs to act inside a church does so with an ordinary account there |
@@ -132,7 +132,6 @@ For the maintainer to accept; none is filed.
 1. **Keep at least one church admin** — refuse the last admin's own demotion in the database and hide the viewer's own role picker on the Members page.
 2. **Name a leader from Admin › Groups** — a church admin can set or replace a group's leaders, so a leaderless group can be recovered without joining it.
 3. **Team leads manage their team's roster** — add and remove members of their own team.
-4. **Fix the fund-management help text** — `components/giving/GivingSettings.tsx` says "only admins" where only leaders can.
-5. **Retire `organization_members`** — drop the table, its helper and its policy.
-6. **Record the trigger for an office admin role** — add it when a church asks for staff who approve people but must not change settings; until then, no work.
-7. **End group access when someone is moved back to pending** — today they keep their group reads, and a leader keeps their writes, until a leader or church admin also removes them from the group.
+4. **Retire `organization_members`** — drop the table, its helper and its policy.
+5. **Record the trigger for an office admin role** — add it when a church asks for staff who approve people but must not change settings; until then, no work.
+6. **End group access when someone is moved back to pending** — today they keep their group reads, and a leader keeps their writes, until a leader or church admin also removes them from the group.
