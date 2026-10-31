@@ -1481,6 +1481,51 @@ COMMENT ON FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") I
 
 
 
+CREATE OR REPLACE FUNCTION "public"."profiles_keep_one_church_admin"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _result public.profiles := case when tg_op = 'DELETE' then old else new end;
+begin
+  if old.role <> 'admin' or _result.role = 'admin' and tg_op = 'UPDATE' then
+    return _result;
+  end if;
+
+  perform pg_advisory_xact_lock(
+    hashtext('public.profiles:church_admin'), hashtext(old.org_id::text));
+
+  if tg_op = 'DELETE'
+     and not exists (select 1 from public.organizations o where o.id = old.org_id) then
+    return _result;
+  end if;
+
+  if current_setting('transaction_isolation') = 'repeatable read' then
+    raise exception 'profiles: removing a church admin needs READ COMMITTED or SERIALIZABLE'
+      using errcode = '0A000';
+  end if;
+
+  if not exists (
+    select 1 from public.profiles p
+    where p.org_id = old.org_id
+      and p.role = 'admin'
+      and p.id <> old.id
+  ) then
+    raise exception 'profiles: a church needs at least one church admin'
+      using errcode = 'CA001';
+  end if;
+
+  return _result;
+end $$;
+
+
+ALTER FUNCTION "public"."profiles_keep_one_church_admin"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."profiles_keep_one_church_admin"() IS 'Trigger function on profiles: refuses a role change or delete that would leave the row''s org with no church admin. Serializes on a per-org advisory lock so concurrent demotions cannot both commit. SECURITY INVOKER; raises CA001.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."provision_organization"("_name" "text", "_owner_email" "text") RETURNS "uuid"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO ''
@@ -3806,6 +3851,10 @@ CREATE OR REPLACE TRIGGER "prayer_requests_touch_updated_at" BEFORE UPDATE ON "p
 
 
 
+CREATE OR REPLACE TRIGGER "profiles_keep_one_church_admin" BEFORE DELETE OR UPDATE OF "role" ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."profiles_keep_one_church_admin"();
+
+
+
 CREATE OR REPLACE TRIGGER "profiles_touch_updated_at" BEFORE UPDATE ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."touch_updated_at"();
 
 
@@ -5541,6 +5590,11 @@ GRANT ALL ON FUNCTION "public"."organizations_timezone_check"() TO "service_role
 REVOKE ALL ON FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."profiles_keep_one_church_admin"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."profiles_keep_one_church_admin"() TO "service_role";
 
 
 
