@@ -35,8 +35,8 @@ export function meetingFieldErrors(
   if (url && !/^https:\/\//i.test(url)) {
     return { meeting_url: "Enter a meeting link that starts with https://" };
   }
-  if (!url && (meetingId.trim() || passcode.trim())) {
-    return { meeting_url: "Enter the meeting link that goes with the meeting ID and passcode." };
+  if (!url && !meetingId.trim() && passcode.trim()) {
+    return { meeting_url: "Enter a meeting link or a meeting ID to go with the passcode." };
   }
   return {};
 }
@@ -76,7 +76,7 @@ export function MeetingFieldsSection({
         <h2 className="font-sans text-lg font-medium text-foreground">Online meeting</h2>
         <p className="text-base text-muted-foreground">
           {isRecurring
-            ? "One link for every date of this event."
+            ? "One meeting for every date of this event."
             : "Members get a Join button on the group dashboard and the event page when it is time."}
         </p>
       </div>
@@ -87,7 +87,7 @@ export function MeetingFieldsSection({
           id="meeting_url"
           type="text"
           inputMode="url"
-          placeholder="https://us02web.zoom.us/j/…"
+          placeholder="https://…"
           value={meetingUrl}
           onChange={(e) => onMeetingUrlChange(e.target.value)}
           className="text-lg"
@@ -95,7 +95,8 @@ export function MeetingFieldsSection({
         />
         <FieldError fieldId="meeting_url" message={errors.meeting_url} />
         <p className="text-base text-muted-foreground">
-          Use the invite link with the passcode embedded so one tap joins.
+          Paste the invite link if you have one, so members can join with one tap. Otherwise,
+          enter the meeting ID and passcode.
         </p>
       </div>
 
@@ -120,7 +121,7 @@ export function MeetingFieldsSection({
         </div>
       </div>
 
-      {meetingUrl.trim() && (
+      {(meetingUrl.trim() || meetingId.trim()) && (
         <>
           <div className="flex items-center gap-3">
             <Switch

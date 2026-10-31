@@ -52,7 +52,10 @@ function listChain(rows: Row[], record: (filter: [string, unknown]) => void) {
       filters.push((row) => valuesAt(row, col).some((v) => vals.includes(v)));
       return obj;
     },
-    gte: () => obj,
+    gte(col: string, val: string) {
+      filters.push((row) => String(row[col]) >= val);
+      return obj;
+    },
     order: () => obj,
     limit: () => obj,
     then: (resolve: (v: Result) => unknown, reject?: (e: unknown) => unknown) =>
@@ -121,6 +124,11 @@ function makeServiceClient(opts: { memberships: Row[] | "error" }) {
     event("event-a", GROUP_A, "A event"),
     event("event-b", GROUP_B, "B event"),
     { ...event("event-x", GROUP_A, "Cancelled date"), is_cancelled: true },
+    { ...event("moved-a", GROUP_A, "Moved study"), series_id: "anchor-a" },
+    // The series began before the feed's window, so only the anchor read finds it.
+    { ...event("anchor-a", GROUP_A, "Study"), start_time: "2020-01-05T15:00:00.000Z", meeting_id: "111 222 3333" },
+    { ...event("anchor-b", GROUP_B, "Other study"), meeting_id: "999 888 7777" },
+    { ...event("moved-b", GROUP_B, "Other moved"), series_id: "anchor-b" },
   ];
   const signups = [
     signup("signup-a", GROUP_A, "Greeters A"),
@@ -228,5 +236,18 @@ describe("GET /api/calendar/feed.ics — group boundary", () => {
 
     expect(res.status).toBe(500);
     expect(predicates.events).toBeUndefined();
+  });
+
+  it("gives a moved date its series' meeting, from the owner's groups only", async () => {
+    const { client, predicates } = makeServiceClient({ memberships: memberOfAOnly });
+    createServiceClient.mockResolvedValue(client);
+
+    const res = await GET(feedRequest());
+    const body = await res.text();
+
+    expect(res.status).toBe(200);
+    expect(body).toContain("Meeting ID: 111 222 3333");
+    expect(body).not.toContain("999 888 7777");
+    expect(predicates.events).toEqual(expect.arrayContaining([["in", { id: ["anchor-a"] }]]));
   });
 });

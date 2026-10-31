@@ -56,6 +56,11 @@ export function joinButtonLabel(meetingUrl: string): string {
   return "Join meeting";
 }
 
+/** A meeting needs a link or an ID; a passcode alone has nothing to join. */
+export function hasMeeting(m: Pick<Event, "meeting_url" | "meeting_id">): boolean {
+  return Boolean(m.meeting_url?.trim() || m.meeting_id?.trim());
+}
+
 /**
  * The meeting fields for an occurrence. Exception rows (series_id set) don't
  * carry their own meeting — they inherit from the series anchor, which the

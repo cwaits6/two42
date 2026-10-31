@@ -70,7 +70,12 @@ function event(id: string, title: string, isCancelled: boolean): Row {
 
 function makeServiceClient() {
   const predicates: Array<[string, unknown]> = [];
-  const events = [event("event-live", "Weekly event", false), event("event-gone", "Cancelled date", true)];
+  const events = [
+    event("event-live", "Weekly event", false),
+    event("event-gone", "Cancelled date", true),
+    { ...event("anchor", "Weekly study", false), meeting_id: "123 456 7890", meeting_passcode: "faith" },
+    { ...event("moved-date", "Weekly study", false), series_id: "anchor" },
+  ];
   const client = {
     from(table: string) {
       switch (table) {
@@ -133,5 +138,18 @@ describe("GET /api/events/[id]/ics", () => {
         ["is_cancelled", false],
       ])
     );
+  });
+
+  it("gives a moved date its series' meeting", async () => {
+    const { client, predicates } = makeServiceClient();
+    createServiceClient.mockResolvedValue(client);
+
+    const res = await icsRequest("moved-date");
+    const body = await res.text();
+
+    expect(res.status).toBe(200);
+    expect(body).toContain("Meeting ID: 123 456 7890");
+    expect(body).toContain("Passcode: faith");
+    expect(predicates).toEqual(expect.arrayContaining([["id", "anchor"], ["group_id", GROUP]]));
   });
 });

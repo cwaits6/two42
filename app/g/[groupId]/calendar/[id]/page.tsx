@@ -10,7 +10,7 @@ import { AttendeeStrip, type Attendee } from "./_components/AttendeeStrip";
 import { JoinMeetingBlock } from "@/components/events/JoinMeetingBlock";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
-import type { MeetingFields } from "@/lib/meetings";
+import { hasMeeting, type MeetingFields } from "@/lib/meetings";
 import { Button } from "@/components/ui/button";
 import { Pencil } from "lucide-react";
 import { groupPath } from "@/lib/groups/active";
@@ -175,7 +175,7 @@ export default async function EventDetailPage({
       .maybeSingle();
     if (anchor) meetingSource = anchor;
   }
-  if (meetingSource.meeting_url) meeting = meetingSource;
+  if (hasMeeting(meetingSource)) meeting = meetingSource;
 
   // Recordings link for the ended state — only when there's a library to point to
   let hasLectures = false;
@@ -216,7 +216,7 @@ export default async function EventDetailPage({
   else if (diffDays > 1 && diffDays <= 7) upcomingLabel = `In ${diffDays} days`;
 
   const recordingsHref = hasLectures ? lecturesHref : null;
-  const joinBlock = meeting?.meeting_url && (
+  const joinBlock = meeting && (
     <JoinMeetingBlock
       meetingUrl={meeting.meeting_url}
       meetingId={meeting.meeting_id}

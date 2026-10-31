@@ -1,5 +1,6 @@
 import { createEvents, type EventAttributes } from "ics";
 import type { Event } from "@/lib/types";
+import { hasMeeting, type MeetingFields } from "@/lib/meetings";
 
 function parseDateToArray(
   isoString: string
@@ -18,9 +19,23 @@ function prefixed(prefix: string | undefined, title: string): string {
   return prefix ? `${prefix}: ${title}` : title;
 }
 
+type ICSMeeting = Pick<MeetingFields, "meeting_url" | "meeting_id" | "meeting_passcode">;
+
+function meetingNotes(meeting: ICSMeeting): string {
+  return [
+    "Online meeting",
+    meeting.meeting_url && `Join: ${meeting.meeting_url}`,
+    meeting.meeting_id && `Meeting ID: ${meeting.meeting_id}`,
+    meeting.meeting_passcode && `Passcode: ${meeting.meeting_passcode}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 export function eventToICSAttributes(
   event: Event,
-  opts: { summaryPrefix?: string } = {}
+  /** `meeting` is the series anchor's for an exception row, which carries none of its own. */
+  opts: { summaryPrefix?: string; meeting?: ICSMeeting | null } = {}
 ): EventAttributes {
   const attrs: EventAttributes = {
     uid: event.id,
@@ -33,8 +48,16 @@ export function eventToICSAttributes(
       : { duration: { hours: 1 } }),
   };
 
-  if (event.description) {
-    attrs.description = event.description;
+  const meeting = opts.meeting ?? event;
+  const notes = [
+    event.description,
+    hasMeeting(meeting) ? meetingNotes(meeting) : null,
+  ].filter(Boolean);
+  if (notes.length > 0) {
+    attrs.description = notes.join("\n\n");
+  }
+  if (meeting.meeting_url) {
+    attrs.url = meeting.meeting_url;
   }
   if (event.location) {
     attrs.location = event.location;
@@ -43,8 +66,8 @@ export function eventToICSAttributes(
   return attrs;
 }
 
-export function generateSingleEventICS(event: Event): string {
-  const { error, value } = createEvents([eventToICSAttributes(event)]);
+export function generateSingleEventICS(event: Event, meeting?: ICSMeeting | null): string {
+  const { error, value } = createEvents([eventToICSAttributes(event, { meeting })]);
   if (error || !value) {
     throw new Error(`Failed to generate ICS: ${error?.message ?? "unknown error"}`);
   }
@@ -95,6 +118,7 @@ export interface FeedEvent {
   event: Event;
   /** The group name, on the merged feed only. */
   summaryPrefix?: string;
+  meeting?: ICSMeeting | null;
 }
 
 /** Combined feed: the member's groups' events + serving signups in one VCALENDAR. */
@@ -103,7 +127,9 @@ export function generateCombinedICS(
   servingSignups: ServingICSInput[]
 ): string {
   const all: EventAttributes[] = [
-    ...events.map(({ event, summaryPrefix }) => eventToICSAttributes(event, { summaryPrefix })),
+    ...events.map(({ event, summaryPrefix, meeting }) =>
+      eventToICSAttributes(event, { summaryPrefix, meeting })
+    ),
     ...servingSignups.map(servingToICSAttributes),
   ];
   if (all.length === 0) {

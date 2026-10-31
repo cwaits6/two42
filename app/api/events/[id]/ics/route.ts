@@ -5,6 +5,7 @@ import {
   subscriptionTokenExpiryDate,
 } from "@/lib/calendar/subscription-token";
 import type { Event } from "@/lib/types";
+import type { MeetingFields } from "@/lib/meetings";
 import { isMemberRole } from "@/lib/roles";
 
 export async function GET(
@@ -116,9 +117,26 @@ export async function GET(
     return new Response("Event not found", { status: 404 });
   }
 
+  // An exception row inherits its series anchor's meeting.
+  let meeting: MeetingFields | null = typedEvent;
+  if (typedEvent.series_id) {
+    const { data: anchor, error: anchorError } = await supabase
+      .from("events")
+      .select("meeting_url, meeting_id, meeting_passcode, meeting_show_on_dashboard, meeting_lead_minutes")
+      .eq("id", typedEvent.series_id)
+      .eq("org_id", sub.org_id)
+      .eq("group_id", typedEvent.group_id)
+      .maybeSingle();
+    if (anchorError) {
+      console.error("Failed to fetch series meeting for event ICS:", anchorError);
+      return new Response("Something went wrong", { status: 500 });
+    }
+    meeting = anchor;
+  }
+
   let icsString: string;
   try {
-    icsString = generateSingleEventICS(typedEvent);
+    icsString = generateSingleEventICS(typedEvent, meeting);
   } catch (err) {
     console.error("ICS generation failed:", err);
     return new Response("Failed to generate calendar file", { status: 500 });

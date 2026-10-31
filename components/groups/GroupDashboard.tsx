@@ -14,7 +14,7 @@ import { formatServiceDate, toDateString } from "@/lib/serving/sundays";
 import { RsvpControl } from "@/components/events/RsvpControl";
 import { JoinMeetingBlock } from "@/components/events/JoinMeetingBlock";
 import { expandUpcomingEvents } from "@/lib/recurrence";
-import { meetingEndMs, ENDED_GRACE_MS, type MeetingFields } from "@/lib/meetings";
+import { meetingEndMs, ENDED_GRACE_MS, hasMeeting, type MeetingFields } from "@/lib/meetings";
 import { prayerAuthorLabel } from "@/lib/prayer";
 import type { Event, Rsvp } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
@@ -192,7 +192,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
 
     let source: MeetingFields = nextEvent;
     if (anchor) source = anchor;
-    if (source.meeting_url && source.meeting_show_on_dashboard) meeting = source;
+    if (hasMeeting(source) && source.meeting_show_on_dashboard) meeting = source;
 
     if (eventRsvps) {
       goingCount = eventRsvps.filter((r) => r.status === "yes").length;
@@ -291,7 +291,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
             </div>
 
             {/* Join the call — time-aware, set on the recurring event */}
-            {meeting?.meeting_url && (
+            {meeting && (
               <div className="mt-4">
                 <JoinMeetingBlock
                   meetingUrl={meeting.meeting_url}

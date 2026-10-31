@@ -7,12 +7,16 @@ describe("meetingFieldErrors", () => {
     expect(meetingFieldErrors(" https://zoom.us/j/1 ", "1", "x")).toEqual({});
   });
 
-  it("marks a link that is not https", () => {
-    expect(meetingFieldErrors("zoom.us/j/1", "", "").meeting_url).toMatch(/^Enter a meeting link/);
+  it("accepts a meeting ID and passcode without a link", () => {
+    expect(meetingFieldErrors("", "123 456 7890", "abc")).toEqual({});
+    expect(meetingFieldErrors("", "123 456 7890", "")).toEqual({});
   });
 
-  it("marks a missing link when an ID or passcode is given", () => {
-    expect(meetingFieldErrors("", "123", "").meeting_url).toMatch(/^Enter the meeting link/);
-    expect(meetingFieldErrors("", "", "abc").meeting_url).toMatch(/^Enter the meeting link/);
+  it("marks a link that is not https", () => {
+    expect(meetingFieldErrors("zoom.us/j/1", "", "").meeting_url).toMatch(/^Enter a meeting link that/);
+  });
+
+  it("marks a passcode with nothing to join", () => {
+    expect(meetingFieldErrors("", "", "abc").meeting_url).toMatch(/^Enter a meeting link or a meeting ID/);
   });
 });
