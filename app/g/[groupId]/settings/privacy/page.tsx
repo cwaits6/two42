@@ -1,14 +1,14 @@
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { createClient } from "@/lib/supabase/server";
-import { siteConfig } from "@/lib/config";
 import { getDiscoveryOn } from "@/lib/groups/discovery";
 import { groupPath } from "@/lib/groups/active";
 import { parseJoinPolicy } from "@/lib/groups/joining";
 import { requireGroupLeader } from "@/lib/groups/server";
 import { PrivacyAndJoiningManager } from "./PrivacyAndJoiningManager";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Privacy and joining | Group settings | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Privacy and joining");
 
 const SETTINGS_UNAVAILABLE_TEXT =
   "Couldn't load this group's privacy settings. Reload the page to try again.";

@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { siteConfig } from "@/lib/config";
 import { getGroupSettings } from "@/lib/groups/settings";
 import { defaultServingLinkMode } from "@/lib/serving/config";
 import { requireGroupLeader } from "@/lib/groups/server";
@@ -9,8 +8,9 @@ import { ServingLinkModeForm } from "@/components/groups/ServingLinkModeForm";
 import { ServingStats } from "./ServingStats";
 import type { MemberGroup } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Serving | Group settings | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Serving settings");
 
 export default async function GroupServingSettingsPage({
   params,

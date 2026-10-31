@@ -2,14 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { normalizeEmail } from "@/lib/sanitize";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Check, KeyRound, LogOut, Mail } from "lucide-react";
+import { Check, KeyRound, Mail } from "lucide-react";
 import { toast } from "sonner";
 
 interface SignInSecurityCardProps {
@@ -56,7 +55,6 @@ export function SignInSecurityCard({ currentEmail }: SignInSecurityCardProps) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [busy, setBusy] = useState(false);
-  const router = useRouter();
   const supabase = createClient();
 
   const togglePanel = (target: "password" | "email") =>
@@ -130,16 +128,6 @@ export function SignInSecurityCard({ currentEmail }: SignInSecurityCardProps) {
     );
   };
 
-  const handleSignOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      toast.error("Sign out failed — please try again.");
-      return;
-    }
-    router.push("/");
-    router.refresh();
-  };
-
   return (
     <Card>
       <CardContent className="pt-6">
@@ -165,14 +153,6 @@ export function SignInSecurityCard({ currentEmail }: SignInSecurityCardProps) {
           >
             <Mail className="mr-2 h-4 w-4" />
             Change my email
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleSignOut}
-            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-          >
-            <LogOut className="mr-2 h-4 w-4" />
-            Sign out
           </Button>
         </div>
 

@@ -95,6 +95,10 @@ A tenant may not change layout, typography, structural or semantic colors, or th
 
 Every page is built from the same frame, so moving between sibling pages never makes the layout jump.
 
+**Header** (`components/layout/Header.tsx`) is the same for everyone signed in, at every width: the wordmark on the left, one **Menu** button on the right. The menu (`AccountMenu`) holds the page navigation on phone — the member nav with its group switcher, or the admin or platform nav in those areas — then Privacy, Terms and Help, and the one **Sign out**. Desktop keeps the navigation in the sidebar. Signed in, there is no footer; Settings repeats Privacy, Terms and Help. Signed out, the header offers **Sign in** and the page ends with the footer.
+
+**Tab titles** come from `pageTitle()` (`lib/pageTitle.ts`) on every page: `{Page} · {Group} · {Church}` inside a group, `{Page} · {Church}` elsewhere signed in, `{Page} · two42` signed out.
+
 ![Invite links on the page frame at 1280 wide](page-frame/invites-after-1280.webp)
 
 **`PageContainer`** (`components/layout/PageContainer.tsx`) sets the content width. It has three named widths and one gutter (16px on phone, 24px from `sm`, 32px from `lg`) at every width:

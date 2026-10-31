@@ -1,10 +1,10 @@
 import { Suspense } from "react";
 import { requireGroupLeader } from "@/lib/groups/server";
-import { siteConfig } from "@/lib/config";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { EditEventForm } from "./EditEventForm";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Edit Event | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Edit event");
 
 export default async function EditEventPage({
   params,

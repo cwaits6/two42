@@ -4,9 +4,9 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { CreateGroupAction } from "@/components/groups/CreateGroupAction";
 import { FindAGroupList, LOAD_FAILED_TEXT } from "@/components/groups/FindAGroupList";
 import { getDiscoverableGroups, getDiscoveryOn } from "@/lib/groups/discovery";
-import { siteConfig } from "@/lib/config";
+import { pageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Find a group | ${siteConfig.name}` };
+export const generateMetadata = () => pageTitle("Find a group");
 
 // Renders only when the org has discovery on; discoverable_groups() decides
 // which groups the viewer may see.

@@ -74,6 +74,7 @@ not covered here.
 | `admin-join-queue.spec.ts`           | A join request for a group the org admin does not lead is counted on the Admin overview and listed under its group on Admin › Groups; Decline (confirmed in the dialog) removes it and leaves the requester out; a second request approved gains the requester the group in their switcher and clears the overview count; the request and membership rows are deleted in afterAll |
 | `group-invite.spec.ts`               | A leader's invite link names the group and offers the signup form to a stranger until it is revoked, after which the same URL shows the one dead-link message and no form; a non-member gets a 404 on the invites page; the created link is revoked in afterAll |
 | `pending-group-access.spec.ts`       | A member moved back to pending gets a 404 on their group's pages and the pending card at Home; approved again, the same group's announcements show with no re-adding; set back to member in afterAll |
+| `signed-in-frame.spec.ts`            | At 390 a one-group member, a two-group member and the church admin get the same header — the wordmark and one Menu button, no footer — and the menu holds their nav, Privacy, Terms, Help and one Sign out; the group switcher is inside the menu; signed in, `/login` and `/forgot-password` land on Home |
 
 ## Adding a spec
 

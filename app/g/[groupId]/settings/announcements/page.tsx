@@ -6,9 +6,9 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { groupPath } from "@/lib/groups/active";
 import { requireGroupLeader } from "@/lib/groups/server";
-import { siteConfig } from "@/lib/config";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Announcements | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Manage announcements");
 
 type AnnouncementRow = {
   id: string;

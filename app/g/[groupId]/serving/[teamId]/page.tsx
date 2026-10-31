@@ -2,7 +2,6 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { siteConfig } from "@/lib/config";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 import { signupDisplayName } from "@/lib/serving/display";
@@ -15,8 +14,9 @@ import { ServingHistory, type HistoryEntry } from "@/components/serving/ServingH
 import { EmailTeamButton } from "@/components/serving/EmailTeamButton";
 import { ServingSettingsDialog } from "@/components/serving/ServingSettingsDialog";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Serving | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Serving");
 
 interface AttendeeProfile {
   id: string;

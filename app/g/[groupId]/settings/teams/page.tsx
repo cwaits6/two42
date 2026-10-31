@@ -1,8 +1,8 @@
-import { siteConfig } from "@/lib/config";
 import { requireGroupLeader } from "@/lib/groups/server";
 import { TeamsManager } from "./TeamsManager";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Teams | Group settings | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Teams");
 
 export default async function GroupTeamsSettingsPage({
   params,

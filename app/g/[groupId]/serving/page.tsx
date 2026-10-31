@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { ChevronRight } from "lucide-react";
-import { siteConfig } from "@/lib/config";
 import { toDateString, upcomingSundays } from "@/lib/serving/sundays";
 import { AdminServingSetup } from "@/components/serving/AdminServingSetup";
 import { RoleRoster, type RosterMember } from "@/components/serving/RoleRoster";
@@ -13,8 +12,9 @@ import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 import type { MemberGroup, ServingTeamSettings } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Serving | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Serving");
 
 // PostgREST embeds the joined profile as a to-one object.
 type RosterRow = {

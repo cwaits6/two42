@@ -92,7 +92,7 @@ export function GroupSwitcher({
         {collapsed ? (
           <>
             <InitialsCircle block={block} />
-            <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-white text-foreground">
+            <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-card text-foreground">
               <ChevronsUpDown className="h-3 w-3" aria-hidden="true" />
             </span>
           </>

@@ -4,12 +4,12 @@ import Link from "next/link";
 import { ProfileForm } from "@/components/profile/ProfileForm";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { siteConfig } from "@/lib/config";
 import { displayName } from "@/lib/names";
 import type { Profile, FamilyUnit } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { pageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Edit Member | ${siteConfig.name}` };
+export const generateMetadata = () => pageTitle("Edit member");
 
 interface EditMemberPageProps {
   params: Promise<{ id: string }>;

@@ -1,11 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
-import { siteConfig } from "@/lib/config";
 import Link from "next/link";
 import { groupPath } from "@/lib/groups/active";
 import { SegmentedLinks } from "@/components/ui/segmented";
 import { requireActiveGroup } from "@/lib/groups/server";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Lectures | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Lectures");
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

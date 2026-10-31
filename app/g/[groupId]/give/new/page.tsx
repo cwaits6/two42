@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { siteConfig } from "@/lib/config";
 import { FundForm } from "@/components/giving/FundForm";
 import {
   givingStewardsCanManage,
@@ -9,8 +8,9 @@ import {
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `New Fund | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("New fund");
 
 export default async function NewFundPage({
   params,

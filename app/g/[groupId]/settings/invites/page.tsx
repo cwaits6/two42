@@ -1,9 +1,9 @@
-import { siteConfig } from "@/lib/config";
 import { requireGroupLeader } from "@/lib/groups/server";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { InviteLinksManager } from "./InviteLinksManager";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Invite links | Group settings | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Invite links");
 
 export default async function GroupInviteLinksSettingsPage({
   params,

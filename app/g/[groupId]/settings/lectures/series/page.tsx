@@ -2,11 +2,11 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { siteConfig } from "@/lib/config";
 import { groupPath } from "@/lib/groups/active";
 import { requireGroupLeader } from "@/lib/groups/server";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Lecture Series | Settings | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Lecture series");
 
 export default async function ManageSeriesPage({
   params,

@@ -1,10 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
-import { siteConfig } from "@/lib/config";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
+import { pageTitle } from "@/lib/pageTitle";
 
 type LectureDetail = {
   id: string;
@@ -59,9 +59,7 @@ export async function generateMetadata({
     .eq("id", id)
     .eq("group_id", groupId)
     .maybeSingle();
-  return {
-    title: data ? `${data.title} | ${siteConfig.name}` : `Lecture | ${siteConfig.name}`,
-  };
+  return pageTitle(data?.title ?? "Lecture", { groupId });
 }
 
 export default async function LectureDetailPage({

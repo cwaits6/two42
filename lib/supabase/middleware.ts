@@ -140,6 +140,14 @@ export async function updateSession(request: NextRequest) {
     return redirectTo(url);
   }
 
+  // The sign-in forms have nothing for someone already signed in.
+  if (user && ["/login", "/forgot-password"].some(atOrUnder)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/dashboard";
+    url.search = "";
+    return redirectTo(url);
+  }
+
   let profile: { role: string; org_id: string } | null = null;
   if ((isAdmin || isLegacy) && user) {
     const { data } = await supabase

@@ -1,8 +1,8 @@
-import { siteConfig } from "@/lib/config";
 import { requireGroupLeader } from "@/lib/groups/server";
 import { LabelsManager } from "./LabelsManager";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Labels | Group settings | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Labels");
 
 export default async function GroupLabelsSettingsPage({
   params,

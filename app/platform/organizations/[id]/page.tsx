@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { siteConfig } from "@/lib/config";
 import { getPlatformAdmin } from "@/lib/platform-access";
 import { createServiceClient } from "@/lib/supabase/server";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -12,8 +11,9 @@ import {
   type OrgDetail,
   type OwnerRequest,
 } from "./OrganizationDetail";
+import { pageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Organization | Platform | ${siteConfig.name}` };
+export const generateMetadata = () => pageTitle("Organization");
 
 interface PageProps {
   params: Promise<{ id: string }>;

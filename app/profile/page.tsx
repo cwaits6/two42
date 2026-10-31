@@ -4,13 +4,13 @@ import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ProfileHouseholdTabs } from "@/components/profile/ProfileHouseholdTabs";
-import { siteConfig } from "@/lib/config";
 import { canEditSpouseProfiles as computeCanEditSpouseProfiles, type HouseholdSummary } from "@/lib/household";
 import type { Profile, FamilyUnit, FamilyMember } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { isMemberRole } from "@/lib/roles";
+import { pageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `My Profile | ${siteConfig.name}` };
+export const generateMetadata = () => pageTitle("My profile");
 
 export default async function ProfilePage() {
   const supabase = await createClient();

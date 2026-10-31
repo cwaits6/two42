@@ -3,11 +3,11 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SegmentedLinks } from "@/components/ui/segmented";
-import { siteConfig } from "@/lib/config";
 import { groupPath } from "@/lib/groups/active";
 import { requireGroupLeader } from "@/lib/groups/server";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Lectures | Settings | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Manage lectures");
 
 type LectureRow = {
   id: string;

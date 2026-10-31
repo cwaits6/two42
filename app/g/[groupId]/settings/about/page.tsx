@@ -1,15 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
 import { mintSignedUrls } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
-import { siteConfig } from "@/lib/config";
 import { getGroupCalendar, GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
 import { requireGroupLeader } from "@/lib/groups/server";
 import { getGroupSettings } from "@/lib/groups/settings";
 import { AboutEditor } from "./AboutEditor";
 import type { AboutPage, ClassTeacherWithProfile } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Edit About Page | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Edit About");
 
 export default async function GroupAboutSettingsPage({
   params,

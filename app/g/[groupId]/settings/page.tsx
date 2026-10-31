@@ -7,10 +7,10 @@ import { GroupDetailsForm } from "@/components/groups/GroupDetailsForm";
 import { createClient } from "@/lib/supabase/server";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
-import { siteConfig } from "@/lib/config";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Group settings | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Group settings");
 
 // Only tiles whose page exists render; later tickets append theirs here.
 const TILES: { href: string; label: string; description: string }[] = [

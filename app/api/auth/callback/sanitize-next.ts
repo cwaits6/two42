@@ -3,7 +3,7 @@ export const DEFAULT_NEXT = "/dashboard";
 /**
  * Open-redirect hardening for the auth callback's `next` param —
  * same sentinel-origin technique as
- * app/(auth)/login/page.tsx's `redirect` param. `new URL(raw, "http://_")`
+ * app/(auth)/login/LoginForm.tsx's `redirect` param. `new URL(raw, "http://_")`
  * makes any absolute URL or scheme ("javascript:...", "https://evil.com")
  * resolve to a DIFFERENT origin than the "http://_" sentinel, so the origin
  * check alone rejects both. The explicit "//" check is defense-in-depth on

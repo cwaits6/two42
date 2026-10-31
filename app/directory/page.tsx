@@ -1,6 +1,7 @@
 import { MembersTab } from "@/components/directory/tabs/MembersTab";
+import { pageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: "Members | Directory" };
+export const generateMetadata = () => pageTitle("Directory");
 
 export default function DirectoryMembersPage() {
   return <MembersTab />;

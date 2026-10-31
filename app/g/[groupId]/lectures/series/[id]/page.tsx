@@ -1,9 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
-import { siteConfig } from "@/lib/config";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
+import { pageTitle } from "@/lib/pageTitle";
 
 type SeriesDetail = {
   id: string;
@@ -44,9 +44,7 @@ export async function generateMetadata({
     .eq("id", id)
     .eq("group_id", groupId)
     .maybeSingle();
-  return {
-    title: data ? `${data.name} | ${siteConfig.name}` : `Series | ${siteConfig.name}`,
-  };
+  return pageTitle(data?.name ?? "Lecture series", { groupId });
 }
 
 export default async function SeriesDetailPage({

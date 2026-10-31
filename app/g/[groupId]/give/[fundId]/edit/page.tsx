@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound, redirect } from "next/navigation";
-import { siteConfig } from "@/lib/config";
 import { FundForm } from "@/components/giving/FundForm";
 import {
   givingStewardsCanManage,
@@ -10,8 +9,9 @@ import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 import type { GivingFund, GivingFundMethod } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Edit Fund | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Edit fund");
 
 export default async function EditFundPage({
   params,

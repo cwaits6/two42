@@ -2,14 +2,14 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { siteConfig } from "@/lib/config";
 import { displayName } from "@/lib/names";
 import { PAYMENT_METHODS } from "@/lib/giving/methods";
 import { groupPath } from "@/lib/groups/active";
 import { requireGroupLeader } from "@/lib/groups/server";
 import type { GivingFund, GivingFundMethod } from "@/lib/types";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Giving | Group settings | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Giving settings");
 
 type FundRow = GivingFund & {
   steward: {
