@@ -103,6 +103,10 @@ export function EditEventForm({
   const [ownSharing, setOwnSharing] = useState<CalendarSharing | null>(
     hasOwnSharing(event) ? eventSharing(groupSharing ?? SHARE_ALL, event) : null
   );
+  // Written only once the leader changes the section: the switches fill any
+  // column the event left to the group, and saving those would pin values
+  // the event never chose.
+  const [sharingTouched, setSharingTouched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [editScope, setEditScope] = useState<EditScope>("all");
@@ -218,7 +222,7 @@ export function EditEventForm({
         meeting_show_on_dashboard: meetingShowOnDashboard,
         meeting_lead_minutes: Number(meetingLeadMinutes),
         // A moved date follows its series, so it never carries a choice of its own.
-        ...(event.series_id ? {} : sharingColumns(ownSharing)),
+        ...(event.series_id || !sharingTouched ? {} : sharingColumns(ownSharing)),
       })
       .eq("id", eventId)
       .eq("group_id", groupId)
@@ -381,7 +385,10 @@ export function EditEventForm({
               <CalendarSharingFields
                 groupSharing={groupSharing}
                 own={ownSharing}
-                onChange={setOwnSharing}
+                onChange={(next) => {
+                  setOwnSharing(next);
+                  setSharingTouched(true);
+                }}
                 isRecurring={isRecurringSeries}
               />
             )}
