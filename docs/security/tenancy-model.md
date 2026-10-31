@@ -89,11 +89,8 @@ SELECT policy, `"Org readable within request org"`, granted to `anon` and
 `authenticated` and repeating the same predicate rather than a bare `true`.
 Postgres RLS grants nothing without a permissive policy, so before that
 migration the table was readable by no PostgREST caller in the seeded org at
-all and the app silently served env-var branding. The older `"org members can
-view their orgs"` policy is gated on `organization_members`, which
-`handle_new_user()` has populated only since `20260731000014` and which was
-never backfilled — it grants nothing to profiles predating that migration and
-is retained as the hook for the Phase 4 membership model.
+all and the app silently served env-var branding. It is the table's only
+permissive SELECT policy.
 
 The permissive policies are additionally rewritten as
 `ORG AND (role arms)` — org predicate factored out front exactly once — for
@@ -128,12 +125,7 @@ capability/entity ones, and the schema lint structurally asserts — for
 every FK, current and future — that a `SET NULL` action on an
 `org_id`-carrying FK names a column list excluding `org_id`, so dropping
 the column list on any of them fails CI. FKs referencing `auth.users`
-cannot be composite (no `org_id` there). `organization_members.profile_id`
-is deliberately single-column, and is the composite-FK check's one named
-exemption (`organization_members_profile_id_fkey` in
-`schema_tenancy_lint.sql`): the membership org is intentionally independent
-of the profile's pinned org — the seam the Phase 4 platform-admin
-authorization contract builds on.
+cannot be composite (no `org_id` there).
 
 ## Group model — the first within-org boundary
 
@@ -824,9 +816,8 @@ plus the Phase 0/1 checks (RLS enabled, `org_id` present, NOT NULL, the
 exact `app_current_org_id()` default). The only remaining allowlist is for
 local-stack stray tables that exist in no migration; the two by-design
 table exemptions (`organizations`, `platform_admins`) are structural, not
-data, and the composite-FK check carries the one named FK exemption
-documented above (`organization_members_profile_id_fkey` — the Phase 4
-platform seam).
+data, and the composite-FK check names no exemption beyond that stray
+table's own FK.
 
 ## Known limits (accepted, tracked)
 

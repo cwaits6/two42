@@ -257,11 +257,13 @@ public.app_current_org_id()`. They are called by the `profiles`,
 `family_units` and `family_members` SELECT policies — see "Directory
 visibility" in [`tenancy-model.md`](tenancy-model.md). None writes.
 
-`handle_new_user()` (the auth signup trigger, `SECURITY DEFINER`) now also
-writes `group_members`: when the org it already resolved from the approved
-access request has exactly one group, the new non-pending profile is
-enrolled in it as a member. The org comes from the same server-owned rows
-as before, never from the caller, and every inserted column carries it.
+`handle_new_user()` (the auth signup trigger, `SECURITY DEFINER`) writes
+the new `profiles` row and, for a non-pending profile, `group_members`:
+when the org it already resolved from the approved access request has
+exactly one group, the new profile is enrolled in it as a member. It writes
+no other membership table — `profiles.org_id` is the only org membership.
+The org comes from the same server-owned rows as before, never from the
+caller, and every inserted column carries it.
 `supabase/tests/directory_visibility_suite.sql` pins the one-group, the
 several-groups and the family-invite (pending) cases.
 
