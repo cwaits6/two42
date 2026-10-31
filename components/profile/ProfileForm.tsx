@@ -166,16 +166,20 @@ type FieldErrors = Partial<
   Record<
     | "first_name"
     | "last_name"
+    | "email"
     | "phone_mobile"
     | "phone_home"
     | "phone_work"
     | "birth_month"
     | "birth_day"
+    | "birth_year"
     | "state"
     | "postal_code",
     string
   >
 >;
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function Required() {
   return <span className="font-normal text-muted-foreground">(required)</span>;
@@ -366,6 +370,11 @@ export function ProfileForm({
     const found: FieldErrors = {};
     if (!firstName) found.first_name = "Enter a first name.";
     if (!lastName) found.last_name = "Enter a last name.";
+    // Only admins can edit the email; a member's own is managed in Settings.
+    const email = state.email.trim();
+    if (isAdmin && email && !EMAIL_PATTERN.test(email)) {
+      found.email = "Enter an email address like name@example.com.";
+    }
 
     // At least one phone or a visible email is required so members can be reached.
     const hasPhone = !!(
@@ -404,6 +413,12 @@ export function ProfileForm({
           ? `Enter a day from 1 to ${maxDay}.`
           : "Enter a day from 1 to 31.";
       }
+    }
+    if (
+      birthYear !== null &&
+      (!Number.isInteger(birthYear) || birthYear < 1900 || birthYear > 2100)
+    ) {
+      found.birth_year = "Enter a year from 1900 to 2100, or leave it blank.";
     }
 
     // state/zip normalize to null on malformed input.
@@ -612,7 +627,9 @@ export function ProfileForm({
               onChange={(e) => update("email", e.target.value)}
               disabled={!isAdmin}
               className="py-5 text-base"
+              {...invalidFieldProps("email", errors.email)}
             />
+            <FieldError fieldId="email" message={errors.email} />
             {!isAdmin && (
               <p className="text-sm text-muted-foreground">
                 To change your email, use the{" "}
@@ -753,6 +770,7 @@ export function ProfileForm({
                 {...invalidFieldProps("birth_day", errors.birth_day)}
               />
               <Input
+                id="birth_year"
                 type="number"
                 min="1900"
                 max="2100"
@@ -761,10 +779,12 @@ export function ProfileForm({
                 onChange={(e) => update("birth_year", e.target.value)}
                 className="py-5 text-base"
                 aria-label="Year (optional)"
+                {...invalidFieldProps("birth_year", errors.birth_year)}
               />
             </div>
             <FieldError fieldId="birth_month" message={errors.birth_month} />
             <FieldError fieldId="birth_day" message={errors.birth_day} />
+            <FieldError fieldId="birth_year" message={errors.birth_year} />
             <p className="text-sm text-muted-foreground">
               The year is optional — the directory only shows the month and
               day.

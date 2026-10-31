@@ -75,12 +75,12 @@ afterEach(async () => {
   document.body.innerHTML = "";
 });
 
-async function mount(overrides: Partial<Profile> = {}) {
+async function mount(overrides: Partial<Profile> = {}, props: { isAdmin?: boolean } = {}) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   await act(async () =>
-    root.render(createElement(ProfileForm, { profile: { ...profile, ...overrides }, families: [] })),
+    root.render(createElement(ProfileForm, { profile: { ...profile, ...overrides }, families: [], ...props })),
   );
   const field = (id: string) => {
     const el = document.getElementById(id);
@@ -127,6 +127,18 @@ describe("ProfileForm inline errors", () => {
     expect(form.field("birth_month").getAttribute("aria-invalid")).toBe("true");
     expect(form.field("birth_day").getAttribute("aria-invalid")).toBe("true");
     expect(document.activeElement).toBe(form.field("birth_month"));
+  });
+
+  it("marks a malformed email and an out-of-range birth year", async () => {
+    const form = await mount({ email: "jane@", birth_year: 1850 }, { isAdmin: true });
+    await form.submit();
+
+    expect(form.field("email").getAttribute("aria-invalid")).toBe("true");
+    expect(form.message("email")).toBe("Enter an email address like name@example.com.");
+    expect(form.field("birth_year").getAttribute("aria-invalid")).toBe("true");
+    expect(form.message("birth_year")).toBe("Enter a year from 1900 to 2100, or leave it blank.");
+    expect(document.activeElement).toBe(form.field("email"));
+    expect(update).not.toHaveBeenCalled();
   });
 
   it("clears a field's message once it is edited", async () => {
