@@ -24,7 +24,8 @@ export function DiscoveryRow({ row, onChanged }: { row: DiscoverableGroup; onCha
       }
       title={row.name}
       subtitle={discoveryRowSubtitle(row)}
-      actions={<GroupJoinAction row={row} onChanged={onChanged} />}
+      trailing={<GroupJoinAction row={row} onChanged={onChanged} />}
+      stackTrailing
     />
   );
 }

@@ -11,6 +11,8 @@ import { groupPath } from "@/lib/groups/active";
 import { joinErrorMessage, joinRowState, type DiscoverableGroup } from "@/lib/groups/joining";
 
 const STATE_TEXT = "text-base font-semibold text-muted-foreground";
+// Full width while the row stacks this under the text; sized to its label once it sits beside it.
+const STACKED_BUTTON = "w-full @lg:w-auto";
 
 /**
  * The trailing end of one discovery row: the viewer's standing in the
@@ -55,11 +57,12 @@ export function GroupJoinAction({
       return <span className={STATE_TEXT}>You lead this group</span>;
     case "member":
       return (
-        <span className="flex flex-wrap items-center justify-end gap-3">
+        <span className="flex flex-wrap items-center gap-3 @lg:justify-end">
           <span className={STATE_TEXT}>You are a member</span>
           <Button
             size="lg"
             variant="outline"
+            className={STACKED_BUTTON}
             nativeButton={false}
             render={<Link href={groupPath(row.id, "/dashboard")} />}
           >
@@ -77,17 +80,19 @@ export function GroupJoinAction({
       return <span className={STATE_TEXT}>Request sent</span>;
     case "join":
       return (
-        <Button
-          size="lg"
-          disabled={busy}
-          onClick={join}
-        >
+        <Button size="lg" className={STACKED_BUTTON} disabled={busy} onClick={join}>
           Join
         </Button>
       );
     case "request":
       return (
-        <Button size="lg" variant="outline" disabled={busy} onClick={join}>
+        <Button
+          size="lg"
+          variant="outline"
+          className={STACKED_BUTTON}
+          disabled={busy}
+          onClick={join}
+        >
           Request to join
         </Button>
       );

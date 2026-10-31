@@ -113,6 +113,7 @@ function GroupsTabInner() {
                         {item.role === "leader" ? "You lead this group" : "You are a member"}
                       </span>
                     }
+                    stackTrailing
                   />
                 ) : (
                   <DiscoveryRow row={item.row} onChanged={onChanged} />
