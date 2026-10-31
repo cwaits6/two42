@@ -8,6 +8,6 @@ describe("NotFound", () => {
     const html = renderToStaticMarkup(createElement(NotFound));
     expect(html).toMatch(/<h1 [^>]*>Page not found<\/h1>/);
     expect(html).toMatch(/<a [^>]*href="\/"[^>]*>Go to Home<\/a>/);
-    expect(html).toMatch(/<a [^>]*role="link"[^>]*>Go to Home<\/a>/);
+    expect(html).not.toMatch(/role="button"/);
   });
 });

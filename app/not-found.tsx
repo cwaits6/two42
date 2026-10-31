@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { siteConfig } from "@/lib/config";
 
 export const metadata = { title: `Page not found | ${siteConfig.name}` };
@@ -13,9 +13,9 @@ export default function NotFound() {
         title="Page not found"
         subtitle="This page doesn't exist, or it isn't open to you."
       />
-      <Button nativeButton={false} render={<Link href="/" />} role="link">
+      <Link href="/" className={buttonVariants()}>
         Go to Home
-      </Button>
+      </Link>
     </PageContainer>
   );
 }
