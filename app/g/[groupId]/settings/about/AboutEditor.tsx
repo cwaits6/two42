@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CalendarSubscriptionCard } from "./CalendarSubscriptionCard";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -468,6 +469,15 @@ export function AboutEditor({
           </Button>
         </CardContent>
       </Card>
+
+      <CalendarSubscriptionCard
+        groupId={groupId}
+        initial={{
+          calendar_meeting_details: initialSettings.calendar_meeting_details,
+          calendar_event_notes: initialSettings.calendar_event_notes,
+          calendar_event_location: initialSettings.calendar_event_location,
+        }}
+      />
 
       <Card>
         <CardHeader>

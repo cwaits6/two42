@@ -22,6 +22,14 @@ import { GoogleMapsScript } from "@/components/GoogleMapsScript";
 import { EventTimeFields } from "@/components/events/EventTimeFields";
 import { LocationInput } from "@/components/events/LocationInput";
 import { MeetingFieldsSection, meetingFieldErrors, type MeetingFieldErrors } from "@/components/events/MeetingFieldsSection";
+import { CalendarSharingFields } from "@/components/events/CalendarSharingFields";
+import {
+  eventSharing,
+  hasOwnSharing,
+  sharingColumns,
+  SHARE_ALL,
+  type CalendarSharing,
+} from "@/lib/calendar/sharing";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { groupPath } from "@/lib/groups/active";
@@ -61,11 +69,14 @@ export function EditEventForm({
   groupId,
   event,
   timeZone,
+  groupSharing,
 }: {
   groupId: string;
   event: Event;
   /** The org's zone, resolved by the server; the form's times are its wall clock. */
   timeZone: string;
+  /** What the group's calendar subscriptions share; null when it couldn't be loaded. */
+  groupSharing: CalendarSharing | null;
 }) {
   const eventId = event.id;
   const router = useRouter();
@@ -89,6 +100,13 @@ export function EditEventForm({
   const [meetingPasscode, setMeetingPasscode] = useState(event.meeting_passcode ?? "");
   const [meetingShowOnDashboard, setMeetingShowOnDashboard] = useState(event.meeting_show_on_dashboard ?? true);
   const [meetingLeadMinutes, setMeetingLeadMinutes] = useState(String(event.meeting_lead_minutes ?? 15));
+  const [ownSharing, setOwnSharing] = useState<CalendarSharing | null>(
+    hasOwnSharing(event) ? eventSharing(groupSharing ?? SHARE_ALL, event) : null
+  );
+  // Written only once the leader changes the section: the switches fill any
+  // column the event left to the group, and saving those would pin values
+  // the event never chose.
+  const [sharingTouched, setSharingTouched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [editScope, setEditScope] = useState<EditScope>("all");
@@ -203,6 +221,8 @@ export function EditEventForm({
         meeting_passcode: meetingPasscode.trim() || null,
         meeting_show_on_dashboard: meetingShowOnDashboard,
         meeting_lead_minutes: Number(meetingLeadMinutes),
+        // A moved date follows its series, so it never carries a choice of its own.
+        ...(event.series_id || !sharingTouched ? {} : sharingColumns(ownSharing)),
       })
       .eq("id", eventId)
       .eq("group_id", groupId)
@@ -356,6 +376,20 @@ export function EditEventForm({
                 onLeadMinutesChange={setMeetingLeadMinutes}
                 isRecurring={isRecurringSeries}
                 errors={errors}
+              />
+            )}
+
+            {/* Like the meeting, this lives on the series: not shown when saving
+                one date of it, or on a moved date, which follow the series. */}
+            {!(showScopeChoice && editScope === "this") && !event.series_id && (
+              <CalendarSharingFields
+                groupSharing={groupSharing}
+                own={ownSharing}
+                onChange={(next) => {
+                  setOwnSharing(next);
+                  setSharingTouched(true);
+                }}
+                isRecurring={isRecurringSeries}
               />
             )}
 

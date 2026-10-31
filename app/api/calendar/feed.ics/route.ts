@@ -11,9 +11,9 @@ import {
   subscriptionTokenExpiryDate,
 } from "@/lib/calendar/subscription-token";
 import type { Event } from "@/lib/types";
-import type { MeetingFields } from "@/lib/meetings";
 import { isMemberRole } from "@/lib/roles";
 import { orgTimeZoneById } from "@/lib/time/orgZone";
+import { calendarSharingByGroup, keepOutFor } from "@/lib/calendar/keepOut";
 
 // Read a page at a time until every matching row is in: a capped read drops
 // a series or a moved date's row, and the dates it governs come back wrong.
@@ -204,19 +204,30 @@ export async function GET(request: Request) {
   }
 
   // Every series is in typedEvents whatever its start, so an exception row
-  // finds its series here and inherits that meeting.
-  const series = new Map<string, MeetingFields>(typedEvents.map((e) => [e.id, e]));
+  // finds its series here and follows its meeting and calendar sharing.
+  const series = new Map<string, Event>(typedEvents.map((e) => [e.id, e]));
   const timeZone = await orgTimeZoneById(supabase, sub.org_id);
+  let sharing: Awaited<ReturnType<typeof calendarSharingByGroup>>;
+  try {
+    sharing = await calendarSharingByGroup(supabase, sub.org_id, groupIds);
+  } catch (err) {
+    console.error("Failed to load calendar subscription settings for calendar feed:", err);
+    return new Response("Something went wrong", { status: 500 });
+  }
 
   // The merged feed names each event's group; a per-group feed carries no
   // prefix, since the subscriber named the group.
   const feedEvents: FeedEvent[] = calendarEntries(typedEvents, timeZone, windowStart, windowEnd).map(
-    ({ event, uid }) => ({
-      event,
-      uid,
-      summaryPrefix: groupParam ? undefined : groupNames.get(event.group_id),
-      meeting: event.series_id ? (series.get(event.series_id) ?? null) : event,
-    })
+    ({ event, uid }) => {
+      const source = event.series_id ? series.get(event.series_id) : event;
+      return {
+        event,
+        uid,
+        summaryPrefix: groupParam ? undefined : groupNames.get(event.group_id),
+        meeting: source ?? null,
+        keepOut: keepOutFor(sharing, event, source ?? event),
+      };
+    }
   );
 
   let icsString: string;

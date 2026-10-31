@@ -146,3 +146,56 @@ describe("calendarEntries", () => {
     expect(entries([oneOff]).map((e) => e.uid)).toEqual(["e1"]);
   });
 });
+
+describe("details kept out of calendars", () => {
+  const page = "https://two42.io/g/g1/calendar/e1";
+  const zoom = { meeting_url: "https://zoom.us/j/123?pwd=abc", meeting_id: "123", meeting_passcode: "faith" };
+  const full = { ...event, ...zoom, description: "Bring a dish", location: "Smith home" } as Event;
+  const keepOut = (joinDetails: boolean, notes: boolean, location: boolean) => ({
+    keepOut: { joinDetails, notes, location, eventPageUrl: page },
+  });
+
+  it("links to the event page in place of the join details, keeping notes and location", () => {
+    const attrs = eventToICSAttributes(full, keepOut(true, false, false));
+    expect(attrs.url).toBe(page);
+    expect(attrs.location).toBe("Smith home");
+    expect(attrs.description).toBe(`Bring a dish\n\nSee the event page for the join details: ${page}`);
+  });
+
+  it("keeps out the notes alone", () => {
+    const attrs = eventToICSAttributes(full, keepOut(false, true, false));
+    expect(attrs.url).toBe(zoom.meeting_url);
+    expect(attrs.location).toBe("Smith home");
+    expect(attrs.description).toBe(
+      `Online meeting\nJoin: ${zoom.meeting_url}\nMeeting ID: 123\nPasscode: faith\n\nSee the event page for the notes: ${page}`
+    );
+  });
+
+  it("keeps out the location alone", () => {
+    const attrs = eventToICSAttributes(full, keepOut(false, false, true));
+    expect(attrs.location).toBeUndefined();
+    expect(attrs.description).toContain("Bring a dish");
+    expect(attrs.description).toContain(`See the event page for the location: ${page}`);
+  });
+
+  it("names everything kept out behind one link", () => {
+    const attrs = eventToICSAttributes(full, keepOut(true, true, true));
+    expect(attrs.url).toBe(page);
+    expect(attrs.location).toBeUndefined();
+    expect(attrs.description).toBe(
+      `See the event page for the join details, notes and location: ${page}`
+    );
+  });
+
+  it("points only to what the event has", () => {
+    const attrs = eventToICSAttributes({ ...event, location: "Smith home" } as Event, keepOut(true, true, true));
+    expect(attrs.description).toBe(`See the event page for the location: ${page}`);
+  });
+
+  it("adds nothing when there was nothing to keep out", () => {
+    const attrs = eventToICSAttributes(event, keepOut(true, true, true));
+    expect(attrs.url).toBeUndefined();
+    expect(attrs.description).toBeUndefined();
+    expect(attrs.location).toBeUndefined();
+  });
+});

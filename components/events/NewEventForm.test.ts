@@ -56,6 +56,7 @@ async function mount() {
         orgId: "o1",
         calendarId: "c1",
         timeZone: "America/Chicago",
+        groupSharing: null,
       })
     )
   );

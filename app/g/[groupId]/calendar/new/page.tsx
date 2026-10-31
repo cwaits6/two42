@@ -10,6 +10,8 @@ import { requireGroupLeader } from "@/lib/groups/server";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { groupPageTitle } from "@/lib/pageTitle";
+import { getGroupSettings } from "@/lib/groups/settings";
+import { groupSharing } from "@/lib/calendar/sharing";
 
 export const generateMetadata = groupPageTitle("Add event");
 
@@ -31,9 +33,12 @@ export default async function NewEventPage({
     .single();
   if (!profile) redirect("/dashboard");
 
-  const [calendar, timeZone] = await Promise.all([
+  // The form still works without the group's sharing settings: it says it is
+  // following them without naming them, and saves nulls that follow them.
+  const [calendar, timeZone, sharing] = await Promise.all([
     getGroupCalendar(supabase, profile.org_id, group.id),
     getOrgTimeZone(),
+    getGroupSettings(supabase, profile.org_id, group.id).then(groupSharing, () => null),
   ]);
 
   return (
@@ -51,6 +56,7 @@ export default async function NewEventPage({
         orgId={profile.org_id}
         calendarId={calendar?.id ?? null}
         timeZone={timeZone}
+        groupSharing={sharing}
       />
     </Suspense>
   );

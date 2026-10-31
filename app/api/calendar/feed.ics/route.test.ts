@@ -94,6 +94,7 @@ function listChain(rows: Row[], record: (filter: [string, unknown]) => void) {
         if (op === "is.null") return (row) => row[col] == null;
         if (op.startsWith("gte.")) return (row) => row[col] != null && String(row[col]) >= op.slice(4);
         if (op.startsWith("lte.")) return (row) => row[col] != null && String(row[col]) <= op.slice(4);
+        if (op.startsWith("eq.")) return (row) => String(row[col]) === op.slice(3);
         throw new Error(`unsupported or arm ${arm}`);
       };
       const arms = split(expr).map(condition);
@@ -195,7 +196,12 @@ function signup(id: string, groupId: string, teamName: string): Row {
   };
 }
 
-function makeServiceClient(opts: { memberships: Row[] | "error"; extraEvents?: Row[] }) {
+function makeServiceClient(opts: {
+  memberships: Row[] | "error";
+  extraEvents?: Row[];
+  hidingGroups?: string[];
+  seriesShares?: boolean;
+}) {
   const predicates: Record<string, Array<[string, unknown]>> = {};
   const record = (table: string) => (filter: [string, unknown]) => {
     (predicates[table] ??= []).push(filter);
@@ -204,7 +210,10 @@ function makeServiceClient(opts: { memberships: Row[] | "error"; extraEvents?: R
     event("event-a", GROUP_A, "A event"),
     event("event-b", GROUP_B, "B event"),
     { ...event("event-x", GROUP_A, "Cancelled date"), is_cancelled: true },
-    weekly("study-a", GROUP_A, "Study", { meeting_id: "111 222 3333" }),
+    weekly("study-a", GROUP_A, "Study", {
+      meeting_id: "111 222 3333",
+      calendar_meeting_details: opts.seriesShares ?? null,
+    }),
     // One date deleted, the next one moved a day later.
     {
       ...event("deleted-a", GROUP_A, "Study"),
@@ -258,6 +267,17 @@ function makeServiceClient(opts: { memberships: Row[] | "error"; extraEvents?: R
           return listChain(events, record(table));
         case "serving_signups":
           return listChain(signups, record(table));
+        case "group_settings":
+          return listChain(
+            [GROUP_A, GROUP_B].map((group_id) => ({
+              org_id: ORG,
+              group_id,
+              calendar_meeting_details: !(opts.hidingGroups ?? []).includes(group_id),
+              calendar_event_notes: true,
+              calendar_event_location: true,
+            })),
+            record(table)
+          );
         default:
           throw new Error(`unexpected table ${table}`);
       }
@@ -385,5 +405,36 @@ describe("GET /api/calendar/feed.ics — group boundary", () => {
     expect(body).toContain("UID:one-off-0\r\n");
     expect(body).toContain("UID:one-off-1199\r\n");
     expect(body).toContain("UID:moved-a");
+  });
+
+  it("links to the event page when the group keeps join details out of calendars", async () => {
+    const { client, predicates } = makeServiceClient({ memberships: memberOfAOnly, hidingGroups: [GROUP_A] });
+    createServiceClient.mockResolvedValue(client);
+
+    // Unfold the 75-octet line folding so the URL reads as one line.
+    const body = (await (await GET(feedRequest())).text()).replace(/\r\n[ \t]/g, "");
+
+    expect(body).not.toContain("111 222 3333");
+    expect(body).toContain("See the event page for the join details");
+    expect(body).toMatch(new RegExp(`URL[^:]*:http://localhost:3000/g/${GROUP_A}/calendar/study-a\\?occurrence=`));
+    expect(predicates.group_settings).toEqual(
+      expect.arrayContaining([["eq", { org_id: ORG }], ["in", { group_id: [GROUP_A] }]])
+    );
+  });
+
+  it("lets a series' own choice override the group's, moved dates included", async () => {
+    const { client } = makeServiceClient({
+      memberships: memberOfAOnly,
+      hidingGroups: [GROUP_A],
+      seriesShares: true,
+    });
+    createServiceClient.mockResolvedValue(client);
+
+    const body = await (await GET(feedRequest())).text();
+    const moved = body.split("BEGIN:VEVENT").find((v) => v.includes("UID:moved-a"));
+
+    expect(body).toContain("Meeting ID: 111 222 3333");
+    expect(body).not.toContain("See the event page for the join details");
+    expect(moved).toContain("Meeting ID: 111 222 3333");
   });
 });

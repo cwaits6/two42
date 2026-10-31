@@ -11,6 +11,8 @@ import { groupPath } from "@/lib/groups/active";
 import type { Event } from "@/lib/types";
 import { EditEventForm } from "./EditEventForm";
 import { groupPageTitle } from "@/lib/pageTitle";
+import { getGroupSettings } from "@/lib/groups/settings";
+import { groupSharing } from "@/lib/calendar/sharing";
 
 export const generateMetadata = groupPageTitle("Edit event");
 
@@ -42,6 +44,13 @@ export default async function EditEventPage({
   }
   if (!event) notFound();
 
+  // The event row came through RLS, so its org_id is the caller's own. The
+  // form still works without the group's settings: it follows them unnamed.
+  const sharing = await getGroupSettings(supabase, event.org_id, group.id).then(
+    groupSharing,
+    () => null
+  );
+
   // The form reads the occurrence date from the URL.
   return (
     <Suspense
@@ -52,7 +61,12 @@ export default async function EditEventPage({
         </PageContainer>
       }
     >
-      <EditEventForm groupId={group.id} event={event as Event} timeZone={timeZone} />
+      <EditEventForm
+        groupId={group.id}
+        event={event as Event}
+        timeZone={timeZone}
+        groupSharing={sharing}
+      />
     </Suspense>
   );
 }

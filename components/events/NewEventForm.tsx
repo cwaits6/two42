@@ -25,6 +25,8 @@ import { GoogleMapsScript } from "@/components/GoogleMapsScript";
 import { EventTimeFields } from "@/components/events/EventTimeFields";
 import { LocationInput } from "@/components/events/LocationInput";
 import { MeetingFieldsSection, meetingFieldErrors, type MeetingFieldErrors } from "@/components/events/MeetingFieldsSection";
+import { CalendarSharingFields } from "@/components/events/CalendarSharingFields";
+import { sharingColumns, type CalendarSharing } from "@/lib/calendar/sharing";
 import { nextWholeHour } from "@/components/events/eventTimes";
 import { ensureGroupCalendar } from "@/lib/groups/calendar";
 import { groupPath } from "@/lib/groups/active";
@@ -64,6 +66,8 @@ interface NewEventFormProps {
   calendarId: string | null;
   /** The org's zone, resolved by the server; the form's times are its wall clock. */
   timeZone: string;
+  /** What the group's calendar subscriptions share; null when it couldn't be loaded. */
+  groupSharing: CalendarSharing | null;
 }
 
 type FieldErrors = MeetingFieldErrors & {
@@ -72,7 +76,14 @@ type FieldErrors = MeetingFieldErrors & {
   recurrence_until?: string;
 };
 
-export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }: NewEventFormProps) {
+export function NewEventForm({
+  groupId,
+  groupName,
+  orgId,
+  calendarId,
+  timeZone,
+  groupSharing,
+}: NewEventFormProps) {
   const [loading, setLoading] = useState(false);
   const [isRsvpEnabled, setIsRsvpEnabled] = useState(true);
   const [isRecurring, setIsRecurring] = useState(false);
@@ -86,6 +97,7 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
   const [meetingPasscode, setMeetingPasscode] = useState("");
   const [meetingShowOnDashboard, setMeetingShowOnDashboard] = useState(true);
   const [meetingLeadMinutes, setMeetingLeadMinutes] = useState("15");
+  const [ownSharing, setOwnSharing] = useState<CalendarSharing | null>(null);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [focusTarget, setFocusTarget] = useState<{ id: string } | null>(null);
   const clearError = (key: keyof FieldErrors) =>
@@ -187,6 +199,7 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
       meeting_passcode: meetingPasscode.trim() || null,
       meeting_show_on_dashboard: meetingShowOnDashboard,
       meeting_lead_minutes: Number(meetingLeadMinutes),
+      ...sharingColumns(ownSharing),
     }).select("id").single();
 
     setLoading(false);
@@ -377,6 +390,13 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
               onLeadMinutesChange={setMeetingLeadMinutes}
               isRecurring={isRecurring}
               errors={errors}
+            />
+
+            <CalendarSharingFields
+              groupSharing={groupSharing}
+              own={ownSharing}
+              onChange={setOwnSharing}
+              isRecurring={isRecurring}
             />
 
             <div className="flex flex-col gap-3 border-t border-border pt-5 sm:flex-row">
