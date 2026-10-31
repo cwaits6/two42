@@ -13,7 +13,7 @@ export default function NotFound() {
         title="Page not found"
         subtitle="This page doesn't exist, or it isn't open to you."
       />
-      <Button nativeButton={false} render={<Link href="/" />}>
+      <Button nativeButton={false} render={<Link href="/" />} role="link">
         Go to Home
       </Button>
     </PageContainer>
