@@ -1,8 +1,13 @@
-import { createElement } from "react";
+// @vitest-environment jsdom
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const refresh = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 
 const { ErrorState } = await import("./ErrorState");
 
@@ -21,6 +26,17 @@ describe("ErrorState", () => {
     const html = render();
     expect(html).toMatch(/^<div role="alert" class="[^"]*\bborder-destructive\/30\b/);
     expect(html).not.toContain("border-dashed");
+  });
+
+  it("retries with onRetry instead of a server refresh when given one", async () => {
+    const onRetry = vi.fn();
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    await act(async () => root.render(createElement(ErrorState, { thing: "the directory", onRetry })));
+    await act(async () => container.querySelector("button")!.click());
+    expect(onRetry).toHaveBeenCalledOnce();
+    expect(refresh).not.toHaveBeenCalled();
+    await act(async () => root.unmount());
   });
 
   it("never reads as an empty list", () => {

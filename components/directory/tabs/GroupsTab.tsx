@@ -11,7 +11,7 @@ import { memberCountLabel, type DiscoverableGroup } from "@/lib/groups/joining";
 import { BackLink } from "@/components/directory/BackLink";
 import { DirRow } from "@/components/directory/DirRow";
 import { DirectoryLoadState } from "@/components/directory/DirectoryLoadState";
-import { RetryErrorState } from "@/components/directory/RetryErrorState";
+import { ErrorState } from "@/components/states/ErrorState";
 import { useDirectory } from "@/components/directory/DirectoryContext";
 import { GroupAvatar } from "@/components/directory/GroupAvatar";
 import { GroupCard } from "@/components/directory/GroupCard";
@@ -86,7 +86,7 @@ function GroupsTabInner() {
           }
         />
         {discoveryOn && discovery.error && (
-          <RetryErrorState thing="groups to join" onRetry={discovery.reload} className="mt-6" />
+          <ErrorState thing="groups to join" onRetry={discovery.reload} className="mt-6" />
         )}
       </>
     );
@@ -157,7 +157,7 @@ function GroupsTabInner() {
         placeholder="Choose one of your groups to see who's in it."
       />
       {discoveryOn && discovery.error && (
-        <RetryErrorState thing="groups to join" onRetry={discovery.reload} className="mt-6" />
+        <ErrorState thing="groups to join" onRetry={discovery.reload} className="mt-6" />
       )}
       {!discoveryOn && (
         <p className="mt-6 text-base text-muted-foreground">

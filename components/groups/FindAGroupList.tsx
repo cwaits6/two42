@@ -3,7 +3,7 @@
 import { Users } from "lucide-react";
 import { DirRow } from "@/components/directory/DirRow";
 import { GroupAvatar } from "@/components/directory/GroupAvatar";
-import { RetryErrorState } from "@/components/directory/RetryErrorState";
+import { ErrorState } from "@/components/states/ErrorState";
 import { groupColor } from "@/components/directory/groupColor";
 import { GroupJoinAction } from "@/components/groups/GroupJoinAction";
 import { useGroupMemberships } from "@/components/groups/GroupProvider";
@@ -32,7 +32,7 @@ export function FindAGroupList({ initialRows }: { initialRows: DiscoverableGroup
   const { rows, error, reload } = useDiscoverableGroups(initialRows);
 
   if (error) {
-    return <RetryErrorState thing="groups to join" onRetry={reload} />;
+    return <ErrorState thing="groups to join" onRetry={reload} />;
   }
   if (rows.length === 0) {
     return <EmptyState icon={Users} message={NO_GROUPS_TEXT} />;
