@@ -52,11 +52,13 @@ describe("DiscoveryRow layout", () => {
     const row = card(root);
     expect(row.classList).toContain("@container");
     expect(row.classList).toContain("flex-wrap");
-    const actions = root.querySelector("button")!.closest(".basis-full") as HTMLElement;
+    const button = root.querySelector("button")!;
+    const actions = button.closest(".basis-full") as HTMLElement;
     expect(actions.parentElement).toBe(row);
     expect([...actions.classList]).toEqual(
       expect.arrayContaining(["order-last", "@lg:order-none", "@lg:basis-auto"]),
     );
+    expect([...button.classList]).toEqual(expect.arrayContaining(["w-full", "@lg:w-auto"]));
   });
 
   it("shows membership as a label, not a button", () => {

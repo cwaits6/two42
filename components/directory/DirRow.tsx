@@ -14,7 +14,7 @@ interface DirRowProps {
   subtitle?: ReactNode;
   /** Pill or other content between the text and the chevron */
   trailing?: ReactNode;
-  /** Below a 32rem row, drop `trailing` under the text instead of squeezing the text beside it */
+  /** While the card is under 32rem inside its padding, drop `trailing` under the text instead of squeezing the text beside it */
   stackTrailing?: boolean;
   /** Soft-blue emphasis for the selected item in a two-pane list */
   selected?: boolean;
