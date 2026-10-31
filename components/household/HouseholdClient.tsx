@@ -33,7 +33,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { toast } from "sonner";
+import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
 import { Pencil, Plus, Trash2, User, UserPlus } from "lucide-react";
 import {
   formatPhone,
@@ -157,6 +159,7 @@ export function HouseholdClient({
   const [fmSheetState, setFmSheetState] = useState<
     { mode: "new" } | { mode: "edit"; member: FamilyMember } | null
   >(null);
+  const [removingMember, setRemovingMember] = useState<FamilyMember | null>(null);
 
   // "Link existing account" search within the dialog
   const [searchQuery, setSearchQuery] = useState("");
@@ -193,8 +196,11 @@ export function HouseholdClient({
     setSavingInfo(false);
 
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      toast.error(body.error ?? "Failed to save household info.");
+      toast.error(
+        failureMessage("save the household", res.status, {
+          400: "Couldn't save the household. Check the household name, state, ZIP code and home phone, then try again.",
+        }),
+      );
       return;
     }
 
@@ -204,14 +210,15 @@ export function HouseholdClient({
 
   // ---- Non-auth family member delete ----
   async function handleDeleteMember(fm: FamilyMember) {
-    if (!confirm(`Remove ${fm.first_name} from this household?`)) return;
-
-    const res = await fetch(`/api/household/members/${fm.id}`, { method: "DELETE" });
-    if (!res.ok) {
-      toast.error("Failed to remove family member.");
+    const res = await fetch(`/api/household/members/${fm.id}`, { method: "DELETE" }).catch(
+      () => null,
+    );
+    if (!res?.ok) {
+      toast.error(res ? failureMessage(`remove ${fm.first_name}`, res.status) : NETWORK_ERROR);
       return;
     }
-    toast.success("Family member removed.");
+    toast.success(`Removed ${fm.first_name} from your household.`);
+    setRemovingMember(null);
     router.refresh();
   }
 
@@ -255,8 +262,11 @@ export function HouseholdClient({
     setLinkingId(null);
 
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      toast.error(body.error ?? "Failed to add member to household.");
+      toast.error(
+        failureMessage("add them to your household", res.status, {
+          409: "They're already in a household. Ask a church admin to move them.",
+        }),
+      );
       return;
     }
 
@@ -559,7 +569,7 @@ export function HouseholdClient({
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => handleDeleteMember(fm)}
+                  onClick={() => setRemovingMember(fm)}
                 >
                   <Trash2 className="h-4 w-4 text-destructive" />
                   <span className="sr-only">Remove</span>
@@ -715,6 +725,18 @@ export function HouseholdClient({
           </div>
         </SheetContent>
       </Sheet>
+
+      <ConfirmDialog
+        open={removingMember !== null}
+        onOpenChange={(open) => !open && setRemovingMember(null)}
+        title={`Remove ${removingMember?.first_name ?? ""} from your household?`}
+        description="They won't be listed with your household in the directory anymore."
+        confirmLabel="Remove from household"
+        pendingLabel="Removing…"
+        onConfirm={async () => {
+          if (removingMember) await handleDeleteMember(removingMember);
+        }}
+      />
     </div>
   );
 }

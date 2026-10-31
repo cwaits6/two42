@@ -17,7 +17,7 @@ import {
   HEX,
 } from "@/lib/contrast";
 import type { Database } from "@/lib/supabase/database.types";
-import { NETWORK_ERROR, operatorMessage } from "../../operatorMessage";
+import { NETWORK_ERROR, operatorMessage } from "@/lib/errorCopy";
 
 type OrgStatus = Database["public"]["Enums"]["org_status"];
 

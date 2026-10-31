@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
+import { failureMessage } from "@/lib/errorCopy";
 import type { MemberGroup } from "@/lib/types";
 
 interface AdminServingSetupProps {
@@ -33,7 +34,8 @@ export function AdminServingSetup({ groups }: AdminServingSetupProps) {
     setBusy(null);
 
     if (error) {
-      toast.error(`Failed to enable serving for ${name}: ${error.message}`);
+      console.error(error);
+      toast.error(failureMessage(`turn on serving for ${name}`));
       return;
     }
     toast.success(`Serving signups enabled for ${name}.`);

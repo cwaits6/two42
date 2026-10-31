@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NETWORK_ERROR, operatorMessage } from "../operatorMessage";
+import { NETWORK_ERROR, operatorMessage } from "@/lib/errorCopy";
 import type { Database } from "@/lib/supabase/database.types";
 
 export interface PlatformOrg {

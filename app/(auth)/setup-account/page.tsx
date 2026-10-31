@@ -6,8 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
+import { failureMessage } from "@/lib/errorCopy";
 import { useSearchParams, useRouter } from "next/navigation";
 import { AuthShell } from "../_components/AuthShell";
+
+const SIGN_UP_ERRORS: Record<string, string> = {
+  user_already_exists: "An account already uses this email. Sign in instead.",
+  weak_password: "Choose a stronger password: longer, with letters and numbers.",
+};
 
 export default function SetupAccountPage() {
   const [loading, setLoading] = useState(false);
@@ -38,8 +44,12 @@ export default function SetupAccountPage() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || "Invalid or expired signup link.");
+        setError(
+          failureMessage("open this signup link", res.status, {
+            404: "This signup link isn't valid.",
+            410: "This signup link has expired.",
+          }),
+        );
         setVerifying(false);
         return;
       }
@@ -87,7 +97,10 @@ export default function SetupAccountPage() {
     setLoading(false);
 
     if (error) {
-      toast.error(error.message || "Failed to create account. Please try again.");
+      console.error(error);
+      toast.error(
+        SIGN_UP_ERRORS[error.code ?? ""] ?? failureMessage("create your account", error.status),
+      );
       return;
     }
 
@@ -117,7 +130,7 @@ export default function SetupAccountPage() {
       }
     }
 
-    toast.success("Account created! Welcome aboard.");
+    toast.success("Account created. Welcome.");
     router.replace("/dashboard");
     router.refresh();
   };
@@ -169,7 +182,7 @@ export default function SetupAccountPage() {
         kicker={error}
       >
         <p className="font-sans text-sm text-muted-foreground">
-          Please contact your group admin for a new invitation.
+          Ask a church admin for a new invitation.
         </p>
       </AuthShell>
     );

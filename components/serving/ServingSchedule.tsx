@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { failureMessage } from "@/lib/errorCopy";
 import { CheckCircle2, X } from "lucide-react";
 import { daysUntilService, formatServiceDate } from "@/lib/serving/sundays";
 
@@ -64,14 +65,13 @@ export function ServingSchedule({
 
       if (res.ok) {
         toast.success(
-          `You're signed up for ${formatServiceDate(date)}! A confirmation email is on its way.`
+          `You're signed up for ${formatServiceDate(date)}. A confirmation email is on its way.`
         );
       } else {
-        const body = await res.json().catch(() => null);
-        toast.error(body?.error || "Something went wrong — please try again.");
+        toast.error(failureMessage("sign you up", res.status, { 409: "Someone just signed up for that date. Thank you anyway." }));
       }
     } catch {
-      toast.error("Something went wrong — please try again.");
+      toast.error(failureMessage("sign you up", "network"));
     } finally {
       setBusy(false);
       setPickerDate(null);
@@ -98,11 +98,10 @@ export function ServingSchedule({
         setCancelling(null);
         toast.success("Signup cancelled.");
       } else {
-        const body = await res.json().catch(() => null);
-        toast.error(body?.error || "Failed to cancel — please try again.");
+        toast.error(failureMessage("cancel your signup", res.status));
       }
     } catch {
-      toast.error("Failed to cancel — please try again.");
+      toast.error(failureMessage("cancel your signup", "network"));
     } finally {
       setBusy(false);
     }

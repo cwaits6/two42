@@ -12,6 +12,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { failureMessage } from "@/lib/errorCopy";
 import { Mail } from "lucide-react";
 import { formatServiceDate } from "@/lib/serving/sundays";
 
@@ -53,11 +54,10 @@ export function EmailTeamButton({
         setMessage("");
         router.refresh();
       } else {
-        const body = await res.json().catch(() => null);
-        toast.error(body?.error || "Failed to send — please try again.");
+        toast.error(failureMessage("email the team", res.status));
       }
     } catch {
-      toast.error("Failed to send — please try again.");
+      toast.error(failureMessage("email the team", "network"));
     } finally {
       setSending(false);
     }

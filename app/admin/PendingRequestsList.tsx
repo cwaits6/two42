@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
+import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
 import { Check, X } from "lucide-react";
 
 export interface PendingRequest {
@@ -38,8 +39,7 @@ export function PendingRequestsList({ initialRequests }: PendingRequestsListProp
             body: JSON.stringify({ email: request.email, name: request.name }),
           });
           if (!res.ok) {
-            const data = await res.json().catch(() => null);
-            toast.error(data?.error || "Failed to approve request.");
+            toast.error(failureMessage("approve the request", res.status));
             return;
           }
         }
@@ -48,7 +48,7 @@ export function PendingRequestsList({ initialRequests }: PendingRequestsListProp
           data: { user },
         } = await supabase.auth.getUser();
         if (!user) {
-          toast.error("Session expired. Please log in again.");
+          toast.error(failureMessage("decline the request", 401));
           return;
         }
         const { error } = await supabase
@@ -62,7 +62,7 @@ export function PendingRequestsList({ initialRequests }: PendingRequestsListProp
 
         if (error) {
           console.error(error);
-          toast.error("Failed to update request.");
+          toast.error(failureMessage("decline the request"));
           return;
         }
       }
@@ -71,7 +71,7 @@ export function PendingRequestsList({ initialRequests }: PendingRequestsListProp
       setRequests((prev) => prev.filter((r) => r.id !== id));
     } catch (err) {
       console.error(err);
-      toast.error("Network error. Please try again.");
+      toast.error(NETWORK_ERROR);
     } finally {
       setBusyId(null);
     }
