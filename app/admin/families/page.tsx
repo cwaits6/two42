@@ -208,6 +208,7 @@ export default function FamiliesPage() {
 
   async function loadFamilyMembers(familyId: string) {
     const requestId = ++membersRequestRef.current;
+    setMembersFamilyId(null);
     const { data, error } = await supabase
       .from("family_members")
       .select("*")
