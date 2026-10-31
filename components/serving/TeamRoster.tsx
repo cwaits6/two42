@@ -9,9 +9,8 @@ import { DirRow } from "@/components/directory/DirRow";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { failureMessage } from "@/lib/errorCopy";
+import { setGroupMembership } from "@/lib/memberGroups";
 import { displayName, initials } from "@/lib/names";
-import { createClient } from "@/lib/supabase/client";
 
 export interface TeamRosterPerson {
   id: string;
@@ -34,21 +33,14 @@ interface TeamRosterProps {
   candidates: TeamRosterPerson[];
 }
 
-// A fetch that never got an answer comes back from PostgREST with status 0.
-function failure(status: number): number | "network" {
-  return status === 0 ? "network" : status;
-}
-
 /**
  * The team's roster for a team lead or group leader: current members by
  * default, an explicit add mode listing the rest of the group, and Remove
  * for anyone who is not a team lead. Writes run on the cookie-bound browser
- * client, so the team_members policies decide; each write selects the rows
- * it touched, because a delete RLS filters to nothing reports success.
+ * client, so the team_members policies decide.
  */
 export function TeamRoster({ teamId, teamName, groupName, members, candidates }: TeamRosterProps) {
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
   const [mode, setMode] = useState<"roster" | "add">("roster");
   const [query, setQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -71,17 +63,10 @@ export function TeamRoster({ teamId, teamName, groupName, members, candidates }:
   async function add(person: TeamRosterPerson) {
     setBusyId(person.id);
     const name = displayName(person);
-    const { data, error, status } = await supabase
-      .from("team_members")
-      .insert({ team_id: teamId, profile_id: person.id })
-      .select("profile_id");
+    const error = await setGroupMembership({ id: person.id, name }, { id: teamId, name: teamName }, true);
     setBusyId(null);
-    if (error || !data?.length) {
-      toast.error(
-        failureMessage(`add ${name} to ${teamName}`, error ? failure(status) : undefined, {
-          409: `${name} is already on ${teamName}.`,
-        }),
-      );
+    if (error) {
+      toast.error(error);
       return;
     }
     toast.success(`Added ${name} to ${teamName}.`);
@@ -91,14 +76,9 @@ export function TeamRoster({ teamId, teamName, groupName, members, candidates }:
   async function remove() {
     if (!removing) return;
     const name = displayName(removing);
-    const { data, error, status } = await supabase
-      .from("team_members")
-      .delete()
-      .eq("team_id", teamId)
-      .eq("profile_id", removing.id)
-      .select("profile_id");
-    if (error || !data?.length) {
-      toast.error(failureMessage(`remove ${name} from ${teamName}`, error ? failure(status) : undefined));
+    const error = await setGroupMembership({ id: removing.id, name }, { id: teamId, name: teamName }, false);
+    if (error) {
+      toast.error(error);
       return;
     }
     setRemoving(null);

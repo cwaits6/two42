@@ -162,7 +162,7 @@ export function TeamRosterDialog({
     if (!team) return;
     setBusy(profile.id);
 
-    const errorMessage = await setGroupMembership(profile.id, team, member);
+    const errorMessage = await setGroupMembership({ id: profile.id, name: displayName(profile) }, team, member);
     if (errorMessage) {
       toast.error(errorMessage);
       setBusy(null);
