@@ -2,7 +2,7 @@ import { requireGroupLeader } from "@/lib/groups/server";
 import { NewLectureForm } from "./NewLectureForm";
 import { groupPageTitle } from "@/lib/pageTitle";
 
-export const generateMetadata = groupPageTitle("Add lecture");
+export const generateMetadata = groupPageTitle("Add lesson");
 
 export default async function NewLecturePage({
   params,

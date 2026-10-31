@@ -6,7 +6,7 @@ import { groupPath } from "@/lib/groups/active";
 import { requireGroupLeader } from "@/lib/groups/server";
 import { groupPageTitle } from "@/lib/pageTitle";
 
-export const generateMetadata = groupPageTitle("Lecture series");
+export const generateMetadata = groupPageTitle("Manage series");
 
 export default async function ManageSeriesPage({
   params,

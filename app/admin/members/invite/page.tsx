@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { InvitePersonForm } from "./InvitePersonForm";
 import { pageTitle } from "@/lib/pageTitle";
 
-export const generateMetadata = () => pageTitle("Invite person");
+export const generateMetadata = () => pageTitle("Invite member");
 
 export default async function InvitePersonPage() {
   const supabase = await createClient();

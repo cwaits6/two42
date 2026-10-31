@@ -44,7 +44,7 @@ export async function generateMetadata({
     .eq("id", id)
     .eq("group_id", groupId)
     .maybeSingle();
-  return pageTitle(data?.name ?? "Lecture series", { groupId });
+  return pageTitle(data?.name ?? "Series", { groupId });
 }
 
 export default async function SeriesDetailPage({

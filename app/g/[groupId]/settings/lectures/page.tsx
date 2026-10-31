@@ -7,7 +7,7 @@ import { groupPath } from "@/lib/groups/active";
 import { requireGroupLeader } from "@/lib/groups/server";
 import { groupPageTitle } from "@/lib/pageTitle";
 
-export const generateMetadata = groupPageTitle("Manage lectures");
+export const generateMetadata = groupPageTitle("Manage lessons");
 
 type LectureRow = {
   id: string;

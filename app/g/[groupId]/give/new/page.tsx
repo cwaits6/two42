@@ -10,7 +10,7 @@ import { requireActiveGroup } from "@/lib/groups/server";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { groupPageTitle } from "@/lib/pageTitle";
 
-export const generateMetadata = groupPageTitle("New fund");
+export const generateMetadata = groupPageTitle("Add fund");
 
 export default async function NewFundPage({
   params,

@@ -5,7 +5,7 @@ import { SegmentedLinks } from "@/components/ui/segmented";
 import { requireActiveGroup } from "@/lib/groups/server";
 import { groupPageTitle } from "@/lib/pageTitle";
 
-export const generateMetadata = groupPageTitle("Lectures");
+export const generateMetadata = groupPageTitle("Lessons");
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
