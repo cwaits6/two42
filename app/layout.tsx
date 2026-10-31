@@ -43,8 +43,7 @@ const jetbrainsMono = JetBrains_Mono({
 export async function generateMetadata(): Promise<Metadata> {
   const b = await getRequestBranding();
   return {
-    // No title.template: 25 pages already hardcode "| siteConfig.name" in
-    // their static titles, and a template would double the suffix.
+    // A fallback only: every page sets its whole title through pageTitle().
     title: b.display_name,
     description: siteConfig.description,
   };
@@ -166,7 +165,8 @@ export default async function RootLayout({
             </AppShell>
           </SidebarProvider>
         </GroupProvider>
-        <Footer />
+        {/* Signed in, Privacy, Terms and Help live in the account menu. */}
+        {!user && <Footer />}
         <Toaster />
         <Analytics />
         <SpeedInsights />

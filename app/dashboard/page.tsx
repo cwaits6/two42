@@ -7,9 +7,9 @@ import { getGroupMemberships } from "@/lib/groups/server";
 import { GroupDashboard } from "@/components/groups/GroupDashboard";
 import { HomeLauncher } from "@/components/groups/HomeLauncher";
 import { NoGroupCard } from "@/components/groups/NoGroupCard";
-import { siteConfig } from "@/lib/config";
+import { pageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Dashboard | ${siteConfig.name}` };
+export const generateMetadata = () => pageTitle("Home");
 
 // Home. A member of exactly one group is always inside it, so Home is that
 // group's dashboard; two or more groups get the launcher; none get the

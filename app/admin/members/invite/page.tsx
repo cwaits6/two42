@@ -1,10 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { siteConfig } from "@/lib/config";
 import { InvitePersonForm } from "./InvitePersonForm";
+import { pageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Invite person | ${siteConfig.name}` };
+export const generateMetadata = () => pageTitle("Invite member");
 
 export default async function InvitePersonPage() {
   const supabase = await createClient();

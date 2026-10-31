@@ -1,8 +1,8 @@
 import { CalendarPage } from "@/components/events/CalendarPage";
 import { requireActiveGroup } from "@/lib/groups/server";
-import { siteConfig } from "@/lib/config";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Calendar | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Calendar");
 
 export default async function GroupCalendarPage({
   params,

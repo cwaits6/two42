@@ -13,11 +13,11 @@ import { getGroupCreationPolicy } from "@/lib/groups/creationPolicy";
 import { getDiscoveryOn } from "@/lib/groups/discovery";
 import { getPendingJoinRequests } from "@/lib/groups/pendingJoinRequests";
 import { PENDING_GROUP_REQUEST_SELECT, toPendingGroupRequest } from "@/lib/groups/requests";
-import { siteConfig } from "@/lib/config";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
+import { pageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Groups | Admin | ${siteConfig.name}` };
+export const generateMetadata = () => pageTitle("Manage groups");
 
 export default async function AdminGroupsPage() {
   const supabase = await createClient();

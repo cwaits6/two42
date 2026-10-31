@@ -4,7 +4,6 @@ import { AuthShell } from "@/app/(auth)/_components/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { orgDisplayName } from "@/lib/branding";
-import { siteConfig } from "@/lib/config";
 import { groupPath, isUuid } from "@/lib/groups/active";
 import { INVITE_INVALID_TEXT, INVITE_OTHER_ORG_TEXT, inviteStatus } from "@/lib/groups/invites";
 import { getOptionalUser } from "@/lib/supabase/current-user";
@@ -12,6 +11,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { InviteSignupForm } from "./InviteSignupForm";
 import { JoinGroupButton } from "./JoinGroupButton";
 import { SignOutButton } from "./SignOutButton";
+import { pageTitle } from "@/lib/pageTitle";
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -82,7 +82,7 @@ export async function generateMetadata({ params }: PageProps) {
   const { token } = await params;
   const lookup = await loadInvite(token);
   const title = lookup.kind === "live" ? `Join ${lookup.invite.groupName}` : "Join a group";
-  return { title: `${title} | ${siteConfig.name}` };
+  return pageTitle(title);
 }
 
 function Notice({

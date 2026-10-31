@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { mintSignedUrl, mintSignedUrls } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
-import { siteConfig } from "@/lib/config";
 import { displayName, initials } from "@/lib/names";
 import { loadFundFormData } from "@/lib/giving/server";
 import { getGroupSettings } from "@/lib/groups/settings";
@@ -9,8 +8,9 @@ import { PrayerBoard } from "@/components/prayer/PrayerBoard";
 import type { PrayerCallSession, PrayerWallRow } from "@/lib/types";
 import { requireActiveGroup } from "@/lib/groups/server";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Prayer | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Prayer");
 
 export default async function PrayerPage({
   params,

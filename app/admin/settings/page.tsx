@@ -7,13 +7,13 @@ import { DirectoryVisibilitySettings } from "@/components/directory/DirectoryVis
 import { GivingSettings } from "@/components/giving/GivingSettings";
 import { getDirectoryVisibility } from "@/lib/directory/visibility";
 import { getGivingSettings } from "@/lib/giving/server";
-import { siteConfig } from "@/lib/config";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { TimezoneSettings } from "@/components/admin/TimezoneSettings";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { CUSTOM_SENDING_DOMAINS_ENABLED } from "@/lib/email/sendingDomains";
+import { pageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Org settings | Admin | ${siteConfig.name}` };
+export const generateMetadata = () => pageTitle("Church settings");
 
 export default async function SettingsPage() {
   const supabase = await createClient();

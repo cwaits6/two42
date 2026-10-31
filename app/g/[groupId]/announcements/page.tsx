@@ -7,12 +7,12 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/states/EmptyState";
 import { ErrorState } from "@/components/states/ErrorState";
 import { Button } from "@/components/ui/button";
-import { siteConfig } from "@/lib/config";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 import { readList } from "@/lib/supabase/readList";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Announcements | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Announcements");
 
 export default async function AnnouncementsPage({
   params,

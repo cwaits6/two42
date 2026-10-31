@@ -4,7 +4,6 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { siteConfig } from "@/lib/config";
 import { PendingRequestsList } from "./PendingRequestsList";
 import { PendingGroupRequests } from "@/components/admin/PendingGroupRequests";
 import { PENDING_GROUP_REQUEST_SELECT, toPendingGroupRequest } from "@/lib/groups/requests";
@@ -12,8 +11,9 @@ import { pendingJoinRequestsSummary } from "@/lib/groups/joinQueue";
 import { getPendingJoinRequests } from "@/lib/groups/pendingJoinRequests";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
+import { pageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Admin | ${siteConfig.name}` };
+export const generateMetadata = () => pageTitle("Admin");
 
 export default async function AdminPage() {
   const supabase = await createClient();

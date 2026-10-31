@@ -10,13 +10,13 @@ import { JoinMeetingBlock } from "@/components/events/JoinMeetingBlock";
 import type { MeetingFields } from "@/lib/meetings";
 import { Button } from "@/components/ui/button";
 import { Pencil } from "lucide-react";
-import { siteConfig } from "@/lib/config";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 import type { Event, Rsvp } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { dayKey, formatEventTime, formatInZone } from "@/lib/time/zone";
+import { pageTitle } from "@/lib/pageTitle";
 
 export async function generateMetadata({
   params,
@@ -33,11 +33,7 @@ export async function generateMetadata({
     .eq("is_cancelled", false)
     .maybeSingle();
 
-  if (!event) {
-    return { title: `Event | ${siteConfig.name}` };
-  }
-
-  return { title: `${event.title} | ${siteConfig.name}` };
+  return pageTitle(event?.title ?? "Event", { groupId });
 }
 
 // ── MetaCell: a single column in the meta strip ──────────────────────────────

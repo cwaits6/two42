@@ -3,7 +3,6 @@ import { mintSignedUrls } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Video } from "lucide-react";
-import { siteConfig } from "@/lib/config";
 import { displayName, initials } from "@/lib/names";
 import { getGroupSettings } from "@/lib/groups/settings";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -14,8 +13,9 @@ import { parseStoredBlocks } from "@/components/editor/normalizeBlocks";
 import type { AboutPage, ClassTeacherWithProfile } from "@/lib/types";
 import { requireActiveGroup } from "@/lib/groups/server";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `About | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("About");
 
 export default async function AboutGroupPage({
   params,

@@ -1,8 +1,8 @@
 import { requireGroupLeader } from "@/lib/groups/server";
-import { siteConfig } from "@/lib/config";
 import { NewAnnouncementForm } from "./NewAnnouncementForm";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `New announcement | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Add announcement");
 
 export default async function NewAnnouncementPage({
   params,

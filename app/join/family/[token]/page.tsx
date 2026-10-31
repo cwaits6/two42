@@ -4,12 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { siteConfig } from "@/lib/config";
 import { AuthShell } from "@/app/(auth)/_components/AuthShell";
 import { FamilyRequestForm } from "./FamilyRequestForm";
+import { pageTitle } from "@/lib/pageTitle";
 
 interface PageProps {
   params: Promise<{ token: string }>;
 }
 
-export const metadata = { title: `Join Your Household | ${siteConfig.name}` };
+export const generateMetadata = () => pageTitle("Join your household");
 
 function ErrorCard({
   title,

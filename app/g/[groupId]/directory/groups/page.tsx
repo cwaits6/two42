@@ -1,6 +1,7 @@
 import { GroupsTab } from "@/components/directory/tabs/GroupsTab";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: "Groups | Directory" };
+export const generateMetadata = groupPageTitle("Groups");
 
 export default function GroupDirectoryGroupsPage() {
   return <GroupsTab />;

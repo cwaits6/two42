@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getPlatformAdmin } from "@/lib/platform-access";
-import { PlatformSidebarNav } from "./PlatformSidebarNav";
+import { AreaSidebar } from "@/components/layout/AreaNav";
 
 export default async function PlatformLayout({
   children,
@@ -14,8 +14,8 @@ export default async function PlatformLayout({
   if (!user) redirect("/dashboard");
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col md:flex-row">
-      <PlatformSidebarNav />
+    <div className="flex min-w-0 flex-1">
+      <AreaSidebar area="platform" />
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   );

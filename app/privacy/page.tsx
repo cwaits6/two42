@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import { PolicyPlaceholder } from "@/components/landing/PolicyPlaceholder";
-import { siteConfig } from "@/lib/config";
+import { pageTitle } from "@/lib/pageTitle";
 
-export const metadata: Metadata = {
-  title: `Privacy | ${siteConfig.name}`,
-  robots: { index: false, follow: true },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return { ...(await pageTitle("Privacy")), robots: { index: false, follow: true } };
+}
 
 export default function PrivacyPage() {
   return (

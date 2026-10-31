@@ -5,7 +5,6 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { siteConfig } from "@/lib/config";
 import { displayName, initials } from "@/lib/names";
 import { resolveFundMethods } from "@/lib/giving/methods";
 import { signStewardAvatars } from "@/lib/giving/server";
@@ -14,8 +13,9 @@ import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 import type { GivingFund, GivingFundMethod } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Give | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Give");
 
 type StewardInfo = {
   id: string;

@@ -5,11 +5,11 @@ import { NewEventForm } from "@/components/events/NewEventForm";
 import { createClient } from "@/lib/supabase/server";
 import { getGroupCalendar } from "@/lib/groups/calendar";
 import { requireGroupLeader } from "@/lib/groups/server";
-import { siteConfig } from "@/lib/config";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Add event | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Add event");
 
 export default async function NewEventPage({
   params,

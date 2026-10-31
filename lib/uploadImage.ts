@@ -117,7 +117,7 @@ export async function uploadImage(
  *   there: both resolve successfully with an empty array. Callers that need
  *   "the blob is gone" rather than "nothing addressable remains" must check
  *   this. Deliberately not a throw: a legacy un-prefixed key is an accepted
- *   no-op (see app/admin/families/page.tsx and the re-key deferral in
+ *   no-op (see app/admin/families/HouseholdsManager.tsx and the re-key deferral in
  *   docs/security/tenancy-model.md), and throwing would regress every
  *   legacy photo removal during exactly the window this change opens.
  */

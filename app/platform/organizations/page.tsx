@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation";
-import { siteConfig } from "@/lib/config";
 import { getPlatformAdmin } from "@/lib/platform-access";
 import { createServiceClient } from "@/lib/supabase/server";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { OrganizationsList, type PlatformOrg } from "./OrganizationsList";
+import { pageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Organizations | Platform | ${siteConfig.name}` };
+export const generateMetadata = () => pageTitle("Organizations");
 
 export default async function PlatformOrganizationsPage() {
   const user = await getPlatformAdmin();

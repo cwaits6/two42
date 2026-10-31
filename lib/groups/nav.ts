@@ -43,7 +43,6 @@ export type SwitcherRow = {
 
 export type SidebarItem =
   | SidebarLink
-  | { kind: "directory"; href: string; children: { href: string; label: string }[] }
   | {
       kind: "groupBlock";
       mode: "static" | "switcher";
@@ -73,7 +72,6 @@ export type SidebarInput = {
 export type SidebarModel = {
   items: SidebarItem[];
   showCollapseControl: boolean;
-  phonePill: { group: ActiveGroup } | null;
   collapsed: boolean;
 };
 
@@ -85,15 +83,9 @@ const FIND_A_GROUP: SidebarLink = {
   icon: "find-a-group",
 };
 
-function directoryItem(base: string, discoveryOn: boolean): SidebarItem {
-  const children = [
-    { href: `${base}/directory`, label: "Members" },
-    { href: `${base}/directory/families`, label: "Families" },
-    { href: `${base}/directory/birthdays`, label: "Birthdays" },
-    { href: `${base}/directory/anniversaries`, label: "Anniversaries" },
-  ];
-  if (discoveryOn) children.push({ href: `${base}/directory/groups`, label: "Groups" });
-  return { kind: "directory", href: `${base}/directory`, children };
+// One entry: the directory page's own tabs are its navigation.
+function directoryItem(base: string): SidebarLink {
+  return { kind: "link", href: `${base}/directory`, label: "Directory", icon: "directory" };
 }
 
 function groupPages(group: ActiveGroup, input: SidebarInput): SidebarItem[] {
@@ -149,13 +141,13 @@ export function buildSidebar(input: SidebarInput): SidebarModel {
     if (discoveryOn) items.push(groupBlock("static", group, input), FIND_A_GROUP);
     items.push(
       { kind: "link", href: "/calendar", label: "Calendar", icon: "calendar" },
-      directoryItem("", discoveryOn),
+      directoryItem(""),
       ...groupPages(group, input)
     );
   } else if (!activeGroup) {
     items.push(
       { kind: "link", href: "/calendar", label: "Calendar", icon: "calendar" },
-      directoryItem("", discoveryOn),
+      directoryItem(""),
       {
         kind: "yourGroups",
         rows: memberships.map((group) => ({ group, href: groupPath(group.id, "/dashboard") })),
@@ -168,7 +160,7 @@ export function buildSidebar(input: SidebarInput): SidebarModel {
       groupBlock("switcher", activeGroup, input),
       { kind: "link", href: `${base}/dashboard`, label: "Dashboard", icon: "dashboard" },
       { kind: "link", href: `${base}/calendar`, label: "Calendar", icon: "calendar" },
-      directoryItem(base, discoveryOn),
+      directoryItem(base),
       ...groupPages(activeGroup, input)
     );
   }
@@ -186,11 +178,9 @@ export function buildSidebar(input: SidebarInput): SidebarModel {
     );
   }
 
-  const insideWithSwitcher = activeGroup !== null && memberships.length >= 2;
   return {
     items,
     showCollapseControl: !input.phone,
-    phonePill: input.phone && insideWithSwitcher && activeGroup ? { group: activeGroup } : null,
     collapsed: input.collapsed,
   };
 }

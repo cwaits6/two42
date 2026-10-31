@@ -216,6 +216,17 @@ describe("legacy group routes and the group cookie", () => {
     expect(location(await updateSession(get("/give-thanks")))).toBeNull();
   });
 
+  it("sends a signed-in visitor from the sign-in forms to Home", async () => {
+    signedIn({ memberships: membershipRows });
+    expect(location(await updateSession(get("/login?redirect=%2Fadmin")))).toBe("/dashboard");
+    expect(location(await updateSession(get("/forgot-password")))).toBe("/dashboard");
+    expect(location(await updateSession(get("/update-password")))).toBeNull();
+
+    getClaims.mockResolvedValue({ data: null });
+    expect(location(await updateSession(get("/login")))).toBeNull();
+    expect(location(await updateSession(get("/forgot-password")))).toBeNull();
+  });
+
   it.each(["member", "content_editor", "pending"])(
     "sends a stored %s away from /admin to Home",
     async (role) => {

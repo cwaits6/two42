@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { createServiceClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
-import { siteConfig } from "@/lib/config";
 import { getServingLinkMode } from "@/lib/serving/config";
 import { verifyServingToken } from "@/lib/serving/links";
 import { formatServiceDate, isValidServiceDate } from "@/lib/serving/sundays";
 import { findSpouse, resolveSignupLabel } from "@/lib/serving/server";
 import { LinkActionConfirm } from "@/components/serving/LinkActionConfirm";
+import { pageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Serving | ${siteConfig.name}` };
+export const generateMetadata = () => pageTitle("Serving");
 
 /**
  * Landing page for signed serving-email links. Works without a login when

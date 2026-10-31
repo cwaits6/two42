@@ -1,14 +1,16 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { INFO_LINKS } from "@/components/layout/infoLinks";
 import { redirect } from "next/navigation";
-import { siteConfig } from "@/lib/config";
 import { DisplayCard } from "./DisplayCard";
 import { SignInSecurityCard } from "./SignInSecurityCard";
 import { NotificationsCard } from "./NotificationsCard";
 import { FeedbackCard } from "./FeedbackCard";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { isMemberRole } from "@/lib/roles";
+import { pageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Settings | ${siteConfig.name}` };
+export const generateMetadata = () => pageTitle("Settings");
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -44,6 +46,18 @@ export default async function SettingsPage() {
         />
         <FeedbackCard />
       </div>
+
+      <nav aria-label="Privacy, terms and help" className="mt-8 flex flex-wrap gap-x-6">
+        {INFO_LINKS.map((link) => (
+          <Link
+            key={link.href}
+            href={link.href}
+            className="inline-flex min-h-11 items-center text-base font-semibold text-brand-primary-text underline underline-offset-4 hover:text-foreground"
+          >
+            {link.label}
+          </Link>
+        ))}
+      </nav>
     </div>
   );
 }

@@ -31,8 +31,6 @@ function outline(items: SidebarItem[]): string[] {
     switch (item.kind) {
       case "link":
         return `${item.label} ${item.href}`;
-      case "directory":
-        return `Directory ${item.href}`;
       case "groupBlock":
         return `[groupBlock:${item.mode}]`;
       case "yourGroups":
@@ -50,7 +48,6 @@ describe("buildSidebar — no group", () => {
   it("shows Home and Account only with discovery off", () => {
     const model = buildSidebar(input({}));
     expect(outline(model.items)).toEqual(["Home /dashboard", ...ACCOUNT]);
-    expect(model.phonePill).toBeNull();
   });
 
   it("adds Find a group with discovery on", () => {
@@ -125,9 +122,6 @@ describe("buildSidebar — one group", () => {
     expect(outline(model.items)).not.toContain(`Serving /g/${A_ID}/serving`);
   });
 
-  it("never shows the phone pill", () => {
-    expect(buildSidebar(input({ ...one, phone: true })).phonePill).toBeNull();
-  });
 
   it("appends Admin after Account for an org admin", () => {
     const model = buildSidebar(input({ ...one, isOrgAdmin: true }));
@@ -163,10 +157,6 @@ describe("buildSidebar — two or more groups, org level", () => {
       "[yourGroups:2]",
       "Find a group /find-a-group",
     ]);
-  });
-
-  it("shows no phone pill at the org level", () => {
-    expect(buildSidebar(input({ ...two, phone: true })).phonePill).toBeNull();
   });
 });
 
@@ -218,48 +208,13 @@ describe("buildSidebar — two or more groups, inside a group", () => {
     expect(outline(model.items)).toContain(`Group settings /g/${A_ID}/settings`);
   });
 
-  it("shows the phone pill for the active group on the phone only", () => {
-    expect(buildSidebar(input({ ...inside, phone: true })).phonePill).toEqual({ group: B });
-    expect(buildSidebar(input({ ...inside, phone: false })).phonePill).toBeNull();
-  });
 });
 
-describe("buildSidebar — directory children", () => {
-  it("lists Members, Families, Birthdays, Anniversaries, and Groups only with discovery on", () => {
-    const off = buildSidebar(input({ memberships: [A], activeGroup: A })).items.find(
-      (i) => i.kind === "directory"
-    );
-    const on = buildSidebar(input({ memberships: [A], activeGroup: A, discoveryOn: true })).items.find(
-      (i) => i.kind === "directory"
-    );
-    if (off?.kind !== "directory" || on?.kind !== "directory") throw new Error("expected directory");
-    expect(off.children.map((c) => c.label)).toEqual([
-      "Members",
-      "Families",
-      "Birthdays",
-      "Anniversaries",
-    ]);
-    expect(on.children.map((c) => c.label)).toEqual([
-      "Members",
-      "Families",
-      "Birthdays",
-      "Anniversaries",
-      "Groups",
-    ]);
-    expect(off.children[0].href).toBe("/directory");
-  });
-
-  it("prefixes the children inside a group", () => {
-    const item = buildSidebar(input({ memberships: [A, B], activeGroup: B })).items.find(
-      (i) => i.kind === "directory"
-    );
-    if (item?.kind !== "directory") throw new Error("expected directory");
-    expect(item.children.map((c) => c.href)).toEqual([
-      `/g/${B_ID}/directory`,
-      `/g/${B_ID}/directory/families`,
-      `/g/${B_ID}/directory/birthdays`,
-      `/g/${B_ID}/directory/anniversaries`,
-    ]);
+describe("buildSidebar — directory", () => {
+  it("is one link, with no sub-menu of the directory's tabs", () => {
+    const items = buildSidebar(input({ memberships: [A, B], activeGroup: B, discoveryOn: true })).items;
+    const entries = outline(items).filter((line) => line.includes("/directory"));
+    expect(entries).toEqual([`Directory /g/${B_ID}/directory`]);
   });
 });
 

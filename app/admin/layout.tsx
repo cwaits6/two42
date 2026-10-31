@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { AdminSidebarNav } from "@/components/layout/AdminSidebarNav";
+import { AreaSidebar } from "@/components/layout/AreaNav";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 
 export default async function AdminLayout({
@@ -24,8 +24,8 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col md:flex-row">
-      <AdminSidebarNav />
+    <div className="flex min-w-0 flex-1">
+      <AreaSidebar area="admin" />
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   );

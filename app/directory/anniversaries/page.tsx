@@ -1,6 +1,7 @@
 import { AnniversariesTab } from "@/components/directory/tabs/AnniversariesTab";
+import { pageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: "Anniversaries | Directory" };
+export const generateMetadata = () => pageTitle("Anniversaries");
 
 export default function DirectoryAnniversariesPage() {
   return <AnniversariesTab />;

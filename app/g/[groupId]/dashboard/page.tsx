@@ -1,8 +1,8 @@
 import { GroupDashboard } from "@/components/groups/GroupDashboard";
 import { requireActiveGroup } from "@/lib/groups/server";
-import { siteConfig } from "@/lib/config";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Dashboard | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Dashboard");
 
 export default async function GroupDashboardPage({
   params,

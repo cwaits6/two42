@@ -1,8 +1,8 @@
 import { requireGroupLeader } from "@/lib/groups/server";
-import { siteConfig } from "@/lib/config";
 import { NewSeriesForm } from "./NewSeriesForm";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `New lecture series | ${siteConfig.name}` };
+export const generateMetadata = groupPageTitle("Add series");
 
 export default async function NewSeriesPage({
   params,

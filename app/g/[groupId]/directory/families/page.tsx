@@ -1,6 +1,7 @@
 import { FamiliesTab } from "@/components/directory/tabs/FamiliesTab";
+import { groupPageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: "Families | Directory" };
+export const generateMetadata = groupPageTitle("Households");
 
 export default function GroupDirectoryFamiliesPage() {
   return <FamiliesTab />;

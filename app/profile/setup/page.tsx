@@ -6,8 +6,9 @@ import type { Profile } from "@/lib/types";
 import { SetupWizard } from "./SetupWizard";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { isMemberRole } from "@/lib/roles";
+import { pageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Profile Setup | ${siteConfig.name}` };
+export const generateMetadata = () => pageTitle("Set up your profile");
 
 export default async function ProfileSetupPage() {
   const supabase = await createClient();
