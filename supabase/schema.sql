@@ -2127,6 +2127,9 @@ CREATE TABLE IF NOT EXISTS "public"."events" (
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
     "group_id" "uuid" NOT NULL,
     "is_cancelled" boolean DEFAULT false NOT NULL,
+    "calendar_meeting_details" boolean,
+    "calendar_event_notes" boolean,
+    "calendar_event_location" boolean,
     CONSTRAINT "events_is_cancelled_exception_only" CHECK (((NOT "is_cancelled") OR (("series_id" IS NOT NULL) AND ("series_occurrence_date" IS NOT NULL)))),
     CONSTRAINT "events_meeting_lead_minutes_check" CHECK ((("meeting_lead_minutes" >= 0) AND ("meeting_lead_minutes" <= 1440))),
     CONSTRAINT "events_recurrence_end_mode_check" CHECK (("recurrence_end_mode" = ANY (ARRAY['never'::"text", 'count'::"text", 'until'::"text"]))),
@@ -2135,6 +2138,18 @@ CREATE TABLE IF NOT EXISTS "public"."events" (
 
 
 ALTER TABLE "public"."events" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."events"."calendar_meeting_details" IS 'Overrides group_settings.calendar_meeting_details for this event or series; null follows the group.';
+
+
+
+COMMENT ON COLUMN "public"."events"."calendar_event_notes" IS 'Overrides group_settings.calendar_event_notes for this event or series; null follows the group.';
+
+
+
+COMMENT ON COLUMN "public"."events"."calendar_event_location" IS 'Overrides group_settings.calendar_event_location for this event or series; null follows the group.';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."family_units" (
@@ -2557,6 +2572,9 @@ CREATE TABLE IF NOT EXISTS "public"."group_settings" (
     "serving_link_mode" "text",
     "updated_by" "uuid",
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "calendar_meeting_details" boolean DEFAULT true NOT NULL,
+    "calendar_event_notes" boolean DEFAULT true NOT NULL,
+    "calendar_event_location" boolean DEFAULT true NOT NULL,
     CONSTRAINT "group_settings_serving_link_mode_check" CHECK (("serving_link_mode" = ANY (ARRAY['signed'::"text", 'login'::"text"]))),
     CONSTRAINT "group_settings_weekly_prayer_call_url_check" CHECK ((("weekly_prayer_call_url" IS NULL) OR ("weekly_prayer_call_url" ~ '^https://'::"text"))),
     CONSTRAINT "group_settings_weekly_zoom_url_check" CHECK ((("weekly_zoom_url" IS NULL) OR ("weekly_zoom_url" ~ '^https://'::"text")))
@@ -2567,6 +2585,18 @@ ALTER TABLE "public"."group_settings" OWNER TO "postgres";
 
 
 COMMENT ON TABLE "public"."group_settings" IS 'Per-group settings: the weekly video call, the weekly prayer call and the serving email link mode. One row per group, created on first save; an absent row means the defaults.';
+
+
+
+COMMENT ON COLUMN "public"."group_settings"."calendar_meeting_details" IS 'Calendar subscriptions include each online meeting''s link, ID and passcode; false links to the event page instead.';
+
+
+
+COMMENT ON COLUMN "public"."group_settings"."calendar_event_notes" IS 'Calendar subscriptions include each event''s description; false links to the event page instead.';
+
+
+
+COMMENT ON COLUMN "public"."group_settings"."calendar_event_location" IS 'Calendar subscriptions include each event''s location; false links to the event page instead.';
 
 
 
