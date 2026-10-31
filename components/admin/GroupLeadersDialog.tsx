@@ -361,7 +361,7 @@ export function GroupLeadersDialog({
   }
 
   return (
-    <Dialog open={!!group} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={!!group} onOpenChange={(open) => !open && !busy && onClose()}>
       <DialogContent className="flex max-h-[85vh] flex-col">
         {group && (
           <GroupLeadersView
