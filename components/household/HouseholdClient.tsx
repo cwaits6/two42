@@ -215,6 +215,11 @@ export function HouseholdClient({
     );
     if (!res?.ok) {
       toast.error(res ? failureMessage(`remove ${fm.first_name}`, res.status) : NETWORK_ERROR);
+      // The request may have reached the server before the connection dropped.
+      if (!res) {
+        setRemovingMember(null);
+        router.refresh();
+      }
       return;
     }
     toast.success(`Removed ${fm.first_name} from your household.`);
