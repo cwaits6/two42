@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { ErrorState } from "@/components/states/ErrorState";
+import { HomeGreeting } from "@/components/groups/HomeGreeting";
 import { createClient } from "@/lib/supabase/server";
 import { groupPath, type ActiveGroup } from "@/lib/groups/active";
 import { loadHomeCards, type HomeCard, type HomeEvent } from "@/lib/groups/home";
@@ -8,13 +11,6 @@ import { formatEventTime, formatInZone } from "@/lib/time/zone";
 
 // Every time below is the org's wall clock: `timeZone` is the org zone the
 // component resolves once per request.
-
-function getGreeting(timeZone: string) {
-  const h = Number(formatInZone(new Date().toISOString(), timeZone, { hour: "numeric", hourCycle: "h23" }));
-  if (h < 12) return "Good morning";
-  if (h < 17) return "Good afternoon";
-  return "Good evening";
-}
 
 function nextLine(event: HomeEvent | null, timeZone: string): string {
   if (!event) return "No upcoming events";
@@ -89,7 +85,7 @@ export async function HomeLauncher({
 }: {
   memberships: ActiveGroup[];
   discoveryOn: boolean;
-  displayName: string;
+  displayName: string | null;
   orgId: string;
 }) {
   const supabase = await createClient();
@@ -101,84 +97,81 @@ export async function HomeLauncher({
   const groupNames = new Map(memberships.map((g) => [g.id, g]));
 
   return (
-    <div className="min-h-screen bg-background">
-      <section className="px-4 pt-14 pb-10 md:px-14">
-        <h1 className="font-serif text-5xl md:text-6xl font-medium leading-none tracking-tight text-foreground mb-9">
-          {getGreeting(timeZone)}, <em className="text-brand-primary-text italic">{displayName}</em>.
-        </h1>
+    <PageContainer>
+      <HomeGreeting name={displayName} timeZone={timeZone} />
 
-        {!home && (
-          <p role="alert" className="mb-9 font-sans text-base text-foreground">
-            Could not load your groups&apos; activity. Try again in a moment.
-          </p>
-        )}
+      <div className="space-y-12">
+        {!home && <ErrorState thing="your groups' activity" />}
 
-        <div className="flex items-baseline justify-between mb-5">
-          <h2 className="font-serif text-[30px] font-medium text-foreground tracking-tight">
-            Your groups
-          </h2>
-          {discoveryOn && (
-            <Link
-              href="/find-a-group"
-              className="font-sans text-base font-semibold text-brand-primary-text hover:underline"
-            >
-              Find a group →
-            </Link>
-          )}
-        </div>
+        <section>
+          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4">
+            <h2 className="font-serif text-3xl font-medium tracking-tight text-foreground">
+              Your groups
+            </h2>
+            {discoveryOn && (
+              <Link
+                href="/find-a-group"
+                className="inline-flex min-h-11 items-center font-sans text-base font-semibold text-brand-primary-text hover:underline"
+              >
+                Find a group
+              </Link>
+            )}
+          </div>
 
-        <div className="grid gap-5 md:grid-cols-2">
-          {cards.map(({ group, activity }) => (
-            <GroupCard key={group.id} group={group} activity={activity} timeZone={timeZone} />
-          ))}
-        </div>
-      </section>
-
-      {home && (
-        <section className="border-t border-border bg-card px-4 py-10 md:px-14 md:pb-16">
-          <h2 className="font-serif text-[30px] font-medium text-foreground tracking-tight mb-5">
-            This week
-          </h2>
-          {home.thisWeek.length === 0 ? (
-            <p className="text-muted-foreground text-base">Nothing on the calendar this week.</p>
-          ) : (
-            <ul>
-              {home.thisWeek.map(({ event, groupId }, i) => {
-                const group = groupNames.get(groupId);
-                return (
-                  <li
-                    key={`${event.id}-${event.start_time}`}
-                    className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-4"
-                    style={i > 0 ? { borderTop: "1px solid var(--color-border)" } : undefined}
-                  >
-                    <span className="font-mono text-base text-muted-foreground">
-                      {weekRowLabel(event, timeZone)}
-                    </span>
-                    <span className="font-serif text-xl font-medium text-foreground">
-                      {event.title}
-                    </span>
-                    {event.location && (
-                      <span className="font-sans text-base text-muted-foreground">
-                        {event.location}
-                      </span>
-                    )}
-                    {group && (
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-0.5 font-sans text-sm text-foreground">
-                        <span
-                          aria-hidden="true"
-                          className="h-2 w-2 rounded-full"
-                          style={{ background: group.color }}
-                        />
-                        {group.name}
-                      </span>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <div className="grid gap-5 md:grid-cols-2">
+            {cards.map(({ group, activity }) => (
+              <GroupCard key={group.id} group={group} activity={activity} timeZone={timeZone} />
+            ))}
+          </div>
         </section>
-      )}
-    </div>
+
+        {home && (
+          <section>
+            <h2 className="mb-4 font-serif text-3xl font-medium tracking-tight text-foreground">
+              This week
+            </h2>
+            {home.thisWeek.length === 0 ? (
+              <p className="font-sans text-base text-muted-foreground">Nothing on the calendar this week.</p>
+            ) : (
+              <ul>
+                {home.thisWeek.map(({ event, groupId }) => {
+                  const group = groupNames.get(groupId);
+                  return (
+                    <li
+                      key={`${event.id}-${event.start_time}`}
+                      className="border-t border-border py-4 first:border-0 first:pt-0"
+                    >
+                      <div className="font-sans text-base text-muted-foreground">
+                        {weekRowLabel(event, timeZone)}
+                      </div>
+                      <div className="font-serif text-xl font-medium text-foreground">{event.title}</div>
+                      {(event.location || group) && (
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                          {event.location && (
+                            <span className="font-sans text-base text-muted-foreground">
+                              {event.location}
+                            </span>
+                          )}
+                          {group && (
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-0.5 font-sans text-sm text-foreground">
+                              <span
+                                aria-hidden="true"
+                                className="h-2 w-2 rounded-full"
+                                style={{ background: group.color }}
+                              />
+                              {group.name}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        )}
+      </div>
+    </PageContainer>
   );
 }

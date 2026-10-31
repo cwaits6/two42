@@ -168,7 +168,7 @@ describe("buildSidebar — two or more groups, inside a group", () => {
     expect(outline(model.items)).toEqual([
       "Home /dashboard",
       "[groupBlock:switcher]",
-      `Dashboard /g/${B_ID}/dashboard`,
+      `Home /g/${B_ID}/dashboard`,
       `Calendar /g/${B_ID}/calendar`,
       `Directory /g/${B_ID}/directory`,
       `Announcements /g/${B_ID}/announcements`,

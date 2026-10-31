@@ -2,7 +2,7 @@ import { GroupDashboard } from "@/components/groups/GroupDashboard";
 import { requireActiveGroup } from "@/lib/groups/server";
 import { groupPageTitle } from "@/lib/pageTitle";
 
-export const generateMetadata = groupPageTitle("Dashboard");
+export const generateMetadata = groupPageTitle("Home");
 
 export default async function GroupDashboardPage({
   params,
