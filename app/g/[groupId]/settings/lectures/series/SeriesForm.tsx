@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -34,16 +34,23 @@ export function SeriesForm({
   });
   const [isPast, setIsPast] = useState(series?.is_archived ?? false);
   const [errors, setErrors] = useState<SeriesFieldErrors>({});
+  // An object, so a second submit with the same error still refocuses.
+  const [focusTarget, setFocusTarget] = useState<{ id: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const listHref = groupPath(groupId, "/settings/lectures/series");
+
+  // Focus waits for the render that ties the message to the field.
+  useEffect(() => {
+    if (focusTarget) document.getElementById(focusTarget.id)?.focus();
+  }, [focusTarget]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const found = validateSeries(draft);
     setErrors(found);
     if (found.name) {
-      document.getElementById("name")?.focus();
+      setFocusTarget({ id: "name" });
       return;
     }
 

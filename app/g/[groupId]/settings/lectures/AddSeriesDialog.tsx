@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { failureMessage } from "@/lib/errorCopy";
@@ -38,6 +38,8 @@ export function AddSeriesDialog({
 }) {
   const [draft, setDraft] = useState<SeriesDraft>(EMPTY);
   const [errors, setErrors] = useState<SeriesFieldErrors>({});
+  // An object, so a second submit with the same error still refocuses.
+  const [focusTarget, setFocusTarget] = useState<{ id: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
   const close = (next: boolean) => {
@@ -49,12 +51,17 @@ export function AddSeriesDialog({
     onOpenChange(next);
   };
 
+  // Focus waits for the render that ties the message to the field.
+  useEffect(() => {
+    if (focusTarget) document.getElementById(focusTarget.id)?.focus();
+  }, [focusTarget]);
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const found = validateSeries(draft);
     setErrors(found);
     if (found.name) {
-      document.getElementById(`${ID_PREFIX}name`)?.focus();
+      setFocusTarget({ id: `${ID_PREFIX}name` });
       return;
     }
 
