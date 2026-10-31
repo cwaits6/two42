@@ -329,4 +329,17 @@ describe("content security policy", () => {
     expect(connectSrc).toContain(" http://127.0.0.1:54321");
     expect(connectSrc).toContain(" ws://127.0.0.1:54321");
   });
+
+  it("allows the calendar's inline font and nothing wider", async () => {
+    const req = new NextRequest("https://two42.io/calendar", {
+      headers: { host: "two42.io" },
+    });
+    const res = await updateSession(req);
+    const fontSrc = res.headers
+      .get("Content-Security-Policy")
+      ?.split(";")
+      .map((d) => d.trim())
+      .find((d) => d.startsWith("font-src "));
+    expect(fontSrc).toBe("font-src 'self' data: https://fonts.gstatic.com");
+  });
 });
