@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -20,11 +22,14 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { GoogleMapsScript } from "@/components/GoogleMapsScript";
+import { EventTimeFields } from "@/components/events/EventTimeFields";
 import { LocationInput } from "@/components/events/LocationInput";
-import { MeetingFieldsSection } from "@/components/events/MeetingFieldsSection";
+import { MeetingFieldsSection, meetingFieldErrors, type MeetingFieldErrors } from "@/components/events/MeetingFieldsSection";
+import { nextWholeHour } from "@/components/events/eventTimes";
 import { ensureGroupCalendar } from "@/lib/groups/calendar";
 import { groupPath } from "@/lib/groups/active";
 import { addHour, isValidEndTime } from "@/lib/datetime-local";
+import { failureMessage } from "@/lib/errorCopy";
 import { localToUTCISO } from "@/lib/time/zone";
 
 type RecurrenceFrequency = "daily" | "weekly" | "monthly" | "yearly";
@@ -39,8 +44,8 @@ const RECURRENCE_LABELS: Record<RecurrenceFrequency, string> = {
 
 const END_MODE_LABELS: Record<RecurrenceEndMode, string> = {
   never: "Never",
-  count: "After Number Of Times",
-  until: "On Date",
+  count: "After a number of times",
+  until: "On a date",
 };
 
 const RECURRENCE_ITEMS = (Object.keys(RECURRENCE_LABELS) as RecurrenceFrequency[]).map(
@@ -61,6 +66,12 @@ interface NewEventFormProps {
   timeZone: string;
 }
 
+type FieldErrors = MeetingFieldErrors & {
+  end_time?: string;
+  recurrence_count?: string;
+  recurrence_until?: string;
+};
+
 export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }: NewEventFormProps) {
   const [loading, setLoading] = useState(false);
   const [isRsvpEnabled, setIsRsvpEnabled] = useState(true);
@@ -75,6 +86,8 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
   const [meetingPasscode, setMeetingPasscode] = useState("");
   const [meetingShowOnDashboard, setMeetingShowOnDashboard] = useState(true);
   const [meetingLeadMinutes, setMeetingLeadMinutes] = useState("15");
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [focusTarget, setFocusTarget] = useState<{ id: string } | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
@@ -82,19 +95,21 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
 
   const rawDate = searchParams.get("date");
   const prefillDate = rawDate ? rawDate.split("T")[0] : null;
-  const initialStartTime = useMemo(
-    () => (prefillDate ? `${prefillDate}T09:00` : ""),
-    [prefillDate]
+  const [startTime, setStartTime] = useState(() =>
+    prefillDate ? `${prefillDate}T09:00` : nextWholeHour(timeZone)
   );
-  const [startTime, setStartTime] = useState(initialStartTime);
-  const [endTime, setEndTime] = useState(() => addHour(initialStartTime));
+  const [endTime, setEndTime] = useState(() => addHour(startTime));
+
+  useEffect(() => {
+    if (focusTarget) document.getElementById(focusTarget.id)?.focus();
+  }, [focusTarget]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
+    const found: FieldErrors = {};
     if (!isValidEndTime(startTime, endTime)) {
-      toast.error("End time must be after start time.");
-      return;
+      found.end_time = "Enter an end time after the start time.";
     }
 
     const parsedRecurrenceCount = Number(recurrenceCount);
@@ -103,33 +118,28 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
       recurrenceEndMode === "count" &&
       (!Number.isInteger(parsedRecurrenceCount) || parsedRecurrenceCount < 2 || parsedRecurrenceCount > 999)
     ) {
-      toast.error("Recurring events must repeat between 2 and 999 times.");
-      return;
+      found.recurrence_count = "Enter a number from 2 to 999.";
     }
 
     if (isRecurring && recurrenceEndMode === "until") {
-      if (!recurrenceUntil) {
-        toast.error("Choose when the recurring event should stop repeating.");
-        return;
-      }
-
       const untilDate = new Date(recurrenceUntil);
       const firstStartDate = new Date(startTime);
       // Both are datetime-local strings (same timezone offset implicit), so
       // comparing them as browser-local Dates is valid for ordering checks.
-      if (Number.isNaN(untilDate.getTime()) || untilDate.getTime() < firstStartDate.getTime()) {
-        toast.error("Repeat until must be on or after the first event.");
-        return;
+      if (!recurrenceUntil) {
+        found.recurrence_until = "Enter the date the event stops repeating.";
+      } else if (Number.isNaN(untilDate.getTime()) || untilDate.getTime() < firstStartDate.getTime()) {
+        found.recurrence_until = "Enter a date on or after the first event.";
       }
     }
 
     const trimmedMeetingUrl = meetingUrl.trim();
-    if (trimmedMeetingUrl && !/^https:\/\//i.test(trimmedMeetingUrl)) {
-      toast.error("Meeting link must start with https://");
-      return;
-    }
-    if (!trimmedMeetingUrl && (meetingId.trim() || meetingPasscode.trim())) {
-      toast.error("Add the meeting link to go with the meeting ID and passcode.");
+    Object.assign(found, meetingFieldErrors(trimmedMeetingUrl, meetingId, meetingPasscode));
+
+    setErrors(found);
+    const firstInvalid = Object.keys(found)[0];
+    if (firstInvalid) {
+      setFocusTarget({ id: firstInvalid });
       return;
     }
 
@@ -148,11 +158,11 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
       calendarId ?? (await ensureGroupCalendar(supabase, orgId, groupId, groupName));
     if (!resolvedCalendarId) {
       setLoading(false);
-      toast.error("Failed to create event.");
+      toast.error(failureMessage("add the event"));
       return;
     }
 
-    const { error } = await supabase.from("events").insert({
+    const { data: created, error } = await supabase.from("events").insert({
       title,
       description,
       location: nextLocation || null,
@@ -175,17 +185,17 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
       meeting_passcode: meetingPasscode.trim() || null,
       meeting_show_on_dashboard: meetingShowOnDashboard,
       meeting_lead_minutes: Number(meetingLeadMinutes),
-    });
+    }).select("id").single();
 
     setLoading(false);
 
-    if (error) {
-      toast.error("Failed to create event.");
+    if (error || !created) {
+      toast.error(failureMessage("add the event"));
       return;
     }
 
-    toast.success("Event created.");
-    router.push(calendarHref);
+    toast.success("Event added.");
+    router.push(groupPath(groupId, `/calendar/${created.id}`));
   };
 
   const handleStartTimeChange = (nextStartTime: string) => {
@@ -211,7 +221,7 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="title" className="text-lg">Title</Label>
-              <Input id="title" name="title" required className="text-lg py-6" />
+              <Input id="title" name="title" required className="text-lg" />
             </div>
 
             <div className="space-y-2">
@@ -229,32 +239,14 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
               />
             </div>
 
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="start_time" className="text-lg">Start Time</Label>
-                <Input
-                  id="start_time"
-                  name="start_time"
-                  type="datetime-local"
-                  required
-                  className="text-lg py-6"
-                  value={startTime}
-                  onChange={(e) => handleStartTimeChange(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="end_time" className="text-lg">End Time</Label>
-                <Input
-                  id="end_time"
-                  name="end_time"
-                  type="datetime-local"
-                  className="text-lg py-6"
-                  min={startTime || undefined}
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                />
-              </div>
-            </div>
+            <EventTimeFields
+              startTime={startTime}
+              endTime={endTime}
+              onStartTimeChange={handleStartTimeChange}
+              onEndTimeChange={setEndTime}
+              timeZone={timeZone}
+              endError={errors.end_time}
+            />
 
             <div className="flex items-center gap-3">
               <Switch
@@ -262,10 +254,10 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
                 checked={isRsvpEnabled}
                 onCheckedChange={setIsRsvpEnabled}
               />
-              <Label htmlFor="is_rsvp_enabled" className="text-lg">RSVP enabled</Label>
+              <Label htmlFor="is_rsvp_enabled" className="text-lg">Ask for RSVPs</Label>
             </div>
 
-            <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+            <div className="space-y-4 rounded-2xl border border-border bg-background p-4">
               <div className="flex items-center gap-3">
                 <Switch
                   id="is_recurring"
@@ -273,8 +265,8 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
                   onCheckedChange={setIsRecurring}
                 />
                 <div>
-                  <Label htmlFor="is_recurring" className="text-lg">Recurring event</Label>
-                  <p className="text-sm text-muted-foreground">
+                  <Label htmlFor="is_recurring" className="text-lg">Repeats</Label>
+                  <p className="text-base text-muted-foreground">
                     Repeat this event on a schedule.
                   </p>
                 </div>
@@ -284,13 +276,13 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
                 <>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label className="text-lg">Repeat</Label>
+                      <Label htmlFor="recurrence_frequency" className="text-lg">How often</Label>
                       <Select
                         items={RECURRENCE_ITEMS}
                         value={recurrenceFrequency}
                         onValueChange={(value) => setRecurrenceFrequency((value ?? "weekly") as RecurrenceFrequency)}
                       >
-                        <SelectTrigger className="w-full text-lg py-6">
+                        <SelectTrigger id="recurrence_frequency" className="w-full text-lg">
                           <SelectValue>{RECURRENCE_LABELS[recurrenceFrequency]}</SelectValue>
                         </SelectTrigger>
                         <SelectContent>
@@ -304,13 +296,13 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-lg">End Repeat</Label>
+                      <Label htmlFor="recurrence_end_mode" className="text-lg">Ends</Label>
                       <Select
                         items={END_MODE_ITEMS}
                         value={recurrenceEndMode}
                         onValueChange={(value) => setRecurrenceEndMode((value ?? "never") as RecurrenceEndMode)}
                       >
-                        <SelectTrigger className="w-full text-lg py-6">
+                        <SelectTrigger id="recurrence_end_mode" className="w-full text-lg">
                           <SelectValue>{END_MODE_LABELS[recurrenceEndMode]}</SelectValue>
                         </SelectTrigger>
                         <SelectContent>
@@ -326,7 +318,7 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
 
                   {recurrenceEndMode === "count" && (
                     <div className="space-y-2">
-                      <Label htmlFor="recurrence_count" className="text-lg">Occurrences</Label>
+                      <Label htmlFor="recurrence_count" className="text-lg">Number of times</Label>
                       <Input
                         id="recurrence_count"
                         type="number"
@@ -335,22 +327,26 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
                         step="1"
                         value={recurrenceCount}
                         onChange={(e) => setRecurrenceCount(e.target.value)}
-                        className="text-lg py-6"
+                        className="text-lg"
+                        {...invalidFieldProps("recurrence_count", errors.recurrence_count)}
                       />
+                      <FieldError fieldId="recurrence_count" message={errors.recurrence_count} />
                     </div>
                   )}
 
                   {recurrenceEndMode === "until" && (
                     <div className="space-y-2">
-                      <Label htmlFor="recurrence_until" className="text-lg">Repeat Until</Label>
+                      <Label htmlFor="recurrence_until" className="text-lg">Repeat until</Label>
                       <Input
                         id="recurrence_until"
                         type="datetime-local"
                         min={startTime || undefined}
                         value={recurrenceUntil}
                         onChange={(e) => setRecurrenceUntil(e.target.value)}
-                        className="text-lg py-6"
+                        className="text-lg"
+                        {...invalidFieldProps("recurrence_until", errors.recurrence_until)}
                       />
+                      <FieldError fieldId="recurrence_until" message={errors.recurrence_until} />
                     </div>
                   )}
                 </>
@@ -369,6 +365,7 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
               leadMinutes={meetingLeadMinutes}
               onLeadMinutesChange={setMeetingLeadMinutes}
               isRecurring={isRecurring}
+              errors={errors}
             />
 
             <div className="flex flex-col gap-3 border-t border-border pt-5 sm:flex-row">
@@ -376,11 +373,10 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
                 {loading ? "Saving…" : "Save event"}
               </Button>
               <Button
-                type="button"
                 size="lg"
                 variant="outline"
-                onClick={() => router.push(calendarHref)}
-                disabled={loading}
+                nativeButton={false}
+                render={<Link href={calendarHref} />}
               >
                 Cancel
               </Button>

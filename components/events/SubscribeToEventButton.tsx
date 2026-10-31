@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Rss } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { failureMessage } from "@/lib/errorCopy";
 import { toast } from "sonner";
 
 interface SubscribeToEventButtonProps {
@@ -17,29 +18,23 @@ export function SubscribeToEventButton({ eventId }: SubscribeToEventButtonProps)
     try {
       const res = await fetch("/api/calendar/subscription-token", { method: "POST" });
       if (!res.ok) {
-        toast.error("Couldn't create your calendar link. Please try again.");
+        toast.error(failureMessage("create your calendar link", res.status));
         return;
       }
       const { token } = (await res.json()) as { token: string };
-      toast.info("This replaces any earlier calendar link — older links stop working.");
+      toast.info("This replaces your earlier calendar link, and the earlier link stops working.");
       window.location.href = `webcal://${window.location.host}/api/events/${eventId}/ics?token=${token}`;
     } catch {
-      toast.error("Couldn't create your calendar link. Please try again.");
+      toast.error(failureMessage("create your calendar link", "network"));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Button
-      onClick={handleClick}
-      disabled={loading}
-      variant="outline"
-      size="lg"
-      className="h-10 gap-2 border-slate-200 bg-white px-6 text-base text-slate-600 shadow-sm hover:border-brand-primary/30 hover:bg-white hover:text-brand-primary-text"
-    >
-      <Rss className="h-4 w-4" />
-      {loading ? "Preparing…" : "Subscribe to Event"}
+    <Button onClick={handleClick} disabled={loading} variant="outline">
+      <Rss aria-hidden="true" />
+      {loading ? "Preparing…" : "Subscribe"}
     </Button>
   );
 }

@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { LoadingState } from "@/components/states/LoadingState";
 import { NewEventForm } from "@/components/events/NewEventForm";
 import { createClient } from "@/lib/supabase/server";
 import { getGroupCalendar } from "@/lib/groups/calendar";
@@ -35,7 +37,14 @@ export default async function NewEventPage({
   ]);
 
   return (
-    <Suspense fallback={<PageContainer size="reading">Loading...</PageContainer>}>
+    <Suspense
+      fallback={
+        <PageContainer size="reading">
+          <PageHeader title="Add event" />
+          <LoadingState thing="the form" />
+        </PageContainer>
+      }
+    >
       <NewEventForm
         groupId={group.id}
         groupName={group.name}

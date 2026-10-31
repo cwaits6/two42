@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getGroupMemberships, requireActiveGroup } from "@/lib/groups/server";
 import { EventsPageClient, type CalendarGroup } from "@/components/events/EventsPageClient";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { ErrorState } from "@/components/states/ErrorState";
 import type { Event, Rsvp } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
@@ -36,7 +38,7 @@ export async function CalendarPage({ pinnedGroupId }: { pinnedGroupId?: string }
 
   // A bounded window: non-recurring events starting in it, plus recurring
   // anchors whose series overlaps it (the anchor may start years earlier).
-  const [{ data: allEventsRaw, error: allEventsError }, { data: rsvps }, timeZone] = await Promise.all([
+  const [{ data: allEventsRaw, error: allEventsError }, { data: rsvps, error: rsvpsError }, timeZone] = await Promise.all([
     supabase
       .from("events")
       .select("*")
@@ -54,8 +56,15 @@ export async function CalendarPage({ pinnedGroupId }: { pinnedGroupId?: string }
     supabase.from("rsvps").select("*").eq("user_id", user.id),
     getOrgTimeZone(),
   ]);
-  if (allEventsError) {
-    console.error("Failed to fetch events:", allEventsError);
+  // A failed read must not pass for an empty calendar or for no replies.
+  if (allEventsError || rsvpsError) {
+    console.error("Failed to load the calendar:", allEventsError ?? rsvpsError);
+    return (
+      <PageContainer size="wide">
+        <PageHeader title="Calendar" />
+        <ErrorState thing="the calendar" />
+      </PageContainer>
+    );
   }
 
   const userRsvps: Record<string, Rsvp> = Object.fromEntries(

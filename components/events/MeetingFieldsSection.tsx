@@ -3,6 +3,7 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import {
   Select,
   SelectContent,
@@ -20,6 +21,26 @@ const LEAD_LABELS: Record<string, string> = {
   "60": "1 hour",
 };
 
+const LEAD_ITEMS = LEAD_OPTIONS.map((value) => ({ value, label: LEAD_LABELS[value] }));
+
+export type MeetingFieldErrors = { meeting_url?: string };
+
+/** The meeting fields' own rules; empty when the meeting is valid or left out. */
+export function meetingFieldErrors(
+  meetingUrl: string,
+  meetingId: string,
+  passcode: string
+): MeetingFieldErrors {
+  const url = meetingUrl.trim();
+  if (url && !/^https:\/\//i.test(url)) {
+    return { meeting_url: "Enter a meeting link that starts with https://" };
+  }
+  if (!url && (meetingId.trim() || passcode.trim())) {
+    return { meeting_url: "Enter the meeting link that goes with the meeting ID and passcode." };
+  }
+  return {};
+}
+
 interface MeetingFieldsSectionProps {
   meetingUrl: string;
   onMeetingUrlChange: (v: string) => void;
@@ -32,6 +53,7 @@ interface MeetingFieldsSectionProps {
   leadMinutes: string;
   onLeadMinutesChange: (v: string) => void;
   isRecurring: boolean;
+  errors?: MeetingFieldErrors;
 }
 
 export function MeetingFieldsSection({
@@ -46,15 +68,16 @@ export function MeetingFieldsSection({
   leadMinutes,
   onLeadMinutesChange,
   isRecurring,
+  errors = {},
 }: MeetingFieldsSectionProps) {
   return (
-    <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+    <div className="space-y-4 rounded-2xl border border-border bg-background p-4">
       <div>
-        <Label className="text-lg">Meeting</Label>
-        <p className="text-sm text-muted-foreground">
+        <h2 className="font-sans text-lg font-medium text-foreground">Online meeting</h2>
+        <p className="text-base text-muted-foreground">
           {isRecurring
-            ? "Set once — the Join button uses it for every date in this series."
-            : "Members get a time-aware Join button on the dashboard and event page."}
+            ? "One link for every date of this event."
+            : "Members get a Join button on the group dashboard and the event page when it is time."}
         </p>
       </div>
 
@@ -66,9 +89,11 @@ export function MeetingFieldsSection({
           placeholder="https://us02web.zoom.us/j/…"
           value={meetingUrl}
           onChange={(e) => onMeetingUrlChange(e.target.value)}
-          className="text-lg py-6"
+          className="text-lg"
+          {...invalidFieldProps("meeting_url", errors.meeting_url)}
         />
-        <p className="text-sm text-muted-foreground">
+        <FieldError fieldId="meeting_url" message={errors.meeting_url} />
+        <p className="text-base text-muted-foreground">
           Use the invite link with the passcode embedded so one tap joins.
         </p>
       </div>
@@ -80,7 +105,7 @@ export function MeetingFieldsSection({
             id="meeting_id"
             value={meetingId}
             onChange={(e) => onMeetingIdChange(e.target.value)}
-            className="text-lg py-6"
+            className="text-lg"
           />
         </div>
         <div className="space-y-2">
@@ -89,7 +114,7 @@ export function MeetingFieldsSection({
             id="meeting_passcode"
             value={passcode}
             onChange={(e) => onPasscodeChange(e.target.value)}
-            className="text-lg py-6"
+            className="text-lg"
           />
         </div>
       </div>
@@ -110,18 +135,19 @@ export function MeetingFieldsSection({
           <div className="space-y-2">
             <Label htmlFor="meeting_lead_minutes" className="text-lg">Join opens before start</Label>
             <Select
+              items={LEAD_ITEMS}
               value={leadMinutes}
               onValueChange={(v) => {
                 if (v) onLeadMinutesChange(v);
               }}
             >
-              <SelectTrigger id="meeting_lead_minutes" className="w-full text-lg py-6">
+              <SelectTrigger id="meeting_lead_minutes" className="w-full text-lg">
                 <SelectValue>{LEAD_LABELS[leadMinutes] ?? `${leadMinutes} minutes`}</SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {LEAD_OPTIONS.map((v) => (
-                  <SelectItem key={v} value={v}>
-                    {LEAD_LABELS[v]}
+                {LEAD_ITEMS.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
                   </SelectItem>
                 ))}
               </SelectContent>

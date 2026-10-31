@@ -7,9 +7,7 @@ export const EventCalendarView = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="bg-white rounded-[2rem] border-2 border-border overflow-hidden p-5 shadow-sm">
-        <div className="h-[560px] rounded-[1.5rem] border border-slate-100 bg-slate-50/70 animate-pulse" />
-      </div>
+      <div className="mt-16 h-[560px] rounded-2xl border border-border bg-muted animate-pulse" />
     ),
   },
 );

@@ -1,5 +1,5 @@
 // Mounts an RSVP control in jsdom and stands in for the Supabase client its
-// write goes through. Shared by the three control tests; not production code.
+// write goes through. Used by RsvpControl.test.ts; not production code.
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
@@ -61,6 +61,11 @@ export async function mountControl(element: ReactElement) {
   const buttons = () => Array.from(container.querySelectorAll("button"));
   return {
     text: () => container.textContent ?? "",
+    labels: () => buttons().map((b) => b.textContent?.trim()),
+    checked: () =>
+      buttons()
+        .filter((b) => b.querySelector("svg"))
+        .map((b) => b.textContent?.trim()),
     pressed: () =>
       buttons()
         .filter((b) => b.getAttribute("aria-pressed") === "true")
