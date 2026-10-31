@@ -60,15 +60,37 @@ function listChain(rows: Row[], record: (filter: [string, unknown]) => void) {
       filters.push((row) => String(row[col]) <= val);
       return obj;
     },
-    // The route's one `.or()`: "col.gte.value" and "col.not.is.null" arms.
+    // The route's one `.or()`: comma-separated arms, each a bare condition or
+    // an and(...) of them, with gte / lte / is.null / not.is.null operators.
     or(expr: string) {
-      const arms = expr.split(",").map((arm) => {
+      const split = (text: string) => {
+        const parts: string[] = [];
+        let depth = 0;
+        let start = 0;
+        for (let i = 0; i < text.length; i++) {
+          if (text[i] === "(") depth++;
+          else if (text[i] === ")") depth--;
+          else if (text[i] === "," && depth === 0) {
+            parts.push(text.slice(start, i));
+            start = i + 1;
+          }
+        }
+        return [...parts, text.slice(start)];
+      };
+      const condition = (arm: string): ((row: Row) => boolean) => {
+        if (arm.startsWith("and(")) {
+          const all = split(arm.slice(4, -1)).map(condition);
+          return (row) => all.every((c) => c(row));
+        }
         const [col, ...rest] = arm.split(".");
         const op = rest.join(".");
-        if (op === "not.is.null") return (row: Row) => row[col] != null;
-        if (op.startsWith("gte.")) return (row: Row) => String(row[col]) >= op.slice(4);
+        if (op === "not.is.null") return (row) => row[col] != null;
+        if (op === "is.null") return (row) => row[col] == null;
+        if (op.startsWith("gte.")) return (row) => row[col] != null && String(row[col]) >= op.slice(4);
+        if (op.startsWith("lte.")) return (row) => row[col] != null && String(row[col]) <= op.slice(4);
         throw new Error(`unsupported or arm ${arm}`);
-      });
+      };
+      const arms = split(expr).map(condition);
       filters.push((row) => arms.some((arm) => arm(row)));
       return obj;
     },
@@ -183,6 +205,13 @@ function makeServiceClient(opts: { memberships: Row[] | "error" }) {
       series_id: "study-a",
       series_occurrence_date: seriesDateNear(new Date(Date.parse(SOON) + 7 * DAY).toISOString()),
       start_time: new Date(Date.parse(seriesDateNear(SOON)) + 8 * DAY).toISOString(),
+    },
+    // A date moved two years out, past the window's end.
+    {
+      ...event("moved-far", GROUP_A, "Far study"),
+      series_id: "study-a",
+      series_occurrence_date: seriesDateNear(new Date(Date.parse(SOON) + 21 * DAY).toISOString()),
+      start_time: new Date(Date.parse(SOON) + 730 * DAY).toISOString(),
     },
     weekly("study-b", GROUP_B, "Other study", { meeting_id: "999 888 7777" }),
   ];
@@ -312,6 +341,10 @@ describe("GET /api/calendar/feed.ics — group boundary", () => {
     // The moved date replaces its slot in the series.
     const movedFrom = seriesDateNear(new Date(Date.parse(SOON) + 7 * DAY).toISOString()).slice(0, 10);
     expect(body).not.toContain(`UID:study-a-${movedFrom}`);
+    // So does one moved past the window, which is itself left out.
+    const movedFarFrom = seriesDateNear(new Date(Date.parse(SOON) + 21 * DAY).toISOString()).slice(0, 10);
+    expect(body).not.toContain(`UID:study-a-${movedFarFrom}`);
+    expect(body).not.toContain("UID:moved-far");
     expect(body).not.toContain("Other study");
   });
 

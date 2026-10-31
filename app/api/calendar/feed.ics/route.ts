@@ -114,6 +114,7 @@ export async function GET(request: Request) {
   // window when it is expanded below.
   const { start: windowStart, end: windowEnd } = subscriptionWindow();
   const thirtyDaysAgo = windowStart.toISOString();
+  const windowEndIso = windowEnd.toISOString();
 
   let typedEvents: Event[] = [];
   let servingSignups: ServingICSInput[] = [];
@@ -129,10 +130,16 @@ export async function GET(request: Request) {
         .select("*")
         .eq("org_id", sub.org_id)
         .in("group_id", groupIds)
-        // Cancelled rows are read too: a cancelled exception row is what
-        // removes a deleted date from its series.
-        .or(`start_time.gte.${thirtyDaysAgo},recurrence_frequency.not.is.null`)
-        .lte("start_time", windowEnd.toISOString())
+        // Dates in the window; every series begun by its end; and every
+        // moved or deleted date (cancelled rows included) whose original slot
+        // is in it, wherever it moved — without that row the slot reappears.
+        .or(
+          [
+            `and(start_time.gte.${thirtyDaysAgo},start_time.lte.${windowEndIso})`,
+            `and(series_id.is.null,recurrence_frequency.not.is.null,start_time.lte.${windowEndIso})`,
+            `and(series_id.not.is.null,series_occurrence_date.gte.${thirtyDaysAgo},series_occurrence_date.lte.${windowEndIso})`,
+          ].join(",")
+        )
         .order("start_time", { ascending: true })
         .limit(500),
       // Serving signups where this user is an attendee, on the groups' teams
