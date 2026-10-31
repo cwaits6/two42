@@ -5,10 +5,12 @@
 -- a name or description of any length, which the approval queue and the
 -- directory render in full.
 --
--- The constraints are NOT VALID: they hold for every row written from now
--- on, but adding them does not scan existing rows, so a long row written
--- before this migration cannot fail the deploy. A row that is edited later
--- must then fit.
+-- A trigger rather than a CHECK constraint: Postgres checks a constraint,
+-- NOT VALID or not, on every UPDATE of the row. A pending request or group
+-- already over a limit would then refuse any update at all, so the request
+-- could not be declined and the group could not change an unrelated setting.
+-- The trigger checks a value only when it is written or changed, and raises
+-- check_violation so a client sees one SQLSTATE for a refused value.
 --
 -- char_length counts code points; the browser's String.length counts UTF-16
 -- units, so anything the forms accept also passes here.
@@ -16,15 +18,34 @@
 -- Error contract addition:
 --   GC007  the group name or description is longer than its limit
 
-alter table public.groups
-  add constraint groups_name_length check (char_length(name) <= 120) not valid,
-  add constraint groups_description_length
-    check (description is null or char_length(description) <= 1000) not valid;
+create function public.group_text_length_check() returns trigger
+  language plpgsql set search_path = ''
+as $$
+begin
+  if (tg_op = 'INSERT' or new.name is distinct from old.name)
+     and char_length(new.name) > 120 then
+    raise exception '%.name: longer than 120 characters', tg_table_name
+      using errcode = 'check_violation';
+  end if;
+  if (tg_op = 'INSERT' or new.description is distinct from old.description)
+     and char_length(new.description) > 1000 then
+    raise exception '%.description: longer than 1000 characters', tg_table_name
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end $$;
+revoke execute on function public.group_text_length_check() from public, anon, authenticated;
 
-alter table public.group_requests
-  add constraint group_requests_name_length check (char_length(name) <= 120) not valid,
-  add constraint group_requests_description_length
-    check (description is null or char_length(description) <= 1000) not valid;
+comment on function public.group_text_length_check() is
+  'Trigger function on groups and group_requests: refuses a name over 120 or a description over 1000 characters when the value is inserted or changed. Unchanged values are not re-checked, so a row stored before the limit still takes unrelated updates. SECURITY INVOKER; raises check_violation.';
+
+create trigger groups_text_length_check
+  before insert or update of name, description on public.groups
+  for each row execute function public.group_text_length_check();
+
+create trigger group_requests_text_length_check
+  before insert or update of name, description on public.group_requests
+  for each row execute function public.group_text_length_check();
 
 -- The body is unchanged apart from the length check after the blank-name
 -- check, which runs on the trimmed values group_create_for() stores.

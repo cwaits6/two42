@@ -728,11 +728,10 @@ select is(
 -- ── 9. Length limits: the same ones the forms enforce ───────────────────────
 -- Org A is back on approval (section 7). The admin path reaches group_create()
 -- and the groups INSERT policy in every mode; the member path files requests.
-select ok(
-  (select count(*) = 4 from pg_constraint where conname in (
-    'groups_name_length', 'groups_description_length',
-    'group_requests_name_length', 'group_requests_description_length')),
-  'groups and group_requests carry name and description length checks');
+select has_trigger('public', 'groups', 'groups_text_length_check',
+  'groups checks name and description length on write');
+select has_trigger('public', 'group_requests', 'group_requests_text_length_check',
+  'group_requests checks name and description length on write');
 
 do $$
 declare
@@ -816,6 +815,54 @@ select is(current_setting('gc.s9_request_desc_err'), '23514',
   'a group request with a description over 1000 characters fails its check');
 select is(current_setting('gc.s9_requested')::int, 1,
   'positive control: a request at both limits is filed');
+
+-- Rows stored before the limit existed: the trigger is lifted for this
+-- transaction only so the fixture can reproduce them; the rollback restores it.
+do $$
+declare
+  org_a uuid := current_setting('gc.org_a')::uuid;
+  owner_a uuid := current_setting('gc.owner_a')::uuid;
+  member_a1 uuid := current_setting('gc.member_a1')::uuid;
+  old_request uuid; old_group uuid;
+  declined bigint; group_updated bigint; rename_err text := 'none';
+begin
+  alter table public.group_requests disable trigger group_requests_text_length_check;
+  alter table public.groups disable trigger groups_text_length_check;
+  insert into public.group_requests (org_id, requested_by, name)
+    values (org_a, member_a1, repeat('o', 200)) returning id into old_request;
+  insert into public.groups (org_id, name) values (org_a, repeat('o', 200)) returning id into old_group;
+  alter table public.group_requests enable trigger group_requests_text_length_check;
+  alter table public.groups enable trigger groups_text_length_check;
+
+  set local role authenticated;
+  perform set_config('request.headers', '{}', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_a)::text, true);
+
+  update public.group_requests
+    set status = 'declined', reviewed_by = owner_a, reviewed_at = now()
+    where id = old_request and org_id = org_a;
+  get diagnostics declined = row_count;
+  update public.groups set description = 'Thursdays at seven'
+    where id = old_group and org_id = org_a;
+  get diagnostics group_updated = row_count;
+  begin
+    update public.groups set name = repeat('o', 201) where id = old_group and org_id = org_a;
+  exception when others then
+    rename_err := sqlstate;
+  end;
+
+  reset role;
+  perform set_config('gc.s9_old_declined', declined::text, true);
+  perform set_config('gc.s9_old_group_updated', group_updated::text, true);
+  perform set_config('gc.s9_old_rename_err', rename_err, true);
+end $$;
+
+select is(current_setting('gc.s9_old_declined')::int, 1,
+  'an over-long request filed before the limit can still be declined');
+select is(current_setting('gc.s9_old_group_updated')::int, 1,
+  'an over-long group stored before the limit still takes an unrelated update');
+select is(current_setting('gc.s9_old_rename_err'), '23514',
+  'but renaming it to another over-long name is refused');
 
 select * from finish();
 rollback;
