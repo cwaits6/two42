@@ -130,6 +130,7 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
                       size="lg"
                       variant="outline"
                       className="text-lg"
+                      nativeButton={false}
                       render={<Link href={`/platform/organizations/${org.id}`} />}
                     >
                       Manage
