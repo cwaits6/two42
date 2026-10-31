@@ -267,9 +267,13 @@ export function GroupLeadersDialog({
   // A write can finish after the dialog has moved to another group; its
   // results must not land on that group's roster.
   const activeGroupId = useRef(groupId);
+  // Identifies the latest write, so an older one cannot clear its busy state.
+  const writeSeq = useRef(0);
 
   useEffect(() => {
     activeGroupId.current = groupId;
+    writeSeq.current += 1;
+    setBusy(false);
     if (!groupId) return;
     let cancelled = false;
     setRoster(null);
@@ -311,6 +315,7 @@ export function GroupLeadersDialog({
   async function handleAdd({ person, inGroup }: Candidate) {
     if (!group || mode.kind !== "add") return;
     const replacing = mode.replacing;
+    const seq = ++writeSeq.current;
     setBusy(true);
     setError(null);
     try {
@@ -337,12 +342,13 @@ export function GroupLeadersDialog({
       if (activeGroupId.current !== group.id) return;
       changeMode({ kind: "leaders" });
     } finally {
-      setBusy(false);
+      if (writeSeq.current === seq) setBusy(false);
     }
   }
 
   async function handleRemove(person: LeaderPerson) {
     if (!group) return;
+    const seq = ++writeSeq.current;
     setBusy(true);
     setError(null);
     try {
@@ -353,7 +359,7 @@ export function GroupLeadersDialog({
       }
       await refresh(group.id);
     } finally {
-      setBusy(false);
+      if (writeSeq.current === seq) setBusy(false);
     }
   }
 

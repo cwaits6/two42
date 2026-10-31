@@ -201,4 +201,21 @@ describe("GroupLeadersDialog when a write finishes after it moves to another gro
     expect(container.querySelector('button[aria-label="Remove Ben Okafor as leader"]')).not.toBeNull();
     expect(container.textContent).not.toContain("This group has no leader yet.");
   });
+
+  it("lets the admin act on the other group while the write is still pending", async () => {
+    client = stubClient(
+      [
+        { data: [{ profile_id: "a", role: "leader" }], error: null },
+        { data: [{ profile_id: "b", role: "leader" }], error: null },
+      ],
+      [new Promise<Result>(() => {})],
+    );
+    await render();
+
+    await click("Remove Ada Lovelace as leader");
+    await render({ id: "h", name: "Thursday Group" });
+
+    const remove = container.querySelector<HTMLButtonElement>('button[aria-label="Remove Ben Okafor as leader"]');
+    expect(remove?.disabled).toBe(false);
+  });
 });
