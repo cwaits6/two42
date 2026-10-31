@@ -6,7 +6,8 @@
 -- roster UI relies on: the RLS arms a leader and a plain member hit when
 -- attaching labels, changing roles, removing and adding members, deleting a
 -- label (which detaches it everywhere), name uniqueness, the colour shape,
--- and the cross-org floor. Every "cannot" has a paired positive control so
+-- the cross-org floor, and the church admin's writes on a group they are not
+-- in. Every "cannot" has a paired positive control so
 -- the suite cannot go green by rejecting everything.
 --
 -- Run locally (rollback-safe, never mutates the shared local stack):
@@ -625,6 +626,146 @@ select is(current_setting('gr.back_is_lead'), 'true',
   'approved again, the person is a team lead with no re-adding');
 select is(current_setting('gr.back_settings_updated')::int, 1,
   'approved again, the team lead changes serving settings');
+
+-- ── 10. A church admin manages the leaders of a group they are not in ───────
+-- Admin › Groups writes through the admin arm alone: owner_a is not in A2,
+-- so no leader arm can satisfy these writes. member_a4 is a directory person
+-- in no group. Writes report row counts, since a write RLS filters to
+-- nothing reports success.
+do $$
+declare
+  org_a uuid := current_setting('gr.org_a')::uuid;
+  member_a4 uuid := gen_random_uuid();
+begin
+  insert into public.access_requests (org_id, name, email, status)
+    values (org_a, 'Member A4', 'member-a4@group-roster.example.test', 'approved');
+  insert into auth.users (id, email) values (member_a4, 'member-a4@group-roster.example.test');
+  perform set_config('gr.member_a4', member_a4::text, true);
+  perform set_config('gr.owner_a',
+    (select id from auth.users where email = 'owner-a@group-roster.example.test')::text, true);
+end $$;
+
+select is(
+  (select role from public.profiles where id = current_setting('gr.owner_a')::uuid),
+  'admin', 'owner_a is the church admin of org A');
+select is(
+  (select count(*)::int from public.group_members
+    where group_id = current_setting('gr.grp_a2')::uuid
+      and profile_id = current_setting('gr.owner_a')::uuid),
+  0, 'the church admin is not in A2, so only the admin arm applies there');
+
+do $$
+declare
+  org_b uuid := current_setting('gr.org_b')::uuid;
+  owner_a uuid := current_setting('gr.owner_a')::uuid;
+  member_a4 uuid := current_setting('gr.member_a4')::uuid;
+  grp_a2 uuid := current_setting('gr.grp_a2')::uuid;
+  m_a2 uuid := current_setting('gr.m_a2')::uuid;
+  inserted_org uuid; inserted_id uuid;
+  promoted bigint; demoted bigint; forged_err text := 'none';
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_a)::text, true);
+  perform set_config('request.headers', '{}', true);
+
+  -- No org_id in the payload: the column DEFAULT resolves it.
+  insert into public.group_members (group_id, profile_id, role)
+    values (grp_a2, member_a4, 'leader')
+    returning id, org_id into inserted_id, inserted_org;
+
+  update public.group_members set role = 'leader' where id = m_a2 and group_id = grp_a2;
+  get diagnostics promoted = row_count;
+  update public.group_members set role = 'member' where id = m_a2 and group_id = grp_a2;
+  get diagnostics demoted = row_count;
+
+  begin
+    insert into public.group_members (org_id, group_id, profile_id, role)
+      values (org_b, grp_a2, member_a4, 'member');
+  exception when others then
+    forged_err := sqlstate;
+  end;
+
+  reset role;
+  perform set_config('gr.admin_inserted_id', inserted_id::text, true);
+  perform set_config('gr.admin_inserted_org', inserted_org::text, true);
+  perform set_config('gr.admin_promoted', promoted::text, true);
+  perform set_config('gr.admin_demoted', demoted::text, true);
+  perform set_config('gr.admin_forged_err', forged_err, true);
+end $$;
+
+select is(current_setting('gr.admin_inserted_org'), current_setting('gr.org_a'),
+  'a church admin adds a directory person to A2 as leader, stamped with their own org');
+select is(
+  (select role from public.group_members where id = current_setting('gr.admin_inserted_id')::uuid),
+  'leader', 'the added person leads A2');
+select is(current_setting('gr.admin_promoted')::int, 1,
+  'a church admin promotes a member of A2 to leader');
+select is(current_setting('gr.admin_demoted')::int, 1,
+  'a church admin demotes that leader back to member');
+select is(current_setting('gr.admin_forged_err'), '42501',
+  'a church admin cannot add a membership carrying another org''s id');
+
+-- Org B's church admin is an admin too, but of another church.
+do $$
+declare
+  owner_b uuid := current_setting('gr.owner_b')::uuid;
+  member_a4 uuid := current_setting('gr.member_a4')::uuid;
+  grp_a2 uuid := current_setting('gr.grp_a2')::uuid;
+  m_a2 uuid := current_setting('gr.m_a2')::uuid;
+  insert_err text := 'none'; updated bigint; deleted bigint;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_b)::text, true);
+  perform set_config('request.headers', '{}', true);
+
+  begin
+    insert into public.group_members (org_id, group_id, profile_id, role)
+      values (current_setting('gr.org_a')::uuid, grp_a2, member_a4, 'member');
+  exception when others then
+    insert_err := sqlstate;
+  end;
+  update public.group_members set role = 'leader' where id = m_a2;
+  get diagnostics updated = row_count;
+  delete from public.group_members where group_id = grp_a2;
+  get diagnostics deleted = row_count;
+
+  reset role;
+  perform set_config('gr.b_admin_insert_err', insert_err, true);
+  perform set_config('gr.b_admin_updated', updated::text, true);
+  perform set_config('gr.b_admin_deleted', deleted::text, true);
+end $$;
+
+select is(current_setting('gr.b_admin_insert_err'), '42501',
+  'an org-B church admin cannot add anyone to an org-A group');
+select is(current_setting('gr.b_admin_updated')::int, 0,
+  'an org-B church admin changes no roles in an org-A group');
+select is(current_setting('gr.b_admin_deleted')::int, 0,
+  'an org-B church admin removes nobody from an org-A group');
+select is(
+  (select count(*)::int from public.group_members where group_id = current_setting('gr.grp_a2')::uuid),
+  2, 'A2 keeps both members after the org-B attempts');
+
+-- Removing someone as a church admin, last: the counts above rely on them.
+do $$
+declare
+  owner_a uuid := current_setting('gr.owner_a')::uuid;
+  grp_a2 uuid := current_setting('gr.grp_a2')::uuid;
+  removed bigint;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_a)::text, true);
+  perform set_config('request.headers', '{}', true);
+
+  delete from public.group_members
+    where id = current_setting('gr.admin_inserted_id')::uuid and group_id = grp_a2;
+  get diagnostics removed = row_count;
+
+  reset role;
+  perform set_config('gr.admin_removed', removed::text, true);
+end $$;
+
+select is(current_setting('gr.admin_removed')::int, 1,
+  'a church admin removes someone from a group they are not in');
 
 select * from finish();
 rollback;
