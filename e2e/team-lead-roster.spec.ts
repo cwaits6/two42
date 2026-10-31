@@ -101,8 +101,10 @@ test.describe("a team with serving signups off", () => {
   test.describe("its team lead", () => {
     test.use({ persona: "twoGroups" });
 
-    test("still gets the roster control", async ({ page }) => {
-      await page.goto(TEAM_PATH);
+    test("finds the team on the Serving page and still gets the roster control", async ({ page }) => {
+      await page.goto(`/g/${GROUP_B}/serving`);
+      await page.getByRole("link", { name: new RegExp(TEAM_NAME) }).click();
+      await expect(page).toHaveURL(new RegExp(`${TEAM_PATH}$`));
       const roster = page.getByRole("region", { name: "Team members" });
       await expect(roster.getByText(MEMBER)).toBeVisible();
       await expect(roster.getByRole("button", { name: "Add person" })).toBeVisible();
@@ -112,7 +114,11 @@ test.describe("a team with serving signups off", () => {
   test.describe("a group member who is not on the team", () => {
     test.use({ persona: "oneGroup" });
 
-    test("is sent back to the Serving page", async ({ page }) => {
+    test("is not linked to the team and is sent back to the Serving page", async ({ page }) => {
+      await page.goto(`/g/${GROUP_B}/serving`);
+      await expect(page.getByRole("heading", { name: "Serving", exact: true })).toBeVisible();
+      await expect(page.getByText(TEAM_NAME)).toHaveCount(0);
+
       await page.goto(TEAM_PATH);
       await expect(page).toHaveURL(new RegExp(`/g/${GROUP_B}/serving$`));
       await expect(page.getByRole("region", { name: "Team members" })).toHaveCount(0);

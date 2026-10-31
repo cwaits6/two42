@@ -106,9 +106,15 @@ export default async function ServingPage({
   }
 
   const isEnabled = (id: string) => settingsMap.get(id)?.enabled === true;
-  // Signup teams (Sunday signups on) and roster-only standing roles.
+  // Signup teams (Sunday signups on) and roster-only standing roles. A team
+  // lead also sees their own signups-off team: this card is their only link
+  // to its roster.
   const signupTeams = groups.filter((g) => isEnabled(g.id));
-  const roleGroups = groups.filter((g) => g.is_serving_role && !isEnabled(g.id));
+  const roleGroups = groups.filter(
+    (g) =>
+      !isEnabled(g.id) &&
+      (g.is_serving_role || membershipMap.get(g.id) === true)
+  );
 
   // Coverage counts for each signup team's upcoming window
   const today = toDateString(new Date());
