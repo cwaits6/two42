@@ -176,6 +176,11 @@ export interface Event {
   recurrence_until: string | null;
   // Per-occurrence exception support
   series_id: string | null;           // set on exception events; points to the anchor series
+  // This event's or series' choice of what calendar subscriptions carry;
+  // null follows the group's setting. Exception rows follow their series.
+  calendar_meeting_details: boolean | null;
+  calendar_event_notes: boolean | null;
+  calendar_event_location: boolean | null;
   series_occurrence_date: string | null; // the original occurrence ISO date this row replaces
   is_cancelled: boolean;                 // an exception row that removes its date instead of replacing it
   // Meeting / video call (set on the series anchor; exceptions inherit)
@@ -500,8 +505,10 @@ export interface GroupSettings {
   serving_link_mode: "signed" | "login" | null;
   /** Calendar subscriptions carry meeting links, IDs and passcodes; off, they link to the event page. */
   calendar_meeting_details: boolean;
-  /** Calendar subscriptions carry event descriptions and locations; off, they link to the event page. */
+  /** Calendar subscriptions carry event descriptions; off, they link to the event page. */
   calendar_event_notes: boolean;
+  /** Calendar subscriptions carry event locations; off, they link to the event page. */
+  calendar_event_location: boolean;
   updated_by: string | null;
   updated_at: string;
 }

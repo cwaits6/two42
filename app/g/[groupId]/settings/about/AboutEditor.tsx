@@ -475,6 +475,7 @@ export function AboutEditor({
         initial={{
           calendar_meeting_details: initialSettings.calendar_meeting_details,
           calendar_event_notes: initialSettings.calendar_event_notes,
+          calendar_event_location: initialSettings.calendar_event_location,
         }}
       />
 

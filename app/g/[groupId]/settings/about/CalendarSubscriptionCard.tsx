@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { createClient } from "@/lib/supabase/client";
 
-type Setting = "calendar_meeting_details" | "calendar_event_notes";
+type Setting = "calendar_meeting_details" | "calendar_event_notes" | "calendar_event_location";
 
 const ROWS: {
   key: Setting;
@@ -25,10 +25,17 @@ const ROWS: {
   },
   {
     key: "calendar_event_notes",
-    label: "Notes and location",
-    description: "Each event's description and location.",
-    on: "Notes and locations now go to members' calendars.",
-    off: "Notes and locations now stay on the event page.",
+    label: "Notes",
+    description: "Each event's description.",
+    on: "Notes now go to members' calendars.",
+    off: "Notes now stay on the event page.",
+  },
+  {
+    key: "calendar_event_location",
+    label: "Location",
+    description: "Where each event is.",
+    on: "Locations now go to members' calendars.",
+    off: "Locations now stay on the event page.",
   },
 ];
 
@@ -78,7 +85,7 @@ export function CalendarSubscriptionCard({
         <CardDescription className="text-base">
           What members&apos; calendar apps get when they subscribe to this group&apos;s calendar.
           Anything turned off is replaced by a link to the event page, where signed-in members see
-          everything.
+          everything. An event can choose differently when it&apos;s added or edited.
         </CardDescription>
       </CardHeader>
       <CardContent className="divide-y divide-border">

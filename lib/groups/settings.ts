@@ -11,6 +11,7 @@ export type GroupSettingsValues = Pick<
   | "serving_link_mode"
   | "calendar_meeting_details"
   | "calendar_event_notes"
+  | "calendar_event_location"
 >;
 
 export const GROUP_SETTINGS_DEFAULTS: GroupSettingsValues = {
@@ -21,6 +22,7 @@ export const GROUP_SETTINGS_DEFAULTS: GroupSettingsValues = {
   serving_link_mode: null,
   calendar_meeting_details: true,
   calendar_event_notes: true,
+  calendar_event_location: true,
 };
 
 /**
@@ -38,7 +40,7 @@ export async function getGroupSettings(
   const { data, error } = await supabase
     .from("group_settings")
     .select(
-      "weekly_zoom_url, zoom_meeting_time, weekly_prayer_call_url, weekly_prayer_call_time, serving_link_mode, calendar_meeting_details, calendar_event_notes"
+      "weekly_zoom_url, zoom_meeting_time, weekly_prayer_call_url, weekly_prayer_call_time, serving_link_mode, calendar_meeting_details, calendar_event_notes, calendar_event_location"
     )
     .eq("org_id", orgId)
     .eq("group_id", groupId)
@@ -59,6 +61,7 @@ export async function getGroupSettings(
         : null,
     calendar_meeting_details: data.calendar_meeting_details ?? true,
     calendar_event_notes: data.calendar_event_notes ?? true,
+    calendar_event_location: data.calendar_event_location ?? true,
   };
 }
 

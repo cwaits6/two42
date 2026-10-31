@@ -25,6 +25,7 @@ function prefixed(prefix: string | undefined, title: string): string {
 export interface CalendarKeepOut {
   joinDetails: boolean;
   notes: boolean;
+  location: boolean;
   eventPageUrl: string;
 }
 
@@ -53,19 +54,21 @@ export function eventToICSAttributes(
   const meeting = opts.meeting ?? event;
   const showJoin = !opts.keepOut?.joinDetails;
   const showNotes = !opts.keepOut?.notes;
-  const heldJoin = !showJoin && hasMeeting(meeting);
-  const heldNotes = !showNotes && Boolean(event.description || event.location);
-  const held = heldJoin && heldNotes
-    ? "Join details, notes and location"
-    : heldJoin
-      ? "Join details"
-      : heldNotes
-        ? "Notes and location"
-        : null;
+  const showLocation = !opts.keepOut?.location;
+  // Only what the event has counts as held back; an empty field kept out is nothing to point to.
+  const held = [
+    !showJoin && hasMeeting(meeting) && "join details",
+    !showNotes && event.description && "notes",
+    !showLocation && event.location && "location",
+  ].filter((part): part is string => Boolean(part));
+  const heldList =
+    held.length > 1 ? `${held.slice(0, -1).join(", ")} and ${held[held.length - 1]}` : held[0];
 
   const notes = [
     notesWithMeeting(showNotes ? event.description : null, showJoin ? meeting : null),
-    held && opts.keepOut ? `${held} are on the event page: ${opts.keepOut.eventPageUrl}` : null,
+    heldList && opts.keepOut
+      ? `See the event page for the ${heldList}: ${opts.keepOut.eventPageUrl}`
+      : null,
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -74,10 +77,10 @@ export function eventToICSAttributes(
   }
   if (showJoin && meeting.meeting_url) {
     attrs.url = meeting.meeting_url;
-  } else if (held && opts.keepOut) {
+  } else if (heldList && opts.keepOut) {
     attrs.url = opts.keepOut.eventPageUrl;
   }
-  if (showNotes && event.location) {
+  if (showLocation && event.location) {
     attrs.location = event.location;
   }
 

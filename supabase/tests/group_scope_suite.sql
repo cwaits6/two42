@@ -778,6 +778,17 @@ select col_not_null('public', 'group_settings', 'calendar_event_notes',
   'group_settings.calendar_event_notes is not null');
 select col_default_is('public', 'group_settings', 'calendar_event_notes', 'true',
   'group_settings.calendar_event_notes defaults to on');
+select col_not_null('public', 'group_settings', 'calendar_event_location',
+  'group_settings.calendar_event_location is not null');
+select col_default_is('public', 'group_settings', 'calendar_event_location', 'true',
+  'group_settings.calendar_event_location defaults to on');
+-- An event's own choice is optional: null follows the group.
+select col_is_null('public', 'events', 'calendar_meeting_details',
+  'events.calendar_meeting_details may be null');
+select col_is_null('public', 'events', 'calendar_event_notes',
+  'events.calendar_event_notes may be null');
+select col_is_null('public', 'events', 'calendar_event_location',
+  'events.calendar_event_location may be null');
 
 select * from finish();
 rollback;

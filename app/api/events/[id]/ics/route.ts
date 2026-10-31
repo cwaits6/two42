@@ -8,7 +8,8 @@ import type { Event } from "@/lib/types";
 import type { MeetingFields } from "@/lib/meetings";
 import { isMemberRole } from "@/lib/roles";
 import { orgTimeZoneById } from "@/lib/time/orgZone";
-import { calendarKeepOutByGroup, keepOutFor } from "@/lib/calendar/keepOut";
+import { calendarSharingByGroup, keepOutFor } from "@/lib/calendar/keepOut";
+import type { SharingColumns } from "@/lib/calendar/sharing";
 
 export async function GET(
   request: Request,
@@ -119,12 +120,15 @@ export async function GET(
     return new Response("Event not found", { status: 404 });
   }
 
-  // An exception row inherits its series anchor's meeting.
+  // An exception row follows its series anchor's meeting and calendar sharing.
   let meeting: MeetingFields | null = typedEvent;
+  let sharingSource: SharingColumns = typedEvent;
   if (typedEvent.series_id) {
     const { data: anchor, error: anchorError } = await supabase
       .from("events")
-      .select("meeting_url, meeting_id, meeting_passcode, meeting_show_on_dashboard, meeting_lead_minutes")
+      .select(
+        "meeting_url, meeting_id, meeting_passcode, meeting_show_on_dashboard, meeting_lead_minutes, calendar_meeting_details, calendar_event_notes, calendar_event_location"
+      )
       .eq("id", typedEvent.series_id)
       .eq("org_id", sub.org_id)
       .eq("group_id", typedEvent.group_id)
@@ -134,6 +138,7 @@ export async function GET(
       return new Response("Something went wrong", { status: 500 });
     }
     meeting = anchor;
+    if (anchor) sharingSource = anchor;
   }
 
   // A subscription to a series lists its dates in the window, without the
@@ -159,9 +164,9 @@ export async function GET(
     );
   }
 
-  let keptOut: Awaited<ReturnType<typeof calendarKeepOutByGroup>>;
+  let sharing: Awaited<ReturnType<typeof calendarSharingByGroup>>;
   try {
-    keptOut = await calendarKeepOutByGroup(supabase, sub.org_id, [typedEvent.group_id]);
+    sharing = await calendarSharingByGroup(supabase, sub.org_id, [typedEvent.group_id]);
   } catch (err) {
     console.error("Failed to load calendar subscription settings for event ICS:", err);
     return new Response("Something went wrong", { status: 500 });
@@ -169,7 +174,9 @@ export async function GET(
 
   let icsString: string;
   try {
-    icsString = generateSingleEventICS(entries, meeting, (event) => keepOutFor(keptOut, event));
+    icsString = generateSingleEventICS(entries, meeting, (event) =>
+      keepOutFor(sharing, event, sharingSource)
+    );
   } catch (err) {
     console.error("ICS generation failed:", err);
     return new Response("Failed to generate calendar file", { status: 500 });

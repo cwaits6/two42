@@ -85,6 +85,7 @@ describe("getGroupSettings", () => {
         serving_link_mode: "login",
         calendar_meeting_details: false,
         calendar_event_notes: false,
+        calendar_event_location: true,
       },
       error: null,
     });
@@ -97,6 +98,7 @@ describe("getGroupSettings", () => {
       serving_link_mode: "login",
       calendar_meeting_details: false,
       calendar_event_notes: false,
+      calendar_event_location: true,
     });
   });
 

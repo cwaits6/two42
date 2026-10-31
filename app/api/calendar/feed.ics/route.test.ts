@@ -200,6 +200,7 @@ function makeServiceClient(opts: {
   memberships: Row[] | "error";
   extraEvents?: Row[];
   hidingGroups?: string[];
+  seriesShares?: boolean;
 }) {
   const predicates: Record<string, Array<[string, unknown]>> = {};
   const record = (table: string) => (filter: [string, unknown]) => {
@@ -209,7 +210,10 @@ function makeServiceClient(opts: {
     event("event-a", GROUP_A, "A event"),
     event("event-b", GROUP_B, "B event"),
     { ...event("event-x", GROUP_A, "Cancelled date"), is_cancelled: true },
-    weekly("study-a", GROUP_A, "Study", { meeting_id: "111 222 3333" }),
+    weekly("study-a", GROUP_A, "Study", {
+      meeting_id: "111 222 3333",
+      calendar_meeting_details: opts.seriesShares ?? null,
+    }),
     // One date deleted, the next one moved a day later.
     {
       ...event("deleted-a", GROUP_A, "Study"),
@@ -270,6 +274,7 @@ function makeServiceClient(opts: {
               group_id,
               calendar_meeting_details: !(opts.hidingGroups ?? []).includes(group_id),
               calendar_event_notes: true,
+              calendar_event_location: true,
             })),
             record(table)
           );
@@ -410,10 +415,26 @@ describe("GET /api/calendar/feed.ics — group boundary", () => {
     const body = (await (await GET(feedRequest())).text()).replace(/\r\n[ \t]/g, "");
 
     expect(body).not.toContain("111 222 3333");
-    expect(body).toContain("Join details are on the event page");
+    expect(body).toContain("See the event page for the join details");
     expect(body).toMatch(new RegExp(`URL[^:]*:http://localhost:3000/g/${GROUP_A}/calendar/study-a\\?occurrence=`));
     expect(predicates.group_settings).toEqual(
       expect.arrayContaining([["eq", { org_id: ORG }], ["in", { group_id: [GROUP_A] }]])
     );
+  });
+
+  it("lets a series' own choice override the group's, moved dates included", async () => {
+    const { client } = makeServiceClient({
+      memberships: memberOfAOnly,
+      hidingGroups: [GROUP_A],
+      seriesShares: true,
+    });
+    createServiceClient.mockResolvedValue(client);
+
+    const body = await (await GET(feedRequest())).text();
+    const moved = body.split("BEGIN:VEVENT").find((v) => v.includes("UID:moved-a"));
+
+    expect(body).toContain("Meeting ID: 111 222 3333");
+    expect(body).not.toContain("See the event page for the join details");
+    expect(moved).toContain("Meeting ID: 111 222 3333");
   });
 });
