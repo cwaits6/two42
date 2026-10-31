@@ -48,13 +48,14 @@ export function CalendarSubscriptionCard({
 }) {
   const supabase = useMemo(() => createClient(), []);
   const [values, setValues] = useState(initial);
-  const [saving, setSaving] = useState<Setting | null>(null);
+  // Per switch, so one save finishing never re-enables another mid-save.
+  const [saving, setSaving] = useState<ReadonlySet<Setting>>(new Set());
 
   // Each switch saves on its own: one left unsaved would read as "kept out"
   // while subscriptions still carry it.
   async function toggle(key: Setting, next: boolean) {
     setValues((v) => ({ ...v, [key]: next }));
-    setSaving(key);
+    setSaving((pending) => new Set(pending).add(key));
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -68,7 +69,11 @@ export function CalendarSubscriptionCard({
         updated_at: new Date().toISOString(),
       })
       .select("group_id");
-    setSaving(null);
+    setSaving((pending) => {
+      const still = new Set(pending);
+      still.delete(key);
+      return still;
+    });
     const row = ROWS.find((r) => r.key === key)!;
     if (error || !data?.length) {
       setValues((v) => ({ ...v, [key]: !next }));
@@ -107,7 +112,7 @@ export function CalendarSubscriptionCard({
               aria-describedby={`${row.key}-help`}
               className="mt-1 shrink-0"
               checked={values[row.key]}
-              disabled={saving === row.key}
+              disabled={saving.has(row.key)}
               onCheckedChange={(next) => toggle(row.key, next)}
             />
           </div>
