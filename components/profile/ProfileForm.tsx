@@ -179,7 +179,7 @@ type FieldErrors = Partial<
   >
 >;
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
 
 function Required() {
   return <span className="font-normal text-muted-foreground">(required)</span>;
@@ -282,7 +282,8 @@ export function ProfileForm({
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setState((prev) => ({ ...prev, [key]: value }));
-    if (key in errors) {
+    // Blur rewrites the value through the same path; an unchanged value is not a fix.
+    if (key in errors && value !== state[key]) {
       setErrors((prev) => {
         const next = { ...prev };
         delete next[key as keyof FieldErrors];

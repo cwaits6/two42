@@ -141,6 +141,26 @@ describe("ProfileForm inline errors", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it("marks an email with an empty domain segment", async () => {
+    const form = await mount({ email: "name@example..com" }, { isAdmin: true });
+    await form.submit();
+
+    expect(form.field("email").getAttribute("aria-invalid")).toBe("true");
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("keeps a field's message when it is left without a change", async () => {
+    const form = await mount({ first_name: "" });
+    await form.submit();
+    await act(async () => {
+      form.field("first_name").focus();
+      form.field("first_name").blur();
+    });
+
+    expect(form.field("first_name").getAttribute("aria-invalid")).toBe("true");
+    expect(form.message("first_name")).toBe("Enter a first name.");
+  });
+
   it("clears a field's message once it is edited", async () => {
     const form = await mount({ first_name: "", postal_code: "12" });
     await form.submit();
