@@ -45,13 +45,13 @@ vi.mock("@/components/groups/GroupDashboard", () => ({ GroupDashboard: () => nul
 vi.mock("@/components/groups/HomeLauncher", () => ({ HomeLauncher: () => null }));
 vi.mock("@/components/groups/NoGroupCard", () => ({ NoGroupCard: () => null }));
 vi.mock("@/components/states/ErrorState", () => ({ ErrorState: () => null }));
-vi.mock("./SignOutButton", () => ({ SignOutButton: () => null }));
+vi.mock("@/app/join/[token]/SignOutButton", () => ({ SignOutButton: () => null }));
 
 const { GroupDashboard } = await import("@/components/groups/GroupDashboard");
 const { HomeLauncher } = await import("@/components/groups/HomeLauncher");
 const { NoGroupCard } = await import("@/components/groups/NoGroupCard");
 const { ErrorState } = await import("@/components/states/ErrorState");
-const { SignOutButton } = await import("./SignOutButton");
+const { SignOutButton } = await import("@/app/join/[token]/SignOutButton");
 const { default: DashboardPage } = await import("./page");
 
 function childTypes(element: { props: { children?: unknown } }): unknown[] {

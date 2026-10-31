@@ -11,7 +11,7 @@ import { GroupDashboard } from "@/components/groups/GroupDashboard";
 import { HomeLauncher } from "@/components/groups/HomeLauncher";
 import { NoGroupCard } from "@/components/groups/NoGroupCard";
 import { pageTitle } from "@/lib/pageTitle";
-import { SignOutButton } from "./SignOutButton";
+import { SignOutButton } from "@/app/join/[token]/SignOutButton";
 
 export const generateMetadata = () => pageTitle("Home");
 
