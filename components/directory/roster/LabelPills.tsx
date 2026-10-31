@@ -4,7 +4,7 @@ import type { RosterLabel } from "@/components/directory/useGroupRoster";
 export function LabelPills({ labels }: { labels: RosterLabel[] }) {
   if (labels.length === 0) return null;
   return (
-    <span className="flex shrink-0 flex-wrap justify-end gap-1.5">
+    <span className="flex flex-wrap gap-1.5">
       {labels.map((label) => (
         <span
           key={label.id}

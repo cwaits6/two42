@@ -1,17 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import { Users } from "lucide-react";
 import { useDiscoveryOn } from "@/components/groups/GroupProvider";
 import { CreateGroupAction } from "@/components/groups/CreateGroupAction";
-import { DiscoveryRow, LOAD_FAILED_TEXT, NO_GROUPS_TEXT } from "@/components/groups/FindAGroupList";
+import { DiscoveryRow, NO_GROUPS_TEXT } from "@/components/groups/FindAGroupList";
 import { useDiscoverableGroups } from "@/components/groups/useDiscoverableGroups";
-import { groupInitials, type ActiveGroup } from "@/lib/groups/active";
+import type { ActiveGroup } from "@/lib/groups/active";
 import { memberCountLabel, type DiscoverableGroup } from "@/lib/groups/joining";
 import { BackLink } from "@/components/directory/BackLink";
 import { DirRow } from "@/components/directory/DirRow";
 import { DirectoryLoadState } from "@/components/directory/DirectoryLoadState";
+import { ErrorState } from "@/components/states/ErrorState";
 import { useDirectory } from "@/components/directory/DirectoryContext";
+import { GroupAvatar } from "@/components/directory/GroupAvatar";
 import { GroupCard } from "@/components/directory/GroupCard";
+import { EmptyState } from "@/components/states/EmptyState";
 import { PersonCard } from "@/components/directory/PersonCard";
 import { TwoPane, scrollToPanel } from "@/components/directory/TwoPane";
 import type { DirectoryProfile } from "@/lib/types";
@@ -73,14 +77,16 @@ function GroupsTabInner() {
     return (
       <>
         <CreateGroupAction className="mb-5" />
-        <p className="py-8 text-center text-base text-muted-foreground">You are not in a group yet.</p>
-        {discoveryOn && discoveryReady && (
-          <p className="text-center text-base text-muted-foreground">{NO_GROUPS_TEXT}</p>
-        )}
+        <EmptyState
+          icon={Users}
+          message={
+            discoveryOn && discoveryReady
+              ? `You are not in a group yet. ${NO_GROUPS_TEXT}`
+              : "You are not in a group yet."
+          }
+        />
         {discoveryOn && discovery.error && (
-          <p role="alert" className="text-center text-base text-muted-foreground">
-            {LOAD_FAILED_TEXT}
-          </p>
+          <ErrorState thing="groups to join" onRetry={discovery.reload} className="mt-6" />
         )}
       </>
     );
@@ -98,14 +104,7 @@ function GroupsTabInner() {
                   <DirRow
                     onClick={() => openPanel({ kind: "group", group: item.group })}
                     selected={item.group.id === selectedGroupId}
-                    avatar={
-                      <span
-                        className="flex h-12 w-12 items-center justify-center rounded-full font-bold text-white"
-                        style={{ backgroundColor: item.group.color }}
-                      >
-                        {groupInitials(item.group.name)}
-                      </span>
-                    }
+                    avatar={<GroupAvatar name={item.group.name} color={item.group.color} />}
                     title={item.group.name}
                     subtitle={memberCountLabel(item.count)}
                     trailing={
@@ -158,9 +157,7 @@ function GroupsTabInner() {
         placeholder="Choose one of your groups to see who's in it."
       />
       {discoveryOn && discovery.error && (
-        <p role="alert" className="mt-6 text-base text-muted-foreground">
-          {LOAD_FAILED_TEXT}
-        </p>
+        <ErrorState thing="groups to join" onRetry={discovery.reload} className="mt-6" />
       )}
       {!discoveryOn && (
         <p className="mt-6 text-base text-muted-foreground">

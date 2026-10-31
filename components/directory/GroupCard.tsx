@@ -1,10 +1,12 @@
 "use client";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { formatPhone } from "@/lib/sanitize";
 import { displayName, initials } from "@/lib/names";
-import { groupInitials, type ActiveGroup } from "@/lib/groups/active";
-import { DirRow } from "@/components/directory/DirRow";
+import type { ActiveGroup } from "@/lib/groups/active";
+import { DirRow, PhoneText } from "@/components/directory/DirRow";
+import { EmptyState } from "@/components/states/EmptyState";
+import { GroupAvatar } from "@/components/directory/GroupAvatar";
+import { Users } from "lucide-react";
 import type { DirectoryProfile } from "@/lib/types";
 
 interface GroupCardProps {
@@ -18,12 +20,7 @@ export function GroupCard({ group, members, onOpenPerson }: GroupCardProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4">
-        <div
-          className="flex h-13 w-13 shrink-0 items-center justify-center rounded-full text-lg font-bold text-white"
-          style={{ backgroundColor: group.color }}
-        >
-          {groupInitials(group.name)}
-        </div>
+        <GroupAvatar name={group.name} color={group.color} className="h-13 w-13 text-lg" />
         <div className="min-w-0">
           <h2 className="font-serif text-2xl md:text-3xl font-medium leading-tight text-foreground">
             {group.name}
@@ -35,9 +32,7 @@ export function GroupCard({ group, members, onOpenPerson }: GroupCardProps) {
       </div>
 
       {members.length === 0 ? (
-        <p className="text-base text-muted-foreground py-4 text-center">
-          No members in this group yet.
-        </p>
+        <EmptyState icon={Users} message="No members in this group yet." />
       ) : (
         <div className="space-y-2.5">
           {members.map((m) => (
@@ -53,7 +48,7 @@ export function GroupCard({ group, members, onOpenPerson }: GroupCardProps) {
                 </Avatar>
               }
               title={displayName(m)}
-              subtitle={m.phone_mobile ? formatPhone(m.phone_mobile) : undefined}
+              subtitle={m.phone_mobile ? <PhoneText phone={m.phone_mobile} /> : undefined}
             />
           ))}
         </div>

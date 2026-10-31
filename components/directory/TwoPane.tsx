@@ -20,7 +20,7 @@ export function TwoPane({ list, panel, placeholder, above }: TwoPaneProps) {
   return (
     <>
       {above && <div className={listClass}>{above}</div>}
-      <div className="grid gap-7 lg:grid-cols-[380px_1fr] lg:items-start">
+      <div className="grid gap-7 lg:grid-cols-2 lg:items-start">
         <div className={listClass}>{list}</div>
         <div className={panel ? "" : "hidden lg:block"}>
           {panel ? (

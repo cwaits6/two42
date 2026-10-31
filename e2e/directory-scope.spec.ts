@@ -64,11 +64,11 @@ test.describe("a member of two groups", () => {
     await expect(zoe).toBeVisible();
   });
 
-  test("the chosen scope carries from Members to Families", async ({ page }) => {
+  test("the chosen scope carries from Members to Households", async ({ page }) => {
     await page.goto(`/g/${GROUP_B}/directory`);
     await chooseScope(page, "Group C");
 
-    await page.getByRole("navigation", { name: "Directory sections" }).getByRole("link", { name: "Families" }).click();
+    await page.getByRole("navigation", { name: "Directory sections" }).getByRole("link", { name: "Households" }).click();
     await expect(page).toHaveURL(`/g/${GROUP_B}/directory/families`);
     await expect(scopeControl(page)).toContainText("Group C");
     await expect(page.getByRole("button", { name: "Demoski" })).toBeVisible();

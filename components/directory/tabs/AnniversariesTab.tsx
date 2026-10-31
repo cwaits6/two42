@@ -3,7 +3,8 @@
 import { useMemo } from "react";
 import { Heart } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { DirRow, DirSectionLabel } from "@/components/directory/DirRow";
+import { DirRow, DirSection } from "@/components/directory/DirRow";
+import { EmptyState } from "@/components/states/EmptyState";
 import { DirectoryLoadState } from "@/components/directory/DirectoryLoadState";
 import { useDirectory } from "@/components/directory/DirectoryContext";
 import {
@@ -85,49 +86,44 @@ function AnniversariesTabInner() {
 
   if (months.length === 0) {
     return (
-      <p className="py-8 text-center text-base text-muted-foreground">
-        No anniversaries on record yet.
-      </p>
+      <EmptyState icon={Heart} message="No anniversaries on record yet." />
     );
   }
 
   return months.map((month) => (
-    <div key={month}>
-      <DirSectionLabel>
-        {MONTH_NAMES[month - 1]}
-        {month === currentMonth && " — this month"}
-      </DirSectionLabel>
-      <div className="space-y-2.5">
-        {byMonth[month].map((entry) => {
-          const soon = entry.daysUntil <= 7;
-          return (
-            <DirRow
-              key={entry.familyId}
-              href={`${basePath}/families?family=${entry.familyId}`}
-              highlight={soon}
-              avatar={
-                <Avatar className="h-12 w-12">
-                  {entry.photoUrl && <AvatarImage src={entry.photoUrl} alt={entry.coupleName} />}
-                  <AvatarFallback className="bg-brand-primary text-white">
-                    {entry.initial}
-                  </AvatarFallback>
-                </Avatar>
-              }
-              title={entry.coupleName}
-              subtitle={`${formatNextOccurrence(entry.month, entry.day, today)} · married ${entry.marriedYear}`}
-              trailing={
-                soon ? (
-                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-brand-accent bg-brand-bg-light px-3.5 py-1 text-sm font-semibold text-brand-accent-text">
-                    <Heart className="h-4 w-4" aria-hidden="true" />
-                    {entry.years} years
-                  </span>
-                ) : undefined
-              }
-            />
-          );
-        })}
-      </div>
-    </div>
+    <DirSection
+      key={month}
+      label={`${MONTH_NAMES[month - 1]}${month === currentMonth ? " — this month" : ""}`}
+    >
+      {byMonth[month].map((entry) => {
+        const soon = entry.daysUntil <= 7;
+        return (
+          <DirRow
+            key={entry.familyId}
+            href={`${basePath}/families?family=${entry.familyId}`}
+            highlight={soon}
+            avatar={
+              <Avatar className="h-12 w-12">
+                {entry.photoUrl && <AvatarImage src={entry.photoUrl} alt={entry.coupleName} />}
+                <AvatarFallback className="bg-brand-primary text-white">
+                  {entry.initial}
+                </AvatarFallback>
+              </Avatar>
+            }
+            title={entry.coupleName}
+            subtitle={`${formatNextOccurrence(entry.month, entry.day, today)} · married ${entry.marriedYear}`}
+            trailing={
+              soon ? (
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-brand-accent bg-brand-bg-light px-3.5 py-1 text-sm font-semibold text-brand-accent-text">
+                  <Heart className="h-4 w-4" aria-hidden="true" />
+                  {entry.years} years
+                </span>
+              ) : undefined
+            }
+          />
+        );
+      })}
+    </DirSection>
   ));
 }
 

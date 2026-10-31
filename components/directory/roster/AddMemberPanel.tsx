@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Users } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DirRow } from "@/components/directory/DirRow";
+import { DirRow, PhoneText } from "@/components/directory/DirRow";
+import { EmptyState } from "@/components/states/EmptyState";
 import { displayName, initials } from "@/lib/names";
-import { formatPhone } from "@/lib/sanitize";
 import type { DirectoryProfile } from "@/lib/types";
 
 interface AddMemberPanelProps {
@@ -56,11 +56,14 @@ export function AddMemberPanel({ groupName, candidates, busyId, onAdd, onDone }:
       </div>
 
       {visible.length === 0 ? (
-        <p className="py-8 text-center text-base text-muted-foreground">
-          {query.trim()
-            ? "No one matches your search."
-            : `Everyone you can see is already in ${groupName}.`}
-        </p>
+        <EmptyState
+          icon={Users}
+          message={
+            query.trim()
+              ? "No one matches your search."
+              : `Everyone you can see is already in ${groupName}.`
+          }
+        />
       ) : (
         <div className="space-y-2.5">
           {visible.map((p) => (
@@ -73,7 +76,7 @@ export function AddMemberPanel({ groupName, candidates, busyId, onAdd, onDone }:
                 </Avatar>
               }
               title={displayName(p)}
-              subtitle={p.phone_mobile ? formatPhone(p.phone_mobile) : undefined}
+              subtitle={p.phone_mobile ? <PhoneText phone={p.phone_mobile} /> : undefined}
               actions={
                 <Button
                   variant="outline"

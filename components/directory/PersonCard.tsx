@@ -48,8 +48,9 @@ function ContactLine({
   );
 }
 
-const telLink =
+const contactLink =
   "text-brand-primary-text font-semibold underline underline-offset-4 hover:text-foreground";
+const telLink = `${contactLink} whitespace-nowrap`;
 
 interface PersonCardProps {
   profile: DirectoryProfile;
@@ -83,7 +84,7 @@ export function PersonCard({ profile, family }: PersonCardProps) {
           {profile.preferred_name &&
             profile.first_name &&
             profile.preferred_name !== profile.first_name && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-base text-muted-foreground">
                 ({profile.first_name} {profile.last_name})
               </p>
             )}
@@ -118,7 +119,7 @@ export function PersonCard({ profile, family }: PersonCardProps) {
             <span className="text-base text-muted-foreground">mobile</span>
             <a
               href={`sms:${profile.phone_mobile}`}
-              className="ml-auto flex items-center gap-1.5 text-brand-primary-text hover:text-foreground"
+              className="ml-auto flex min-h-11 items-center gap-1.5 text-brand-primary-text hover:text-foreground"
             >
               <MessageSquare className="h-5 w-5" aria-hidden="true" />
               <span className="text-base font-medium">Text</span>
@@ -133,7 +134,7 @@ export function PersonCard({ profile, family }: PersonCardProps) {
           </ContactLine>
         )}
         {!profile.phone_home && family?.phone_home && (
-          <ContactLine icon={Home} kind="family home">
+          <ContactLine icon={Home} kind="household">
             <a href={`tel:${family.phone_home}`} className={telLink}>
               {formatPhone(family.phone_home)}
             </a>
@@ -150,7 +151,7 @@ export function PersonCard({ profile, family }: PersonCardProps) {
         {/* Email */}
         {profile.email && (
           <ContactLine icon={Mail}>
-            <a href={`mailto:${profile.email}`} className={`${telLink} break-all`}>
+            <a href={`mailto:${profile.email}`} className={`${contactLink} break-all`}>
               {profile.email}
             </a>
           </ContactLine>
