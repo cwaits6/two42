@@ -8,7 +8,9 @@
 -- its own row's lock when the trigger fires, so two admins demoting each
 -- other would each wait on the other's row and one would die as a deadlock.
 -- Serialized on the org instead, the second demotion counts with a fresh
--- snapshot, sees the first one committed, and gets the plain refusal.
+-- snapshot, sees the first one committed, and gets the plain refusal. A
+-- REPEATABLE READ snapshot predates the wait and would miss that commit, so
+-- that level is refused; SERIALIZABLE is safe because SSI aborts one side.
 --
 -- SECURITY INVOKER: an authenticated caller only reaches the role UPDATE
 -- through the admin arm, and an admin reads every profile in their org.
@@ -18,6 +20,7 @@
 --
 -- Error contract addition:
 --   CA001  the change would leave the church with no church admin
+--   0A000  the demotion or delete ran under REPEATABLE READ
 
 create function public.profiles_keep_one_church_admin() returns trigger
   language plpgsql set search_path = ''
@@ -35,6 +38,11 @@ begin
   if tg_op = 'DELETE'
      and not exists (select 1 from public.organizations o where o.id = old.org_id) then
     return _result;
+  end if;
+
+  if current_setting('transaction_isolation') = 'repeatable read' then
+    raise exception 'profiles: removing a church admin needs READ COMMITTED or SERIALIZABLE'
+      using errcode = '0A000';
   end if;
 
   if not exists (
