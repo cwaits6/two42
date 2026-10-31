@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle2 } from "lucide-react";
+import { failureMessage } from "@/lib/errorCopy";
 
 interface LinkActionConfirmProps {
   token: string;
@@ -28,6 +29,8 @@ export function LinkActionConfirm({
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const verb = action === "signup" ? "sign you up" : "cancel your signup";
+
   async function submit(includeSpouse: boolean) {
     setBusy(true);
     setError(null);
@@ -41,11 +44,15 @@ export function LinkActionConfirm({
       if (res.ok) {
         setDone(true);
       } else {
-        const body = await res.json().catch(() => null);
-        setError(body?.error || "Something went wrong — please try again.");
+        setError(
+          failureMessage(verb, res.status, {
+            400: "This link no longer works. Sign in to change your serving from the site.",
+            409: "Someone just signed up for that date. Thank you anyway.",
+          }),
+        );
       }
     } catch {
-      setError("Something went wrong — please try again.");
+      setError(failureMessage(verb, "network"));
     } finally {
       setBusy(false);
     }
@@ -113,7 +120,7 @@ export function LinkActionConfirm({
                 )}
               </div>
 
-              {error && <p className="text-destructive mt-4">{error}</p>}
+              {error && <p role="alert" className="text-destructive mt-4">{error}</p>}
             </>
           )}
 

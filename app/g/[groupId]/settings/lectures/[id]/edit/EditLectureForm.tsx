@@ -120,7 +120,7 @@ export function EditLectureForm({
       return;
     }
 
-    toast.success("Lecture updated!");
+    toast.success("Lecture updated.");
     router.push(base);
   };
 

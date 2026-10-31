@@ -184,7 +184,7 @@ export function NewEventForm({ groupId, groupName, orgId, calendarId, timeZone }
       return;
     }
 
-    toast.success("Event created!");
+    toast.success("Event created.");
     router.push(calendarHref);
   };
 

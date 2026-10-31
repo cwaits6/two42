@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
 import { Upload, Mail, AlertCircle, CheckCircle2 } from "lucide-react";
 
 interface ParsedRow {
@@ -210,12 +211,12 @@ export default function BulkInvitePage() {
         body: JSON.stringify({ emails: selected.map((r) => r.email) }),
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
-        toast.error(data.error || "Failed to send invites.");
+        toast.error(failureMessage("send the invites", res.status));
         return;
       }
+
+      const data = await res.json();
 
       setResult(data);
 
@@ -227,7 +228,7 @@ export default function BulkInvitePage() {
         toast.info("No new invites were sent.");
       }
     } catch {
-      toast.error("Network error. Please try again.");
+      toast.error(NETWORK_ERROR);
     } finally {
       setSending(false);
     }

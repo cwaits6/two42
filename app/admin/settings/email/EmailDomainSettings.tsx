@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import type { Tables } from "@/lib/supabase/database.types";
@@ -112,10 +114,10 @@ async function requestJson(
   url: string,
   init?: RequestInit,
   { allowEmptyBody = false }: { allowEmptyBody?: boolean } = {},
-): Promise<{ ok: boolean; data: DomainApiResponse | null }> {
+): Promise<{ ok: boolean; status: number; data: DomainApiResponse | null }> {
   const res = await fetch(url, init);
   const data = await res.json().catch(() => null);
-  return { ok: res.ok && (allowEmptyBody || data !== null), data };
+  return { ok: res.ok && (allowEmptyBody || data !== null), status: res.status, data };
 }
 
 export function EmailDomainSettings() {
@@ -126,6 +128,7 @@ export function EmailDomainSettings() {
   const [row, setRow] = useState<EmailDomainRow | null>(null);
   const [domainInput, setDomainInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
 
   const load = useCallback(async () => {
     // One request for both the row and the enablement flag: the flag is a
@@ -140,14 +143,14 @@ export function EmailDomainSettings() {
           "email-domain load: failed to load sending domain:",
           data?.error,
         );
-        toast.error("Failed to load sending domain settings.");
+        toast.error(failureMessage("load the sending domain"));
         return;
       }
       setEnabled(data.enabled);
       setRow(data.data ?? null);
     } catch (err) {
       console.error("email-domain load: request failed:", err);
-      toast.error("Could not reach the server. Check your connection and try again.");
+      toast.error(NETWORK_ERROR);
     } finally {
       setLoading(false);
     }
@@ -161,13 +164,19 @@ export function EmailDomainSettings() {
     e.preventDefault();
     setBusy(true);
     try {
-      const { ok, data } = await requestJson("/api/admin/email-domain", {
+      const { ok, status, data } = await requestJson("/api/admin/email-domain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ domain: domainInput }),
       });
       if (!ok) {
-        toast.error(data?.error || "Failed to claim domain.");
+        toast.error(
+          failureMessage("claim the domain", status, {
+            400: "Enter a valid domain, like mail.example.church.",
+            403: "Couldn't claim the domain. Contact support to turn on custom sending domains.",
+            409: "Your church already has a sending domain, or one is still being removed. Reload the page, then try again.",
+          }),
+        );
         return;
       }
       toast.success(
@@ -181,7 +190,7 @@ export function EmailDomainSettings() {
       }
     } catch (err) {
       console.error("email-domain claim: request failed:", err);
-      toast.error("Could not reach the server. Check your connection and try again.");
+      toast.error(NETWORK_ERROR);
     } finally {
       setBusy(false);
     }
@@ -190,11 +199,11 @@ export function EmailDomainSettings() {
   const handleVerify = async () => {
     setBusy(true);
     try {
-      const { ok, data } = await requestJson("/api/admin/email-domain/verify", {
+      const { ok, status, data } = await requestJson("/api/admin/email-domain/verify", {
         method: "POST",
       });
       if (!ok) {
-        toast.error(data?.error || "Failed to verify domain.");
+        toast.error(failureMessage("verify the domain", status));
         return;
       }
       const fresh = data?.data ?? null;
@@ -212,7 +221,7 @@ export function EmailDomainSettings() {
       }
     } catch (err) {
       console.error("email-domain verify: request failed:", err);
-      toast.error("Could not reach the server. Check your connection and try again.");
+      toast.error(NETWORK_ERROR);
     } finally {
       setBusy(false);
     }
@@ -221,24 +230,19 @@ export function EmailDomainSettings() {
   const cleanupPending = row?.status === "cleanup_pending";
 
   const handleRemove = async () => {
-    if (
-      !confirm(
-        cleanupPending
-          ? "Retry removing this sending domain?"
-          : "Remove this sending domain? You can claim a new one afterward.",
-      )
-    ) {
-      return;
-    }
     setBusy(true);
     try {
-      const { ok, data } = await requestJson(
+      const { ok, status } = await requestJson(
         "/api/admin/email-domain",
         { method: "DELETE" },
         { allowEmptyBody: true },
       );
       if (!ok) {
-        toast.error(data?.error || "Failed to remove domain.");
+        toast.error(
+          failureMessage("remove the domain", status, {
+            502: "The email provider hasn't released the domain yet. Try again in a few minutes.",
+          }),
+        );
         // A failed provider-side removal leaves the row marked as still
         // cleaning up — reload so the card shows that state.
         await load();
@@ -246,9 +250,11 @@ export function EmailDomainSettings() {
       }
       toast.success("Domain removed.");
       setRow(null);
+      setConfirmingRemove(false);
     } catch (err) {
       console.error("email-domain remove: request failed:", err);
-      toast.error("Could not reach the server. Check your connection and try again.");
+      toast.error(NETWORK_ERROR);
+      setConfirmingRemove(false);
     } finally {
       setBusy(false);
     }
@@ -452,7 +458,7 @@ export function EmailDomainSettings() {
                 size="lg"
                 variant="outline"
                 className="flex-1 text-lg py-6"
-                onClick={handleRemove}
+                onClick={() => setConfirmingRemove(true)}
                 disabled={busy}
               >
                 {busy ? "Working..." : cleanupPending ? "Retry removal" : "Remove"}
@@ -461,6 +467,20 @@ export function EmailDomainSettings() {
           </CardContent>
         </Card>
       ) : null}
+
+      <ConfirmDialog
+        open={confirmingRemove}
+        onOpenChange={setConfirmingRemove}
+        title={cleanupPending ? `Retry removing ${row?.domain ?? ""}?` : `Remove ${row?.domain ?? ""}?`}
+        description={
+          cleanupPending
+            ? "The email provider hasn't released it yet. This tries again."
+            : "Email sends from the platform address again. You can claim a new domain afterward."
+        }
+        confirmLabel={cleanupPending ? "Retry removal" : "Remove domain"}
+        pendingLabel="Removing…"
+        onConfirm={handleRemove}
+      />
     </PageContainer>
   );
 }

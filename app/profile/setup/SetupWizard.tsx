@@ -597,7 +597,7 @@ export function SetupWizard({ profile, userEmail }: SetupWizardProps) {
 
       if (setupError) throw setupError;
 
-      toast.success("Profile setup complete! Welcome to the directory.");
+      toast.success("Profile set up. Welcome to the directory.");
       router.push("/directory");
     } catch (err) {
       console.error(err);

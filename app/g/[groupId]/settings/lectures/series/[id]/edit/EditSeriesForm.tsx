@@ -83,7 +83,7 @@ export function EditSeriesForm({
       return;
     }
 
-    toast.success("Series updated!");
+    toast.success("Series updated.");
     router.push(listHref);
   };
 

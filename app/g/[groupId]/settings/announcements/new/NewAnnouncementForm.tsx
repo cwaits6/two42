@@ -60,7 +60,7 @@ export function NewAnnouncementForm({
 
     toast.success(
       publishNow
-        ? "Announcement published!"
+        ? "Announcement published."
         : scheduledDate
           ? `Announcement scheduled for ${new Date(scheduledDate).toLocaleString()}.`
           : "Announcement saved as draft."

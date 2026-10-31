@@ -16,7 +16,9 @@ import {
   ComboboxItem,
   ComboboxEmpty,
 } from "@/components/ui/combobox";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { toast } from "sonner";
+import { failureMessage } from "@/lib/errorCopy";
 import { AvatarCluster } from "@/components/directory/AvatarCluster";
 import { PostingTo } from "@/components/groups/PostingTo";
 import { MethodButton, MethodChip } from "@/components/giving/MethodButton";
@@ -72,6 +74,7 @@ export function FundForm({
   const [stewardRole, setStewardRole] = useState(fund?.steward_role ?? "");
   const [retireOn, setRetireOn] = useState(fund?.retire_on ?? "");
   const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [methods, setMethods] = useState<MethodState>(() => {
     const state = {} as MethodState;
     for (const key of METHOD_ORDER) {
@@ -151,7 +154,7 @@ export function FundForm({
         .select("id");
       if (error || !data?.length) {
         setSaving(false);
-        toast.error("Failed to save the fund.");
+        toast.error(failureMessage("save the fund"));
         return;
       }
     } else {
@@ -162,7 +165,7 @@ export function FundForm({
         .single();
       if (error || !data) {
         setSaving(false);
-        toast.error("Failed to create the fund.");
+        toast.error(failureMessage("add the fund"));
         return;
       }
       fundId = data.id;
@@ -205,7 +208,7 @@ export function FundForm({
 
     setSaving(false);
     if (upsertError || delError) {
-      toast.error("Fund saved, but payment methods failed to update.");
+      toast.error("Fund saved, but couldn't save its payment methods. Try again.");
       return;
     }
     toast.success(fund ? "Fund updated." : "Fund created.");
@@ -222,7 +225,7 @@ export function FundForm({
       .eq("group_id", groupId)
       .select("id");
     if (error || !data?.length) {
-      toast.error("Failed to update the fund.");
+      toast.error(failureMessage(active ? "reactivate the fund" : "retire the fund"));
       return;
     }
     toast.success(active ? "Fund reactivated." : "Fund retired.");
@@ -232,7 +235,6 @@ export function FundForm({
 
   async function remove() {
     if (!fund) return;
-    if (!window.confirm(`Delete "${fund.name}"? This can't be undone.`)) return;
     const { data, error } = await supabase
       .from("giving_funds")
       .delete()
@@ -240,7 +242,7 @@ export function FundForm({
       .eq("group_id", groupId)
       .select("id");
     if (error || !data?.length) {
-      toast.error("Failed to delete the fund.");
+      toast.error(failureMessage("delete the fund"));
       return;
     }
     toast.success("Fund deleted.");
@@ -459,11 +461,20 @@ export function FundForm({
                 </Button>
                 <Button
                   variant="ghost"
-                  onClick={remove}
+                  onClick={() => setConfirmingDelete(true)}
                   className="text-destructive hover:text-destructive"
                 >
                   Delete
                 </Button>
+                <ConfirmDialog
+                  open={confirmingDelete}
+                  onOpenChange={setConfirmingDelete}
+                  title={`Delete ${fund.name}?`}
+                  description="The fund and its payment methods are removed. This can't be undone."
+                  confirmLabel="Delete fund"
+                  pendingLabel="Deleting…"
+                  onConfirm={remove}
+                />
               </div>
             )}
           </div>

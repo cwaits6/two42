@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { failureMessage } from "@/lib/errorCopy";
 import { Camera } from "lucide-react";
 import { titleCaseName } from "@/lib/sanitize";
 import { mintSignedUrl, uploadImage } from "@/lib/uploadImage";
@@ -144,7 +145,7 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
     } catch (err) {
       console.error(err);
       setAvatarUrl(previousAvatarUrl);
-      toast.error("Failed to upload photo.");
+      toast.error(failureMessage("upload the photo"));
     } finally {
       setUploadingAvatar(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -205,8 +206,7 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
     setSaving(false);
 
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      toast.error(body.error ?? "Failed to save.");
+      toast.error(failureMessage(`save ${first}`, res.status));
       return;
     }
 

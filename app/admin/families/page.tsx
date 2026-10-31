@@ -25,7 +25,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { toast } from "sonner";
+import { failureMessage } from "@/lib/errorCopy";
 import { Camera, Plus, Pencil, Trash2, Users, X } from "lucide-react";
 import type { FamilyUnit, Profile, FamilyMember, FamilyMemberRelationship } from "@/lib/types";
 import {
@@ -133,11 +135,17 @@ export default function FamiliesPage() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<FamilyUnit | null>(null);
+  const [deletingFamily, setDeletingFamily] = useState<FamilyWithMembers | null>(null);
+  const [removingMember, setRemovingMember] = useState<FamilyMember | null>(null);
   const [form, setForm] = useState<FamilyFormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
   // Family members state (populated when editing a family)
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
+  // The household whose members `familyMembers` holds; delete stays disabled
+  // until it matches, so the confirm never counts another household's people.
+  const [membersFamilyId, setMembersFamilyId] = useState<string | null>(null);
+  const membersRequestRef = useRef(0);
   const [memberForm, setMemberForm] = useState<FamilyMemberFormState>(EMPTY_MEMBER_FORM);
   const [editingMember, setEditingMember] = useState<FamilyMember | null>(null);
   const [showMemberForm, setShowMemberForm] = useState(false);
@@ -164,7 +172,7 @@ export default function FamiliesPage() {
       .order("family_name");
 
     if (familyErr) {
-      toast.error("Failed to load families.");
+      toast.error(failureMessage("load households"));
       setLoading(false);
       return;
     }
@@ -199,17 +207,21 @@ export default function FamiliesPage() {
   }, [loadFamilies]);
 
   async function loadFamilyMembers(familyId: string) {
+    const requestId = ++membersRequestRef.current;
+    setMembersFamilyId(null);
     const { data, error } = await supabase
       .from("family_members")
       .select("*")
       .eq("family_id", familyId)
       .order("relationship");
 
+    if (membersRequestRef.current !== requestId) return;
     if (error) {
-      toast.error("Failed to load family members.");
+      toast.error(failureMessage("load the household's members"));
       return;
     }
     setFamilyMembers((data || []) as FamilyMember[]);
+    setMembersFamilyId(familyId);
   }
 
   function openCreate() {
@@ -217,7 +229,9 @@ export default function FamiliesPage() {
     setForm(EMPTY_FORM);
     photoRequestRef.current++; // invalidate any in-flight mint
     setPhotoUrl(null);
+    membersRequestRef.current++; // invalidate any in-flight load
     setFamilyMembers([]);
+    setMembersFamilyId(null);
     setShowMemberForm(false);
     setEditingMember(null);
     setMemberForm(EMPTY_MEMBER_FORM);
@@ -243,6 +257,8 @@ export default function FamiliesPage() {
           console.error("openEdit: signing family photo failed", err);
         });
     }
+    setFamilyMembers([]);
+    setMembersFamilyId(null);
     setShowMemberForm(false);
     setEditingMember(null);
     setMemberForm(EMPTY_MEMBER_FORM);
@@ -299,37 +315,26 @@ export default function FamiliesPage() {
 
     if (error) {
       console.error(error);
-      toast.error("Failed to save family.");
+      toast.error(failureMessage("save the household"));
       return;
     }
 
-    toast.success(editing ? "Family updated." : "Family created.");
+    toast.success(editing ? "Household saved." : "Household added.");
     setDialogOpen(false);
     loadFamilies();
   }
 
   async function handleDelete(family: FamilyWithMembers) {
-    if (family.members.length > 0) {
-      if (
-        !confirm(
-          `${family.family_name} has ${family.members.length} member(s). Deleting will unassign them. Continue?`,
-        )
-      ) {
-        return;
-      }
-    } else if (!confirm(`Delete ${family.family_name}?`)) {
-      return;
-    }
-
     const { error } = await supabase
       .from("family_units")
       .delete()
       .eq("id", family.id);
     if (error) {
-      toast.error("Failed to delete family.");
+      toast.error(failureMessage("delete the household"));
       return;
     }
-    toast.success("Family deleted.");
+    toast.success("Household deleted.");
+    setDeletingFamily(null);
     setDialogOpen(false);
     loadFamilies();
   }
@@ -355,11 +360,11 @@ export default function FamiliesPage() {
       const requestId = ++photoRequestRef.current;
       const signed = await mintSignedUrl(url);
       if (photoRequestRef.current === requestId) setPhotoUrl(signed);
-      toast.success("Family photo updated.");
+      toast.success("Household photo updated.");
       loadFamilies();
     } catch (err) {
       console.error(err);
-      toast.error("Failed to upload family photo.");
+      toast.error(failureMessage("upload the household photo"));
     } finally {
       setUploadingPhoto(false);
       if (photoInputRef.current) photoInputRef.current.value = "";
@@ -380,7 +385,7 @@ export default function FamiliesPage() {
       try {
         await deleteImage("family", relObjectPath("families", editing.id, "photo"));
       } catch {
-        toast.error("Failed to remove family photo.");
+        toast.error(failureMessage("remove the household photo"));
         return;
       }
       const { error } = await supabase
@@ -388,12 +393,12 @@ export default function FamiliesPage() {
         .update({ photo_url: null })
         .eq("id", editing.id);
       if (error) {
-        toast.error("Failed to remove family photo.");
+        toast.error(failureMessage("remove the household photo"));
         return;
       }
       photoRequestRef.current++; // invalidate any in-flight mint
       setPhotoUrl(null);
-      toast.success("Family photo removed.");
+      toast.success("Household photo removed.");
       loadFamilies();
     } finally {
       setRemovingPhoto(false);
@@ -443,25 +448,25 @@ export default function FamiliesPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        toast.error("Failed to update family member.");
+      }).catch(() => null);
+      if (!res?.ok) {
+        toast.error(failureMessage("save the household member", res ? res.status : "network"));
         setSavingMember(false);
         return;
       }
-      toast.success("Family member updated.");
+      toast.success("Household member saved.");
     } else {
       const res = await fetch("/api/admin/family-members", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        toast.error("Failed to add family member.");
+      }).catch(() => null);
+      if (!res?.ok) {
+        toast.error(failureMessage("add the household member", res ? res.status : "network"));
         setSavingMember(false);
         return;
       }
-      toast.success("Family member added.");
+      toast.success("Household member added.");
     }
     setSavingMember(false);
     setShowMemberForm(false);
@@ -471,15 +476,22 @@ export default function FamiliesPage() {
   }
 
   async function handleDeleteMember(fm: FamilyMember) {
-    if (!confirm(`Remove ${fm.first_name} from this family?`)) return;
     const res = await fetch(`/api/admin/family-members/${fm.id}`, {
       method: "DELETE",
-    });
-    if (!res.ok) {
-      toast.error("Failed to remove family member.");
+    }).catch(() => null);
+    if (!res?.ok) {
+      toast.error(
+        failureMessage(`remove ${fm.first_name}`, res ? res.status : "network"),
+      );
+      // The request may have reached the server before the connection dropped.
+      if (!res) {
+        setRemovingMember(null);
+        if (editing) loadFamilyMembers(editing.id);
+      }
       return;
     }
-    toast.success("Family member removed.");
+    toast.success(`Removed ${fm.first_name} from the household.`);
+    setRemovingMember(null);
     if (editing) loadFamilyMembers(editing.id);
   }
 
@@ -822,10 +834,10 @@ export default function FamiliesPage() {
                               type="button"
                               variant="ghost"
                               size="icon-sm"
-                              onClick={() => handleDeleteMember(fm)}
+                              onClick={() => setRemovingMember(fm)}
                             >
                               <Trash2 className="h-3 w-3 text-destructive" />
-                              <span className="sr-only">Delete</span>
+                              <span className="sr-only">Remove</span>
                             </Button>
                           </div>
                         </li>
@@ -997,10 +1009,9 @@ export default function FamiliesPage() {
               <Button
                 variant="destructive"
                 size="sm"
+                disabled={membersFamilyId !== editing.id}
                 onClick={() =>
-                  handleDelete(
-                    families.find((f) => f.id === editing.id)!,
-                  )
+                  setDeletingFamily(families.find((f) => f.id === editing.id) ?? null)
                 }
               >
                 <Trash2 className="mr-1 h-4 w-4" />
@@ -1019,8 +1030,54 @@ export default function FamiliesPage() {
               </Button>
             </div>
           </DialogFooter>
+
+          <ConfirmDialog
+            open={deletingFamily !== null}
+            onOpenChange={(open) => !open && setDeletingFamily(null)}
+            title={`Delete ${deletingFamily?.family_name ?? ""}?`}
+            description={deleteHouseholdConsequence(
+              deletingFamily?.members.length ?? 0,
+              familyMembers.length,
+            )}
+            confirmLabel="Delete household"
+            pendingLabel="Deleting…"
+            onConfirm={async () => {
+              if (deletingFamily) await handleDelete(deletingFamily);
+            }}
+          />
+          <ConfirmDialog
+            open={removingMember !== null}
+            onOpenChange={(open) => !open && setRemovingMember(null)}
+            title={`Remove ${removingMember?.first_name ?? ""} from this household?`}
+            description="They won't be listed with this household in the directory anymore."
+            confirmLabel="Remove from household"
+            pendingLabel="Removing…"
+            onConfirm={async () => {
+              if (removingMember) await handleDeleteMember(removingMember);
+            }}
+          />
         </DialogContent>
       </Dialog>
     </PageContainer>
   );
+}
+
+function deleteHouseholdConsequence(memberCount: number, withoutAccountCount: number): string {
+  const parts: string[] = [];
+  if (memberCount > 0) {
+    parts.push(
+      memberCount === 1
+        ? "Its 1 member is left without a household."
+        : `Its ${memberCount} members are left without a household.`,
+    );
+  }
+  if (withoutAccountCount > 0) {
+    parts.push(
+      withoutAccountCount === 1
+        ? "The 1 person listed without an account is deleted."
+        : `The ${withoutAccountCount} people listed without an account are deleted.`,
+    );
+  }
+  parts.push("This can't be undone.");
+  return parts.join(" ");
 }

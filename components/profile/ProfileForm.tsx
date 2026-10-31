@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { mintSignedUrl, uploadImage } from "@/lib/uploadImage";
@@ -32,6 +32,8 @@ import {
 } from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
+import { failureMessage } from "@/lib/errorCopy";
+import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { Camera, Check } from "lucide-react";
 import {
   canManageAvatar,
@@ -159,6 +161,26 @@ const MONTHS = [
   { value: "12", label: "December" },
 ];
 
+/** Fields that can be marked invalid, keyed by their element id. */
+type FieldErrors = Partial<
+  Record<
+    | "first_name"
+    | "last_name"
+    | "email"
+    | "phone_mobile"
+    | "phone_home"
+    | "phone_work"
+    | "birth_month"
+    | "birth_day"
+    | "birth_year"
+    | "state"
+    | "postal_code",
+    string
+  >
+>;
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
+
 function Required() {
   return <span className="font-normal text-muted-foreground">(required)</span>;
 }
@@ -251,12 +273,30 @@ export function ProfileForm({
       !!(profile.address_line1 || profile.address_line2 || profile.city),
   );
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  // An object, so a second submit with the same first error still refocuses.
+  const [focusTarget, setFocusTarget] = useState<{ id: string } | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
 
-  const update = <K extends keyof FormState>(key: K, value: FormState[K]) =>
+  const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setState((prev) => ({ ...prev, [key]: value }));
+    // Blur rewrites the value through the same path; an unchanged value is not a fix.
+    if (key in errors && value !== state[key]) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[key as keyof FieldErrors];
+        return next;
+      });
+    }
+  };
+
+  // Focus waits for the render that ties the message to the field, so a
+  // screen reader reads the message when focus lands.
+  useEffect(() => {
+    if (focusTarget) document.getElementById(focusTarget.id)?.focus();
+  }, [focusTarget]);
 
   const handleAvatarUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -285,7 +325,7 @@ export function ProfileForm({
       toast.success("Photo updated.");
     } catch (err) {
       console.error(err);
-      toast.error("Failed to upload photo.");
+      toast.error(failureMessage("upload the photo"));
     } finally {
       setUploadingAvatar(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -312,49 +352,6 @@ export function ProfileForm({
         ? normalizePostalCode(state.postal_code)
         : null;
 
-    // Validate required fields.
-    if (!firstName) {
-      toast.error("First name is required.");
-      setSaving(false);
-      return;
-    }
-    if (!lastName) {
-      toast.error("Last name is required.");
-      setSaving(false);
-      return;
-    }
-    if (!relaxValidation && (!state.birth_month || !state.birth_day)) {
-      toast.error("Birthday month and day are required.");
-      setSaving(false);
-      return;
-    }
-    // At least one phone or a visible email is required so members can be reached.
-    const hasPhone = !!(
-      (state.phone_mobile && !state.hide_phone_mobile) ||
-      (state.phone_home && !state.hide_phone_home) ||
-      (state.phone_work && !state.hide_phone_work)
-    );
-    const hasVisibleEmail = !!state.email && !state.hide_email;
-    if (!relaxValidation && !hasPhone && !hasVisibleEmail) {
-      toast.error(
-        "Please provide at least one phone number, or keep your email visible so others can reach you.",
-      );
-      setSaving(false);
-      return;
-    }
-
-    // Validate required shapes — state/zip return null on malformed input.
-    if (ownAddress && state.state && !stateCode) {
-      toast.error("State must be a 2-letter abbreviation, like TX.");
-      setSaving(false);
-      return;
-    }
-    if (ownAddress && state.postal_code && !postal) {
-      toast.error("ZIP code must be 5 digits or ZIP+4 format.");
-      setSaving(false);
-      return;
-    }
-
     const phoneMobile = state.phone_mobile
       ? normalizePhone(state.phone_mobile)
       : null;
@@ -365,37 +362,80 @@ export function ProfileForm({
       ? normalizePhone(state.phone_work)
       : null;
 
-    if (state.phone_mobile && !phoneMobile) {
-      toast.error("Mobile phone number isn't valid.");
-      setSaving(false);
-      return;
-    }
-    if (state.phone_home && !phoneHome) {
-      toast.error("Home phone number isn't valid.");
-      setSaving(false);
-      return;
-    }
-    if (state.phone_work && !phoneWork) {
-      toast.error("Work phone number isn't valid.");
-      setSaving(false);
-      return;
-    }
-
     const birthMonth = state.birth_month ? Number(state.birth_month) : null;
     const birthDay = state.birth_day ? Number(state.birth_day) : null;
     const birthYear = state.birth_year ? Number(state.birth_year) : null;
 
-    // Calendar-aware birthday check — rejects impossible dates like Feb 31.
-    // Without a year, leap year 2000 is assumed so Feb 29 stays allowed.
-    if (birthDay !== null) {
+    // Collected in the order the fields appear, so the first key is the
+    // field focus moves to.
+    const found: FieldErrors = {};
+    if (!firstName) found.first_name = "Enter a first name.";
+    if (!lastName) found.last_name = "Enter a last name.";
+    // Only admins can edit the email; a member's own is managed in Settings.
+    const email = state.email.trim();
+    if (isAdmin && email && !EMAIL_PATTERN.test(email)) {
+      found.email = "Enter an email address like name@example.com.";
+    }
+
+    // At least one phone or a visible email is required so members can be reached.
+    const hasPhone = !!(
+      (state.phone_mobile && !state.hide_phone_mobile) ||
+      (state.phone_home && !state.hide_phone_home) ||
+      (state.phone_work && !state.hide_phone_work)
+    );
+    const hasVisibleEmail = !!state.email && !state.hide_email;
+    if (!relaxValidation && !hasPhone && !hasVisibleEmail) {
+      found.phone_mobile =
+        "Add a phone number, or keep your email visible so people can reach you.";
+    }
+    if (state.phone_mobile && !phoneMobile) {
+      found.phone_mobile = "Enter a valid phone number.";
+    }
+    if (state.phone_home && !phoneHome) {
+      found.phone_home = "Enter a valid phone number.";
+    }
+    if (state.phone_work && !phoneWork) {
+      found.phone_work = "Enter a valid phone number.";
+    }
+
+    if (!relaxValidation && !birthMonth) {
+      found.birth_month = "Choose the month of the birthday.";
+    }
+    if (birthDay === null) {
+      if (!relaxValidation) found.birth_day = "Enter the day of the birthday.";
+    } else {
+      // Calendar-aware — rejects impossible dates like Feb 31. Without a
+      // year, leap year 2000 is assumed so Feb 29 stays allowed.
       const maxDay = birthMonth
         ? new Date(birthYear ?? 2000, birthMonth, 0).getDate()
         : 31;
       if (!Number.isInteger(birthDay) || birthDay < 1 || birthDay > maxDay) {
-        toast.error("That birthday day doesn't exist in the selected month.");
-        setSaving(false);
-        return;
+        found.birth_day = birthMonth
+          ? `Enter a day from 1 to ${maxDay}.`
+          : "Enter a day from 1 to 31.";
       }
+    }
+    if (
+      birthYear !== null &&
+      (!Number.isInteger(birthYear) || birthYear < 1900 || birthYear > 2100)
+    ) {
+      found.birth_year = "Enter a year from 1900 to 2100, or leave it blank.";
+    }
+
+    // state/zip normalize to null on malformed input.
+    if (ownAddress && state.state && !stateCode) {
+      found.state = "Enter a 2-letter state, like TX.";
+    }
+    if (ownAddress && state.postal_code && !postal) {
+      found.postal_code = "Enter a 5-digit ZIP code, or ZIP+4.";
+    }
+
+    setErrors(found);
+    const firstInvalid = Object.keys(found)[0];
+    if (firstInvalid) {
+      setSaving(false);
+      setFocusTarget({ id: firstInvalid });
+      return;
     }
 
     const updates = {
@@ -443,7 +483,7 @@ export function ProfileForm({
 
     if (error) {
       console.error(error);
-      toast.error("Failed to save profile.");
+      toast.error(failureMessage("save the profile"));
       return;
     }
 
@@ -464,7 +504,7 @@ export function ProfileForm({
     "??";
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} noValidate>
       <Card>
         <CardContent className="space-y-5 pt-6">
           {!isAdmin && !relaxValidation && (
@@ -526,7 +566,9 @@ export function ProfileForm({
                 }
                 required
                 className="py-5 text-base"
+                {...invalidFieldProps("first_name", errors.first_name)}
               />
+              <FieldError fieldId="first_name" message={errors.first_name} />
             </div>
             {familySurname && (
               <CheckRow
@@ -550,7 +592,9 @@ export function ProfileForm({
                   }
                   required
                   className="py-5 text-base"
+                  {...invalidFieldProps("last_name", errors.last_name)}
                 />
+                <FieldError fieldId="last_name" message={errors.last_name} />
               </div>
             )}
           </div>
@@ -584,7 +628,9 @@ export function ProfileForm({
               onChange={(e) => update("email", e.target.value)}
               disabled={!isAdmin}
               className="py-5 text-base"
+              {...invalidFieldProps("email", errors.email)}
             />
+            <FieldError fieldId="email" message={errors.email} />
             {!isAdmin && (
               <p className="text-sm text-muted-foreground">
                 To change your email, use the{" "}
@@ -620,7 +666,9 @@ export function ProfileForm({
               }
               placeholder="(555) 123-4567"
               className="py-5 text-base"
+              {...invalidFieldProps("phone_mobile", errors.phone_mobile)}
             />
+            <FieldError fieldId="phone_mobile" message={errors.phone_mobile} />
             <HideRow
               id="hide_phone_mobile"
               label="Hide my mobile number"
@@ -642,7 +690,9 @@ export function ProfileForm({
               }
               placeholder="(555) 123-4567"
               className="py-5 text-base"
+              {...invalidFieldProps("phone_home", errors.phone_home)}
             />
+            <FieldError fieldId="phone_home" message={errors.phone_home} />
             {state.phone_home && (
               <HideRow
                 id="hide_phone_home"
@@ -666,7 +716,9 @@ export function ProfileForm({
               }
               placeholder="(555) 123-4567"
               className="py-5 text-base"
+              {...invalidFieldProps("phone_work", errors.phone_work)}
             />
+            <FieldError fieldId="phone_work" message={errors.phone_work} />
             {state.phone_work && (
               <HideRow
                 id="hide_phone_work"
@@ -690,7 +742,12 @@ export function ProfileForm({
                 value={state.birth_month}
                 onValueChange={(v) => update("birth_month", v ?? "")}
               >
-                <SelectTrigger className="w-full py-5 text-base">
+                <SelectTrigger
+                  id="birth_month"
+                  aria-label="Month"
+                  className="w-full py-5 text-base"
+                  {...invalidFieldProps("birth_month", errors.birth_month)}
+                >
                   <SelectValue placeholder="Month" />
                 </SelectTrigger>
                 <SelectContent>
@@ -702,6 +759,7 @@ export function ProfileForm({
                 </SelectContent>
               </Select>
               <Input
+                id="birth_day"
                 type="number"
                 min="1"
                 max="31"
@@ -710,8 +768,10 @@ export function ProfileForm({
                 onChange={(e) => update("birth_day", e.target.value)}
                 className="py-5 text-base"
                 aria-label="Day"
+                {...invalidFieldProps("birth_day", errors.birth_day)}
               />
               <Input
+                id="birth_year"
                 type="number"
                 min="1900"
                 max="2100"
@@ -720,8 +780,12 @@ export function ProfileForm({
                 onChange={(e) => update("birth_year", e.target.value)}
                 className="py-5 text-base"
                 aria-label="Year (optional)"
+                {...invalidFieldProps("birth_year", errors.birth_year)}
               />
             </div>
+            <FieldError fieldId="birth_month" message={errors.birth_month} />
+            <FieldError fieldId="birth_day" message={errors.birth_day} />
+            <FieldError fieldId="birth_year" message={errors.birth_year} />
             <p className="text-sm text-muted-foreground">
               The year is optional — the directory only shows the month and
               day.
@@ -832,7 +896,9 @@ export function ProfileForm({
                     maxLength={2}
                     placeholder="TX"
                     className="py-5 text-base uppercase"
+                    {...invalidFieldProps("state", errors.state)}
                   />
+                  <FieldError fieldId="state" message={errors.state} />
                 </div>
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="postal_code" className="text-base">
@@ -844,7 +910,9 @@ export function ProfileForm({
                     onChange={(e) => update("postal_code", e.target.value)}
                     placeholder="12345"
                     className="py-5 text-base"
+                    {...invalidFieldProps("postal_code", errors.postal_code)}
                   />
+                  <FieldError fieldId="postal_code" message={errors.postal_code} />
                 </div>
               </div>
               <HideRow

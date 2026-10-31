@@ -41,7 +41,7 @@ export function NewSeriesForm({
       return;
     }
 
-    toast.success("Series created!");
+    toast.success("Series created.");
     router.push(groupPath(groupId, "/settings/lectures/series"));
   };
 
