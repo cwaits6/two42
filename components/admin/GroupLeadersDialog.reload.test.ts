@@ -202,6 +202,31 @@ describe("GroupLeadersDialog when a write finishes after it moves to another gro
     expect(container.textContent).not.toContain("This group has no leader yet.");
   });
 
+  it("keeps the reopened group's leaders when the write is from an earlier visit", async () => {
+    let finishWrite: (result: Result) => void = () => {};
+    const write = new Promise<Result>((resolve) => {
+      finishWrite = resolve;
+    });
+    client = stubClient(
+      [
+        { data: [{ profile_id: "a", role: "leader" }], error: null },
+        { data: [{ profile_id: "b", role: "leader" }], error: null },
+        { data: [{ profile_id: "a", role: "leader" }], error: null },
+        { data: [{ profile_id: "a", role: "member" }], error: null },
+      ],
+      [write],
+    );
+    await render();
+
+    await click("Remove Ada Lovelace as leader");
+    await render({ id: "h", name: "Thursday Group" });
+    await render();
+    await act(async () => finishWrite(saved));
+
+    expect(container.querySelector('button[aria-label="Remove Ada Lovelace as leader"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("This group has no leader yet.");
+  });
+
   it("lets the admin act on the other group while the write is still pending", async () => {
     client = stubClient(
       [

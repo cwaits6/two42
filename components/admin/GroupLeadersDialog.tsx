@@ -264,14 +264,11 @@ export function GroupLeadersDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const groupId = group?.id;
-  // A write can finish after the dialog has moved to another group; its
-  // results must not land on that group's roster.
-  const activeGroupId = useRef(groupId);
-  // Identifies the latest write, so an older one cannot clear its busy state.
+  // Bumped by every write and every group switch. A write can finish after
+  // the dialog has moved on; its results must not land on what is shown now.
   const writeSeq = useRef(0);
 
   useEffect(() => {
-    activeGroupId.current = groupId;
     writeSeq.current += 1;
     setBusy(false);
     if (!groupId) return;
@@ -295,12 +292,12 @@ export function GroupLeadersDialog({
    * Re-read the roster after a committed write. A failed read drops the
    * stale list rather than keep showing it: acting on it would hit rows the
    * write already changed. Resolves false when the read failed or the
-   * dialog has since moved to another group.
+   * dialog has since moved on.
    */
-  async function refresh(id: string): Promise<boolean> {
+  async function refresh(id: string, seq: number): Promise<boolean> {
     const loaded = await loadLeaderRoster(supabase, id);
     onChanged();
-    if (activeGroupId.current !== id) return false;
+    if (writeSeq.current !== seq) return false;
     setRoster(loaded);
     setLoadFailed(loaded === null);
     return loaded !== null;
@@ -321,14 +318,14 @@ export function GroupLeadersDialog({
     try {
       const addError = await addLeader(supabase, group.id, person.id, inGroup);
       if (addError) {
-        if (activeGroupId.current === group.id) setError(addError);
+        if (writeSeq.current === seq) setError(addError);
         return;
       }
       if (replacing) {
         const removeError = await removeLeader(supabase, group.id, replacing.id);
         if (removeError) {
-          const reloaded = await refresh(group.id);
-          if (activeGroupId.current !== group.id) return;
+          const reloaded = await refresh(group.id, seq);
+          if (writeSeq.current !== seq) return;
           setMode({ kind: "leaders" });
           setQuery("");
           setError(
@@ -338,8 +335,8 @@ export function GroupLeadersDialog({
           return;
         }
       }
-      await refresh(group.id);
-      if (activeGroupId.current !== group.id) return;
+      await refresh(group.id, seq);
+      if (writeSeq.current !== seq) return;
       changeMode({ kind: "leaders" });
     } finally {
       if (writeSeq.current === seq) setBusy(false);
@@ -354,10 +351,10 @@ export function GroupLeadersDialog({
     try {
       const removeError = await removeLeader(supabase, group.id, person.id);
       if (removeError) {
-        if (activeGroupId.current === group.id) setError(removeError);
+        if (writeSeq.current === seq) setError(removeError);
         return;
       }
-      await refresh(group.id);
+      await refresh(group.id, seq);
     } finally {
       if (writeSeq.current === seq) setBusy(false);
     }
