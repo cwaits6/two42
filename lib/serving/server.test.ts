@@ -151,6 +151,7 @@ describe("notifyLeadersOfCancel", () => {
               last_name: "Doe",
               preferred_name: null,
               email: "leah@example.com",
+              role: "member",
             },
           },
         ],
@@ -163,5 +164,29 @@ describe("notifyLeadersOfCancel", () => {
     expect(resolveEmailBranding).toHaveBeenCalledWith("org-1");
     const call = sendServingCancelNoticeEmail.mock.calls[0][0];
     expect(call.servingUrl).toBe("https://two42.io/g/group-1/serving/team-1");
+  });
+
+  it("skips a team lead who has been moved back to pending", async () => {
+    const service = stubClient({
+      team_members: {
+        data: [
+          {
+            profiles: {
+              id: "leader-1",
+              first_name: "Leah",
+              last_name: "Doe",
+              preferred_name: null,
+              email: "leah@example.com",
+              role: "pending",
+            },
+          },
+        ],
+        error: null,
+      },
+    });
+
+    await notifyLeadersOfCancel(service, baseOpts);
+
+    expect(sendServingCancelNoticeEmail).not.toHaveBeenCalled();
   });
 });

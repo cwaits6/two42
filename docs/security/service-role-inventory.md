@@ -200,6 +200,12 @@ policies resolve membership through three `SECURITY DEFINER` helpers, each
   `serving_broadcasts` view/log, `serving_team_settings` insert/update) and
   `serving_signup_create()` call it.
 
+Each also joins the caller's `profiles` row and requires `role <> 'pending'`
+(`20261102000000_pending_ends_group_access.sql`): a person moved back to
+pending keeps their rows but passes no arm until they are approved again,
+and `serving_signup_create()` applies the same check to its direct
+`team_members` arm.
+
 Every body carries `org_id = public.app_current_org_id()`, so a membership
 row in another org never counts — `schema_tenancy_lint.sql` check 4 sees
 that predicate; the org equality itself is what keeps a caller-supplied id
@@ -564,14 +570,16 @@ Both functions iterate org → group → team. `send-event-reminders` lists the
 org's groups through `listGroups()` (`_shared/groups.ts`), reads each
 group's events on `org_id` + `group_id`, and resolves recipients through
 `resolveEventReminderRecipients()` (`_shared/event-recipients.ts`): RSVPs
-∩ current `group_members` of the event's group → profiles with an email, so
-an RSVP from someone who has since left the group is dropped. A failing
+∩ current `group_members` of the event's group → non-pending profiles with
+an email, so an RSVP from someone who has since left the group, or who was
+moved back to pending, is dropped. A failing
 group is recorded in `failedItems[]` keyed by `group_id` and the org's
 other groups still run. `send-serving-reminders` keeps its team loop,
 reads `teams.group_id` with the team name, and resolves the serving link
 mode per group through `resolveGroupLinkMode()` (`group_settings`, on
 `org_id` + `group_id`, memoised per org run); every `serving_*` query is on
-`team_id`. Both shared modules are pure, with recorded-chain tests under
+`team_id`, and both its reminder and its open-date emails skip pending
+profiles. Both shared modules are pure, with recorded-chain tests under
 `supabase/functions/tests/`.
 
 Audit result (CWA-58, re-audited with the group flip): every query chain
