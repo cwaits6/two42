@@ -42,7 +42,7 @@ test.describe("a member of Group B moved back to pending", () => {
       await expect(page.getByText(ANNOUNCEMENT)).toHaveCount(0);
     }
     await page.goto("/dashboard");
-    await expect(page.getByRole("heading", { name: "Pending Approval" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Waiting for approval" })).toBeVisible();
 
     setIsaacRole("member");
 

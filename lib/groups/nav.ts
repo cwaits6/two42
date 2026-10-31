@@ -158,7 +158,7 @@ export function buildSidebar(input: SidebarInput): SidebarModel {
     const base = `${GROUP_PREFIX}/${activeGroup.id}`;
     items.push(
       groupBlock("switcher", activeGroup, input),
-      { kind: "link", href: `${base}/dashboard`, label: "Dashboard", icon: "dashboard" },
+      { kind: "link", href: `${base}/dashboard`, label: "Home", icon: "dashboard" },
       { kind: "link", href: `${base}/calendar`, label: "Calendar", icon: "calendar" },
       directoryItem(base),
       ...groupPages(activeGroup, input)

@@ -1,8 +1,15 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Calendar, Clock, HandHelping, HeartHandshake, MapPin } from "lucide-react";
+import { Calendar, ChevronRight, Clock, HeartHandshake, MapPin, Megaphone, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { groupPath, type ActiveGroup } from "@/lib/groups/active";
+import { greetingName } from "@/lib/groups/greeting";
+import { readList } from "@/lib/supabase/readList";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { EmptyState } from "@/components/states/EmptyState";
+import { ErrorState } from "@/components/states/ErrorState";
+import { buttonVariants } from "@/components/ui/button-variants";
+import { HomeGreeting } from "@/components/groups/HomeGreeting";
 import { formatServiceDate, toDateString } from "@/lib/serving/sundays";
 import { RsvpSegmented } from "@/components/groups/RsvpSegmented";
 import { JoinMeetingBlock } from "@/components/events/JoinMeetingBlock";
@@ -34,21 +41,7 @@ function eventWeekday(startTime: string, timeZone: string): string {
 }
 
 function eventMonth(startTime: string, timeZone: string): string {
-  return formatInZone(startTime, timeZone, { month: "short" }).toUpperCase();
-}
-
-function greeting(timeZone: string): string {
-  const h = Number(formatInZone(new Date().toISOString(), timeZone, { hour: "numeric", hourCycle: "h23" }));
-  if (h < 12) return "Good morning";
-  if (h < 17) return "Good afternoon";
-  return "Good evening";
-}
-
-function todayLabel(timeZone: string): string {
-  const now = new Date().toISOString();
-  const weekday = formatInZone(now, timeZone, { weekday: "long" });
-  const date = formatInZone(now, timeZone, { month: "short", day: "numeric" });
-  return `${weekday} · ${date}`;
+  return formatInZone(startTime, timeZone, { month: "short" });
 }
 
 function excerpt(content: string): string {
@@ -82,16 +75,16 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
   const windowStart = new Date(nowDate.getTime() - 24 * 60 * 60 * 1000);
   const windowStartISO = windowStart.toISOString();
 
-  // Phase A — every query below is independent of `nextEvent`; fire them
-  // together instead of awaiting one at a time.
+  // Every query below is independent of `nextEvent`; fire them together
+  // instead of awaiting one at a time.
   const [
     { data: viewer },
-    { data: rawEvents },
-    { data: rsvps },
-    { data: announcements },
+    eventsRead,
+    rsvpsRead,
+    announcementsRead,
     { count: lectureCount },
-    { data: prayers },
-    { data: myServings },
+    prayersRead,
+    servingsRead,
     timeZone,
   ] = await Promise.all([
     supabase
@@ -144,33 +137,40 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
     getOrgTimeZone(),
   ]);
 
-  // Keep the current occurrence on the hero through its live window plus a
-  // short grace period (ended state points to the recording), then roll over.
-  const occurrences = expandUpcomingEvents((rawEvents ?? []) as Event[], timeZone, windowStart);
-  const nextEvent =
-    occurrences.find(
-      (e) => meetingEndMs(e.start_time, e.end_time) + ENDED_GRACE_MS > nowDate.getTime()
-    ) ?? null;
-
-  let userRsvps: Record<string, Rsvp> = {};
-  if (rsvps) {
-    userRsvps = Object.fromEntries(rsvps.map((r) => [r.event_id, r]));
-  }
-
-  const upcomingServings = (myServings ?? []) as Array<{
+  // Each section reports its own failed read; the rest of the page still renders.
+  const rawEvents = readList(eventsRead, "dashboard events");
+  // The hero's RSVP control needs the viewer's replies, so it fails with them.
+  const rsvps = readList(rsvpsRead, "the viewer's RSVPs");
+  const announcements = readList(announcementsRead, "dashboard announcements");
+  const prayers = readList(prayersRead, "dashboard prayer requests");
+  const upcomingServings = readList(servingsRead, "the viewer's serving turns") as Array<{
     id: string;
     service_date: string;
     team_id: string;
     teams: { id: string; name: string } | Array<{ id: string; name: string }> | null;
-  }>;
+  }> | null;
+  const eventsFailed = rawEvents === null || rsvps === null;
+
+  // Keep the current occurrence on the hero through its live window plus a
+  // short grace period (ended state points to the recording), then roll over.
+  const occurrences = expandUpcomingEvents((rawEvents ?? []) as Event[], timeZone, windowStart);
+  const nextEvent = eventsFailed
+    ? null
+    : (occurrences.find(
+        (e) => meetingEndMs(e.start_time, e.end_time) + ENDED_GRACE_MS > nowDate.getTime()
+      ) ?? null);
+
+  const userRsvps: Record<string, Rsvp> = Object.fromEntries(
+    (rsvps ?? []).map((r) => [r.event_id, r])
+  );
 
   // Meeting fields live on the series anchor; exception rows inherit them.
   let meeting: MeetingFields | null = null;
   let goingCount = 0;
   let maybeCount = 0;
 
-  // Phase B — these depend on `nextEvent`. The anchor lookup and the event's
-  // RSVP list are mutually independent, so fetch them together.
+  // These depend on `nextEvent`. The anchor lookup and the event's RSVP list
+  // are mutually independent, so fetch them together.
   if (nextEvent) {
     const [anchor, { data: eventRsvps }] = await Promise.all([
       nextEvent.series_id
@@ -201,72 +201,65 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
   }
 
   const href = (path: string) => groupPath(group.id, path);
-
-  const displayName = viewer?.preferred_name || viewer?.first_name || "Friend";
+  const isLeader = group.role === "leader";
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* ── Greeting, then the next meeting ─────────────────────────────── */}
-      <section className="mx-auto max-w-[960px] px-4 pt-5 pb-8 md:px-8 md:pt-10">
-        <div className="mb-4 flex items-center gap-3">
-          <span aria-hidden="true" className="h-px w-8 bg-brand-accent" />
-          <span className="font-sans text-[15px] font-bold uppercase tracking-[3px] text-brand-accent-text">
-            {todayLabel(timeZone)}
-          </span>
-        </div>
-        <h1 className="mb-7 font-serif text-[40px] font-medium leading-none tracking-[-0.02em] text-foreground md:text-[56px]">
-          {greeting(timeZone)}, <em className="not-italic text-brand-primary-text">{displayName}</em>.
-        </h1>
+    <PageContainer>
+      <HomeGreeting name={greetingName(viewer)} timeZone={timeZone} />
 
-        {nextEvent ? (
+      <div className="space-y-12">
+        {/* ── The next event ───────────────────────────────────────────────── */}
+        {eventsFailed ? (
+          <ErrorState thing="upcoming events" />
+        ) : nextEvent ? (
           <div
-            className="rounded-[18px] p-7 text-white"
+            className="rounded-2xl p-6 text-white md:p-7"
             style={{
               background: "var(--color-brand-primary)",
               boxShadow:
                 "0 14px 40px color-mix(in srgb, var(--color-brand-primary) 20%, transparent)",
             }}
           >
-            <div className="mb-[18px] flex items-center gap-2.5 font-sans text-sm font-bold uppercase tracking-[1.5px]">
+            <div className="mb-4 flex items-center gap-2.5 font-sans text-base font-semibold">
               <span aria-hidden="true" className="h-2 w-2 rounded-full bg-brand-accent" />
-              Next meeting · {relativeDay(nextEvent.start_time, timeZone)}
+              Next event · {relativeDay(nextEvent.start_time, timeZone)}
             </div>
 
-            <div className="flex flex-wrap items-start gap-[22px]">
+            <div className="flex flex-wrap items-start gap-5">
               {/* Date tile: Warm Paper ground, Espresso text */}
               <div
-                className="flex h-[84px] w-[84px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-2xl"
+                className="flex h-24 w-24 shrink-0 flex-col items-center justify-center gap-1 rounded-2xl"
                 style={{ background: "var(--color-brand-warm)", color: "var(--color-brand-navy)" }}
               >
-                <span className="font-sans text-[13px] font-bold uppercase leading-none tracking-[0.14em] text-secondary-foreground">
+                <span className="font-sans text-sm font-semibold leading-none text-secondary-foreground">
                   {eventWeekday(nextEvent.start_time, timeZone).slice(0, 3)}
                 </span>
                 <span className="font-serif text-4xl font-semibold leading-none">
                   {formatInZone(nextEvent.start_time, timeZone, { day: "numeric" })}
                 </span>
-                <span className="font-sans text-[13px] font-semibold uppercase leading-none tracking-[0.08em] text-muted-foreground">
+                <span className="font-sans text-sm font-semibold leading-none text-muted-foreground">
                   {eventMonth(nextEvent.start_time, timeZone)}
                 </span>
               </div>
 
               <div className="min-w-0 flex-1 pt-1">
-                <div className="font-serif text-[32px] font-medium leading-[1.15] tracking-[-0.01em]">
+                <h2 className="font-serif text-3xl font-medium leading-tight tracking-tight">
                   {nextEvent.title}
-                </div>
-                <div className="mt-2.5 flex flex-wrap items-center gap-x-5 gap-y-2 font-sans text-[17px]">
+                </h2>
+                <div className="mt-2.5 flex flex-wrap items-center gap-x-5 gap-y-2 font-sans text-lg">
                   <span className="inline-flex items-center gap-2">
-                    <Clock className="h-[18px] w-[18px]" aria-hidden="true" />
+                    <Clock className="h-5 w-5" aria-hidden="true" />
                     {formatEventTime(nextEvent.start_time, timeZone)}
                   </span>
                   {nextEvent.location && (
                     <span className="inline-flex items-center gap-2">
-                      <MapPin className="h-[18px] w-[18px]" aria-hidden="true" />
+                      <MapPin className="h-5 w-5" aria-hidden="true" />
                       {nextEvent.location}
                     </span>
                   )}
                 </div>
                 {nextEvent.description && (
-                  <p className="mt-3 max-w-[52ch] font-sans text-[17px] leading-normal text-white/90">
+                  <p className="mt-3 max-w-[52ch] font-sans text-lg leading-normal text-white/90">
                     {nextEvent.description.length > 160
                       ? nextEvent.description.slice(0, 160) + "…"
                       : nextEvent.description}
@@ -275,22 +268,19 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
               </div>
             </div>
 
-            <div
-              className="mt-6 flex flex-wrap items-center justify-between gap-4 pt-[18px]"
-              style={{ borderTop: "1px solid rgba(255,255,255,0.22)" }}
-            >
-              <div className="flex items-center gap-2.5 font-sans text-base">
-                <span className="font-bold">Are you going?</span>
-                <span className="text-[15px] text-white/90">
-                  {goingCount > 0 ? (
-                    <>
-                      {goingCount} going
-                      {maybeCount > 0 && <> · {maybeCount} maybe</>}
-                    </>
-                  ) : (
-                    "Be the first to RSVP"
-                  )}
-                </span>
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-white/25 pt-5">
+              <div className="flex flex-wrap items-center gap-x-2.5 font-sans text-base">
+                <span className="font-semibold">Are you going?</span>
+                {(goingCount > 0 || maybeCount > 0) && (
+                  <span className="text-white/90">
+                    {[
+                      goingCount > 0 && `${goingCount} going`,
+                      maybeCount > 0 && `${maybeCount} maybe`,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                )}
               </div>
               <RsvpSegmented
                 eventId={nextEvent.id}
@@ -316,145 +306,156 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
             )}
           </div>
         ) : (
-          <div className="flex items-center justify-center rounded-[18px] border border-border bg-brand-warm p-10 text-center text-muted-foreground">
-            <div>
-              <Calendar className="mx-auto mb-3 h-10 w-10 text-brand-primary/40" />
-              <p className="font-serif text-xl text-foreground/60">No upcoming events</p>
-              <p className="mt-1 text-sm">Check back soon.</p>
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* ── Your turn to serve ───────────────────────────────────────────── */}
-      {upcomingServings.length > 0 && (
-        <section className="px-4 pb-6 md:px-14">
-          <div className="rounded-2xl border border-border bg-card p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <HandHelping className="h-5 w-5 text-brand-primary" />
-              <h2 className="font-sans text-sm font-semibold text-foreground uppercase tracking-wider">
-                Your turn to serve
-              </h2>
-            </div>
-            <div className="space-y-2">
-              {upcomingServings.map((s) => (
-                <Link
-                  key={s.id}
-                  href={href(`/serving/${s.team_id}`)}
-                  className="flex items-center justify-between gap-4 py-2 border-t border-border first:border-0 hover:text-brand-primary-text transition-colors"
-                >
-                  <div>
-                    <div className="font-sans text-sm font-semibold text-foreground">
-                      {(Array.isArray(s.teams) ? s.teams[0]?.name : s.teams?.name) ?? "Serving team"}
-                    </div>
-                    <div className="font-sans text-xs text-muted-foreground mt-0.5">
-                      {formatServiceDate(s.service_date)}
-                    </div>
-                  </div>
-                  <span className="font-sans text-xs font-semibold text-brand-primary-text shrink-0">
-                    View →
-                  </span>
+          <EmptyState
+            icon={Calendar}
+            message="No upcoming events."
+            action={
+              isLeader && (
+                <Link href={href("/calendar/new")} className={buttonVariants()}>
+                  <Plus aria-hidden="true" />
+                  Add event
                 </Link>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
+              )
+            }
+          />
+        )}
 
-      {/* ── Bottom: Announcements + Prayer ───────────────────────────────── */}
-      <section className="border-t border-border bg-card px-4 py-10 md:px-14 md:pb-16 grid gap-8 grid-cols-1 lg:grid-cols-[1.3fr_1fr]">
-        <div>
-          <div className="flex items-baseline justify-between mb-5">
-            <h2 className="font-serif text-[30px] font-medium text-foreground tracking-tight">
-              Announcements
-            </h2>
-            <Link
-              href={href("/announcements")}
-              className="font-sans text-base font-semibold text-brand-primary-text hover:underline"
-            >
-              See all →
-            </Link>
-          </div>
+        {/* ── Your turn to serve ───────────────────────────────────────────── */}
+        {upcomingServings === null ? (
+          <section>
+            <SectionHeading title="Your turn to serve" />
+            <ErrorState thing="your serving turns" />
+          </section>
+        ) : (
+          upcomingServings.length > 0 && (
+            <section>
+              <SectionHeading title="Your turn to serve" />
+              <ul>
+                {upcomingServings.map((s) => (
+                  <li key={s.id} className="border-t border-border first:border-0">
+                    <Link
+                      href={href(`/serving/${s.team_id}`)}
+                      className="flex min-h-16 items-center justify-between gap-4 py-3 transition-colors hover:text-brand-primary-text"
+                    >
+                      <div>
+                        <div className="font-serif text-xl font-medium text-foreground">
+                          {(Array.isArray(s.teams) ? s.teams[0]?.name : s.teams?.name) ?? "Serving team"}
+                        </div>
+                        <div className="mt-0.5 font-sans text-base text-muted-foreground">
+                          {formatServiceDate(s.service_date)}
+                        </div>
+                      </div>
+                      <ChevronRight className="h-6 w-6 shrink-0 text-brand-primary-text" aria-hidden="true" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )
+        )}
 
-          {announcements && announcements.length > 0 ? (
-            <div>
-              {announcements.map((a, i) => {
-                const publishedAt = a.published_at || a.created_at;
-                const text = excerpt(a.content);
-                return (
-                  <div
-                    key={a.id}
-                    className="py-5 grid grid-cols-[1fr_auto] gap-5 items-start"
-                    style={i > 0 ? { borderTop: "1px solid var(--color-border)" } : undefined}
-                  >
-                    <div>
-                      <h3 className="font-serif text-[22px] font-medium text-foreground tracking-tight leading-snug mb-1">
-                        {a.title}
+        {/* ── Announcements + Prayer ───────────────────────────────────────── */}
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1.3fr_1fr] lg:gap-8">
+          <section>
+            <SectionHeading
+              title="Announcements"
+              link={{ href: href("/announcements"), label: "All announcements" }}
+            />
+            {announcements === null ? (
+              <ErrorState thing="announcements" />
+            ) : announcements.length === 0 ? (
+              <EmptyState
+                icon={Megaphone}
+                message="No announcements yet."
+                action={
+                  isLeader && (
+                    <Link
+                      href={href("/settings/announcements/new")}
+                      className={buttonVariants()}
+                    >
+                      <Plus aria-hidden="true" />
+                      Add announcement
+                    </Link>
+                  )
+                }
+              />
+            ) : (
+              <ul>
+                {announcements.map((a) => {
+                  const publishedAt = a.published_at || a.created_at;
+                  const text = excerpt(a.content);
+                  return (
+                    <li key={a.id} className="border-t border-border py-4 first:border-0 first:pt-0">
+                      <h3 className="font-serif text-xl font-medium leading-snug tracking-tight">
+                        <Link
+                          href={href(`/announcements#${a.id}`)}
+                          className="inline-flex min-h-11 items-center text-foreground hover:text-brand-primary-text hover:underline"
+                        >
+                          {a.title}
+                        </Link>
                       </h3>
                       {text && (
-                        <p className="font-sans text-base text-muted-foreground leading-relaxed line-clamp-2">
+                        <p className="line-clamp-2 font-sans text-base leading-relaxed text-muted-foreground">
                           {text}
                         </p>
                       )}
-                      <p className="font-sans text-base text-muted-foreground mt-2">
+                      <p className="mt-2 font-sans text-base text-muted-foreground">
                         {timeAgo(publishedAt)}
                       </p>
-                    </div>
-                    <Link
-                      href={href(`/announcements#${a.id}`)}
-                      className="font-sans text-base font-semibold text-brand-primary-text hover:underline whitespace-nowrap pt-1"
-                    >
-                      Read →
-                    </Link>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-muted-foreground text-base">No announcements yet.</p>
-          )}
-        </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
 
-        <div>
-          <div className="flex items-baseline justify-between mb-5">
-            <h2 className="font-serif text-[30px] font-medium text-foreground tracking-tight">
-              Prayer
-            </h2>
-            <Link
-              href={href("/prayer")}
-              className="font-sans text-base font-semibold text-brand-primary-text hover:underline"
-            >
-              See all →
-            </Link>
-          </div>
-
-          {prayers && prayers.length > 0 ? (
-            <div>
-              {prayers.map((p, i) => (
-                <div
-                  key={p.id ?? i}
-                  className="flex gap-3.5 py-3.5"
-                  style={i > 0 ? { borderTop: "1px solid var(--color-border)" } : undefined}
-                >
-                  <span className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-warm">
-                    <HeartHandshake className="h-4 w-4 text-brand-primary" aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-sans text-base font-semibold text-muted-foreground">
-                      {prayerAuthorLabel(p)}
+          <section>
+            <SectionHeading title="Prayer" link={{ href: href("/prayer"), label: "All prayer requests" }} />
+            {prayers === null ? (
+              <ErrorState thing="prayer requests" />
+            ) : prayers.length === 0 ? (
+              <EmptyState icon={HeartHandshake} message="No prayer requests yet." />
+            ) : (
+              <ul>
+                {prayers.map((p, i) => (
+                  <li
+                    key={p.id ?? i}
+                    className="flex gap-3.5 border-t border-border py-4 first:border-0 first:pt-0"
+                  >
+                    <span className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-warm">
+                      <HeartHandshake className="h-4 w-4 text-brand-primary" aria-hidden="true" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-sans text-base font-semibold text-muted-foreground">
+                        {prayerAuthorLabel(p)}
+                      </div>
+                      <div className="line-clamp-2 font-sans text-base text-foreground">
+                        {p.body}
+                      </div>
                     </div>
-                    <div className="font-sans text-base text-foreground line-clamp-2">
-                      {p.body}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-muted-foreground text-base">No prayer requests yet.</p>
-          )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </div>
-      </section>
+      </div>
+    </PageContainer>
+  );
+}
+
+function SectionHeading({ title, link }: { title: string; link?: { href: string; label: string } }) {
+  return (
+    <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4">
+      <h2 className="font-serif text-3xl font-medium tracking-tight text-foreground">{title}</h2>
+      {link && (
+        <Link
+          href={link.href}
+          className="inline-flex min-h-11 items-center font-sans text-base font-semibold text-brand-primary-text hover:underline"
+        >
+          {link.label}
+        </Link>
+      )}
     </div>
   );
 }

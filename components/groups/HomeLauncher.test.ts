@@ -12,12 +12,25 @@ vi.mock("@/lib/groups/home", () => ({
   loadHomeCards: () => loadHomeCards(),
 }));
 
+vi.mock("@/components/states/ErrorState", () => ({ ErrorState: () => null }));
+
+const { ErrorState } = await import("@/components/states/ErrorState");
 const { HomeLauncher } = await import("./HomeLauncher");
 
 const A: ActiveGroup = { id: "a", name: "Grace", color: GROUP_DEFAULT_COLOR, role: "leader" };
 const B: ActiveGroup = { id: "b", name: "Hope", color: GROUP_DEFAULT_COLOR, role: "member" };
 
-const FAILURE_NOTICE = "Could not load your groups' activity. Try again in a moment.";
+function failedSections(node: ReactNode, out: string[] = []): string[] {
+  if (Array.isArray(node)) {
+    node.forEach((n) => failedSections(n, out));
+    return out;
+  }
+  if (!node || typeof node !== "object" || !("props" in node)) return out;
+  const element = node as ReactElement<{ thing?: string; children?: ReactNode }>;
+  if (element.type === ErrorState) out.push(element.props.thing ?? "");
+  failedSections(element.props.children, out);
+  return out;
+}
 
 function texts(node: ReactNode, out: string[] = []): string[] {
   if (typeof node === "string" || typeof node === "number") {
@@ -51,7 +64,7 @@ function expand(node: ReactNode): ReactNode {
   if (Array.isArray(node)) return node.map(expand);
   if (!node || typeof node !== "object" || !("props" in node)) return node;
   const element = node as ReactElement<{ children?: ReactNode }>;
-  if (typeof element.type === "function") {
+  if (typeof element.type === "function" && element.type !== ErrorState) {
     const Component = element.type as (props: unknown) => ReactNode;
     return expand(Component(element.props));
   }
@@ -62,7 +75,7 @@ async function render() {
   const element = await HomeLauncher({
     memberships: [A, B],
     discoveryOn: false,
-    displayName: "Ann",
+    displayName: null,
     orgId: "org-1",
   });
   return expand(element);
@@ -82,12 +95,22 @@ describe("HomeLauncher", () => {
       thisWeek: [],
     });
 
-    const text = texts(await render()).join("");
+    const tree = await render();
+    const text = texts(tree).join("");
 
     expect(text).toContain("4 announcements");
     expect(text).toContain("1 prayer request");
     expect(text).toContain("This week");
-    expect(text).not.toContain(FAILURE_NOTICE);
+    expect(failedSections(tree)).toEqual([]);
+  });
+
+  it("greets without a stand-in name when there is none", async () => {
+    loadHomeCards.mockResolvedValue({ cards: [], thisWeek: [] });
+
+    const text = texts(await render()).join("");
+
+    expect(text).not.toContain("Friend");
+    expect(text).toMatch(/Good (morning|afternoon|evening)\./);
   });
 
   it("says the read failed and keeps the group links, with no counts or week", async () => {
@@ -96,7 +119,7 @@ describe("HomeLauncher", () => {
     const tree = await render();
     const text = texts(tree).join("");
 
-    expect(text).toContain(FAILURE_NOTICE);
+    expect(failedSections(tree)).toEqual(["your groups' activity"]);
     expect(text).not.toContain("announcement");
     expect(text).not.toContain("No upcoming events");
     expect(text).not.toContain("This week");
