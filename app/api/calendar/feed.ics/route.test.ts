@@ -94,6 +94,7 @@ function listChain(rows: Row[], record: (filter: [string, unknown]) => void) {
         if (op === "is.null") return (row) => row[col] == null;
         if (op.startsWith("gte.")) return (row) => row[col] != null && String(row[col]) >= op.slice(4);
         if (op.startsWith("lte.")) return (row) => row[col] != null && String(row[col]) <= op.slice(4);
+        if (op.startsWith("eq.")) return (row) => String(row[col]) === op.slice(3);
         throw new Error(`unsupported or arm ${arm}`);
       };
       const arms = split(expr).map(condition);
@@ -268,6 +269,7 @@ function makeServiceClient(opts: {
               org_id: ORG,
               group_id,
               calendar_meeting_details: !(opts.hidingGroups ?? []).includes(group_id),
+              calendar_event_notes: true,
             })),
             record(table)
           );
@@ -408,7 +410,7 @@ describe("GET /api/calendar/feed.ics — group boundary", () => {
     const body = (await (await GET(feedRequest())).text()).replace(/\r\n[ \t]/g, "");
 
     expect(body).not.toContain("111 222 3333");
-    expect(body).toContain("The join details are on the event page");
+    expect(body).toContain("Join details are on the event page");
     expect(body).toMatch(new RegExp(`URL[^:]*:http://localhost:3000/g/${GROUP_A}/calendar/study-a\\?occurrence=`));
     expect(predicates.group_settings).toEqual(
       expect.arrayContaining([["eq", { org_id: ORG }], ["in", { group_id: [GROUP_A] }]])

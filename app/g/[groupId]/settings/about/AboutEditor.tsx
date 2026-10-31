@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { CalendarSubscriptionCard } from "./CalendarSubscriptionCard";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -150,38 +150,6 @@ export function AboutEditor({
     weekly_prayer_call_url: initialSettings.weekly_prayer_call_url ?? "",
     weekly_prayer_call_time: initialSettings.weekly_prayer_call_time ?? "",
   });
-  const [calendarMeetingDetails, setCalendarMeetingDetails] = useState(
-    initialSettings.calendar_meeting_details
-  );
-  const [savingCalendarDetails, setSavingCalendarDetails] = useState(false);
-
-  // Saves on its own, like the Privacy page's switches: a switch left
-  // unsaved would read as "hidden" while subscriptions still carry the details.
-  const toggleCalendarMeetingDetails = async (next: boolean) => {
-    setCalendarMeetingDetails(next);
-    setSavingCalendarDetails(true);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    const { data, error } = await supabase
-      .from("group_settings")
-      .upsert({
-        group_id: groupId,
-        calendar_meeting_details: next,
-        updated_by: user?.id,
-        updated_at: new Date().toISOString(),
-      })
-      .select("group_id");
-    setSavingCalendarDetails(false);
-    if (error || !data?.length) {
-      setCalendarMeetingDetails(!next);
-      toast.error("Couldn't save the calendar setting.");
-      return;
-    }
-    toast.success(
-      next ? "Join details now go to members' calendars." : "Join details now stay on the event page."
-    );
-  };
   const [savingCalls, setSavingCalls] = useState(false);
   const setCall = (key: keyof typeof calls, value: string) =>
     setCalls((prev) => ({ ...prev, [key]: value }));
@@ -499,27 +467,16 @@ export function AboutEditor({
           >
             {savingCalls ? "Saving..." : "Save weekly calls"}
           </Button>
-          <div className="flex items-start justify-between gap-4 border-t border-border pt-5">
-            <div className="min-w-0">
-              <Label htmlFor="calendar-meeting-details" className="text-base">
-                Put join details in members&apos; calendars
-              </Label>
-              <p className="mt-1 text-base text-muted-foreground">
-                On: members who subscribe to the calendar get each event&apos;s meeting link, ID and
-                passcode. Off: they get a link to the event page, and sign in to see them. Anything
-                typed in an event&apos;s description or location still goes to their calendars.
-              </p>
-            </div>
-            <Switch
-              id="calendar-meeting-details"
-              className="mt-1 shrink-0"
-              checked={calendarMeetingDetails}
-              disabled={savingCalendarDetails}
-              onCheckedChange={toggleCalendarMeetingDetails}
-            />
-          </div>
         </CardContent>
       </Card>
+
+      <CalendarSubscriptionCard
+        groupId={groupId}
+        initial={{
+          calendar_meeting_details: initialSettings.calendar_meeting_details,
+          calendar_event_notes: initialSettings.calendar_event_notes,
+        }}
+      />
 
       <Card>
         <CardHeader>

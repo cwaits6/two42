@@ -84,6 +84,7 @@ describe("getGroupSettings", () => {
         weekly_prayer_call_time: null,
         serving_link_mode: "login",
         calendar_meeting_details: false,
+        calendar_event_notes: false,
       },
       error: null,
     });
@@ -95,6 +96,7 @@ describe("getGroupSettings", () => {
       weekly_prayer_call_time: null,
       serving_link_mode: "login",
       calendar_meeting_details: false,
+      calendar_event_notes: false,
     });
   });
 

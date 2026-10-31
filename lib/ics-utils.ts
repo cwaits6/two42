@@ -21,6 +21,13 @@ function prefixed(prefix: string | undefined, title: string): string {
   return prefix ? `${prefix}: ${title}` : title;
 }
 
+/** What a group keeps out of calendar subscriptions; signed-in members still see it all. */
+export interface CalendarKeepOut {
+  joinDetails: boolean;
+  notes: boolean;
+  eventPageUrl: string;
+}
+
 export function eventToICSAttributes(
   event: Event,
   /** `meeting` is the series anchor's for an exception row, which carries none of its own. */
@@ -28,8 +35,8 @@ export function eventToICSAttributes(
     summaryPrefix?: string;
     meeting?: MeetingDetails | null;
     uid?: string;
-    /** Set when the group keeps join details out of calendars: the event page to point to instead. */
-    eventPageUrl?: string;
+    /** What the group keeps out of calendars, and the event page to point to instead. */
+    keepOut?: CalendarKeepOut;
   } = {}
 ): EventAttributes {
   const attrs: EventAttributes = {
@@ -44,24 +51,33 @@ export function eventToICSAttributes(
   };
 
   const meeting = opts.meeting ?? event;
-  if (opts.eventPageUrl && hasMeeting(meeting)) {
-    attrs.description = [
-      event.description,
-      `Online meeting\nThe join details are on the event page: ${opts.eventPageUrl}`,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
-    attrs.url = opts.eventPageUrl;
-  } else {
-    const notes = notesWithMeeting(event.description, meeting);
-    if (notes) {
-      attrs.description = notes;
-    }
-    if (meeting.meeting_url) {
-      attrs.url = meeting.meeting_url;
-    }
+  const showJoin = !opts.keepOut?.joinDetails;
+  const showNotes = !opts.keepOut?.notes;
+  const heldJoin = !showJoin && hasMeeting(meeting);
+  const heldNotes = !showNotes && Boolean(event.description || event.location);
+  const held = heldJoin && heldNotes
+    ? "Join details, notes and location"
+    : heldJoin
+      ? "Join details"
+      : heldNotes
+        ? "Notes and location"
+        : null;
+
+  const notes = [
+    notesWithMeeting(showNotes ? event.description : null, showJoin ? meeting : null),
+    held && opts.keepOut ? `${held} are on the event page: ${opts.keepOut.eventPageUrl}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  if (notes) {
+    attrs.description = notes;
   }
-  if (event.location) {
+  if (showJoin && meeting.meeting_url) {
+    attrs.url = meeting.meeting_url;
+  } else if (held && opts.keepOut) {
+    attrs.url = opts.keepOut.eventPageUrl;
+  }
+  if (showNotes && event.location) {
     attrs.location = event.location;
   }
 
@@ -112,12 +128,12 @@ export function calendarEntries(
 export function generateSingleEventICS(
   entries: CalendarEntry[],
   meeting?: MeetingDetails | null,
-  eventPageUrl?: (event: Event) => string | undefined
+  keepOut?: (event: Event) => CalendarKeepOut | undefined
 ): string {
   if (entries.length === 0) return EMPTY_CALENDAR;
   const { error, value } = createEvents(
     entries.map(({ event, uid }) =>
-      eventToICSAttributes(event, { meeting, uid, eventPageUrl: eventPageUrl?.(event) })
+      eventToICSAttributes(event, { meeting, uid, keepOut: keepOut?.(event) })
     )
   );
   if (error || !value) {
@@ -172,7 +188,7 @@ export interface FeedEvent {
   summaryPrefix?: string;
   meeting?: MeetingDetails | null;
   uid?: string;
-  eventPageUrl?: string;
+  keepOut?: CalendarKeepOut;
 }
 
 /** Combined feed: the member's groups' events + serving signups in one VCALENDAR. */
@@ -181,8 +197,8 @@ export function generateCombinedICS(
   servingSignups: ServingICSInput[]
 ): string {
   const all: EventAttributes[] = [
-    ...events.map(({ event, summaryPrefix, meeting, uid, eventPageUrl }) =>
-      eventToICSAttributes(event, { summaryPrefix, meeting, uid, eventPageUrl })
+    ...events.map(({ event, summaryPrefix, meeting, uid, keepOut }) =>
+      eventToICSAttributes(event, { summaryPrefix, meeting, uid, keepOut })
     ),
     ...servingSignups.map(servingToICSAttributes),
   ];

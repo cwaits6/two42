@@ -737,14 +737,14 @@ isOneToOne: false
                   ]
                 },"group_settings": {
                   Row: {
-                    "calendar_meeting_details": boolean,"group_id": string,"org_id": string,"serving_link_mode": string | null,"updated_at": string,"updated_by": string | null,"weekly_prayer_call_time": string | null,"weekly_prayer_call_url": string | null,"weekly_zoom_url": string | null,"zoom_meeting_time": string | null
+                    "calendar_event_notes": boolean,"calendar_meeting_details": boolean,"group_id": string,"org_id": string,"serving_link_mode": string | null,"updated_at": string,"updated_by": string | null,"weekly_prayer_call_time": string | null,"weekly_prayer_call_url": string | null,"weekly_zoom_url": string | null,"zoom_meeting_time": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "calendar_meeting_details"?: boolean,"group_id": string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null,"weekly_prayer_call_time"?: string | null,"weekly_prayer_call_url"?: string | null,"weekly_zoom_url"?: string | null,"zoom_meeting_time"?: string | null
+                    "calendar_event_notes"?: boolean,"calendar_meeting_details"?: boolean,"group_id": string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null,"weekly_prayer_call_time"?: string | null,"weekly_prayer_call_url"?: string | null,"weekly_zoom_url"?: string | null,"zoom_meeting_time"?: string | null
                   }
                   Update: {
-                    "calendar_meeting_details"?: boolean,"group_id"?: string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null,"weekly_prayer_call_time"?: string | null,"weekly_prayer_call_url"?: string | null,"weekly_zoom_url"?: string | null,"zoom_meeting_time"?: string | null
+                    "calendar_event_notes"?: boolean,"calendar_meeting_details"?: boolean,"group_id"?: string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null,"weekly_prayer_call_time"?: string | null,"weekly_prayer_call_url"?: string | null,"weekly_zoom_url"?: string | null,"zoom_meeting_time"?: string | null
                   }
                   Relationships: [
                     {

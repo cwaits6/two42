@@ -500,6 +500,8 @@ export interface GroupSettings {
   serving_link_mode: "signed" | "login" | null;
   /** Calendar subscriptions carry meeting links, IDs and passcodes; off, they link to the event page. */
   calendar_meeting_details: boolean;
+  /** Calendar subscriptions carry event descriptions and locations; off, they link to the event page. */
+  calendar_event_notes: boolean;
   updated_by: string | null;
   updated_at: string;
 }

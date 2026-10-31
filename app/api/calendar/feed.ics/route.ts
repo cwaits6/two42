@@ -14,7 +14,7 @@ import type { Event } from "@/lib/types";
 import type { MeetingFields } from "@/lib/meetings";
 import { isMemberRole } from "@/lib/roles";
 import { orgTimeZoneById } from "@/lib/time/orgZone";
-import { eventPageUrl, groupsHidingMeetingDetails } from "@/lib/calendar/meetingDetails";
+import { calendarKeepOutByGroup, keepOutFor } from "@/lib/calendar/keepOut";
 
 // Read a page at a time until every matching row is in: a capped read drops
 // a series or a moved date's row, and the dates it governs come back wrong.
@@ -208,11 +208,11 @@ export async function GET(request: Request) {
   // finds its series here and inherits that meeting.
   const series = new Map<string, MeetingFields>(typedEvents.map((e) => [e.id, e]));
   const timeZone = await orgTimeZoneById(supabase, sub.org_id);
-  let hidingDetails: Set<string>;
+  let keptOut: Awaited<ReturnType<typeof calendarKeepOutByGroup>>;
   try {
-    hidingDetails = await groupsHidingMeetingDetails(supabase, sub.org_id, groupIds);
+    keptOut = await calendarKeepOutByGroup(supabase, sub.org_id, groupIds);
   } catch (err) {
-    console.error("Failed to load calendar meeting settings for calendar feed:", err);
+    console.error("Failed to load calendar subscription settings for calendar feed:", err);
     return new Response("Something went wrong", { status: 500 });
   }
 
@@ -224,7 +224,7 @@ export async function GET(request: Request) {
       uid,
       summaryPrefix: groupParam ? undefined : groupNames.get(event.group_id),
       meeting: event.series_id ? (series.get(event.series_id) ?? null) : event,
-      eventPageUrl: hidingDetails.has(event.group_id) ? eventPageUrl(event) : undefined,
+      keepOut: keepOutFor(keptOut, event),
     })
   );
 

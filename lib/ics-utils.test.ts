@@ -147,23 +147,41 @@ describe("calendarEntries", () => {
   });
 });
 
-describe("join details kept out of calendars", () => {
+describe("details kept out of calendars", () => {
   const page = "https://two42.io/g/g1/calendar/e1";
   const zoom = { meeting_url: "https://zoom.us/j/123?pwd=abc", meeting_id: "123", meeting_passcode: "faith" };
+  const full = { ...event, ...zoom, description: "Bring a dish", location: "Smith home" } as Event;
+  const keepOut = (joinDetails: boolean, notes: boolean) => ({
+    keepOut: { joinDetails, notes, eventPageUrl: page },
+  });
 
-  it("links to the event page in place of the link, ID and passcode", () => {
-    const attrs = eventToICSAttributes({ ...event, ...zoom, description: "Bring a dish" } as Event, {
-      eventPageUrl: page,
-    });
+  it("links to the event page in place of the join details, keeping the notes", () => {
+    const attrs = eventToICSAttributes(full, keepOut(true, false));
     expect(attrs.url).toBe(page);
+    expect(attrs.location).toBe("Smith home");
+    expect(attrs.description).toBe(`Bring a dish\n\nJoin details are on the event page: ${page}`);
+  });
+
+  it("keeps the join details and leaves out the notes and location", () => {
+    const attrs = eventToICSAttributes(full, keepOut(false, true));
+    expect(attrs.url).toBe(zoom.meeting_url);
+    expect(attrs.location).toBeUndefined();
     expect(attrs.description).toBe(
-      `Bring a dish\n\nOnline meeting\nThe join details are on the event page: ${page}`
+      `Online meeting\nJoin: ${zoom.meeting_url}\nMeeting ID: 123\nPasscode: faith\n\nNotes and location are on the event page: ${page}`
     );
   });
 
-  it("adds nothing to an event without a meeting", () => {
-    const attrs = eventToICSAttributes(event, { eventPageUrl: page });
+  it("leaves out both, behind one link", () => {
+    const attrs = eventToICSAttributes(full, keepOut(true, true));
+    expect(attrs.url).toBe(page);
+    expect(attrs.location).toBeUndefined();
+    expect(attrs.description).toBe(`Join details, notes and location are on the event page: ${page}`);
+  });
+
+  it("adds nothing when there was nothing to keep out", () => {
+    const attrs = eventToICSAttributes(event, keepOut(true, true));
     expect(attrs.url).toBeUndefined();
     expect(attrs.description).toBeUndefined();
+    expect(attrs.location).toBeUndefined();
   });
 });

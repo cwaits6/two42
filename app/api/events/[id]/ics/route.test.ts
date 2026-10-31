@@ -38,6 +38,8 @@ function filteredChain(rows: Row[], record: (filter: [string, unknown]) => void)
       filters.push((row) => vals.includes(row[col]));
       return obj;
     },
+    // Only the group_settings read uses .or(), and its rows here are empty.
+    or: () => obj,
     single: async (): Promise<Result> => {
       const [row] = matches();
       return row ? { data: row, error: null } : { data: null, error: { code: "PGRST116" } };

@@ -8,7 +8,7 @@ import type { Event } from "@/lib/types";
 import type { MeetingFields } from "@/lib/meetings";
 import { isMemberRole } from "@/lib/roles";
 import { orgTimeZoneById } from "@/lib/time/orgZone";
-import { eventPageUrl, groupsHidingMeetingDetails } from "@/lib/calendar/meetingDetails";
+import { calendarKeepOutByGroup, keepOutFor } from "@/lib/calendar/keepOut";
 
 export async function GET(
   request: Request,
@@ -159,21 +159,17 @@ export async function GET(
     );
   }
 
-  let hidingDetails: Set<string>;
+  let keptOut: Awaited<ReturnType<typeof calendarKeepOutByGroup>>;
   try {
-    hidingDetails = await groupsHidingMeetingDetails(supabase, sub.org_id, [typedEvent.group_id]);
+    keptOut = await calendarKeepOutByGroup(supabase, sub.org_id, [typedEvent.group_id]);
   } catch (err) {
-    console.error("Failed to load calendar meeting settings for event ICS:", err);
+    console.error("Failed to load calendar subscription settings for event ICS:", err);
     return new Response("Something went wrong", { status: 500 });
   }
 
   let icsString: string;
   try {
-    icsString = generateSingleEventICS(
-      entries,
-      meeting,
-      hidingDetails.has(typedEvent.group_id) ? eventPageUrl : undefined
-    );
+    icsString = generateSingleEventICS(entries, meeting, (event) => keepOutFor(keptOut, event));
   } catch (err) {
     console.error("ICS generation failed:", err);
     return new Response("Failed to generate calendar file", { status: 500 });

@@ -774,6 +774,10 @@ select col_not_null('public', 'group_settings', 'calendar_meeting_details',
   'group_settings.calendar_meeting_details is not null');
 select col_default_is('public', 'group_settings', 'calendar_meeting_details', 'true',
   'group_settings.calendar_meeting_details defaults to on');
+select col_not_null('public', 'group_settings', 'calendar_event_notes',
+  'group_settings.calendar_event_notes is not null');
+select col_default_is('public', 'group_settings', 'calendar_event_notes', 'true',
+  'group_settings.calendar_event_notes defaults to on');
 
 select * from finish();
 rollback;
