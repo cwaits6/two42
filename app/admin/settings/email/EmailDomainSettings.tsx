@@ -250,12 +250,13 @@ export function EmailDomainSettings() {
       }
       toast.success("Domain removed.");
       setRow(null);
+      setConfirmingRemove(false);
     } catch (err) {
       console.error("email-domain remove: request failed:", err);
       toast.error(NETWORK_ERROR);
+      setConfirmingRemove(false);
     } finally {
       setBusy(false);
-      setConfirmingRemove(false);
     }
   };
 
