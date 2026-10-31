@@ -155,6 +155,22 @@ describe("GroupDashboard", () => {
     expect(text).not.toContain("2026-11-01");
   });
 
+  it("shows the maybe count when no one has said yes yet", async () => {
+    const start = new Date(Date.now() + 86_400_000).toISOString();
+    reads.events = {
+      data: [{ id: "e1", title: "Group night", start_time: start, end_time: null, series_id: null }],
+      error: null,
+    };
+    reads.rsvps = { data: [{ event_id: "e1", status: "maybe" }], error: null };
+
+    const text = texts(await render()).join("");
+
+    expect(text).toContain("Group night");
+    expect(text).toContain("1 maybe");
+    expect(text).not.toContain("going ·");
+    expect(text).not.toContain("0 going");
+  });
+
   it("shows a failed serving read under its own heading", async () => {
     reads.serving_signups = FAILED;
 

@@ -271,10 +271,14 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
             <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-white/25 pt-5">
               <div className="flex flex-wrap items-center gap-x-2.5 font-sans text-base">
                 <span className="font-semibold">Are you going?</span>
-                {goingCount > 0 && (
+                {(goingCount > 0 || maybeCount > 0) && (
                   <span className="text-white/90">
-                    {goingCount} going
-                    {maybeCount > 0 && <> · {maybeCount} maybe</>}
+                    {[
+                      goingCount > 0 && `${goingCount} going`,
+                      maybeCount > 0 && `${maybeCount} maybe`,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </span>
                 )}
               </div>
