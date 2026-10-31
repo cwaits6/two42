@@ -52,27 +52,6 @@ function validateBrandingPatch(
     }
   }
 
-  if ("logo_url" in raw) {
-    if (typeof raw.logo_url !== "string") {
-      return { ok: false, error: "Logo URL must be text." };
-    }
-    const logoUrl = raw.logo_url.trim();
-    if (logoUrl === "") {
-      branding.logo_url = null;
-    } else {
-      let parsed: URL;
-      try {
-        parsed = new URL(logoUrl);
-      } catch {
-        return { ok: false, error: "Logo URL must be a valid http(s) URL." };
-      }
-      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-        return { ok: false, error: "Logo URL must be a valid http(s) URL." };
-      }
-      branding.logo_url = logoUrl;
-    }
-  }
-
   if ("reply_to" in raw) {
     if (typeof raw.reply_to !== "string") {
       return { ok: false, error: "Reply-to must be an email address." };
@@ -179,8 +158,12 @@ export async function PATCH(request: Request, { params }: RouteParams) {
         typeof current.branding === "object" &&
         current.branding !== null &&
         !Array.isArray(current.branding)
-          ? (current.branding as Record<string, unknown>)
+          ? { ...(current.branding as Record<string, unknown>) }
           : {};
+      // Nothing renders or validates a logo, so a stored one is dropped
+      // rather than carried forward. Remove this when logos are a validated
+      // branding key.
+      delete existing.logo_url;
       update.branding = { ...existing, ...brandingPatch };
     }
 

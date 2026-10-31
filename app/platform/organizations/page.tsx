@@ -1,9 +1,12 @@
 import { redirect } from "next/navigation";
+import { siteConfig } from "@/lib/config";
 import { getPlatformAdmin } from "@/lib/platform-access";
 import { createServiceClient } from "@/lib/supabase/server";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { OrganizationsList, type PlatformOrg } from "./OrganizationsList";
+
+export const metadata = { title: `Organizations | Platform | ${siteConfig.name}` };
 
 export default async function PlatformOrganizationsPage() {
   const user = await getPlatformAdmin();
@@ -22,8 +25,7 @@ export default async function PlatformOrganizationsPage() {
 
   // Without this, a failed read is indistinguishable from an empty
   // deployment: orgs is null and the list renders "No organizations yet."
-  // There is no error boundary in app/, so render the failure rather than
-  // throwing into Next's default error page.
+  // Rendered here rather than thrown, so the page keeps its header.
   if (error) {
     console.error("Platform organizations list read failed", error);
     return (
@@ -38,10 +40,7 @@ export default async function PlatformOrganizationsPage() {
 
   return (
     <PageContainer size="wide">
-      <PageHeader
-        title="Organizations"
-        subtitle="Every organization on this deployment."
-      />
+      <PageHeader title="Organizations" />
       <OrganizationsList initialOrgs={(orgs ?? []) as PlatformOrg[]} />
     </PageContainer>
   );

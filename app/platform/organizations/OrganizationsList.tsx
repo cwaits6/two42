@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NETWORK_ERROR, operatorMessage } from "../operatorMessage";
 import type { Database } from "@/lib/supabase/database.types";
 
 export interface PlatformOrg {
@@ -46,11 +47,11 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
     const name = form.name.trim();
     const ownerEmail = form.ownerEmail.trim();
     if (!name || !ownerEmail) {
-      toast.error("Name and owner email are required.");
+      toast.error("Enter a name and the first admin's email.");
       return;
     }
     if (ownerEmail.length > 254 || !EMAIL.test(ownerEmail)) {
-      toast.error("Enter a valid owner email address.");
+      toast.error("Enter a valid email address for the first admin.");
       return;
     }
 
@@ -63,16 +64,16 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        toast.error(data?.error || "Failed to create organization.");
+        toast.error(operatorMessage(res.status, data, "Couldn't add the organization. Try again."));
         return;
       }
-      toast.success(`Organization ${name} created.`);
+      toast.success(`${name} added.`);
       setDialogOpen(false);
       setForm({ name: "", ownerEmail: "" });
       router.refresh();
     } catch (err) {
       console.error(err);
-      toast.error("Network error. Please try again.");
+      toast.error(NETWORK_ERROR);
     } finally {
       setCreating(false);
     }
@@ -87,7 +88,7 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
           onClick={() => setDialogOpen(true)}
         >
           <Plus className="mr-1 h-5 w-5" />
-          New organization
+          Add organization
         </Button>
       </div>
 
@@ -144,7 +145,7 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>New organization</DialogTitle>
+            <DialogTitle>Add organization</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
@@ -158,7 +159,7 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="org-owner-email">Owner email</Label>
+              <Label htmlFor="org-owner-email">First admin&apos;s email</Label>
               <Input
                 id="org-owner-email"
                 type="email"
@@ -167,8 +168,8 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
                 placeholder="e.g. admin@gracechapel.org"
               />
               <p className="text-sm text-muted-foreground">
-                The founding admin. Send their invite from the organization page
-                after creating.
+                They become its church admin. Send their invite from the
+                organization page once it is added.
               </p>
             </div>
           </div>
@@ -181,7 +182,7 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
               onClick={handleCreate}
               disabled={creating}
             >
-              {creating ? "Creating..." : "Create organization"}
+              {creating ? "Adding…" : "Add organization"}
             </Button>
           </DialogFooter>
         </DialogContent>

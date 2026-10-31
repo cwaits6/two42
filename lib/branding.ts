@@ -24,14 +24,12 @@ export {
 
 export type OrgBranding = {
   display_name: string;
-  logo_url: string | null;
   accent: string;
   reply_to: string | null;
 };
 
 export const BRANDING_DEFAULTS: OrgBranding = {
   display_name: siteConfig.name,
-  logo_url: null,
   accent: siteConfig.colors.primary,
   reply_to: null,
 };
@@ -71,7 +69,6 @@ export function resolveBranding(raw: unknown): OrgBranding {
   }
   return {
     display_name: name !== "" ? name : BRANDING_DEFAULTS.display_name,
-    logo_url: typeof b.logo_url === "string" ? b.logo_url : null,
     accent:
       typeof b.accent === "string" && HEX.test(b.accent)
         ? b.accent

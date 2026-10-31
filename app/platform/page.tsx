@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { siteConfig } from "@/lib/config";
 import { getPlatformAdmin } from "@/lib/platform-access";
 import { createServiceClient } from "@/lib/supabase/server";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
+
+export const metadata = { title: `Overview | Platform | ${siteConfig.name}` };
 
 export default async function PlatformOverviewPage() {
   const user = await getPlatformAdmin();
@@ -23,7 +26,7 @@ export default async function PlatformOverviewPage() {
     console.error("Platform overview organizations read failed", error);
     return (
       <PageContainer>
-        <PageHeader title="Platform" />
+        <PageHeader title="Overview" />
         <p className="text-base">
           Could not load organization counts. Try again in a moment.
         </p>
@@ -36,7 +39,7 @@ export default async function PlatformOverviewPage() {
 
   return (
     <PageContainer>
-      <PageHeader title="Platform" subtitle="Create and manage organizations." />
+      <PageHeader title="Overview" />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>

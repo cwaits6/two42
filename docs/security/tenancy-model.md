@@ -742,8 +742,9 @@ disambiguate within the matched set, never widen it; client-supplied
 
 `provision_organization(name, owner_email)` builds a complete org in one
 transaction: the org row — its `branding` jsonb seeded with the full
-tenant-overridable contract (`display_name`, `logo_url`, `accent`,
-`reply_to`; see [`DESIGN.md`](../design/DESIGN.md)) — the two org-level
+tenant-overridable contract (`display_name`, `accent`, `reply_to`; see
+[`DESIGN.md`](../design/DESIGN.md), plus a `logo_url` key it seeds as null
+and nothing reads) — the two org-level
 giving settings, and an **approved access request for the owner** — so self-serve
 onboarding is org-first: provision, then create the auth user, and the
 fail-closed trigger needs no special case. Phase 4 must NOT solve

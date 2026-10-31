@@ -132,11 +132,8 @@ describe("resolveBranding", () => {
     expect(resolved.accent).toBe(BRANDING_DEFAULTS.accent);
   });
 
-  it("keeps string logo_url and nulls everything else", () => {
-    expect(resolveBranding({ logo_url: "https://x.test/l.png" }).logo_url).toBe(
-      "https://x.test/l.png"
-    );
-    expect(resolveBranding({ logo_url: 42 }).logo_url).toBeNull();
+  it("ignores a stored logo_url, which nothing renders", () => {
+    expect(resolveBranding({ logo_url: "https://x.test/l.png" })).not.toHaveProperty("logo_url");
   });
 });
 
