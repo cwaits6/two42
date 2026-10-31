@@ -11,6 +11,11 @@ vi.mock("@/lib/supabase/server", () => ({
   createServiceClient: () => createServiceClient(),
 }));
 
+// A fixed clock: how many weekly dates fall in the feed's window depends on
+// the day, so a count asserted against the real clock would drift.
+vi.useFakeTimers({ toFake: ["Date"] });
+vi.setSystemTime(new Date("2026-11-04T00:00:00.000Z"));
+
 const { GET } = await import("@/app/api/calendar/feed.ics/route");
 
 const ORG = "org-1";
@@ -333,8 +338,9 @@ describe("GET /api/calendar/feed.ics — group boundary", () => {
     const deletedDay = seriesDateNear(SOON).slice(0, 10);
     const studyUids = body.match(/UID:study-a-\d{4}-\d{2}-\d{2}/g) ?? [];
 
-    // A month back to a year ahead of weekly dates, less the deleted and the moved one.
-    expect(studyUids.length).toBeGreaterThanOrEqual(54);
+    // 2026-10-05 to 2027-11-04 holds 56 Sundays; the deleted date and the two
+    // moved ones each take one.
+    expect(studyUids.length).toBe(53);
     expect(new Set(studyUids).size).toBe(studyUids.length);
     expect(body).not.toContain(`UID:study-a-${deletedDay}`);
     expect(body).not.toContain("UID:deleted-a");
