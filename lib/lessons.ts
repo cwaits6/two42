@@ -28,10 +28,14 @@ function formatMonthYear(date: string): string {
 
 type DatedLesson = { id: string; lecture_date: string | null };
 
-/** Oldest first; undated lessons keep their order after the dated ones. */
+/** Oldest first, ties by id; undated lessons keep their order after the dated ones. */
 export function lessonsInOrder<T extends DatedLesson>(lessons: readonly T[]): T[] {
   return [...lessons].sort((a, b) => {
-    if (a.lecture_date === b.lecture_date) return 0;
+    if (a.lecture_date === b.lecture_date) {
+      // Callers query in different orders, so a same-day tie must not depend on input order.
+      if (a.lecture_date === null) return 0;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    }
     if (a.lecture_date === null) return 1;
     if (b.lecture_date === null) return -1;
     return a.lecture_date < b.lecture_date ? -1 : 1;

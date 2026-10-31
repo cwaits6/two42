@@ -31,6 +31,19 @@ describe("lessonsInOrder", () => {
     ]);
     expect(ordered.map((l) => l.id)).toEqual(["may", "june", "undated-a", "undated-b"]);
   });
+
+  it("orders lessons on the same date by id whatever the input order", () => {
+    const forward = lessonsInOrder([
+      { id: "b", lecture_date: "2026-06-07" },
+      { id: "a", lecture_date: "2026-06-07" },
+    ]);
+    const reverse = lessonsInOrder([
+      { id: "a", lecture_date: "2026-06-07" },
+      { id: "b", lecture_date: "2026-06-07" },
+    ]);
+    expect(forward.map((l) => l.id)).toEqual(["a", "b"]);
+    expect(reverse.map((l) => l.id)).toEqual(["a", "b"]);
+  });
 });
 
 describe("partNumbers", () => {
