@@ -3,12 +3,12 @@
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { useDirectory } from "@/components/directory/DirectoryContext";
-import { DirectoryListSkeleton } from "@/components/directory/DirectoryListSkeleton";
+import { LoadingState } from "@/components/states/LoadingState";
 
 /** Skeleton while loading, a retry when the load failed, else the tab body. */
 export function DirectoryLoadState({ children }: { children: ReactNode }) {
   const { loading, error, reload } = useDirectory();
-  if (loading) return <DirectoryListSkeleton />;
+  if (loading) return <LoadingState thing="the directory" />;
   if (error) {
     return (
       <div className="rounded-xl border border-border p-8 text-center">
