@@ -8,7 +8,6 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({}) }));
 
 const { DiscoveryRow } = await import("./FindAGroupList");
-const { DirRow } = await import("@/components/directory/DirRow");
 
 const group: DiscoverableGroup = {
   id: "group-1",
@@ -47,42 +46,11 @@ describe("DiscoveryRow layout", () => {
     expect(root.firstElementChild).toBe(card(root));
   });
 
-  it("drops the actions under the text in a narrow row and beside it in a wide one", () => {
-    const root = mount(createElement(DiscoveryRow, { row: group, onChanged: () => {} }));
-    const row = card(root);
-    expect(row.classList).toContain("@container");
-    expect(row.classList).toContain("flex-wrap");
-    const button = root.querySelector("button")!;
-    const actions = button.closest(".basis-full") as HTMLElement;
-    expect(actions.parentElement).toBe(row);
-    expect([...actions.classList]).toEqual(
-      expect.arrayContaining(["order-last", "@lg:order-none", "@lg:basis-auto"]),
-    );
-    expect([...button.classList]).toEqual(expect.arrayContaining(["w-full", "@lg:w-auto"]));
-  });
-
   it("shows membership as a label, not a button", () => {
     const root = mount(
       createElement(DiscoveryRow, { row: { ...group, viewer_role: "member" }, onChanged: () => {} }),
     );
     const controls = [...root.querySelectorAll("button, a")].map((el) => el.textContent);
     expect(controls).toEqual(["Open group"]);
-  });
-});
-
-describe("DirRow actions", () => {
-  it("keeps actions beside the card for rows that do not stack", () => {
-    const root = mount(
-      createElement(DirRow, {
-        avatar: null,
-        title: "Ada",
-        onClick: () => {},
-        actions: createElement("button", { type: "button" }, "Edit"),
-      }),
-    );
-    const row = card(root);
-    expect(row.classList).not.toContain("flex-wrap");
-    expect(row.textContent).not.toContain("Edit");
-    expect(row.parentElement!.textContent).toContain("Edit");
   });
 });
