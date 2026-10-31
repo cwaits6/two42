@@ -13,6 +13,13 @@ import {
 import { ServingHistory, type HistoryEntry } from "@/components/serving/ServingHistory";
 import { EmailTeamButton } from "@/components/serving/EmailTeamButton";
 import { ServingSettingsDialog } from "@/components/serving/ServingSettingsDialog";
+import {
+  TeamRoster,
+  type TeamRosterMember,
+  type TeamRosterPerson,
+} from "@/components/serving/TeamRoster";
+import { displayName } from "@/lib/names";
+import { mintSignedUrls } from "@/lib/storageRead";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { groupPageTitle } from "@/lib/pageTitle";
 
@@ -24,6 +31,11 @@ interface AttendeeProfile {
   last_name: string | null;
   preferred_name: string | null;
 }
+
+type RosterProfile = TeamRosterPerson & { role: string };
+
+const byName = (a: TeamRosterPerson, b: TeamRosterPerson) =>
+  displayName(a).localeCompare(displayName(b));
 
 export default async function ServingSchedulePage({
   params,
@@ -77,10 +89,22 @@ export default async function ServingSchedulePage({
   // team leads, and group leaders can actually claim a Sunday.
   const canSignUp = isMember || isTeamLead || isLeader;
 
-  const { data: memberRows } = await supabase
-    .from("team_members")
-    .select("profiles(email, role)")
-    .eq("team_id", teamId);
+  const canManageRoster = isLeader || isTeamLead;
+
+  const [{ data: memberRows }, { data: groupRows }] = await Promise.all([
+    supabase
+      .from("team_members")
+      .select(
+        "is_leader, profiles(id, email, role, first_name, last_name, preferred_name, avatar_url)"
+      )
+      .eq("team_id", teamId),
+    canManageRoster
+      ? supabase
+          .from("group_members")
+          .select("profiles(id, role, first_name, last_name, preferred_name, avatar_url)")
+          .eq("group_id", group.id)
+      : Promise.resolve({ data: [] }),
+  ]);
   const memberCount = (memberRows ?? []).filter((row) => {
     const member = row.profiles as unknown as {
       email: string | null;
@@ -88,6 +112,53 @@ export default async function ServingSchedulePage({
     } | null;
     return !!member?.email && member.role !== "pending";
   }).length;
+
+  // Pending profiles are household peers who never signed in, not people to
+  // put on a team. A null embed is a profile RLS hides from the viewer.
+  let rosterMembers: TeamRosterMember[] = [];
+  let rosterCandidates: TeamRosterPerson[] = [];
+  if (canManageRoster) {
+    const onTeam = new Set<string>();
+    for (const row of memberRows ?? []) {
+      const p = row.profiles as unknown as RosterProfile | null;
+      if (!p) continue;
+      onTeam.add(p.id);
+      if (p.role === "pending") continue;
+      rosterMembers.push({
+        id: p.id,
+        first_name: p.first_name,
+        last_name: p.last_name,
+        preferred_name: p.preferred_name,
+        avatar_url: p.avatar_url,
+        is_leader: row.is_leader,
+      });
+    }
+    for (const row of groupRows ?? []) {
+      const p = row.profiles as unknown as RosterProfile | null;
+      if (!p || p.role === "pending" || onTeam.has(p.id)) continue;
+      rosterCandidates.push({
+        id: p.id,
+        first_name: p.first_name,
+        last_name: p.last_name,
+        preferred_name: p.preferred_name,
+        avatar_url: p.avatar_url,
+      });
+    }
+    rosterMembers.sort((a, b) =>
+      a.is_leader !== b.is_leader ? (a.is_leader ? -1 : 1) : byName(a, b)
+    );
+    rosterCandidates.sort(byName);
+
+    // Private buckets: exchange stored avatar URLs for signed URLs.
+    const signed = await mintSignedUrls(
+      [...rosterMembers, ...rosterCandidates].map((p) => p.avatar_url)
+    );
+    rosterMembers = rosterMembers.map((p, i) => ({ ...p, avatar_url: signed[i] }));
+    rosterCandidates = rosterCandidates.map((p, i) => ({
+      ...p,
+      avatar_url: signed[rosterMembers.length + i],
+    }));
+  }
 
   const sundays = upcomingSundays(settings?.window_weeks ?? 8);
 
@@ -243,7 +314,7 @@ export default async function ServingSchedulePage({
         </p>
       )}
 
-      {(isLeader || isTeamLead) && (
+      {canManageRoster && (
         <div className="flex flex-wrap items-center gap-2 mb-6">
           {settings?.enabled && (
             <EmailTeamButton
@@ -283,8 +354,20 @@ export default async function ServingSchedulePage({
         userId={user.id}
         spouse={spouse}
         canSignUp={canSignUp}
-        canManage={isLeader || isTeamLead}
+        canManage={canManageRoster}
       />
+
+      {canManageRoster && (
+        <div className="mt-10">
+          <TeamRoster
+            teamId={teamId}
+            teamName={team.name}
+            groupName={group.name}
+            members={rosterMembers}
+            candidates={rosterCandidates}
+          />
+        </div>
+      )}
 
       {historyEntries.length > 0 && (
         <ServingHistory entries={historyEntries} />
