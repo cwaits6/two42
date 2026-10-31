@@ -1,6 +1,8 @@
 import { createEvents, type EventAttributes } from "ics";
 import type { Event } from "@/lib/types";
 import { notesWithMeeting, type MeetingDetails } from "@/lib/meetings";
+import { expandUpcomingEvents } from "@/lib/recurrence";
+import { dayKey } from "@/lib/time/zone";
 
 function parseDateToArray(
   isoString: string
@@ -22,10 +24,10 @@ function prefixed(prefix: string | undefined, title: string): string {
 export function eventToICSAttributes(
   event: Event,
   /** `meeting` is the series anchor's for an exception row, which carries none of its own. */
-  opts: { summaryPrefix?: string; meeting?: MeetingDetails | null } = {}
+  opts: { summaryPrefix?: string; meeting?: MeetingDetails | null; uid?: string } = {}
 ): EventAttributes {
   const attrs: EventAttributes = {
-    uid: event.id,
+    uid: opts.uid ?? event.id,
     title: prefixed(opts.summaryPrefix, event.title),
     start: parseDateToArray(event.start_time),
     startInputType: "utc",
@@ -50,8 +52,55 @@ export function eventToICSAttributes(
   return attrs;
 }
 
-export function generateSingleEventICS(event: Event, meeting?: MeetingDetails | null): string {
-  const { error, value } = createEvents([eventToICSAttributes(event, { meeting })]);
+const EMPTY_CALENDAR =
+  "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Small Group Hub//EN\r\nEND:VCALENDAR\r\n";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The dates a subscription lists: a month back, so recent entries don't vanish, to a year ahead. */
+export function subscriptionWindow(now: Date = new Date()): { start: Date; end: Date } {
+  return { start: new Date(now.getTime() - 30 * DAY_MS), end: new Date(now.getTime() + 365 * DAY_MS) };
+}
+
+export interface CalendarEntry {
+  event: Event;
+  uid: string;
+}
+
+/**
+ * One entry per date between `windowStart` and `windowEnd`: one-off events,
+ * moved dates, and every date of a series. Calendar apps ignore what the app
+ * stores about repeating, so each date is written out as its own entry, with
+ * a UID per date — one UID per series would collapse them into one.
+ * Cancelled exception rows must be passed in: they are what removes a
+ * deleted date from its series.
+ */
+export function calendarEntries(
+  events: Event[],
+  timeZone: string,
+  windowStart: Date,
+  windowEnd: Date
+): CalendarEntry[] {
+  const live = events.filter((e) => e.series_id || !e.is_cancelled);
+  return expandUpcomingEvents(live, timeZone, windowStart, windowEnd)
+    .filter((e) => new Date(e.start_time) <= windowEnd)
+    .map((event) => ({
+      event,
+      uid:
+        !event.series_id && event.recurrence_frequency
+          ? `${event.id}-${dayKey(event.start_time, timeZone)}`
+          : event.id,
+    }));
+}
+
+export function generateSingleEventICS(
+  entries: CalendarEntry[],
+  meeting?: MeetingDetails | null
+): string {
+  if (entries.length === 0) return EMPTY_CALENDAR;
+  const { error, value } = createEvents(
+    entries.map(({ event, uid }) => eventToICSAttributes(event, { meeting, uid }))
+  );
   if (error || !value) {
     throw new Error(`Failed to generate ICS: ${error?.message ?? "unknown error"}`);
   }
@@ -103,6 +152,7 @@ export interface FeedEvent {
   /** The group name, on the merged feed only. */
   summaryPrefix?: string;
   meeting?: MeetingDetails | null;
+  uid?: string;
 }
 
 /** Combined feed: the member's groups' events + serving signups in one VCALENDAR. */
@@ -111,13 +161,13 @@ export function generateCombinedICS(
   servingSignups: ServingICSInput[]
 ): string {
   const all: EventAttributes[] = [
-    ...events.map(({ event, summaryPrefix, meeting }) =>
-      eventToICSAttributes(event, { summaryPrefix, meeting })
+    ...events.map(({ event, summaryPrefix, meeting, uid }) =>
+      eventToICSAttributes(event, { summaryPrefix, meeting, uid })
     ),
     ...servingSignups.map(servingToICSAttributes),
   ];
   if (all.length === 0) {
-    return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Small Group Hub//EN\r\nEND:VCALENDAR\r\n";
+    return EMPTY_CALENDAR;
   }
   const { error, value } = createEvents(all);
   if (error || !value) {

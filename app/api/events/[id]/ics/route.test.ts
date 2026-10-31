@@ -38,6 +38,8 @@ function filteredChain(rows: Row[], record: (filter: [string, unknown]) => void)
       return row ? { data: row, error: null } : { data: null, error: { code: "PGRST116" } };
     },
     maybeSingle: async (): Promise<Result> => ({ data: matches()[0] ?? null, error: null }),
+    then: (resolve: (v: Result) => unknown, reject?: (e: unknown) => unknown) =>
+      Promise.resolve({ data: matches(), error: null }).then(resolve, reject),
   };
   return obj;
 }
@@ -48,6 +50,7 @@ function tokenChain(terminal: Result) {
     update: () => obj,
     eq: () => obj,
     single: async () => terminal,
+    maybeSingle: async () => terminal,
     then: (resolve: (v: Result) => unknown, reject?: (e: unknown) => unknown) =>
       Promise.resolve({ data: null, error: null }).then(resolve, reject),
   };
@@ -68,6 +71,14 @@ function event(id: string, title: string, isCancelled: boolean): Row {
   };
 }
 
+// The first Thursday noon UTC after a week from now: a date of the series below.
+function nextThursdayNoon(): string {
+  const d = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  d.setUTCHours(12, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() + ((4 - d.getUTCDay() + 7) % 7));
+  return d.toISOString();
+}
+
 function makeServiceClient() {
   const predicates: Array<[string, unknown]> = [];
   const events = [
@@ -75,6 +86,20 @@ function makeServiceClient() {
     event("event-gone", "Cancelled date", true),
     { ...event("anchor", "Weekly study", false), meeting_id: "123 456 7890", meeting_passcode: "faith" },
     { ...event("moved-date", "Weekly study", false), series_id: "anchor" },
+    {
+      ...event("series", "Thursday study", false),
+      start_time: "2025-01-02T12:00:00.000Z",
+      recurrence_frequency: "weekly",
+      recurrence_interval: 1,
+      recurrence_end_mode: "never",
+      series_id: null,
+    },
+    {
+      ...event("series-deleted", "Thursday study", true),
+      series_id: "series",
+      series_occurrence_date: nextThursdayNoon(),
+      start_time: nextThursdayNoon(),
+    },
   ];
   const client = {
     from(table: string) {
@@ -86,6 +111,8 @@ function makeServiceClient() {
           });
         case "profiles":
           return tokenChain({ data: { role: "member" }, error: null });
+        case "organizations":
+          return tokenChain({ data: { timezone: "UTC" }, error: null });
         case "group_members":
           return filteredChain([{ org_id: ORG, profile_id: OWNER, group_id: GROUP }], () => {});
         case "events":
@@ -151,5 +178,17 @@ describe("GET /api/events/[id]/ics", () => {
     expect(body).toContain("Meeting ID: 123 456 7890");
     expect(body).toContain("Passcode: faith");
     expect(predicates).toEqual(expect.arrayContaining([["id", "anchor"], ["group_id", GROUP]]));
+  });
+
+  it("lists a subscribed series' dates, without the deleted one", async () => {
+    const { client, predicates } = makeServiceClient();
+    createServiceClient.mockResolvedValue(client);
+
+    const body = await (await icsRequest("series")).text();
+    const uids = body.match(/UID:series-\d{4}-\d{2}-\d{2}/g) ?? [];
+
+    expect(uids.length).toBeGreaterThanOrEqual(55);
+    expect(body).not.toContain(`UID:series-${nextThursdayNoon().slice(0, 10)}`);
+    expect(predicates).toEqual(expect.arrayContaining([["series_id", "series"], ["group_id", GROUP]]));
   });
 });

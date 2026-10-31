@@ -11,6 +11,11 @@ vi.mock("@/lib/supabase/server", () => ({
   createServiceClient: () => createServiceClient(),
 }));
 
+// A fixed clock: how many weekly dates fall in the feed's window depends on
+// the day, so a count asserted against the real clock would drift.
+vi.useFakeTimers({ toFake: ["Date"] });
+vi.setSystemTime(new Date("2026-11-04T00:00:00.000Z"));
+
 const { GET } = await import("@/app/api/calendar/feed.ics/route");
 
 const ORG = "org-1";
@@ -40,6 +45,7 @@ function valuesAt(row: Row, path: string): unknown[] {
 // predicates are applied, the way the database would.
 function listChain(rows: Row[], record: (filter: [string, unknown]) => void) {
   const filters: Array<(row: Row) => boolean> = [];
+  let slice: [number, number?] = [0];
   const obj = {
     select: () => obj,
     eq(col: string, val: unknown) {
@@ -56,11 +62,56 @@ function listChain(rows: Row[], record: (filter: [string, unknown]) => void) {
       filters.push((row) => String(row[col]) >= val);
       return obj;
     },
+    lte(col: string, val: string) {
+      filters.push((row) => String(row[col]) <= val);
+      return obj;
+    },
+    // The route's one `.or()`: comma-separated arms, each a bare condition or
+    // an and(...) of them, with gte / lte / is.null / not.is.null operators.
+    or(expr: string) {
+      const split = (text: string) => {
+        const parts: string[] = [];
+        let depth = 0;
+        let start = 0;
+        for (let i = 0; i < text.length; i++) {
+          if (text[i] === "(") depth++;
+          else if (text[i] === ")") depth--;
+          else if (text[i] === "," && depth === 0) {
+            parts.push(text.slice(start, i));
+            start = i + 1;
+          }
+        }
+        return [...parts, text.slice(start)];
+      };
+      const condition = (arm: string): ((row: Row) => boolean) => {
+        if (arm.startsWith("and(")) {
+          const all = split(arm.slice(4, -1)).map(condition);
+          return (row) => all.every((c) => c(row));
+        }
+        const [col, ...rest] = arm.split(".");
+        const op = rest.join(".");
+        if (op === "not.is.null") return (row) => row[col] != null;
+        if (op === "is.null") return (row) => row[col] == null;
+        if (op.startsWith("gte.")) return (row) => row[col] != null && String(row[col]) >= op.slice(4);
+        if (op.startsWith("lte.")) return (row) => row[col] != null && String(row[col]) <= op.slice(4);
+        throw new Error(`unsupported or arm ${arm}`);
+      };
+      const arms = split(expr).map(condition);
+      filters.push((row) => arms.some((arm) => arm(row)));
+      return obj;
+    },
     order: () => obj,
-    limit: () => obj,
+    limit(n: number) {
+      slice = [0, n];
+      return obj;
+    },
+    range(from: number, to: number) {
+      slice = [from, to + 1];
+      return obj;
+    },
     then: (resolve: (v: Result) => unknown, reject?: (e: unknown) => unknown) =>
       Promise.resolve({
-        data: rows.filter((row) => filters.every((f) => f(row))),
+        data: rows.filter((row) => filters.every((f) => f(row))).slice(...slice),
         error: null,
       }).then(resolve, reject),
   };
@@ -73,6 +124,7 @@ function singleChain(terminal: Result) {
     update: () => obj,
     eq: () => obj,
     single: async () => terminal,
+    maybeSingle: async () => terminal,
     then: (resolve: (v: Result) => unknown, reject?: (e: unknown) => unknown) =>
       Promise.resolve(terminal).then(resolve, reject),
   };
@@ -91,6 +143,13 @@ function errorChain(message: string) {
   return obj;
 }
 
+const DAY = 24 * 60 * 60 * 1000;
+// Inside the feed's window, which runs from a month back to a year ahead.
+const SOON = new Date(Date.now() + 7 * DAY).toISOString();
+// A weekly series that began long before the window, at noon UTC so its
+// dates fall on the same calendar day in the test zone.
+const SERIES_START = "2025-01-05T12:00:00.000Z";
+
 function event(id: string, groupId: string, title: string): Row {
   return {
     id,
@@ -99,10 +158,31 @@ function event(id: string, groupId: string, title: string): Row {
     title,
     description: null,
     location: null,
-    start_time: "2030-01-05T15:00:00.000Z",
+    start_time: SOON,
     end_time: null,
     is_cancelled: false,
+    series_id: null,
+    recurrence_frequency: null,
+    recurrence_interval: 1,
+    recurrence_end_mode: null,
   };
+}
+
+function weekly(id: string, groupId: string, title: string, extra: Row = {}): Row {
+  return {
+    ...event(id, groupId, title),
+    start_time: SERIES_START,
+    recurrence_frequency: "weekly",
+    recurrence_end_mode: "never",
+    ...extra,
+  };
+}
+
+// The series date nearest to `SOON`, at the series' time of day.
+function seriesDateNear(iso: string): string {
+  const start = Date.parse(SERIES_START);
+  const weeks = Math.round((Date.parse(iso) - start) / (7 * DAY));
+  return new Date(start + weeks * 7 * DAY).toISOString();
 }
 
 function signup(id: string, groupId: string, teamName: string): Row {
@@ -115,7 +195,7 @@ function signup(id: string, groupId: string, teamName: string): Row {
   };
 }
 
-function makeServiceClient(opts: { memberships: Row[] | "error" }) {
+function makeServiceClient(opts: { memberships: Row[] | "error"; extraEvents?: Row[] }) {
   const predicates: Record<string, Array<[string, unknown]>> = {};
   const record = (table: string) => (filter: [string, unknown]) => {
     (predicates[table] ??= []).push(filter);
@@ -124,11 +204,30 @@ function makeServiceClient(opts: { memberships: Row[] | "error" }) {
     event("event-a", GROUP_A, "A event"),
     event("event-b", GROUP_B, "B event"),
     { ...event("event-x", GROUP_A, "Cancelled date"), is_cancelled: true },
-    { ...event("moved-a", GROUP_A, "Moved study"), series_id: "anchor-a" },
-    // The series began before the feed's window, so only the anchor read finds it.
-    { ...event("anchor-a", GROUP_A, "Study"), start_time: "2020-01-05T15:00:00.000Z", meeting_id: "111 222 3333" },
-    { ...event("anchor-b", GROUP_B, "Other study"), meeting_id: "999 888 7777" },
-    { ...event("moved-b", GROUP_B, "Other moved"), series_id: "anchor-b" },
+    weekly("study-a", GROUP_A, "Study", { meeting_id: "111 222 3333" }),
+    // One date deleted, the next one moved a day later.
+    {
+      ...event("deleted-a", GROUP_A, "Study"),
+      series_id: "study-a",
+      series_occurrence_date: seriesDateNear(SOON),
+      start_time: seriesDateNear(SOON),
+      is_cancelled: true,
+    },
+    {
+      ...event("moved-a", GROUP_A, "Moved study"),
+      series_id: "study-a",
+      series_occurrence_date: seriesDateNear(new Date(Date.parse(SOON) + 7 * DAY).toISOString()),
+      start_time: new Date(Date.parse(seriesDateNear(SOON)) + 8 * DAY).toISOString(),
+    },
+    // A date moved two years out, past the window's end.
+    {
+      ...event("moved-far", GROUP_A, "Far study"),
+      series_id: "study-a",
+      series_occurrence_date: seriesDateNear(new Date(Date.parse(SOON) + 21 * DAY).toISOString()),
+      start_time: new Date(Date.parse(SOON) + 730 * DAY).toISOString(),
+    },
+    weekly("study-b", GROUP_B, "Other study", { meeting_id: "999 888 7777" }),
+    ...(opts.extraEvents ?? []),
   ];
   const signups = [
     signup("signup-a", GROUP_A, "Greeters A"),
@@ -149,6 +248,8 @@ function makeServiceClient(opts: { memberships: Row[] | "error" }) {
           });
         case "profiles":
           return singleChain({ data: { role: "member" }, error: null });
+        case "organizations":
+          return singleChain({ data: { timezone: "UTC" }, error: null });
         case "group_members":
           return opts.memberships === "error"
             ? errorChain("boom")
@@ -238,16 +339,51 @@ describe("GET /api/calendar/feed.ics — group boundary", () => {
     expect(predicates.events).toBeUndefined();
   });
 
-  it("gives a moved date its series' meeting, from the owner's groups only", async () => {
-    const { client, predicates } = makeServiceClient({ memberships: memberOfAOnly });
+  it("lists every date of a series that began before the window, without the deleted date", async () => {
+    const { client } = makeServiceClient({ memberships: memberOfAOnly });
     createServiceClient.mockResolvedValue(client);
 
-    const res = await GET(feedRequest());
-    const body = await res.text();
+    const body = await (await GET(feedRequest())).text();
+    const deletedDay = seriesDateNear(SOON).slice(0, 10);
+    const studyUids = body.match(/UID:study-a-\d{4}-\d{2}-\d{2}/g) ?? [];
 
-    expect(res.status).toBe(200);
-    expect(body).toContain("Meeting ID: 111 222 3333");
+    // 2026-10-05 to 2027-11-04 holds 56 Sundays; the deleted date and the two
+    // moved ones each take one.
+    expect(studyUids.length).toBe(53);
+    expect(new Set(studyUids).size).toBe(studyUids.length);
+    expect(body).not.toContain(`UID:study-a-${deletedDay}`);
+    expect(body).not.toContain("UID:deleted-a");
+    // The moved date replaces its slot in the series.
+    const movedFrom = seriesDateNear(new Date(Date.parse(SOON) + 7 * DAY).toISOString()).slice(0, 10);
+    expect(body).not.toContain(`UID:study-a-${movedFrom}`);
+    // So does one moved past the window, which is itself left out.
+    const movedFarFrom = seriesDateNear(new Date(Date.parse(SOON) + 21 * DAY).toISOString()).slice(0, 10);
+    expect(body).not.toContain(`UID:study-a-${movedFarFrom}`);
+    expect(body).not.toContain("UID:moved-far");
+    expect(body).not.toContain("Other study");
+  });
+
+  it("gives a moved date its series' meeting", async () => {
+    const { client } = makeServiceClient({ memberships: memberOfAOnly });
+    createServiceClient.mockResolvedValue(client);
+
+    const body = await (await GET(feedRequest())).text();
+    const moved = body.split("BEGIN:VEVENT").find((v) => v.includes("UID:moved-a"));
+
+    expect(moved).toContain("Moved study");
+    expect(moved).toContain("Meeting ID: 111 222 3333");
     expect(body).not.toContain("999 888 7777");
-    expect(predicates.events).toEqual(expect.arrayContaining([["in", { id: ["anchor-a"] }]]));
+  });
+
+  it("reads every page of events, not just the first", async () => {
+    const many = Array.from({ length: 1200 }, (_, i) => event(`one-off-${i}`, GROUP_A, `One-off ${i}`));
+    const { client } = makeServiceClient({ memberships: memberOfAOnly, extraEvents: many });
+    createServiceClient.mockResolvedValue(client);
+
+    const body = await (await GET(feedRequest())).text();
+
+    expect(body).toContain("UID:one-off-0\r\n");
+    expect(body).toContain("UID:one-off-1199\r\n");
+    expect(body).toContain("UID:moved-a");
   });
 });

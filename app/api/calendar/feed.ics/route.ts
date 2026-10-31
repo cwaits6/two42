@@ -1,5 +1,11 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { generateCombinedICS, type FeedEvent, type ServingICSInput } from "@/lib/ics-utils";
+import {
+  calendarEntries,
+  generateCombinedICS,
+  subscriptionWindow,
+  type FeedEvent,
+  type ServingICSInput,
+} from "@/lib/ics-utils";
 import {
   hashSubscriptionToken,
   subscriptionTokenExpiryDate,
@@ -7,6 +13,23 @@ import {
 import type { Event } from "@/lib/types";
 import type { MeetingFields } from "@/lib/meetings";
 import { isMemberRole } from "@/lib/roles";
+import { orgTimeZoneById } from "@/lib/time/orgZone";
+
+// Read a page at a time until every matching row is in: a capped read drops
+// a series or a moved date's row, and the dates it governs come back wrong.
+const PAGE_SIZE = 1000;
+
+async function readAllPages<T>(
+  page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>
+): Promise<{ data: T[] | null; error: unknown }> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await page(from, from + PAGE_SIZE - 1);
+    if (error) return { data: null, error };
+    rows.push(...(data ?? []));
+    if ((data ?? []).length < PAGE_SIZE) return { data: rows, error: null };
+  }
+}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -103,8 +126,11 @@ export async function GET(request: Request) {
   // a distinguishing status.
   const groupIds = [...groupNames.keys()].filter((id) => !groupParam || id === groupParam);
 
-  // Bound results to a reasonable time window
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  // A series counts however long ago it began: its dates are cut to the
+  // window when it is expanded below.
+  const { start: windowStart, end: windowEnd } = subscriptionWindow();
+  const thirtyDaysAgo = windowStart.toISOString();
+  const windowEndIso = windowEnd.toISOString();
 
   let typedEvents: Event[] = [];
   let servingSignups: ServingICSInput[] = [];
@@ -115,15 +141,28 @@ export async function GET(request: Request) {
       { data: events, error: eventsError },
       { data: myServings, error: servingsError },
     ] = await Promise.all([
-      supabase
-        .from("events")
-        .select("*")
-        .eq("org_id", sub.org_id)
-        .in("group_id", groupIds)
-        .eq("is_cancelled", false)
-        .gte("start_time", thirtyDaysAgo)
-        .order("start_time", { ascending: true })
-        .limit(500),
+      readAllPages((from, to) =>
+        supabase
+          .from("events")
+          .select("*")
+          .eq("org_id", sub.org_id)
+          .in("group_id", groupIds)
+          // Dates in the window; every series begun by its end; and every
+          // moved or deleted date (cancelled rows included) whose original
+          // slot is in it, wherever it moved — without that row the slot
+          // reappears.
+          .or(
+            [
+              `and(start_time.gte.${thirtyDaysAgo},start_time.lte.${windowEndIso})`,
+              `and(series_id.is.null,recurrence_frequency.not.is.null,start_time.lte.${windowEndIso})`,
+              `and(series_id.not.is.null,series_occurrence_date.gte.${thirtyDaysAgo},series_occurrence_date.lte.${windowEndIso})`,
+            ].join(",")
+          )
+          // id breaks start_time ties, so pages neither skip nor repeat a row.
+          .order("start_time", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to)
+      ),
       // Serving signups where this user is an attendee, on the groups' teams
       // (both inner joins filter)
       supabase
@@ -164,33 +203,21 @@ export async function GET(request: Request) {
     });
   }
 
-  // An exception row carries no meeting of its own; it inherits its series
-  // anchor's, which may have started before the feed's window.
-  const anchors = new Map<string, MeetingFields>(typedEvents.map((e) => [e.id, e]));
-  const missingAnchorIds = [
-    ...new Set(typedEvents.flatMap((e) => (e.series_id && !anchors.has(e.series_id) ? [e.series_id] : []))),
-  ];
-  if (missingAnchorIds.length > 0) {
-    const { data: anchorRows, error: anchorsError } = await supabase
-      .from("events")
-      .select("id, meeting_url, meeting_id, meeting_passcode, meeting_show_on_dashboard, meeting_lead_minutes")
-      .eq("org_id", sub.org_id)
-      .in("group_id", groupIds)
-      .in("id", missingAnchorIds);
-    if (anchorsError) {
-      console.error("Failed to fetch series meetings for calendar feed:", anchorsError);
-      return new Response("Failed to fetch events", { status: 500 });
-    }
-    for (const a of anchorRows ?? []) anchors.set(a.id, a);
-  }
+  // Every series is in typedEvents whatever its start, so an exception row
+  // finds its series here and inherits that meeting.
+  const series = new Map<string, MeetingFields>(typedEvents.map((e) => [e.id, e]));
+  const timeZone = await orgTimeZoneById(supabase, sub.org_id);
 
   // The merged feed names each event's group; a per-group feed carries no
   // prefix, since the subscriber named the group.
-  const feedEvents: FeedEvent[] = typedEvents.map((event) => ({
-    event,
-    summaryPrefix: groupParam ? undefined : groupNames.get(event.group_id),
-    meeting: event.series_id ? (anchors.get(event.series_id) ?? null) : event,
-  }));
+  const feedEvents: FeedEvent[] = calendarEntries(typedEvents, timeZone, windowStart, windowEnd).map(
+    ({ event, uid }) => ({
+      event,
+      uid,
+      summaryPrefix: groupParam ? undefined : groupNames.get(event.group_id),
+      meeting: event.series_id ? (series.get(event.series_id) ?? null) : event,
+    })
+  );
 
   let icsString: string;
   try {
