@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.32.0](https://github.com/cwaits6/two42/compare/v0.31.0...v0.32.0) (2026-10-31)
+
+
+### Features
+
+* **admin:** invite one person to the church by email ([#551](https://github.com/cwaits6/two42/issues/551)) ([1774166](https://github.com/cwaits6/two42/commit/1774166ab3187aa9a0613d730a20bf23addeb3ad))
+* **admin:** let a church admin name a leader for any group ([#565](https://github.com/cwaits6/two42/issues/565)) ([79bc22c](https://github.com/cwaits6/two42/commit/79bc22c3e6329c0fbf9d7011626076085b5345be))
+* **admin:** retire the content editor role ([#538](https://github.com/cwaits6/two42/issues/538)) ([806b9e5](https://github.com/cwaits6/two42/commit/806b9e531eeb21c8cb5b057ceff38b79b54a9782))
+* **serving:** let team leads add and remove people on their own team ([#580](https://github.com/cwaits6/two42/issues/580)) ([20e4c8b](https://github.com/cwaits6/two42/commit/20e4c8b5babca5ac62bf418c83bc600cfb198c57))
+* **ui:** give every page one header, back link and content width ([#554](https://github.com/cwaits6/two42/issues/554)) ([88b6771](https://github.com/cwaits6/two42/commit/88b677164f1132f1789c601b4bca4fea645b8558))
+
+
+### Bug Fixes
+
+* **admin:** keep at least one church admin ([#578](https://github.com/cwaits6/two42/issues/578)) ([18c1f4d](https://github.com/cwaits6/two42/commit/18c1f4d298012f9bc14aa1b0a71ae24d9ce33120))
+* **calendar:** delete only the chosen date of a repeating event ([#533](https://github.com/cwaits6/two42/issues/533)) ([7ab9353](https://github.com/cwaits6/two42/commit/7ab9353f070319efd64225ffb30af22a0e1b5d91))
+* **calendar:** theme the calendar, open it in list view on phones, and unify RSVP ([#586](https://github.com/cwaits6/two42/issues/586)) ([ab4ee70](https://github.com/cwaits6/two42/commit/ab4ee70d78ea514ff8e2f56688dbd2c9129dadf8))
+* **design:** make brand colors meet 4.5:1 as text and give primary buttons a solid hover ([#532](https://github.com/cwaits6/two42/issues/532)) ([7d1259f](https://github.com/cwaits6/two42/commit/7d1259f27c8387c0841ba718adbe18d4e7a91170))
+* **directory:** fix the phone layout of the member list and Find a group, and say household ([#585](https://github.com/cwaits6/two42/issues/585)) ([a9b77bb](https://github.com/cwaits6/two42/commit/a9b77bb831387e3b7d98ecc356d8f211425fb779))
+* **events:** show RSVP failures instead of reporting a reply that never saved ([#531](https://github.com/cwaits6/two42/issues/531)) ([c4faacc](https://github.com/cwaits6/two42/commit/c4faacc6c5ec3a56ca694a1f3a537271e1418801))
+* **giving:** say leaders, not admins, in the fund management help text ([#564](https://github.com/cwaits6/two42/issues/564)) ([d7ff4a8](https://github.com/cwaits6/two42/commit/d7ff4a8662b42621cd77e7933bbbcd7df74c5a04))
+* **groups:** end group access when someone is moved back to pending ([#567](https://github.com/cwaits6/two42/issues/567)) ([5c8b1cc](https://github.com/cwaits6/two42/commit/5c8b1cca4b5afb202e0675c27e8e61412a1edc48))
+* **groups:** keep find a group cards readable on phones ([#577](https://github.com/cwaits6/two42/issues/577)) ([3ee1ca5](https://github.com/cwaits6/two42/commit/3ee1ca5930411e49e37aa5faa7843be2ba9df0f7))
+* **groups:** limit group names and descriptions in the database ([#572](https://github.com/cwaits6/two42/issues/572)) ([c58ecee](https://github.com/cwaits6/two42/commit/c58ecee436b374c5febf7410bd333b64c66c9048))
+* **home:** make Home and the group dashboard one readable, honest page ([#583](https://github.com/cwaits6/two42/issues/583)) ([00db7bf](https://github.com/cwaits6/two42/commit/00db7bfe955080aebaacff56acd7c55b5a534c27))
+* **lessons:** call lectures lessons and bring the lesson pages into the app's style ([#584](https://github.com/cwaits6/two42/issues/584)) ([a20e5b5](https://github.com/cwaits6/two42/commit/a20e5b5f95dd71c4faaa265882f009dc27b4cfae))
+* **observability:** pin OpenTelemetry back to the family that deploys ([#548](https://github.com/cwaits6/two42/issues/548)) ([6c2b2f2](https://github.com/cwaits6/two42/commit/6c2b2f2286df056100e1ae85db5a397c3de007a1))
+* **platform:** show a platform admin as signed in ([#576](https://github.com/cwaits6/two42/issues/576)) ([1912661](https://github.com/cwaits6/two42/commit/19126617c30f5fdd6261b743565c7f6b9d4ab77a))
+* **platform:** tidy the operator pages and remove the unused Logo URL field ([#573](https://github.com/cwaits6/two42/issues/573)) ([50f1ed9](https://github.com/cwaits6/two42/commit/50f1ed9e4ac3efe13ca6d6a44460875a2fbb0386))
+* **ui:** make loading, empty and failed states look and read differently ([#566](https://github.com/cwaits6/two42/issues/566)) ([c2649e4](https://github.com/cwaits6/two42/commit/c2649e4563817804f7b193f44fd934252206bb41))
+* **ui:** make the header, menu and footer the same for everyone signed in ([#581](https://github.com/cwaits6/two42/issues/581)) ([aab0868](https://github.com/cwaits6/two42/commit/aab08687b4682c38241503e9905d0d4efb561a30))
+* **ui:** raise shared controls, badges, nav and toasts to the type and touch floor ([#547](https://github.com/cwaits6/two42/issues/547)) ([d7fa873](https://github.com/cwaits6/two42/commit/d7fa873d059d5f8064b7342787b64432aed89bc6))
+* **ui:** replace browser confirm dialogs, toast-only form errors and raw error text ([#579](https://github.com/cwaits6/two42/issues/579)) ([7b82719](https://github.com/cwaits6/two42/commit/7b827195b702a469f307ad48531f26d8cb933f3e))
+* **ui:** use the reading width on the invite person page ([#561](https://github.com/cwaits6/two42/issues/561)) ([a28321e](https://github.com/cwaits6/two42/commit/a28321e4176bc0fc37fb28edc8813579287c8091))
+
 ## [0.31.0](https://github.com/cwaits6/two42/compare/v0.30.0...v0.31.0) (2026-10-27)
 
 
