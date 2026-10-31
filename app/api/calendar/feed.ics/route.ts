@@ -1,5 +1,11 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { generateCombinedICS, type FeedEvent, type ServingICSInput } from "@/lib/ics-utils";
+import {
+  calendarEntries,
+  generateCombinedICS,
+  subscriptionWindow,
+  type FeedEvent,
+  type ServingICSInput,
+} from "@/lib/ics-utils";
 import {
   hashSubscriptionToken,
   subscriptionTokenExpiryDate,
@@ -7,6 +13,7 @@ import {
 import type { Event } from "@/lib/types";
 import type { MeetingFields } from "@/lib/meetings";
 import { isMemberRole } from "@/lib/roles";
+import { orgTimeZoneById } from "@/lib/time/orgZone";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -103,8 +110,10 @@ export async function GET(request: Request) {
   // a distinguishing status.
   const groupIds = [...groupNames.keys()].filter((id) => !groupParam || id === groupParam);
 
-  // Bound results to a reasonable time window
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  // A series counts however long ago it began: its dates are cut to the
+  // window when it is expanded below.
+  const { start: windowStart, end: windowEnd } = subscriptionWindow();
+  const thirtyDaysAgo = windowStart.toISOString();
 
   let typedEvents: Event[] = [];
   let servingSignups: ServingICSInput[] = [];
@@ -120,8 +129,10 @@ export async function GET(request: Request) {
         .select("*")
         .eq("org_id", sub.org_id)
         .in("group_id", groupIds)
-        .eq("is_cancelled", false)
-        .gte("start_time", thirtyDaysAgo)
+        // Cancelled rows are read too: a cancelled exception row is what
+        // removes a deleted date from its series.
+        .or(`start_time.gte.${thirtyDaysAgo},recurrence_frequency.not.is.null`)
+        .lte("start_time", windowEnd.toISOString())
         .order("start_time", { ascending: true })
         .limit(500),
       // Serving signups where this user is an attendee, on the groups' teams
@@ -164,33 +175,21 @@ export async function GET(request: Request) {
     });
   }
 
-  // An exception row carries no meeting of its own; it inherits its series
-  // anchor's, which may have started before the feed's window.
-  const anchors = new Map<string, MeetingFields>(typedEvents.map((e) => [e.id, e]));
-  const missingAnchorIds = [
-    ...new Set(typedEvents.flatMap((e) => (e.series_id && !anchors.has(e.series_id) ? [e.series_id] : []))),
-  ];
-  if (missingAnchorIds.length > 0) {
-    const { data: anchorRows, error: anchorsError } = await supabase
-      .from("events")
-      .select("id, meeting_url, meeting_id, meeting_passcode, meeting_show_on_dashboard, meeting_lead_minutes")
-      .eq("org_id", sub.org_id)
-      .in("group_id", groupIds)
-      .in("id", missingAnchorIds);
-    if (anchorsError) {
-      console.error("Failed to fetch series meetings for calendar feed:", anchorsError);
-      return new Response("Failed to fetch events", { status: 500 });
-    }
-    for (const a of anchorRows ?? []) anchors.set(a.id, a);
-  }
+  // Every series is in typedEvents whatever its start, so an exception row
+  // finds its series here and inherits that meeting.
+  const series = new Map<string, MeetingFields>(typedEvents.map((e) => [e.id, e]));
+  const timeZone = await orgTimeZoneById(supabase, sub.org_id);
 
   // The merged feed names each event's group; a per-group feed carries no
   // prefix, since the subscriber named the group.
-  const feedEvents: FeedEvent[] = typedEvents.map((event) => ({
-    event,
-    summaryPrefix: groupParam ? undefined : groupNames.get(event.group_id),
-    meeting: event.series_id ? (anchors.get(event.series_id) ?? null) : event,
-  }));
+  const feedEvents: FeedEvent[] = calendarEntries(typedEvents, timeZone, windowStart, windowEnd).map(
+    ({ event, uid }) => ({
+      event,
+      uid,
+      summaryPrefix: groupParam ? undefined : groupNames.get(event.group_id),
+      meeting: event.series_id ? (series.get(event.series_id) ?? null) : event,
+    })
+  );
 
   let icsString: string;
   try {

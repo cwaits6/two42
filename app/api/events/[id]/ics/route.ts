@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { generateSingleEventICS } from "@/lib/ics-utils";
+import { calendarEntries, generateSingleEventICS, subscriptionWindow } from "@/lib/ics-utils";
 import {
   hashSubscriptionToken,
   subscriptionTokenExpiryDate,
@@ -7,6 +7,7 @@ import {
 import type { Event } from "@/lib/types";
 import type { MeetingFields } from "@/lib/meetings";
 import { isMemberRole } from "@/lib/roles";
+import { orgTimeZoneById } from "@/lib/time/orgZone";
 
 export async function GET(
   request: Request,
@@ -134,9 +135,32 @@ export async function GET(
     meeting = anchor;
   }
 
+  // A subscription to a series lists its dates in the window, without the
+  // deleted ones and with the moved ones at their new times.
+  let entries = [{ event: typedEvent, uid: typedEvent.id }];
+  if (!typedEvent.series_id && typedEvent.recurrence_frequency) {
+    const { data: exceptions, error: exceptionsError } = await supabase
+      .from("events")
+      .select("*")
+      .eq("series_id", typedEvent.id)
+      .eq("org_id", sub.org_id)
+      .eq("group_id", typedEvent.group_id);
+    if (exceptionsError) {
+      console.error("Failed to fetch moved and deleted dates for event ICS:", exceptionsError);
+      return new Response("Something went wrong", { status: 500 });
+    }
+    const { start, end } = subscriptionWindow();
+    entries = calendarEntries(
+      [typedEvent, ...((exceptions ?? []) as Event[])],
+      await orgTimeZoneById(supabase, sub.org_id),
+      start,
+      end
+    );
+  }
+
   let icsString: string;
   try {
-    icsString = generateSingleEventICS(typedEvent, meeting);
+    icsString = generateSingleEventICS(entries, meeting);
   } catch (err) {
     console.error("ICS generation failed:", err);
     return new Response("Failed to generate calendar file", { status: 500 });

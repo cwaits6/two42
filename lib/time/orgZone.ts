@@ -1,4 +1,5 @@
 import { cache } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { siteConfig } from "@/lib/config";
 import { isValidTimeZone } from "@/lib/time/zone";
@@ -36,3 +37,21 @@ export const getOrgTimeZone = cache(async (): Promise<string> => {
     return siteConfig.timeZone;
   }
 });
+
+/**
+ * The zone of `orgId`, for routes with no session to scope a read — the
+ * calendar subscriptions. `orgId` must come from an already-validated anchor
+ * such as the subscription-token row. Degrades like getOrgTimeZone().
+ */
+export async function orgTimeZoneById(supabase: SupabaseClient, orgId: string): Promise<string> {
+  const { data, error } = await supabase
+    .from("organizations")
+    .select("timezone")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (error || !data || !isValidTimeZone(data.timezone)) {
+    console.error("Failed to load the time zone for org %s; using the default:", orgId, error);
+    return siteConfig.timeZone;
+  }
+  return data.timezone;
+}
