@@ -4,13 +4,14 @@ import { useState } from "react";
 import { Users } from "lucide-react";
 import { useDiscoveryOn } from "@/components/groups/GroupProvider";
 import { CreateGroupAction } from "@/components/groups/CreateGroupAction";
-import { DiscoveryRow, LOAD_FAILED_TEXT, NO_GROUPS_TEXT } from "@/components/groups/FindAGroupList";
+import { DiscoveryRow, NO_GROUPS_TEXT } from "@/components/groups/FindAGroupList";
 import { useDiscoverableGroups } from "@/components/groups/useDiscoverableGroups";
 import type { ActiveGroup } from "@/lib/groups/active";
 import { memberCountLabel, type DiscoverableGroup } from "@/lib/groups/joining";
 import { BackLink } from "@/components/directory/BackLink";
 import { DirRow } from "@/components/directory/DirRow";
 import { DirectoryLoadState } from "@/components/directory/DirectoryLoadState";
+import { RetryErrorState } from "@/components/directory/RetryErrorState";
 import { useDirectory } from "@/components/directory/DirectoryContext";
 import { GroupAvatar } from "@/components/directory/GroupAvatar";
 import { GroupCard } from "@/components/directory/GroupCard";
@@ -85,9 +86,7 @@ function GroupsTabInner() {
           }
         />
         {discoveryOn && discovery.error && (
-          <p role="alert" className="mt-6 text-center text-base text-muted-foreground">
-            {LOAD_FAILED_TEXT}
-          </p>
+          <RetryErrorState thing="groups to join" onRetry={discovery.reload} className="mt-6" />
         )}
       </>
     );
@@ -158,9 +157,7 @@ function GroupsTabInner() {
         placeholder="Choose one of your groups to see who's in it."
       />
       {discoveryOn && discovery.error && (
-        <p role="alert" className="mt-6 text-base text-muted-foreground">
-          {LOAD_FAILED_TEXT}
-        </p>
+        <RetryErrorState thing="groups to join" onRetry={discovery.reload} className="mt-6" />
       )}
       {!discoveryOn && (
         <p className="mt-6 text-base text-muted-foreground">
