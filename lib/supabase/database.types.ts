@@ -951,38 +951,6 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
-                },"organization_members": {
-                  Row: {
-                    "created_at": string,"org_id": string,"profile_id": string
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "created_at"?: string,"org_id": string,"profile_id": string
-                  }
-                  Update: {
-                    "created_at"?: string,"org_id"?: string,"profile_id"?: string
-                  }
-                  Relationships: [
-                    {
-      foreignKeyName: "organization_members_org_id_fkey"
-      columns: ["org_id"]
-isOneToOne: false
-      referencedRelation: "organizations"
-      referencedColumns: ["id"]
-    },{
-      foreignKeyName: "organization_members_profile_id_fkey"
-      columns: ["profile_id"]
-isOneToOne: false
-      referencedRelation: "profiles"
-      referencedColumns: ["id"]
-    },{
-      foreignKeyName: "organization_members_profile_id_fkey"
-      columns: ["profile_id"]
-isOneToOne: false
-      referencedRelation: "profiles_directory"
-      referencedColumns: ["id"]
-    }
-                  ]
                 },"organizations": {
                   Row: {
                     "branding": NonNullable<Json>,"created_at": string,"custom_email_domain_enabled": boolean,"directory_visibility": string,"group_creation_policy": string,"group_discovery": boolean,"id": string,"name": string,"status": Database["public"]['Enums']["org_status"],"timezone": string
@@ -1631,9 +1599,6 @@ isOneToOne: false
                            },
 "is_member":
 { Args: Record<PropertyKey, never>; Returns: boolean
-                           },
-"is_org_member":
-{ Args: { "_org_id": string }; Returns: boolean
                            },
 "is_platform_admin":
 { Args: Record<PropertyKey, never>; Returns: boolean

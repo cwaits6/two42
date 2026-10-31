@@ -110,7 +110,6 @@ begin
   insert into auth.users (id, email) values (member_b, 'member-b@idor.example.test');
 
   -- Hand the org-A UUIDs an attacker would hold across blocks.
-  perform set_config('idor.org_a', org_a::text, true);
   perform set_config('idor.org_b', org_b::text, true);
   perform set_config('idor.owner_a', owner_a::text, true);
   perform set_config('idor.owner_b', owner_b::text, true);
@@ -368,8 +367,6 @@ declare
   grp_member_a boolean;
   grp_leader_a boolean;
   fund_a boolean;
-  org_member_a boolean;
-  org_member_b boolean;
 begin
   set local role authenticated;
   perform set_config('request.jwt.claims', json_build_object('sub', member_b)::text, true);
@@ -381,8 +378,6 @@ begin
   grp_member_a := public.is_group_member(current_setting('idor.grp_a')::uuid);
   grp_leader_a := public.is_group_leader(current_setting('idor.grp_a')::uuid);
   fund_a := public.giving_can_manage_fund(current_setting('idor.fund_a')::uuid);
-  org_member_a := public.is_org_member(current_setting('idor.org_a')::uuid);
-  org_member_b := public.is_org_member(current_setting('idor.org_b')::uuid);
 
   reset role;
 
@@ -398,10 +393,6 @@ begin
     select ok(not grp_leader_a, 'is_group_leader(org-A group) is false for an org-B member');
   insert into idor_results
     select ok(not fund_a, 'giving_can_manage_fund(org-A fund) is false for a plain org-B member');
-  insert into idor_results
-    select ok(not org_member_a, 'is_org_member(org A) is false for an org-B member');
-  insert into idor_results
-    select ok(org_member_b, 'non-vacuity: is_org_member(org B) is true for the org-B member');
 end $$;
 
 -- Helper positive control: the org-B ADMIN does manage their own org's fund
