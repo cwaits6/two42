@@ -146,3 +146,24 @@ describe("calendarEntries", () => {
     expect(entries([oneOff]).map((e) => e.uid)).toEqual(["e1"]);
   });
 });
+
+describe("join details kept out of calendars", () => {
+  const page = "https://two42.io/g/g1/calendar/e1";
+  const zoom = { meeting_url: "https://zoom.us/j/123?pwd=abc", meeting_id: "123", meeting_passcode: "faith" };
+
+  it("links to the event page in place of the link, ID and passcode", () => {
+    const attrs = eventToICSAttributes({ ...event, ...zoom, description: "Bring a dish" } as Event, {
+      eventPageUrl: page,
+    });
+    expect(attrs.url).toBe(page);
+    expect(attrs.description).toBe(
+      `Bring a dish\n\nOnline meeting\nThe join details are on the event page: ${page}`
+    );
+  });
+
+  it("adds nothing to an event without a meeting", () => {
+    const attrs = eventToICSAttributes(event, { eventPageUrl: page });
+    expect(attrs.url).toBeUndefined();
+    expect(attrs.description).toBeUndefined();
+  });
+});

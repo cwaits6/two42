@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -149,6 +150,9 @@ export function AboutEditor({
     weekly_prayer_call_url: initialSettings.weekly_prayer_call_url ?? "",
     weekly_prayer_call_time: initialSettings.weekly_prayer_call_time ?? "",
   });
+  const [calendarMeetingDetails, setCalendarMeetingDetails] = useState(
+    initialSettings.calendar_meeting_details
+  );
   const [savingCalls, setSavingCalls] = useState(false);
   const setCall = (key: keyof typeof calls, value: string) =>
     setCalls((prev) => ({ ...prev, [key]: value }));
@@ -172,6 +176,7 @@ export function AboutEditor({
         zoom_meeting_time: calls.zoom_meeting_time.trim() || null,
         weekly_prayer_call_url: prayerUrl || null,
         weekly_prayer_call_time: calls.weekly_prayer_call_time.trim() || null,
+        calendar_meeting_details: calendarMeetingDetails,
         updated_by: user?.id,
         updated_at: new Date().toISOString(),
       })
@@ -459,6 +464,23 @@ export function AboutEditor({
                 className="text-base"
               />
             </div>
+          </div>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <Label htmlFor="calendar-meeting-details" className="text-base">
+                Put join details in members&apos; calendars
+              </Label>
+              <p className="mt-1 text-base text-muted-foreground">
+                On: members who subscribe to the calendar get each event&apos;s meeting link, ID and
+                passcode. Off: they get a link to the event page, and sign in to see the join details.
+              </p>
+            </div>
+            <Switch
+              id="calendar-meeting-details"
+              className="mt-1 shrink-0"
+              checked={calendarMeetingDetails}
+              onCheckedChange={setCalendarMeetingDetails}
+            />
           </div>
           <Button
             onClick={handleSaveCalls}

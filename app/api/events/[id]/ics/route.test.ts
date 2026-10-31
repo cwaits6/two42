@@ -33,6 +33,11 @@ function filteredChain(rows: Row[], record: (filter: [string, unknown]) => void)
       filters.push((row) => row[col] === val);
       return obj;
     },
+    in(col: string, vals: unknown[]) {
+      record([col, vals]);
+      filters.push((row) => vals.includes(row[col]));
+      return obj;
+    },
     single: async (): Promise<Result> => {
       const [row] = matches();
       return row ? { data: row, error: null } : { data: null, error: { code: "PGRST116" } };
@@ -111,6 +116,8 @@ function makeServiceClient() {
           });
         case "profiles":
           return tokenChain({ data: { role: "member" }, error: null });
+        case "group_settings":
+          return filteredChain([], () => {});
         case "organizations":
           return tokenChain({ data: { timezone: "UTC" }, error: null });
         case "group_members":

@@ -498,6 +498,8 @@ export interface GroupSettings {
   weekly_prayer_call_url: string | null;
   weekly_prayer_call_time: string | null;
   serving_link_mode: "signed" | "login" | null;
+  /** Calendar subscriptions carry meeting links, IDs and passcodes; off, they link to the event page. */
+  calendar_meeting_details: boolean;
   updated_by: string | null;
   updated_at: string;
 }

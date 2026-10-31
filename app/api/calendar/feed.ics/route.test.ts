@@ -195,7 +195,11 @@ function signup(id: string, groupId: string, teamName: string): Row {
   };
 }
 
-function makeServiceClient(opts: { memberships: Row[] | "error"; extraEvents?: Row[] }) {
+function makeServiceClient(opts: {
+  memberships: Row[] | "error";
+  extraEvents?: Row[];
+  hidingGroups?: string[];
+}) {
   const predicates: Record<string, Array<[string, unknown]>> = {};
   const record = (table: string) => (filter: [string, unknown]) => {
     (predicates[table] ??= []).push(filter);
@@ -258,6 +262,15 @@ function makeServiceClient(opts: { memberships: Row[] | "error"; extraEvents?: R
           return listChain(events, record(table));
         case "serving_signups":
           return listChain(signups, record(table));
+        case "group_settings":
+          return listChain(
+            [GROUP_A, GROUP_B].map((group_id) => ({
+              org_id: ORG,
+              group_id,
+              calendar_meeting_details: !(opts.hidingGroups ?? []).includes(group_id),
+            })),
+            record(table)
+          );
         default:
           throw new Error(`unexpected table ${table}`);
       }
@@ -385,5 +398,20 @@ describe("GET /api/calendar/feed.ics — group boundary", () => {
     expect(body).toContain("UID:one-off-0\r\n");
     expect(body).toContain("UID:one-off-1199\r\n");
     expect(body).toContain("UID:moved-a");
+  });
+
+  it("links to the event page when the group keeps join details out of calendars", async () => {
+    const { client, predicates } = makeServiceClient({ memberships: memberOfAOnly, hidingGroups: [GROUP_A] });
+    createServiceClient.mockResolvedValue(client);
+
+    // Unfold the 75-octet line folding so the URL reads as one line.
+    const body = (await (await GET(feedRequest())).text()).replace(/\r\n[ \t]/g, "");
+
+    expect(body).not.toContain("111 222 3333");
+    expect(body).toContain("The join details are on the event page");
+    expect(body).toMatch(new RegExp(`URL[^:]*:http://localhost:3000/g/${GROUP_A}/calendar/study-a\\?occurrence=`));
+    expect(predicates.group_settings).toEqual(
+      expect.arrayContaining([["eq", { org_id: ORG }], ["in", { group_id: [GROUP_A] }]])
+    );
   });
 });

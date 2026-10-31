@@ -769,5 +769,11 @@ end $$;
 select is(current_setting('gs.rpc_own'), 'ok', 'a leader of A who is not on the team signs up for A''s team');
 select is(current_setting('gs.rpc_cross'), 'SV004', 'a leader of B is refused on A''s team');
 
+-- Calendar subscriptions carry join details unless a leader turns them off.
+select col_not_null('public', 'group_settings', 'calendar_meeting_details',
+  'group_settings.calendar_meeting_details is not null');
+select col_default_is('public', 'group_settings', 'calendar_meeting_details', 'true',
+  'group_settings.calendar_meeting_details defaults to on');
+
 select * from finish();
 rollback;

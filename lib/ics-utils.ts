@@ -1,6 +1,6 @@
 import { createEvents, type EventAttributes } from "ics";
 import type { Event } from "@/lib/types";
-import { notesWithMeeting, type MeetingDetails } from "@/lib/meetings";
+import { hasMeeting, notesWithMeeting, type MeetingDetails } from "@/lib/meetings";
 import { expandUpcomingEvents } from "@/lib/recurrence";
 import { dayKey } from "@/lib/time/zone";
 
@@ -24,7 +24,13 @@ function prefixed(prefix: string | undefined, title: string): string {
 export function eventToICSAttributes(
   event: Event,
   /** `meeting` is the series anchor's for an exception row, which carries none of its own. */
-  opts: { summaryPrefix?: string; meeting?: MeetingDetails | null; uid?: string } = {}
+  opts: {
+    summaryPrefix?: string;
+    meeting?: MeetingDetails | null;
+    uid?: string;
+    /** Set when the group keeps join details out of calendars: the event page to point to instead. */
+    eventPageUrl?: string;
+  } = {}
 ): EventAttributes {
   const attrs: EventAttributes = {
     uid: opts.uid ?? event.id,
@@ -38,12 +44,22 @@ export function eventToICSAttributes(
   };
 
   const meeting = opts.meeting ?? event;
-  const notes = notesWithMeeting(event.description, meeting);
-  if (notes) {
-    attrs.description = notes;
-  }
-  if (meeting.meeting_url) {
-    attrs.url = meeting.meeting_url;
+  if (opts.eventPageUrl && hasMeeting(meeting)) {
+    attrs.description = [
+      event.description,
+      `Online meeting\nThe join details are on the event page: ${opts.eventPageUrl}`,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+    attrs.url = opts.eventPageUrl;
+  } else {
+    const notes = notesWithMeeting(event.description, meeting);
+    if (notes) {
+      attrs.description = notes;
+    }
+    if (meeting.meeting_url) {
+      attrs.url = meeting.meeting_url;
+    }
   }
   if (event.location) {
     attrs.location = event.location;
@@ -95,11 +111,14 @@ export function calendarEntries(
 
 export function generateSingleEventICS(
   entries: CalendarEntry[],
-  meeting?: MeetingDetails | null
+  meeting?: MeetingDetails | null,
+  eventPageUrl?: (event: Event) => string | undefined
 ): string {
   if (entries.length === 0) return EMPTY_CALENDAR;
   const { error, value } = createEvents(
-    entries.map(({ event, uid }) => eventToICSAttributes(event, { meeting, uid }))
+    entries.map(({ event, uid }) =>
+      eventToICSAttributes(event, { meeting, uid, eventPageUrl: eventPageUrl?.(event) })
+    )
   );
   if (error || !value) {
     throw new Error(`Failed to generate ICS: ${error?.message ?? "unknown error"}`);
@@ -153,6 +172,7 @@ export interface FeedEvent {
   summaryPrefix?: string;
   meeting?: MeetingDetails | null;
   uid?: string;
+  eventPageUrl?: string;
 }
 
 /** Combined feed: the member's groups' events + serving signups in one VCALENDAR. */
@@ -161,8 +181,8 @@ export function generateCombinedICS(
   servingSignups: ServingICSInput[]
 ): string {
   const all: EventAttributes[] = [
-    ...events.map(({ event, summaryPrefix, meeting, uid }) =>
-      eventToICSAttributes(event, { summaryPrefix, meeting, uid })
+    ...events.map(({ event, summaryPrefix, meeting, uid, eventPageUrl }) =>
+      eventToICSAttributes(event, { summaryPrefix, meeting, uid, eventPageUrl })
     ),
     ...servingSignups.map(servingToICSAttributes),
   ];
