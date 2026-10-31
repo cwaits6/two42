@@ -106,9 +106,15 @@ export default async function ServingPage({
   }
 
   const isEnabled = (id: string) => settingsMap.get(id)?.enabled === true;
-  // Signup teams (Sunday signups on) and roster-only standing roles.
+  // Signup teams (Sunday signups on) and roster-only standing roles. A team
+  // lead also sees their own signups-off team: this card is their only link
+  // to its roster.
   const signupTeams = groups.filter((g) => isEnabled(g.id));
-  const roleGroups = groups.filter((g) => g.is_serving_role && !isEnabled(g.id));
+  const roleGroups = groups.filter(
+    (g) =>
+      !isEnabled(g.id) &&
+      (g.is_serving_role || membershipMap.get(g.id) === true)
+  );
 
   // Coverage counts for each signup team's upcoming window
   const today = toDateString(new Date());
@@ -213,8 +219,12 @@ export default async function ServingPage({
             {roleGroups.map((team) => {
               const members = rosters.get(team.id) ?? [];
               const isMember = membershipMap.has(team.id);
-              return (
-                <Card key={team.id}>
+              const canManage = isLeader || membershipMap.get(team.id) === true;
+              const card = (
+                <Card
+                  key={team.id}
+                  className={canManage ? "hover:border-brand-primary/50 transition-colors" : undefined}
+                >
                   <CardContent className="py-5">
                     <div className="flex items-center gap-4">
                       <span
@@ -242,6 +252,17 @@ export default async function ServingPage({
                     </div>
                   </CardContent>
                 </Card>
+              );
+              return canManage ? (
+                <Link
+                  key={team.id}
+                  href={groupPath(group.id, `/serving/${team.id}`)}
+                  className="block"
+                >
+                  {card}
+                </Link>
+              ) : (
+                card
               );
             })}
           </div>

@@ -13,6 +13,13 @@ import {
 import { ServingHistory, type HistoryEntry } from "@/components/serving/ServingHistory";
 import { EmailTeamButton } from "@/components/serving/EmailTeamButton";
 import { ServingSettingsDialog } from "@/components/serving/ServingSettingsDialog";
+import {
+  TeamRoster,
+  type TeamRosterMember,
+  type TeamRosterPerson,
+} from "@/components/serving/TeamRoster";
+import { displayName } from "@/lib/names";
+import { mintSignedUrls } from "@/lib/storageRead";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { groupPageTitle } from "@/lib/pageTitle";
 
@@ -24,6 +31,11 @@ interface AttendeeProfile {
   last_name: string | null;
   preferred_name: string | null;
 }
+
+type RosterProfile = TeamRosterPerson & { role: string };
+
+const byName = (a: TeamRosterPerson, b: TeamRosterPerson) =>
+  displayName(a).localeCompare(displayName(b));
 
 export default async function ServingSchedulePage({
   params,
@@ -62,7 +74,6 @@ export default async function ServingSchedulePage({
   if (!team) notFound();
 
   const isLeader = group.role === "leader";
-  if (!settings?.enabled && !isLeader) redirect(servingHref);
 
   const { data: membership } = await supabase
     .from("team_members")
@@ -73,14 +84,35 @@ export default async function ServingSchedulePage({
 
   const isMember = !!membership;
   const isTeamLead = membership?.is_leader === true;
+  const canManageRoster = isLeader || isTeamLead;
+  // A team with signups off is a roster only, so it is reachable only by the
+  // people who can change that roster or turn signups on.
+  if (!settings?.enabled && !canManageRoster) redirect(servingHref);
+
   // Everyone can view the schedule/roster read-only; only team members,
   // team leads, and group leaders can actually claim a Sunday.
   const canSignUp = isMember || isTeamLead || isLeader;
 
-  const { data: memberRows } = await supabase
-    .from("team_members")
-    .select("profiles(email, role)")
-    .eq("team_id", teamId);
+  const [{ data: memberRows, error: memberError }, { data: groupRows, error: groupError }] =
+    await Promise.all([
+      supabase
+        .from("team_members")
+        .select(
+          "is_leader, profiles(id, email, role, first_name, last_name, preferred_name, avatar_url)"
+        )
+        .eq("team_id", teamId),
+      canManageRoster
+        ? supabase
+            .from("group_members")
+            .select("profiles(id, role, first_name, last_name, preferred_name, avatar_url)")
+            .eq("group_id", group.id)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+  // A failed read would otherwise render as an empty roster or an empty
+  // group, and the add mode's empty-state copy would state that as fact.
+  const rosterUnavailable = !!(memberError || groupError);
+  if (memberError) console.error("team roster read failed:", memberError.message);
+  if (groupError) console.error("team roster group read failed:", groupError.message);
   const memberCount = (memberRows ?? []).filter((row) => {
     const member = row.profiles as unknown as {
       email: string | null;
@@ -88,6 +120,53 @@ export default async function ServingSchedulePage({
     } | null;
     return !!member?.email && member.role !== "pending";
   }).length;
+
+  // Pending profiles are household peers who never signed in, not people to
+  // put on a team. A null embed is a profile RLS hides from the viewer.
+  let rosterMembers: TeamRosterMember[] = [];
+  let rosterCandidates: TeamRosterPerson[] = [];
+  if (canManageRoster && !rosterUnavailable) {
+    const onTeam = new Set<string>();
+    for (const row of memberRows ?? []) {
+      const p = row.profiles as unknown as RosterProfile | null;
+      if (!p) continue;
+      onTeam.add(p.id);
+      if (p.role === "pending") continue;
+      rosterMembers.push({
+        id: p.id,
+        first_name: p.first_name,
+        last_name: p.last_name,
+        preferred_name: p.preferred_name,
+        avatar_url: p.avatar_url,
+        is_leader: row.is_leader,
+      });
+    }
+    for (const row of groupRows ?? []) {
+      const p = row.profiles as unknown as RosterProfile | null;
+      if (!p || p.role === "pending" || onTeam.has(p.id)) continue;
+      rosterCandidates.push({
+        id: p.id,
+        first_name: p.first_name,
+        last_name: p.last_name,
+        preferred_name: p.preferred_name,
+        avatar_url: p.avatar_url,
+      });
+    }
+    rosterMembers.sort((a, b) =>
+      a.is_leader !== b.is_leader ? (a.is_leader ? -1 : 1) : byName(a, b)
+    );
+    rosterCandidates.sort(byName);
+
+    // Private buckets: exchange stored avatar URLs for signed URLs.
+    const signed = await mintSignedUrls(
+      [...rosterMembers, ...rosterCandidates].map((p) => p.avatar_url)
+    );
+    rosterMembers = rosterMembers.map((p, i) => ({ ...p, avatar_url: signed[i] }));
+    rosterCandidates = rosterCandidates.map((p, i) => ({
+      ...p,
+      avatar_url: signed[rosterMembers.length + i],
+    }));
+  }
 
   const sundays = upcomingSundays(settings?.window_weeks ?? 8);
 
@@ -236,14 +315,14 @@ export default async function ServingSchedulePage({
           "Pick a date below — one signup covers the whole service."}
       </p>
 
-      {!settings?.enabled && isLeader && (
+      {!settings?.enabled && canManageRoster && (
         <p className="text-sm text-brand-accent-text mb-6">
-          Serving signups are not enabled for this team yet — enable them from
-          the Serving page.
+          Serving signups are not enabled for this team yet — turn them on in
+          Team settings.
         </p>
       )}
 
-      {(isLeader || isTeamLead) && (
+      {canManageRoster && (
         <div className="flex flex-wrap items-center gap-2 mb-6">
           {settings?.enabled && (
             <EmailTeamButton
@@ -283,8 +362,26 @@ export default async function ServingSchedulePage({
         userId={user.id}
         spouse={spouse}
         canSignUp={canSignUp}
-        canManage={isLeader || isTeamLead}
+        canManage={canManageRoster}
       />
+
+      {canManageRoster && rosterUnavailable && (
+        <p className="mt-10 text-base text-muted-foreground">
+          The team roster could not be loaded. Refresh the page to try again.
+        </p>
+      )}
+
+      {canManageRoster && !rosterUnavailable && (
+        <div className="mt-10">
+          <TeamRoster
+            teamId={teamId}
+            teamName={team.name}
+            groupName={group.name}
+            members={rosterMembers}
+            candidates={rosterCandidates}
+          />
+        </div>
+      )}
 
       {historyEntries.length > 0 && (
         <ServingHistory entries={historyEntries} />
