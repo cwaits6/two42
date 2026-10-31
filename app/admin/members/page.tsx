@@ -28,15 +28,20 @@ const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: "admin", label: "Admin" },
 ];
 
+// Raised by the profiles trigger when a change would leave the church with
+// no church admin.
+const LAST_CHURCH_ADMIN = "CA001";
+
 export default function MembersPage() {
   const [requests, setRequests] = useState<AccessRequest[]>([]);
   const [members, setMembers] = useState<Profile[]>([]);
+  const [viewerId, setViewerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const supabase = useMemo(() => createClient(), []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [{ data: reqs }, { data: mems }] = await Promise.all([
+    const [{ data: reqs }, { data: mems }, { data: auth }] = await Promise.all([
       supabase
         .from("access_requests")
         .select("*")
@@ -46,7 +51,9 @@ export default function MembersPage() {
         .select("*")
         .order("last_name", { ascending: true })
         .order("first_name", { ascending: true }),
+      supabase.auth.getUser(),
     ]);
+    setViewerId(auth.user?.id ?? null);
     setRequests(reqs || []);
     setMembers((mems || []).map((m) => ({ ...m, role: toUserRole(m.role) })));
     setLoading(false);
@@ -96,13 +103,18 @@ export default function MembersPage() {
   }
 
   async function handleRoleChange(userId: string, newRole: UserRole) {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("profiles")
       .update({ role: newRole })
-      .eq("id", userId);
+      .eq("id", userId)
+      .select("id");
 
-    if (error) {
-      toast.error("Failed to update role.");
+    if (error?.code === LAST_CHURCH_ADMIN) {
+      toast.error("Couldn't change this role. A church needs at least one church admin.");
+      return;
+    }
+    if (error || !data?.length) {
+      toast.error("Couldn't change this role.");
       return;
     }
 
@@ -264,7 +276,8 @@ export default function MembersPage() {
                       <UserCog className="h-5 w-5 text-muted-foreground" />
                       <Select
                         items={ROLE_OPTIONS}
-                        defaultValue={member.role}
+                        value={member.role}
+                        disabled={member.id === viewerId}
                         onValueChange={(v) =>
                           handleRoleChange(member.id, v as UserRole)
                         }
