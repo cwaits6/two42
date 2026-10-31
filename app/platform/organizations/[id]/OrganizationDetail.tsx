@@ -379,9 +379,9 @@ export function OrganizationDetail({
                 {emailCap.hasOverride ? "" : " (platform default)"}
               </p>
               <p className="text-sm text-muted-foreground">
-                The most emails this organization can send in a day, across
-                reminders, broadcasts and notifications. Set 0 to stop all
-                sending.
+                The most reminder, broadcast and notification emails this
+                organization can send in a day. Invite and approval emails are
+                not counted. Set 0 to stop the counted emails.
               </p>
               <div className="space-y-2">
                 <Label htmlFor="email-daily-cap">Emails per day</Label>
