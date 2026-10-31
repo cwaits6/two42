@@ -45,9 +45,9 @@ declare
   _invite_link uuid;
 begin
   -- provisioning already seeded: organizations, site_settings,
-  -- access_requests (owner), and the owner's profiles + organization_members
-  -- rows via signup. Groups and teams are org-defined (provisioning seeds
-  -- none), so the fixture creates its own group, with the owner as its
+  -- access_requests (owner), and the owner's profiles row via signup.
+  -- Groups and teams are org-defined (provisioning seeds none), so the
+  -- fixture creates its own group, with the owner as its
   -- leader, a label attached to that membership, a serving team under it,
   -- and every group-owned content row — the rows the fixture-completeness
   -- gate counts.
@@ -251,8 +251,6 @@ declare
   view_cross bigint[] := '{}';
   view_errors text[] := '{}';
   org_b_visible_count bigint;
-  is_member_own boolean;
-  is_member_other boolean;
   profiles_recursion_error text := null;
   own_c bigint; cross_c bigint;
   t text;
@@ -300,9 +298,6 @@ begin
   -- organizations has no org_id column; check it directly.
   select count(*) into org_b_visible_count
     from public.organizations where id = org_b;
-
-  is_member_own := public.is_org_member(org_a);
-  is_member_other := public.is_org_member(org_b);
 
   -- Regression guard for 20260715000000_fix_profiles_update_recursion:
   -- app_current_org_id() reads profiles inside profiles RLS. SECURITY
@@ -359,10 +354,6 @@ begin
 
   insert into tenancy_leak_results
     select ok(org_b_visible_count = 0, 'org A member cannot read org B''s organizations row');
-  insert into tenancy_leak_results
-    select ok(is_member_own, 'is_org_member() is true for org A member''s own org');
-  insert into tenancy_leak_results
-    select ok(not is_member_other, 'is_org_member() is false for org A member checking org B');
   insert into tenancy_leak_results
     select ok(profiles_recursion_error is null,
       coalesce('profiles SELECT does not recurse — got: ' || profiles_recursion_error,

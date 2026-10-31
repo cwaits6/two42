@@ -1,15 +1,11 @@
--- Branding read-path regression guard (CWA-10 Phase 3, #212).
+-- Branding read-path regression guard.
 --
 -- Before 20260801000002_org_branding_backfill.sql, public.organizations was
--- readable by nobody in the seeded org over PostgREST: the only permissive
--- select policy ("org members can view their orgs") is gated on
--- organization_members, which handle_new_user() has populated only since
--- 20260731000014 and which was never backfilled — so anon callers and every
--- profile predating that migration (i.e. all of org #1) saw 0 rows while the
--- app silently fell back to env-var branding defaults. This suite pins the
--- new permissive SELECT policy by name, the anon read behavior, and the
--- canonical branding shape for both the seeded org and newly provisioned
--- ones.
+-- readable by nobody in the seeded org over PostgREST, and the app silently
+-- fell back to env-var branding defaults. "Org readable within request org"
+-- is now the only permissive SELECT policy on the table. This suite pins it
+-- by name, the anon and member read behavior, and the canonical branding
+-- shape for both the seeded org and newly provisioned ones.
 --
 -- Run locally through the shared stack's container (never `supabase test db`):
 --
@@ -170,14 +166,7 @@ select is(
   'anon with no org header reads no organizations (fail-closed)'
 );
 
--- An authenticated member reads exactly their own org row. NOTE which policy
--- actually carries this differs by environment, so it is NOT a guard on the
--- new one: in CI the database is ephemeral, seed.sql's auth.users insert
--- fires handle_new_user() → an organization_members row → the LEGACY
--- membership policy alone grants this SELECT, and the assertion passes with
--- the new policy reverted. On the shared local stack the seed profile
--- predates 20260731000014, so the new policy carries it. The anon assertions
--- above and the policy_cmd assertion at the top are the real guards.
+-- An authenticated member reads exactly their own org row.
 reset role;
 set local role authenticated;
 select set_config(

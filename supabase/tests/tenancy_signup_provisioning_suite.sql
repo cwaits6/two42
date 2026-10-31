@@ -124,14 +124,6 @@ select ok(
   not exists (select 1 from public.organizations where name = 'Signup Suite Org C'),
   'the rejected call left no partial org behind (atomic)');
 
-select ok(
-  not exists (
-    select 1 from public.organization_members om
-    join public.profiles p on p.id = om.profile_id
-    where p.id = current_setting('su.owner_b')::uuid
-      and om.org_id is distinct from current_setting('su.org_b')::uuid),
-  'the rejected call granted no membership outside the owner''s own org');
-
 -- A profile-less owner email is still rejected when another org already
 -- holds an approved access request or unclaimed family invite for it:
 -- provisioning would insert a SECOND approved request, and the owner's

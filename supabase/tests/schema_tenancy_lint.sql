@@ -182,16 +182,11 @@ create temporary table org_id_nullable on commit drop as
 
 create temporary table org_id_no_default on commit drop as
   select t.table_name from lint_scope_tables t
-  -- organization_members is a membership join table: org_id is half its
-  -- natural key and must always be named explicitly by the caller
-  -- (provision_organization, handle_new_user) — a fail-closed DEFAULT
-  -- makes no sense there. It stays covered by every other check.
-  where t.table_name <> 'organization_members'
-    and exists (
-      select 1 from information_schema.columns c
-      where c.table_schema = 'public' and c.table_name = t.table_name
-        and c.column_name = 'org_id' and c.column_default is null
-    );
+  where exists (
+    select 1 from information_schema.columns c
+    where c.table_schema = 'public' and c.table_name = t.table_name
+      and c.column_name = 'org_id' and c.column_default is null
+  );
 
 select is(
   (select count(*)::int from org_id_nullable where table_name not like 'tenancy\_probe\_%'),
@@ -219,21 +214,20 @@ select isnt(
 
 create temporary table org_id_wrong_default on commit drop as
   select t.table_name from lint_scope_tables t
-  where t.table_name <> 'organization_members'
-    and exists (
-      select 1
-      from pg_catalog.pg_attrdef d
-      join pg_catalog.pg_attribute a on a.attrelid = d.adrelid and a.attnum = d.adnum
-      join pg_catalog.pg_class c on c.oid = d.adrelid
-      join pg_catalog.pg_namespace n on n.oid = c.relnamespace
-      where n.nspname = 'public' and c.relname = t.table_name
-        and a.attname = 'org_id'
-        -- pg_get_expr renders the call schema-qualified or not depending on
-        -- the session search_path; both spellings are the same function and
-        -- ONLY these two exact renderings are valid.
-        and pg_get_expr(d.adbin, d.adrelid) not in
-          ('app_current_org_id()', 'public.app_current_org_id()')
-    );
+  where exists (
+    select 1
+    from pg_catalog.pg_attrdef d
+    join pg_catalog.pg_attribute a on a.attrelid = d.adrelid and a.attnum = d.adnum
+    join pg_catalog.pg_class c on c.oid = d.adrelid
+    join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relname = t.table_name
+      and a.attname = 'org_id'
+      -- pg_get_expr renders the call schema-qualified or not depending on
+      -- the session search_path; both spellings are the same function and
+      -- ONLY these two exact renderings are valid.
+      and pg_get_expr(d.adbin, d.adrelid) not in
+        ('app_current_org_id()', 'public.app_current_org_id()')
+  );
 
 select is(
   (select count(*)::int from org_id_wrong_default where table_name not like 'tenancy\_probe\_%'),
@@ -359,11 +353,6 @@ create temporary table noncomposite_fks on commit drop as
     )
     -- Named exceptions, each with a reason:
     and con.conname not in (
-      -- organization_members.profile_id → profiles: the membership org is
-      -- deliberately independent of the profile's pinned org — that
-      -- independence is the platform-admin / multi-org seam Phase 4 builds
-      -- on.
-      'organization_members_profile_id_fkey',
       -- payment_handles is a local-stack stray (see tenancy_local_strays);
       -- its FK does not exist in CI's migrations-built database.
       'payment_handles_profile_id_fkey'
