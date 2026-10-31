@@ -225,7 +225,7 @@ export function EditEventForm({
       return;
     }
 
-    toast.success("Event updated!");
+    toast.success("Event updated.");
     router.replace(detailHref);
     router.refresh();
   };

@@ -58,7 +58,7 @@ export default function UpdatePasswordPage() {
       return;
     }
 
-    toast.success("Password updated successfully!");
+    toast.success("Password updated successfully.");
     router.replace("/dashboard");
     router.refresh();
   };

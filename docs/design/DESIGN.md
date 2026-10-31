@@ -144,6 +144,18 @@ A server page splits a list read three ways with `readList()` (`lib/supabase/rea
 
 ---
 
+## Messages
+
+**Errors** read "Couldn't {verb} {thing}." followed by what to do: "Couldn't save the fund. Try again." Build them with `failureMessage()` (`lib/errorCopy.ts`), which picks the next step from the response — check the connection, sign in again, wait a minute — and never shows server text: no `error.message` from Postgres, PostgREST or Auth and no API `data.error` reaches a toast or alert. When a route uses a status to mean something specific (a 409 that means someone else got there first), pass the whole sentence for it.
+
+**Success toasts** say what happened, in the past tense, with no exclamation marks: "Fund deleted."
+
+**Form fields** that fail validation are marked where they are, never only in a toast: the control gets `aria-invalid`, the message sits right below it and is tied to it with `aria-describedby` (`FieldError` and `invalidFieldProps()` in `components/ui/field-error.tsx`), and submitting moves focus to the first invalid field. Messages say what to enter: "Enter a first name." `ProfileForm` is the reference.
+
+**Confirmations** use `ConfirmDialog` (`components/ConfirmDialog.tsx`), never the browser's `confirm()`: the title asks the question and names the thing ("Delete General fund?"), the description is one sentence on what happens next, and the destructive button is named for the action — "Delete fund", never "OK".
+
+---
+
 ## Accessibility floor
 
 - Body text ≥ 16px; never below 14px for meaningful content.

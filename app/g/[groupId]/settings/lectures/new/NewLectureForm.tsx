@@ -85,7 +85,7 @@ function NewLectureFormInner({ groupId, groupName }: Props) {
       return;
     }
 
-    toast.success("Lecture added!");
+    toast.success("Lecture added.");
     router.push(base);
   };
 

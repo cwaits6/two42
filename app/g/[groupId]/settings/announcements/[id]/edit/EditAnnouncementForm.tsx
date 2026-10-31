@@ -108,7 +108,7 @@ export function EditAnnouncementForm({
       return;
     }
 
-    toast.success("Announcement updated!");
+    toast.success("Announcement updated.");
     router.push(listHref);
   };
 
