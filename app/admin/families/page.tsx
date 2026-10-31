@@ -472,7 +472,10 @@ export default function FamiliesPage() {
         failureMessage(`remove ${fm.first_name}`, res ? res.status : "network"),
       );
       // The request may have reached the server before the connection dropped.
-      if (!res && editing) loadFamilyMembers(editing.id);
+      if (!res) {
+        setRemovingMember(null);
+        if (editing) loadFamilyMembers(editing.id);
+      }
       return;
     }
     toast.success(`Removed ${fm.first_name} from the household.`);
