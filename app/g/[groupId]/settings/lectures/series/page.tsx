@@ -1,12 +1,25 @@
-import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import { Layers, Plus } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyState } from "@/components/states/EmptyState";
+import { ErrorState } from "@/components/states/ErrorState";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { groupPath } from "@/lib/groups/active";
 import { requireGroupLeader } from "@/lib/groups/server";
 import { groupPageTitle } from "@/lib/pageTitle";
+import { readList } from "@/lib/supabase/readList";
 
 export const generateMetadata = groupPageTitle("Manage series");
+
+type SeriesRow = {
+  id: string;
+  name: string;
+  teacher: string | null;
+  is_archived: boolean;
+  lectures: { count: number }[];
+};
 
 export default async function ManageSeriesPage({
   params,
@@ -18,95 +31,79 @@ export default async function ManageSeriesPage({
   const base = groupPath(group.id, "/settings/lectures");
   const supabase = await createClient();
 
-  const { data: series } = await supabase
-    .from("lecture_series")
-    .select("*, lectures(count)")
-    .eq("group_id", group.id)
-    .order("created_at", { ascending: false });
+  const series = readList<SeriesRow>(
+    await supabase
+      .from("lecture_series")
+      .select("id, name, teacher, is_archived, lectures(count)")
+      .eq("group_id", group.id)
+      .order("created_at", { ascending: false }),
+    "lesson series",
+  );
+
+  const addSeries = (
+    <Button nativeButton={false} render={<Link href={`${base}/series/new`} />}>
+      <Plus aria-hidden="true" />
+      Add series
+    </Button>
+  );
 
   return (
-    <div className="container mx-auto px-4 py-12">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold text-brand-primary-text">Lecture Series</h1>
-        <Button nativeButton={false} render={<Link href={`${base}/series/new`} />}>
-          New series
-        </Button>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Series"
+        subtitle="Lessons grouped under one title and teacher."
+        backHref={base}
+        backLabel="Back to Lessons"
+        actions={addSeries}
+      />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>All Series</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-base">
-              <thead>
-                <tr className="border-b border-border text-left">
-                  <th className="pb-3 pr-4 font-semibold text-muted-foreground">Series</th>
-                  <th className="pb-3 pr-4 font-semibold text-muted-foreground">Teacher</th>
-                  <th className="pb-3 pr-4 font-semibold text-muted-foreground">Lectures</th>
-                  <th className="pb-3 pr-4 font-semibold text-muted-foreground">Status</th>
-                  <th className="pb-3 font-semibold text-muted-foreground"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {(series ?? []).map((s) => {
-                  const count = (s.lectures as unknown as Array<{ count: number }>)?.[0]?.count ?? 0;
-                  return (
-                    <tr key={s.id} className="border-b border-border last:border-0">
-                      <td className="py-3 pr-4 font-medium text-foreground">{s.name}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">{s.teacher ?? "—"}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">{count}</td>
-                      <td className="py-3 pr-4">
-                        {(s as unknown as { is_archived: boolean }).is_archived ? (
-                          <span className="text-base font-medium text-muted-foreground">Archived</span>
-                        ) : (
-                          <span className="text-base font-medium text-green-700">Active</span>
-                        )}
-                      </td>
-                      <td className="py-3">
-                        <div className="flex items-center gap-4">
-                          <Link
-                            href={`${base}/new?series=${s.id}`}
-                            className="text-brand-primary-text hover:underline font-medium text-base"
-                          >
-                            + Add lecture
-                          </Link>
-                          <Link
-                            href={`${base}/series/${s.id}/edit`}
-                            className="text-muted-foreground hover:underline font-medium text-base"
-                          >
-                            Edit
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {(!series || series.length === 0) && (
-                  <tr>
-                    <td colSpan={5} className="py-8 text-center text-muted-foreground">
-                      No series yet.{" "}
-                      <Link href={`${base}/series/new`} className="text-brand-primary-text hover:underline">
-                        Create one →
-                      </Link>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="mt-6">
-        <Link
-          href={base}
-          className="inline-flex items-center justify-center rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted transition-colors"
-        >
-          ← Back to Lectures
-        </Link>
-      </div>
-    </div>
+      {series === null ? (
+        <ErrorState thing="series" />
+      ) : series.length === 0 ? (
+        <EmptyState icon={Layers} message="No series yet." action={addSeries} />
+      ) : (
+        <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
+          {series.map((s) => {
+            const count = s.lectures[0]?.count ?? 0;
+            const meta = [
+              s.teacher,
+              `${count} ${count === 1 ? "lesson" : "lessons"}`,
+              s.is_archived ? "Past series" : "Current series",
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            return (
+              <li
+                key={s.id}
+                className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6"
+              >
+                <div className="min-w-0">
+                  <p className="text-lg font-medium text-foreground">{s.name}</p>
+                  <p className="text-base text-muted-foreground">{meta}</p>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-3">
+                  <Button
+                    variant="outline"
+                    nativeButton={false}
+                    render={<Link href={`${base}/new?series=${s.id}`} />}
+                    aria-label={`Add lesson to ${s.name}`}
+                  >
+                    Add lesson
+                  </Button>
+                  <Button
+                    variant="outline"
+                    nativeButton={false}
+                    render={<Link href={`${base}/series/${s.id}/edit`} />}
+                    aria-label={`Edit ${s.name}`}
+                  >
+                    Edit
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </PageContainer>
   );
 }
