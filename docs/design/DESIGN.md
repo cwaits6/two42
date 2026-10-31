@@ -146,7 +146,7 @@ A server page splits a list read three ways with `readList()` (`lib/supabase/rea
 
 ## Messages
 
-**Errors** read "Couldn't {verb} {thing}." followed by what to do: "Couldn't save the fund. Try again." Build them with `failureMessage()` (`lib/errorCopy.ts`), which picks the next step from the response — check the connection, sign in again, wait a minute — and never shows server text: no `error.message` from Postgres, PostgREST or Auth and no API `data.error` reaches a toast or alert. When a route uses a status to mean something specific (a 409 that means someone else got there first), pass the whole sentence for it.
+**Errors** read "Couldn't {verb} {thing}." followed by what to do: "Couldn't save the fund. Try again." Build them with `failureMessage()` (`lib/errorCopy.ts`), which picks the next step from the response — check the connection, sign in again, wait a minute — and never shows server text: no `error.message` from Postgres, PostgREST or Auth and no API `data.error` reaches a toast or alert. The one exception is the platform operator pages: `operatorMessage()` shows the 400 and 409 sentences that `app/api/platform/**` writes for the operator to act on, and nothing else. When a route uses a status to mean something specific (a 409 that means someone else got there first), pass the whole sentence for it.
 
 **Success toasts** say what happened, in the past tense, with no exclamation marks: "Fund deleted."
 

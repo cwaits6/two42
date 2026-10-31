@@ -1,6 +1,7 @@
 // Every failed request a person sees goes through here, so the copy follows
 // one rule — "Couldn't {verb} {thing}." and what to do next — and no
-// Postgres, PostgREST, Auth or API error text ever reaches a toast or alert.
+// Postgres, PostgREST, Auth or API error text reaches a toast or alert.
+// The exception is operatorMessage below, for the platform operator API only.
 
 export const NETWORK_ERROR = "Couldn't reach the server. Check your connection and try again.";
 
