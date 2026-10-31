@@ -19,7 +19,7 @@ const saved: Result = { data: [{ id: "row" }], error: null };
  * Membership reads and writes are each answered in order; profile reads
  * always succeed, and so does a write with no queued answer.
  */
-function stubClient(memberReads: Result[], writes: Result[] = []) {
+function stubClient(memberReads: Result[], writes: (Result | Promise<Result>)[] = []) {
   const from = (table: string) => {
     let writing = false;
     const chain = {
@@ -79,11 +79,11 @@ async function click(label: string) {
   await act(async () => button.click());
 }
 
-function render() {
+function render(group = { id: "g", name: "Tuesday Group" }) {
   return act(async () =>
     root.render(
       createElement(GroupLeadersDialog, {
-        group: { id: "g", name: "Tuesday Group" },
+        group,
         onClose: () => {},
         onChanged: () => {},
       }),
@@ -175,5 +175,30 @@ describe("GroupLeadersDialog when a replace saves the new leader but not the rem
     );
     expect(container.querySelector('button[aria-label="Remove Ada Lovelace as leader"]')).toBeNull();
     expect(container.textContent).not.toContain("Remove them below.");
+  });
+});
+
+describe("GroupLeadersDialog when a write finishes after it moves to another group", () => {
+  it("keeps the other group's leaders", async () => {
+    let finishWrite: (result: Result) => void = () => {};
+    const write = new Promise<Result>((resolve) => {
+      finishWrite = resolve;
+    });
+    client = stubClient(
+      [
+        { data: [{ profile_id: "a", role: "leader" }], error: null },
+        { data: [{ profile_id: "b", role: "leader" }], error: null },
+        { data: [{ profile_id: "a", role: "member" }], error: null },
+      ],
+      [write],
+    );
+    await render();
+
+    await click("Remove Ada Lovelace as leader");
+    await render({ id: "h", name: "Thursday Group" });
+    await act(async () => finishWrite(saved));
+
+    expect(container.querySelector('button[aria-label="Remove Ben Okafor as leader"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("This group has no leader yet.");
   });
 });

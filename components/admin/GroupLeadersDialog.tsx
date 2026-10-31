@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -264,8 +264,12 @@ export function GroupLeadersDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const groupId = group?.id;
+  // A write can finish after the dialog has moved to another group; its
+  // results must not land on that group's roster.
+  const activeGroupId = useRef(groupId);
 
   useEffect(() => {
+    activeGroupId.current = groupId;
     if (!groupId) return;
     let cancelled = false;
     setRoster(null);
@@ -286,13 +290,15 @@ export function GroupLeadersDialog({
   /**
    * Re-read the roster after a committed write. A failed read drops the
    * stale list rather than keep showing it: acting on it would hit rows the
-   * write already changed. Resolves false when the read failed.
+   * write already changed. Resolves false when the read failed or the
+   * dialog has since moved to another group.
    */
   async function refresh(id: string): Promise<boolean> {
     const loaded = await loadLeaderRoster(supabase, id);
+    onChanged();
+    if (activeGroupId.current !== id) return false;
     setRoster(loaded);
     setLoadFailed(loaded === null);
-    onChanged();
     return loaded !== null;
   }
 
@@ -310,13 +316,14 @@ export function GroupLeadersDialog({
     try {
       const addError = await addLeader(supabase, group.id, person.id, inGroup);
       if (addError) {
-        setError(addError);
+        if (activeGroupId.current === group.id) setError(addError);
         return;
       }
       if (replacing) {
         const removeError = await removeLeader(supabase, group.id, replacing.id);
         if (removeError) {
           const reloaded = await refresh(group.id);
+          if (activeGroupId.current !== group.id) return;
           setMode({ kind: "leaders" });
           setQuery("");
           setError(
@@ -327,6 +334,7 @@ export function GroupLeadersDialog({
         }
       }
       await refresh(group.id);
+      if (activeGroupId.current !== group.id) return;
       changeMode({ kind: "leaders" });
     } finally {
       setBusy(false);
@@ -340,7 +348,7 @@ export function GroupLeadersDialog({
     try {
       const removeError = await removeLeader(supabase, group.id, person.id);
       if (removeError) {
-        setError(removeError);
+        if (activeGroupId.current === group.id) setError(removeError);
         return;
       }
       await refresh(group.id);
