@@ -1015,7 +1015,10 @@ export default function FamiliesPage() {
             open={deletingFamily !== null}
             onOpenChange={(open) => !open && setDeletingFamily(null)}
             title={`Delete ${deletingFamily?.family_name ?? ""}?`}
-            description={deleteHouseholdConsequence(deletingFamily?.members.length ?? 0)}
+            description={deleteHouseholdConsequence(
+              deletingFamily?.members.length ?? 0,
+              familyMembers.length,
+            )}
             confirmLabel="Delete household"
             pendingLabel="Deleting…"
             onConfirm={async () => {
@@ -1039,8 +1042,22 @@ export default function FamiliesPage() {
   );
 }
 
-function deleteHouseholdConsequence(memberCount: number): string {
-  if (memberCount === 0) return "This can't be undone.";
-  const members = memberCount === 1 ? "Its 1 member is" : `Its ${memberCount} members are`;
-  return `${members} left without a household. This can't be undone.`;
+function deleteHouseholdConsequence(memberCount: number, withoutAccountCount: number): string {
+  const parts: string[] = [];
+  if (memberCount > 0) {
+    parts.push(
+      memberCount === 1
+        ? "Its 1 member is left without a household."
+        : `Its ${memberCount} members are left without a household.`,
+    );
+  }
+  if (withoutAccountCount > 0) {
+    parts.push(
+      withoutAccountCount === 1
+        ? "The 1 person listed without an account is deleted."
+        : `The ${withoutAccountCount} people listed without an account are deleted.`,
+    );
+  }
+  parts.push("This can't be undone.");
+  return parts.join(" ");
 }
