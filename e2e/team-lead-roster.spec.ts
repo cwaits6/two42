@@ -92,3 +92,30 @@ test.describe("a group member who is not on the team", () => {
     await expect(page.getByRole("region", { name: "Team members" })).toHaveCount(0);
   });
 });
+
+test.describe("a team with serving signups off", () => {
+  test.beforeAll(() =>
+    runSql(`update public.serving_team_settings set enabled = false where team_id = '${TEAM_ID}';`),
+  );
+
+  test.describe("its team lead", () => {
+    test.use({ persona: "twoGroups" });
+
+    test("still gets the roster control", async ({ page }) => {
+      await page.goto(TEAM_PATH);
+      const roster = page.getByRole("region", { name: "Team members" });
+      await expect(roster.getByText(MEMBER)).toBeVisible();
+      await expect(roster.getByRole("button", { name: "Add person" })).toBeVisible();
+    });
+  });
+
+  test.describe("a group member who is not on the team", () => {
+    test.use({ persona: "oneGroup" });
+
+    test("is sent back to the Serving page", async ({ page }) => {
+      await page.goto(TEAM_PATH);
+      await expect(page).toHaveURL(new RegExp(`/g/${GROUP_B}/serving$`));
+      await expect(page.getByRole("region", { name: "Team members" })).toHaveCount(0);
+    });
+  });
+});

@@ -78,7 +78,7 @@ not covered here.
 | `group-invite.spec.ts`               | A leader's invite link names the group and offers the signup form to a stranger until it is revoked, after which the same URL shows the one dead-link message and no form; a non-member gets a 404 on the invites page; the created link is revoked in afterAll |
 | `pending-group-access.spec.ts`       | A member moved back to pending gets a 404 on their group's pages and the pending card at Home; approved again, the same group's announcements show with no re-adding; set back to member in afterAll |
 | `signed-in-frame.spec.ts`            | At 390 a one-group member, a two-group member and the church admin get the same header — the wordmark and one Menu button, no footer — and the menu holds their nav, Privacy, Terms, Help and one Sign out; the group switcher is inside the menu; signed in, `/login` and `/forgot-password` land on Home |
-| `team-lead-roster.spec.ts`           | A team lead who does not lead the group sees the team's members with Remove on non-leads only; Add person lists the group's members not on the team and no one from another group; an add and a remove go through; a group member not on the team sees no roster controls; the team is deleted in afterAll |
+| `team-lead-roster.spec.ts`           | A team lead who does not lead the group sees the team's members with Remove on non-leads only; Add person lists the group's members not on the team and no one from another group; an add and a remove go through; a group member not on the team sees no roster controls; with serving signups off the lead still gets the roster and that member is sent back to the Serving page; the team is deleted in afterAll |
 
 ## Adding a spec
 

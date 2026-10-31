@@ -213,8 +213,12 @@ export default async function ServingPage({
             {roleGroups.map((team) => {
               const members = rosters.get(team.id) ?? [];
               const isMember = membershipMap.has(team.id);
-              return (
-                <Card key={team.id}>
+              const canManage = isLeader || membershipMap.get(team.id) === true;
+              const card = (
+                <Card
+                  key={team.id}
+                  className={canManage ? "hover:border-brand-primary/50 transition-colors" : undefined}
+                >
                   <CardContent className="py-5">
                     <div className="flex items-center gap-4">
                       <span
@@ -242,6 +246,17 @@ export default async function ServingPage({
                     </div>
                   </CardContent>
                 </Card>
+              );
+              return canManage ? (
+                <Link
+                  key={team.id}
+                  href={groupPath(group.id, `/serving/${team.id}`)}
+                  className="block"
+                >
+                  {card}
+                </Link>
+              ) : (
+                card
               );
             })}
           </div>

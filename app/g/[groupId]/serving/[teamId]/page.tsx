@@ -74,7 +74,6 @@ export default async function ServingSchedulePage({
   if (!team) notFound();
 
   const isLeader = group.role === "leader";
-  if (!settings?.enabled && !isLeader) redirect(servingHref);
 
   const { data: membership } = await supabase
     .from("team_members")
@@ -85,26 +84,35 @@ export default async function ServingSchedulePage({
 
   const isMember = !!membership;
   const isTeamLead = membership?.is_leader === true;
+  const canManageRoster = isLeader || isTeamLead;
+  // A team with signups off is a roster only, so it is reachable only by the
+  // people who can change that roster or turn signups on.
+  if (!settings?.enabled && !canManageRoster) redirect(servingHref);
+
   // Everyone can view the schedule/roster read-only; only team members,
   // team leads, and group leaders can actually claim a Sunday.
   const canSignUp = isMember || isTeamLead || isLeader;
 
-  const canManageRoster = isLeader || isTeamLead;
-
-  const [{ data: memberRows }, { data: groupRows }] = await Promise.all([
-    supabase
-      .from("team_members")
-      .select(
-        "is_leader, profiles(id, email, role, first_name, last_name, preferred_name, avatar_url)"
-      )
-      .eq("team_id", teamId),
-    canManageRoster
-      ? supabase
-          .from("group_members")
-          .select("profiles(id, role, first_name, last_name, preferred_name, avatar_url)")
-          .eq("group_id", group.id)
-      : Promise.resolve({ data: [] }),
-  ]);
+  const [{ data: memberRows, error: memberError }, { data: groupRows, error: groupError }] =
+    await Promise.all([
+      supabase
+        .from("team_members")
+        .select(
+          "is_leader, profiles(id, email, role, first_name, last_name, preferred_name, avatar_url)"
+        )
+        .eq("team_id", teamId),
+      canManageRoster
+        ? supabase
+            .from("group_members")
+            .select("profiles(id, role, first_name, last_name, preferred_name, avatar_url)")
+            .eq("group_id", group.id)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+  // A failed read would otherwise render as an empty roster or an empty
+  // group, and the add mode's empty-state copy would state that as fact.
+  const rosterUnavailable = !!(memberError || groupError);
+  if (memberError) console.error("team roster read failed:", memberError.message);
+  if (groupError) console.error("team roster group read failed:", groupError.message);
   const memberCount = (memberRows ?? []).filter((row) => {
     const member = row.profiles as unknown as {
       email: string | null;
@@ -117,7 +125,7 @@ export default async function ServingSchedulePage({
   // put on a team. A null embed is a profile RLS hides from the viewer.
   let rosterMembers: TeamRosterMember[] = [];
   let rosterCandidates: TeamRosterPerson[] = [];
-  if (canManageRoster) {
+  if (canManageRoster && !rosterUnavailable) {
     const onTeam = new Set<string>();
     for (const row of memberRows ?? []) {
       const p = row.profiles as unknown as RosterProfile | null;
@@ -307,10 +315,10 @@ export default async function ServingSchedulePage({
           "Pick a date below — one signup covers the whole service."}
       </p>
 
-      {!settings?.enabled && isLeader && (
+      {!settings?.enabled && canManageRoster && (
         <p className="text-sm text-brand-accent-text mb-6">
-          Serving signups are not enabled for this team yet — enable them from
-          the Serving page.
+          Serving signups are not enabled for this team yet — turn them on in
+          Team settings.
         </p>
       )}
 
@@ -357,7 +365,13 @@ export default async function ServingSchedulePage({
         canManage={canManageRoster}
       />
 
-      {canManageRoster && (
+      {canManageRoster && rosterUnavailable && (
+        <p className="mt-10 text-base text-muted-foreground">
+          The team roster could not be loaded. Refresh the page to try again.
+        </p>
+      )}
+
+      {canManageRoster && !rosterUnavailable && (
         <div className="mt-10">
           <TeamRoster
             teamId={teamId}
