@@ -18,9 +18,9 @@ const { Header } = await import("./Header");
 
 const member = { id: "user-1", role: "member" } as Profile;
 
-function render(profile: Profile | null) {
+function render(profile: Profile | null, signedIn = profile !== null) {
   return renderToStaticMarkup(
-    createElement(Header, { profile, hasServingAccess: false, orgName: "Org" }),
+    createElement(Header, { signedIn, profile, hasServingAccess: false, orgName: "Org" }),
   );
 }
 
@@ -34,6 +34,7 @@ describe("Header signed out", () => {
     expect(html).toContain("two42-wordmark.svg");
     expect(html).toContain('href="/login"');
     expect(html).not.toContain('href="#');
+    expect(html).not.toContain("Sign Out");
   });
 
   it("keeps sign-in on every other route", () => {
@@ -55,5 +56,22 @@ describe("Header signed in", () => {
     const html = render(member);
     expect(html).not.toContain('href="/login"');
     expect(html).toContain("Sign Out");
+  });
+});
+
+describe("Header signed in with no profile", () => {
+  it("shows sign-out, not sign-in, on the platform pages", () => {
+    pathname = "/platform";
+    const html = render(null, true);
+    expect(html).toContain("Sign Out");
+    expect(html).not.toContain('href="/login"');
+  });
+
+  it("shows sign-out on every other route without the member menu", () => {
+    pathname = "/privacy";
+    const html = render(null, true);
+    expect(html).toContain("Sign Out");
+    expect(html).not.toContain('href="/login"');
+    expect(html).not.toContain("navigation menu");
   });
 });

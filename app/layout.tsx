@@ -69,7 +69,7 @@ export default async function RootLayout({
   if (user) {
     const supabase = await createClient();
     const [{ data, error }, { data: groupData, error: groupError }, { data: platformAdmin }] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", user.id).single(),
+      supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
       supabase.from("team_members").select("team_id").eq("profile_id", user.id),
       // Nav affordance only — every /platform surface re-checks
       // server-side; an RPC error just hides the link (fail closed).
@@ -77,9 +77,9 @@ export default async function RootLayout({
     ]);
     isPlatformAdmin = platformAdmin === true;
     // Neither failure can render an error page — the layout wraps every
-    // route — but both degrade silently otherwise: a null profile renders
-    // an authenticated member with the logged-out Header/AppShell, and a
-    // null groupData silently denies serving access.
+    // route — but both degrade silently otherwise: a failed profile read
+    // hides a member's nav, and a null groupData silently denies serving
+    // access. No row is not an error: a platform admin has no profile.
     if (error) console.error("Layout: failed to load profile:", error);
     if (groupError) console.error("Layout: failed to load team memberships:", groupError);
     profile = data;
@@ -155,6 +155,7 @@ export default async function RootLayout({
         >
           <SidebarProvider>
             <Header
+              signedIn={!!user}
               profile={profile}
               hasServingAccess={hasServingAccess}
               isPlatformAdmin={isPlatformAdmin}

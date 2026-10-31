@@ -16,13 +16,14 @@ import type { Profile } from "@/lib/types";
 import { isMemberRole } from "@/lib/roles";
 
 interface HeaderProps {
+  signedIn: boolean;
   profile: Profile | null;
   hasServingAccess: boolean;
   isPlatformAdmin?: boolean;
   orgName: string;
 }
 
-export function Header({ profile, hasServingAccess, isPlatformAdmin = false, orgName }: HeaderProps) {
+export function Header({ signedIn, profile, hasServingAccess, isPlatformAdmin = false, orgName }: HeaderProps) {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const pathname = usePathname();
@@ -117,7 +118,7 @@ export function Header({ profile, hasServingAccess, isPlatformAdmin = false, org
               Platform
             </Button>
           )}
-          {profile ? (
+          {signedIn ? (
             <Button
               variant="outline"
               size="lg"
