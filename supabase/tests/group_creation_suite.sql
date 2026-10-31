@@ -725,5 +725,144 @@ select is(
   (select count(*)::int from public.groups where org_id = current_setting('gc.org_a')::uuid),
   4, 'non-vacuity: org A holds its backfilled group and the three created here');
 
+-- ── 9. Length limits: the same ones the forms enforce ───────────────────────
+-- Org A is back on approval (section 7). The admin path reaches group_create()
+-- and the groups INSERT policy in every mode; the member path files requests.
+select has_trigger('public', 'groups', 'groups_text_length_check',
+  'groups checks name and description length on write');
+select has_trigger('public', 'group_requests', 'group_requests_text_length_check',
+  'group_requests checks name and description length on write');
+
+do $$
+declare
+  org_a uuid := current_setting('gc.org_a')::uuid;
+  owner_a uuid := current_setting('gc.owner_a')::uuid;
+  member_a1 uuid := current_setting('gc.member_a1')::uuid;
+  long_name_err text := 'none'; long_desc_err text := 'none';
+  insert_name_err text := 'none'; insert_desc_err text := 'none';
+  request_name_err text := 'none'; request_desc_err text := 'none';
+  at_limit uuid; requested bigint;
+begin
+  set local role authenticated;
+  perform set_config('request.headers', '{}', true);
+
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_a)::text, true);
+  begin
+    perform public.group_create(repeat('n', 121));
+  exception when others then
+    long_name_err := sqlstate;
+  end;
+  begin
+    perform public.group_create('Long description', repeat('d', 1001));
+  exception when others then
+    long_desc_err := sqlstate;
+  end;
+  -- Measured after trimming, as stored.
+  at_limit := public.group_create('  ' || repeat('n', 120) || '  ', repeat('d', 1000));
+  begin
+    insert into public.groups (org_id, name) values (org_a, repeat('n', 121));
+  exception when others then
+    insert_name_err := sqlstate;
+  end;
+  begin
+    insert into public.groups (org_id, name, description) values (org_a, 'Long', repeat('d', 1001));
+  exception when others then
+    insert_desc_err := sqlstate;
+  end;
+
+  perform set_config('request.jwt.claims', json_build_object('sub', member_a1)::text, true);
+  begin
+    insert into public.group_requests (org_id, requested_by, name)
+      values (org_a, member_a1, repeat('n', 121));
+  exception when others then
+    request_name_err := sqlstate;
+  end;
+  begin
+    insert into public.group_requests (org_id, requested_by, name, description)
+      values (org_a, member_a1, 'Long ask', repeat('d', 1001));
+  exception when others then
+    request_desc_err := sqlstate;
+  end;
+  insert into public.group_requests (org_id, requested_by, name, description)
+    values (org_a, member_a1, repeat('r', 120), repeat('d', 1000));
+  get diagnostics requested = row_count;
+
+  reset role;
+  perform set_config('gc.s9_long_name_err', long_name_err, true);
+  perform set_config('gc.s9_long_desc_err', long_desc_err, true);
+  perform set_config('gc.s9_at_limit', coalesce(at_limit::text, ''), true);
+  perform set_config('gc.s9_insert_name_err', insert_name_err, true);
+  perform set_config('gc.s9_insert_desc_err', insert_desc_err, true);
+  perform set_config('gc.s9_request_name_err', request_name_err, true);
+  perform set_config('gc.s9_request_desc_err', request_desc_err, true);
+  perform set_config('gc.s9_requested', requested::text, true);
+end $$;
+
+select is(current_setting('gc.s9_long_name_err'), 'GC007',
+  'group_create() refuses a name over 120 characters with GC007');
+select is(current_setting('gc.s9_long_desc_err'), 'GC007',
+  'group_create() refuses a description over 1000 characters with GC007');
+select is(
+  (select char_length(name) from public.groups where id = nullif(current_setting('gc.s9_at_limit'), '')::uuid),
+  120, 'positive control: a 120-character name with surrounding spaces is created, trimmed');
+select is(current_setting('gc.s9_insert_name_err'), '23514',
+  'a direct groups insert with a name over 120 characters fails its check');
+select is(current_setting('gc.s9_insert_desc_err'), '23514',
+  'a direct groups insert with a description over 1000 characters fails its check');
+select is(current_setting('gc.s9_request_name_err'), '23514',
+  'a group request with a name over 120 characters fails its check');
+select is(current_setting('gc.s9_request_desc_err'), '23514',
+  'a group request with a description over 1000 characters fails its check');
+select is(current_setting('gc.s9_requested')::int, 1,
+  'positive control: a request at both limits is filed');
+
+-- Rows stored before the limit existed: the trigger is lifted for this
+-- transaction only so the fixture can reproduce them; the rollback restores it.
+do $$
+declare
+  org_a uuid := current_setting('gc.org_a')::uuid;
+  owner_a uuid := current_setting('gc.owner_a')::uuid;
+  member_a1 uuid := current_setting('gc.member_a1')::uuid;
+  old_request uuid; old_group uuid;
+  declined bigint; group_updated bigint; rename_err text := 'none';
+begin
+  alter table public.group_requests disable trigger group_requests_text_length_check;
+  alter table public.groups disable trigger groups_text_length_check;
+  insert into public.group_requests (org_id, requested_by, name)
+    values (org_a, member_a1, repeat('o', 200)) returning id into old_request;
+  insert into public.groups (org_id, name) values (org_a, repeat('o', 200)) returning id into old_group;
+  alter table public.group_requests enable trigger group_requests_text_length_check;
+  alter table public.groups enable trigger groups_text_length_check;
+
+  set local role authenticated;
+  perform set_config('request.headers', '{}', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_a)::text, true);
+
+  update public.group_requests
+    set status = 'declined', reviewed_by = owner_a, reviewed_at = now()
+    where id = old_request and org_id = org_a;
+  get diagnostics declined = row_count;
+  update public.groups set description = 'Thursdays at seven'
+    where id = old_group and org_id = org_a;
+  get diagnostics group_updated = row_count;
+  begin
+    update public.groups set name = repeat('o', 201) where id = old_group and org_id = org_a;
+  exception when others then
+    rename_err := sqlstate;
+  end;
+
+  reset role;
+  perform set_config('gc.s9_old_declined', declined::text, true);
+  perform set_config('gc.s9_old_group_updated', group_updated::text, true);
+  perform set_config('gc.s9_old_rename_err', rename_err, true);
+end $$;
+
+select is(current_setting('gc.s9_old_declined')::int, 1,
+  'an over-long request filed before the limit can still be declined');
+select is(current_setting('gc.s9_old_group_updated')::int, 1,
+  'an over-long group stored before the limit still takes an unrelated update');
+select is(current_setting('gc.s9_old_rename_err'), '23514',
+  'but renaming it to another over-long name is refused');
+
 select * from finish();
 rollback;

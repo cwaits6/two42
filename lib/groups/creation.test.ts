@@ -77,7 +77,7 @@ describe("validateGroupDescription", () => {
 describe("groupCreationErrorMessage", () => {
   const fallback = "Couldn't create the group. Please try again.";
 
-  it.each(["GC001", "GC002", "GC003", "GC004", "GC005", "GC006"])(
+  it.each(["GC001", "GC002", "GC003", "GC004", "GC005", "GC006", "GC007"])(
     "maps %s to its own sentence",
     (code) => {
       const message = groupCreationErrorMessage(code);
