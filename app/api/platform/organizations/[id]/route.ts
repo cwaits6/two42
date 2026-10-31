@@ -28,6 +28,12 @@ function validateBrandingPatch(
 ): { ok: true; branding: Record<string, string | null> } | { ok: false; error: string } {
   const branding: Record<string, string | null> = {};
 
+  // Logos are not a branding key until they are rendered and validated; a
+  // write that names one is refused rather than reported as saved.
+  if ("logo_url" in raw) {
+    return { ok: false, error: "Logos are not supported." };
+  }
+
   if ("display_name" in raw) {
     if (typeof raw.display_name !== "string") {
       return { ok: false, error: "Display name must be text." };
