@@ -436,9 +436,9 @@ export default function FamiliesPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        toast.error(failureMessage("save the household member"));
+      }).catch(() => null);
+      if (!res?.ok) {
+        toast.error(failureMessage("save the household member", res ? res.status : "network"));
         setSavingMember(false);
         return;
       }
@@ -448,9 +448,9 @@ export default function FamiliesPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        toast.error(failureMessage("add the household member"));
+      }).catch(() => null);
+      if (!res?.ok) {
+        toast.error(failureMessage("add the household member", res ? res.status : "network"));
         setSavingMember(false);
         return;
       }
@@ -466,9 +466,13 @@ export default function FamiliesPage() {
   async function handleDeleteMember(fm: FamilyMember) {
     const res = await fetch(`/api/admin/family-members/${fm.id}`, {
       method: "DELETE",
-    });
-    if (!res.ok) {
-      toast.error(failureMessage(`remove ${fm.first_name}`, res.status));
+    }).catch(() => null);
+    if (!res?.ok) {
+      toast.error(
+        failureMessage(`remove ${fm.first_name}`, res ? res.status : "network"),
+      );
+      // The request may have reached the server before the connection dropped.
+      if (!res && editing) loadFamilyMembers(editing.id);
       return;
     }
     toast.success(`Removed ${fm.first_name} from the household.`);
