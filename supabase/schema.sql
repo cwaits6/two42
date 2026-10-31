@@ -4823,12 +4823,6 @@ CREATE POLICY "Leaders and admins can delete group members" ON "public"."group_m
 
 
 
-CREATE POLICY "Leaders and admins can delete team members" ON "public"."team_members" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR (EXISTS ( SELECT 1
-   FROM "public"."teams" "t"
-  WHERE (("t"."id" = "team_members"."team_id") AND ("t"."org_id" = "team_members"."org_id") AND "public"."is_group_leader"("t"."group_id")))))));
-
-
-
 CREATE POLICY "Leaders and admins can delete teams" ON "public"."teams" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("group_id"))));
 
 
@@ -4842,12 +4836,6 @@ CREATE POLICY "Leaders and admins can insert group member labels" ON "public"."g
 
 
 CREATE POLICY "Leaders and admins can insert group members" ON "public"."group_members" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("group_id"))));
-
-
-
-CREATE POLICY "Leaders and admins can insert team members" ON "public"."team_members" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR (EXISTS ( SELECT 1
-   FROM "public"."teams" "t"
-  WHERE (("t"."id" = "team_members"."team_id") AND ("t"."org_id" = "team_members"."org_id") AND "public"."is_group_leader"("t"."group_id")))))));
 
 
 
@@ -4888,6 +4876,18 @@ CREATE POLICY "Leaders and admins can view group invite uses" ON "public"."group
 
 
 CREATE POLICY "Leaders and admins can view group invites" ON "public"."group_invites" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("group_id"))));
+
+
+
+CREATE POLICY "Leaders, team leads and admins can delete team members" ON "public"."team_members" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR (EXISTS ( SELECT 1
+   FROM "public"."teams" "t"
+  WHERE (("t"."id" = "team_members"."team_id") AND ("t"."org_id" = "team_members"."org_id") AND "public"."is_group_leader"("t"."group_id")))) OR ("public"."is_team_lead"("team_id") AND ("is_leader" = false)))));
+
+
+
+CREATE POLICY "Leaders, team leads and admins can insert team members" ON "public"."team_members" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR (EXISTS ( SELECT 1
+   FROM "public"."teams" "t"
+  WHERE (("t"."id" = "team_members"."team_id") AND ("t"."org_id" = "team_members"."org_id") AND "public"."is_group_leader"("t"."group_id")))) OR ("public"."is_team_lead"("team_id") AND ("is_leader" = false)))));
 
 
 
