@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { siteConfig } from "@/lib/config";
 import { getPlatformAdmin } from "@/lib/platform-access";
 import { createServiceClient } from "@/lib/supabase/server";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -12,8 +13,21 @@ import {
   type OwnerRequest,
 } from "./OrganizationDetail";
 
+export const metadata = { title: `Organization | Platform | ${siteConfig.name}` };
+
 interface PageProps {
   params: Promise<{ id: string }>;
+}
+
+// Explicit locale and zone, so SSR and hydration render the same date.
+function createdLabel(createdAt: string): string {
+  const date = new Date(createdAt).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  return `Created ${date}`;
 }
 
 export default async function PlatformOrganizationPage({ params }: PageProps) {
@@ -39,7 +53,7 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
     console.error("Platform organization detail read failed", orgError);
     return (
       <PageContainer>
-        <PageHeader title="Organization" backHref="/platform/organizations" backLabel="Back to Organizations" />
+        <PageHeader title="Organization" backHref="/platform/organizations" backLabel="Back to organizations" />
         <p className="text-base">
           Could not load this organization. Try again in a moment.
         </p>
@@ -63,7 +77,7 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
     console.error("Platform founding-admin read failed", ownerError);
     return (
       <PageContainer>
-        <PageHeader title={org.name} subtitle={org.id} backHref="/platform/organizations" backLabel="Back to Organizations" />
+        <PageHeader title={org.name} subtitle={createdLabel(org.created_at)} backHref="/platform/organizations" backLabel="Back to organizations" />
         <p className="text-base">
           Could not load the founding-admin request. Try again in a moment.
         </p>
@@ -157,7 +171,6 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
     customEmailDomainEnabled: org.custom_email_domain_enabled,
     branding: {
       display_name: typeof branding.display_name === "string" ? branding.display_name : "",
-      logo_url: typeof branding.logo_url === "string" ? branding.logo_url : "",
       accent: typeof branding.accent === "string" ? branding.accent : "",
       reply_to: typeof branding.reply_to === "string" ? branding.reply_to : "",
     },
@@ -167,9 +180,9 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
     <PageContainer>
       <PageHeader
         title={org.name}
-        subtitle={org.id}
+        subtitle={createdLabel(org.created_at)}
         backHref="/platform/organizations"
-        backLabel="Back to Organizations"
+        backLabel="Back to organizations"
       />
       <OrganizationDetail
         org={detail}

@@ -178,6 +178,34 @@ describe("PATCH /api/platform/organizations/[id]", () => {
     });
   });
 
+  it("drops a stored logo_url on a branding save", async () => {
+    const { client, calls } = makeServiceClient({
+      brandingReadResult: {
+        data: { branding: { display_name: "Old Name", logo_url: "javascript:alert(1)" } },
+        error: null,
+      },
+    });
+    createServiceClient.mockResolvedValue(client);
+
+    const res = await PATCH(request({ branding: { accent: "#B85C38" } }), routeParams());
+
+    expect(res.status).toBe(200);
+    expect(calls.updatePayload).toEqual({
+      branding: { display_name: "Old Name", accent: "#B85C38" },
+    });
+  });
+
+  it("400s on a logo_url without touching the service client", async () => {
+    const res = await PATCH(
+      request({ branding: { logo_url: "https://x.test/l.png" } }),
+      routeParams(),
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Logos are not supported." });
+    expect(createServiceClient).not.toHaveBeenCalled();
+  });
+
   it("404s when the branding read finds no organization", async () => {
     const { client } = makeServiceClient({
       brandingReadResult: { data: null, error: null },

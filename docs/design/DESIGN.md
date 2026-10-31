@@ -76,7 +76,6 @@ Tokens come in two layers.
 | Key | Meaning | Validation in `resolveBranding()` |
 |---|---|---|
 | `display_name` | the church/group name shown within their space (tab title, email sender name) | non-empty after trim; C0/C1 control characters stripped (it reaches `From:` and `Subject:` headers) |
-| `logo_url` | their logo (falls back to their name set in Fraunces; not rendered yet — a later phase) | **type-checked only** — any string passes, including `javascript:`. Must be validated before the first render |
 | `accent` | a single accent color; drives `--color-brand-primary` **and** the shadcn `--primary` / `--ring` / `--sidebar-primary` / `--sidebar-ring` | strict 6-digit hex — the CSS-injection guard for the `<style>` block and every inline `style=""` in `lib/email/*`. The `/platform` write path additionally enforces ≥ 4.5:1 contrast via `validateAccent()` (see below) |
 | `reply_to` | the org's Reply-To address on outbound email (the From: *domain* is separate — platform-wide unless the org has a verified claimed sending domain, see `org_email_domains` / `SENDING_DOMAIN` in CLAUDE.md) | conservative address shape, ≤ 254 chars; anything else falls back to no Reply-To |
 

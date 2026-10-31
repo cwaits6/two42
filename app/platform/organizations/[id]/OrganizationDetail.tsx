@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Globe, Mail, Pause, Play, RefreshCw } from "lucide-react";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +17,7 @@ import {
   HEX,
 } from "@/lib/contrast";
 import type { Database } from "@/lib/supabase/database.types";
+import { NETWORK_ERROR, operatorMessage } from "../../operatorMessage";
 
 type OrgStatus = Database["public"]["Enums"]["org_status"];
 
@@ -27,7 +29,6 @@ export interface OrgDetail {
   customEmailDomainEnabled: boolean;
   branding: {
     display_name: string;
-    logo_url: string;
     accent: string;
     reply_to: string;
   };
@@ -72,7 +73,7 @@ interface OrganizationDetailProps {
 
 function patchSuccessMessage(kind: "branding" | "status" | "customDomain"): string {
   if (kind === "branding") return "Branding saved.";
-  if (kind === "status") return "Status updated.";
+  if (kind === "status") return "Status saved.";
   return "Custom email domain setting saved.";
 }
 
@@ -109,6 +110,7 @@ export function OrganizationDetail({
     emailCap ? String(emailCap.dailyCap) : ""
   );
   const [capError, setCapError] = useState<string | null>(null);
+  const [confirmSuspend, setConfirmSuspend] = useState(false);
   const [busy, setBusy] = useState<
     "branding" | "invite" | "status" | "emailCap" | "customDomain" | "domainCleanup" | null
   >(null);
@@ -119,10 +121,11 @@ export function OrganizationDetail({
     ? contrastRatio(branding.accent, ACCENT_CONTRAST_REFERENCE)
     : null;
 
+  // Resolves true once the change is saved.
   async function patchOrg(
     body: Record<string, unknown>,
     kind: "branding" | "status" | "customDomain"
-  ) {
+  ): Promise<boolean> {
     setBusy(kind);
     if (kind === "branding") setBrandingError(null);
     try {
@@ -133,16 +136,18 @@ export function OrganizationDetail({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        const message = data?.error || "Failed to update organization.";
+        const message = operatorMessage(res.status, data, "Couldn't save the change. Try again.");
         if (kind === "branding") setBrandingError(message);
         toast.error(message);
-        return;
+        return false;
       }
       toast.success(patchSuccessMessage(kind));
       router.refresh();
+      return true;
     } catch (err) {
       console.error(err);
-      toast.error("Network error. Please try again.");
+      toast.error(NETWORK_ERROR);
+      return false;
     } finally {
       setBusy(null);
     }
@@ -159,7 +164,7 @@ export function OrganizationDetail({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        toast.error(data?.error || "Failed to send invite.");
+        toast.error(operatorMessage(res.status, data, "Couldn't send the invite. Try again."));
         return;
       }
       toast.success(`Invite sent to ${owner.email}.`);
@@ -190,12 +195,12 @@ export function OrganizationDetail({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        const message = data?.error || "Failed to update the email cap.";
+        const message = operatorMessage(res.status, data, "Couldn't save the limit. Try again.");
         setCapError(message);
         toast.error(message);
         return;
       }
-      toast.success("Email cap saved.");
+      toast.success("Daily email limit saved.");
       router.refresh();
     } catch (err) {
       console.error(err);
@@ -214,7 +219,7 @@ export function OrganizationDetail({
       );
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        toast.error(data?.error || "Failed to retry the domain cleanup.");
+        toast.error(operatorMessage(res.status, data, "The cleanup didn't finish. Try again later."));
         // The failed attempt is recorded server-side; refresh so the card
         // shows it.
         router.refresh();
@@ -230,18 +235,6 @@ export function OrganizationDetail({
     }
   }
 
-  function handleStatusChange(next: OrgStatus) {
-    if (next === "suspended") {
-      if (
-        !confirm(
-          `Suspending stops reminder emails for this organization. Members can still sign in. Suspend ${org.name}?`
-        )
-      ) {
-        return;
-      }
-    }
-    void patchOrg({ status: next }, "status");
-  }
 
   return (
     <div className="space-y-6">
@@ -285,15 +278,6 @@ export function OrganizationDetail({
             </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="branding-logo-url">Logo URL</Label>
-            <Input
-              id="branding-logo-url"
-              value={branding.logo_url}
-              onChange={(e) => setBranding({ ...branding, logo_url: e.target.value })}
-              placeholder="https://example.org/logo.png"
-            />
-          </div>
-          <div className="space-y-2">
             <Label htmlFor="branding-reply-to">Reply-to email</Label>
             <Input
               id="branding-reply-to"
@@ -315,7 +299,7 @@ export function OrganizationDetail({
             onClick={() => {
               // page.tsx defaults an absent display_name to "", and the PATCH
               // handler rejects an empty display_name with a 400. Sending the
-              // whole object would therefore make accent, logo, and reply_to
+              // whole object would therefore make accent and reply_to
               // unsavable for any org that has no display name yet. The
               // handler keys off presence, so omit it when it is blank.
               const { display_name, ...rest } = branding;
@@ -324,14 +308,14 @@ export function OrganizationDetail({
               void patchOrg({ branding: payload }, "branding");
             }}
           >
-            {busy === "branding" ? "Saving..." : "Save branding"}
+            {busy === "branding" ? "Saving…" : "Save branding"}
           </Button>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Founding admin</CardTitle>
+          <CardTitle>First admin</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {owner ? (
@@ -368,7 +352,7 @@ export function OrganizationDetail({
               >
                 <Mail className="mr-1 h-5 w-5" />
                 {busy === "invite"
-                  ? "Sending..."
+                  ? "Sending…"
                   : owner.inviteOutstanding
                     ? "Resend invite"
                     : "Send invite"}
@@ -376,7 +360,7 @@ export function OrganizationDetail({
             </>
           ) : (
             <p className="text-base text-muted-foreground">
-              No founding-admin request exists for this organization.
+              This organization has no first admin on record.
             </p>
           )}
         </CardContent>
@@ -384,7 +368,7 @@ export function OrganizationDetail({
 
       <Card>
         <CardHeader>
-          <CardTitle>Email caps</CardTitle>
+          <CardTitle>Daily email limit</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {emailCap ? (
@@ -395,12 +379,12 @@ export function OrganizationDetail({
                 {emailCap.hasOverride ? "" : " (platform default)"}
               </p>
               <p className="text-sm text-muted-foreground">
-                The daily cap bounds how many emails this organization can send
-                per day across reminders, broadcasts, and notifications. Set 0
-                to stop all sending.
+                The most reminder, broadcast and notification emails this
+                organization can send in a day. Invite and approval emails are
+                not counted. Set 0 to stop the counted emails.
               </p>
               <div className="space-y-2">
-                <Label htmlFor="email-daily-cap">Daily cap</Label>
+                <Label htmlFor="email-daily-cap">Emails per day</Label>
                 <Input
                   id="email-daily-cap"
                   type="number"
@@ -420,12 +404,12 @@ export function OrganizationDetail({
                 disabled={busy === "emailCap"}
                 onClick={() => void handleSaveEmailCap()}
               >
-                {busy === "emailCap" ? "Saving..." : "Save email cap"}
+                {busy === "emailCap" ? "Saving…" : "Save limit"}
               </Button>
             </>
           ) : (
             <p className="text-base text-muted-foreground">
-              Email cap information could not be loaded. Refresh to try again.
+              Couldn&apos;t load the daily email limit. Refresh to try again.
             </p>
           )}
         </CardContent>
@@ -465,7 +449,7 @@ export function OrganizationDetail({
             )
           ) : (
             <p className="text-base text-muted-foreground">
-              Domain information could not be loaded. Refresh to try again.
+              Couldn&apos;t load the sending domain. Refresh to try again.
             </p>
           )}
           {org.customEmailDomainEnabled ? (
@@ -479,7 +463,7 @@ export function OrganizationDetail({
               }
             >
               <Globe className="mr-1 h-5 w-5" />
-              {busy === "customDomain" ? "Updating..." : "Disable custom domains"}
+              {busy === "customDomain" ? "Saving…" : "Disable custom domains"}
             </Button>
           ) : (
             <Button
@@ -491,7 +475,7 @@ export function OrganizationDetail({
               }
             >
               <Globe className="mr-1 h-5 w-5" />
-              {busy === "customDomain" ? "Updating..." : "Enable custom domains"}
+              {busy === "customDomain" ? "Saving…" : "Enable custom domains"}
             </Button>
           )}
         </CardContent>
@@ -520,7 +504,7 @@ export function OrganizationDetail({
               onClick={() => void handleRetryDomainCleanup()}
             >
               <RefreshCw className="mr-1 h-5 w-5" />
-              {busy === "domainCleanup" ? "Retrying..." : "Retry cleanup"}
+              {busy === "domainCleanup" ? "Retrying…" : "Retry cleanup"}
             </Button>
           </CardContent>
         </Card>
@@ -528,7 +512,7 @@ export function OrganizationDetail({
 
       <Card>
         <CardHeader>
-          <CardTitle>Lifecycle</CardTitle>
+          <CardTitle>Status</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-2">
@@ -547,24 +531,36 @@ export function OrganizationDetail({
               variant="destructive"
               className="text-lg"
               disabled={busy === "status"}
-              onClick={() => handleStatusChange("suspended")}
+              onClick={() => setConfirmSuspend(true)}
             >
               <Pause className="mr-1 h-5 w-5" />
-              {busy === "status" ? "Updating..." : "Suspend organization"}
+              Suspend organization
             </Button>
           ) : (
             <Button
               size="lg"
               className="text-lg"
               disabled={busy === "status"}
-              onClick={() => handleStatusChange("active")}
+              onClick={() => void patchOrg({ status: "active" }, "status")}
             >
               <Play className="mr-1 h-5 w-5" />
-              {busy === "status" ? "Updating..." : "Reactivate organization"}
+              {busy === "status" ? "Saving…" : "Reactivate organization"}
             </Button>
           )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={confirmSuspend}
+        onOpenChange={setConfirmSuspend}
+        title={`Suspend ${org.name}?`}
+        description="Reminder emails stop for this organization. Members can still sign in."
+        confirmLabel="Suspend organization"
+        pendingLabel="Suspending…"
+        onConfirm={async () => {
+          if (await patchOrg({ status: "suspended" }, "status")) setConfirmSuspend(false);
+        }}
+      />
     </div>
   );
 }
