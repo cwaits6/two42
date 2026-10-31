@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Heart, Home, MapPin } from "lucide-react";
 import { formatPhone } from "@/lib/sanitize";
 import { displayName, initials } from "@/lib/names";
-import { DirRow } from "@/components/directory/DirRow";
+import { DirRow, PhoneText } from "@/components/directory/DirRow";
 import { formatAnniversary, relLabel } from "@/components/directory/utils";
 import type {
   DirectoryProfile,
@@ -66,7 +66,7 @@ export function FamilyCard({ family, profileMap, onOpenPerson }: FamilyCardProps
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={family.photo_url}
-          alt={`${family.family_name} family photo`}
+          alt={`${family.family_name} household photo`}
           className="w-full aspect-[4/3] object-cover rounded-xl"
         />
       )}
@@ -78,9 +78,11 @@ export function FamilyCard({ family, profileMap, onOpenPerson }: FamilyCardProps
       <div className="space-y-2.5">
         {members.map((m) => {
           const fullProfile = profileMap[m.id];
-          const subtitle = m.phone_mobile
-            ? `${formatPhone(m.phone_mobile)} · mobile`
-            : m.relationship !== "primary"
+          const subtitle = m.phone_mobile ? (
+            <>
+              <PhoneText phone={m.phone_mobile} /> · mobile
+            </>
+          ) : m.relationship !== "primary"
               ? relLabel(m.relationship)
               : undefined;
           return (
@@ -110,11 +112,11 @@ export function FamilyCard({ family, profileMap, onOpenPerson }: FamilyCardProps
               <Home className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
               <a
                 href={`tel:${family.phone_home}`}
-                className="text-brand-primary-text font-semibold underline underline-offset-4 hover:text-foreground"
+                className="whitespace-nowrap text-brand-primary-text font-semibold underline underline-offset-4 hover:text-foreground"
               >
                 {formatPhone(family.phone_home)}
               </a>
-              <span className="text-sm text-muted-foreground">home</span>
+              <span className="text-base text-muted-foreground">home</span>
             </div>
           )}
           {family.address_line1 && (

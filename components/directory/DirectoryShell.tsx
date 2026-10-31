@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -13,7 +14,7 @@ import { cn } from "@/lib/utils";
 
 const TABS = [
   { path: "", label: "Members" },
-  { path: "/families", label: "Families" },
+  { path: "/families", label: "Households" },
   { path: "/birthdays", label: "Birthdays" },
   { path: "/anniversaries", label: "Anniversaries" },
   { path: "/groups", label: "Groups" },
@@ -39,19 +40,25 @@ export function DirectoryShell({ children, ...provider }: DirectoryProviderProps
 
 function TabStrip({ basePath }: { basePath: string }) {
   const pathname = usePathname();
+  const activeRef = useRef<HTMLAnchorElement>(null);
+  // On a phone the strip scrolls sideways; keep the open tab on screen.
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [pathname]);
   return (
-    <nav aria-label="Directory sections" className="mb-7 border-b border-border">
-      <ul className="-mb-px flex flex-wrap gap-x-2">
+    <nav aria-label="Directory sections" className="mb-7 overflow-x-auto border-b border-border">
+      <ul className="flex gap-x-1 sm:gap-x-2">
         {TABS.map((tab) => {
           const href = `${basePath}${tab.path}`;
           const active = tab.path === "" ? pathname === href : pathname.startsWith(href);
           return (
             <li key={tab.path}>
               <Link
+                ref={active ? activeRef : undefined}
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "inline-flex min-h-12 items-center border-b-4 px-3 text-base font-semibold transition-colors",
+                  "inline-flex min-h-12 items-center whitespace-nowrap border-b-4 px-2.5 text-base sm:px-3 font-semibold transition-colors",
                   active
                     ? "border-brand-primary text-brand-primary-text"
                     : "border-transparent text-muted-foreground hover:border-border hover:text-foreground"

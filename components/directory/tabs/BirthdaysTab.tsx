@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { Cake } from "lucide-react";
+import { EmptyState } from "@/components/states/EmptyState";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { displayName, initials } from "@/lib/names";
-import { DirRow, DirSectionLabel } from "@/components/directory/DirRow";
+import { DirRow, DirSection } from "@/components/directory/DirRow";
 import { DirectoryLoadState } from "@/components/directory/DirectoryLoadState";
 import { useDirectory } from "@/components/directory/DirectoryContext";
 import {
@@ -27,12 +28,13 @@ interface BirthdayEntry {
   month: number;
   day: number;
   daysUntil: number;
-  isClassMember: boolean;
+  /** False for a household member without an account who doesn't attend a group */
+  attendsGroup: boolean;
 }
 
 function BirthdaysTabInner() {
   const { members, families, basePath } = useDirectory();
-  const [includeNonClassMembers, setIncludeNonClassMembers] = useState(false);
+  const [includeNonAttendees, setIncludeNonAttendees] = useState(false);
 
   const today = useMemo(() => {
     const d = new Date();
@@ -55,11 +57,11 @@ function BirthdaysTabInner() {
         month: m.birth_month,
         day: m.birth_day,
         daysUntil: daysUntilNextOccurrence(m.birth_month, m.birth_day, today),
-        isClassMember: true,
+        attendsGroup: true,
       });
     }
 
-    // Family members without accounts (skip records claimed by a profile)
+    // Household members without accounts (skip records claimed by a profile)
     for (const family of families) {
       for (const fm of family.family_members_list) {
         if (fm.claimed_profile_id || !fm.birth_month || !fm.birth_day) continue;
@@ -72,7 +74,7 @@ function BirthdaysTabInner() {
           month: fm.birth_month,
           day: fm.birth_day,
           daysUntil: daysUntilNextOccurrence(fm.birth_month, fm.birth_day, today),
-          isClassMember: fm.is_class_member,
+          attendsGroup: fm.is_class_member,
         });
       }
     }
@@ -81,9 +83,7 @@ function BirthdaysTabInner() {
   }, [members, families, today]);
 
   const byMonth = useMemo(() => {
-    const filtered = includeNonClassMembers
-      ? entries
-      : entries.filter((e) => e.isClassMember);
+    const filtered = includeNonAttendees ? entries : entries.filter((e) => e.attendsGroup);
     const map: Record<number, BirthdayEntry[]> = {};
     for (const e of filtered) {
       (map[e.month] ??= []).push(e);
@@ -92,7 +92,7 @@ function BirthdaysTabInner() {
       list.sort((a, b) => a.day - b.day);
     }
     return map;
-  }, [entries, includeNonClassMembers]);
+  }, [entries, includeNonAttendees]);
 
   const months = monthCycle(currentMonth).filter((m) => byMonth[m]?.length);
 
@@ -100,59 +100,54 @@ function BirthdaysTabInner() {
     <>
       <div className="mb-6 flex items-center gap-2">
         <Switch
-          id="include-family"
-          checked={includeNonClassMembers}
-          onCheckedChange={setIncludeNonClassMembers}
+          id="include-non-attendees"
+          checked={includeNonAttendees}
+          onCheckedChange={setIncludeNonAttendees}
         />
-        <Label htmlFor="include-family" className="cursor-pointer text-base text-muted-foreground">
-          Include all family members
+        <Label htmlFor="include-non-attendees" className="cursor-pointer text-base text-foreground">
+          Also show household members who don&apos;t attend a group
         </Label>
       </div>
 
       {months.length === 0 ? (
-        <p className="py-8 text-center text-base text-muted-foreground">
-          No birthdays on record yet.
-        </p>
+        <EmptyState icon={Cake} message="No birthdays on record yet." />
       ) : (
         months.map((month) => (
-          <div key={month}>
-            <DirSectionLabel>
-              {MONTH_NAMES[month - 1]}
-              {month === currentMonth && " — this month"}
-            </DirSectionLabel>
-            <div className="space-y-2.5">
-              {byMonth[month].map((entry) => {
-                const soon = entry.daysUntil <= 7;
-                return (
-                  <DirRow
-                    key={entry.key}
-                    href={
-                      entry.profileId ? `${basePath}/families?person=${entry.profileId}` : undefined
-                    }
-                    highlight={soon}
-                    avatar={
-                      <Avatar className="h-12 w-12">
-                        {entry.avatarUrl && <AvatarImage src={entry.avatarUrl} alt={entry.name} />}
-                        <AvatarFallback className="bg-brand-primary text-white">
-                          {entry.initials}
-                        </AvatarFallback>
-                      </Avatar>
-                    }
-                    title={entry.name}
-                    subtitle={formatNextOccurrence(entry.month, entry.day, today)}
-                    trailing={
-                      soon ? (
-                        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-brand-accent bg-brand-bg-light px-3.5 py-1 text-sm font-semibold text-brand-accent-text">
-                          <Cake className="h-4 w-4" aria-hidden="true" />
-                          {formatDaysUntil(entry.daysUntil)}
-                        </span>
-                      ) : undefined
-                    }
-                  />
-                );
-              })}
-            </div>
-          </div>
+          <DirSection
+            key={month}
+            label={`${MONTH_NAMES[month - 1]}${month === currentMonth ? " — this month" : ""}`}
+          >
+            {byMonth[month].map((entry) => {
+              const soon = entry.daysUntil <= 7;
+              return (
+                <DirRow
+                  key={entry.key}
+                  href={
+                    entry.profileId ? `${basePath}/families?person=${entry.profileId}` : undefined
+                  }
+                  highlight={soon}
+                  avatar={
+                    <Avatar className="h-12 w-12">
+                      {entry.avatarUrl && <AvatarImage src={entry.avatarUrl} alt={entry.name} />}
+                      <AvatarFallback className="bg-brand-primary text-white">
+                        {entry.initials}
+                      </AvatarFallback>
+                    </Avatar>
+                  }
+                  title={entry.name}
+                  subtitle={formatNextOccurrence(entry.month, entry.day, today)}
+                  trailing={
+                    soon ? (
+                      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-brand-accent bg-brand-bg-light px-3.5 py-1 text-sm font-semibold text-brand-accent-text">
+                        <Cake className="h-4 w-4" aria-hidden="true" />
+                        {formatDaysUntil(entry.daysUntil)}
+                      </span>
+                    ) : undefined
+                  }
+                />
+              );
+            })}
+          </DirSection>
         ))
       )}
     </>

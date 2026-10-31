@@ -1,10 +1,13 @@
 "use client";
 
+import { Users } from "lucide-react";
 import { DirRow } from "@/components/directory/DirRow";
+import { GroupAvatar } from "@/components/directory/GroupAvatar";
+import { groupColor } from "@/components/directory/groupColor";
 import { GroupJoinAction } from "@/components/groups/GroupJoinAction";
+import { useGroupMemberships } from "@/components/groups/GroupProvider";
 import { useDiscoverableGroups } from "@/components/groups/useDiscoverableGroups";
-import { groupInitials } from "@/lib/groups/active";
-import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
+import { EmptyState } from "@/components/states/EmptyState";
 import { discoveryRowSubtitle, type DiscoverableGroup } from "@/lib/groups/joining";
 
 export const NO_GROUPS_TEXT = "No groups are open to join yet.";
@@ -12,16 +15,10 @@ export const LOAD_FAILED_TEXT = "Couldn't load groups to join. Reload the page t
 
 /** One discovery row: name, member count and meeting time, then the viewer's standing or action. */
 export function DiscoveryRow({ row, onChanged }: { row: DiscoverableGroup; onChanged: () => void }) {
+  const memberships = useGroupMemberships();
   return (
     <DirRow
-      avatar={
-        <span
-          className="flex h-12 w-12 items-center justify-center rounded-full font-bold text-white"
-          style={{ backgroundColor: GROUP_DEFAULT_COLOR }}
-        >
-          {groupInitials(row.name)}
-        </span>
-      }
+      avatar={<GroupAvatar name={row.name} color={groupColor(row.id, memberships)} />}
       title={row.name}
       subtitle={discoveryRowSubtitle(row)}
       trailing={<GroupJoinAction row={row} onChanged={onChanged} />}
@@ -42,7 +39,7 @@ export function FindAGroupList({ initialRows }: { initialRows: DiscoverableGroup
     );
   }
   if (rows.length === 0) {
-    return <p className="text-lg text-muted-foreground">{NO_GROUPS_TEXT}</p>;
+    return <EmptyState icon={Users} message={NO_GROUPS_TEXT} />;
   }
   return (
     <ul className="space-y-2.5">

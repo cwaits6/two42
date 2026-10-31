@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { CreateGroupAction } from "@/components/groups/CreateGroupAction";
-import { FindAGroupList, LOAD_FAILED_TEXT } from "@/components/groups/FindAGroupList";
+import { FindAGroupList } from "@/components/groups/FindAGroupList";
+import { ErrorState } from "@/components/states/ErrorState";
 import { getDiscoverableGroups, getDiscoveryOn } from "@/lib/groups/discovery";
 import { pageTitle } from "@/lib/pageTitle";
 
@@ -19,9 +20,7 @@ export default async function FindAGroupPage() {
       <PageHeader title="Find a group" />
       <CreateGroupAction className="mb-6" />
       {rows === null ? (
-        <p role="alert" className="text-lg text-muted-foreground">
-          {LOAD_FAILED_TEXT}
-        </p>
+        <ErrorState thing="groups to join" />
       ) : (
         <FindAGroupList initialRows={rows} />
       )}

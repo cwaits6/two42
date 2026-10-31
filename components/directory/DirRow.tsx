@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
+import { formatPhone } from "@/lib/sanitize";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 
@@ -12,6 +13,8 @@ interface DirRowProps {
   avatar: ReactNode;
   title: ReactNode;
   subtitle?: ReactNode;
+  /** Chips or a note on their own line under the text, so they never squeeze the name */
+  below?: ReactNode;
   /** Pill or other content between the text and the chevron */
   trailing?: ReactNode;
   /** While the card is under 32rem inside its padding, drop `trailing` under the text instead of squeezing the text beside it */
@@ -38,6 +41,7 @@ export function DirRow({
   avatar,
   title,
   subtitle,
+  below,
   trailing,
   stackTrailing,
   selected,
@@ -48,7 +52,7 @@ export function DirRow({
 }: DirRowProps) {
   const interactive = !!href || !!onClick;
   const className = cn(
-    "w-full flex items-center gap-4 min-h-16 px-4 py-3 rounded-xl border bg-card text-left transition-colors",
+    "w-full flex items-center gap-3 min-h-16 px-3 py-3 sm:gap-4 sm:px-4 rounded-xl border bg-card text-left transition-colors",
     selected || highlighted || highlight ? "bg-brand-warm border-brand-primary/40" : "border-border",
     interactive && "hover:border-brand-primary/60",
     (actions || leading) && "flex-1 min-w-0",
@@ -59,10 +63,11 @@ export function DirRow({
     <>
       <span className="shrink-0">{avatar}</span>
       <span className="min-w-0 flex-1">
-        <span className="block font-semibold text-foreground">{title}</span>
+        <span className="block font-semibold break-words text-foreground">{title}</span>
         {subtitle && (
           <span className="block text-base text-muted-foreground">{subtitle}</span>
         )}
+        {below && <span className="mt-1.5 block">{below}</span>}
       </span>
       {stackTrailing && trailing ? (
         // pl-16 lines the stacked content up with the text past the 3rem avatar.
@@ -110,11 +115,17 @@ export function DirRow({
   );
 }
 
-/** Muted section label used above groups of rows (A–Z letters, month names) */
-export function DirSectionLabel({ children }: { children: ReactNode }) {
+/** A phone number that never breaks across lines. */
+export function PhoneText({ phone }: { phone: string }) {
+  return <span className="whitespace-nowrap">{formatPhone(phone)}</span>;
+}
+
+/** A labelled run of rows (an A–Z letter, a month), spaced clear of the run above it. */
+export function DirSection({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
-    <p className="mt-6 mb-2.5 first:mt-0 text-base font-bold tracking-widest text-muted-foreground">
-      {children}
-    </p>
+    <section className="mt-8 first:mt-0">
+      <h2 className="mb-2.5 font-sans text-base font-bold tracking-widest text-muted-foreground">{label}</h2>
+      <div className="space-y-2.5">{children}</div>
+    </section>
   );
 }

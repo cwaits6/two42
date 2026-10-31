@@ -2,18 +2,18 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Search } from "lucide-react";
+import { Home, Search } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { displayName, initials } from "@/lib/names";
-import { formatPhone } from "@/lib/sanitize";
 import { BackLink } from "@/components/directory/BackLink";
-import { DirRow, DirSectionLabel } from "@/components/directory/DirRow";
+import { DirRow, DirSection, PhoneText } from "@/components/directory/DirRow";
 import { DirectoryLoadState } from "@/components/directory/DirectoryLoadState";
 import { useDirectory } from "@/components/directory/DirectoryContext";
 import { FamilyCard } from "@/components/directory/FamilyCard";
 import { PersonCard } from "@/components/directory/PersonCard";
 import { TwoPane, scrollToPanel } from "@/components/directory/TwoPane";
+import { EmptyState } from "@/components/states/EmptyState";
 import type { DirectoryProfile, FamilyDirectoryFull } from "@/lib/types";
 
 type Panel =
@@ -136,7 +136,7 @@ function FamiliesTabInner() {
           <Input
             type="search"
             placeholder="Search by name"
-            aria-label="Search families"
+            aria-label="Search households"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="h-13 rounded-xl pl-12 text-base"
@@ -145,73 +145,73 @@ function FamiliesTabInner() {
       }
       list={
         entries.length === 0 ? (
-          <p className="py-8 text-center text-base text-muted-foreground">
-            {memberships.length === 0
-              ? "You are not in a group yet."
-              : query
-                ? "No families match your search."
-                : "No families to show."}
-          </p>
+          <EmptyState
+            icon={Home}
+            message={
+              memberships.length === 0
+                ? "You are not in a group yet."
+                : query
+                  ? "No households match your search."
+                  : "No households to show."
+            }
+          />
         ) : (
           Object.keys(sections)
             .sort()
             .map((letter) => (
-              <div key={letter}>
-                <DirSectionLabel>{letter}</DirSectionLabel>
-                <div className="space-y-2.5">
-                  {sections[letter].map((entry) =>
-                    entry.kind === "family" ? (
-                      <DirRow
-                        key={`fam-${entry.family.id}`}
-                        onClick={() => openPanel({ kind: "family", family: entry.family })}
-                        selected={entry.family.id === selectedFamilyId}
-                        avatar={
-                          <Avatar className="h-12 w-12">
-                            {entry.family.photo_url && (
-                              <AvatarImage
-                                src={entry.family.photo_url}
-                                alt={`${entry.family.family_name} family photo`}
-                              />
-                            )}
-                            <AvatarFallback className="bg-brand-primary text-white">
-                              {entry.family.family_name.charAt(0).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                        }
-                        title={entry.family.family_name}
-                        subtitle={adultNames(entry.family) || undefined}
-                      />
-                    ) : (
-                      <DirRow
-                        key={`solo-${entry.member.id}`}
-                        onClick={() =>
-                          openPanel({ kind: "person", profile: entry.member, fromFamily: null })
-                        }
-                        selected={panel?.kind === "person" && panel.profile.id === entry.member.id}
-                        avatar={
-                          <Avatar className="h-12 w-12">
-                            {entry.member.avatar_url && (
-                              <AvatarImage
-                                src={entry.member.avatar_url}
-                                alt={displayName(entry.member)}
-                              />
-                            )}
-                            <AvatarFallback className="bg-brand-primary text-white">
-                              {initials(entry.member)}
-                            </AvatarFallback>
-                          </Avatar>
-                        }
-                        title={displayName(entry.member)}
-                        subtitle={
-                          entry.member.phone_mobile
-                            ? formatPhone(entry.member.phone_mobile)
-                            : undefined
-                        }
-                      />
-                    ),
-                  )}
-                </div>
-              </div>
+              <DirSection key={letter} label={letter}>
+                {sections[letter].map((entry) =>
+                  entry.kind === "family" ? (
+                    <DirRow
+                      key={`fam-${entry.family.id}`}
+                      onClick={() => openPanel({ kind: "family", family: entry.family })}
+                      selected={entry.family.id === selectedFamilyId}
+                      avatar={
+                        <Avatar className="h-12 w-12">
+                          {entry.family.photo_url && (
+                            <AvatarImage
+                              src={entry.family.photo_url}
+                              alt={`${entry.family.family_name} household photo`}
+                            />
+                          )}
+                          <AvatarFallback className="bg-brand-primary text-white">
+                            {entry.family.family_name.charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                      }
+                      title={entry.family.family_name}
+                      subtitle={adultNames(entry.family) || undefined}
+                    />
+                  ) : (
+                    <DirRow
+                      key={`solo-${entry.member.id}`}
+                      onClick={() =>
+                        openPanel({ kind: "person", profile: entry.member, fromFamily: null })
+                      }
+                      selected={panel?.kind === "person" && panel.profile.id === entry.member.id}
+                      avatar={
+                        <Avatar className="h-12 w-12">
+                          {entry.member.avatar_url && (
+                            <AvatarImage
+                              src={entry.member.avatar_url}
+                              alt={displayName(entry.member)}
+                            />
+                          )}
+                          <AvatarFallback className="bg-brand-primary text-white">
+                            {initials(entry.member)}
+                          </AvatarFallback>
+                        </Avatar>
+                      }
+                      title={displayName(entry.member)}
+                      subtitle={
+                        entry.member.phone_mobile ? (
+                          <PhoneText phone={entry.member.phone_mobile} />
+                        ) : undefined
+                      }
+                    />
+                  ),
+                )}
+              </DirSection>
             ))
         )
       }
@@ -253,7 +253,7 @@ function FamiliesTabInner() {
           )
         ) : null
       }
-      placeholder="Choose a family from the list to see their details."
+      placeholder="Choose a household from the list to see their details."
     />
   );
 }

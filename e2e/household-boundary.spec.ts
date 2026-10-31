@@ -36,7 +36,7 @@ test.describe("a member of one group", () => {
 
     await page.goto(`/directory/families?family=${SAMPLETON_HOUSEHOLD}`);
     await expect(page.getByRole("button", { name: "Dummyfield" })).toBeVisible();
-    await expect(page.getByText("Choose a family from the list to see their details.")).toBeVisible();
+    await expect(page.getByText("Choose a household from the list to see their details.")).toBeVisible();
     await expect(page.getByText("Sampleton")).toHaveCount(0);
   });
 });

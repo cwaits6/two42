@@ -2,21 +2,21 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Pencil, Search, X } from "lucide-react";
+import { Pencil, Search, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { displayName, initials } from "@/lib/names";
-import { formatPhone } from "@/lib/sanitize";
 import { BackLink } from "@/components/directory/BackLink";
-import { DirRow, DirSectionLabel } from "@/components/directory/DirRow";
+import { DirRow, DirSection, PhoneText } from "@/components/directory/DirRow";
 import { DirectoryLoadState } from "@/components/directory/DirectoryLoadState";
 import { useDirectory } from "@/components/directory/DirectoryContext";
 import { GroupChips } from "@/components/directory/GroupChips";
 import { PersonCard } from "@/components/directory/PersonCard";
 import { TwoPane, scrollToPanel } from "@/components/directory/TwoPane";
+import { EmptyState } from "@/components/states/EmptyState";
 import {
   EMPTY_FILTER,
   applyRosterFilter,
@@ -222,7 +222,7 @@ function MembersTabInner() {
         <div className="ml-auto flex gap-2">
           {roster.labels.length > 0 && (
             <Button variant="outline" onClick={() => setMode("select")}>
-              Select
+              Label members
             </Button>
           )}
           <Button
@@ -271,82 +271,93 @@ function MembersTabInner() {
         list={
           <>
             {letters.length === 0 ? (
-              <div className="py-8 text-center">
-                <p className="text-base text-muted-foreground">{emptyMessage}</p>
-                {filtering && (
-                  <Button variant="outline" className="mt-4" onClick={() => setFilter(EMPTY_FILTER)}>
-                    Clear filters
-                  </Button>
-                )}
-              </div>
+              <EmptyState
+                icon={Users}
+                message={emptyMessage}
+                action={
+                  filtering ? (
+                    <Button variant="outline" onClick={() => setFilter(EMPTY_FILTER)}>
+                      Clear filters
+                    </Button>
+                  ) : undefined
+                }
+              />
             ) : (
               letters.map((letter) => (
-                <div key={letter}>
-                  <DirSectionLabel>{letter}</DirSectionLabel>
-                  <div className="space-y-2.5">
-                    {sections[letter].map((m) => {
-                      const name = displayName(m);
-                      const selecting = mode === "select";
-                      return (
-                        <DirRow
-                          key={m.id}
-                          onClick={selecting ? undefined : () => openPerson(m)}
-                          selected={selecting ? undefined : selected?.id === m.id}
-                          highlighted={selecting && checked.has(m.id)}
-                          avatar={
-                            <Avatar className="h-12 w-12">
-                              {m.avatar_url && <AvatarImage src={m.avatar_url} alt={name} />}
-                              <AvatarFallback className="bg-brand-primary text-white">
-                                {initials(m)}
-                              </AvatarFallback>
-                            </Avatar>
-                          }
-                          title={name}
-                          subtitle={m.phone_mobile ? formatPhone(m.phone_mobile) : undefined}
-                          trailing={
-                            scopedGroupId ? (
+                <DirSection key={letter} label={letter}>
+                  {sections[letter].map((m) => {
+                    const name = displayName(m);
+                    const selecting = mode === "select";
+                    const isSelf = m.id === currentUserId;
+                    const managing = isLeader && mode === "list";
+                    const selfNoteId = `remove-self-${m.id}`;
+                    return (
+                      <DirRow
+                        key={m.id}
+                        onClick={selecting ? undefined : () => openPerson(m)}
+                        selected={selecting ? undefined : selected?.id === m.id}
+                        highlighted={selecting && checked.has(m.id)}
+                        avatar={
+                          <Avatar className="h-12 w-12">
+                            {m.avatar_url && <AvatarImage src={m.avatar_url} alt={name} />}
+                            <AvatarFallback className="bg-brand-primary text-white">
+                              {initials(m)}
+                            </AvatarFallback>
+                          </Avatar>
+                        }
+                        title={name}
+                        subtitle={m.phone_mobile ? <PhoneText phone={m.phone_mobile} /> : undefined}
+                        below={
+                          scopedGroupId ? (
+                            <>
                               <LabelPills labels={labelsFor(m.id)} />
-                            ) : (
-                              <GroupChips profileId={m.id} />
-                            )
-                          }
-                          leading={
-                            selecting ? (
-                              <Checkbox
-                                checked={checked.has(m.id)}
-                                onCheckedChange={() => setChecked(toggleInSet(checked, m.id))}
-                                aria-label={name}
-                              />
-                            ) : undefined
-                          }
-                          actions={
-                            isLeader && mode === "list" ? (
-                              <>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  aria-label={`Edit ${name}`}
-                                  onClick={() => setEditing(m)}
-                                >
-                                  <Pencil aria-hidden="true" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  aria-label={`Remove ${name} from ${groupName}`}
-                                  disabled={m.id === currentUserId}
-                                  onClick={() => setRemoving(m)}
-                                >
-                                  <X aria-hidden="true" />
-                                </Button>
-                              </>
-                            ) : undefined
-                          }
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
+                              {managing && isSelf && (
+                                <span id={selfNoteId} className="mt-1 block text-base text-muted-foreground first:mt-0">
+                                  Another leader can remove you.
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <GroupChips profileId={m.id} />
+                          )
+                        }
+                        leading={
+                          selecting ? (
+                            <Checkbox
+                              checked={checked.has(m.id)}
+                              onCheckedChange={() => setChecked(toggleInSet(checked, m.id))}
+                              aria-label={name}
+                            />
+                          ) : undefined
+                        }
+                        actions={
+                          managing ? (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Edit ${name}`}
+                                onClick={() => setEditing(m)}
+                              >
+                                <Pencil aria-hidden="true" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Remove ${name} from ${groupName}`}
+                                disabled={isSelf}
+                                aria-describedby={isSelf ? selfNoteId : undefined}
+                                onClick={() => setRemoving(m)}
+                              >
+                                <X aria-hidden="true" />
+                              </Button>
+                            </>
+                          ) : undefined
+                        }
+                      />
+                    );
+                  })}
+                </DirSection>
               ))
             )}
             {mode === "select" && (

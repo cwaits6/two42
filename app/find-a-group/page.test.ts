@@ -17,12 +17,11 @@ vi.mock("@/lib/groups/discovery", () => ({
 }));
 
 vi.mock("@/components/groups/CreateGroupAction", () => ({ CreateGroupAction: () => null }));
-vi.mock("@/components/groups/FindAGroupList", () => ({
-  FindAGroupList: () => null,
-  LOAD_FAILED_TEXT: "Couldn't load groups to join. Reload the page to try again.",
-}));
+vi.mock("@/components/groups/FindAGroupList", () => ({ FindAGroupList: () => null }));
+vi.mock("@/components/states/ErrorState", () => ({ ErrorState: () => null }));
 
-const { FindAGroupList, LOAD_FAILED_TEXT } = await import("@/components/groups/FindAGroupList");
+const { FindAGroupList } = await import("@/components/groups/FindAGroupList");
+const { ErrorState } = await import("@/components/states/ErrorState");
 const { default: FindAGroupPage } = await import("./page");
 
 const row: DiscoverableGroup = {
@@ -45,20 +44,6 @@ function flatten(node: ReactNode, out: ReactElement[] = []): ReactElement[] {
   const element = node as ReactElement<{ children?: ReactNode }>;
   out.push(element);
   flatten(element.props.children, out);
-  return out;
-}
-
-function texts(node: ReactNode, out: string[] = []): string[] {
-  if (typeof node === "string") {
-    out.push(node);
-    return out;
-  }
-  if (Array.isArray(node)) {
-    node.forEach((n) => texts(n, out));
-    return out;
-  }
-  if (!node || typeof node !== "object" || !("props" in node)) return out;
-  texts((node as ReactElement<{ children?: ReactNode }>).props.children, out);
   return out;
 }
 
@@ -85,13 +70,15 @@ describe("FindAGroupPage", () => {
     expect(list?.props).toEqual({ initialRows: [row] });
   });
 
-  it("renders the failure line, not an empty list, when the loader returns null", async () => {
+  it("renders the failed state, not an empty list, when the loader returns null", async () => {
     getDiscoveryOn.mockResolvedValue(true);
     getDiscoverableGroups.mockResolvedValue(null);
 
     const element = await FindAGroupPage();
 
     expect(flatten(element).some((e) => e.type === FindAGroupList)).toBe(false);
-    expect(texts(element)).toContain(LOAD_FAILED_TEXT);
+    expect(flatten(element).find((e) => e.type === ErrorState)?.props).toEqual({
+      thing: "groups to join",
+    });
   });
 });
