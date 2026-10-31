@@ -493,6 +493,9 @@ begin
   if _name is null or btrim(_name) = '' then
     raise exception 'group creation rejected: name is required' using errcode = 'GC006';
   end if;
+  if char_length(btrim(_name)) > 120 or char_length(btrim(coalesce(_description, ''))) > 1000 then
+    raise exception 'group creation rejected: name or description is too long' using errcode = 'GC007';
+  end if;
 
   _leader := coalesce(_leader_id, _actor);
   if not _admin then
@@ -513,7 +516,7 @@ $$;
 ALTER FUNCTION "public"."group_create"("_name" "text", "_description" "text", "_leader_id" "uuid") OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."group_create"("_name" "text", "_description" "text", "_leader_id" "uuid") IS 'Creates a group with its leader and calendar. Tenant anchor: the caller''s own profiles row (org and role), never a parameter. A non-admin may only lead the group themselves (GC005) and only under the open policy (GC001); an admin may name any approved member of their org (GC003 otherwise). GC002: not an approved member. GC006: blank name.';
+COMMENT ON FUNCTION "public"."group_create"("_name" "text", "_description" "text", "_leader_id" "uuid") IS 'Creates a group with its leader and calendar. Tenant anchor: the caller''s own profiles row (org and role), never a parameter. A non-admin may only lead the group themselves (GC005) and only under the open policy (GC001); an admin may name any approved member of their org (GC003 otherwise). GC002: not an approved member. GC006: blank name. GC007: name over 120 or description over 1000 characters.';
 
 
 
@@ -910,6 +913,32 @@ ALTER FUNCTION "public"."group_request_approve"("_request_id" "uuid") OWNER TO "
 
 
 COMMENT ON FUNCTION "public"."group_request_approve"("_request_id" "uuid") IS 'Turns a pending group request into a group led by its requester. Tenant anchor: the caller''s own profiles row, which must be an org admin (GC005); the request is looked up by id AND that org (GC004 for missing or foreign). GC003 when the requester is no longer an approved member.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."group_text_length_check"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  if (tg_op = 'INSERT' or new.name is distinct from old.name)
+     and char_length(new.name) > 120 then
+    raise exception '%.name: longer than 120 characters', tg_table_name
+      using errcode = 'check_violation';
+  end if;
+  if (tg_op = 'INSERT' or new.description is distinct from old.description)
+     and char_length(new.description) > 1000 then
+    raise exception '%.description: longer than 1000 characters', tg_table_name
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end $$;
+
+
+ALTER FUNCTION "public"."group_text_length_check"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."group_text_length_check"() IS 'Trigger function on groups and group_requests: refuses a name over 120 or a description over 1000 characters when the value is inserted or changed. Unchanged values are not re-checked, so a row stored before the limit still takes unrelated updates. SECURITY INVOKER; raises check_violation.';
 
 
 
@@ -3753,6 +3782,14 @@ CREATE OR REPLACE TRIGGER "group_members_leave_teams" AFTER DELETE OR UPDATE OF 
 
 
 
+CREATE OR REPLACE TRIGGER "group_requests_text_length_check" BEFORE INSERT OR UPDATE OF "name", "description" ON "public"."group_requests" FOR EACH ROW EXECUTE FUNCTION "public"."group_text_length_check"();
+
+
+
+CREATE OR REPLACE TRIGGER "groups_text_length_check" BEFORE INSERT OR UPDATE OF "name", "description" ON "public"."groups" FOR EACH ROW EXECUTE FUNCTION "public"."group_text_length_check"();
+
+
+
 CREATE OR REPLACE TRIGGER "groups_touch_updated_at" BEFORE UPDATE ON "public"."groups" FOR EACH ROW EXECUTE FUNCTION "public"."touch_updated_at"();
 
 
@@ -5391,6 +5428,11 @@ REVOKE ALL ON FUNCTION "public"."group_model_backfill"() FROM PUBLIC;
 REVOKE ALL ON FUNCTION "public"."group_request_approve"("_request_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."group_request_approve"("_request_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."group_request_approve"("_request_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."group_text_length_check"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."group_text_length_check"() TO "service_role";
 
 
 
