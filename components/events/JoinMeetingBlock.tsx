@@ -107,6 +107,8 @@ export function JoinMeetingBlock({
     timeZone
   );
 
+  const whatToEnter = passcode ? "the meeting ID and passcode" : "the meeting ID";
+
   const creds = (meetingId || passcode) && (
     <div className="flex gap-2 mt-3">
       {meetingId && <CopyField label="Meeting ID" value={meetingId} />}
@@ -182,7 +184,7 @@ export function JoinMeetingBlock({
           <>
             <p className="font-sans text-base text-white/90 leading-relaxed mt-2">
               At <strong className="text-white">{opensAt}</strong>, open your meeting app and
-              enter the meeting ID and passcode.
+              enter {whatToEnter}.
             </p>
             {creds}
           </>
@@ -220,7 +222,7 @@ export function JoinMeetingBlock({
         </a>
       ) : (
         <p className="font-sans text-base text-white/90 leading-relaxed mt-2">
-          Open your meeting app and enter the meeting ID and passcode.
+          Open your meeting app and enter {whatToEnter}.
         </p>
       )}
       {creds}
