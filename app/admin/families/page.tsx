@@ -142,6 +142,10 @@ export default function FamiliesPage() {
 
   // Family members state (populated when editing a family)
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
+  // The household whose members `familyMembers` holds; delete stays disabled
+  // until it matches, so the confirm never counts another household's people.
+  const [membersFamilyId, setMembersFamilyId] = useState<string | null>(null);
+  const membersRequestRef = useRef<string | null>(null);
   const [memberForm, setMemberForm] = useState<FamilyMemberFormState>(EMPTY_MEMBER_FORM);
   const [editingMember, setEditingMember] = useState<FamilyMember | null>(null);
   const [showMemberForm, setShowMemberForm] = useState(false);
@@ -203,17 +207,20 @@ export default function FamiliesPage() {
   }, [loadFamilies]);
 
   async function loadFamilyMembers(familyId: string) {
+    membersRequestRef.current = familyId;
     const { data, error } = await supabase
       .from("family_members")
       .select("*")
       .eq("family_id", familyId)
       .order("relationship");
 
+    if (membersRequestRef.current !== familyId) return;
     if (error) {
       toast.error(failureMessage("load the household's members"));
       return;
     }
     setFamilyMembers((data || []) as FamilyMember[]);
+    setMembersFamilyId(familyId);
   }
 
   function openCreate() {
@@ -221,7 +228,9 @@ export default function FamiliesPage() {
     setForm(EMPTY_FORM);
     photoRequestRef.current++; // invalidate any in-flight mint
     setPhotoUrl(null);
+    membersRequestRef.current = null;
     setFamilyMembers([]);
+    setMembersFamilyId(null);
     setShowMemberForm(false);
     setEditingMember(null);
     setMemberForm(EMPTY_MEMBER_FORM);
@@ -247,6 +256,8 @@ export default function FamiliesPage() {
           console.error("openEdit: signing family photo failed", err);
         });
     }
+    setFamilyMembers([]);
+    setMembersFamilyId(null);
     setShowMemberForm(false);
     setEditingMember(null);
     setMemberForm(EMPTY_MEMBER_FORM);
@@ -997,6 +1008,7 @@ export default function FamiliesPage() {
               <Button
                 variant="destructive"
                 size="sm"
+                disabled={membersFamilyId !== editing.id}
                 onClick={() =>
                   setDeletingFamily(families.find((f) => f.id === editing.id) ?? null)
                 }
