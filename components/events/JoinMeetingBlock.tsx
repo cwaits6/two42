@@ -11,7 +11,8 @@ import {
 import { formatEventTime } from "@/lib/time/zone";
 
 interface JoinMeetingBlockProps {
-  meetingUrl: string;
+  /** Null when the leader gave only an ID and passcode: no button, just the details. */
+  meetingUrl: string | null;
   meetingId: string | null;
   passcode: string | null;
   /** Occurrence start/end (ISO) — not the series anchor's original date. */
@@ -98,13 +99,15 @@ export function JoinMeetingBlock({
     return () => clearTimeout(timer);
   }, [state, startTime, endTime, leadMinutes]);
 
-  const provider = providerName(meetingUrl);
-  const buttonLabel = joinButtonLabel(meetingUrl);
+  const provider = meetingUrl ? providerName(meetingUrl) : null;
+  const buttonLabel = meetingUrl ? joinButtonLabel(meetingUrl) : null;
 
   const opensAt = formatEventTime(
     new Date(new Date(startTime).getTime() - leadMinutes * 60 * 1000).toISOString(),
     timeZone
   );
+
+  const whatToEnter = passcode ? "the meeting ID and passcode" : "the meeting ID";
 
   const creds = (meetingId || passcode) && (
     <div className="flex gap-2 mt-3">
@@ -161,19 +164,31 @@ export function JoinMeetingBlock({
             Join online{provider ? ` · ${provider}` : ""}
           </span>
         </div>
-        <p className="font-sans text-base text-white/90 leading-relaxed mt-2">
-          One-tap join opens at <strong className="text-white">{opensAt}</strong>,{" "}
-          {leadMinutes} minutes before start.
-        </p>
-        <a
-          href={meetingUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={outlineButtonClass}
-          style={outlineButtonStyle}
-        >
-          <Video className="h-4 w-4" /> {buttonLabel}
-        </a>
+        {meetingUrl ? (
+          <>
+            <p className="font-sans text-base text-white/90 leading-relaxed mt-2">
+              One-tap join opens at <strong className="text-white">{opensAt}</strong>,{" "}
+              {leadMinutes} minutes before start.
+            </p>
+            <a
+              href={meetingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={outlineButtonClass}
+              style={outlineButtonStyle}
+            >
+              <Video className="h-4 w-4" /> {buttonLabel}
+            </a>
+          </>
+        ) : (
+          <>
+            <p className="font-sans text-base text-white/90 leading-relaxed mt-2">
+              At <strong className="text-white">{opensAt}</strong>, open your meeting app and
+              enter {whatToEnter}.
+            </p>
+            {creds}
+          </>
+        )}
       </div>
     );
   }
@@ -191,19 +206,25 @@ export function JoinMeetingBlock({
         />
         <span style={{ color: "var(--color-brand-accent)" }}>Live now</span>
       </div>
-      <a
-        href={meetingUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex w-full items-center justify-center gap-2.5 mt-3 rounded-xl py-[15px] font-sans text-base font-bold transition-opacity hover:opacity-90"
-        style={{
-          background: "var(--color-brand-accent)",
-          color: "var(--foreground)",
-          boxShadow: "0 8px 22px rgba(0,0,0,0.22)",
-        }}
-      >
-        <Video className="h-5 w-5" /> {buttonLabel}
-      </a>
+      {meetingUrl ? (
+        <a
+          href={meetingUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex w-full items-center justify-center gap-2.5 mt-3 rounded-xl py-[15px] font-sans text-base font-bold transition-opacity hover:opacity-90"
+          style={{
+            background: "var(--color-brand-accent)",
+            color: "var(--foreground)",
+            boxShadow: "0 8px 22px rgba(0,0,0,0.22)",
+          }}
+        >
+          <Video className="h-5 w-5" /> {buttonLabel}
+        </a>
+      ) : (
+        <p className="font-sans text-base text-white/90 leading-relaxed mt-2">
+          Open your meeting app and enter {whatToEnter}.
+        </p>
+      )}
       {creds}
     </div>
   );

@@ -5,6 +5,7 @@ import {
   subscriptionTokenExpiryDate,
 } from "@/lib/calendar/subscription-token";
 import type { Event } from "@/lib/types";
+import type { MeetingFields } from "@/lib/meetings";
 import { isMemberRole } from "@/lib/roles";
 
 export async function GET(request: Request) {
@@ -163,11 +164,32 @@ export async function GET(request: Request) {
     });
   }
 
+  // An exception row carries no meeting of its own; it inherits its series
+  // anchor's, which may have started before the feed's window.
+  const anchors = new Map<string, MeetingFields>(typedEvents.map((e) => [e.id, e]));
+  const missingAnchorIds = [
+    ...new Set(typedEvents.flatMap((e) => (e.series_id && !anchors.has(e.series_id) ? [e.series_id] : []))),
+  ];
+  if (missingAnchorIds.length > 0) {
+    const { data: anchorRows, error: anchorsError } = await supabase
+      .from("events")
+      .select("id, meeting_url, meeting_id, meeting_passcode, meeting_show_on_dashboard, meeting_lead_minutes")
+      .eq("org_id", sub.org_id)
+      .in("group_id", groupIds)
+      .in("id", missingAnchorIds);
+    if (anchorsError) {
+      console.error("Failed to fetch series meetings for calendar feed:", anchorsError);
+      return new Response("Failed to fetch events", { status: 500 });
+    }
+    for (const a of anchorRows ?? []) anchors.set(a.id, a);
+  }
+
   // The merged feed names each event's group; a per-group feed carries no
   // prefix, since the subscriber named the group.
   const feedEvents: FeedEvent[] = typedEvents.map((event) => ({
     event,
     summaryPrefix: groupParam ? undefined : groupNames.get(event.group_id),
+    meeting: event.series_id ? (anchors.get(event.series_id) ?? null) : event,
   }));
 
   let icsString: string;

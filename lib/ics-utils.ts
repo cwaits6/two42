@@ -1,5 +1,6 @@
 import { createEvents, type EventAttributes } from "ics";
 import type { Event } from "@/lib/types";
+import { notesWithMeeting, type MeetingDetails } from "@/lib/meetings";
 
 function parseDateToArray(
   isoString: string
@@ -20,7 +21,8 @@ function prefixed(prefix: string | undefined, title: string): string {
 
 export function eventToICSAttributes(
   event: Event,
-  opts: { summaryPrefix?: string } = {}
+  /** `meeting` is the series anchor's for an exception row, which carries none of its own. */
+  opts: { summaryPrefix?: string; meeting?: MeetingDetails | null } = {}
 ): EventAttributes {
   const attrs: EventAttributes = {
     uid: event.id,
@@ -33,8 +35,13 @@ export function eventToICSAttributes(
       : { duration: { hours: 1 } }),
   };
 
-  if (event.description) {
-    attrs.description = event.description;
+  const meeting = opts.meeting ?? event;
+  const notes = notesWithMeeting(event.description, meeting);
+  if (notes) {
+    attrs.description = notes;
+  }
+  if (meeting.meeting_url) {
+    attrs.url = meeting.meeting_url;
   }
   if (event.location) {
     attrs.location = event.location;
@@ -43,8 +50,8 @@ export function eventToICSAttributes(
   return attrs;
 }
 
-export function generateSingleEventICS(event: Event): string {
-  const { error, value } = createEvents([eventToICSAttributes(event)]);
+export function generateSingleEventICS(event: Event, meeting?: MeetingDetails | null): string {
+  const { error, value } = createEvents([eventToICSAttributes(event, { meeting })]);
   if (error || !value) {
     throw new Error(`Failed to generate ICS: ${error?.message ?? "unknown error"}`);
   }
@@ -95,6 +102,7 @@ export interface FeedEvent {
   event: Event;
   /** The group name, on the merged feed only. */
   summaryPrefix?: string;
+  meeting?: MeetingDetails | null;
 }
 
 /** Combined feed: the member's groups' events + serving signups in one VCALENDAR. */
@@ -103,7 +111,9 @@ export function generateCombinedICS(
   servingSignups: ServingICSInput[]
 ): string {
   const all: EventAttributes[] = [
-    ...events.map(({ event, summaryPrefix }) => eventToICSAttributes(event, { summaryPrefix })),
+    ...events.map(({ event, summaryPrefix, meeting }) =>
+      eventToICSAttributes(event, { summaryPrefix, meeting })
+    ),
     ...servingSignups.map(servingToICSAttributes),
   ];
   if (all.length === 0) {
