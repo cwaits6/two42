@@ -1466,7 +1466,7 @@ isOneToOne: false
           Views: {
             "families_directory": {
                   Row: {
-                    "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"city": string | null,"created_at": string | null,"family_name": string | null,"id": string | null,"org_id": string | null,"phone_home": string | null,"photo_url": string | null,"postal_code": string | null,"state": string | null,"updated_at": string | null
+                    "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"city": string | null,"created_at": string,"family_name": string,"id": string,"org_id": string,"phone_home": string | null,"photo_url": string | null,"postal_code": string | null,"state": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
@@ -1486,7 +1486,7 @@ isOneToOne: false
                   ]
                 },"families_directory_full": {
                   Row: {
-                    "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"city": string | null,"created_at": string | null,"family_members_list": Json | null,"family_name": string | null,"id": string | null,"members": Json | null,"org_id": string | null,"phone_home": string | null,"photo_url": string | null,"postal_code": string | null,"state": string | null,"updated_at": string | null
+                    "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"city": string | null,"created_at": string,"family_members_list": Json | null,"family_name": string,"id": string,"members": Json | null,"org_id": string,"phone_home": string | null,"photo_url": string | null,"postal_code": string | null,"state": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
@@ -1506,7 +1506,7 @@ isOneToOne: false
                   ]
                 },"prayer_wall": {
                   Row: {
-                    "avatar_url": string | null,"body": string | null,"created_at": string | null,"first_name": string | null,"group_id": string | null,"i_am_praying": boolean | null,"id": string | null,"is_anonymous": boolean | null,"is_answered": boolean | null,"last_name": string | null,"mine": boolean | null,"org_id": string | null,"praying_count": number | null,"preferred_name": string | null
+                    "avatar_url": string | null,"body": string,"created_at": string,"first_name": string | null,"group_id": string,"i_am_praying": boolean | null,"id": string,"is_anonymous": boolean,"is_answered": boolean,"last_name": string | null,"mine": boolean | null,"org_id": string,"praying_count": number | null,"preferred_name": string | null
                   }
                   ComputedFields: never
                   Relationships: [
@@ -1526,7 +1526,7 @@ isOneToOne: false
                   ]
                 },"profiles_directory": {
                   Row: {
-                    "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"avatar_url": string | null,"bio": string | null,"birth_day": number | null,"birth_month": number | null,"birth_year": number | null,"city": string | null,"created_at": string | null,"email": string | null,"employer": string | null,"family_id": string | null,"first_name": string | null,"groups": Json | null,"id": string | null,"last_name": string | null,"occupation": string | null,"org_id": string | null,"phone_home": string | null,"phone_mobile": string | null,"phone_work": string | null,"postal_code": string | null,"preferred_name": string | null,"relationship": string | null,"role": string | null,"state": string | null
+                    "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"avatar_url": string | null,"bio": string | null,"birth_day": number | null,"birth_month": number | null,"birth_year": number | null,"city": string | null,"created_at": string,"email": string | null,"employer": string | null,"family_id": string | null,"first_name": string | null,"groups": Json | null,"id": string,"last_name": string | null,"occupation": string | null,"org_id": string,"phone_home": string | null,"phone_mobile": string | null,"phone_work": string | null,"postal_code": string | null,"preferred_name": string | null,"relationship": string,"role": string,"state": string | null
                   }
                   ComputedFields: never
                   Relationships: [

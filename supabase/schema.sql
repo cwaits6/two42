@@ -1071,10 +1071,12 @@ CREATE OR REPLACE FUNCTION "public"."is_group_leader"("_group_id" "uuid") RETURN
     AS $$
   select exists (
     select 1 from public.group_members gm
+    join public.profiles p on p.id = gm.profile_id and p.org_id = gm.org_id
     where gm.profile_id = auth.uid()
       and gm.group_id = _group_id
       and gm.role = 'leader'
       and gm.org_id = public.app_current_org_id()
+      and p.role <> 'pending'
   );
 $$;
 
@@ -1082,7 +1084,7 @@ $$;
 ALTER FUNCTION "public"."is_group_leader"("_group_id" "uuid") OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."is_group_leader"("_group_id" "uuid") IS 'True when the caller (auth.uid()) is a leader of the given group in their own org. Caller resolved from auth.uid() only.';
+COMMENT ON FUNCTION "public"."is_group_leader"("_group_id" "uuid") IS 'True when the caller (auth.uid()) is a non-pending leader of the given group in their own org. Caller resolved from auth.uid() only.';
 
 
 
@@ -1092,9 +1094,11 @@ CREATE OR REPLACE FUNCTION "public"."is_group_member"("_group_id" "uuid") RETURN
     AS $$
   select exists (
     select 1 from public.group_members gm
+    join public.profiles p on p.id = gm.profile_id and p.org_id = gm.org_id
     where gm.profile_id = auth.uid()
       and gm.group_id = _group_id
       and gm.org_id = public.app_current_org_id()
+      and p.role <> 'pending'
   );
 $$;
 
@@ -1102,7 +1106,7 @@ $$;
 ALTER FUNCTION "public"."is_group_member"("_group_id" "uuid") OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."is_group_member"("_group_id" "uuid") IS 'True when the caller (auth.uid()) is a member of the given group in their own org. Caller resolved from auth.uid() only.';
+COMMENT ON FUNCTION "public"."is_group_member"("_group_id" "uuid") IS 'True when the caller (auth.uid()) is a non-pending member of the given group in their own org. Caller resolved from auth.uid() only.';
 
 
 
@@ -1169,10 +1173,12 @@ CREATE OR REPLACE FUNCTION "public"."is_team_lead"("_team_id" "uuid") RETURNS bo
     AS $$
   select exists (
     select 1 from public.team_members tm
+    join public.profiles p on p.id = tm.profile_id and p.org_id = tm.org_id
     where tm.profile_id = auth.uid()
       and tm.team_id = _team_id
       and tm.is_leader = true
       and tm.org_id = public.app_current_org_id()
+      and p.role <> 'pending'
   );
 $$;
 
@@ -1180,7 +1186,7 @@ $$;
 ALTER FUNCTION "public"."is_team_lead"("_team_id" "uuid") OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."is_team_lead"("_team_id" "uuid") IS 'True when the caller (auth.uid()) is a lead of the given team in their own org. Formerly is_group_leader.';
+COMMENT ON FUNCTION "public"."is_team_lead"("_team_id" "uuid") IS 'True when the caller (auth.uid()) is a non-pending lead of the given team in their own org.';
 
 
 
@@ -1790,9 +1796,11 @@ begin
     or public.is_group_leader(_grp)
     or exists (
       select 1 from public.team_members tm
+      join public.profiles p on p.id = tm.profile_id and p.org_id = tm.org_id
       where tm.profile_id = _actor
         and tm.team_id = _group_id
         and tm.org_id = _org
+        and p.role <> 'pending'
     )
   ) then
     raise exception 'serving signup rejected: actor % is not on team %', _actor, _group_id
@@ -1808,7 +1816,7 @@ $$;
 ALTER FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_date" "date", "_attendee_ids" "uuid"[]) OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_date" "date", "_attendee_ids" "uuid"[]) IS 'Authenticated serving signup entry point. Actor from auth.uid(); tenant anchor: the team''s org pinned against app_request_org_id(), fail-closed on NULL; the RLS INSERT-policy arms (team member, team lead, or a leader of the team''s group) are re-checked before delegating to serving_signup_apply().';
+COMMENT ON FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_date" "date", "_attendee_ids" "uuid"[]) IS 'Authenticated serving signup entry point. Actor from auth.uid(); tenant anchor: the team''s org pinned against app_request_org_id(), fail-closed on NULL; the RLS INSERT-policy arms (non-pending team member, team lead, or a leader of the team''s group) are re-checked before delegating to serving_signup_apply().';
 
 
 

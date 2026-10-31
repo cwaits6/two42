@@ -154,7 +154,7 @@ export async function notifyLeadersOfCancel(
   // service-role client — an unscoped read would mail another org's leaders.
   const { data: leaders, error } = await service
     .from("team_members")
-    .select("profiles(id, first_name, last_name, preferred_name, email)")
+    .select("profiles(id, first_name, last_name, preferred_name, email, role)")
     .eq("team_id", opts.teamId)
     .eq("org_id", opts.orgId)
     .eq("is_leader", true);
@@ -180,12 +180,12 @@ export async function notifyLeadersOfCancel(
     .map(
       (row) =>
         row.profiles as unknown as
-          | (NamedProfile & { email: string | null })
+          | (NamedProfile & { email: string | null; role: string })
           | null,
     )
     .filter(
-      (p): p is NamedProfile & { email: string } =>
-        !!p?.email && p.id !== opts.excludeProfileId,
+      (p): p is NamedProfile & { email: string; role: string } =>
+        !!p?.email && p.role !== "pending" && p.id !== opts.excludeProfileId,
     );
 
   if (recipients.length === 0) return;
