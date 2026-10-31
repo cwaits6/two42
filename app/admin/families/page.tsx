@@ -145,7 +145,7 @@ export default function FamiliesPage() {
   // The household whose members `familyMembers` holds; delete stays disabled
   // until it matches, so the confirm never counts another household's people.
   const [membersFamilyId, setMembersFamilyId] = useState<string | null>(null);
-  const membersRequestRef = useRef<string | null>(null);
+  const membersRequestRef = useRef(0);
   const [memberForm, setMemberForm] = useState<FamilyMemberFormState>(EMPTY_MEMBER_FORM);
   const [editingMember, setEditingMember] = useState<FamilyMember | null>(null);
   const [showMemberForm, setShowMemberForm] = useState(false);
@@ -207,14 +207,14 @@ export default function FamiliesPage() {
   }, [loadFamilies]);
 
   async function loadFamilyMembers(familyId: string) {
-    membersRequestRef.current = familyId;
+    const requestId = ++membersRequestRef.current;
     const { data, error } = await supabase
       .from("family_members")
       .select("*")
       .eq("family_id", familyId)
       .order("relationship");
 
-    if (membersRequestRef.current !== familyId) return;
+    if (membersRequestRef.current !== requestId) return;
     if (error) {
       toast.error(failureMessage("load the household's members"));
       return;
@@ -228,7 +228,7 @@ export default function FamiliesPage() {
     setForm(EMPTY_FORM);
     photoRequestRef.current++; // invalidate any in-flight mint
     setPhotoUrl(null);
-    membersRequestRef.current = null;
+    membersRequestRef.current++; // invalidate any in-flight load
     setFamilyMembers([]);
     setMembersFamilyId(null);
     setShowMemberForm(false);
