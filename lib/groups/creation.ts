@@ -81,6 +81,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   GC004: "That request is no longer waiting for approval.",
   GC005: "Only an org admin can do that.",
   GC006: "Enter a group name.",
+  GC007: `Keep the group name to ${GROUP_NAME_MAX} characters and the meeting time and place to ${GROUP_DESCRIPTION_MAX}.`,
 };
 
 /** Member-facing copy for a group_create() / group_request_approve() error code. */

@@ -419,7 +419,9 @@ org checks in their bodies replace the isolation policy on this surface:
 - the core asserts the leader is an approved member of that org (`GC003`)
   before writing, and every row it inserts carries that `org_id`.
 
-`GC002` is no principal or a pending account; `GC006` a blank name. Grants:
+`GC002` is no principal or a pending account; `GC006` a blank name; `GC007`
+a name over 120 or a description over 1000 characters, the same limits the
+`groups` and `group_requests` check constraints hold. Grants:
 EXECUTE on the two entry points and the reader revoked from `public` and
 `anon`, granted to `authenticated`; the core revoked from everyone
 including `service_role`. `schema_tenancy_lint.sql` check 4 only sees that
