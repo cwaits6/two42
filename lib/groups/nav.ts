@@ -97,7 +97,7 @@ function groupPages(group: ActiveGroup, input: SidebarInput): SidebarItem[] {
   });
   const items: SidebarItem[] = [
     link("/announcements", "Announcements", "announcements"),
-    link("/lectures", "Lectures", "lectures"),
+    link("/lectures", "Lessons", "lectures"),
     link("/about", "About", "about"),
   ];
   if (input.hasServingAccess) items.push(link("/serving", "Serving", "serving"));

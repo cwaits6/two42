@@ -1,33 +1,29 @@
-import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import { BookOpen, CircleCheck, PenLine, Plus } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyState } from "@/components/states/EmptyState";
+import { ErrorState } from "@/components/states/ErrorState";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SegmentedLinks } from "@/components/ui/segmented";
 import { groupPath } from "@/lib/groups/active";
 import { requireGroupLeader } from "@/lib/groups/server";
+import { formatLessonDate, needsSummary, partNumbers } from "@/lib/lessons";
 import { groupPageTitle } from "@/lib/pageTitle";
+import { readList } from "@/lib/supabase/readList";
 
 export const generateMetadata = groupPageTitle("Manage lessons");
 
-type LectureRow = {
+type LessonRow = {
   id: string;
   title: string;
   lecture_date: string | null;
   summary: string | null;
   series_id: string | null;
-  lecture_series: { name: string } | null;
 };
 
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function needsSummary(l: { summary: string | null }): boolean {
-  return !l.summary || l.summary.trim() === "";
-}
-
-export default async function ManageLecturesPage({
+export default async function ManageLessonsPage({
   params,
   searchParams,
 }: {
@@ -39,168 +35,136 @@ export default async function ManageLecturesPage({
   const base = groupPath(group.id, "/settings/lectures");
   const { filter } = await searchParams;
   const isNeedsSummaryView = filter === "needs-summary";
-
   const supabase = await createClient();
 
-  const { data: lecturesData, error: lecturesError } = await supabase
-    .from("lectures")
-    .select("id, title, lecture_date, summary, series_id, lecture_series(name)")
-    .eq("group_id", group.id)
-    .order("lecture_date", { ascending: false, nullsFirst: false });
+  const [lessons, series] = await Promise.all([
+    supabase
+      .from("lectures")
+      .select("id, title, lecture_date, summary, series_id")
+      .eq("group_id", group.id)
+      .order("lecture_date", { ascending: false, nullsFirst: false })
+      .then((read) => readList<LessonRow>(read, "lessons")),
+    supabase
+      .from("lecture_series")
+      .select("id, name")
+      .eq("group_id", group.id)
+      .then((read) => readList<{ id: string; name: string }>(read, "lesson series")),
+  ]);
 
-  if (lecturesError) {
-    throw new Error(`Failed to load lectures: ${lecturesError.message}`);
-  }
-
-  const allLectures = (lecturesData ?? []) as unknown as LectureRow[];
-  const awaitingCount = allLectures.filter(needsSummary).length;
-
-  // Compute auto week numbers per series (date asc)
-  const weekMap = new Map<string, number>();
-  const seriesIds = Array.from(
-    new Set(allLectures.map((l) => l.series_id).filter((id): id is string => !!id))
+  const addLesson = (
+    <Button nativeButton={false} render={<Link href={`${base}/new`} />}>
+      <Plus aria-hidden="true" />
+      Add lesson
+    </Button>
   );
-  for (const sid of seriesIds) {
-    const sorted = allLectures
-      .filter((l) => l.series_id === sid)
-      .sort((a, b) => {
-        if (a.lecture_date && b.lecture_date)
-          return new Date(a.lecture_date).getTime() - new Date(b.lecture_date).getTime();
-        return 0;
-      });
-    sorted.forEach((l, i) => weekMap.set(l.id, i + 1));
-  }
-
-  const lectures = isNeedsSummaryView
-    ? allLectures.filter(needsSummary)
-    : allLectures;
 
   return (
-    <div className="container mx-auto px-4 py-12">
-      <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
-        <h1 className="text-3xl font-bold text-brand-primary-text">Lectures</h1>
-        <Button nativeButton={false} render={<Link href={`${base}/new`} />}>
-          Add lecture
-        </Button>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Lessons"
+        subtitle={`Lessons, series and lesson summaries for ${group.name}.`}
+        backHref={groupPath(group.id, "/settings")}
+        backLabel="Back to Group settings"
+        actions={
+          <>
+            <Button
+              variant="outline"
+              nativeButton={false}
+              render={<Link href={`${base}/series`} />}
+            >
+              Manage series
+            </Button>
+            {addLesson}
+          </>
+        }
+      />
 
+      {lessons === null || series === null ? (
+        <ErrorState thing="lessons" />
+      ) : lessons.length === 0 ? (
+        <EmptyState icon={BookOpen} message="No lessons yet." action={addLesson} />
+      ) : (
+        <LessonCards
+          base={base}
+          lessons={lessons}
+          seriesNames={new Map(series.map((s) => [s.id, s.name]))}
+          isNeedsSummaryView={isNeedsSummaryView}
+        />
+      )}
+    </PageContainer>
+  );
+}
+
+function LessonCards({
+  base,
+  lessons,
+  seriesNames,
+  isNeedsSummaryView,
+}: {
+  base: string;
+  lessons: LessonRow[];
+  seriesNames: Map<string, string>;
+  isNeedsSummaryView: boolean;
+}) {
+  const parts = partNumbers(lessons);
+  const awaiting = lessons.filter((l) => needsSummary(l.summary));
+  const shown = isNeedsSummaryView ? awaiting : lessons;
+
+  return (
+    <>
       <SegmentedLinks
-        label="Lecture filter"
+        label="Show lessons"
         className="mb-6"
         options={[
-          { href: base, label: `All Lectures (${allLectures.length})`, current: !isNeedsSummaryView },
+          { href: base, label: `All lessons (${lessons.length})`, current: !isNeedsSummaryView },
           {
             href: `${base}?filter=needs-summary`,
+            label: `Needs summary (${awaiting.length})`,
             current: isNeedsSummaryView,
-            label: (
-              <>
-                Awaiting Summary
-                {awaitingCount > 0 && (
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-sm font-bold ${
-                      isNeedsSummaryView
-                        ? "bg-background text-foreground"
-                        : "bg-brand-accent text-foreground"
-                    }`}
-                  >
-                    {awaitingCount}
-                  </span>
-                )}
-              </>
-            ),
           },
         ]}
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {isNeedsSummaryView ? "Awaiting Summary" : "All Lectures"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-base">
-              <thead>
-                <tr className="border-b border-border text-left">
-                  <th className="pb-3 pr-4 font-semibold text-muted-foreground">Title</th>
-                  <th className="pb-3 pr-4 font-semibold text-muted-foreground">Series</th>
-                  <th className="pb-3 pr-4 font-semibold text-muted-foreground">Week</th>
-                  <th className="pb-3 pr-4 font-semibold text-muted-foreground">Date</th>
-                  <th className="pb-3 pr-4 font-semibold text-muted-foreground">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lectures.map((lecture) => {
-                  const seriesName = lecture.lecture_series?.name ?? "—";
-                  const week = weekMap.get(lecture.id);
-                  const missingSummary = needsSummary(lecture);
-
-                  return (
-                    <tr
-                      key={lecture.id}
-                      className="border-b border-border last:border-0 hover:bg-muted/50 transition-colors"
-                    >
-                      <td className="py-3 pr-4 font-medium">
-                        <Link
-                          href={`${base}/${lecture.id}/edit`}
-                          className="text-foreground hover:text-brand-primary-text transition-colors"
-                        >
-                          {lecture.title}
-                        </Link>
-                      </td>
-                      <td className="py-3 pr-4 text-muted-foreground">{seriesName}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">
-                        {week ? `Week ${String(week).padStart(2, "0")}` : "—"}
-                      </td>
-                      <td className="py-3 pr-4 text-muted-foreground">
-                        {lecture.lecture_date ? formatDate(lecture.lecture_date) : "—"}
-                      </td>
-                      <td className="py-3 pr-4">
-                        {missingSummary ? (
-                          <span className="inline-flex items-center text-base font-bold text-brand-accent-text uppercase tracking-[0.1em]">
-                            Needs summary
-                          </span>
-                        ) : (
-                          <span className="text-base text-muted-foreground">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {lectures.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="py-8 text-center text-muted-foreground">
-                      {isNeedsSummaryView ? (
-                        <>All caught up — every lecture has a summary.</>
-                      ) : (
-                        <>
-                          No lectures yet.{" "}
-                          <Link
-                            href={`${base}/new`}
-                            className="text-brand-primary-text hover:underline"
-                          >
-                            Add one →
-                          </Link>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="mt-6">
-        <Link
-          href={`${base}/series`}
-          className="inline-flex items-center justify-center rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted transition-colors"
-        >
-          Manage Lecture Series →
-        </Link>
-      </div>
-    </div>
+      {shown.length === 0 ? (
+        <EmptyState icon={CircleCheck} message="Every lesson has a summary." />
+      ) : (
+        <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
+          {shown.map((lesson) => {
+            const part = parts.get(lesson.id);
+            const series = [lesson.series_id && seriesNames.get(lesson.series_id), part && `Part ${part}`]
+              .filter(Boolean)
+              .join(" · ");
+            return (
+              <li key={lesson.id}>
+                <Link
+                  href={`${base}/${lesson.id}/edit`}
+                  className="flex min-h-16 flex-col gap-1 px-5 py-4 transition-colors hover:bg-muted/50 sm:flex-row sm:items-center sm:justify-between sm:gap-6"
+                >
+                  <span className="min-w-0">
+                    <span className="block text-lg font-medium text-foreground">
+                      {lesson.title}
+                    </span>
+                    <span className="block text-base text-muted-foreground">
+                      {series || "No series"}
+                    </span>
+                  </span>
+                  <span className="flex flex-wrap items-center gap-x-4 gap-y-1 sm:justify-end">
+                    <span className="whitespace-nowrap text-base text-muted-foreground">
+                      {lesson.lecture_date ? formatLessonDate(lesson.lecture_date) : "No date"}
+                    </span>
+                    {needsSummary(lesson.summary) && (
+                      <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-base font-medium text-foreground">
+                        <PenLine className="size-4 text-brand-primary-text" aria-hidden="true" />
+                        Needs summary
+                      </span>
+                    )}
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </>
   );
 }

@@ -1,14 +1,20 @@
-import { createClient } from "@/lib/supabase/server";
-import { notFound } from "next/navigation";
 import Link from "next/link";
+import { notFound } from "next/navigation";
+import { BookOpen, ExternalLink, Play } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { ErrorState } from "@/components/states/ErrorState";
 import { Button } from "@/components/ui/button";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
+import { formatLessonDate, lessonThumbnail, partNumbers, safeHttpUrl } from "@/lib/lessons";
 import { pageTitle } from "@/lib/pageTitle";
+import { readList } from "@/lib/supabase/readList";
+import { LessonList, MetaLine } from "../LessonList";
 
-type LectureDetail = {
+type Lesson = {
   id: string;
-  group_id: string;
   title: string;
   description: string | null;
   video_url: string;
@@ -16,35 +22,9 @@ type LectureDetail = {
   lecture_date: string | null;
   summary: string | null;
   series_id: string | null;
-  lecture_series: { id: string; name: string; teacher: string | null } | null;
 };
 
-function getYouTubeId(url: string): string | null {
-  const match = url.match(
-    /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([^&?\s]+)/
-  );
-  return match ? match[1] : null;
-}
-
-function sanitizeHttpUrl(value: string | null): string | null {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
-
-function formatLongDate(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+type Sibling = { id: string; title: string; lecture_date: string | null; series_id: string | null };
 
 export async function generateMetadata({
   params,
@@ -62,7 +42,7 @@ export async function generateMetadata({
   return pageTitle(data?.title ?? "Lesson", { groupId });
 }
 
-export default async function LectureDetailPage({
+export default async function LessonPage({
   params,
 }: {
   params: Promise<{ groupId: string; id: string }>;
@@ -72,242 +52,168 @@ export default async function LectureDetailPage({
   const libraryHref = groupPath(group.id, "/lectures");
   const supabase = await createClient();
 
-  const { data: lectureData } = await supabase
+  const { data, error } = await supabase
     .from("lectures")
-    .select("*, lecture_series(id, name, teacher)")
+    .select(
+      "id, title, description, video_url, thumbnail_url, lecture_date, summary, series_id",
+    )
     .eq("id", id)
     .eq("group_id", group.id)
     .maybeSingle();
 
-  if (!lectureData) notFound();
-  const lecture = lectureData as LectureDetail;
-
-  // Compute week numbers from series sibling order (date asc)
-  let weekNumber: number | null = null;
-  let siblings: { id: string; title: string; lecture_date: string | null; weekNumber: number }[] = [];
-  if (lecture.series_id) {
-    const { data: seriesLectures } = await supabase
-      .from("lectures")
-      .select("id, title, lecture_date")
-      .eq("series_id", lecture.series_id)
-      .eq("group_id", group.id)
-      .order("lecture_date", { ascending: true });
-
-    if (seriesLectures) {
-      const withWeeks = seriesLectures.map((l, i) => ({ ...l, weekNumber: i + 1 }));
-      const me = withWeeks.find((l) => l.id === lecture.id);
-      weekNumber = me?.weekNumber ?? null;
-      siblings = withWeeks.filter((l) => l.id !== lecture.id);
-    }
+  if (error) {
+    console.error("Failed to load lesson: code=%s message=%s", error.code, error.message);
+    return (
+      <PageContainer>
+        <PageHeader title="Lesson" backHref={libraryHref} backLabel="Back to Lessons" />
+        <ErrorState thing="this lesson" />
+      </PageContainer>
+    );
   }
+  if (!data) notFound();
+  const lesson: Lesson = data;
 
-  const series = lecture.lecture_series;
-  const safeVideoUrl = sanitizeHttpUrl(lecture.video_url);
-  const youtubeId = safeVideoUrl ? getYouTubeId(safeVideoUrl) : null;
-  const thumbnail =
-    sanitizeHttpUrl(lecture.thumbnail_url) ||
-    (youtubeId ? `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg` : null);
+  // A failed series read only drops the series line, the part number and
+  // the rest of the series; the lesson itself still shows.
+  const [series, inSeries] = lesson.series_id
+    ? await Promise.all([
+        supabase
+          .from("lecture_series")
+          .select("id, name, teacher")
+          .eq("id", lesson.series_id)
+          .eq("group_id", group.id)
+          .maybeSingle()
+          .then(({ data }) => data),
+        supabase
+          .from("lectures")
+          .select("id, title, lecture_date, series_id")
+          .eq("series_id", lesson.series_id)
+          .eq("group_id", group.id)
+          .then((read) => readList<Sibling>(read, "lessons in series") ?? []),
+      ])
+    : [null, []];
+  const parts = partNumbers(inSeries);
+  const part = parts.get(lesson.id);
+  const others = inSeries.filter((l) => l.id !== lesson.id);
+
+  const videoUrl = safeHttpUrl(lesson.video_url);
+  const thumbnail = lessonThumbnail(lesson);
 
   return (
-    <div>
-      {/* ── Hero ── */}
-      <section className="relative overflow-hidden bg-background">
-        <div className="relative px-6 md:px-14 py-12 md:py-16">
-          {/* Back link */}
-          <Link
-            href={libraryHref}
-            className="font-sans text-base text-muted-foreground uppercase tracking-[0.2em] hover:text-foreground transition-colors inline-flex items-center gap-2 mb-10"
-          >
-            ← The Lecture Library
-          </Link>
+    <PageContainer>
+      <PageHeader
+        title={lesson.title}
+        subtitle={lesson.description}
+        backHref={libraryHref}
+        backLabel="Back to Lessons"
+        className="mb-4"
+      />
 
-          {/* Eyebrow: series + week */}
-          {(series || weekNumber !== null) && (
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-7 h-px bg-brand-accent" />
-              {series && (
-                <Link
-                  href={`${libraryHref}/series/${series.id}`}
-                  className="text-muted-foreground text-base font-semibold font-sans tracking-[0.2em] uppercase hover:text-foreground transition-colors"
-                >
-                  {series.name}
-                </Link>
-              )}
-              {weekNumber !== null && (
-                <span className="text-brand-accent-text text-base font-bold font-sans tracking-[0.2em] uppercase">
-                  Week {String(weekNumber).padStart(2, "0")}
-                </span>
-              )}
-            </div>
-          )}
+      <MetaLine
+        className="mb-8 block text-lg text-muted-foreground"
+        parts={[
+          series && (
+            <Link
+              key="series"
+              href={`${libraryHref}/series/${series.id}`}
+              className="font-medium text-brand-primary-text underline underline-offset-4 hover:text-foreground"
+            >
+              {series.name}
+            </Link>
+          ),
+          part && `Part ${part}`,
+          lesson.lecture_date && formatLessonDate(lesson.lecture_date, "long"),
+          series?.teacher && `Taught by ${series.teacher}`,
+        ]}
+      />
 
-          {/* Title */}
-          <h1 className="font-display text-4xl md:text-6xl font-medium tracking-tight leading-none mb-5 max-w-4xl">
-            {lecture.title}
-          </h1>
-
-          {/* Description */}
-          {lecture.description && (
-            <p className="font-display italic text-xl md:text-2xl text-muted-foreground max-w-2xl leading-snug mb-6">
-              {lecture.description}
-            </p>
-          )}
-
-          {/* Meta row */}
-          <div className="flex items-center gap-4 flex-wrap font-sans text-base text-muted-foreground">
-            {lecture.lecture_date && (
-              <span className="font-mono">{formatLongDate(lecture.lecture_date)}</span>
-            )}
-            {lecture.lecture_date && series?.teacher && (
-              <span className="opacity-40">·</span>
-            )}
-            {series?.teacher && <span>Taught by {series.teacher}</span>}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Watch block ── */}
-      <section className="bg-card border-t border-border">
-        <div className="px-6 md:px-14 py-12 grid md:grid-cols-[1.4fr_1fr] gap-10 items-center">
-          {safeVideoUrl ? (
+      <section
+        aria-label="Recording"
+        className="grid gap-6 rounded-2xl border border-border bg-card p-5 md:grid-cols-[1.4fr_1fr] md:items-center"
+      >
+        {videoUrl ? (
           <a
-            href={safeVideoUrl}
+            href={videoUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="group block relative aspect-video rounded-2xl overflow-hidden border border-border"
+            tabIndex={-1}
+            aria-hidden="true"
+            className="group relative block aspect-video overflow-hidden rounded-xl bg-brand-warm"
           >
             {thumbnail ? (
-              // eslint-disable-next-line @next/next/no-img-element -- Lecture thumbnails can be arbitrary stored URLs.
-              <img src={thumbnail} alt={lecture.title} className="w-full h-full object-cover" />
+              // eslint-disable-next-line @next/next/no-img-element -- Lesson thumbnails can be arbitrary stored URLs.
+              <img src={thumbnail} alt="" className="h-full w-full object-cover" />
             ) : (
-              <div
-                className="w-full h-full"
-                style={{
-                  background: "linear-gradient(135deg, var(--color-brand-primary) 0%, var(--color-brand-navy) 100%)",
-                }}
-              />
+              <BookOpen className="absolute inset-0 m-auto size-12 text-brand-primary-text" />
             )}
-            <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/20 transition-colors">
-              <div className="w-20 h-20 rounded-full bg-brand-accent flex items-center justify-center shadow-xl group-hover:scale-105 transition-transform">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-                  <path d="M8 5.14v14l11-7-11-7z" fill="var(--color-brand-navy)" />
-                </svg>
-              </div>
-            </div>
-          </a>
-          ) : (
-            <div className="relative aspect-video rounded-2xl overflow-hidden border border-border flex items-center justify-center bg-muted">
-              <p className="font-sans text-base text-muted-foreground">
-                Recording unavailable.
-              </p>
-            </div>
-          )}
-
-          <div className="flex flex-col gap-4">
-            {safeVideoUrl ? (
-              <Button
-                size="lg"
-                nativeButton={false}
-                render={<a href={safeVideoUrl} target="_blank" rel="noopener noreferrer" />}
-                className="rounded-xl font-sans text-lg font-bold tracking-[0.1em] uppercase"
-              >
-                Watch the recording →
-              </Button>
-            ) : (
-              <span className="bg-muted text-muted-foreground font-sans text-lg font-bold tracking-[0.1em] uppercase px-6 py-4 rounded-xl inline-flex items-center justify-center gap-2 cursor-not-allowed">
-                Recording unavailable
-              </span>
-            )}
-            <p className="font-sans text-base text-foreground italic px-2">
-              Opens in a new tab. You may be prompted to enter a Zoom passcode.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Class summary ── */}
-      <section className="bg-background border-t border-border">
-        <div className="px-6 md:px-14 py-14 md:py-16 max-w-3xl">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-7 h-px bg-brand-accent" />
-            <span className="text-brand-accent-text text-base font-bold font-sans tracking-[0.2em] uppercase">
-              Class Summary
+            <span className="absolute inset-0 m-auto flex size-20 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform group-hover:scale-105">
+              <Play className="size-8 fill-current" />
             </span>
+          </a>
+        ) : (
+          <div className="flex aspect-video items-center justify-center rounded-xl bg-muted">
+            <p className="text-lg text-muted-foreground">Recording unavailable.</p>
           </div>
+        )}
 
-          {lecture.summary ? (
-            <div className="font-sans text-base md:text-lg text-foreground leading-relaxed whitespace-pre-wrap">
-              {lecture.summary}
-            </div>
-          ) : (
-            <p className="font-display italic text-lg text-muted-foreground">
-              A summary hasn&apos;t been written yet — check back later this week.
-            </p>
-          )}
-        </div>
+        {videoUrl && (
+          <div className="flex flex-col gap-3">
+            <Button
+              size="lg"
+              nativeButton={false}
+              render={<a href={videoUrl} target="_blank" rel="noopener noreferrer" />}
+            >
+              <ExternalLink aria-hidden="true" />
+              Watch recording
+            </Button>
+            <p className="text-base text-muted-foreground">Opens in a new tab.</p>
+          </div>
+        )}
       </section>
 
-      {/* ── Also in this series ── */}
-      {series && siblings.length > 0 && (
-        <section className="bg-card border-t border-border">
-          <div className="px-6 md:px-14 py-14">
-            <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
-              <div>
-                <p className="font-sans text-base text-muted-foreground tracking-[0.15em] uppercase font-semibold mb-1">
-                  Also in this series
-                </p>
-                <h2 className="font-display text-3xl font-medium text-foreground tracking-tight">
-                  {series.name}
-                </h2>
-              </div>
-              <Link
-                href={`${libraryHref}/series/${series.id}`}
-                className="font-sans text-sm font-semibold text-brand-primary-text hover:underline"
-              >
-                View full series →
-              </Link>
-            </div>
+      <section aria-labelledby="lesson-summary" className="mt-12">
+        <h2 id="lesson-summary" className="mb-4 font-serif text-2xl font-medium text-foreground">
+          Lesson summary
+        </h2>
+        {lesson.summary ? (
+          <p className="max-w-prose text-lg leading-relaxed text-foreground whitespace-pre-wrap">
+            {lesson.summary}
+          </p>
+        ) : (
+          <p className="text-lg text-muted-foreground">No lesson summary yet.</p>
+        )}
+      </section>
 
-            <div>
-              {siblings.slice(0, 5).map((sib) => (
-                <SiblingRow key={sib.id} libraryHref={libraryHref} sib={sib} weekNumber={sib.weekNumber} />
-              ))}
-            </div>
+      {series && others.length > 0 && (
+        <section aria-labelledby="more-in-series" className="mt-12">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <h2 id="more-in-series" className="font-serif text-2xl font-medium text-foreground">
+              More from {series.name}
+            </h2>
+            <Button
+              variant="outline"
+              nativeButton={false}
+              render={<Link href={`${libraryHref}/series/${series.id}`} />}
+            >
+              View series
+            </Button>
           </div>
+          <LessonList
+            libraryHref={libraryHref}
+            lessons={others
+              .sort((a, b) => (parts.get(a.id) ?? 0) - (parts.get(b.id) ?? 0))
+              .slice(0, 5)
+              .map((l) => ({
+                id: l.id,
+                title: l.title,
+                meta: [
+                  parts.has(l.id) && `Part ${parts.get(l.id)}`,
+                  l.lecture_date && formatLessonDate(l.lecture_date),
+                ],
+              }))}
+          />
         </section>
       )}
-    </div>
-  );
-}
-
-function SiblingRow({
-  libraryHref,
-  sib,
-  weekNumber,
-}: {
-  libraryHref: string;
-  sib: { id: string; title: string; lecture_date: string | null };
-  weekNumber: number;
-}) {
-  return (
-    <Link
-      href={`${libraryHref}/${sib.id}`}
-      className="grid grid-cols-[80px_1fr_auto] items-center gap-6 border-t border-border py-4 hover:bg-background transition-colors -mx-2 px-2 rounded"
-    >
-      <span className="font-sans text-base text-brand-accent-text tracking-[0.15em] uppercase font-bold">
-        Week {String(weekNumber).padStart(2, "0")}
-      </span>
-      <span className="font-display text-lg font-medium text-foreground tracking-tight">
-        {sib.title}
-      </span>
-      <span className="font-mono text-base text-muted-foreground">
-        {sib.lecture_date
-          ? new Date(sib.lecture_date + "T00:00:00").toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            })
-          : ""}
-      </span>
-    </Link>
+    </PageContainer>
   );
 }

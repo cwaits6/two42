@@ -36,8 +36,8 @@ const TILES: { href: string; label: string; description: string }[] = [
   },
   {
     href: "/settings/lectures",
-    label: "Lectures",
-    description: "Lectures and series.",
+    label: "Lessons",
+    description: "Lessons, series and lesson summaries.",
   },
   {
     href: "/settings/giving",
