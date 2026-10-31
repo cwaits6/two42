@@ -20,7 +20,12 @@ function isFresh(file: string): boolean {
 
 async function signIn(browser: Browser, baseURL: string, key: PersonaKey, file: string) {
   const persona = PERSONAS[key];
-  const context = await browser.newContext({ baseURL });
+  // The runner applies the test's own storageState to every new context, and
+  // /login redirects anyone already signed in, so start explicitly signed out.
+  const context = await browser.newContext({
+    baseURL,
+    storageState: { cookies: [], origins: [] },
+  });
   try {
     const page = await context.newPage();
     await page.goto("/login");
