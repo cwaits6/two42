@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CALENDAR_VIEWS, type CalendarView } from "@/components/events/calendarViewState";
@@ -46,14 +46,25 @@ export function CalendarToolbar({ viewSwitch, nav }: { viewSwitch: ReactNode; na
   );
 }
 
-/** Month / Week / List as a radiogroup: arrow keys move the checked view and its focus. */
+/**
+ * Month / Week / List as a radiogroup: arrow keys move the checked view and its focus.
+ * Each view renders its own switch, so a change mounts a new one; `focusOnMount`
+ * hands focus to it rather than letting it fall to the page.
+ */
 export function CalendarViewSwitch({
   view,
   onChange,
+  focusOnMount = false,
 }: {
   view: CalendarView;
   onChange: (view: CalendarView) => void;
+  focusOnMount?: boolean;
 }) {
+  const group = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focusOnMount) group.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
+  }, [focusOnMount]);
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
     if (!step) return;
@@ -67,6 +78,7 @@ export function CalendarViewSwitch({
 
   return (
     <div
+      ref={group}
       role="radiogroup"
       aria-label="View"
       onKeyDown={onKeyDown}

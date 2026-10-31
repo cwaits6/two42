@@ -56,8 +56,16 @@ export function EventsPageClient({ groups, allEvents, userRsvps, userId, timeZon
   const { visibleGroupIds } = viewState;
   const isPhone = useIsPhone();
   const view = shownView(viewState, isPhone);
+  const [switchUsed, setSwitchUsed] = useState(false);
   const viewSwitch = (
-    <CalendarViewSwitch view={view} onChange={(next) => dispatch({ type: "setView", view: next })} />
+    <CalendarViewSwitch
+      view={view}
+      focusOnMount={switchUsed}
+      onChange={(next) => {
+        setSwitchUsed(true);
+        dispatch({ type: "setView", view: next });
+      }}
+    />
   );
 
   // webcal:// feed links need an absolute host, but this component still SSRs,
