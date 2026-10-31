@@ -45,6 +45,7 @@ function valuesAt(row: Row, path: string): unknown[] {
 // predicates are applied, the way the database would.
 function listChain(rows: Row[], record: (filter: [string, unknown]) => void) {
   const filters: Array<(row: Row) => boolean> = [];
+  let slice: [number, number?] = [0];
   const obj = {
     select: () => obj,
     eq(col: string, val: unknown) {
@@ -100,10 +101,17 @@ function listChain(rows: Row[], record: (filter: [string, unknown]) => void) {
       return obj;
     },
     order: () => obj,
-    limit: () => obj,
+    limit(n: number) {
+      slice = [0, n];
+      return obj;
+    },
+    range(from: number, to: number) {
+      slice = [from, to + 1];
+      return obj;
+    },
     then: (resolve: (v: Result) => unknown, reject?: (e: unknown) => unknown) =>
       Promise.resolve({
-        data: rows.filter((row) => filters.every((f) => f(row))),
+        data: rows.filter((row) => filters.every((f) => f(row))).slice(...slice),
         error: null,
       }).then(resolve, reject),
   };
@@ -187,7 +195,7 @@ function signup(id: string, groupId: string, teamName: string): Row {
   };
 }
 
-function makeServiceClient(opts: { memberships: Row[] | "error" }) {
+function makeServiceClient(opts: { memberships: Row[] | "error"; extraEvents?: Row[] }) {
   const predicates: Record<string, Array<[string, unknown]>> = {};
   const record = (table: string) => (filter: [string, unknown]) => {
     (predicates[table] ??= []).push(filter);
@@ -219,6 +227,7 @@ function makeServiceClient(opts: { memberships: Row[] | "error" }) {
       start_time: new Date(Date.parse(SOON) + 730 * DAY).toISOString(),
     },
     weekly("study-b", GROUP_B, "Other study", { meeting_id: "999 888 7777" }),
+    ...(opts.extraEvents ?? []),
   ];
   const signups = [
     signup("signup-a", GROUP_A, "Greeters A"),
@@ -364,5 +373,17 @@ describe("GET /api/calendar/feed.ics — group boundary", () => {
     expect(moved).toContain("Moved study");
     expect(moved).toContain("Meeting ID: 111 222 3333");
     expect(body).not.toContain("999 888 7777");
+  });
+
+  it("reads every page of events, not just the first", async () => {
+    const many = Array.from({ length: 1200 }, (_, i) => event(`one-off-${i}`, GROUP_A, `One-off ${i}`));
+    const { client } = makeServiceClient({ memberships: memberOfAOnly, extraEvents: many });
+    createServiceClient.mockResolvedValue(client);
+
+    const body = await (await GET(feedRequest())).text();
+
+    expect(body).toContain("UID:one-off-0\r\n");
+    expect(body).toContain("UID:one-off-1199\r\n");
+    expect(body).toContain("UID:moved-a");
   });
 });

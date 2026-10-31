@@ -15,6 +15,22 @@ import type { MeetingFields } from "@/lib/meetings";
 import { isMemberRole } from "@/lib/roles";
 import { orgTimeZoneById } from "@/lib/time/orgZone";
 
+// Read a page at a time until every matching row is in: a capped read drops
+// a series or a moved date's row, and the dates it governs come back wrong.
+const PAGE_SIZE = 1000;
+
+async function readAllPages<T>(
+  page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>
+): Promise<{ data: T[] | null; error: unknown }> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await page(from, from + PAGE_SIZE - 1);
+    if (error) return { data: null, error };
+    rows.push(...(data ?? []));
+    if ((data ?? []).length < PAGE_SIZE) return { data: rows, error: null };
+  }
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const token = searchParams.get("token");
@@ -125,23 +141,28 @@ export async function GET(request: Request) {
       { data: events, error: eventsError },
       { data: myServings, error: servingsError },
     ] = await Promise.all([
-      supabase
-        .from("events")
-        .select("*")
-        .eq("org_id", sub.org_id)
-        .in("group_id", groupIds)
-        // Dates in the window; every series begun by its end; and every
-        // moved or deleted date (cancelled rows included) whose original slot
-        // is in it, wherever it moved — without that row the slot reappears.
-        .or(
-          [
-            `and(start_time.gte.${thirtyDaysAgo},start_time.lte.${windowEndIso})`,
-            `and(series_id.is.null,recurrence_frequency.not.is.null,start_time.lte.${windowEndIso})`,
-            `and(series_id.not.is.null,series_occurrence_date.gte.${thirtyDaysAgo},series_occurrence_date.lte.${windowEndIso})`,
-          ].join(",")
-        )
-        .order("start_time", { ascending: true })
-        .limit(500),
+      readAllPages((from, to) =>
+        supabase
+          .from("events")
+          .select("*")
+          .eq("org_id", sub.org_id)
+          .in("group_id", groupIds)
+          // Dates in the window; every series begun by its end; and every
+          // moved or deleted date (cancelled rows included) whose original
+          // slot is in it, wherever it moved — without that row the slot
+          // reappears.
+          .or(
+            [
+              `and(start_time.gte.${thirtyDaysAgo},start_time.lte.${windowEndIso})`,
+              `and(series_id.is.null,recurrence_frequency.not.is.null,start_time.lte.${windowEndIso})`,
+              `and(series_id.not.is.null,series_occurrence_date.gte.${thirtyDaysAgo},series_occurrence_date.lte.${windowEndIso})`,
+            ].join(",")
+          )
+          // id breaks start_time ties, so pages neither skip nor repeat a row.
+          .order("start_time", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to)
+      ),
       // Serving signups where this user is an attendee, on the groups' teams
       // (both inner joins filter)
       supabase
