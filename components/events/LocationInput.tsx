@@ -69,7 +69,7 @@ export function LocationInput({ value, onChange, id, name }: LocationInputProps)
       // Style the host element so CSS custom properties cascade into the shadow DOM
       Object.assign((el as HTMLElement).style, {
         width: "100%",
-        height: "2.5rem",
+        height: "3rem",
         display: "block",
         borderRadius: "0.375rem",
         border: "0",
@@ -198,13 +198,13 @@ export function LocationInput({ value, onChange, id, name }: LocationInputProps)
       <div className="relative w-full">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 rounded-lg border border-input bg-background"
+          className="pointer-events-none absolute inset-0 rounded-lg border border-input bg-transparent"
         />
         <div ref={containerRef} className="relative z-10 w-full" />
       </div>
       <input type="hidden" id={id ? `${id}-hidden` : undefined} name={name} value={value} readOnly />
       {value && (
-        <p className="text-sm text-muted-foreground px-1 truncate">
+        <p className="text-base text-muted-foreground px-1 truncate">
           Saved: {value}
         </p>
       )}

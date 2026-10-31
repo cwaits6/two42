@@ -2,11 +2,14 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { mintSignedUrls } from "@/lib/storageRead";
-import { EventRsvpPanel } from "./_components/EventRsvpPanel";
 import { AddToCalendarButton } from "@/components/events/AddToCalendarButton";
+import { EventMap } from "@/components/events/EventMap";
+import { RsvpControl } from "@/components/events/RsvpControl";
 import { SubscribeToEventButton } from "@/components/events/SubscribeToEventButton";
 import { AttendeeStrip, type Attendee } from "./_components/AttendeeStrip";
 import { JoinMeetingBlock } from "@/components/events/JoinMeetingBlock";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
 import type { MeetingFields } from "@/lib/meetings";
 import { Button } from "@/components/ui/button";
 import { Pencil } from "lucide-react";
@@ -113,7 +116,7 @@ export default async function EventDetailPage({
   if (event.is_rsvp_enabled) {
     const { data: rsvpsRaw } = await supabase
       .from("rsvps")
-      .select("user_id, status, profiles(id, first_name, last_name, avatar_url)")
+      .select("user_id, status, profiles(id, first_name, last_name, preferred_name, avatar_url)")
       .eq("event_id", id)
       .in("status", ["yes", "maybe"]);
 
@@ -123,6 +126,7 @@ export default async function EventDetailPage({
         id: p?.id ?? r.user_id,
         first_name: p?.first_name ?? null,
         last_name: p?.last_name ?? null,
+        preferred_name: p?.preferred_name ?? null,
         avatar_url: p?.avatar_url ?? null,
         status: r.status as Attendee["status"],
       };
@@ -183,8 +187,6 @@ export default async function EventDetailPage({
     hasLectures = (count ?? 0) > 0;
   }
 
-  const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-
   // Short date for meta strip
   const shortDate = formatInZone(displayStartTime, timeZone, {
     weekday: "short",
@@ -204,9 +206,6 @@ export default async function EventDetailPage({
       : `/calendar/${id}/edit`
   );
 
-  // Breadcrumb date label
-  const breadcrumbDate = formatInZone(displayStartTime, timeZone, { month: "long", day: "numeric" });
-
   // Upcoming pill: whole calendar days until the event, by the org's calendar.
   const diffMs =
     Date.parse(dayKey(displayStartTime, timeZone)) - Date.parse(dayKey(new Date().toISOString(), timeZone));
@@ -216,283 +215,114 @@ export default async function EventDetailPage({
   else if (diffDays === 1) upcomingLabel = "Tomorrow";
   else if (diffDays > 1 && diffDays <= 7) upcomingLabel = `In ${diffDays} days`;
 
-  // Attendee counts
+  const recordingsHref = hasLectures ? lecturesHref : null;
+  const joinBlock = meeting?.meeting_url && (
+    <JoinMeetingBlock
+      meetingUrl={meeting.meeting_url}
+      meetingId={meeting.meeting_id}
+      passcode={meeting.meeting_passcode}
+      startTime={displayStartTime}
+      endTime={displayEndTime}
+      leadMinutes={meeting.meeting_lead_minutes}
+      timeZone={timeZone}
+      recordingsHref={recordingsHref}
+    />
+  );
+  const showRsvp = event.is_rsvp_enabled && !!user;
 
   return (
-    <div className="relative min-h-dvh bg-background">
-      <div className="relative container mx-auto px-4 py-8 md:py-12 max-w-6xl">
-        {/* ── Breadcrumb ── */}
-        <div className="flex items-center justify-between mb-8">
-          <nav className="font-sans text-base text-muted-foreground">
-            <Link
-              href={groupPath(group.id, "/calendar")}
-              className="hover:text-foreground transition-colors"
-            >
-              Calendar
-            </Link>
-            <span className="mx-2 text-muted-foreground/50">›</span>
-            <span className="text-foreground font-medium">
-              {breadcrumbDate} · {event.title}
-            </span>
-          </nav>
-
-          {/* Leader edit button — top right, visually subordinate */}
-          {isLeader && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-muted-foreground hover:border-brand-primary/30 hover:text-brand-primary-text"
-              nativeButton={false}
-              render={<Link href={editHref} />}
-            >
-              <Pencil className="h-3 w-3" />
-              Edit
+    <PageContainer size="wide">
+      <PageHeader
+        title={event.title}
+        subtitle={group.name}
+        backHref={groupPath(group.id, "/calendar")}
+        backLabel="Back to Calendar"
+        actions={
+          isLeader && (
+            <Button variant="outline" nativeButton={false} render={<Link href={editHref} />}>
+              <Pencil aria-hidden="true" />
+              Edit event
             </Button>
+          )
+        }
+      />
+
+      <div className="grid grid-cols-1 items-start gap-10 md:grid-cols-[1.5fr_1fr] md:gap-12">
+        <div>
+          {upcomingLabel && (
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-brand-bg-light px-3 py-1.5">
+              <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-accent" />
+              <span className="font-sans text-base font-bold uppercase tracking-[1.5px] text-brand-accent-text">
+                {diffDays <= 1 ? upcomingLabel : `This week · ${upcomingLabel.toLowerCase()}`}
+              </span>
+            </div>
+          )}
+
+          <div
+            className={`grid grid-cols-1 gap-6 border-t border-b border-border py-5 sm:grid-cols-2 ${
+              event.location ? "lg:grid-cols-3" : ""
+            }`}
+          >
+            <MetaCell label="Date" value={shortDate} sub={shortYear} />
+            <MetaCell label="Time" value={startLabel} sub={endLabel ? `Until ${endLabel}` : null} />
+            {event.location && <MetaCell label="Where" value={event.location} sub={null} />}
+          </div>
+
+          {event.description && (
+            <div className="mt-8">
+              <div className="mb-4 flex items-center gap-3">
+                <div aria-hidden="true" className="h-px w-6 bg-brand-accent" />
+                <h2 className="font-sans text-base font-bold uppercase tracking-[2px] text-brand-accent-text">
+                  About this event
+                </h2>
+              </div>
+              <p className="max-w-[620px] whitespace-pre-line font-serif text-[22px] font-normal leading-[1.5] tracking-tight text-foreground">
+                {event.description}
+              </p>
+            </div>
           )}
         </div>
 
-        {/* ── Two-column grid ── */}
-        <div className="grid grid-cols-1 md:grid-cols-[1.5fr_1fr] gap-10 md:gap-12 items-start">
-
-          {/* ═══════════════════════════════════════════════
-              LEFT COLUMN — hero + meta + description
-          ═══════════════════════════════════════════════ */}
-          <div>
-            {/* Upcoming pill */}
-            {upcomingLabel && (
-              <div
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-5"
-                style={{
-                  background:
-                    "color-mix(in srgb, var(--color-brand-accent) 13%, transparent)",
-                }}
-              >
-                <span
-                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                  style={{ background: "var(--color-brand-accent)" }}
-                />
-                <span className="font-sans text-base font-bold uppercase tracking-[1.5px] text-brand-accent-text">
-                  {diffDays <= 1
-                    ? upcomingLabel
-                    : `This week · ${upcomingLabel.toLowerCase()}`}
-                </span>
-              </div>
-            )}
-
-            {/* Title */}
-            <h1 className="font-serif text-5xl md:text-6xl font-medium text-foreground leading-[1.05] tracking-tight">
-              {event.title}
-            </h1>
-
-            {/* The group as serif-italic subtitle */}
-            <p className="font-serif italic text-[22px] mt-2 leading-snug tracking-tight text-brand-primary-text">
-              {group.name}
-            </p>
-
-            {/* Meta strip */}
-            <div
-              className={`mt-8 py-5 grid grid-cols-1 gap-6 border-t border-b border-border sm:grid-cols-2 ${
-                event.location ? "lg:grid-cols-3" : ""
-              }`}
-            >
-              <MetaCell
-                label="Date"
-                value={shortDate}
-                sub={shortYear}
-              />
-              <MetaCell
-                label="Time"
-                value={startLabel}
-                sub={endLabel ? `Until ${endLabel}` : null}
-              />
-              {event.location && (
-                <MetaCell
-                  label="Where"
-                  value={event.location}
-                  sub={null}
-                />
-              )}
-            </div>
-
-            {/* Description */}
-            {event.description && (
-              <div className="mt-8">
-                {/* Eyebrow */}
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="h-px w-6 bg-brand-accent" />
-                  <span className="font-sans text-base font-bold uppercase tracking-[2px] text-brand-accent-text">
-                    About this event
-                  </span>
-                </div>
-                <p
-                  className="font-serif text-[22px] leading-[1.5] text-foreground font-normal tracking-tight max-w-[620px]"
-                >
-                  {event.description}
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* ═══════════════════════════════════════════════
-              RIGHT COLUMN — RSVP card + attendees + map
-              (sticky on desktop)
-          ═══════════════════════════════════════════════ */}
-          <div className="flex flex-col gap-4 md:sticky md:top-6">
-
-            {/* ── RSVP Hero Card ── */}
-            {event.is_rsvp_enabled && user && (
-              <div
-                className="rounded-[18px] p-6 relative overflow-hidden"
-                style={{
-                  background: "var(--color-brand-primary)",
-                  boxShadow:
-                    "0 14px 40px color-mix(in srgb, var(--color-brand-primary) 20%, transparent)",
-                }}
-              >
-                <div className="relative text-white">
-                  <EventRsvpPanel
+        <div className="flex flex-col gap-4 md:sticky md:top-6">
+          {(showRsvp || joinBlock) && (
+            <div className="rounded-2xl bg-primary p-6 text-primary-foreground shadow-lg">
+              {showRsvp && (
+                <>
+                  <h2 className="mb-4 font-serif text-2xl font-medium leading-snug">Are you going?</h2>
+                  <RsvpControl
                     eventId={event.id}
                     userId={user.id}
-                    initialStatus={userRsvp?.status ?? null}
+                    currentStatus={userRsvp?.status ?? null}
+                    tone="primary"
                   />
+                </>
+              )}
+              {joinBlock && <div className={showRsvp ? "mt-4" : ""}>{joinBlock}</div>}
+            </div>
+          )}
 
-                  {/* Join the call — time-aware, set once on the recurring event */}
-                  {meeting?.meeting_url && (
-                    <div className="mt-4">
-                      <JoinMeetingBlock
-                        meetingUrl={meeting.meeting_url}
-                        meetingId={meeting.meeting_id}
-                        passcode={meeting.meeting_passcode}
-                        startTime={displayStartTime}
-                        endTime={displayEndTime}
-                        leadMinutes={meeting.meeting_lead_minutes}
-                        timeZone={timeZone}
-                        recordingsHref={hasLectures ? lecturesHref : null}
-                      />
-                    </div>
-                  )}
-
-                  {/* Calendar actions below RSVP */}
-                  <div
-                    className="flex flex-wrap gap-2 mt-4 pt-4"
-                    style={{ borderTop: "1px solid rgba(255,255,255,0.16)" }}
-                  >
-                    <AddToCalendarButton
-                      instance={`event-detail-${event.id}`}
-                      eventTitle={event.title}
-                      startTime={displayStartTime}
-                      endTime={displayEndTime}
-                      location={event.location}
-                      description={event.description}
-                      timeZone={timeZone}
-                    />
-                    <SubscribeToEventButton eventId={event.id} />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Join card when RSVP is disabled but a meeting is set */}
-            {!(event.is_rsvp_enabled && user) && meeting?.meeting_url && (
-              <div
-                className="rounded-[18px] p-6 relative overflow-hidden"
-                style={{
-                  background: "var(--color-brand-primary)",
-                  boxShadow:
-                    "0 14px 40px color-mix(in srgb, var(--color-brand-primary) 20%, transparent)",
-                }}
-              >
-                <div className="relative">
-                  <JoinMeetingBlock
-                    meetingUrl={meeting.meeting_url}
-                    meetingId={meeting.meeting_id}
-                    passcode={meeting.meeting_passcode}
-                    startTime={displayStartTime}
-                    endTime={displayEndTime}
-                    leadMinutes={meeting.meeting_lead_minutes}
-                    timeZone={timeZone}
-                    recordingsHref={hasLectures ? lecturesHref : null}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Calendar actions for non-RSVP or logged-out state */}
-            {!(event.is_rsvp_enabled && user) && (
-              <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-card p-4">
-                <AddToCalendarButton
-                  instance={`event-detail-${event.id}`}
-                  eventTitle={event.title}
-                  startTime={displayStartTime}
-                  endTime={displayEndTime}
-                  location={event.location}
-                  description={event.description}
-                  timeZone={timeZone}
-                />
-                <SubscribeToEventButton eventId={event.id} />
-              </div>
-            )}
-
-            {/* ── Who's coming card ── */}
-            {event.is_rsvp_enabled && attendees.length > 0 && (
-              <div className="rounded-[18px] border border-border bg-card p-6">
-                <AttendeeStrip attendees={attendees} />
-              </div>
-            )}
-
-            {/* ── Map card ── */}
-            {event.location && (
-              <div className="rounded-[18px] border border-border bg-card overflow-hidden">
-                {/* Map area */}
-                <div className="relative" style={{ aspectRatio: "4/3" }}>
-                  {googleMapsApiKey ? (
-                    <iframe
-                      title={`Map of ${event.location}`}
-                      src={`https://www.google.com/maps/embed/v1/place?key=${googleMapsApiKey}&q=${encodeURIComponent(event.location)}`}
-                      className="absolute inset-0 w-full h-full border-0"
-                      loading="lazy"
-                      allowFullScreen
-                      referrerPolicy="no-referrer-when-downgrade"
-                    />
-                  ) : (
-                    <div
-                      className="absolute inset-0 flex items-center justify-center"
-                      style={{
-                        background:
-                          "linear-gradient(135deg, var(--color-brand-warm) 0%, var(--background) 100%)",
-                      }}
-                    >
-                      <div
-                        className="bg-white rounded-[10px] px-4 py-2.5 text-center"
-                        style={{ boxShadow: "0 6px 16px rgba(0,0,0,0.10)" }}
-                      >
-                        <div className="font-sans text-sm font-semibold text-foreground">
-                          {event.location}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Address + directions */}
-                <div className="flex items-center justify-between px-4 py-3.5">
-                  <span className="font-sans text-base text-muted-foreground truncate">
-                    {event.location}
-                  </span>
-                  <a
-                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ml-3 inline-flex min-h-12 shrink-0 items-center whitespace-nowrap font-sans text-base font-semibold text-brand-primary-text hover:underline"
-                  >
-                    Directions →
-                  </a>
-                </div>
-              </div>
-            )}
+          <div className="flex flex-wrap items-center gap-3">
+            <AddToCalendarButton
+              instance={`event-detail-${event.id}`}
+              eventTitle={event.title}
+              startTime={displayStartTime}
+              endTime={displayEndTime}
+              location={event.location}
+              description={event.description}
+              timeZone={timeZone}
+            />
+            <SubscribeToEventButton eventId={event.id} />
           </div>
+
+          {event.is_rsvp_enabled && attendees.length > 0 && (
+            <div className="rounded-2xl border border-border bg-card p-6">
+              <AttendeeStrip attendees={attendees} />
+            </div>
+          )}
+
+          {event.location && <EventMap location={event.location} />}
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 }

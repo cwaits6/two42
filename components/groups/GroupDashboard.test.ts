@@ -30,7 +30,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: que
 vi.mock("@/lib/supabase/current-user", () => ({ getOptionalUser: async () => ({ id: "user-1" }) }));
 vi.mock("@/lib/time/orgZone", () => ({ getOrgTimeZone: async () => "America/New_York" }));
 vi.mock("@/components/states/ErrorState", () => ({ ErrorState: () => null }));
-vi.mock("@/components/groups/RsvpSegmented", () => ({ RsvpSegmented: () => null }));
+vi.mock("@/components/events/RsvpControl", () => ({ RsvpControl: () => null }));
 vi.mock("@/components/events/JoinMeetingBlock", () => ({ JoinMeetingBlock: () => null }));
 
 const { default: Link } = await import("next/link");

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Video, Copy, Check, ArrowRight, Play } from "lucide-react";
+import { Video, Copy, Check, Play } from "lucide-react";
 import {
   getJoinState,
   msUntilNextJoinTransition,
@@ -48,7 +48,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
       style={{ background: "rgba(0,0,0,0.20)", border: "1px solid rgba(255,255,255,0.22)" }}
     >
       <div className="flex-1 min-w-0">
-        <div className="font-sans text-lg font-bold uppercase tracking-[1.2px] text-white/55">
+        <div className="font-sans text-base font-bold uppercase tracking-[1.2px] text-white/80">
           {label}
         </div>
         <div className="font-mono text-xl text-white mt-0.5 tracking-[0.4px] whitespace-nowrap overflow-hidden text-ellipsis">
@@ -114,7 +114,7 @@ export function JoinMeetingBlock({
   );
 
   const outlineButtonClass =
-    "flex w-full items-center justify-center gap-2 mt-3 rounded-xl py-3 font-sans text-[15px] font-semibold text-white transition-colors hover:bg-white/20";
+    "flex w-full items-center justify-center gap-2 mt-3 rounded-xl py-3 font-sans text-base font-semibold text-white transition-colors hover:bg-white/20";
   const outlineButtonStyle = {
     background: "rgba(255,255,255,0.10)",
     border: "1px solid rgba(255,255,255,0.4)",
@@ -131,13 +131,13 @@ export function JoinMeetingBlock({
         style={{ background: "rgba(255,255,255,0.09)", border: "1px solid rgba(255,255,255,0.22)" }}
       >
         <div className={statusRowClass}>
-          <span className="h-2 w-2 rounded-full bg-white/55" />
-          <span className="text-white/55">This event has ended</span>
+          <span aria-hidden="true" className="h-2 w-2 rounded-full bg-white/80" />
+          <span className="text-white/90">This event has ended</span>
         </div>
         {recordingsHref && (
           <>
-            <p className="font-sans text-sm text-white/78 leading-relaxed mt-2.5">
-              Missed it? The recording is posted to Lectures.
+            <p className="font-sans text-base text-white/90 leading-relaxed mt-2.5">
+              Missed it? The recording is posted to Lessons.
             </p>
             <a href={recordingsHref} className={outlineButtonClass} style={outlineButtonStyle}>
               <Play className="h-4 w-4" /> Watch the recording
@@ -161,7 +161,7 @@ export function JoinMeetingBlock({
             Join online{provider ? ` · ${provider}` : ""}
           </span>
         </div>
-        <p className="font-sans text-base text-white/78 leading-relaxed mt-2">
+        <p className="font-sans text-base text-white/90 leading-relaxed mt-2">
           One-tap join opens at <strong className="text-white">{opensAt}</strong>,{" "}
           {leadMinutes} minutes before start.
         </p>
@@ -203,7 +203,6 @@ export function JoinMeetingBlock({
         }}
       >
         <Video className="h-5 w-5" /> {buttonLabel}
-        <ArrowRight className="h-[18px] w-[18px]" />
       </a>
       {creds}
     </div>

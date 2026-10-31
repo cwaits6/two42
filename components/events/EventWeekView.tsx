@@ -8,8 +8,6 @@ import dynamic from "next/dynamic";
 export const EventWeekView = dynamic(() => import("./EventWeekView.impl"), {
   ssr: false,
   loading: () => (
-    <div className="bg-white rounded-[2rem] border-2 border-border overflow-hidden p-2 shadow-sm md:p-5">
-      <div className="h-[560px] rounded-[1.5rem] border border-slate-100 bg-slate-50/70 animate-pulse" />
-    </div>
+    <div className="mt-16 h-[560px] rounded-2xl border border-border bg-muted animate-pulse" />
   ),
 });

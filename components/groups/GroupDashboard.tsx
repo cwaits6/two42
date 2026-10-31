@@ -11,7 +11,7 @@ import { ErrorState } from "@/components/states/ErrorState";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { HomeGreeting } from "@/components/groups/HomeGreeting";
 import { formatServiceDate, toDateString } from "@/lib/serving/sundays";
-import { RsvpSegmented } from "@/components/groups/RsvpSegmented";
+import { RsvpControl } from "@/components/events/RsvpControl";
 import { JoinMeetingBlock } from "@/components/events/JoinMeetingBlock";
 import { expandUpcomingEvents } from "@/lib/recurrence";
 import { meetingEndMs, ENDED_GRACE_MS, type MeetingFields } from "@/lib/meetings";
@@ -282,10 +282,11 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
                   </span>
                 )}
               </div>
-              <RsvpSegmented
+              <RsvpControl
                 eventId={nextEvent.id}
                 userId={user.id}
                 currentStatus={userRsvps[nextEvent.id]?.status ?? null}
+                tone="primary"
               />
             </div>
 

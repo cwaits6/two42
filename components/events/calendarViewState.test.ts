@@ -3,14 +3,26 @@ import {
   CALENDAR_VIEWS,
   calendarViewReducer,
   initialCalendarViewState,
+  shownView,
 } from "./calendarViewState";
 
 const GROUPS = ["a", "b", "c"];
 
 describe("calendarViewReducer", () => {
-  it("offers Month, Week and List in that order and starts on Month", () => {
+  it("offers Month, Week and List in that order", () => {
     expect(CALENDAR_VIEWS.map((v) => v.label)).toEqual(["Month", "Week", "List"]);
-    expect(initialCalendarViewState(GROUPS).view).toBe("month");
+  });
+
+  it("opens in List on a phone and in Month wider", () => {
+    const state = initialCalendarViewState(GROUPS);
+    expect(shownView(state, true)).toBe("list");
+    expect(shownView(state, false)).toBe("month");
+  });
+
+  it("keeps the member's chosen view at any width", () => {
+    const state = calendarViewReducer(initialCalendarViewState(GROUPS), { type: "setView", view: "month" });
+    expect(shownView(state, true)).toBe("month");
+    expect(shownView(calendarViewReducer(state, { type: "setView", view: "list" }), false)).toBe("list");
   });
 
   it("shows every group at first", () => {
@@ -23,12 +35,12 @@ describe("calendarViewReducer", () => {
     expect([...state.visibleGroupIds]).toEqual(["a", "c"]);
 
     state = calendarViewReducer(state, { type: "setView", view: "week" });
-    expect(state.view).toBe("week");
+    expect(state.chosenView).toBe("week");
     expect([...state.visibleGroupIds]).toEqual(["a", "c"]);
 
     state = calendarViewReducer(state, { type: "toggleGroup", id: "a" });
     state = calendarViewReducer(state, { type: "setView", view: "month" });
-    expect(state.view).toBe("month");
+    expect(state.chosenView).toBe("month");
     expect([...state.visibleGroupIds]).toEqual(["c"]);
 
     state = calendarViewReducer(state, { type: "setView", view: "list" });

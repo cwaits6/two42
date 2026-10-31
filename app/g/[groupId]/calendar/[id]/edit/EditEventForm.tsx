@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -19,10 +19,14 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { GoogleMapsScript } from "@/components/GoogleMapsScript";
+import { EventTimeFields } from "@/components/events/EventTimeFields";
 import { LocationInput } from "@/components/events/LocationInput";
-import { MeetingFieldsSection } from "@/components/events/MeetingFieldsSection";
+import { MeetingFieldsSection, meetingFieldErrors, type MeetingFieldErrors } from "@/components/events/MeetingFieldsSection";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { groupPath } from "@/lib/groups/active";
 import { addHour, isValidEndTime } from "@/lib/datetime-local";
+import { failureMessage } from "@/lib/errorCopy";
 import { countUpcomingOccurrences, occurrenceEndTime } from "@/lib/recurrence";
 import { formatEventDate, isoToLocalInput, localToUTCISO } from "@/lib/time/zone";
 import type { Event } from "@/lib/types";
@@ -32,112 +36,98 @@ import { cancelOccurrence, deleteEvent } from "./deleteEvent";
 type EditScope = "all" | "this";
 
 const SCOPE_ITEMS = [
-  { value: "this", label: "This event only" },
-  { value: "all", label: "All events in series" },
+  { value: "this", label: "This date only" },
+  { value: "all", label: "Every date" },
 ];
+
+type FieldErrors = MeetingFieldErrors & { end_time?: string };
+
+/** The start and end inputs as loaded: the occurrence's own when the form was opened for one date. */
+function loadedTimes(event: Event, occurrenceISO: string | null, timeZone: string) {
+  if (occurrenceISO) {
+    const occurrenceEnd = occurrenceEndTime(event, occurrenceISO);
+    return {
+      start: isoToLocalInput(occurrenceISO, timeZone),
+      end: occurrenceEnd ? isoToLocalInput(occurrenceEnd, timeZone) : "",
+    };
+  }
+  return {
+    start: isoToLocalInput(event.start_time, timeZone),
+    end: event.end_time ? isoToLocalInput(event.end_time, timeZone) : "",
+  };
+}
 
 export function EditEventForm({
   groupId,
-  eventId,
+  event,
   timeZone,
 }: {
   groupId: string;
-  eventId: string;
+  event: Event;
   /** The org's zone, resolved by the server; the form's times are its wall clock. */
   timeZone: string;
 }) {
-  const [event, setEvent] = useState<Event | null>(null);
-  const [isRsvpEnabled, setIsRsvpEnabled] = useState(true);
-  const [location, setLocation] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
-  const [meetingUrl, setMeetingUrl] = useState("");
-  const [meetingId, setMeetingId] = useState("");
-  const [meetingPasscode, setMeetingPasscode] = useState("");
-  const [meetingShowOnDashboard, setMeetingShowOnDashboard] = useState(true);
-  const [meetingLeadMinutes, setMeetingLeadMinutes] = useState("15");
-  const [loading, setLoading] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [loadState, setLoadState] = useState<"loading" | "ready" | "not-found">("loading");
-  const [editScope, setEditScope] = useState<EditScope>("all");
+  const eventId = event.id;
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = useMemo(() => createClient(), []);
-  // The input values as loaded, to tell whether the leader changed a time.
-  const loadedTimes = useRef<{ start: string; end: string } | null>(null);
-
-  const calendarHref = groupPath(groupId, "/calendar");
-  const detailHref = groupPath(groupId, `/calendar/${eventId}`);
 
   // Occurrence param is set when navigating from a specific recurring occurrence.
   const rawOccurrence = searchParams.get("occurrence");
   const occurrenceISO = rawOccurrence ? decodeURIComponent(rawOccurrence) : null;
+  // The input values as loaded, to tell whether the leader changed a time.
+  const [loaded] = useState(() => loadedTimes(event, occurrenceISO, timeZone));
 
-  const upcomingCount = useMemo(
-    () => (event ? countUpcomingOccurrences(event, timeZone) : null),
-    [event, timeZone]
+  const [isRsvpEnabled, setIsRsvpEnabled] = useState(event.is_rsvp_enabled ?? true);
+  const [location, setLocation] = useState(event.location ?? "");
+  const [startTime, setStartTime] = useState(loaded.start);
+  const [endTime, setEndTime] = useState(() =>
+    isValidEndTime(loaded.start, loaded.end) ? loaded.end : addHour(loaded.start)
+  );
+  const [meetingUrl, setMeetingUrl] = useState(event.meeting_url ?? "");
+  const [meetingId, setMeetingId] = useState(event.meeting_id ?? "");
+  const [meetingPasscode, setMeetingPasscode] = useState(event.meeting_passcode ?? "");
+  const [meetingShowOnDashboard, setMeetingShowOnDashboard] = useState(event.meeting_show_on_dashboard ?? true);
+  const [meetingLeadMinutes, setMeetingLeadMinutes] = useState(String(event.meeting_lead_minutes ?? 15));
+  const [loading, setLoading] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [editScope, setEditScope] = useState<EditScope>("all");
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [focusTarget, setFocusTarget] = useState<{ id: string } | null>(null);
+  const clearError = (key: keyof FieldErrors) =>
+    setErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev));
+
+  const calendarHref = groupPath(groupId, "/calendar");
+  const detailHref = groupPath(
+    groupId,
+    `/calendar/${eventId}${occurrenceISO ? `?occurrence=${encodeURIComponent(occurrenceISO)}` : ""}`
   );
 
+  const upcomingCount = useMemo(() => countUpcomingOccurrences(event, timeZone), [event, timeZone]);
+
   useEffect(() => {
-    async function load() {
-      const { data: eventData, error: eventError } = await supabase
-        .from("events")
-        .select("*")
-        .eq("id", eventId)
-        .eq("group_id", groupId)
-        .maybeSingle();
-      if (eventError || !eventData) {
-        setLoadState("not-found");
-        return;
-      }
-      setEvent(eventData as Event);
-      setIsRsvpEnabled(eventData.is_rsvp_enabled ?? true);
-      setLocation(eventData.location ?? "");
-      setMeetingUrl(eventData.meeting_url ?? "");
-      setMeetingId(eventData.meeting_id ?? "");
-      setMeetingPasscode(eventData.meeting_passcode ?? "");
-      setMeetingShowOnDashboard(eventData.meeting_show_on_dashboard ?? true);
-      setMeetingLeadMinutes(String(eventData.meeting_lead_minutes ?? 15));
-      let nextStartTime: string;
-      let nextEndTime: string;
-      if (occurrenceISO) {
-        nextStartTime = isoToLocalInput(occurrenceISO, timeZone);
-        const occurrenceEnd = occurrenceEndTime(eventData, occurrenceISO);
-        nextEndTime = occurrenceEnd ? isoToLocalInput(occurrenceEnd, timeZone) : "";
-      } else {
-        nextStartTime = isoToLocalInput(eventData.start_time, timeZone);
-        nextEndTime = eventData.end_time ? isoToLocalInput(eventData.end_time, timeZone) : "";
-      }
-      loadedTimes.current = { start: nextStartTime, end: nextEndTime };
-      setStartTime(nextStartTime);
-      setEndTime(isValidEndTime(nextStartTime, nextEndTime) ? nextEndTime : addHour(nextStartTime));
-      setLoadState("ready");
-    }
-    load();
-  }, [occurrenceISO, eventId, groupId, supabase, timeZone]);
+    if (focusTarget) document.getElementById(focusTarget.id)?.focus();
+  }, [focusTarget]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!event) return;
-
-    if (!isValidEndTime(startTime, endTime)) {
-      toast.error("End time must be after start time.");
-      return;
-    }
 
     const isRecurringSeries = !!event.recurrence_frequency && !event.series_id;
     const isSingleOccurrenceEdit = isRecurringSeries && !!occurrenceISO && editScope === "this";
 
+    const found: FieldErrors = {};
+    if (!isValidEndTime(startTime, endTime)) {
+      found.end_time = "Enter an end time after the start time.";
+    }
     const trimmedMeetingUrl = meetingUrl.trim();
     if (!isSingleOccurrenceEdit) {
-      if (trimmedMeetingUrl && !/^https:\/\//i.test(trimmedMeetingUrl)) {
-        toast.error("Meeting link must start with https://");
-        return;
-      }
-      if (!trimmedMeetingUrl && (meetingId.trim() || meetingPasscode.trim())) {
-        toast.error("Add the meeting link to go with the meeting ID and passcode.");
-        return;
-      }
+      Object.assign(found, meetingFieldErrors(trimmedMeetingUrl, meetingId, meetingPasscode));
+    }
+    setErrors(found);
+    const firstInvalid = Object.keys(found)[0];
+    if (firstInvalid) {
+      setFocusTarget({ id: firstInvalid });
+      return;
     }
 
     setLoading(true);
@@ -177,11 +167,11 @@ export function EditEventForm({
       setLoading(false);
 
       if (error) {
-        toast.error("Failed to create event exception.");
+        toast.error(failureMessage("save this date"));
         return;
       }
 
-      toast.success("This occurrence has been saved separately.");
+      toast.success("Date saved.");
       router.push(calendarHref);
       return;
     }
@@ -193,10 +183,10 @@ export function EditEventForm({
     const startValue = formData.get("start_time") as string;
     const endValue = (formData.get("end_time") as string) || "";
     const timeChanges = {
-      ...(startValue !== loadedTimes.current?.start
+      ...(startValue !== loaded.start
         ? { start_time: localToUTCISO(startValue, timeZone) }
         : {}),
-      ...(endValue !== loadedTimes.current?.end
+      ...(endValue !== loaded.end
         ? { end_time: endValue ? localToUTCISO(endValue, timeZone) : null }
         : {}),
     };
@@ -221,11 +211,11 @@ export function EditEventForm({
     setLoading(false);
 
     if (error || !updated?.length) {
-      toast.error("Failed to update event.");
+      toast.error(failureMessage("save the event"));
       return;
     }
 
-    toast.success("Event updated.");
+    toast.success("Event saved.");
     router.replace(detailHref);
     router.refresh();
   };
@@ -240,44 +230,23 @@ export function EditEventForm({
   };
 
   const handleDeleteDate = async () => {
-    if (!event || !occurrenceISO) return;
+    if (!occurrenceISO) return;
     if (!(await cancelOccurrence(supabase, event, occurrenceISO))) {
-      toast.error("Failed to delete this date.");
+      toast.error(failureMessage("delete this date"));
       return;
     }
-    toast.success("This date has been deleted.");
+    toast.success("Date deleted.");
     router.push(calendarHref);
   };
 
   const handleDeleteAll = async () => {
     if (!(await deleteEvent(supabase, eventId, groupId))) {
-      toast.error("Failed to delete event.");
+      toast.error(failureMessage("delete the event"));
       return;
     }
     toast.success("Event deleted.");
     router.push(calendarHref);
   };
-
-  if (loadState === "loading") {
-    return (
-      <div className="container mx-auto px-4 py-12">
-        <p className="text-xl text-muted-foreground">Loading...</p>
-      </div>
-    );
-  }
-
-  if (loadState === "not-found" || !event) {
-    return (
-      <div className="container mx-auto px-4 py-12">
-        <p className="text-xl text-muted-foreground">
-          Event not found.{" "}
-          <Link href={calendarHref} className="text-brand-primary-text hover:underline">
-            Back to the calendar
-          </Link>
-        </p>
-      </div>
-    );
-  }
 
   const isRecurringSeries = !!event.recurrence_frequency && !event.series_id;
   const showScopeChoice = isRecurringSeries && !!occurrenceISO;
@@ -285,33 +254,35 @@ export function EditEventForm({
   const occurrenceLabel = occurrenceISO ? formatEventDate(occurrenceISO, timeZone) : null;
 
   return (
-    <div className="container mx-auto px-4 py-12 max-w-2xl">
+    <PageContainer size="reading">
       <GoogleMapsScript />
+      <PageHeader
+        title="Edit event"
+        subtitle={event.title}
+        backHref={detailHref}
+        backLabel={`Back to ${event.title}`}
+      />
       <Card>
-        <CardHeader>
-          <CardTitle className="text-3xl text-brand-primary-text">Edit Event</CardTitle>
-        </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
-
-            {/* Scope choice — only shown for recurring series occurrences */}
             {showScopeChoice && (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+              <div className="space-y-3 rounded-2xl border border-brand-accent/50 bg-brand-bg-light/40 p-4">
                 <div>
-                  <p className="text-sm font-semibold text-amber-800">Recurring event</p>
-                  <p className="text-sm text-amber-700">
-                    You are editing the <span className="font-medium">{occurrenceLabel}</span> occurrence.
-                    Choose whether to save changes for just this date or the whole series.
+                  <h2 className="font-sans text-lg font-semibold text-foreground">Repeating event</h2>
+                  <p className="text-base text-muted-foreground">
+                    You&apos;re editing the date <span className="font-medium text-foreground">{occurrenceLabel}</span>.
+                    Save your changes for this date only, or for every date.
                   </p>
                 </div>
+                <Label htmlFor="edit_scope" className="sr-only">Save changes for</Label>
                 <Select
                   items={SCOPE_ITEMS}
                   value={editScope}
                   onValueChange={(v) => setEditScope((v ?? "all") as EditScope)}
                 >
-                  <SelectTrigger className="w-full text-base py-5 bg-white">
+                  <SelectTrigger id="edit_scope" className="w-full bg-card text-base">
                     <SelectValue>
-                      {editScope === "this" ? "This event only" : "All events in series"}
+                      {editScope === "this" ? "This date only" : "Every date"}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
@@ -327,7 +298,7 @@ export function EditEventForm({
 
             <div className="space-y-2">
               <Label htmlFor="title" className="text-lg">Title</Label>
-              <Input id="title" name="title" required defaultValue={event.title} className="text-lg py-6" />
+              <Input id="title" name="title" required defaultValue={event.title} className="text-lg" />
             </div>
 
             <div className="space-y-2">
@@ -345,32 +316,17 @@ export function EditEventForm({
               />
             </div>
 
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="start_time" className="text-lg">Start Time</Label>
-                <Input
-                  id="start_time"
-                  name="start_time"
-                  type="datetime-local"
-                  required
-                  className="text-lg py-6"
-                  value={startTime}
-                  onChange={(e) => handleStartTimeChange(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="end_time" className="text-lg">End Time</Label>
-                <Input
-                  id="end_time"
-                  name="end_time"
-                  type="datetime-local"
-                  className="text-lg py-6"
-                  min={startTime || undefined}
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                />
-              </div>
-            </div>
+            <EventTimeFields
+              startTime={startTime}
+              endTime={endTime}
+              onStartTimeChange={handleStartTimeChange}
+              onEndTimeChange={(value) => {
+                setEndTime(value);
+                clearError("end_time");
+              }}
+              timeZone={timeZone}
+              endError={errors.end_time}
+            />
 
             <div className="flex items-center gap-3">
               <Switch
@@ -378,7 +334,7 @@ export function EditEventForm({
                 checked={isRsvpEnabled}
                 onCheckedChange={setIsRsvpEnabled}
               />
-              <Label htmlFor="is_rsvp_enabled" className="text-lg">RSVP enabled</Label>
+              <Label htmlFor="is_rsvp_enabled" className="text-lg">Ask for RSVPs</Label>
             </div>
 
             {/* Meeting lives on the series anchor — hidden when saving a single
@@ -386,7 +342,10 @@ export function EditEventForm({
             {!(showScopeChoice && editScope === "this") && (
               <MeetingFieldsSection
                 meetingUrl={meetingUrl}
-                onMeetingUrlChange={setMeetingUrl}
+                onMeetingUrlChange={(value) => {
+                  setMeetingUrl(value);
+                  clearError("meeting_url");
+                }}
                 meetingId={meetingId}
                 onMeetingIdChange={setMeetingId}
                 passcode={meetingPasscode}
@@ -396,35 +355,25 @@ export function EditEventForm({
                 leadMinutes={meetingLeadMinutes}
                 onLeadMinutesChange={setMeetingLeadMinutes}
                 isRecurring={isRecurringSeries}
+                errors={errors}
               />
             )}
 
-            <div className="flex gap-3">
-              <Button
-                type="submit"
-                size="lg"
-                className="flex-1 text-lg py-6"
-                disabled={loading}
-              >
-                {loading ? "Saving..." : "Save Changes"}
+            <div className="flex flex-col gap-3 border-t border-border pt-5 sm:flex-row">
+              <Button type="submit" size="lg" disabled={loading}>
+                {loading ? "Saving…" : "Save changes"}
               </Button>
-              <Button
-                type="button"
-                size="lg"
-                variant="outline"
-                className="text-lg py-6"
-                onClick={() => router.push(detailHref)}
-              >
+              <Button size="lg" variant="outline" nativeButton={false} render={<Link href={detailHref} />}>
                 Cancel
               </Button>
               <Button
                 type="button"
                 size="lg"
                 variant="destructive"
-                className="text-lg py-6"
+                className="sm:ml-auto"
                 onClick={() => setConfirmingDelete(true)}
               >
-                Delete
+                Delete event
               </Button>
             </div>
           </form>
@@ -438,6 +387,6 @@ export function EditEventForm({
         onDeleteDate={handleDeleteDate}
         onDeleteAll={handleDeleteAll}
       />
-    </div>
+    </PageContainer>
   );
 }

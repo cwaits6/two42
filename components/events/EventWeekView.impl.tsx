@@ -1,11 +1,11 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { DateTime } from "luxon";
 import { blockStyle } from "@/components/events/blockStyle";
+import { CalendarToolbar } from "@/components/events/CalendarToolbar";
 import type { CalendarGroup } from "@/components/events/EventsPageClient";
 import { eventDetailHref, expandVisibleEvents } from "@/components/events/visibleEvents";
 import {
@@ -36,6 +36,7 @@ interface EventWeekViewProps {
   visibleGroupIds: ReadonlySet<string>;
   /** The org's zone, resolved by the server; the grid's days and hours are its wall clock. */
   timeZone: string;
+  viewSwitch: ReactNode;
 }
 
 type Block = {
@@ -51,10 +52,7 @@ type TimedBlock = Block & { topMinutes: number; durationMinutes: number; lane: L
 
 type DayColumn = { date: DateTime; key: string; allDay: Block[]; timed: TimedBlock[] };
 
-const navButtonClass =
-  "flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition-colors hover:border-brand-primary/30 hover:text-brand-primary-text";
-
-export default function EventWeekView({ groups, events, visibleGroupIds, timeZone }: EventWeekViewProps) {
+export default function EventWeekView({ groups, events, visibleGroupIds, timeZone, viewSwitch }: EventWeekViewProps) {
   const firstDay = useMemo(() => localeWeekStart(navigator.language), []);
   const now = () => DateTime.now().setZone(timeZone);
   const [anchor, setAnchor] = useState<DateTime>(now);
@@ -96,26 +94,18 @@ export default function EventWeekView({ groups, events, visibleGroupIds, timeZon
   };
 
   return (
-    <div className="bg-white rounded-[2rem] border-2 border-border overflow-hidden p-2 shadow-sm md:p-5">
-      <div className="md:rounded-[1.5rem] md:border md:border-slate-100 md:bg-slate-50/70 md:p-5">
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => goTo(addDays(anchor, -7))} className={navButtonClass} aria-label="Previous week">
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-          <button type="button" onClick={() => goTo(addDays(anchor, 7))} className={navButtonClass} aria-label="Next week">
-            <ChevronRight className="h-5 w-5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => goTo(now())}
-            className="h-12 cursor-pointer rounded-full border border-slate-200 bg-white px-5 text-base font-semibold text-slate-600 transition-colors hover:border-brand-primary/30 hover:text-brand-primary-text"
-          >
-            Today
-          </button>
-          <h2 className="ml-auto font-display text-xl font-bold text-slate-800 md:text-2xl" aria-live="polite">
-            {weekTitle(days)}
-          </h2>
-        </div>
+    <div>
+      <CalendarToolbar
+        viewSwitch={viewSwitch}
+        nav={{
+          title: weekTitle(days),
+          unit: "week",
+          onPrev: () => goTo(addDays(anchor, -7)),
+          onNext: () => goTo(addDays(anchor, 7)),
+          onToday: () => goTo(now()),
+        }}
+      />
+      <div>
 
         <div className="md:hidden">
           <div
@@ -142,8 +132,8 @@ export default function EventWeekView({ groups, events, visibleGroupIds, timeZon
                     selected
                       ? "border-brand-primary bg-brand-primary text-white"
                       : isToday
-                        ? "border-brand-primary bg-white text-secondary-foreground"
-                        : "border-transparent bg-white text-slate-700 hover:border-slate-300"
+                        ? "border-brand-primary bg-card text-secondary-foreground"
+                        : "border-transparent bg-card text-foreground hover:border-border"
                   }`}
                 >
                   <span className="font-medium">{weekdayShort(column.date)}</span>
@@ -228,14 +218,14 @@ function WeekGrid({ columns, todayKey }: { columns: DayColumn[]; todayKey: strin
   const todayTint = (key: string) => (key === todayKey ? "bg-brand-bg-light/50" : "");
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div className="grid border-b border-slate-200" style={template}>
+    <div className="overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="grid border-b border-border" style={template}>
         <div aria-hidden="true" />
         {columns.map((column) => (
           <div
             key={column.key}
-            className={`flex flex-col items-center border-l border-slate-200 py-2 text-base leading-tight ${todayTint(column.key)} ${
-              column.key === todayKey ? "text-secondary-foreground" : "text-slate-700"
+            className={`flex flex-col items-center border-l border-border py-2 text-base leading-tight ${todayTint(column.key)} ${
+              column.key === todayKey ? "text-secondary-foreground" : "text-foreground"
             }`}
           >
             <span className="font-medium">{weekdayShort(column.date)}</span>
@@ -249,12 +239,12 @@ function WeekGrid({ columns, todayKey }: { columns: DayColumn[]; todayKey: strin
         ))}
       </div>
 
-      <div className="grid border-b border-slate-200" style={template}>
-        <div className="px-2 py-2 text-right font-mono text-base text-slate-500">All day</div>
+      <div className="grid border-b border-border" style={template}>
+        <div className="px-2 py-2 text-right font-mono text-base text-muted-foreground">All day</div>
         {columns.map((column) => (
           <div
             key={column.key}
-            className={`flex min-h-14 flex-col gap-1 border-l border-slate-200 p-1 ${todayTint(column.key)}`}
+            className={`flex min-h-14 flex-col gap-1 border-l border-border p-1 ${todayTint(column.key)}`}
           >
             {column.allDay.map((block) => (
               <Link
@@ -277,7 +267,7 @@ function WeekGrid({ columns, todayKey }: { columns: DayColumn[]; todayKey: strin
           {HOURS.map(({ hour, label }) => (
             <span
               key={hour}
-              className="absolute right-2 -translate-y-1/2 font-mono text-base text-slate-500"
+              className="absolute right-2 -translate-y-1/2 font-mono text-base text-muted-foreground"
               style={{ top: gridTop((hour - HOURS[0].hour) * 60) }}
             >
               {label}
@@ -287,14 +277,14 @@ function WeekGrid({ columns, todayKey }: { columns: DayColumn[]; todayKey: strin
         {columns.map((column) => (
           <div
             key={column.key}
-            className={`relative border-l border-slate-200 ${todayTint(column.key)}`}
+            className={`relative border-l border-border ${todayTint(column.key)}`}
             style={{ height: GRID_HEIGHT_PX }}
           >
             {HOURS.map(({ hour }) => (
               <div
                 key={hour}
                 aria-hidden="true"
-                className="absolute inset-x-0 border-t border-slate-200"
+                className="absolute inset-x-0 border-t border-border"
                 style={{ top: gridTop((hour - HOURS[0].hour) * 60) }}
               />
             ))}
@@ -304,7 +294,7 @@ function WeekGrid({ columns, todayKey }: { columns: DayColumn[]; todayKey: strin
                 href={block.href}
                 title={block.tooltip}
                 aria-label={block.tooltip}
-                className="absolute overflow-hidden rounded-lg border border-white/70 px-1.5 py-0.5 text-base leading-tight shadow-sm"
+                className="absolute overflow-hidden rounded-lg border border-card px-1.5 py-0.5 text-base leading-tight shadow-sm"
                 style={{
                   top: gridTop(block.topMinutes),
                   height: minutesToPx(block.durationMinutes),

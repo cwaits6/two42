@@ -14,7 +14,7 @@ import {
 let stub: RsvpClientStub;
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => stub.client }));
 
-const { RsvpButton } = await import("./RsvpButton");
+const { RsvpControl } = await import("./RsvpControl");
 const { RSVP_SAVE_FAILED } = await import("./useRsvp");
 
 const ids = { eventId: "event-1", userId: "user-1" };
@@ -28,10 +28,10 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-describe("RsvpButton when the write fails", () => {
+describe("RsvpControl when the write fails", () => {
   it("keeps the previous reply and tells the member", async () => {
     stub = stubRsvpClient(writeFailed);
-    const view = await mountControl(createElement(RsvpButton, { ...ids, currentStatus: "maybe" }));
+    const view = await mountControl(createElement(RsvpControl, { ...ids, currentStatus: "maybe" }));
     await view.click("Going");
     expect(view.pressed()).toEqual(["Maybe"]);
     expect(view.text()).toContain(RSVP_SAVE_FAILED);
@@ -39,7 +39,7 @@ describe("RsvpButton when the write fails", () => {
 
   it("treats a write that touched no row as a failure", async () => {
     stub = stubRsvpClient(writeTouchedNoRow);
-    const view = await mountControl(createElement(RsvpButton, { ...ids, currentStatus: "yes" }));
+    const view = await mountControl(createElement(RsvpControl, { ...ids, currentStatus: "yes" }));
     await view.click("Going");
     expect(stub.writes).toEqual([{ kind: "delete" }]);
     expect(view.pressed()).toEqual(["Going"]);
@@ -47,10 +47,10 @@ describe("RsvpButton when the write fails", () => {
   });
 });
 
-describe("RsvpButton when the write saves", () => {
+describe("RsvpControl when the write saves", () => {
   it("shows the new reply with no message", async () => {
     stub = stubRsvpClient(writeSaved);
-    const view = await mountControl(createElement(RsvpButton, { ...ids, currentStatus: null }));
+    const view = await mountControl(createElement(RsvpControl, { ...ids, currentStatus: null }));
     await view.click("Going");
     expect(stub.writes).toEqual([
       { kind: "upsert", row: { event_id: "event-1", user_id: "user-1", status: "yes" } },
@@ -61,7 +61,7 @@ describe("RsvpButton when the write saves", () => {
 
   it("clears the reply again when the current one is chosen", async () => {
     stub = stubRsvpClient(writeSaved);
-    const view = await mountControl(createElement(RsvpButton, { ...ids, currentStatus: "yes" }));
+    const view = await mountControl(createElement(RsvpControl, { ...ids, currentStatus: "yes" }));
     await view.click("Going");
     expect(stub.writes).toEqual([{ kind: "delete" }]);
     expect(view.pressed()).toEqual([]);
@@ -70,12 +70,31 @@ describe("RsvpButton when the write saves", () => {
   it("drops the message once a retry saves", async () => {
     let result = writeFailed;
     stub = stubRsvpClient(() => result());
-    const view = await mountControl(createElement(RsvpButton, { ...ids, currentStatus: null }));
+    const view = await mountControl(createElement(RsvpControl, { ...ids, currentStatus: null }));
     await view.click("Going");
     expect(view.text()).toContain(RSVP_SAVE_FAILED);
     result = writeSaved;
     await view.click("Going");
     expect(view.pressed()).toEqual(["Going"]);
     expect(view.text()).not.toContain(RSVP_SAVE_FAILED);
+  });
+});
+
+describe("RsvpControl", () => {
+  it.each(["default", "primary"] as const)("offers the same three replies on the %s tone", async (tone) => {
+    stub = stubRsvpClient(writeSaved);
+    const view = await mountControl(createElement(RsvpControl, { ...ids, currentStatus: null, tone }));
+    expect(view.labels()).toEqual(["Going", "Maybe", "Can't go"]);
+    await view.click("Can't go");
+    expect(stub.writes).toEqual([
+      { kind: "upsert", row: { event_id: "event-1", user_id: "user-1", status: "no" } },
+    ]);
+    expect(view.pressed()).toEqual(["Can't go"]);
+  });
+
+  it("marks the chosen reply with a check, not color alone", async () => {
+    stub = stubRsvpClient(writeSaved);
+    const view = await mountControl(createElement(RsvpControl, { ...ids, currentStatus: "maybe" }));
+    expect(view.checked()).toEqual(["Maybe"]);
   });
 });
