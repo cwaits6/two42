@@ -128,6 +128,33 @@ describe("GroupDashboard", () => {
     expect(text).toContain("Potluck sign-up");
   });
 
+  it("shows a failed RSVP read as an events error, not as no replies", async () => {
+    reads.rsvps = FAILED;
+
+    const tree = await render();
+    const text = texts(tree).join("");
+
+    expect(failedSections(tree)).toEqual(["upcoming events"]);
+    expect(text).not.toContain("No upcoming events.");
+    expect(text).toContain("Potluck sign-up");
+  });
+
+  it("lists a serving turn by team name with the date written out", async () => {
+    reads.serving_signups = {
+      data: [{ id: "s1", service_date: "2026-11-01", team_id: "t1", teams: { id: "t1", name: "Coffee team" } }],
+      error: null,
+    };
+
+    const tree = await render();
+    const text = texts(tree).join("");
+
+    expect(failedSections(tree)).toEqual([]);
+    expect(text).toContain("Your turn to serve");
+    expect(text).toContain("Coffee team");
+    expect(text).toContain("Sunday, November 1");
+    expect(text).not.toContain("2026-11-01");
+  });
+
   it("shows a failed serving read under its own heading", async () => {
     reads.serving_signups = FAILED;
 
