@@ -70,7 +70,7 @@ not covered here.
 | `directory-scope.spec.ts`            | Scope control absent for a one-group member; options, roster, tab carry-over, search       |
 | `directory-visibility-toggle.spec.ts`| The org-wide switch adds and removes "Everyone in …"; outsiders marked; left off in afterAll   |
 | `household-boundary.spec.ts`         | Only households sharing a group are listed; a deep link to another's opens nothing         |
-| `group-frame.spec.ts`                | Switcher lists own groups only; a foreign `/g/<id>/…` is a 404; content stays in its group |
+| `group-frame.spec.ts`                | Switcher lists own groups only; a foreign `/g/<id>/…` is a 404, while Admin › Groups opens that group's page for the church admin with its leader and members; content stays in its group |
 | `anonymous.spec.ts`                  | `/directory` and `/g/<id>/directory` redirect to `/login`                                  |
 | `group-creation-policy.spec.ts`      | The org's create policy decides whether a member sees "Request a group", "Create a group" or neither; restored to approval in afterAll |
 | `group-discovery.spec.ts`            | A private group is listed for its members and tagged for the org admin but absent for everyone else, and its deep link stays a 404; the org switch removes Find a group and every other group; both restored in afterAll |
