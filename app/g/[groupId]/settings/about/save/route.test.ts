@@ -153,12 +153,18 @@ describe("POST settings/about/save", () => {
     expect(writes.map((w) => [w.op, w.rows])).toEqual([["update", { sort_order: 1 }]]);
   });
 
-  it("writes an edit to that entry's title and bio alone", async () => {
+  it("writes an edit to the columns it names, so a title edit keeps a bio another leader wrote", async () => {
     const res = await save({
-      leaders: { added: [], edited: [{ ...entry(LISTED), title: "Host" }], removed: [] },
+      leaders: { added: [], edited: [{ profile_id: LISTED, title: "Host" }], removed: [] },
     });
     expect(res.status).toBe(200);
-    expect(writes.map((w) => [w.op, w.rows])).toEqual([["update", { title: "Host", bio: "" }]]);
+    expect(writes.map((w) => [w.op, w.rows])).toEqual([["update", { title: "Host" }]]);
+  });
+
+  it("writes a cleared field as blank when the edit names it", async () => {
+    const res = await save({ leaders: { added: [], edited: [{ profile_id: LISTED, bio: "" }], removed: [] } });
+    expect(res.status).toBe(200);
+    expect(writes.map((w) => [w.op, w.rows])).toEqual([["update", { bio: "" }]]);
   });
 
   it("refuses an edit to an entry another leader removed, and applies nothing else from that Save", async () => {
@@ -177,13 +183,21 @@ describe("POST settings/about/save", () => {
     expect(res.status).toBe(200);
   });
 
-  it("treats someone another leader just added as an edit, so a retry is safe", async () => {
+  it("does not blank what another leader wrote when someone they just listed is added with empty fields", async () => {
+    const res = await save({
+      leaders: { added: [entry(LISTED)], edited: [], removed: [], order: [LISTED] },
+    });
+    expect(res.status).toBe(200);
+    expect(writes.map((w) => [w.op, w.rows])).toEqual([["update", { sort_order: 0 }]]);
+  });
+
+  it("writes only the filled fields of someone already listed, so a retry is safe", async () => {
     const res = await save({
       leaders: { added: [{ ...entry(LISTED), title: "Host" }], edited: [], removed: [], order: [LISTED] },
     });
     expect(res.status).toBe(200);
     expect(writes.map((w) => [w.op, w.rows])).toEqual([
-      ["update", { title: "Host", bio: "" }],
+      ["update", { title: "Host" }],
       ["update", { sort_order: 0 }],
     ]);
   });

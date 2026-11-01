@@ -43,10 +43,15 @@ describe("aboutChanges", () => {
     });
   });
 
-  it("sends an edit as that one entry, leaving the order alone", () => {
-    const edited = { ...leaderB, bio: "Hello" };
-    expect(aboutChanges(saved, { ...saved, leaders: [leaderA, edited] }, null)).toEqual({
-      leaders: { added: [], edited: [edited], removed: [] },
+  it("sends an edit as that entry's changed fields alone, leaving the order alone", () => {
+    expect(aboutChanges(saved, { ...saved, leaders: [leaderA, { ...leaderB, bio: "Hello" }] }, null)).toEqual({
+      leaders: { added: [], edited: [{ profile_id: B, bio: "Hello" }], removed: [] },
+    });
+  });
+
+  it("sends a cleared field as blank", () => {
+    expect(aboutChanges(saved, { ...saved, leaders: [{ ...leaderA, title: "" }, leaderB] }, null)).toEqual({
+      leaders: { added: [], edited: [{ profile_id: A, title: "" }], removed: [] },
     });
   });
 
@@ -100,6 +105,13 @@ describe("parseAboutChanges", () => {
     expect(parsed?.leaders?.edited).toEqual([{ profile_id: A, title: "", bio: "" }]);
   });
 
+  it("keeps an edit to the fields it names", () => {
+    const parsed = parseAboutChanges({
+      leaders: { added: [], edited: [{ profile_id: A, bio: " Hello " }], removed: [] },
+    });
+    expect(parsed?.leaders?.edited).toEqual([{ profile_id: A, bio: "Hello" }]);
+  });
+
   it.each([
     ["a non-object body", []],
     ["a summary that is not text", { summary: 1 }],
@@ -110,6 +122,8 @@ describe("parseAboutChanges", () => {
     ["a malformed removed id", { leaders: { added: [], edited: [], removed: ["x"] } }],
     ["a malformed order id", { leaders: { added: [], edited: [], removed: [], order: ["x"] } }],
     ["an order naming someone twice", { leaders: { added: [], edited: [], removed: [], order: [A, A] } }],
+    ["an edit whose title is not text", { leaders: { added: [], edited: [{ profile_id: A, title: 1 }], removed: [] } }],
+    ["someone added without a bio", { leaders: { added: [{ profile_id: A, title: "" }], edited: [], removed: [], order: [A] } }],
     ["a leader edited twice", { leaders: { added: [], edited: [leaderA, leaderA], removed: [] } }],
     ["a leader both added and edited", { leaders: { added: [leaderA], edited: [leaderA], removed: [], order: [A] } }],
     ["a leader both edited and removed", { leaders: { added: [], edited: [leaderA], removed: [A] } }],

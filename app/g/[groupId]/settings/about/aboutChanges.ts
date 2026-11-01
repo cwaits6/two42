@@ -3,6 +3,9 @@ import { validateGroupColor } from "@/lib/groups/settings";
 
 export type LeaderEntry = { profile_id: string; title: string; bio: string };
 
+/** A field left out stays as saved; a blank one is cleared. */
+export type LeaderEdit = { profile_id: string; title?: string; bio?: string };
+
 /**
  * Only what this leader changed, so a Save never undoes another leader's edit
  * or removal. `added` and `edited` stay apart so that editing an entry someone
@@ -11,7 +14,7 @@ export type LeaderEntry = { profile_id: string; title: string; bio: string };
  */
 export type LeaderChanges = {
   added: LeaderEntry[];
-  edited: LeaderEntry[];
+  edited: LeaderEdit[];
   removed: string[];
   order?: string[];
 };
@@ -72,9 +75,16 @@ function leaderChanges(saved: LeaderEntry[], draft: LeaderEntry[]): LeaderChange
   const keptIds = saved.map((l) => l.profile_id).filter((id) => kept.has(id));
   const changes: LeaderChanges = {
     added: draft.filter((l) => !before.has(l.profile_id)),
-    edited: draft.filter((l) => {
+    edited: draft.flatMap((l) => {
       const was = before.get(l.profile_id);
-      return was !== undefined && (was.title !== l.title || was.bio !== l.bio);
+      if (!was || (was.title === l.title && was.bio === l.bio)) return [];
+      return [
+        {
+          profile_id: l.profile_id,
+          ...(was.title !== l.title && { title: l.title }),
+          ...(was.bio !== l.bio && { bio: l.bio }),
+        },
+      ];
     }),
     removed: saved.map((l) => l.profile_id).filter((id) => !kept.has(id)),
   };
@@ -110,17 +120,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseEntries(raw: unknown): LeaderEntry[] | null {
+function parseEdits(raw: unknown): LeaderEdit[] | null {
   if (!Array.isArray(raw)) return null;
-  const entries: LeaderEntry[] = [];
+  const edits: LeaderEdit[] = [];
   for (const entry of raw) {
     if (!isRecord(entry)) return null;
     const { profile_id, title, bio } = entry;
     if (typeof profile_id !== "string" || !isUuid(profile_id)) return null;
-    if (typeof title !== "string" || typeof bio !== "string") return null;
-    entries.push({ profile_id, title: title.trim(), bio: bio.trim() });
+    if (title !== undefined && typeof title !== "string") return null;
+    if (bio !== undefined && typeof bio !== "string") return null;
+    edits.push({
+      profile_id,
+      ...(title !== undefined && { title: title.trim() }),
+      ...(bio !== undefined && { bio: bio.trim() }),
+    });
   }
-  return entries;
+  return edits;
+}
+
+function isEntry(edit: LeaderEdit): edit is LeaderEntry {
+  return edit.title !== undefined && edit.bio !== undefined;
 }
 
 function parseIds(raw: unknown): string[] | null {
@@ -130,10 +149,10 @@ function parseIds(raw: unknown): string[] | null {
 
 function parseLeaders(raw: unknown): LeaderChanges | null {
   if (!isRecord(raw)) return null;
-  const added = parseEntries(raw.added);
-  const edited = parseEntries(raw.edited);
+  const added = parseEdits(raw.added);
+  const edited = parseEdits(raw.edited);
   const removed = parseIds(raw.removed);
-  if (!added || !edited || !removed) return null;
+  if (!added?.every(isEntry) || !edited || !removed) return null;
 
   const named = [...added.map((l) => l.profile_id), ...edited.map((l) => l.profile_id), ...removed];
   if (new Set(named).size !== named.length) return null;

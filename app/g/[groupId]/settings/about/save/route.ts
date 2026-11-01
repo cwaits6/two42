@@ -5,7 +5,7 @@ import { getGroupMemberships } from "@/lib/groups/server";
 import { STORED_MEMBER_ROLES } from "@/lib/roles";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { createClient } from "@/lib/supabase/server";
-import { parseAboutChanges, type LeaderChanges } from "../aboutChanges";
+import { parseAboutChanges, type LeaderChanges, type LeaderEdit, type LeaderEntry } from "../aboutChanges";
 
 type RequestClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -47,11 +47,17 @@ async function allAreMembers(
   return (data ?? []).length === profileIds.length;
 }
 
+/** A blank field on an addition means "nothing entered", not "clear what is saved". */
+function filledFields({ profile_id, title, bio }: LeaderEntry): LeaderEdit {
+  return { profile_id, ...(title && { title }), ...(bio && { bio }) };
+}
+
 /**
  * Touches only the rows and columns this leader changed. An `order` entry
  * another leader has since removed is skipped rather than written back. Someone
- * another leader has since added counts as an edit, so a retry after a partial
- * failure is safe too. Returns the failure response, or null when it all landed.
+ * already listed, because another leader added them or a partial failure is
+ * being retried, keeps any field this addition left blank. Returns the failure
+ * response, or null when it all landed.
  */
 async function writeLeaders(
   supabase: RequestClient,
@@ -86,7 +92,7 @@ async function writeLeaders(
     if (error) return failed("leadership addition", error);
   }
 
-  const update = (profileId: string, fields: { title: string; bio: string } | { sort_order: number }) =>
+  const update = (profileId: string, fields: Omit<LeaderEdit, "profile_id"> | { sort_order: number }) =>
     supabase
       .from("class_teachers")
       .update(fields)
@@ -95,8 +101,8 @@ async function writeLeaders(
       .eq("profile_id", profileId)
       .select("id");
   const results = await Promise.all([
-    ...[...edited, ...added.filter((l) => listed.has(l.profile_id))].map((l) =>
-      update(l.profile_id, { title: l.title, bio: l.bio }),
+    ...[...edited, ...added.filter((l) => listed.has(l.profile_id)).map(filledFields)].flatMap(
+      ({ profile_id, ...fields }) => (Object.keys(fields).length > 0 ? [update(profile_id, fields)] : []),
     ),
     ...(order ?? []).flatMap((id, index) => (listed.has(id) ? [update(id, { sort_order: index })] : [])),
   ]);
