@@ -98,11 +98,15 @@ export const INVITE_INVALID_TITLE = "This link isn't valid anymore";
 export const INVITE_INVALID_HELP = "Ask a leader of the group for a new one.";
 export const INVITE_INVALID_TEXT = `${INVITE_INVALID_TITLE}. ${INVITE_INVALID_HELP}`;
 
-export const INVITE_OTHER_ORG_TEXT = "This invite link is for a different account.";
+/** Household invites and signup links come from a church admin. */
+export const CHURCH_ADMIN_INVALID_HELP = "Ask a church admin for a new one.";
+export const HOUSEHOLD_INVITE_INVALID_TEXT = `${INVITE_INVALID_TITLE}. ${CHURCH_ADMIN_INVALID_HELP}`;
+
+export const INVITE_OTHER_ACCOUNT_TEXT = "This invite link is for a different account.";
 
 const JOIN_ERROR_MESSAGES: Record<string, string> = {
   GI001: INVITE_INVALID_TEXT,
-  GI006: INVITE_OTHER_ORG_TEXT,
+  GI006: INVITE_OTHER_ACCOUNT_TEXT,
 };
 
 /** Member-facing copy for a group_invite_join() error code. */

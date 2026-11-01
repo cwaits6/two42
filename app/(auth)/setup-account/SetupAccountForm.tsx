@@ -12,6 +12,7 @@ import { ErrorState } from "@/components/states/ErrorState";
 import { AuthShell } from "../_components/AuthShell";
 import { AuthFormLoading } from "../_components/AuthFormLoading";
 import { InvalidLink } from "../_components/InvalidLink";
+import { CHURCH_ADMIN_INVALID_HELP } from "@/lib/groups/invites";
 import { NewPasswordFields } from "../_components/NewPasswordFields";
 import {
   PASSWORD_AUTH_ERRORS,
@@ -58,17 +59,11 @@ export function SetupAccountForm() {
         return;
       }
 
-      let res: Response;
-      try {
-        res = await fetch("/api/auth/verify-token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token }),
-        });
-      } catch {
-        setView({ kind: "failed" });
-        return;
-      }
+      const res = await fetch("/api/auth/verify-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
 
       if (!res.ok) {
         // A link that has been used set up an account; if that account is
@@ -90,7 +85,10 @@ export function SetupAccountForm() {
         link: { name: data.name, email: data.email, invite_token: data.invite_token ?? null },
       });
     }
-    verifyToken();
+    verifyToken().catch((err) => {
+      console.error(err);
+      setView({ kind: "failed" });
+    });
   }, [token, supabase, router, attempt]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -181,7 +179,7 @@ export function SetupAccountForm() {
   }
 
   if (view.kind === "invalid") {
-    return <InvalidLink help="Ask a church admin for a new one." />;
+    return <InvalidLink help={CHURCH_ADMIN_INVALID_HELP} />;
   }
 
   return (

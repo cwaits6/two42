@@ -1,8 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { INVITE_INVALID_TITLE } from "@/lib/groups/invites";
-import { HOUSEHOLD_INVITE_INVALID_HELP } from "./copy";
+import { CHURCH_ADMIN_INVALID_HELP, INVITE_INVALID_TITLE } from "@/lib/groups/invites";
 
 const lookup = vi.fn();
 const createServiceClient = vi.fn(async () => ({
@@ -43,7 +42,7 @@ describe("FamilyJoinPage", () => {
     const html = await render("not-a-link");
 
     expect(html).toContain(INVITE_INVALID_TITLE);
-    expect(html).toContain(HOUSEHOLD_INVITE_INVALID_HELP);
+    expect(html).toContain(CHURCH_ADMIN_INVALID_HELP);
     expect(html).toContain('href="/login"');
     expect(html).not.toContain("Couldn't load");
     expect(createServiceClient).not.toHaveBeenCalled();

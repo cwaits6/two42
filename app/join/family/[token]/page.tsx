@@ -4,7 +4,7 @@ import { ErrorState } from "@/components/states/ErrorState";
 import { isUuid } from "@/lib/groups/active";
 import { pageTitle } from "@/lib/pageTitle";
 import { createServiceClient } from "@/lib/supabase/server";
-import { HOUSEHOLD_INVITE_INVALID_HELP } from "./copy";
+import { CHURCH_ADMIN_INVALID_HELP } from "@/lib/groups/invites";
 import { FamilyRequestForm } from "./FamilyRequestForm";
 
 interface PageProps {
@@ -21,7 +21,7 @@ export default async function FamilyJoinPage({ params }: PageProps) {
 
   // The column is a uuid, so anything else would fail the lookup as a
   // database error rather than find no row.
-  if (!isUuid(token)) return <InvalidLink eyebrow={EYEBROW} help={HOUSEHOLD_INVITE_INVALID_HELP} />;
+  if (!isUuid(token)) return <InvalidLink eyebrow={EYEBROW} help={CHURCH_ADMIN_INVALID_HELP} />;
 
   // Public page — uses service client to bypass RLS for token validation
   const supabase = await createServiceClient();
@@ -64,7 +64,7 @@ export default async function FamilyJoinPage({ params }: PageProps) {
 
   // An accepted invite is as dead as a missing one; the request route
   // refuses both alike.
-  if (!invite || invite.accepted_at) return <InvalidLink eyebrow={EYEBROW} help={HOUSEHOLD_INVITE_INVALID_HELP} />;
+  if (!invite || invite.accepted_at) return <InvalidLink eyebrow={EYEBROW} help={CHURCH_ADMIN_INVALID_HELP} />;
 
   const familyMember = invite.family_members as unknown as {
     first_name: string;

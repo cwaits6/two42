@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { failureMessage } from "@/lib/errorCopy";
 import { useFieldFocus } from "@/app/(auth)/_components/useFieldFocus";
-import { HOUSEHOLD_INVITE_INVALID_TEXT } from "./copy";
+import { HOUSEHOLD_INVITE_INVALID_TEXT } from "@/lib/groups/invites";
 
 interface FamilyRequestFormProps {
   token: string;

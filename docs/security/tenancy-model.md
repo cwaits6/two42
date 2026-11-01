@@ -860,7 +860,7 @@ table's own FK.
   `supabase/tests/org_email_quota_suite.sql`; the inventory records the
   call sites ([service-role-inventory.md](service-role-inventory.md)).
 - An authenticated member of org A who opens org B's group invite link is
-  told the invite is for a different organization and offered Sign out:
+  told the link is for a different account and offered Sign out:
   `group_invite_join()` compares the caller's own org to the invite row's
   and answers `GI001` on a mismatch, the same as a dead link, so nothing
   about org B is confirmed. Session cookies stay host-scoped (no `Domain=`
