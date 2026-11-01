@@ -30,31 +30,59 @@ export function uniqueByEmail<T extends { email: string }>(rows: T[]): T[] {
   });
 }
 
-// Minimal CSV parser (no external dependency)
-export function parseCSV(text: string): string[][] {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  return lines.map((line) => {
-    const cells: string[] = [];
-    let current = "";
-    let inQuotes = false;
+// The name column falls back to the first column, which can be the email column.
+export function importCandidates(
+  dataRows: string[][],
+  nameIdx: number,
+  emailIdx: number
+): { name: string; email: string }[] {
+  return uniqueByEmail(
+    dataRows
+      .map((row) => ({
+        name: nameIdx === emailIdx ? "" : (row[nameIdx] || "").trim(),
+        email: (row[emailIdx] || "").trim().toLowerCase(),
+      }))
+      .filter((r) => r.email && r.email.includes("@"))
+  );
+}
 
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        if (inQuotes && line[i + 1] === '"') {
-          current += '"';
-          i++;
-        } else {
-          inQuotes = !inQuotes;
-        }
-      } else if (ch === "," && !inQuotes) {
-        cells.push(current.trim());
-        current = "";
-      } else {
+// Minimal CSV parser (no external dependency). A quote only opens at the start
+// of a cell, so a stray one inside a cell can't swallow the rows after it.
+export function parseCSV(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch !== '"') {
         current += ch;
+      } else if (text[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = false;
       }
+    } else if (ch === '"' && current.trim() === "") {
+      inQuotes = true;
+    } else if (ch === ",") {
+      row.push(current.trim());
+      current = "";
+    } else if (ch === "\n" || (ch === "\r" && text[i + 1] !== "\n")) {
+      row.push(current.trim());
+      rows.push(row);
+      row = [];
+      current = "";
+    } else if (ch !== "\r") {
+      current += ch;
     }
-    cells.push(current.trim());
-    return cells;
-  });
+  }
+  if (current.length > 0 || row.length > 0) {
+    row.push(current.trim());
+    rows.push(row);
+  }
+
+  return rows.filter((r) => r.length > 1 || r[0] !== "");
 }

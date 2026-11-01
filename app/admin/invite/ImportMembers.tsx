@@ -11,7 +11,7 @@ import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
 import { Upload, Mail, AlertCircle, CheckCircle2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { detectEmailColumn, detectNameColumn, parseCSV, uniqueByEmail } from "./csv";
+import { detectEmailColumn, detectNameColumn, importCandidates, parseCSV } from "./csv";
 
 interface ParsedRow {
   name: string;
@@ -72,14 +72,7 @@ export function ImportMembers() {
     const dataRows = parsed.slice(1);
 
     // Extract name + email pairs
-    const candidates = uniqueByEmail(
-      dataRows
-        .map((row) => ({
-          name: (row[nameIdx] || "").trim(),
-          email: (row[emailIdx] || "").trim().toLowerCase(),
-        }))
-        .filter((r) => r.email && r.email.includes("@"))
-    );
+    const candidates = importCandidates(dataRows, nameIdx, emailIdx);
 
     if (candidates.length === 0) {
       setDetectionError(
