@@ -12,6 +12,8 @@ import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { groupPageTitle } from "@/lib/pageTitle";
+import { todayIn } from "@/lib/serving/dates";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
 
 export const generateMetadata = groupPageTitle("Add fund");
 
@@ -38,7 +40,10 @@ export default async function NewFundPage({
   const stewardsCanManage = await givingStewardsCanManage(supabase, profile.org_id);
   if (!isLeader && !stewardsCanManage) redirect(giveHref);
 
-  const { members, failed } = await loadFundFormData(supabase, profile.org_id);
+  const [{ members, failed }, timeZone] = await Promise.all([
+    loadFundFormData(supabase, profile.org_id),
+    getOrgTimeZone(),
+  ]);
 
   return (
     <PageContainer>
@@ -54,6 +59,7 @@ export default async function NewFundPage({
           groupId={group.id}
           groupName={group.name}
           backHref={giveHref}
+          today={todayIn(timeZone)}
         />
       )}
     </PageContainer>

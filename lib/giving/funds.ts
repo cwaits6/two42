@@ -36,6 +36,15 @@ export function fundStatus(
   return { text: "Live", live: true };
 }
 
+/** Reopening drops a last day that has passed, or the fund would stay retired. */
+export function reopenedFund(
+  retireOn: string | null,
+  today: string
+): { is_active: true; retire_on: string | null } {
+  const keepsDate = fundStatus({ is_active: true, retire_on: retireOn }, today).live;
+  return { is_active: true, retire_on: keepsDate ? retireOn : null };
+}
+
 export const FUND_NAME_FIELD = "fund-name";
 
 export function methodAccountField(key: PaymentMethodKey): string {

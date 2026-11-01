@@ -28,9 +28,11 @@ import {
   METHODS_FIELD,
   fundFieldErrors,
   fundRecipientLine,
+  fundStatus,
   fundThroughTag,
   methodAccountField,
   methodToggleField,
+  reopenedFund,
   type FundMethodInput,
 } from "@/lib/giving/funds";
 import { groupPath } from "@/lib/groups/active";
@@ -61,6 +63,8 @@ interface FundFormProps {
   groupId: string;
   groupName: string;
   backHref: string;
+  /** "YYYY-MM-DD" in the church's time zone */
+  today: string;
 }
 
 const NONE = "none";
@@ -76,6 +80,7 @@ export function FundForm({
   groupId,
   groupName,
   backHref,
+  today,
 }: FundFormProps) {
   const router = useRouter();
   const supabase = createClient();
@@ -227,11 +232,12 @@ export function FundForm({
             .in("method", pruned)
         : { error: null };
 
-    setSaving(false);
+    // Once a new fund exists, saving stays on until navigation unmounts the
+    // form: another save from the add form would insert a second fund.
     if (upsertError || delError) {
       toast.error("Fund saved, but couldn't save its payment methods. Try again.");
-      // The fund exists from here on: saving again from the add form would add a second one.
-      if (!fund) router.replace(groupPath(groupId, `/give/${fundId}/edit`));
+      if (fund) setSaving(false);
+      else router.replace(groupPath(groupId, `/give/${fundId}/edit`));
       return;
     }
     toast.success(fund ? "Fund updated." : "Fund added.");
@@ -239,19 +245,22 @@ export function FundForm({
     router.refresh();
   }
 
-  async function setActive(active: boolean) {
+  async function setLive(live: boolean) {
     if (!fund) return;
     const { data, error } = await supabase
       .from("giving_funds")
-      .update({ is_active: active, updated_at: new Date().toISOString() })
+      .update({
+        ...(live ? reopenedFund(fund.retire_on, today) : { is_active: false }),
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", fund.id)
       .eq("group_id", groupId)
       .select("id");
     if (error || !data?.length) {
-      toast.error(failureMessage(active ? "reopen the fund" : "retire the fund"));
+      toast.error(failureMessage(live ? "reopen the fund" : "retire the fund"));
       return;
     }
-    toast.success(active ? "Fund reopened." : "Fund retired.");
+    toast.success(live ? "Fund reopened." : "Fund retired.");
     router.push(backHref);
     router.refresh();
   }
@@ -274,6 +283,7 @@ export function FundForm({
   }
 
   const previewTag = fundThroughTag(retireOn || null);
+  const isLive = fund ? fundStatus(fund, today).live : false;
 
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_340px] lg:items-start">
@@ -484,8 +494,8 @@ export function FundForm({
 
         {fund && (
           <div className="flex flex-wrap gap-3">
-            <Button variant="outline" onClick={() => setActive(!fund.is_active)}>
-              {fund.is_active ? "Retire fund" : "Reopen fund"}
+            <Button variant="outline" onClick={() => setLive(!isLive)}>
+              {isLive ? "Retire fund" : "Reopen fund"}
             </Button>
             <Button
               variant="ghost"
@@ -534,9 +544,11 @@ export function FundForm({
                   </span>
                 )}
               </div>
-              <p className="text-base text-muted-foreground">
-                {fundRecipientLine(stewardNames, stewardRole.trim() || null)}
-              </p>
+              {stewardNames && (
+                <p className="text-base text-muted-foreground">
+                  {fundRecipientLine(stewardNames, stewardRole.trim() || null)}
+                </p>
+              )}
             </div>
           </div>
           {description.trim() && (

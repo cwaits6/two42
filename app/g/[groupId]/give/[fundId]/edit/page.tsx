@@ -14,6 +14,8 @@ import type { GivingFund, GivingFundMethod } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { groupPageTitle } from "@/lib/pageTitle";
 import { readList } from "@/lib/supabase/readList";
+import { todayIn } from "@/lib/serving/dates";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
 
 export const generateMetadata = groupPageTitle("Edit fund");
 
@@ -37,7 +39,7 @@ export default async function EditFundPage({
   if (!profile || profile.role === "pending") redirect("/dashboard");
   const isLeader = group.role === "leader";
 
-  const [{ data: fund, error: fundError }, methods, stewardsCanManage] =
+  const [{ data: fund, error: fundError }, methods, stewardsCanManage, timeZone] =
     await Promise.all([
       supabase
         .from("giving_funds")
@@ -52,6 +54,7 @@ export default async function EditFundPage({
         .eq("group_id", group.id)
         .then((read) => readList<GivingFundMethod>(read, "fund payment methods")),
       givingStewardsCanManage(supabase, profile.org_id),
+      getOrgTimeZone(),
     ]);
 
   if (fundError) {
@@ -86,6 +89,7 @@ export default async function EditFundPage({
           groupId={group.id}
           groupName={group.name}
           backHref={backHref}
+          today={todayIn(timeZone)}
         />
       )}
     </PageContainer>

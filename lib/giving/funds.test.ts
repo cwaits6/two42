@@ -8,6 +8,7 @@ import {
   fundStatus,
   fundThroughTag,
   methodAccountField,
+  reopenedFund,
   type FundMethodInput,
 } from "@/lib/giving/funds";
 
@@ -62,6 +63,22 @@ describe("fundStatus", () => {
       text: "Retired",
       live: false,
     });
+  });
+});
+
+describe("reopenedFund", () => {
+  const today = "2026-11-01";
+
+  it("drops a last day that has passed, so the fund reads live afterward", () => {
+    const reopened = reopenedFund("2026-10-31", today);
+    expect(reopened).toEqual({ is_active: true, retire_on: null });
+    expect(fundStatus(reopened, today).live).toBe(true);
+  });
+
+  it("keeps a last day still to come, including one that is today", () => {
+    expect(reopenedFund("2027-01-01", today).retire_on).toBe("2027-01-01");
+    expect(reopenedFund(today, today).retire_on).toBe(today);
+    expect(reopenedFund(null, today).retire_on).toBeNull();
   });
 });
 
