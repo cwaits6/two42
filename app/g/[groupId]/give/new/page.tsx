@@ -1,6 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { FundForm } from "@/components/giving/FundForm";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { ErrorState } from "@/components/states/ErrorState";
 import {
   givingStewardsCanManage,
   loadFundFormData,
@@ -9,6 +12,8 @@ import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { groupPageTitle } from "@/lib/pageTitle";
+import { todayIn } from "@/lib/serving/dates";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
 
 export const generateMetadata = groupPageTitle("Add fund");
 
@@ -35,22 +40,28 @@ export default async function NewFundPage({
   const stewardsCanManage = await givingStewardsCanManage(supabase, profile.org_id);
   if (!isLeader && !stewardsCanManage) redirect(giveHref);
 
-  const { members } = await loadFundFormData(supabase, profile.org_id);
+  const [{ members, failed }, timeZone] = await Promise.all([
+    loadFundFormData(supabase, profile.org_id),
+    getOrgTimeZone(),
+  ]);
 
   return (
-    <div className="container mx-auto px-4 py-12 max-w-5xl">
-      <h1 className="text-3xl md:text-4xl font-bold text-brand-primary-text mb-10">
-        New Fund
-      </h1>
-      <FundForm
-        fund={null}
-        members={members}
-        currentUserId={user.id}
-        isLeader={isLeader}
-        groupId={group.id}
-        groupName={group.name}
-        backHref={giveHref}
-      />
-    </div>
+    <PageContainer>
+      <PageHeader title="Add fund" backHref={giveHref} backLabel="Back to Give" />
+      {failed ? (
+        <ErrorState thing="the fund form" />
+      ) : (
+        <FundForm
+          fund={null}
+          members={members}
+          currentUserId={user.id}
+          isLeader={isLeader}
+          groupId={group.id}
+          groupName={group.name}
+          backHref={giveHref}
+          today={todayIn(timeZone)}
+        />
+      )}
+    </PageContainer>
   );
 }

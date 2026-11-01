@@ -1,19 +1,25 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { HandCoins, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyState } from "@/components/states/EmptyState";
+import { ErrorState } from "@/components/states/ErrorState";
 import { displayName, initials } from "@/lib/names";
+import { fundThroughTag } from "@/lib/giving/funds";
 import { resolveFundMethods } from "@/lib/giving/methods";
-import { signStewardAvatars } from "@/lib/giving/server";
+import { givingStewardsCanManage, signStewardAvatars } from "@/lib/giving/server";
 import { GiveList, type FundView } from "@/components/giving/GiveList";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 import type { GivingFund, GivingFundMethod } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { groupPageTitle } from "@/lib/pageTitle";
+import { todayIn } from "@/lib/serving/dates";
+import { readList } from "@/lib/supabase/readList";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
 
 export const generateMetadata = groupPageTitle("Give");
 
@@ -29,16 +35,6 @@ type FundWithStewards = GivingFund & {
   steward: StewardInfo | null;
   co_steward: StewardInfo | null;
 };
-
-function retireTag(retireOn: string | null): string | null {
-  if (!retireOn) return null;
-  const date = new Date(retireOn + "T00:00:00Z");
-  return `Through ${date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  })}`;
-}
 
 function stewardPerson(p: StewardInfo) {
   return { name: displayName(p), initials: initials(p), avatarUrl: p.avatar_url };
@@ -56,11 +52,17 @@ export default async function GivePage({
   const user = await getOptionalUser();
   if (!user) redirect("/login");
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, org_id")
+    .eq("id", user.id)
+    .single();
+  if (!profile || profile.role === "pending") redirect("/dashboard");
   const isLeader = group.role === "leader";
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIn(await getOrgTimeZone());
 
-  const [{ data: fundRows }, { data: modeRow }] = await Promise.all([
+  const [fundRows, stewardsCanManage] = await Promise.all([
     supabase
       .from("giving_funds")
       .select(
@@ -72,40 +74,37 @@ export default async function GivePage({
       .eq("is_active", true)
       .or(`retire_on.is.null,retire_on.gte.${today}`)
       .order("display_order")
-      .order("created_at"),
-    supabase
-      .from("site_settings")
-      .select("value")
-      .eq("key", "giving_manage_mode")
-      .maybeSingle(),
+      .order("created_at")
+      .then((read) => readList<FundWithStewards>(read, "funds")),
+    givingStewardsCanManage(supabase, profile.org_id),
   ]);
 
-  const rawFunds = (fundRows ?? []) as FundWithStewards[];
   // Private buckets: exchange steward avatar URLs for signed URLs
   // before they reach GiveList's renders.
-  const funds = await signStewardAvatars(rawFunds);
-  const stewardsCanManage = (modeRow?.value ?? "stewards") === "stewards";
+  const funds = await signStewardAvatars(fundRows ?? []);
   const canCreate = isLeader || stewardsCanManage;
 
-  let methods: GivingFundMethod[] = [];
-  if (funds.length > 0) {
-    const { data: methodRows } = await supabase
-      .from("giving_fund_methods")
-      .select("*")
-      .eq("group_id", group.id)
-      .in(
-        "fund_id",
-        funds.map((f) => f.id)
-      );
-    methods = (methodRows ?? []) as GivingFundMethod[];
-  }
+  const methods =
+    funds.length > 0
+      ? readList<GivingFundMethod>(
+          await supabase
+            .from("giving_fund_methods")
+            .select("*")
+            .eq("group_id", group.id)
+            .in(
+              "fund_id",
+              funds.map((f) => f.id)
+            ),
+          "fund payment methods"
+        )
+      : [];
 
   const views: FundView[] = funds.flatMap((fund) => {
     if (!fund.steward) return [];
     const canManage =
       isLeader || (stewardsCanManage && fund.steward_id === user.id);
     const resolved = resolveFundMethods(
-      methods.filter((m) => m.fund_id === fund.id)
+      (methods ?? []).filter((m) => m.fund_id === fund.id)
     );
     // A fund nobody can pay yet is only useful to whoever can fix it
     if (resolved.length === 0 && !canManage) return [];
@@ -126,7 +125,7 @@ export default async function GivePage({
         id: fund.id,
         name: fund.name,
         description: fund.description,
-        tag: retireTag(fund.retire_on),
+        tag: fundThroughTag(fund.retire_on),
         stewards,
         stewardNames,
         role: fund.steward_role,
@@ -136,39 +135,23 @@ export default async function GivePage({
     ];
   });
 
+  const addFund = canCreate && (
+    <Button nativeButton={false} render={<Link href={newFundHref} />}>
+      <Plus aria-hidden="true" />
+      Add fund
+    </Button>
+  );
+
   return (
     <PageContainer>
-      <PageHeader
-        title="Give"
-        actions={
-          canCreate && (
-            <Button
-              nativeButton={false}
-              render={<Link href={newFundHref} />}
-            >
-              <Plus className="mr-1.5 h-4 w-4" />
-              Add fund
-            </Button>
-          )
-        }
-      />
+      <PageHeader title="Give" actions={addFund} />
 
-      {views.length > 0 ? (
+      {fundRows === null || methods === null ? (
+        <ErrorState thing="funds" />
+      ) : views.length > 0 ? (
         <GiveList funds={views} groupId={group.id} />
       ) : (
-        <div className="rounded-2xl border border-dashed border-border px-6 py-12 text-center">
-          <p className="text-xl text-muted-foreground">No funds yet.</p>
-          {canCreate && (
-            <p className="mt-2 text-muted-foreground">
-              <Link
-                href={newFundHref}
-                className="font-semibold text-brand-primary-text hover:underline"
-              >
-                Add the first fund
-              </Link>
-            </p>
-          )}
-        </div>
+        <EmptyState icon={HandCoins} message="No funds yet." action={addFund} />
       )}
     </PageContainer>
   );

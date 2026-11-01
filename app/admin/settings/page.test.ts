@@ -36,7 +36,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 vi.mock("@/lib/giving/server", () => ({
-  getGivingSettings: async () => ({ stewardsCanManage: false, dashboardTile: false }),
+  givingStewardsCanManage: async () => false,
 }));
 vi.mock("@/lib/directory/visibility", () => ({
   getDirectoryVisibility: async () => "shared_groups",

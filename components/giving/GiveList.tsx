@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronDown, Pencil } from "lucide-react";
 import { AvatarCluster } from "@/components/directory/AvatarCluster";
 import { MethodButton } from "@/components/giving/MethodButton";
+import { fundRecipientLine } from "@/lib/giving/funds";
 import { groupPath } from "@/lib/groups/active";
 import type { ResolvedMethod } from "@/lib/giving/methods";
 
@@ -12,7 +13,7 @@ export interface FundView {
   id: string;
   name: string;
   description: string | null;
-  /** e.g. "Through Jun 20" — derived from retire_on */
+  /** e.g. "Through Jun 20, 2027" — derived from retire_on */
   tag: string | null;
   stewards: { name: string; initials: string; avatarUrl: string | null }[];
   /** "Linda & Ray Park" */
@@ -23,7 +24,7 @@ export interface FundView {
 }
 
 /**
- * Direction A — quiet accordion list. One fund open at a time; payment
+ * Quiet accordion list. One fund open at a time; payment
  * buttons expand in place so paying is two taps from page load.
  */
 export function GiveList({ funds, groupId }: { funds: FundView[]; groupId: string }) {
@@ -55,19 +56,18 @@ export function GiveList({ funds, groupId }: { funds: FundView[]; groupId: strin
                     {fund.name}
                   </span>
                   {fund.tag && (
-                    <span className="rounded-full bg-brand-bg-light px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-foreground">
+                    <span className="rounded-full bg-brand-bg-light px-2.5 py-0.5 text-sm font-semibold text-foreground">
                       {fund.tag}
                     </span>
                   )}
                 </span>
-                <span className="mt-0.5 block text-sm text-muted-foreground">
-                  {fund.stewardNames}
-                  {fund.role ? ` · ${fund.role}` : ""}
+                <span className="mt-0.5 block text-base text-muted-foreground">
+                  {fundRecipientLine(fund.stewardNames, fund.role)}
                 </span>
               </span>
               <ChevronDown
                 aria-hidden="true"
-                className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
+                className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform ${
                   open ? "rotate-180" : ""
                 }`}
               />
@@ -87,19 +87,19 @@ export function GiveList({ funds, groupId }: { funds: FundView[]; groupId: strin
                     ))}
                   </div>
                 ) : (
-                  <p className="rounded-xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
-                    No payment methods set up yet — add your handles to make
-                    this fund payable.
+                  <p className="text-base text-muted-foreground">
+                    Members can&apos;t give to this fund until it has a payment
+                    method.
                   </p>
                 )}
                 {fund.canManage && (
-                  <div className="mt-3.5 flex justify-end text-sm">
+                  <div className="mt-2 flex justify-end">
                     <Link
                       href={groupPath(groupId, `/give/${fund.id}/edit`)}
-                      className="flex items-center gap-1 font-semibold text-brand-primary-text hover:underline"
+                      className="inline-flex min-h-11 items-center gap-1.5 text-base font-semibold text-brand-primary-text hover:underline"
                     >
-                      <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                      Edit
+                      <Pencil className="h-4 w-4" aria-hidden="true" />
+                      Edit fund
                     </Link>
                   </div>
                 )}

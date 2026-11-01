@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import {
   Combobox,
   ComboboxInput,
@@ -22,6 +23,19 @@ import { failureMessage } from "@/lib/errorCopy";
 import { AvatarCluster } from "@/components/directory/AvatarCluster";
 import { PostingTo } from "@/components/groups/PostingTo";
 import { MethodButton, MethodChip } from "@/components/giving/MethodButton";
+import {
+  FUND_NAME_FIELD,
+  METHODS_FIELD,
+  fundFieldErrors,
+  fundRecipientLine,
+  fundStatus,
+  fundThroughTag,
+  methodAccountField,
+  methodToggleField,
+  reopenedFund,
+  type FundMethodInput,
+} from "@/lib/giving/funds";
+import { groupPath } from "@/lib/groups/active";
 import {
   METHOD_ORDER,
   PAYMENT_METHODS,
@@ -49,11 +63,14 @@ interface FundFormProps {
   groupId: string;
   groupName: string;
   backHref: string;
+  /** "YYYY-MM-DD" in the church's time zone */
+  today: string;
 }
 
-type MethodState = Record<PaymentMethodKey, { enabled: boolean; custom: string }>;
-
 const NONE = "none";
+
+// The shared unchecked track is pale on pale; a person has to tell off from on at a glance.
+const CLEAR_OFF_TRACK = "data-unchecked:[&>[data-slot=switch-track]]:bg-muted-foreground";
 
 export function FundForm({
   fund,
@@ -63,6 +80,7 @@ export function FundForm({
   groupId,
   groupName,
   backHref,
+  today,
 }: FundFormProps) {
   const router = useRouter();
   const supabase = createClient();
@@ -75,8 +93,11 @@ export function FundForm({
   const [retireOn, setRetireOn] = useState(fund?.retire_on ?? "");
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [methods, setMethods] = useState<MethodState>(() => {
-    const state = {} as MethodState;
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  // An object, so a second save with the same first error still refocuses.
+  const [focusTarget, setFocusTarget] = useState<{ id: string } | null>(null);
+  const [methods, setMethods] = useState<FundMethodInput>(() => {
+    const state = {} as FundMethodInput;
     for (const key of METHOD_ORDER) {
       const existing = fund?.methods.find((m) => m.method === key);
       state[key] = {
@@ -87,10 +108,15 @@ export function FundForm({
     return state;
   });
 
+  // Focus waits for the render that ties the message to the field, so a
+  // screen reader reads the message when focus lands.
+  useEffect(() => {
+    if (focusTarget) document.getElementById(focusTarget.id)?.focus();
+  }, [focusTarget]);
+
   const steward = members.find((m) => m.id === stewardId);
   const coSteward =
     coStewardId !== NONE ? members.find((m) => m.id === coStewardId) : undefined;
-
 
   const stewardNames = useMemo(() => {
     if (!steward) return "";
@@ -116,19 +142,25 @@ export function FundForm({
     return [{ method: key, handle, meta: PAYMENT_METHODS[key] }];
   });
 
-  function setMethod(key: PaymentMethodKey, patch: Partial<MethodState[PaymentMethodKey]>) {
+  function clearErrors(...ids: string[]) {
+    setErrors((prev) => {
+      const next = { ...prev };
+      for (const id of ids) delete next[id];
+      return next;
+    });
+  }
+
+  function setMethod(key: PaymentMethodKey, patch: Partial<FundMethodInput[PaymentMethodKey]>) {
     setMethods((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+    clearErrors(METHODS_FIELD, methodAccountField(key));
   }
 
   async function save() {
-    if (!name.trim()) {
-      toast.error("Give the fund a name.");
-      return;
-    }
-    if (previewMethods.length === 0) {
-      toast.error(
-        "Turn on at least one payment method with a handle, or nobody can pay."
-      );
+    const found = fundFieldErrors(name, methods);
+    setErrors(found);
+    const firstInvalid = Object.keys(found)[0];
+    if (firstInvalid) {
+      setFocusTarget({ id: firstInvalid });
       return;
     }
     setSaving(true);
@@ -173,29 +205,23 @@ export function FundForm({
 
     // Reconcile methods: upsert the usable rows first, then prune the
     // rest — a failed write never leaves the fund with no methods.
-    // Enabled-but-blank methods are pruned too: without a handle there
-    // is nothing to save (custom_handle is not null in the schema).
-    const rows = METHOD_ORDER.flatMap((key, i) => {
-      const m = methods[key];
-      const handle = m.custom.trim();
-      if (!m.enabled || !handle) return [];
-      return [
-        {
-          fund_id: fundId,
-          group_id: groupId,
-          method: key,
-          custom_handle: handle,
-          display_order: i,
-        },
-      ];
-    });
+    const rows = METHOD_ORDER.flatMap((key, i) =>
+      methods[key].enabled
+        ? [
+            {
+              fund_id: fundId,
+              group_id: groupId,
+              method: key,
+              custom_handle: methods[key].custom.trim(),
+              display_order: i,
+            },
+          ]
+        : []
+    );
     const pruned = METHOD_ORDER.filter(
       (key) => !rows.some((r) => r.method === key)
     );
-    const { error: upsertError } =
-      rows.length > 0
-        ? await supabase.from("giving_fund_methods").upsert(rows)
-        : { error: null };
+    const { error: upsertError } = await supabase.from("giving_fund_methods").upsert(rows);
     const { error: delError } =
       !upsertError && pruned.length > 0
         ? await supabase
@@ -206,29 +232,35 @@ export function FundForm({
             .in("method", pruned)
         : { error: null };
 
-    setSaving(false);
+    // Once a new fund exists, saving stays on until navigation unmounts the
+    // form: another save from the add form would insert a second fund.
     if (upsertError || delError) {
       toast.error("Fund saved, but couldn't save its payment methods. Try again.");
+      if (fund) setSaving(false);
+      else router.replace(groupPath(groupId, `/give/${fundId}/edit`));
       return;
     }
-    toast.success(fund ? "Fund updated." : "Fund created.");
+    toast.success(fund ? "Fund updated." : "Fund added.");
     router.push(backHref);
     router.refresh();
   }
 
-  async function setActive(active: boolean) {
+  async function setLive(live: boolean) {
     if (!fund) return;
     const { data, error } = await supabase
       .from("giving_funds")
-      .update({ is_active: active, updated_at: new Date().toISOString() })
+      .update({
+        ...(live ? reopenedFund(fund.retire_on, today) : { is_active: false }),
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", fund.id)
       .eq("group_id", groupId)
       .select("id");
     if (error || !data?.length) {
-      toast.error(failureMessage(active ? "reactivate the fund" : "retire the fund"));
+      toast.error(failureMessage(live ? "reopen the fund" : "retire the fund"));
       return;
     }
-    toast.success(active ? "Fund reactivated." : "Fund retired.");
+    toast.success(live ? "Fund reopened." : "Fund retired.");
     router.push(backHref);
     router.refresh();
   }
@@ -250,51 +282,49 @@ export function FundForm({
     router.refresh();
   }
 
-  const previewTag = retireOn
-    ? `Through ${new Date(retireOn + "T00:00:00Z").toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        timeZone: "UTC",
-      })}`
-    : null;
+  const previewTag = fundThroughTag(retireOn || null);
+  const isLive = fund ? fundStatus(fund, today).live : false;
 
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_340px] lg:items-start">
-      <div className="rounded-2xl border border-border bg-card p-6 sm:p-7">
-        <div className="space-y-5">
-          {!fund && <PostingTo groupName={groupName} />}
-          <div>
-            <Label htmlFor="fund-name" className="text-base">
-              Fund name
-            </Label>
-            <Input
-              id="fund-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Flowers for Delores"
-              maxLength={80}
-              className="mt-1.5 text-base py-5"
-            />
+      <div className="space-y-6">
+        {!fund && <PostingTo groupName={groupName} />}
+        <div>
+          <Label htmlFor={FUND_NAME_FIELD}>Fund name</Label>
+          <Input
+            id={FUND_NAME_FIELD}
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              clearErrors(FUND_NAME_FIELD);
+            }}
+            placeholder="Building fund"
+            maxLength={80}
+            className="mt-1.5"
+            {...invalidFieldProps(FUND_NAME_FIELD, errors[FUND_NAME_FIELD])}
+          />
+          <div className="mt-1.5">
+            <FieldError fieldId={FUND_NAME_FIELD} message={errors[FUND_NAME_FIELD]} />
           </div>
+        </div>
 
+        <div>
+          <Label htmlFor="fund-desc">Short description (optional)</Label>
+          <Textarea
+            id="fund-desc"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="What is this fund for?"
+            rows={2}
+            className="mt-1.5 text-base"
+          />
+        </div>
+
+        <div className="grid gap-6 sm:grid-cols-2">
           <div>
-            <Label htmlFor="fund-desc" className="text-base">
-              Short description
-            </Label>
-            <Textarea
-              id="fund-desc"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="What is this collection for?"
-              rows={2}
-              className="mt-1.5 text-base"
-            />
-          </div>
-
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div>
-              <Label className="text-base">Who receives it?</Label>
-              {isLeader ? (
+            {isLeader ? (
+              <>
+                <Label htmlFor="fund-recipient">Who receives it?</Label>
                 <Combobox
                   items={memberIds}
                   itemToStringLabel={memberLabel}
@@ -306,187 +336,190 @@ export function FundForm({
                   }}
                 >
                   <ComboboxInput
+                    id="fund-recipient"
                     placeholder="Search members…"
-                    className="mt-1.5 text-base py-2.5"
+                    className="mt-1.5 h-12"
                   />
                   <ComboboxPopup>
                     <ComboboxEmpty />
                     <ComboboxList>
                       {(id: string) => (
-                        <ComboboxItem key={id} value={id}>
+                        <ComboboxItem key={id} value={id} className="min-h-11">
                           {memberLabel(id)}
                         </ComboboxItem>
                       )}
                     </ComboboxList>
                   </ComboboxPopup>
                 </Combobox>
-              ) : (
-                <p className="mt-1.5 rounded-md border border-border bg-background px-3 py-2.5 text-base">
+              </>
+            ) : (
+              <>
+                <p className="text-base leading-none font-medium">Who receives it?</p>
+                <p className="mt-1.5 rounded-lg border border-border bg-background px-3 py-2.5 text-base">
                   {steward?.name ?? "You"}
                 </p>
-              )}
-              <p className="mt-1.5 text-sm text-muted-foreground">
-                Money goes to this person&apos;s accounts.
-              </p>
-            </div>
-            <div>
-              <Label className="text-base">Shown with (optional)</Label>
-              <Combobox
-                items={coMemberIds}
-                itemToStringLabel={memberLabel}
-                value={coStewardId}
-                onValueChange={(v) => setCoStewardId(v ?? NONE)}
-              >
-                <ComboboxInput
-                  placeholder="Search members…"
-                  className="mt-1.5 text-base py-2.5"
-                />
-                <ComboboxPopup>
-                  <ComboboxEmpty />
-                  <ComboboxList>
-                    {(id: string) => (
-                      <ComboboxItem key={id} value={id}>
-                        {memberLabel(id)}
-                      </ComboboxItem>
-                    )}
-                  </ComboboxList>
-                </ComboboxPopup>
-              </Combobox>
-              <p className="mt-1.5 text-sm text-muted-foreground">
-                A spouse or co-collector, for display.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div>
-              <Label htmlFor="fund-role" className="text-base">
-                Role label (optional)
-              </Label>
-              <Input
-                id="fund-role"
-                value={stewardRole}
-                onChange={(e) => setStewardRole(e.target.value)}
-                placeholder="Care team, Treasurer…"
-                maxLength={60}
-                className="mt-1.5 text-base py-5"
-              />
-            </div>
-            <div>
-              <Label htmlFor="fund-retire" className="text-base">
-                Auto-retire on (optional)
-              </Label>
-              <Input
-                id="fund-retire"
-                type="date"
-                value={retireOn}
-                onChange={(e) => setRetireOn(e.target.value)}
-                className="mt-1.5 text-base py-5"
-              />
-              <p className="mt-1.5 text-sm text-muted-foreground">
-                Hidden from the Give page after this date.
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <Label className="text-base">Payment methods</Label>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              Enter a payment handle for each method.
-            </p>
-            <div className="mt-3 space-y-2">
-              {METHOD_ORDER.map((key) => {
-                const meta = PAYMENT_METHODS[key];
-                const m = methods[key];
-                const missing = m.enabled && !m.custom.trim();
-                return (
-                  <div
-                    key={key}
-                    className={`rounded-xl border px-3.5 py-3 transition-opacity ${
-                      m.enabled
-                        ? "border-border bg-card"
-                        : "border-transparent bg-background opacity-60"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <MethodChip method={meta} size="sm" />
-                      <span className="flex-1 text-base font-semibold">
-                        {meta.name}
-                      </span>
-                      <Switch
-                        checked={m.enabled}
-                        onCheckedChange={(on) => setMethod(key, { enabled: on })}
-                        aria-label={`Accept ${meta.name}`}
-                      />
-                    </div>
-                    {m.enabled && (
-                      <div className="mt-2.5 pl-10">
-                        <Input
-                          value={m.custom}
-                          onChange={(e) => setMethod(key, { custom: e.target.value })}
-                          placeholder={meta.placeholder}
-                          maxLength={120}
-                          className="font-mono text-sm"
-                        />
-                        {missing && (
-                          <p className="mt-1.5 text-sm font-medium text-brand-accent-text">
-                            Enter a handle for {meta.name}{' '}or this method won&apos;t be saved.
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 border-t border-border pt-5">
-            <Button
-              onClick={save}
-              disabled={saving}
-            >
-              {saving ? "Saving…" : fund ? "Save changes" : "Create fund"}
-            </Button>
-            <Button variant="outline" onClick={() => router.push(backHref)}>
-              Cancel
-            </Button>
-            {fund && (
-              <div className="ml-auto flex items-center gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => setActive(!fund.is_active)}
-                >
-                  {fund.is_active ? "Retire fund" : "Reactivate fund"}
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => setConfirmingDelete(true)}
-                  className="text-destructive hover:text-destructive"
-                >
-                  Delete
-                </Button>
-                <ConfirmDialog
-                  open={confirmingDelete}
-                  onOpenChange={setConfirmingDelete}
-                  title={`Delete ${fund.name}?`}
-                  description="The fund and its payment methods are removed. This can't be undone."
-                  confirmLabel="Delete fund"
-                  pendingLabel="Deleting…"
-                  onConfirm={remove}
-                />
-              </div>
+              </>
             )}
+            <p className="mt-1.5 text-base text-muted-foreground">
+              Money goes to this person&apos;s accounts.
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="fund-second-person">Second person (optional)</Label>
+            <Combobox
+              items={coMemberIds}
+              itemToStringLabel={memberLabel}
+              value={coStewardId}
+              onValueChange={(v) => setCoStewardId(v ?? NONE)}
+            >
+              <ComboboxInput
+                id="fund-second-person"
+                placeholder="Search members…"
+                className="mt-1.5 h-12"
+              />
+              <ComboboxPopup>
+                <ComboboxEmpty />
+                <ComboboxList>
+                  {(id: string) => (
+                    <ComboboxItem key={id} value={id} className="min-h-11">
+                      {memberLabel(id)}
+                    </ComboboxItem>
+                  )}
+                </ComboboxList>
+              </ComboboxPopup>
+            </Combobox>
+            <p className="mt-1.5 text-base text-muted-foreground">
+              Named beside them on the fund, such as a spouse.
+            </p>
           </div>
         </div>
+
+        <div className="grid gap-6 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="fund-role">Their role (optional)</Label>
+            <Input
+              id="fund-role"
+              value={stewardRole}
+              onChange={(e) => setStewardRole(e.target.value)}
+              placeholder="Treasurer"
+              maxLength={60}
+              className="mt-1.5"
+            />
+            <p className="mt-1.5 text-base text-muted-foreground">
+              Shown after their name.
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="fund-retire">Retire on (optional)</Label>
+            <Input
+              id="fund-retire"
+              type="date"
+              value={retireOn}
+              onChange={(e) => setRetireOn(e.target.value)}
+              className="mt-1.5"
+            />
+            <p className="mt-1.5 text-base text-muted-foreground">
+              Hidden from the Give page after this date.
+            </p>
+          </div>
+        </div>
+
+        <fieldset>
+          <legend className="text-base font-medium">Payment methods</legend>
+          <p className="mt-1 text-base text-muted-foreground">
+            Turn on each way members can give, then enter the account to send to.
+          </p>
+          <div className="mt-2">
+            <FieldError fieldId={METHODS_FIELD} message={errors[METHODS_FIELD]} />
+          </div>
+          <div className="mt-2 space-y-2">
+            {METHOD_ORDER.map((key) => {
+              const meta = PAYMENT_METHODS[key];
+              const m = methods[key];
+              const accountField = methodAccountField(key);
+              const toggleField = methodToggleField(key);
+              return (
+                <div
+                  key={key}
+                  className={`rounded-xl border px-3.5 py-2 ${
+                    m.enabled ? "border-brand-primary/40 bg-card" : "border-border bg-background"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <MethodChip method={meta} size="sm" />
+                    <span className="flex-1 text-base font-semibold">{meta.name}</span>
+                    <span aria-hidden="true" className="text-base text-muted-foreground">
+                      {m.enabled ? "On" : "Off"}
+                    </span>
+                    <Switch
+                      id={toggleField}
+                      checked={m.enabled}
+                      onCheckedChange={(on) => setMethod(key, { enabled: on })}
+                      aria-label={`Accept ${meta.name}`}
+                      className={CLEAR_OFF_TRACK}
+                      {...invalidFieldProps(toggleField, errors[toggleField])}
+                    />
+                  </div>
+                  {m.enabled && (
+                    <div className="mt-1 pb-1.5">
+                      <Label htmlFor={accountField}>{meta.name} account</Label>
+                      <Input
+                        id={accountField}
+                        value={m.custom}
+                        onChange={(e) => setMethod(key, { custom: e.target.value })}
+                        placeholder={meta.placeholder}
+                        maxLength={120}
+                        className="mt-1.5"
+                        {...invalidFieldProps(accountField, errors[accountField])}
+                      />
+                      <div className="mt-1.5">
+                        <FieldError fieldId={accountField} message={errors[accountField]} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        <div className="flex flex-wrap gap-3 border-t border-border pt-6">
+          <Button onClick={save} disabled={saving}>
+            {saving ? "Saving…" : fund ? "Save changes" : "Add fund"}
+          </Button>
+          <Button variant="outline" onClick={() => router.push(backHref)}>
+            Cancel
+          </Button>
+        </div>
+
+        {fund && (
+          <div className="flex flex-wrap gap-3">
+            <Button variant="outline" onClick={() => setLive(!isLive)}>
+              {isLive ? "Retire fund" : "Reopen fund"}
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => setConfirmingDelete(true)}
+              className="text-destructive hover:text-destructive"
+            >
+              Delete fund
+            </Button>
+            <ConfirmDialog
+              open={confirmingDelete}
+              onOpenChange={setConfirmingDelete}
+              title={`Delete ${fund.name}?`}
+              description="The fund and its payment methods are removed. This can't be undone."
+              confirmLabel="Delete fund"
+              pendingLabel="Deleting…"
+              onConfirm={remove}
+            />
+          </div>
+        )}
       </div>
 
       {/* Live preview — how the fund reads on the Give page */}
       <div className="lg:sticky lg:top-6">
-        <p className="mb-3 flex items-center gap-2.5 text-xs font-bold uppercase tracking-widest text-brand-accent-text">
-          <span className="h-px w-6 bg-brand-accent" aria-hidden="true" />
-          How members see it
-        </p>
+        <p className="mb-3 text-base font-semibold text-foreground">How members see it</p>
         <div className="rounded-2xl border border-border bg-card p-4">
           <div className="flex items-center gap-3">
             {steward && (
@@ -502,23 +535,24 @@ export function FundForm({
             )}
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-lg font-semibold">
+                <span className="text-xl font-semibold">
                   {name.trim() || "Fund name"}
                 </span>
                 {previewTag && (
-                  <span className="rounded-full bg-brand-bg-light px-2 py-0.5 text-xs font-bold uppercase tracking-wide">
+                  <span className="rounded-full bg-brand-bg-light px-2.5 py-0.5 text-sm font-semibold">
                     {previewTag}
                   </span>
                 )}
               </div>
-              <p className="text-sm text-muted-foreground">
-                {stewardNames}
-                {stewardRole.trim() ? ` · ${stewardRole.trim()}` : ""}
-              </p>
+              {stewardNames && (
+                <p className="text-base text-muted-foreground">
+                  {fundRecipientLine(stewardNames, stewardRole.trim() || null)}
+                </p>
+              )}
             </div>
           </div>
           {description.trim() && (
-            <p className="mt-3 text-sm text-muted-foreground">
+            <p className="mt-3 text-base text-muted-foreground">
               {description.trim()}
             </p>
           )}
@@ -528,18 +562,12 @@ export function FundForm({
                 <MethodButton key={m.method} resolved={m} />
               ))
             ) : (
-              <p className="rounded-xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
-                Turn on a payment method to make this fund payable.
+              <p className="text-base text-muted-foreground">
+                Turn on a payment method to see it here.
               </p>
             )}
           </div>
         </div>
-        {retireOn && (
-          <p className="mt-3 text-sm text-muted-foreground">
-            Auto-retires {previewTag?.replace("Through ", "")} — no cleanup
-            needed.
-          </p>
-        )}
       </div>
     </div>
   );

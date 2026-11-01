@@ -12,6 +12,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { displayName, initials } from "@/lib/names";
 import { mintSignedUrls } from "@/lib/storageRead";
+import { readList } from "@/lib/supabase/readList";
 import type { MemberOption } from "@/components/giving/FundForm";
 
 /** Whether members may put up and manage their own giving links */
@@ -26,26 +27,6 @@ export async function givingStewardsCanManage(
     .eq("key", "giving_manage_mode")
     .maybeSingle();
   return (data?.value ?? "stewards") === "stewards";
-}
-
-/** Both giving settings in one query, for the admin page */
-export async function getGivingSettings(
-  supabase: SupabaseClient,
-  orgId: string
-): Promise<{
-  stewardsCanManage: boolean;
-  dashboardTile: boolean;
-}> {
-  const { data } = await supabase
-    .from("site_settings")
-    .select("key, value")
-    .eq("org_id", orgId)
-    .in("key", ["giving_manage_mode", "giving_dashboard_tile"]);
-  const map = new Map((data ?? []).map((s) => [s.key, s.value]));
-  return {
-    stewardsCanManage: (map.get("giving_manage_mode") ?? "stewards") === "stewards",
-    dashboardTile: (map.get("giving_dashboard_tile") ?? "on") === "on",
-  };
 }
 
 type StewardAvatarSource = {
@@ -78,25 +59,29 @@ export async function signStewardAvatars<T extends StewardAvatarSource>(
   }));
 }
 
-/** Member picker options for the fund form */
+/** Member picker options for the fund form; `failed` tells an empty list from a failed read. */
 export async function loadFundFormData(
   supabase: SupabaseClient,
   orgId: string
 ): Promise<{
   members: MemberOption[];
+  failed: boolean;
 }> {
-  const { data: memberRows } = await supabase
-    .from("profiles_directory")
-    .select("id, first_name, last_name, preferred_name, avatar_url")
-    .eq("org_id", orgId)
-    .order("last_name")
-    .order("first_name");
+  const rows = readList(
+    await supabase
+      .from("profiles_directory")
+      .select("id, first_name, last_name, preferred_name, avatar_url")
+      .eq("org_id", orgId)
+      .order("last_name")
+      .order("first_name"),
+    "fund form members"
+  );
+  if (rows === null) return { members: [], failed: true };
 
   // Private buckets: exchange stored avatar URLs for signed URLs
   // before they reach the member-picker renders. Signing goes through
   // lib/storageRead's own cookie-bound client, never the caller's `supabase`
   // parameter — a passed-in client is untyped as to privilege (Tier C).
-  const rows = memberRows ?? [];
   const signedAvatars = await mintSignedUrls(rows.map((p) => p.avatar_url));
   const members: MemberOption[] = rows.map((p, i) => ({
     id: p.id,
@@ -105,5 +90,5 @@ export async function loadFundFormData(
     avatarUrl: signedAvatars[i],
   }));
 
-  return { members };
+  return { members, failed: false };
 }
