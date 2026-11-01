@@ -7,8 +7,9 @@ import { dayKey } from "@/lib/time/zone";
  * the result never depends on the runtime's zone; the one zone that matters
  * — the church's, for what "today" is — comes in as `today` from todayIn().
  * Slots are lazy: upcoming dates are computed here and signup rows exist
- * only for covered dates. The schedule falls on Sundays, the rule the
- * signup routes and the reminder function enforce.
+ * only for covered dates. The schedule falls on Sundays: the signup routes
+ * check that weekday in the church's zone, the reminder function only in
+ * its runtime's.
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -21,14 +22,6 @@ function toMs(date: string): number {
 
 function fromMs(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
-}
-
-/** Format a Date as YYYY-MM-DD in the runtime's local time (matches Postgres `date`). */
-export function toDateString(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
 }
 
 export const MAX_WINDOW_WEEKS = 26;

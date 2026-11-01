@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/states/EmptyState";
 import { ErrorState } from "@/components/states/ErrorState";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { HomeGreeting } from "@/components/groups/HomeGreeting";
-import { formatServiceDate, toDateString } from "@/lib/serving/dates";
+import { formatServiceDate, todayIn } from "@/lib/serving/dates";
 import { RsvpControl } from "@/components/events/RsvpControl";
 import { JoinMeetingBlock } from "@/components/events/JoinMeetingBlock";
 import { expandUpcomingEvents } from "@/lib/recurrence";
@@ -126,14 +126,16 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
       .order("created_at", { ascending: false })
       .limit(3),
     // This member's upcoming turns on the group's teams (both inner joins filter)
-    supabase
-      .from("serving_signups")
-      .select("id, service_date, team_id, teams!inner(id, name, group_id), serving_signup_attendees!inner(profile_id)")
-      .eq("teams.group_id", group.id)
-      .eq("serving_signup_attendees.profile_id", user.id)
-      .gte("service_date", toDateString(new Date()))
-      .order("service_date", { ascending: true })
-      .limit(3),
+    getOrgTimeZone().then((zone) =>
+      supabase
+        .from("serving_signups")
+        .select("id, service_date, team_id, teams!inner(id, name, group_id), serving_signup_attendees!inner(profile_id)")
+        .eq("teams.group_id", group.id)
+        .eq("serving_signup_attendees.profile_id", user.id)
+        .gte("service_date", todayIn(zone))
+        .order("service_date", { ascending: true })
+        .limit(3),
+    ),
     getOrgTimeZone(),
   ]);
 
