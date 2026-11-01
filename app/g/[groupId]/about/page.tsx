@@ -2,17 +2,23 @@ import { createClient } from "@/lib/supabase/server";
 import { mintSignedUrls } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Video } from "lucide-react";
+import { Users, Video } from "lucide-react";
 import { displayName, initials } from "@/lib/names";
 import { getGroupSettings } from "@/lib/groups/settings";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyState } from "@/components/states/EmptyState";
+import { ErrorState } from "@/components/states/ErrorState";
 import { StaticBlockContent } from "@/components/editor/StaticBlockContent";
 import { parseStoredBlocks } from "@/components/editor/normalizeBlocks";
 import type { AboutPage, ClassTeacherWithProfile } from "@/lib/types";
 import { requireActiveGroup } from "@/lib/groups/server";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { readList } from "@/lib/supabase/readList";
+import { groupPath } from "@/lib/groups/active";
 import { groupPageTitle } from "@/lib/pageTitle";
 
 export const generateMetadata = groupPageTitle("About");
@@ -35,7 +41,7 @@ export default async function AboutGroupPage({
     .single();
   if (!profile || profile.role === "pending") redirect("/dashboard");
 
-  const [{ data: about }, { data: teachers }, settings] = await Promise.all([
+  const [aboutRead, teachersRead, settings] = await Promise.all([
     supabase.from("about_page").select("*").eq("group_id", group.id).maybeSingle(),
     supabase
       .from("class_teachers")
@@ -48,10 +54,33 @@ export default async function AboutGroupPage({
     getGroupSettings(supabase, profile.org_id, group.id),
   ]);
 
-  const summaryBlocks = parseStoredBlocks((about as AboutPage | null)?.body);
+  const isLeader = group.role === "leader";
+  const editLink = isLeader ? (
+    <Button
+      variant="outline"
+      nativeButton={false}
+      render={<Link href={groupPath(group.id, "/settings/about")} />}
+    >
+      Edit page
+    </Button>
+  ) : undefined;
+
+  const teacherRows = readList<ClassTeacherWithProfile>(teachersRead, "the group's leadership");
+  if (aboutRead.error) {
+    console.error("Failed to load the group's summary: code=%s", aboutRead.error.code);
+  }
+  if (!teacherRows || aboutRead.error) {
+    return (
+      <PageContainer>
+        <PageHeader title={`About ${group.name}`} actions={editLink} />
+        <ErrorState thing="this page" />
+      </PageContainer>
+    );
+  }
+
+  const summaryBlocks = parseStoredBlocks((aboutRead.data as AboutPage | null)?.body);
   // Private buckets: exchange stored avatar URLs for signed URLs
   // before they reach the AvatarImage renders below.
-  const teacherRows = (teachers ?? []) as ClassTeacherWithProfile[];
   const signedAvatars = await mintSignedUrls(
     teacherRows.map((t) => t.profiles?.avatar_url),
   );
@@ -66,10 +95,8 @@ export default async function AboutGroupPage({
     : null;
 
   return (
-    <div className="container mx-auto px-4 py-12 max-w-4xl">
-      <h1 className="text-3xl md:text-4xl font-bold text-brand-primary-text mb-8">
-        About {group.name}
-      </h1>
+    <PageContainer>
+      <PageHeader title={`About ${group.name}`} actions={editLink} />
 
       {summaryBlocks?.length ? (
         <StaticBlockContent blocks={summaryBlocks} />
@@ -80,19 +107,16 @@ export default async function AboutGroupPage({
       )}
 
       {(videoCallUrl || settings.zoom_meeting_time) && (
-        <Card className="mt-12">
+        <Card className="mt-10">
           <CardContent className="py-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <h2 className="flex items-center gap-2 text-2xl font-bold text-brand-primary-text">
-                  <Video className="h-6 w-6" aria-hidden="true" />
+                <h2 className="flex items-center gap-2 text-xl font-bold text-foreground">
+                  <Video className="h-6 w-6 text-brand-primary-text" aria-hidden="true" />
                   Weekly video call
                 </h2>
                 {settings.zoom_meeting_time && (
                   <p className="mt-1 text-lg text-foreground">{settings.zoom_meeting_time}</p>
-                )}
-                {videoCallUrl && (
-                  <p className="mt-1 break-all text-base text-muted-foreground">{videoCallUrl}</p>
                 )}
               </div>
               {videoCallUrl && (
@@ -110,52 +134,62 @@ export default async function AboutGroupPage({
         </Card>
       )}
 
-      <div className="mt-12">
-        <h2 className="text-2xl md:text-3xl font-bold text-brand-primary-text mb-6">
-          Leadership
-        </h2>
+      <section className="mt-10">
+        <h2 className="mb-4 text-xl font-bold text-foreground">Leadership</h2>
 
         {teacherList.length === 0 ? (
-          <p className="text-lg text-muted-foreground">
-            Leadership info hasn&apos;t been added yet.
-          </p>
+          <EmptyState
+            icon={Users}
+            message="No one listed yet."
+            action={
+              isLeader ? (
+                <Button
+                  variant="outline"
+                  nativeButton={false}
+                  render={<Link href={groupPath(group.id, "/settings/about")} />}
+                >
+                  Add member
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
-          <div className="space-y-6">
+          <ul className="space-y-4">
             {teacherList.map((teacher) => (
-              <Card key={teacher.id}>
-                <CardContent className="py-6">
-                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
-                    <Avatar className="h-24 w-24 shrink-0 border-2 border-brand-accent">
+              <li key={teacher.id}>
+                <Card>
+                  <CardContent className="flex flex-col items-start gap-4 py-6 sm:flex-row">
+                    <Avatar className="h-16 w-16 shrink-0 sm:h-20 sm:w-20">
                       {teacher.profiles?.avatar_url && (
                         <AvatarImage
                           src={teacher.profiles.avatar_url}
                           alt={`Photo of ${displayName(teacher.profiles)}`}
                         />
                       )}
-                      <AvatarFallback className="bg-brand-primary text-white text-2xl">
+                      <AvatarFallback className="bg-brand-primary text-white text-xl">
                         {initials(teacher.profiles)}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="min-w-0 text-center sm:text-left">
-                      <h3 className="text-xl font-semibold">
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-semibold text-foreground">
                         {displayName(teacher.profiles)}
                       </h3>
-                      <p className="text-base font-medium uppercase tracking-wider text-brand-primary-text mb-2">
-                        {teacher.title}
-                      </p>
-                      {teacher.bio ? (
-                        <p className="text-base text-foreground/90 whitespace-pre-line">
+                      {teacher.title && (
+                        <p className="text-base text-muted-foreground">{teacher.title}</p>
+                      )}
+                      {teacher.bio && (
+                        <p className="mt-2 max-w-prose text-base text-foreground whitespace-pre-line">
                           {teacher.bio}
                         </p>
-                      ) : null}
+                      )}
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
-      </div>
-    </div>
+      </section>
+    </PageContainer>
   );
 }
