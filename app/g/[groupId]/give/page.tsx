@@ -10,7 +10,7 @@ import { ErrorState } from "@/components/states/ErrorState";
 import { displayName, initials } from "@/lib/names";
 import { fundThroughTag } from "@/lib/giving/funds";
 import { resolveFundMethods } from "@/lib/giving/methods";
-import { signStewardAvatars } from "@/lib/giving/server";
+import { givingStewardsCanManage, signStewardAvatars } from "@/lib/giving/server";
 import { GiveList, type FundView } from "@/components/giving/GiveList";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
@@ -52,11 +52,17 @@ export default async function GivePage({
   const user = await getOptionalUser();
   if (!user) redirect("/login");
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, org_id")
+    .eq("id", user.id)
+    .single();
+  if (!profile || profile.role === "pending") redirect("/dashboard");
   const isLeader = group.role === "leader";
 
   const today = todayIn(await getOrgTimeZone());
 
-  const [fundRows, { data: modeRow }] = await Promise.all([
+  const [fundRows, stewardsCanManage] = await Promise.all([
     supabase
       .from("giving_funds")
       .select(
@@ -70,17 +76,12 @@ export default async function GivePage({
       .order("display_order")
       .order("created_at")
       .then((read) => readList<FundWithStewards>(read, "funds")),
-    supabase
-      .from("site_settings")
-      .select("value")
-      .eq("key", "giving_manage_mode")
-      .maybeSingle(),
+    givingStewardsCanManage(supabase, profile.org_id),
   ]);
 
   // Private buckets: exchange steward avatar URLs for signed URLs
   // before they reach GiveList's renders.
   const funds = await signStewardAvatars(fundRows ?? []);
-  const stewardsCanManage = (modeRow?.value ?? "stewards") === "stewards";
   const canCreate = isLeader || stewardsCanManage;
 
   const methods =
