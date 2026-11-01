@@ -8,7 +8,8 @@ import { dayKey } from "@/lib/time/zone";
  * — the church's, for what "today" is — comes in as `today` from todayIn().
  * Slots are lazy: upcoming dates are computed here and signup rows exist
  * only for covered dates. The schedule falls on Sundays. The signup routes
- * and the reminder function both read "today" in the church's zone;
+ * read "today" in the church's zone; the reminder function reads it through
+ * reminderRun(), which never falls behind the UTC date.
  * supabase/functions/_shared/serving-dates.ts mirrors what the function needs.
  */
 
