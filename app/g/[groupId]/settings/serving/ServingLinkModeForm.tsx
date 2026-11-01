@@ -5,20 +5,10 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { createClient } from "@/lib/supabase/client";
+import { failureMessage } from "@/lib/errorCopy";
 import type { ServingLinkMode } from "@/lib/serving/config";
-
-const SERVING_LINK_MODE_OPTIONS: { value: ServingLinkMode; label: string }[] = [
-  { value: "signed", label: "Signed links — members act without logging in (recommended)" },
-  { value: "login", label: "Login required — links redirect to the login page first" },
-];
 
 export function ServingLinkModeForm({
   groupId,
@@ -50,42 +40,34 @@ export function ServingLinkModeForm({
       .select("group_id");
     setSaving(false);
     if (error || !data?.length) {
-      toast.error("Couldn't save the link mode. Please try again.");
+      toast.error(failureMessage("save the email setting"));
       return;
     }
-    toast.success("Serving link mode saved.");
+    toast.success("Email setting saved.");
     router.refresh();
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      <div className="space-y-2">
-        <Label htmlFor="serving-link-mode" className="text-lg">
-          Serving email link mode
-        </Label>
-        <Select
-          items={SERVING_LINK_MODE_OPTIONS}
-          value={mode}
-          onValueChange={(v) => setMode(v === "login" ? "login" : "signed")}
-        >
-          <SelectTrigger id="serving-link-mode" className="w-full text-lg py-5">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {SERVING_LINK_MODE_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <Label htmlFor="serving-link-mode" className="text-lg">
+            Let people respond from the email without signing in
+          </Label>
+          <p id="serving-link-mode-help" className="text-base text-muted-foreground">
+            The sign-up and cancel buttons in serving emails work straight
+            away. Turn this off to ask people to sign in first.
+          </p>
+        </div>
+        <Switch
+          id="serving-link-mode"
+          aria-describedby="serving-link-mode-help"
+          checked={mode === "signed"}
+          onCheckedChange={(on) => setMode(on ? "signed" : "login")}
+        />
       </div>
-      <Button
-        type="submit"
-        size="lg"
-        disabled={saving}
-      >
-        {saving ? "Saving…" : "Save link mode"}
+      <Button type="submit" disabled={saving || mode === initialMode}>
+        {saving ? "Saving…" : "Save setting"}
       </Button>
     </form>
   );

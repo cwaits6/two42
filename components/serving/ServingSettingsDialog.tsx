@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Segmented } from "@/components/ui/segmented";
 import { Switch } from "@/components/ui/switch";
 import { Settings } from "lucide-react";
 import { toast } from "sonner";
+import { failureMessage } from "@/lib/errorCopy";
+import { MAX_WINDOW_WEEKS, windowWeeksError } from "@/lib/serving/dates";
 
 const DAY_OPTIONS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label, dow) => ({
   value: dow,
@@ -34,30 +38,46 @@ export function ServingSettingsDialog({ teamId, settings }: ServingSettingsDialo
   const [open, setOpen] = useState(false);
   const [enabled, setEnabled] = useState(settings?.enabled ?? false);
   const [reminderDays, setReminderDays] = useState<number[]>(settings?.reminder_days ?? [4, 5]);
-  const [windowWeeks, setWindowWeeks] = useState(settings?.window_weeks ?? 8);
+  const [windowWeeks, setWindowWeeks] = useState(String(settings?.window_weeks ?? 8));
+  const [weeksError, setWeeksError] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
+  const weeksRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const supabase = createClient();
+  const id = useId();
+  const enabledId = `${id}-enabled`;
+  const weeksId = `${id}-weeks`;
 
   async function save() {
+    const error = windowWeeksError(windowWeeks);
+    setWeeksError(error);
+    if (error) {
+      weeksRef.current?.focus();
+      return;
+    }
+
     setSaving(true);
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    const { error } = await supabase.from("serving_team_settings").upsert({
-      team_id: teamId,
-      enabled,
-      reminder_days: reminderDays,
-      window_weeks: Math.max(1, Math.min(26, windowWeeks)),
-      updated_by: user?.id,
-    });
+    // A write the RLS policy rejects matches zero rows without an error.
+    const { data, error: saveError } = await supabase
+      .from("serving_team_settings")
+      .upsert({
+        team_id: teamId,
+        enabled,
+        reminder_days: reminderDays,
+        window_weeks: Number(windowWeeks),
+        updated_by: user?.id,
+      })
+      .select("team_id");
     setSaving(false);
 
-    if (error) {
-      toast.error("Failed to save settings.");
+    if (saveError || !data?.length) {
+      toast.error(failureMessage("save the team settings"));
       return;
     }
-    toast.success("Settings saved.");
+    toast.success("Team settings saved.");
     setOpen(false);
     router.refresh();
   }
@@ -70,23 +90,21 @@ export function ServingSettingsDialog({ teamId, settings }: ServingSettingsDialo
       </Button>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Serving team settings</DialogTitle>
+          <DialogTitle>Team settings</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6 py-2">
-          {/* Enabled */}
-          <div className="flex items-center justify-between">
-            <Label htmlFor="st-enabled" className="text-base">
-              Signups enabled
+          <div className="flex items-center justify-between gap-4">
+            <Label htmlFor={enabledId} className="text-base">
+              Signups on
             </Label>
             <Switch
-              id="st-enabled"
+              id={enabledId}
               checked={enabled}
               onCheckedChange={setEnabled}
             />
           </div>
 
-          {/* Reminder days */}
           <div className="space-y-2">
             <Label className="text-base">Reminder days</Label>
             <p className="text-base text-muted-foreground">
@@ -101,23 +119,26 @@ export function ServingSettingsDialog({ teamId, settings }: ServingSettingsDialo
             />
           </div>
 
-          {/* Window weeks */}
           <div className="space-y-2">
-            <Label htmlFor="st-weeks" className="text-base">
-              Schedule window (weeks)
+            <Label htmlFor={weeksId} className="text-base">
+              Weeks shown
             </Label>
             <p className="text-base text-muted-foreground">
-              How many upcoming weeks to show (1–26).
+              How many weeks of upcoming dates to show, from 1 to {MAX_WINDOW_WEEKS}.
             </p>
-            <input
-              id="st-weeks"
+            <Input
+              ref={weeksRef}
+              id={weeksId}
               type="number"
+              inputMode="numeric"
               min={1}
-              max={26}
+              max={MAX_WINDOW_WEEKS}
               value={windowWeeks}
-              onChange={(e) => setWindowWeeks(Number(e.target.value))}
-              className="h-12 w-24 rounded-md border border-border bg-background px-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-primary"
+              onChange={(e) => setWindowWeeks(e.target.value)}
+              className="w-24"
+              {...invalidFieldProps(weeksId, weeksError)}
             />
+            <FieldError fieldId={weeksId} message={weeksError} />
           </div>
 
           <Button

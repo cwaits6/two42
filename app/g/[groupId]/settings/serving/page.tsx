@@ -1,12 +1,17 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/button";
 import { getGroupSettings } from "@/lib/groups/settings";
+import { groupPath } from "@/lib/groups/active";
 import { defaultServingLinkMode } from "@/lib/serving/config";
+import { todayIn } from "@/lib/serving/dates";
 import { requireGroupLeader } from "@/lib/groups/server";
-import { AdminServingSetup } from "@/components/serving/AdminServingSetup";
-import { ServingLinkModeForm } from "@/components/groups/ServingLinkModeForm";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
+import { ServingLinkModeForm } from "./ServingLinkModeForm";
 import { ServingStats } from "./ServingStats";
-import type { MemberGroup } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { groupPageTitle } from "@/lib/pageTitle";
 
@@ -30,51 +35,41 @@ export default async function GroupServingSettingsPage({
     .single();
   if (!profile) redirect("/dashboard");
 
-  const [settings, { data: teamRows }] = await Promise.all([
+  const [settings, zone] = await Promise.all([
     getGroupSettings(supabase, profile.org_id, group.id),
-    supabase
-      .from("teams")
-      .select("id, name, color")
-      .eq("group_id", group.id)
-      .order("display_order"),
+    getOrgTimeZone(),
   ]);
-
-  const teams = (teamRows ?? []) as Pick<MemberGroup, "id" | "name" | "color">[];
-  const teamIds = teams.map((t) => t.id);
-  const { data: settingsRows } = teamIds.length
-    ? await supabase
-        .from("serving_team_settings")
-        .select("team_id")
-        .in("team_id", teamIds)
-    : { data: [] };
-  const configured = new Set((settingsRows ?? []).map((s) => s.team_id as string));
-  const candidateTeams = teams.filter((t) => !configured.has(t.id));
+  const teamsHref = groupPath(group.id, "/settings/teams");
 
   return (
-    <div className="container mx-auto px-4 py-12 max-w-4xl">
-      <div className="mb-8">
-        <h1 className="text-3xl md:text-4xl font-bold text-brand-primary-text mb-2">
-          Serving
-        </h1>
-        <p className="text-lg text-muted-foreground">
-          Serving settings for {group.name}.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Serving"
+        subtitle={`Serving emails and history for ${group.name}.`}
+        backHref={groupPath(group.id, "/settings")}
+        backLabel="Back to Group settings"
+      />
 
-      <section className="rounded-2xl border border-border bg-card p-6 mb-10">
+      <section className="rounded-2xl border border-border bg-card p-6 mb-6">
         <ServingLinkModeForm
           groupId={group.id}
           initialMode={settings.serving_link_mode ?? defaultServingLinkMode()}
         />
       </section>
 
-      {candidateTeams.length > 0 && (
-        <div className="mb-10">
-          <AdminServingSetup groups={candidateTeams} />
+      <section className="rounded-2xl border border-border bg-card p-6 mb-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <h2 className="text-lg font-medium text-foreground">Teams, rosters and signups</h2>
+          <p className="text-base text-muted-foreground">
+            Choose which teams serve, who is on them and when signups are on.
+          </p>
         </div>
-      )}
+        <Button variant="outline" nativeButton={false} render={<Link href={teamsHref} />}>
+          Go to Teams
+        </Button>
+      </section>
 
-      <ServingStats groupId={group.id} />
-    </div>
+      <ServingStats groupId={group.id} today={todayIn(zone)} teamsHref={teamsHref} />
+    </PageContainer>
   );
 }

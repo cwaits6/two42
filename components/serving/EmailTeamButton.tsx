@@ -14,23 +14,26 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
 import { Mail } from "lucide-react";
-import { formatServiceDate } from "@/lib/serving/sundays";
+import { formatServingDate } from "@/lib/serving/dates";
 
 interface EmailTeamButtonProps {
-  groupId: string;
+  teamId: string;
   teamName: string;
   openDates: string[];
+  /** Today in the church's time zone, "YYYY-MM-DD" */
+  today: string;
   memberCount: number;
 }
 
 /**
- * Leader broadcast: previews the open Sundays the email will list, then sends
+ * Leader broadcast: previews the open dates the email will list, then sends
  * every team member a message with one-tap signup links.
  */
 export function EmailTeamButton({
-  groupId,
+  teamId,
   teamName,
   openDates,
+  today,
   memberCount,
 }: EmailTeamButtonProps) {
   const [open, setOpen] = useState(false);
@@ -44,7 +47,7 @@ export function EmailTeamButton({
       const res = await fetch("/api/serving/broadcast", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ groupId, message: message.trim() || undefined }),
+        body: JSON.stringify({ groupId: teamId, message: message.trim() || undefined }),
       });
 
       if (res.ok) {
@@ -63,39 +66,47 @@ export function EmailTeamButton({
     }
   }
 
+  const allCovered = openDates.length === 0;
+
   return (
-    <>
+    <div className="flex flex-col gap-1">
       <Button
         variant="outline"
         onClick={() => setOpen(true)}
-        disabled={openDates.length === 0}
+        disabled={allCovered}
+        aria-describedby={allCovered ? "email-team-reason" : undefined}
       >
-        <Mail className="mr-2 h-4 w-4" />
+        <Mail aria-hidden="true" />
         Email the team
       </Button>
+      {allCovered && (
+        <p id="email-team-reason" className="text-base text-muted-foreground">
+          Every date is covered.
+        </p>
+      )}
 
       <Dialog open={open} onOpenChange={(o) => !sending && setOpen(o)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Email the {teamName}</DialogTitle>
+            <DialogTitle>Email {teamName}</DialogTitle>
           </DialogHeader>
 
           {memberCount === 0 ? (
-            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-              No team members found. Add members to this group in{" "}
-              <strong>Admin → Groups</strong> first.
+            <p className="text-base text-foreground bg-muted border border-border rounded-md px-3 py-2">
+              No one on this team can get email yet. Add people under Team
+              members on this page first.
             </p>
           ) : (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-base text-muted-foreground">
               Everyone on the team ({memberCount} member{memberCount !== 1 ? "s" : ""})
               will get an email listing the open dates below, each with a
               one-tap signup button.
             </p>
           )}
 
-          <ul className="text-sm list-disc pl-5 space-y-0.5 max-h-40 overflow-y-auto">
+          <ul className="text-base list-disc pl-5 space-y-0.5 max-h-40 overflow-y-auto">
             {openDates.map((d) => (
-              <li key={d}>{formatServiceDate(d)}</li>
+              <li key={d}>{formatServingDate(d, today)}</li>
             ))}
           </ul>
 
@@ -124,11 +135,11 @@ export function EmailTeamButton({
               disabled={sending || memberCount === 0}
               onClick={send}
             >
-              {sending ? "Sending..." : `Send to ${memberCount} member${memberCount !== 1 ? "s" : ""}`}
+              {sending ? "Sending…" : `Send to ${memberCount} member${memberCount !== 1 ? "s" : ""}`}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }

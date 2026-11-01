@@ -26,6 +26,7 @@ const { TeamRoster } = await import("./TeamRoster");
 
 const henry = {
   id: "p-henry",
+  email: "henry@example.test",
   first_name: "Henry",
   last_name: "Mockingham",
   preferred_name: null,

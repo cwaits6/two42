@@ -14,7 +14,7 @@ import {
 import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
 import { CheckCircle2, X } from "lucide-react";
-import { daysUntilService, formatServiceDate } from "@/lib/serving/sundays";
+import { daysUntil, formatServingDate } from "@/lib/serving/dates";
 
 export interface ScheduleEntry {
   id: string;
@@ -25,9 +25,12 @@ export interface ScheduleEntry {
 }
 
 interface ServingScheduleProps {
-  groupId: string;
+  teamId: string;
   teamName: string;
-  sundays: string[];
+  /** The upcoming dates in the team's window, "YYYY-MM-DD" */
+  dates: string[];
+  /** Today in the church's time zone, "YYYY-MM-DD" */
+  today: string;
   entries: Record<string, ScheduleEntry>;
   userId: string;
   spouse: { id: string; name: string } | null;
@@ -36,13 +39,14 @@ interface ServingScheduleProps {
 }
 
 /**
- * Vertical list of upcoming Sundays with one big "I'll do it" button per open
- * week — deliberately not a month-grid calendar.
+ * Vertical list of the team's upcoming dates with a Sign up button on each
+ * open one — deliberately not a month-grid calendar.
  */
 export function ServingSchedule({
-  groupId,
+  teamId,
   teamName,
-  sundays,
+  dates,
+  today,
   entries,
   userId,
   spouse,
@@ -60,12 +64,12 @@ export function ServingSchedule({
       const res = await fetch("/api/serving/signups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ groupId, serviceDate: date, attendeeProfileIds }),
+        body: JSON.stringify({ groupId: teamId, serviceDate: date, attendeeProfileIds }),
       });
 
       if (res.ok) {
         toast.success(
-          `You're signed up for ${formatServiceDate(date)}. A confirmation email is on its way.`
+          `Signed up for ${formatServingDate(date, today)}. A confirmation email is on its way.`
         );
       } else {
         toast.error(failureMessage("sign you up", res.status, { 409: "Someone just signed up for that date. Thank you anyway." }));
@@ -120,10 +124,10 @@ export function ServingSchedule({
 
   return (
     <div className="space-y-3">
-      {sundays.map((date) => {
+      {dates.map((date) => {
         const entry = entries[date];
         const mine = entry && isMine(entry);
-        const days = daysUntilService(date);
+        const label = formatServingDate(date, today);
 
         return (
           <Card
@@ -132,34 +136,35 @@ export function ServingSchedule({
           >
             <CardContent className="py-4 flex items-center gap-4">
               <div className="flex-1 min-w-0">
-                <p className="text-lg font-semibold">{formatServiceDate(date)}</p>
+                <p className="text-lg font-semibold">{label}</p>
                 {entry ? (
-                  <p className="text-muted-foreground flex items-center gap-1.5">
-                    <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                  <p className="text-base text-muted-foreground flex items-center gap-1.5">
+                    <CheckCircle2 className="h-5 w-5 text-brand-success shrink-0" aria-hidden="true" />
                     {mine ? (
                       <span>
                         <strong>You&apos;re serving</strong>
-                        {entry.attendeeIds.length > 1 ? ` — ${entry.label}` : ""}
+                        {entry.attendeeIds.length > 1 ? ` · ${entry.label}` : ""}
                       </span>
                     ) : (
                       <span>{entry.label}</span>
                     )}
                   </p>
                 ) : (
-                  <p className="text-muted-foreground">
-                    {days === 0 ? "Today — still open" : "Still needs someone"}
+                  <p className="text-base text-muted-foreground">
+                    {daysUntil(date, today) === 0 ? "Today · still needs someone" : "Still needs someone"}
                   </p>
                 )}
               </div>
 
               {!entry && canSignUp && (
                 <Button
-                  size="lg"
+                  variant="outline"
                   disabled={busy}
                   onClick={() => handleTake(date)}
-                  className="text-lg px-6 py-6 shrink-0"
+                  aria-label={`Sign up for ${label}`}
+                  className="shrink-0"
                 >
-                  I&apos;ll do it
+                  Sign up
                 </Button>
               )}
 
@@ -168,9 +173,10 @@ export function ServingSchedule({
                   variant="outline"
                   disabled={busy}
                   onClick={() => setCancelling(entry)}
+                  aria-label={`Cancel signup for ${label}`}
                   className="shrink-0"
                 >
-                  Can&apos;t make it?
+                  Cancel signup
                 </Button>
               )}
 
@@ -180,10 +186,10 @@ export function ServingSchedule({
                   size="icon"
                   disabled={busy}
                   onClick={() => setCancelling(entry)}
-                  aria-label={`Remove ${entry.label}`}
+                  aria-label={`Remove ${entry.label} from ${label}`}
                   className="text-muted-foreground hover:text-destructive shrink-0"
                 >
-                  <X className="h-4 w-4" />
+                  <X aria-hidden="true" />
                 </Button>
               )}
             </CardContent>
@@ -198,16 +204,15 @@ export function ServingSchedule({
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="text-xl">
-              {pickerDate ? formatServiceDate(pickerDate) : ""} — {teamName}
+              Who&apos;s serving on {pickerDate ? formatServingDate(pickerDate, today) : ""}?
             </DialogTitle>
           </DialogHeader>
-          <p className="text-muted-foreground">Who&apos;s coming?</p>
+          <p className="text-base text-muted-foreground">{teamName}</p>
           <div className="flex flex-col gap-3 pt-2">
             <Button
               size="lg"
               disabled={busy}
               onClick={() => pickerDate && signUp(pickerDate, [userId])}
-              className="text-lg py-6"
             >
               Just me
             </Button>
@@ -218,7 +223,6 @@ export function ServingSchedule({
                 onClick={() =>
                   pickerDate && signUp(pickerDate, [userId, spouse.id])
                 }
-                className="text-lg py-6"
               >
                 Me &amp; {spouse.name}
               </Button>
@@ -234,8 +238,8 @@ export function ServingSchedule({
           cancelling === null
             ? ""
             : cancellingMine
-              ? `Cancel your signup for ${formatServiceDate(cancelling.date)}?`
-              : `Remove ${cancelling.label} from ${formatServiceDate(cancelling.date)}?`
+              ? `Cancel your signup for ${formatServingDate(cancelling.date, today)}?`
+              : `Remove ${cancelling.label} from ${formatServingDate(cancelling.date, today)}?`
         }
         description={cancellingMine ? "That date will open back up for someone else." : undefined}
         confirmLabel={cancellingMine ? "Cancel signup" : "Remove signup"}
