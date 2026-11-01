@@ -1,11 +1,12 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { ErrorState } from "@/components/states/ErrorState";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
-import { signupDisplayName } from "@/lib/serving/display";
-import { upcomingSundays, pastSundaysUntil } from "@/lib/serving/sundays";
+import { personName, signupDisplayName } from "@/lib/serving/display";
+import { pastServiceDates, todayIn, upcomingServiceDates } from "@/lib/serving/dates";
 import {
   ServingSchedule,
   type ScheduleEntry,
@@ -13,20 +14,23 @@ import {
 import { ServingHistory, type HistoryEntry } from "@/components/serving/ServingHistory";
 import { EmailTeamButton } from "@/components/serving/EmailTeamButton";
 import { ServingSettingsDialog } from "@/components/serving/ServingSettingsDialog";
+import { TeamDot } from "@/components/serving/TeamDot";
 import {
   TeamRoster,
   type TeamRosterMember,
   type TeamRosterPerson,
 } from "@/components/serving/TeamRoster";
-import { displayName } from "@/lib/names";
 import { mintSignedUrls } from "@/lib/storageRead";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { readList } from "@/lib/supabase/readList";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { groupPageTitle } from "@/lib/pageTitle";
 
 export const generateMetadata = groupPageTitle("Serving");
 
 interface AttendeeProfile {
   id: string;
+  email: string | null;
   first_name: string | null;
   last_name: string | null;
   preferred_name: string | null;
@@ -35,7 +39,10 @@ interface AttendeeProfile {
 type RosterProfile = TeamRosterPerson & { role: string };
 
 const byName = (a: TeamRosterPerson, b: TeamRosterPerson) =>
-  displayName(a).localeCompare(displayName(b));
+  personName(a).localeCompare(personName(b));
+
+const SIGNUP_SELECT =
+  "id, service_date, created_by, family_id, serving_signup_attendees(profiles(id, email, first_name, last_name, preferred_name))";
 
 export default async function ServingSchedulePage({
   params,
@@ -90,7 +97,7 @@ export default async function ServingSchedulePage({
   if (!settings?.enabled && !canManageRoster) redirect(servingHref);
 
   // Everyone can view the schedule/roster read-only; only team members,
-  // team leads, and group leaders can actually claim a Sunday.
+  // team leads, and group leaders can actually claim a date.
   const canSignUp = isMember || isTeamLead || isLeader;
 
   const [{ data: memberRows, error: memberError }, { data: groupRows, error: groupError }] =
@@ -104,7 +111,7 @@ export default async function ServingSchedulePage({
       canManageRoster
         ? supabase
             .from("group_members")
-            .select("profiles(id, role, first_name, last_name, preferred_name, avatar_url)")
+            .select("profiles(id, email, role, first_name, last_name, preferred_name, avatar_url)")
             .eq("group_id", group.id)
         : Promise.resolve({ data: [], error: null }),
     ]);
@@ -134,6 +141,7 @@ export default async function ServingSchedulePage({
       if (p.role === "pending") continue;
       rosterMembers.push({
         id: p.id,
+        email: p.email,
         first_name: p.first_name,
         last_name: p.last_name,
         preferred_name: p.preferred_name,
@@ -146,6 +154,7 @@ export default async function ServingSchedulePage({
       if (!p || p.role === "pending" || onTeam.has(p.id)) continue;
       rosterCandidates.push({
         id: p.id,
+        email: p.email,
         first_name: p.first_name,
         last_name: p.last_name,
         preferred_name: p.preferred_name,
@@ -168,21 +177,32 @@ export default async function ServingSchedulePage({
     }));
   }
 
-  const sundays = upcomingSundays(settings?.window_weeks ?? 8);
+  const today = todayIn(await getOrgTimeZone());
+  const dates = upcomingServiceDates(settings?.window_weeks ?? 8, today);
 
-  const { data: signups } = await supabase
-    .from("serving_signups")
-    .select(
-      "id, service_date, created_by, family_id, serving_signup_attendees(profiles(id, first_name, last_name, preferred_name))"
-    )
-    .eq("team_id", teamId)
-    .gte("service_date", sundays[0])
-    .lte("service_date", sundays[sundays.length - 1]);
+  const [signupRead, pastSignupRead] = await Promise.all([
+    supabase
+      .from("serving_signups")
+      .select(SIGNUP_SELECT)
+      .eq("team_id", teamId)
+      .gte("service_date", dates[0])
+      .lte("service_date", dates[dates.length - 1]),
+    supabase
+      .from("serving_signups")
+      .select(SIGNUP_SELECT)
+      .eq("team_id", teamId)
+      .lt("service_date", dates[0])
+      .order("service_date", { ascending: false }),
+  ]);
+  const signups = readList(signupRead, "upcoming serving signups");
+  const pastSignupRows = readList(pastSignupRead, "past serving signups");
+  const scheduleUnavailable = !signups || !pastSignupRows;
 
-  // Household names for couple signups
+  // Household names for couple signups. A failed read degrades the label to
+  // the attendees' joined names.
   const familyIds = [
     ...new Set(
-      (signups ?? [])
+      [...(signups ?? []), ...(pastSignupRows ?? [])]
         .filter((s) => (s.serving_signup_attendees?.length ?? 0) > 1 && s.family_id)
         .map((s) => s.family_id as string)
     ),
@@ -196,53 +216,11 @@ export default async function ServingSchedulePage({
     for (const f of families ?? []) familyNames.set(f.id, f.family_name);
   }
 
-  const entries: Record<string, ScheduleEntry> = {};
-  for (const s of signups ?? []) {
+  const toEntry = (s: NonNullable<typeof signups>[number]): ScheduleEntry => {
     const attendees = (s.serving_signup_attendees ?? [])
       .map((a) => a.profiles as unknown as AttendeeProfile)
       .filter(Boolean);
-    entries[s.service_date] = {
-      id: s.id,
-      date: s.service_date,
-      createdBy: s.created_by,
-      attendeeIds: attendees.map((a) => a.id),
-      label: signupDisplayName(
-        attendees,
-        s.family_id ? (familyNames.get(s.family_id) ?? null) : null
-      ),
-    };
-  }
-
-  // Past signups for history section
-  const { data: pastSignupRows } = await supabase
-    .from("serving_signups")
-    .select(
-      "id, service_date, created_by, family_id, serving_signup_attendees(profiles(id, first_name, last_name, preferred_name))"
-    )
-    .eq("team_id", teamId)
-    .lt("service_date", sundays[0])
-    .order("service_date", { ascending: false });
-
-  const pastSignupMap = new Map<string, ScheduleEntry>();
-  const pastFamilyIds = [
-    ...new Set(
-      (pastSignupRows ?? [])
-        .filter((s) => (s.serving_signup_attendees?.length ?? 0) > 1 && s.family_id)
-        .map((s) => s.family_id as string)
-    ),
-  ];
-  if (pastFamilyIds.length > 0) {
-    const { data: pastFamilies } = await supabase
-      .from("family_units")
-      .select("id, family_name")
-      .in("id", pastFamilyIds);
-    for (const f of pastFamilies ?? []) familyNames.set(f.id, f.family_name);
-  }
-  for (const s of pastSignupRows ?? []) {
-    const attendees = (s.serving_signup_attendees ?? [])
-      .map((a) => a.profiles as unknown as AttendeeProfile)
-      .filter(Boolean);
-    pastSignupMap.set(s.service_date, {
+    return {
       id: s.id,
       date: s.service_date,
       createdBy: s.created_by ?? "",
@@ -251,18 +229,20 @@ export default async function ServingSchedulePage({
         attendees,
         s.family_id ? (familyNames.get(s.family_id) ?? null) : null
       ),
-    });
-  }
+    };
+  };
 
-  // All past Sundays from earliest signup to last week
-  const earliestPast =
-    pastSignupRows && pastSignupRows.length > 0
-      ? pastSignupRows[pastSignupRows.length - 1].service_date
-      : null;
+  const entries: Record<string, ScheduleEntry> = Object.fromEntries(
+    (signups ?? []).map((s) => [s.service_date, toEntry(s)])
+  );
+  const pastEntries = new Map((pastSignupRows ?? []).map((s) => [s.service_date, toEntry(s)]));
+
+  // Every past date from the earliest signup on, covered or not
+  const earliestPast = pastSignupRows?.at(-1)?.service_date ?? null;
   const historyEntries: HistoryEntry[] = earliestPast
-    ? pastSundaysUntil(earliestPast).map((date) => ({
+    ? pastServiceDates(earliestPast, today).map((date) => ({
         date,
-        entry: pastSignupMap.get(date) ?? null,
+        entry: pastEntries.get(date) ?? null,
       }))
     : [];
 
@@ -291,84 +271,83 @@ export default async function ServingSchedulePage({
     }
   }
 
-  return (
-    <div className="container mx-auto px-4 py-12 max-w-2xl">
-      <Link
-        href={servingHref}
-        className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground mb-6"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        All serving teams
-      </Link>
+  const teamSettings = canManageRoster && (
+    <ServingSettingsDialog
+      teamId={teamId}
+      settings={
+        settings
+          ? {
+              enabled: settings.enabled ?? false,
+              reminder_days: settings.reminder_days ?? [4, 5],
+              window_weeks: settings.window_weeks ?? 8,
+            }
+          : null
+      }
+    />
+  );
 
-      <div className="flex items-center gap-3 mb-2">
-        <span
-          className="inline-block w-4 h-4 rounded-full shrink-0"
-          style={{ backgroundColor: team.color ?? "var(--color-brand-primary)" }}
-        />
-        <h1 className="text-3xl md:text-4xl font-bold text-brand-primary-text">
-          {team.name}
-        </h1>
-      </div>
-      <p className="text-lg text-muted-foreground mb-8">
-        {team.description ||
-          "Pick a date below — one signup covers the whole service."}
-      </p>
+  return (
+    <PageContainer size="reading">
+      <PageHeader
+        backHref={servingHref}
+        backLabel="Back to Serving"
+        title={
+          <span className="flex items-center gap-3">
+            <TeamDot color={team.color} />
+            {team.name}
+          </span>
+        }
+        subtitle={team.description || "Pick an open date to serve."}
+      />
 
       {!settings?.enabled && canManageRoster && (
-        <p className="text-sm text-brand-accent-text mb-6">
-          Serving signups are not enabled for this team yet — turn them on in
-          Team settings.
-        </p>
-      )}
-
-      {canManageRoster && (
-        <div className="flex flex-wrap items-center gap-2 mb-6">
-          {settings?.enabled && (
-            <EmailTeamButton
-              groupId={teamId}
-              teamName={team.name}
-              openDates={sundays.filter((d) => !entries[d])}
-              memberCount={memberCount ?? 0}
-            />
-          )}
-          <ServingSettingsDialog
-            teamId={teamId}
-            settings={
-              settings
-                ? {
-                    enabled: settings.enabled ?? false,
-                    reminder_days: settings.reminder_days ?? [4, 5],
-                    window_weeks: settings.window_weeks ?? 8,
-                  }
-                : null
-            }
-          />
+        <div className="mb-8 flex flex-col gap-4 rounded-2xl border border-border bg-card p-5 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-base text-foreground">
+            Signups are off for this team. Turn them on in Team settings.
+          </p>
+          {teamSettings}
         </div>
       )}
 
       {!canSignUp && (
-        <p className="text-sm text-muted-foreground mb-6">
-          You&apos;re viewing this team&apos;s schedule. Only team members can
-          sign up — ask an admin to be added.
+        <p className="text-base text-muted-foreground mb-6">
+          Only people on this team can sign up. Ask a leader or the team lead to add you.
         </p>
       )}
 
-      <ServingSchedule
-        groupId={teamId}
-        teamName={team.name}
-        sundays={sundays}
-        entries={entries}
-        userId={user.id}
-        spouse={spouse}
-        canSignUp={canSignUp}
-        canManage={canManageRoster}
-      />
+      {scheduleUnavailable ? (
+        <ErrorState thing="the schedule" />
+      ) : (
+        <>
+          {settings?.enabled && canManageRoster && (
+            <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start">
+              <EmailTeamButton
+                teamId={teamId}
+                teamName={team.name}
+                openDates={dates.filter((d) => !entries[d])}
+                today={today}
+                memberCount={memberCount ?? 0}
+              />
+              {teamSettings}
+            </div>
+          )}
+
+          <ServingSchedule
+            teamId={teamId}
+            teamName={team.name}
+            dates={dates}
+            today={today}
+            entries={entries}
+            userId={user.id}
+            spouse={spouse}
+            canSignUp={canSignUp}
+            canManage={canManageRoster}
+          />
+        </>
+      )}
 
       {canManageRoster && rosterUnavailable && (
-        <p className="mt-10 text-base text-muted-foreground">
-          The team roster could not be loaded. Refresh the page to try again.
-        </p>
+        <ErrorState thing="the team roster" className="mt-10" />
       )}
 
       {canManageRoster && !rosterUnavailable && (
@@ -384,8 +363,8 @@ export default async function ServingSchedulePage({
       )}
 
       {historyEntries.length > 0 && (
-        <ServingHistory entries={historyEntries} />
+        <ServingHistory entries={historyEntries} today={today} />
       )}
-    </div>
+    </PageContainer>
   );
 }

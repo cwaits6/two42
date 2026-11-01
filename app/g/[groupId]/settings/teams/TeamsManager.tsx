@@ -484,7 +484,7 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
                 <Label htmlFor="t_serving">Serving role</Label>
                 <p className="text-base text-muted-foreground">
                   Lists this team on the Serving page with a roster everyone
-                  can see. Turn on serving signups separately from that page.
+                  can see. Turn on signups from its Team settings once saved.
                 </p>
               </div>
               <Switch

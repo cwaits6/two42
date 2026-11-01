@@ -1,10 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { CalendarCheck, HandHelping } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { EmptyState } from "@/components/states/EmptyState";
+import { ErrorState } from "@/components/states/ErrorState";
+import { LoadingState } from "@/components/states/LoadingState";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Segmented } from "@/components/ui/segmented";
-import { displayName } from "@/lib/names";
+import { statsRange, type StatsRange } from "@/lib/serving/dates";
+import { personName } from "@/lib/serving/display";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -22,43 +29,32 @@ interface MemberRow {
 
 // ── Date range helpers ────────────────────────────────────────────────────────
 
-const RANGES = [
+const RANGES: { label: string; value: StatsRange }[] = [
   { label: "This year", value: "thisYear" },
   { label: "Last year", value: "lastYear" },
   { label: "Last 6 months", value: "6mo" },
   { label: "All time", value: "all" },
-] as const;
-
-type RangeKey = (typeof RANGES)[number]["value"];
-
-function dateRange(key: RangeKey): { start: string | null; end: string | null } {
-  const now = new Date();
-  const y = now.getFullYear();
-
-  if (key === "thisYear") {
-    return { start: `${y}-01-01`, end: `${y}-12-31` };
-  }
-  if (key === "lastYear") {
-    return { start: `${y - 1}-01-01`, end: `${y - 1}-12-31` };
-  }
-  if (key === "6mo") {
-    const d = new Date(now);
-    d.setMonth(d.getMonth() - 6);
-    return {
-      start: d.toISOString().slice(0, 10),
-      end: now.toISOString().slice(0, 10),
-    };
-  }
-  return { start: null, end: null };
-}
+];
 
 // ── Stats ────────────────────────────────────────────────────────────────────
 
-export function ServingStats({ groupId }: { groupId: string }) {
-  const [range, setRange] = useState<RangeKey>("thisYear");
+export function ServingStats({
+  groupId,
+  today,
+  teamsHref,
+}: {
+  groupId: string;
+  /** Today in the church's time zone, "YYYY-MM-DD" */
+  today: string;
+  teamsHref: string;
+}) {
+  const [range, setRange] = useState<StatsRange>("thisYear");
   const [teams, setTeams] = useState<Team[]>([]);
   const [rows, setRows] = useState<MemberRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
   const supabase = createClient();
 
   useEffect(() => {
@@ -66,9 +62,10 @@ export function ServingStats({ groupId }: { groupId: string }) {
 
     async function load() {
       setLoading(true);
+      setFailed(false);
 
-      // Enabled teams in this group
-      const { data: teamSettings } = await supabase
+      // Teams in this group with signups on
+      const { data: teamSettings, error: teamsError } = await supabase
         .from("serving_team_settings")
         .select("team_id, teams!inner(name, group_id)")
         .eq("enabled", true)
@@ -80,6 +77,12 @@ export function ServingStats({ groupId }: { groupId: string }) {
       });
 
       if (cancelled) return;
+      if (teamsError) {
+        console.error("Failed to load serving teams: code=%s", teamsError.code);
+        setFailed(true);
+        setLoading(false);
+        return;
+      }
       setTeams(resolvedTeams);
 
       if (!resolvedTeams.length) {
@@ -89,13 +92,13 @@ export function ServingStats({ groupId }: { groupId: string }) {
       }
 
       // Signups with attendees, filtered by date range
-      const { start, end } = dateRange(range);
+      const { start, end } = statsRange(range, today);
       const teamIds = resolvedTeams.map((t) => t.team_id);
 
       let query = supabase
         .from("serving_signups")
         .select(
-          "id, service_date, team_id, serving_signup_attendees(profile_id, profiles(id, first_name, last_name, preferred_name))"
+          "id, service_date, team_id, serving_signup_attendees(profile_id, profiles(id, email, first_name, last_name, preferred_name))"
         )
         .in("team_id", teamIds)
         .order("service_date", { ascending: false });
@@ -103,8 +106,14 @@ export function ServingStats({ groupId }: { groupId: string }) {
       if (start) query = query.gte("service_date", start);
       if (end) query = query.lte("service_date", end);
 
-      const { data: signups } = await query;
+      const { data: signups, error: signupsError } = await query;
       if (cancelled) return;
+      if (signupsError) {
+        console.error("Failed to load serving history: code=%s", signupsError.code);
+        setFailed(true);
+        setLoading(false);
+        return;
+      }
 
       // Aggregate: profileId → teamId → count
       const countMap = new Map<string, Map<string, number>>();
@@ -114,14 +123,20 @@ export function ServingStats({ groupId }: { groupId: string }) {
         const teamId = signup.team_id as string;
         const attendees = (signup.serving_signup_attendees ?? []) as unknown as Array<{
           profile_id: string;
-          profiles: { id: string; first_name: string | null; last_name: string | null; preferred_name: string | null } | null;
+          profiles: {
+            id: string;
+            email: string | null;
+            first_name: string | null;
+            last_name: string | null;
+            preferred_name: string | null;
+          } | null;
         }>;
 
         for (const a of attendees) {
           if (!a.profiles) continue;
           const pid = a.profile_id;
           if (!nameMap.has(pid)) {
-            nameMap.set(pid, displayName(a.profiles));
+            nameMap.set(pid, personName(a.profiles));
           }
           if (!countMap.has(pid)) countMap.set(pid, new Map());
           const tc = countMap.get(pid)!;
@@ -137,7 +152,7 @@ export function ServingStats({ groupId }: { groupId: string }) {
             counts[tid] = n;
             total += n;
           }
-          return { profileId, name: nameMap.get(profileId) ?? "Unknown", counts, total };
+          return { profileId, name: nameMap.get(profileId)!, counts, total };
         })
         .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
 
@@ -149,7 +164,7 @@ export function ServingStats({ groupId }: { groupId: string }) {
 
     load();
     return () => { cancelled = true; };
-  }, [range, groupId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [range, groupId, today, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalServings = useMemo(
     () => rows.reduce((s, r) => s + r.total, 0),
@@ -160,9 +175,9 @@ export function ServingStats({ groupId }: { groupId: string }) {
     <section>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-brand-primary-text">Serving stats</h2>
-          <p className="text-muted-foreground mt-1">
-            Who has served, and how often, across all active teams.
+          <h2 className="text-2xl font-bold text-brand-primary-text">Who has served</h2>
+          <p className="text-base text-muted-foreground mt-1">
+            How often each member has served on each team with signups on.
           </p>
         </div>
 
@@ -175,26 +190,27 @@ export function ServingStats({ groupId }: { groupId: string }) {
       </div>
 
       {loading ? (
-        <p className="text-muted-foreground">Loading…</p>
+        <LoadingState thing="serving history" />
+      ) : failed ? (
+        <ErrorState thing="serving history" onRetry={retry} />
       ) : teams.length === 0 ? (
-        <Card>
-          <CardContent className="py-10 text-center text-muted-foreground">
-            No serving teams are enabled yet. Enable a team from the Serving page.
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={HandHelping}
+          message="No teams have signups on yet."
+          action={
+            <Button nativeButton={false} render={<Link href={teamsHref} />}>
+              Go to Teams
+            </Button>
+          }
+        />
       ) : rows.length === 0 ? (
-        <Card>
-          <CardContent className="py-10 text-center text-muted-foreground">
-            No serving data for this period.
-          </CardContent>
-        </Card>
+        <EmptyState icon={CalendarCheck} message="No one has served in this period." />
       ) : (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-lg">
-              {totalServings} serving slot{totalServings !== 1 ? "s" : ""} logged
-              {" · "}
-              {rows.length} member{rows.length !== 1 ? "s" : ""}
+              {totalServings} {totalServings === 1 ? "turn" : "turns"} served by{" "}
+              {rows.length} {rows.length === 1 ? "member" : "members"}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">

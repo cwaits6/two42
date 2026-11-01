@@ -10,10 +10,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { setGroupMembership } from "@/lib/memberGroups";
-import { displayName, initials } from "@/lib/names";
+import { personInitials, personName } from "@/lib/serving/display";
 
 export interface TeamRosterPerson {
   id: string;
+  email: string | null;
   first_name: string | null;
   last_name: string | null;
   preferred_name: string | null;
@@ -51,7 +52,7 @@ export function TeamRoster({ teamId, teamName, groupName, members, candidates }:
     const q = query.trim().toLowerCase();
     if (!q) return candidates;
     return candidates.filter((p) =>
-      [p.first_name, p.last_name, p.preferred_name].filter(Boolean).join(" ").toLowerCase().includes(q),
+      [personName(p), p.first_name, p.last_name, p.email].filter(Boolean).join(" ").toLowerCase().includes(q),
     );
   }, [candidates, query]);
 
@@ -62,7 +63,7 @@ export function TeamRoster({ teamId, teamName, groupName, members, candidates }:
 
   async function add(person: TeamRosterPerson) {
     setBusyId(person.id);
-    const name = displayName(person);
+    const name = personName(person);
     const error = await setGroupMembership({ id: person.id, name }, { id: teamId, name: teamName }, true);
     setBusyId(null);
     if (error) {
@@ -75,7 +76,7 @@ export function TeamRoster({ teamId, teamName, groupName, members, candidates }:
 
   async function remove() {
     if (!removing) return;
-    const name = displayName(removing);
+    const name = personName(removing);
     const error = await setGroupMembership({ id: removing.id, name }, { id: teamId, name: teamName }, false);
     if (error) {
       toast.error(error);
@@ -88,8 +89,8 @@ export function TeamRoster({ teamId, teamName, groupName, members, candidates }:
 
   const avatar = (p: TeamRosterPerson) => (
     <Avatar className="h-12 w-12">
-      {p.avatar_url && <AvatarImage src={p.avatar_url} alt={displayName(p)} />}
-      <AvatarFallback className="bg-brand-primary text-white">{initials(p)}</AvatarFallback>
+      {p.avatar_url && <AvatarImage src={p.avatar_url} alt={personName(p)} />}
+      <AvatarFallback className="bg-brand-primary text-white">{personInitials(p)}</AvatarFallback>
     </Avatar>
   );
 
@@ -122,7 +123,7 @@ export function TeamRoster({ teamId, teamName, groupName, members, candidates }:
               <DirRow
                 key={m.id}
                 avatar={avatar(m)}
-                title={displayName(m)}
+                title={personName(m)}
                 subtitle={m.is_leader ? "Team lead" : undefined}
                 actions={
                   m.is_leader ? undefined : (
@@ -130,7 +131,7 @@ export function TeamRoster({ teamId, teamName, groupName, members, candidates }:
                       variant="outline"
                       disabled={refreshing}
                       onClick={() => setRemoving(m)}
-                      aria-label={`Remove ${displayName(m)} from ${teamName}`}
+                      aria-label={`Remove ${personName(m)} from ${teamName}`}
                     >
                       Remove
                     </Button>
@@ -165,13 +166,13 @@ export function TeamRoster({ teamId, teamName, groupName, members, candidates }:
                 <DirRow
                   key={p.id}
                   avatar={avatar(p)}
-                  title={displayName(p)}
+                  title={personName(p)}
                   actions={
                     <Button
                       variant="outline"
                       disabled={busyId === p.id || refreshing}
                       onClick={() => add(p)}
-                      aria-label={`Add ${displayName(p)} to ${teamName}`}
+                      aria-label={`Add ${personName(p)} to ${teamName}`}
                     >
                       <Plus aria-hidden="true" />
                       Add
@@ -187,7 +188,7 @@ export function TeamRoster({ teamId, teamName, groupName, members, candidates }:
       <ConfirmDialog
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}
-        title={removing ? `Remove ${displayName(removing)} from ${teamName}?` : ""}
+        title={removing ? `Remove ${personName(removing)} from ${teamName}?` : ""}
         description={`They stay in ${groupName}.`}
         confirmLabel="Remove from team"
         pendingLabel="Removing…"

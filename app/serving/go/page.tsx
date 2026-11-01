@@ -1,11 +1,11 @@
-import Link from "next/link";
 import { createServiceClient } from "@/lib/supabase/server";
-import { Card, CardContent } from "@/components/ui/card";
 import { getServingLinkMode } from "@/lib/serving/config";
 import { verifyServingToken } from "@/lib/serving/links";
-import { formatServiceDate, isValidServiceDate } from "@/lib/serving/sundays";
+import { formatServingDate, isUpcomingServiceDate, todayIn } from "@/lib/serving/dates";
 import { findSpouse, resolveSignupLabel } from "@/lib/serving/server";
+import { orgTimeZoneById } from "@/lib/time/orgZone";
 import { LinkActionConfirm } from "@/components/serving/LinkActionConfirm";
+import { ServingNotice } from "@/components/serving/ServingNotice";
 import { pageTitle } from "@/lib/pageTitle";
 
 export const generateMetadata = () => pageTitle("Serving");
@@ -17,24 +17,24 @@ export const generateMetadata = () => pageTitle("Serving");
  * prefetch URLs can't sign anyone up or cancel anything.
  */
 
-function Message({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="container mx-auto px-4 py-20 max-w-lg text-center">
-      <Card className="p-8">
-        <CardContent className="pt-6">
-          <h1 className="font-serif text-3xl text-brand-primary-text mb-4">{title}</h1>
-          <p className="text-lg text-muted-foreground">{body}</p>
-          <Link
-            href="/serving"
-            className="inline-block mt-6 text-brand-primary-text hover:underline text-lg"
-          >
-            Go to the serving page
-          </Link>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
+// Every way a link can be invalid — bad signature, expired, a deleted team,
+// a removed person, signups turned off, a cross-org pairing — renders this
+// one notice, so the page never says which.
+const INVALID_LINK = (
+  <ServingNotice
+    title="This link"
+    em="no longer works"
+    body="Sign in to see your team's dates and sign up from the site."
+  />
+);
+
+const LOAD_FAILED = (
+  <ServingNotice
+    title="Couldn't load"
+    em="this link"
+    body="Try again in a moment, or sign in to see your team's dates on the site."
+  />
+);
 
 export default async function ServingLinkPage({
   searchParams,
@@ -45,12 +45,7 @@ export default async function ServingLinkPage({
   const payload = token ? verifyServingToken(token) : null;
 
   if (!token || !payload) {
-    return (
-      <Message
-        title="This link has expired"
-        body="No problem — you can sign in to the site and manage your serving Sundays there."
-      />
-    );
+    return INVALID_LINK;
   }
 
   const service = await createServiceClient();
@@ -65,7 +60,7 @@ export default async function ServingLinkPage({
   // instead of silently matching zero rows.
   // supabase-js returns { data: null, error } rather than throwing, so an
   // uncaptured error is indistinguishable from an absent row and renders as
-  // "expired" with nothing in the logs.
+  // an invalid link with nothing in the logs.
   const { data: group, error: groupError } = await service
     .from("teams")
     .select("id, name, org_id, group_id")
@@ -74,29 +69,20 @@ export default async function ServingLinkPage({
 
   if (groupError) {
     console.error("Serving link page: group lookup failed for %s:", payload.g, groupError);
-    return (
-      <Message
-        title="Something went wrong"
-        body="We couldn't load this link just now. Please try again in a moment, or sign in to the site to manage your serving Sundays."
-      />
-    );
+    return LOAD_FAILED;
   }
 
   if (!group) {
-    return (
-      <Message
-        title="This link has expired"
-        body="No problem — you can sign in to the site and manage your serving Sundays there."
-      />
-    );
+    return INVALID_LINK;
   }
 
   const linkMode = await getServingLinkMode(service, group.org_id, group.group_id);
   if (linkMode === "login") {
     return (
-      <Message
-        title="Please sign in"
-        body="Email links on this site require signing in first. Head to the serving page and we'll take you through login."
+      <ServingNotice
+        title="Sign in"
+        em="to respond"
+        body="This group asks people to sign in before responding to a serving email."
       />
     );
   }
@@ -147,21 +133,11 @@ export default async function ServingLinkPage({
       payload.d,
       loadError
     );
-    return (
-      <Message
-        title="Something went wrong"
-        body="We couldn't load this link just now. Please try again in a moment, or sign in to the site to manage your serving Sundays."
-      />
-    );
+    return LOAD_FAILED;
   }
 
   if (!profile || profile.role === "pending" || !settings?.enabled) {
-    return (
-      <Message
-        title="This link has expired"
-        body="No problem — you can sign in to the site and manage your serving Sundays there."
-      />
-    );
+    return INVALID_LINK;
   }
 
   // The HMAC covers `g` and `p` as opaque ids; nothing in the signature binds
@@ -176,31 +152,29 @@ export default async function ServingLinkPage({
       payload.g,
       payload.p
     );
-    return (
-      <Message
-        title="This link has expired"
-        body="No problem — you can sign in to the site and manage your serving Sundays there."
-      />
-    );
+    return INVALID_LINK;
   }
 
-  const dateLabel = formatServiceDate(payload.d);
-  const firstName = profile.preferred_name || profile.first_name || "Friend";
+  const today = todayIn(await orgTimeZoneById(service, group.org_id));
+  const dateLabel = formatServingDate(payload.d, today);
+  const firstName = profile.preferred_name || profile.first_name || null;
 
   if (payload.a === "signup") {
     if (!membership) {
       return (
-        <Message
-          title="You're no longer on this team"
-          body="This signup link is for a team you're not currently part of. Check the serving page for teams available to you."
+        <ServingNotice
+          title="You're not on"
+          em={group.name}
+          body="This link is for a team you're not on. The Serving page shows the teams you can sign up with."
         />
       );
     }
-    if (!isValidServiceDate(payload.d)) {
+    if (!isUpcomingServiceDate(payload.d, today)) {
       return (
-        <Message
-          title="That Sunday has passed"
-          body="This link pointed at a Sunday that's already behind us. Check the serving page for the upcoming schedule."
+        <ServingNotice
+          title={dateLabel}
+          em="has passed"
+          body="The Serving page shows the dates that are still open."
         />
       );
     }
@@ -223,9 +197,10 @@ export default async function ServingLinkPage({
         group.org_id
       );
       return (
-        <Message
-          title="That Sunday is covered"
-          body={`${coveredLabel} already has ${dateLabel} — thank you for offering! Check the serving page for other open Sundays.`}
+        <ServingNotice
+          title={dateLabel}
+          em="is covered"
+          body={`${coveredLabel} is serving with ${group.name} that day. Thank you for offering. The Serving page shows the dates that are still open.`}
         />
       );
     }
@@ -266,9 +241,10 @@ export default async function ServingLinkPage({
 
   if (!signup || !isInvolved) {
     return (
-      <Message
-        title="Nothing to cancel"
-        body={`You're not signed up for ${dateLabel} — it may have been cancelled already.`}
+      <ServingNotice
+        title="Nothing"
+        em="to cancel"
+        body={`You're not signed up for ${dateLabel}. The signup may have been cancelled already.`}
       />
     );
   }

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { formatServiceDate } from "@/lib/serving/sundays";
+import { formatServingDate } from "@/lib/serving/dates";
 import type { ScheduleEntry } from "./ServingSchedule";
 
 export interface HistoryEntry {
@@ -12,9 +12,11 @@ export interface HistoryEntry {
 
 interface ServingHistoryProps {
   entries: HistoryEntry[];
+  /** Today in the church's time zone, "YYYY-MM-DD" */
+  today: string;
 }
 
-export function ServingHistory({ entries }: ServingHistoryProps) {
+export function ServingHistory({ entries, today }: ServingHistoryProps) {
   const [open, setOpen] = useState(false);
 
   if (!entries.length) return null;
@@ -24,34 +26,32 @@ export function ServingHistory({ entries }: ServingHistoryProps) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
+        aria-expanded={open}
+        className="flex min-h-11 items-center gap-2 text-base font-semibold text-muted-foreground hover:text-foreground transition-colors"
       >
-        {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        Previous weeks ({entries.length})
+        {open ? <ChevronUp className="h-5 w-5" aria-hidden="true" /> : <ChevronDown className="h-5 w-5" aria-hidden="true" />}
+        Past dates ({entries.length})
       </button>
 
       {open && (
-        <div className="mt-4 space-y-0 divide-y divide-border">
+        <ul className="mt-4 divide-y divide-border">
           {entries.map(({ date, entry }) => (
-            <div
-              key={date}
-              className="flex items-center justify-between py-3 gap-4"
-            >
-              <span className="font-sans text-sm text-muted-foreground shrink-0">
-                {formatServiceDate(date)}
+            <li key={date} className="flex items-center justify-between py-3 gap-4">
+              <span className="text-base text-muted-foreground shrink-0">
+                {formatServingDate(date, today)}
               </span>
-              {entry ? (
-                <span className="font-sans text-sm font-medium text-foreground text-right">
-                  {entry.label}
-                </span>
-              ) : (
-                <span className="font-sans text-sm text-muted-foreground/60 italic text-right">
-                  No one signed up
-                </span>
-              )}
-            </div>
+              <span
+                className={
+                  entry
+                    ? "text-base font-medium text-foreground text-right"
+                    : "text-base text-muted-foreground text-right"
+                }
+              >
+                {entry ? entry.label : "No one signed up"}
+              </span>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );

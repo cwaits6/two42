@@ -47,7 +47,7 @@ const TILES: { href: string; label: string; description: string }[] = [
   {
     href: "/settings/serving",
     label: "Serving",
-    description: "Serving teams, email links and who has served.",
+    description: "Serving email links and who has served.",
   },
   {
     href: "/settings/teams",

@@ -1,16 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle2 } from "lucide-react";
 import { failureMessage } from "@/lib/errorCopy";
+import { ServingNotice, ServingPageLink } from "./ServingNotice";
 
 interface LinkActionConfirmProps {
   token: string;
   action: "signup" | "cancel";
-  firstName: string;
+  /** Null when the person has no name on file yet */
+  firstName: string | null;
   teamName: string;
   dateLabel: string;
   spouseName: string | null;
@@ -30,6 +29,7 @@ export function LinkActionConfirm({
   const [error, setError] = useState<string | null>(null);
 
   const verb = action === "signup" ? "sign you up" : "cancel your signup";
+  const greeting = firstName ? `Hi ${firstName}. ` : "";
 
   async function submit(includeSpouse: boolean) {
     setBusy(true);
@@ -58,80 +58,58 @@ export function LinkActionConfirm({
     }
   }
 
+  if (done) {
+    return action === "signup" ? (
+      <ServingNotice
+        title="You're signed up for"
+        em={dateLabel}
+        body={`Thank you for serving with ${teamName}. A confirmation email with a calendar invitation is on its way.`}
+      />
+    ) : (
+      <ServingNotice
+        title="Signup cancelled for"
+        em={dateLabel}
+        body="That date is open again for someone else. Thank you for letting us know."
+      />
+    );
+  }
+
   return (
-    <div className="container mx-auto px-4 py-20 max-w-lg text-center">
-      <Card className="p-8">
-        <CardContent className="pt-6">
-          {done ? (
-            <>
-              <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto mb-4" />
-              <h1 className="font-serif text-3xl text-brand-primary-text mb-4">
-                {action === "signup" ? "You're all set!" : "Signup cancelled"}
-              </h1>
-              <p className="text-lg text-muted-foreground">
-                {action === "signup"
-                  ? `Thank you for serving with the ${teamName} on ${dateLabel}. A confirmation email with a calendar invitation is on its way.`
-                  : `Your ${dateLabel} signup is cancelled and the Sunday is open for someone else. Thank you for letting us know.`}
-              </p>
-            </>
-          ) : (
-            <>
-              <h1 className="font-serif text-3xl text-brand-primary-text mb-4">
-                {action === "signup" ? `Serve on ${dateLabel}?` : "Can't make it?"}
-              </h1>
-              <p className="text-lg text-muted-foreground mb-8">
-                {action === "signup"
-                  ? `Hi ${firstName}! Tap a button below and ${dateLabel} with the ${teamName} is yours.`
-                  : `Hi ${firstName}, tap the button to cancel your ${teamName} signup for ${dateLabel}. The Sunday will open back up for someone else.`}
-              </p>
+    <ServingNotice
+      title={action === "signup" ? `Serve with ${teamName} on` : "Cancel your signup for"}
+      em={dateLabel}
+      body={
+        action === "signup"
+          ? spouseName
+            ? `${greeting}Choose who is serving that day.`
+            : `${greeting}Confirm below and ${dateLabel} with ${teamName} is yours.`
+          : `${greeting}Confirm below to cancel your ${teamName} signup. ${dateLabel} will open up for someone else.`
+      }
+    >
+      <div className="flex flex-col gap-3">
+        {action === "signup" ? (
+          <>
+            <Button size="lg" disabled={busy} onClick={() => submit(false)}>
+              {spouseName ? "Just me" : "Sign up"}
+            </Button>
+            {spouseName && (
+              <Button size="lg" disabled={busy} onClick={() => submit(true)}>
+                Me &amp; {spouseName}
+              </Button>
+            )}
+          </>
+        ) : (
+          <Button size="lg" variant="destructive" disabled={busy} onClick={() => submit(false)}>
+            Cancel signup
+          </Button>
+        )}
 
-              <div className="flex flex-col gap-3">
-                {action === "signup" ? (
-                  <>
-                    <Button
-                      size="lg"
-                      disabled={busy}
-                      onClick={() => submit(false)}
-                      className="text-lg py-6"
-                    >
-                      {spouseName ? "Just me" : "Yes, I'll serve"}
-                    </Button>
-                    {spouseName && (
-                      <Button
-                        size="lg"
-                        disabled={busy}
-                        onClick={() => submit(true)}
-                        className="text-lg py-6"
-                      >
-                        Me &amp; {spouseName}
-                      </Button>
-                    )}
-                  </>
-                ) : (
-                  <Button
-                    size="lg"
-                    disabled={busy}
-                    onClick={() => submit(false)}
-                    variant="destructive"
-                    className="text-lg py-6"
-                  >
-                    Yes, cancel my signup
-                  </Button>
-                )}
-              </div>
+        {error && <p role="alert" className="text-base text-destructive">{error}</p>}
 
-              {error && <p role="alert" className="text-destructive mt-4">{error}</p>}
-            </>
-          )}
-
-          <Link
-            href="/serving"
-            className="inline-block mt-8 text-brand-primary-text hover:underline text-lg"
-          >
-            See the full serving schedule
-          </Link>
-        </CardContent>
-      </Card>
-    </div>
+        <div className="mt-3">
+          <ServingPageLink />
+        </div>
+      </div>
+    </ServingNotice>
   );
 }

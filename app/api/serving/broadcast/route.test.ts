@@ -65,6 +65,7 @@ function makeCookieClient(insertSpy: (payload: unknown) => { data: unknown; erro
     serving_team_settings: { data: { enabled: true, window_weeks: 8 }, error: null },
     serving_signups: { data: [], error: null },
     group_settings: { data: null, error: null },
+    organizations: { data: { timezone: "America/New_York" }, error: null },
   };
 
   return {

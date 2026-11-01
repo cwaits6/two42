@@ -4,14 +4,15 @@ import { displayName } from "@/lib/names";
 import { resolveEmailBranding } from "@/lib/email/identity";
 import { getServingLinkMode } from "@/lib/serving/config";
 import { createServingToken } from "@/lib/serving/links";
-import { upcomingSundays } from "@/lib/serving/sundays";
+import { todayIn, upcomingServiceDates } from "@/lib/serving/dates";
+import { orgTimeZoneById } from "@/lib/time/orgZone";
 import { sendServingBroadcastEmail } from "@/lib/email/serving";
 import { reserveEmailQuota } from "@/lib/email/quota";
 import type { Profile } from "@/lib/types";
 import { siteConfig } from "@/lib/config";
 
 /**
- * Leader "Email the team" broadcast: emails every team member the Sundays
+ * Leader "Email the team" broadcast: emails every team member the dates
  * that still need someone, each with its own one-tap action link.
  */
 export async function POST(request: Request) {
@@ -122,17 +123,18 @@ export async function POST(request: Request) {
     );
   }
 
-  // Open Sundays are recomputed here — the email must reflect the truth at
+  // Open dates are recomputed here — the email must reflect the truth at
   // send time, not what the leader's page showed when it loaded
-  const sundays = upcomingSundays(settings.window_weeks);
+  const today = todayIn(await orgTimeZoneById(supabase, group.org_id));
+  const dates = upcomingServiceDates(settings.window_weeks, today);
   const { data: signups, error: signupsError } = await supabase
     .from("serving_signups")
     .select("service_date")
     .eq("team_id", groupId)
-    .gte("service_date", sundays[0])
-    .lte("service_date", sundays[sundays.length - 1]);
+    .gte("service_date", dates[0])
+    .lte("service_date", dates[dates.length - 1]);
 
-  // A failed read here would render every Sunday as open and broadcast
+  // A failed read here would render every date as open and broadcast
   // signup links for dates that are already covered — fail the send instead.
   if (signupsError) {
     console.error(
@@ -147,7 +149,7 @@ export async function POST(request: Request) {
   }
 
   const covered = new Set((signups ?? []).map((s) => s.service_date));
-  const openDates = sundays.filter((d) => !covered.has(d));
+  const openDates = dates.filter((d) => !covered.has(d));
 
   if (openDates.length === 0) {
     return NextResponse.json(

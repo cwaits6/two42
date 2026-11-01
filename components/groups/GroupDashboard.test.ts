@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement, ReactNode } from "react";
 import type { ActiveGroup } from "@/lib/groups/active";
 import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
@@ -8,8 +8,10 @@ type Read = { data: unknown; error: { code: string; message: string } | null; co
 const FAILED: Read = { data: null, error: { code: "57014", message: "timeout" } };
 
 let reads: Record<string, Read>;
+let lowerBounds: Record<string, unknown[][]>;
+let zone: string;
 
-/** A query builder whose every call chains, resolving to the table's canned read. */
+/** A query builder whose every call chains, resolving to the table's canned read; `gte` arguments are recorded per table. */
 function query(table: string) {
   const builder: Record<string, unknown> = new Proxy(
     {},
@@ -17,6 +19,12 @@ function query(table: string) {
       get(_, prop) {
         if (prop === "then") {
           return (resolve: (r: Read) => unknown) => resolve(reads[table] ?? { data: [], error: null });
+        }
+        if (prop === "gte") {
+          return (...args: unknown[]) => {
+            (lowerBounds[table] ??= []).push(args);
+            return builder;
+          };
         }
         return () => builder;
       },
@@ -28,7 +36,7 @@ function query(table: string) {
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: query }) }));
 vi.mock("@/lib/supabase/current-user", () => ({ getOptionalUser: async () => ({ id: "user-1" }) }));
-vi.mock("@/lib/time/orgZone", () => ({ getOrgTimeZone: async () => "America/New_York" }));
+vi.mock("@/lib/time/orgZone", () => ({ getOrgTimeZone: async () => zone }));
 vi.mock("@/components/states/ErrorState", () => ({ ErrorState: () => null }));
 vi.mock("@/components/events/RsvpControl", () => ({ RsvpControl: () => null }));
 vi.mock("@/components/events/JoinMeetingBlock", () => ({ JoinMeetingBlock: () => null }));
@@ -86,6 +94,8 @@ async function render(group: ActiveGroup = MEMBER) {
 
 beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
+  zone = "America/New_York";
+  lowerBounds = {};
   reads = {
     profiles: { data: { preferred_name: null, first_name: "Ann" }, error: null },
     events: { data: [], error: null },
@@ -101,6 +111,10 @@ beforeEach(() => {
     },
     serving_signups: { data: [], error: null },
   };
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("GroupDashboard", () => {
@@ -153,6 +167,18 @@ describe("GroupDashboard", () => {
     expect(text).toContain("Coffee team");
     expect(text).toContain("Sunday, November 1");
     expect(text).not.toContain("2026-11-01");
+  });
+
+  it("takes upcoming serving turns from today in the church's time zone", async () => {
+    vi.useFakeTimers({ now: new Date("2026-11-02T02:30:00Z"), toFake: ["Date"] });
+
+    await render();
+    expect(lowerBounds.serving_signups).toEqual([["service_date", "2026-11-01"]]);
+
+    zone = "UTC";
+    lowerBounds = {};
+    await render();
+    expect(lowerBounds.serving_signups).toEqual([["service_date", "2026-11-02"]]);
   });
 
   it("shows the maybe count when no one has said yes yet", async () => {
