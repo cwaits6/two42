@@ -147,8 +147,6 @@ export function AboutEditor({
   const [calls, setCalls] = useState({
     weekly_zoom_url: initialSettings.weekly_zoom_url ?? "",
     zoom_meeting_time: initialSettings.zoom_meeting_time ?? "",
-    weekly_prayer_call_url: initialSettings.weekly_prayer_call_url ?? "",
-    weekly_prayer_call_time: initialSettings.weekly_prayer_call_time ?? "",
   });
   const [savingCalls, setSavingCalls] = useState(false);
   const setCall = (key: keyof typeof calls, value: string) =>
@@ -156,8 +154,7 @@ export function AboutEditor({
 
   const handleSaveCalls = async () => {
     const zoomUrl = calls.weekly_zoom_url.trim();
-    const prayerUrl = calls.weekly_prayer_call_url.trim();
-    if (!isHttpsOrEmpty(zoomUrl) || !isHttpsOrEmpty(prayerUrl)) {
+    if (!isHttpsOrEmpty(zoomUrl)) {
       toast.error("Call links must start with https://");
       return;
     }
@@ -171,8 +168,6 @@ export function AboutEditor({
         group_id: groupId,
         weekly_zoom_url: zoomUrl || null,
         zoom_meeting_time: calls.zoom_meeting_time.trim() || null,
-        weekly_prayer_call_url: prayerUrl || null,
-        weekly_prayer_call_time: calls.weekly_prayer_call_time.trim() || null,
         updated_by: user?.id,
         updated_at: new Date().toISOString(),
       })
@@ -439,28 +434,17 @@ export function AboutEditor({
                 className="text-base"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="weekly-prayer-call-url" className="text-base">Prayer call link</Label>
-              <Input
-                id="weekly-prayer-call-url"
-                type="url"
-                placeholder="https://…"
-                value={calls.weekly_prayer_call_url}
-                onChange={(e) => setCall("weekly_prayer_call_url", e.target.value)}
-                className="text-base"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="weekly-prayer-call-time" className="text-base">Prayer call time</Label>
-              <Input
-                id="weekly-prayer-call-time"
-                placeholder="Tuesdays at 7am"
-                value={calls.weekly_prayer_call_time}
-                onChange={(e) => setCall("weekly_prayer_call_time", e.target.value)}
-                className="text-base"
-              />
-            </div>
           </div>
+          <p className="text-base text-muted-foreground">
+            The prayer call is set up on the{" "}
+            <Link
+              href={groupPath(groupId, "/prayer")}
+              className="font-semibold text-brand-primary-text underline underline-offset-4 hover:text-foreground"
+            >
+              Prayer page
+            </Link>
+            .
+          </p>
           <Button
             onClick={handleSaveCalls}
             disabled={savingCalls}

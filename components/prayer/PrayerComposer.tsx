@@ -26,26 +26,26 @@ function SwitchRow({
   return (
     <label
       htmlFor={id}
-      className={`flex w-full cursor-pointer items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
+      className={`flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
         on
           ? "border-brand-primary/40 bg-brand-warm"
           : "border-border bg-card hover:border-brand-primary/30"
       }`}
     >
       <span
-        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
           on
-            ? "bg-brand-primary text-white"
+            ? "bg-primary text-primary-foreground"
             : "bg-background text-muted-foreground"
         }`}
       >
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-foreground">
+        <span className="block text-base font-semibold text-foreground">
           {title}
         </span>
-        <span className="block text-[13px] leading-snug text-muted-foreground">
+        <span className="block text-sm leading-snug text-muted-foreground">
           {sub}
         </span>
       </span>
@@ -97,7 +97,7 @@ export function PrayerComposer({
               {me.initials}
             </AvatarFallback>
           </Avatar>
-          <h2 className="text-xl font-semibold text-foreground">
+          <h2 id="prayer-composer-title" className="text-xl font-semibold text-foreground">
             Share a request
           </h2>
         </div>
@@ -108,6 +108,7 @@ export function PrayerComposer({
           placeholder="What can we pray with you about?"
           rows={4}
           maxLength={2000}
+          aria-labelledby="prayer-composer-title"
           className="bg-background text-base"
         />
       </div>
@@ -124,17 +125,15 @@ export function PrayerComposer({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background px-5 py-3.5">
-        <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
-          <span>
-            Posting to{" "}
-            <strong className="font-semibold text-foreground">{groupName}</strong>{" "}
-            as{" "}
-            <strong className="font-semibold text-foreground">
-              {anonymous ? "Anonymous" : me.name}
-            </strong>
-          </span>
+        <p className="text-base text-muted-foreground">
+          Posting to{" "}
+          <strong className="font-semibold text-foreground">{groupName}</strong>{" "}
+          as{" "}
+          <strong className="font-semibold text-foreground">
+            {anonymous ? "Anonymous" : me.name}
+          </strong>
         </p>
-        <Button type="button" onClick={submit} disabled={!canPost} className="font-bold">
+        <Button type="button" onClick={submit} disabled={!canPost} className="font-semibold">
           <HandHeart aria-hidden="true" />
           {submitting ? "Posting…" : "Post request"}
         </Button>

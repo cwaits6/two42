@@ -5,7 +5,12 @@ import { displayName, initials } from "@/lib/names";
 import { loadFundFormData } from "@/lib/giving/server";
 import { getGroupSettings } from "@/lib/groups/settings";
 import { PrayerBoard } from "@/components/prayer/PrayerBoard";
-import type { PrayerCallSession, PrayerWallRow } from "@/lib/types";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { ErrorState } from "@/components/states/ErrorState";
+import { toCallSession, toWallRow } from "@/lib/prayer";
+import { readList } from "@/lib/supabase/readList";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { requireActiveGroup } from "@/lib/groups/server";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { groupPageTitle } from "@/lib/pageTitle";
@@ -30,37 +35,42 @@ export default async function PrayerPage({
     .single();
   if (!profile || profile.role === "pending") redirect("/dashboard");
 
-  const [
-    { data: requests, error: requestsError },
-    { data: sessions, error: sessionsError },
-    { members },
-    settings,
-  ] = await Promise.all([
+  const [requests, sessions, { members }, settings, timeZone] = await Promise.all([
     supabase
       .from("prayer_wall")
       .select("*")
       .eq("group_id", group.id)
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .then((read) => readList(read, "prayer requests")),
     supabase
       .from("prayer_call_sessions")
       .select("*")
       .eq("group_id", group.id)
       .order("display_order")
-      .order("created_at"),
+      .order("created_at")
+      .then((read) => readList(read, "prayer call times")),
     loadFundFormData(supabase, profile.org_id),
-    getGroupSettings(supabase, profile.org_id, group.id),
+    // getGroupSettings logs its own failure; the call card reports it.
+    getGroupSettings(supabase, profile.org_id, group.id).catch(() => null),
+    getOrgTimeZone(),
   ]);
-  if (requestsError) {
-    console.error("Failed to fetch prayer requests:", requestsError);
-    throw new Error("Failed to load the prayer wall.");
-  }
-  if (sessionsError) {
-    console.error("Failed to fetch prayer call sessions:", sessionsError);
+
+  const header = (
+    <PageHeader title="Prayer" subtitle="Post a request with your name or anonymously." />
+  );
+
+  if (requests === null) {
+    return (
+      <PageContainer size="wide">
+        {header}
+        <ErrorState thing="prayer requests" />
+      </PageContainer>
+    );
   }
 
   // Private buckets: exchange stored avatar URLs for signed URLs
   // before the wall rows and the composer's "me" reach client renders.
-  const wallRows = (requests ?? []) as PrayerWallRow[];
+  const wallRows = requests.map(toWallRow);
   const [signedWallAvatars, myAvatarUrl] = await Promise.all([
     mintSignedUrls(wallRows.map((r) => r.avatar_url)),
     mintSignedUrl(profile.avatar_url),
@@ -70,36 +80,36 @@ export default async function PrayerPage({
     avatar_url: signedWallAvatars[i],
   }));
 
-  return (
-    <div className="container mx-auto px-4 py-12 max-w-6xl">
-      <h1 className="text-3xl md:text-4xl font-bold text-brand-primary-text mb-2">
-        Prayer
-      </h1>
-      <p className="text-lg text-muted-foreground max-w-2xl">
-        Post a request with your name or anonymously.
-      </p>
+  // The call card is all or nothing: a leader editing it with half its data
+  // missing would save the gap over what is stored.
+  const prayerCall =
+    sessions === null || settings === null
+      ? null
+      : {
+          sessions: sessions.map(toCallSession),
+          url: settings.weekly_prayer_call_url?.startsWith("https://")
+            ? settings.weekly_prayer_call_url
+            : null,
+          time: settings.weekly_prayer_call_time,
+        };
 
-      <div className="mt-10">
-        <PrayerBoard
-          initialRequests={signedRequests}
-          sessions={(sessions ?? []) as PrayerCallSession[]}
-          me={{
-            id: user.id,
-            name: displayName(profile),
-            initials: initials(profile),
-            avatarUrl: myAvatarUrl,
-          }}
-          group={{ id: group.id, name: group.name, isLeader: group.role === "leader" }}
-          members={members}
-          orgId={profile.org_id}
-          prayerCall={{
-            url: settings.weekly_prayer_call_url?.startsWith("https://")
-              ? settings.weekly_prayer_call_url
-              : null,
-            time: settings.weekly_prayer_call_time,
-          }}
-        />
-      </div>
-    </div>
+  return (
+    <PageContainer size="wide">
+      {header}
+      <PrayerBoard
+        initialRequests={signedRequests}
+        prayerCall={prayerCall}
+        me={{
+          id: user.id,
+          name: displayName(profile),
+          initials: initials(profile),
+          avatarUrl: myAvatarUrl,
+        }}
+        group={{ id: group.id, name: group.name, isLeader: group.role === "leader" }}
+        members={members}
+        orgId={profile.org_id}
+        timeZone={timeZone}
+      />
+    </PageContainer>
   );
 }

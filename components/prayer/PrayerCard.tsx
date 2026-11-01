@@ -2,38 +2,39 @@
 
 import { Check, HandHeart, UserRound } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { initials } from "@/lib/names";
 import { prayerAuthorLabel, timeAgo } from "@/lib/prayer";
+import { cn } from "@/lib/utils";
 import type { PrayerWallRow } from "@/lib/types";
-
-const ANSWERED = "var(--color-brand-success)";
 
 export function PrayerCard({
   row,
   prayPending,
   onPray,
   onToggleAnswered,
+  timeZone,
 }: {
   row: PrayerWallRow;
   prayPending: boolean;
   onPray: () => void;
   onToggleAnswered: () => void;
+  /** The church's zone; older requests show the date there. */
+  timeZone: string;
 }) {
   const hasName = row.first_name || row.last_name || row.preferred_name;
   const showAvatar = !row.is_anonymous && hasName;
 
   return (
-    <div
-      className={`relative overflow-hidden rounded-2xl border bg-card p-5 ${
-        row.is_answered ? "border-brand-success/40" : "border-border"
-      }`}
+    <article
+      className={cn(
+        "relative overflow-hidden rounded-2xl border bg-card p-5",
+        row.is_answered ? "border-brand-success/40" : "border-border",
+      )}
     >
       {row.is_answered && (
-        <div
-          aria-hidden="true"
-          className="absolute inset-y-0 left-0 w-1"
-          style={{ backgroundColor: ANSWERED }}
-        />
+        <div aria-hidden="true" className="absolute inset-y-0 left-0 w-1 bg-brand-success" />
       )}
 
       <div className="flex items-center gap-3">
@@ -52,73 +53,44 @@ export function PrayerCard({
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-lg font-semibold text-foreground">
-              {prayerAuthorLabel(row)}
-            </span>
-            {row.mine && (
-              <span className="rounded-full bg-brand-warm px-2 py-0.5 text-xs font-bold text-brand-primary-text">
-                You
-              </span>
-            )}
+            <span className="text-lg font-semibold text-foreground">{prayerAuthorLabel(row)}</span>
+            {row.mine && <Badge variant="secondary">You</Badge>}
             {row.is_answered && (
-              <span
-                className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wide"
-                style={{ backgroundColor: `${ANSWERED}1A`, color: ANSWERED }}
-              >
-                <Check className="h-2.5 w-2.5" aria-hidden="true" />
+              <Badge variant="outline">
+                <Check className="text-brand-success" aria-hidden="true" />
                 Answered
-              </span>
+              </Badge>
             )}
           </div>
-          <div className="text-sm text-muted-foreground">
-            {timeAgo(row.created_at)}
-          </div>
+          <div className="text-sm text-muted-foreground">{timeAgo(row.created_at, timeZone)}</div>
         </div>
       </div>
 
-      <p className="mt-3 whitespace-pre-wrap text-base leading-relaxed text-foreground/80">
-        {row.body}
-      </p>
+      <p className="mt-3 whitespace-pre-wrap text-base leading-relaxed text-foreground">{row.body}</p>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant={row.i_am_praying ? "default" : "secondary"}
             onClick={onPray}
             disabled={prayPending}
             aria-pressed={row.i_am_praying}
-            className={`flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold transition-colors ${
-              row.i_am_praying
-                ? "bg-brand-primary text-white"
-                : "bg-brand-warm text-brand-primary-text hover:bg-brand-primary/15"
-            }`}
           >
-            <HandHeart className="h-4 w-4" aria-hidden="true" />
+            <HandHeart aria-hidden="true" />
             {row.i_am_praying ? "You're praying" : "I'm praying"}
-          </button>
+          </Button>
 
           {row.mine && (
-            <button
-              type="button"
-              onClick={onToggleAnswered}
-              className={`flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-medium transition-colors ${
-                row.is_answered
-                  ? "border-brand-success bg-brand-success text-white"
-                  : "border-border bg-card text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Check className="h-3.5 w-3.5" aria-hidden="true" />
+            <Button variant="outline" onClick={onToggleAnswered} aria-pressed={row.is_answered}>
+              <Check aria-hidden="true" />
               {row.is_answered ? "Answered" : "Mark answered"}
-            </button>
+            </Button>
           )}
         </div>
-        <span className="text-sm text-muted-foreground">
-          <strong className="font-semibold text-foreground/80">
-            {row.praying_count}
-          </strong>{" "}
-          praying
+        <span className="text-base text-muted-foreground">
+          <strong className="font-semibold text-foreground">{row.praying_count}</strong> praying
         </span>
       </div>
-    </div>
+    </article>
   );
 }

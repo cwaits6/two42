@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
@@ -39,6 +39,14 @@ const jetbrainsMono = JetBrains_Mono({
   weight: ["400", "500"],
   display: "swap",
 });
+
+// resizes-content keeps a focused field, the block editor included, above
+// the on-screen keyboard instead of letting the keyboard cover it.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  interactiveWidget: "resizes-content",
+};
 
 export async function generateMetadata(): Promise<Metadata> {
   const b = await getRequestBranding();

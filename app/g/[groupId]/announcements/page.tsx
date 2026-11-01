@@ -11,6 +11,7 @@ import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 import { readList } from "@/lib/supabase/readList";
 import { groupPageTitle } from "@/lib/pageTitle";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
 
 export const generateMetadata = groupPageTitle("Announcements");
 
@@ -23,46 +24,48 @@ export default async function AnnouncementsPage({
   const group = await requireActiveGroup(groupId);
   const supabase = await createClient();
 
-  const announcements = readList(
-    await supabase
+  const [announcements, timeZone] = await Promise.all([
+    supabase
       .from("announcements")
       .select("*")
       .eq("group_id", group.id)
       .eq("is_published", true)
       .lte("published_at", new Date().toISOString())
-      .order("published_at", { ascending: false }),
-    "announcements",
+      .order("published_at", { ascending: false })
+      .then((read) => readList(read, "announcements")),
+    getOrgTimeZone(),
+  ]);
+
+  const addAnnouncement = group.role === "leader" && (
+    <Button
+      nativeButton={false}
+      render={<Link href={groupPath(group.id, "/settings/announcements/new")} />}
+    >
+      <Plus aria-hidden="true" />
+      Add announcement
+    </Button>
   );
 
   return (
     <PageContainer>
       <PageHeader
         title="Announcements"
-        subtitle="News and updates from our group."
+        subtitle={`News and updates for ${group.name}.`}
+        actions={addAnnouncement}
       />
 
       {announcements === null ? (
         <ErrorState thing="announcements" />
       ) : announcements.length === 0 ? (
-        <EmptyState
-          icon={Megaphone}
-          message="No announcements yet."
-          action={
-            group.role === "leader" && (
-              <Button
-                nativeButton={false}
-                render={<Link href={groupPath(group.id, "/settings/announcements/new")} />}
-              >
-                <Plus />
-                Add announcement
-              </Button>
-            )
-          }
-        />
+        <EmptyState icon={Megaphone} message="No announcements yet." action={addAnnouncement} />
       ) : (
         <div className="space-y-6">
           {announcements.map((announcement) => (
-            <AnnouncementCard key={announcement.id} announcement={announcement} />
+            <AnnouncementCard
+              key={announcement.id}
+              announcement={announcement}
+              timeZone={timeZone}
+            />
           ))}
         </div>
       )}

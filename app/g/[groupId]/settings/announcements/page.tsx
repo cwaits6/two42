@@ -1,12 +1,19 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Megaphone, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyState } from "@/components/states/EmptyState";
+import { ErrorState } from "@/components/states/ErrorState";
+import { AnnouncementStatusBadge } from "@/components/announcements/AnnouncementStatusBadge";
 import { Button } from "@/components/ui/button";
+import { announcementStatus } from "@/lib/announcements";
 import { groupPath } from "@/lib/groups/active";
 import { requireGroupLeader } from "@/lib/groups/server";
 import { groupPageTitle } from "@/lib/pageTitle";
+import { readList } from "@/lib/supabase/readList";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
+import { formatInZone } from "@/lib/time/zone";
 
 export const generateMetadata = groupPageTitle("Manage announcements");
 
@@ -18,20 +25,6 @@ type AnnouncementRow = {
   created_at: string;
 };
 
-function statusOf(a: AnnouncementRow, now: Date): "Draft" | "Scheduled" | "Published" {
-  if (!a.is_published) return "Draft";
-  if (a.published_at && new Date(a.published_at) > now) return "Scheduled";
-  return "Published";
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 export default async function ManageAnnouncementsPage({
   params,
 }: {
@@ -41,19 +34,24 @@ export default async function ManageAnnouncementsPage({
   const group = await requireGroupLeader(groupId);
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("announcements")
-    .select("id, title, is_published, published_at, created_at")
-    .eq("group_id", group.id)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    throw new Error(`Failed to load announcements: ${error.message}`);
-  }
-
-  const announcements = (data ?? []) as AnnouncementRow[];
+  const [announcements, timeZone] = await Promise.all([
+    supabase
+      .from("announcements")
+      .select("id, title, is_published, published_at, created_at")
+      .eq("group_id", group.id)
+      .order("created_at", { ascending: false })
+      .then((read) => readList<AnnouncementRow>(read, "announcements")),
+    getOrgTimeZone(),
+  ]);
   const now = new Date();
-  const settingsHref = groupPath(group.id, "/settings/announcements");
+  const base = groupPath(group.id, "/settings/announcements");
+
+  const addAnnouncement = (
+    <Button nativeButton={false} render={<Link href={`${base}/new`} />}>
+      <Plus aria-hidden="true" />
+      Add announcement
+    </Button>
+  );
 
   return (
     <PageContainer>
@@ -61,42 +59,35 @@ export default async function ManageAnnouncementsPage({
         title="Announcements"
         subtitle={`Drafts, scheduled and published announcements for ${group.name}.`}
         backHref={groupPath(group.id, "/settings")}
-        backLabel="Back to group settings"
-        actions={
-          <Button
-            nativeButton={false}
-            render={<Link href={`${settingsHref}/new`} />}
-          >
-            <Plus className="mr-1.5 h-4 w-4" />
-            New announcement
-          </Button>
-        }
+        backLabel="Back to Group settings"
+        actions={addAnnouncement}
       />
 
-      {announcements.length > 0 ? (
+      {announcements === null ? (
+        <ErrorState thing="announcements" />
+      ) : announcements.length === 0 ? (
+        <EmptyState icon={Megaphone} message="No announcements yet." action={addAnnouncement} />
+      ) : (
         <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
           {announcements.map((a) => {
-            const status = statusOf(a, now);
+            const status = announcementStatus(a, now);
             const when = status === "Draft" ? a.created_at : (a.published_at ?? a.created_at);
             return (
               <li key={a.id}>
                 <Link
-                  href={`${settingsHref}/${a.id}/edit`}
-                  className="flex min-h-14 flex-wrap items-center justify-between gap-x-6 gap-y-1 px-5 py-4 hover:bg-muted/50 transition-colors"
+                  href={`${base}/${a.id}/edit`}
+                  className="flex min-h-14 flex-wrap items-center justify-between gap-x-6 gap-y-2 px-5 py-4 transition-colors hover:bg-muted/50"
                 >
                   <span className="text-lg font-medium text-foreground">{a.title}</span>
-                  <span className="text-base text-muted-foreground">
-                    {status} · {formatDate(when)}
+                  <span className="flex items-center gap-3 text-base text-muted-foreground">
+                    <AnnouncementStatusBadge status={status} />
+                    {formatInZone(when, timeZone, { month: "short", day: "numeric", year: "numeric" })}
                   </span>
                 </Link>
               </li>
             );
           })}
         </ul>
-      ) : (
-        <div className="rounded-2xl border border-dashed border-border px-6 py-12 text-center">
-          <p className="text-xl text-muted-foreground">No announcements yet.</p>
-        </div>
       )}
     </PageContainer>
   );

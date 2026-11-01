@@ -43,16 +43,16 @@
   font-style: italic;
 }
 
-/* Links carry the text-safe accent and an underline, so colour is never
+/* Links carry the text-safe Clay and an underline, so colour is never
    the only cue. */
 .bn-editor a,
 .bn-static a {
-  color: var(--color-brand-accent-text);
+  color: var(--color-brand-primary-text);
   text-decoration: underline;
   text-underline-offset: 0.15em;
 }
 
 .bn-editor a:hover,
 .bn-static a:hover {
-  color: var(--color-brand-primary-text);
+  color: var(--foreground);
 }

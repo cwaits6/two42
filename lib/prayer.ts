@@ -1,3 +1,5 @@
+import { DateTime } from "luxon";
+import { formatInZone, zoned } from "@/lib/time/zone";
 import { displayName } from "@/lib/names";
 import type { PrayerCallSession, PrayerWallRow } from "@/lib/types";
 
@@ -25,23 +27,28 @@ export const WEEKDAY_LABELS = [
   "Saturdays",
 ] as const;
 
-/** "20:00:00" → "8:00 PM" (drop the meridiem when told to share it) */
+const TIME = /^([01]?\d|2[0-3]):([0-5]\d)/;
+
+/** "20:00:00" → "8:00 PM" (drop the meridiem when told to share it); anything else as stored */
 function formatTime(time: string, withMeridiem = true): string {
-  const [h, m] = time.split(":").map(Number);
+  const match = TIME.exec(time);
+  if (!match) return time;
+  const h = Number(match[1]);
   const meridiem = h < 12 ? "AM" : "PM";
   const hour12 = h % 12 === 0 ? 12 : h % 12;
-  const base = `${hour12}:${String(m).padStart(2, "0")}`;
+  const base = `${hour12}:${match[2]}`;
   return withMeridiem ? `${base} ${meridiem}` : base;
 }
+
+const isMorning = (time: string) => Number(TIME.exec(time)?.[1] ?? 0) < 12;
 
 /** "Wednesdays · 8:00 – 8:30 PM" */
 export function sessionLabel(s: Pick<PrayerCallSession, "weekday" | "start_time" | "end_time">): string {
   const day = WEEKDAY_LABELS[s.weekday] ?? "";
-  if (!s.end_time) return `${day} · ${formatTime(s.start_time)}`;
-  const sameMeridiem =
-    (Number(s.start_time.split(":")[0]) < 12) ===
-    (Number(s.end_time.split(":")[0]) < 12);
-  return `${day} · ${formatTime(s.start_time, !sameMeridiem)} – ${formatTime(s.end_time)}`;
+  const times = !s.end_time
+    ? formatTime(s.start_time)
+    : `${formatTime(s.start_time, isMorning(s.start_time) !== isMorning(s.end_time))} – ${formatTime(s.end_time)}`;
+  return [day, times].filter(Boolean).join(" · ");
 }
 
 /**
@@ -56,28 +63,37 @@ export function telHref(dialIn: string, pin: string | null): string {
 }
 
 /**
- * The next occurrence of a weekly session (today counts if the start time is
- * still ahead), in the browser's timezone — the same site-wide-local
- * assumption the events pages already make.
+ * The next start of a weekly session, read as wall-clock time in `zone`, the
+ * church's zone; today counts if the start time is still ahead there.
  */
 export function nextOccurrence(
   weekday: number,
   time: string,
+  zone: string,
   from: Date = new Date()
 ): Date {
   const [h, m] = time.split(":").map(Number);
-  const d = new Date(from);
-  d.setHours(h, m, 0, 0);
-  let daysAhead = (weekday - d.getDay() + 7) % 7;
-  if (daysAhead === 0 && d <= from) daysAhead = 7;
-  d.setDate(d.getDate() + daysAhead);
-  return d;
+  const now = DateTime.fromJSDate(from, { zone });
+  const today = now.set({ hour: h, minute: m, second: 0, millisecond: 0 });
+  // Luxon numbers Monday 1 … Sunday 7; sessions number Sunday 0 … Saturday 6.
+  let daysAhead = (weekday - (today.weekday % 7) + 7) % 7;
+  if (daysAhead === 0 && today <= now) daysAhead = 7;
+  return today.plus({ days: daysAhead }).toJSDate();
 }
 
-/** "Just now", "2 hours ago", "Yesterday", then a plain date */
-export function timeAgo(iso: string): string {
+/** The end of a session that starts at `start`, on the next day when it is not after the start. */
+export function sessionEnd(start: Date, endTime: string, zone: string): Date {
+  const [h, m] = endTime.split(":").map(Number);
+  const begin = DateTime.fromJSDate(start, { zone });
+  const end = begin.set({ hour: h, minute: m, second: 0, millisecond: 0 });
+  return (end <= begin ? end.plus({ days: 1 }) : end).toJSDate();
+}
+
+/** "Just now", "2 hours ago", "Yesterday", then a plain date in `zone`; nothing for a date that won't parse */
+export function timeAgo(iso: string, zone: string, now: Date = new Date()): string {
   const then = new Date(iso).getTime();
-  const minutes = Math.floor((Date.now() - then) / 60_000);
+  if (Number.isNaN(then)) return "";
+  const minutes = Math.floor((now.getTime() - then) / 60_000);
   if (minutes < 1) return "Just now";
   if (minutes < 60) return minutes === 1 ? "1 minute ago" : `${minutes} minutes ago`;
   const hours = Math.floor(minutes / 60);
@@ -85,12 +101,60 @@ export function timeAgo(iso: string): string {
   const days = Math.floor(hours / 24);
   if (days === 1) return "Yesterday";
   if (days < 7) return `${days} days ago`;
-  const date = new Date(iso);
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    ...(date.getFullYear() !== new Date().getFullYear()
-      ? { year: "numeric" }
-      : {}),
-  });
+  const sameYear = zoned(iso, zone).year === DateTime.fromJSDate(now, { zone }).year;
+  return formatInZone(iso, zone, { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) });
+}
+
+const text = (v: unknown): string => (typeof v === "string" ? v : "");
+const textOrNull = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
+const count = (v: unknown): number =>
+  typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0;
+
+/**
+ * A prayer_wall row as the page renders it. The view's computed columns are
+ * nullable, and one stray value must not take the page down with it, so
+ * every field falls back to something the card can show.
+ */
+export function toWallRow(raw: Record<string, unknown>): PrayerWallRow {
+  return {
+    id: text(raw.id),
+    group_id: text(raw.group_id),
+    body: text(raw.body),
+    is_anonymous: raw.is_anonymous === true,
+    is_answered: raw.is_answered === true,
+    created_at: text(raw.created_at),
+    mine: raw.mine === true,
+    first_name: textOrNull(raw.first_name),
+    last_name: textOrNull(raw.last_name),
+    preferred_name: textOrNull(raw.preferred_name),
+    avatar_url: textOrNull(raw.avatar_url),
+    praying_count: count(raw.praying_count),
+    i_am_praying: raw.i_am_praying === true,
+  };
+}
+
+/** The column only caps length, so a link written outside the form could carry any scheme. */
+const httpsOrNull = (v: unknown): string | null => {
+  const url = textOrNull(v);
+  return url?.startsWith("https://") ? url : null;
+};
+
+/** A prayer_call_sessions row with the same fallbacks as toWallRow(). */
+export function toCallSession(raw: Record<string, unknown>): PrayerCallSession {
+  const weekday = typeof raw.weekday === "number" ? raw.weekday : -1;
+  return {
+    id: text(raw.id),
+    group_id: text(raw.group_id),
+    weekday,
+    start_time: text(raw.start_time),
+    end_time: textOrNull(raw.end_time),
+    leader_id: textOrNull(raw.leader_id),
+    dial_in: textOrNull(raw.dial_in),
+    pin: textOrNull(raw.pin),
+    join_url: httpsOrNull(raw.join_url),
+    event_id: textOrNull(raw.event_id),
+    display_order: count(raw.display_order),
+    created_at: text(raw.created_at),
+    updated_at: text(raw.updated_at),
+  };
 }
