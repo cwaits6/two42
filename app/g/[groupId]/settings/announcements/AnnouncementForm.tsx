@@ -99,33 +99,38 @@ export function AnnouncementForm({
       : (announcement?.content ?? JSON.stringify([]));
 
     let failed: boolean;
-    if (announcement) {
-      const { data, error } = await supabase
-        .from("announcements")
-        .update({ title: title.trim(), content, ...publication })
-        .eq("id", announcement.id)
-        .eq("group_id", groupId)
-        .select("id");
-      failed = !!error || !data?.length;
-    } else {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      const { error } = await supabase.from("announcements").insert({
-        group_id: groupId,
-        title: title.trim(),
-        content,
-        author_id: user?.id,
-        ...publication,
-      });
-      failed = !!error;
+    try {
+      if (announcement) {
+        const { data, error } = await supabase
+          .from("announcements")
+          .update({ title: title.trim(), content, ...publication })
+          .eq("id", announcement.id)
+          .eq("group_id", groupId)
+          .select("id");
+        failed = !!error || !data?.length;
+      } else {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        const { error } = await supabase.from("announcements").insert({
+          group_id: groupId,
+          title: title.trim(),
+          content,
+          author_id: user?.id,
+          ...publication,
+        });
+        failed = !!error;
+      }
+    } catch {
+      failed = true;
     }
-    setSaving(false);
 
     if (failed) {
+      setSaving(false);
       toast.error(failureMessage(announcement ? "save the announcement" : "add the announcement"));
       return;
     }
+    // Saving stays set through the navigation: a second click would insert again.
     toast.success(successMessage(choice, fields.published_at, timeZone));
     router.push(listHref);
     router.refresh();

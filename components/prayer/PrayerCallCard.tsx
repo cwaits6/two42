@@ -398,7 +398,10 @@ export function PrayerCallCard({
                   <Button
                     variant="destructive"
                     className="self-start"
-                    onClick={() => setDrafts((cur) => cur.filter((_, j) => j !== i))}
+                    onClick={() => {
+                      setDrafts((cur) => cur.filter((_, j) => j !== i));
+                      setErrors({});
+                    }}
                   >
                     <Trash2 aria-hidden="true" />
                     Delete call time
