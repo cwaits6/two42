@@ -110,11 +110,11 @@ export function privacyHelper(orgDiscoveryOn: boolean): HelperSentence {
         before: "Hidden from Find a group and the Directory. People join by ",
         link: INVITE_LINK_WORDS,
         after:
-          " or when a leader adds them. The organization's setting is the ceiling: a private group can only hide more, never less.",
+          " or when a leader adds them. Your church's setting is the limit: a private group can only hide more, never less.",
       }
     : {
         before:
-          "Already hidden: the organization has turned off finding groups. Private keeps this group hidden if that changes.",
+          "Already hidden: your church has turned off finding groups. Private keeps this group hidden if that changes.",
         link: null,
         after: "",
       };
@@ -135,7 +135,7 @@ export const PRIVATE_POLICY_HELPER: HelperSentence = {
 };
 
 export const OPEN_POLICY_EMPTY_TEXT =
-  "Requests are approved automatically while the join policy is Open.";
+  "Requests are approved automatically while anyone can join.";
 
 export const NO_PENDING_TEXT = "No pending requests.";
 
