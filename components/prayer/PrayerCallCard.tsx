@@ -227,6 +227,11 @@ export function PrayerCallCard({
     setSaving(false);
 
     if (errMsg || fetchError) {
+      // Show rows that did get written even on failure, so a cancelled edit
+      // does not reopen from a list missing them.
+      if (!fetchError && fresh) {
+        setCall((c) => ({ ...c, sessions: fresh.map(toCallSession) }));
+      }
       // Carry the ids of rows that did get written back into the drafts, so
       // retrying updates them instead of inserting duplicates.
       setDrafts((cur) =>
@@ -269,7 +274,7 @@ export function PrayerCallCard({
       </p>
 
       {editing ? (
-        <div className="mt-5 flex flex-col gap-4">
+        <fieldset disabled={saving} className="mt-5 flex min-w-0 flex-col gap-4">
           {editing.drafts.map((d, i) => {
             const startId = `call-${i}-start`;
             const joinId = `call-${i}-join`;
@@ -443,7 +448,7 @@ export function PrayerCallCard({
               Cancel
             </Button>
           </div>
-        </div>
+        </fieldset>
       ) : (
         <>
           {hasStandingCall && (

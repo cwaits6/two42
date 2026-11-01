@@ -133,6 +133,12 @@ export function toWallRow(raw: Record<string, unknown>): PrayerWallRow {
   };
 }
 
+/** The column only caps length, so a link written outside the form could carry any scheme. */
+const httpsOrNull = (v: unknown): string | null => {
+  const url = textOrNull(v);
+  return url?.startsWith("https://") ? url : null;
+};
+
 /** A prayer_call_sessions row with the same fallbacks as toWallRow(). */
 export function toCallSession(raw: Record<string, unknown>): PrayerCallSession {
   const weekday = typeof raw.weekday === "number" ? raw.weekday : -1;
@@ -145,7 +151,7 @@ export function toCallSession(raw: Record<string, unknown>): PrayerCallSession {
     leader_id: textOrNull(raw.leader_id),
     dial_in: textOrNull(raw.dial_in),
     pin: textOrNull(raw.pin),
-    join_url: textOrNull(raw.join_url),
+    join_url: httpsOrNull(raw.join_url),
     event_id: textOrNull(raw.event_id),
     display_order: count(raw.display_order),
     created_at: text(raw.created_at),

@@ -72,6 +72,13 @@ describe("rows with unexpected values", () => {
     expect(row).not.toHaveProperty("category");
   });
 
+  it("keeps only https join links on a call session", () => {
+    expect(toCallSession({ join_url: "https://meet.example/x" }).join_url).toBe("https://meet.example/x");
+    expect(toCallSession({ join_url: "javascript:alert(1)" }).join_url).toBeNull();
+    expect(toCallSession({ join_url: "data:text/html,hi" }).join_url).toBeNull();
+    expect(toCallSession({ join_url: "http://meet.example/x" }).join_url).toBeNull();
+  });
+
   it("labels a session whose day or time is out of range without throwing", () => {
     expect(sessionLabel(toCallSession({ weekday: 9, start_time: "soon", end_time: null }))).toBe("soon");
     expect(sessionLabel(toCallSession({ weekday: "2", start_time: null }))).toBe("");
