@@ -1,7 +1,7 @@
 // Supabase Edge Function: send-serving-reminders
 //
 // Two modes, two pg_cron entries — schedule defined in
-// supabase/migrations/20260729000000_reminder_cron_schedules.sql (not here,
+// supabase/migrations/20261108000000_reminders_default_send_time.sql (not here,
 // so it survives a point-in-time restore or self-host from this repo):
 //
 //   - "send-serving-reminders-daily": remind attendees of covered Sundays

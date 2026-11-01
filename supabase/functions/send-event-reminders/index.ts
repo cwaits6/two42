@@ -1,7 +1,6 @@
 // Supabase Edge Function: send-event-reminders
-// Triggered by pg_cron daily at 08:00 UTC ('0 8 * * *' — 04:00 ET during EDT,
-// 03:00 ET during EST; the schedule is not localized) — defined in
-// supabase/migrations/20260729000000_reminder_cron_schedules.sql
+// Triggered by pg_cron once a day; the schedule is not localized — defined in
+// supabase/migrations/20261108000000_reminders_default_send_time.sql
 // Sends email reminders to users RSVPed to events starting in the next 24 hours.
 // Events belong to a group, so each org run fans out per group and only
 // mails RSVPed members who are still in that group.
