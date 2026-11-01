@@ -16,6 +16,7 @@ const hrefs = [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1]);
 describe("PolicyPlaceholder", () => {
   it("links home, to the contact address and to the source, nothing else", () => {
     expect(hrefs).toEqual(["/", `mailto:${CONTACT_EMAIL}`, GITHUB_URL]);
+    expect(html).toContain("Back to Home");
   });
 
   it("names the page and says the document is still being written", () => {

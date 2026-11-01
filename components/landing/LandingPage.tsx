@@ -1,12 +1,54 @@
-import Image from "next/image";
+import { getImageProps } from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { CONTACT_EMAIL, SELF_HOST_URL } from "./sections";
 
 const WRAP = "mx-auto w-full max-w-6xl px-6";
 const DISPLAY = "font-serif font-medium tracking-[-0.015em] text-balance";
 const SHOT =
   "h-auto w-full rounded-2xl border border-border shadow-xl";
+
+const DESKTOP = { width: 1880, height: 1400 };
+const PHONE = { width: 780, height: 1280 };
+const PHONE_SIZES = "(min-width: 420px) 360px, 90vw";
+
+/**
+ * A screenshot taken at phone width below md and at desktop width above it,
+ * so its text stays readable on a phone instead of shrinking a desktop page.
+ */
+function Screenshot({
+  src,
+  phoneSrc,
+  alt,
+  desktop = DESKTOP,
+  sizes,
+  priority = false,
+  className,
+}: {
+  src: string;
+  phoneSrc: string;
+  alt: string;
+  desktop?: { width: number; height: number };
+  sizes: string;
+  priority?: boolean;
+  className?: string;
+}) {
+  const common = { alt, priority, ...(priority ? { fetchPriority: "high" as const } : {}) };
+  const {
+    props: { srcSet: desktopSrcSet },
+  } = getImageProps({ ...common, ...desktop, src, sizes });
+  const {
+    props: { srcSet: phoneSrcSet, ...img },
+  } = getImageProps({ ...common, ...PHONE, src: phoneSrc, sizes: PHONE_SIZES });
+  return (
+    <picture className={cn("mx-auto block w-full max-w-[360px] md:max-w-none", className)}>
+      <source media="(min-width: 768px)" srcSet={desktopSrcSet} sizes={sizes} />
+      <source srcSet={phoneSrcSet} sizes={PHONE_SIZES} />
+      <img {...img} alt={alt} className={SHOT} />
+    </picture>
+  );
+}
 
 function Eyebrow({ children, rule = "left" }: { children: React.ReactNode; rule?: "left" | "both" | "none" }) {
   const bar = <span aria-hidden="true" className="inline-block h-0.5 w-7 bg-brand-accent" />;
@@ -24,13 +66,15 @@ const FEATURES = [
     title: "Serving schedule",
     text: "Each team’s coming dates in one list. Members pick the ones they can take, and leaders see what’s still uncovered at a glance.",
     src: "/landing/serving.png",
+    phoneSrc: "/landing/serving-phone.png",
     alt: "The Serving page: teams with how many of the coming dates are covered and who is on each",
     imageFirst: true,
   },
   {
     title: "Events and calendar",
-    text: "Recurring meetings, RSVP, a Join Meeting button, reminders before each one, and a feed that subscribes into Apple or Google Calendar.",
+    text: "Events that repeat, RSVP, a link to join online, reminders before each one, and a feed that subscribes into Apple or Google Calendar.",
     src: "/landing/calendar-list.png",
+    phoneSrc: "/landing/calendar-phone.png",
     alt: "The Calendar in list view: each event with its time and place, RSVP buttons and Add to Calendar",
     imageFirst: false,
   },
@@ -38,13 +82,15 @@ const FEATURES = [
     title: "Directory",
     text: "People and households, birthdays and anniversaries, with each member choosing what to hide.",
     src: "/landing/directory.png",
+    phoneSrc: "/landing/directory-phone.png",
     alt: "The Directory: members, families, birthdays and anniversaries, with search",
     imageFirst: true,
   },
   {
     title: "Prayer requests",
-    text: "Share a request with your group, by name or anonymously, and everyone sees what they’ve been asked to carry.",
+    text: "Share a request with your group, by name or anonymously, and let people know you’re praying for theirs.",
     src: "/landing/prayer.png",
+    phoneSrc: "/landing/prayer-phone.png",
     alt: "The Prayer page: requests from the group, each with a You’re praying button, and a form to share one by name or anonymously",
     imageFirst: false,
   },
@@ -60,8 +106,8 @@ export function LandingPage() {
             Run your church&rsquo;s groups <span className="text-secondary-foreground">in one place.</span>
           </h1>
           <p className="max-w-[580px] text-xl leading-normal text-muted-foreground md:text-2xl">
-            Calendar, serving schedule, directory, announcements and prayer requests — one shared
-            place for every group, instead of scattered texts, email chains and apps.
+            Calendar, serving schedule, directory, announcements, prayer requests and giving — one
+            shared place for every group, instead of scattered texts, email chains and apps.
           </p>
           <div className="flex flex-wrap items-center gap-4 pt-1">
             <Button
@@ -77,27 +123,39 @@ export function LandingPage() {
               size="lg"
               className="border-2 border-foreground bg-transparent px-7 text-lg font-semibold"
               nativeButton={false}
-              render={<a href="#contact" />}
+              render={<a href="#invite" />}
             >
-              Get in touch
+              Use an invite link
             </Button>
           </div>
         </div>
         <div className="flex min-w-0 flex-[1_1_400px] justify-center">
-          <Image
+          <Screenshot
             src="/landing/dashboard.png"
-            alt="The group dashboard: the group’s navigation, a greeting, and the next meeting with RSVP and a one-tap Zoom join"
-            width={2360}
-            height={1640}
-            priority
-            fetchPriority="high"
+            phoneSrc="/landing/dashboard-phone.png"
+            alt="The group dashboard: a greeting and the next event, with RSVP and a button to join online"
+            desktop={{ width: 2360, height: 1640 }}
             sizes="(min-width: 1024px) 600px, 100vw"
-            className={`${SHOT} max-w-[600px]`}
+            priority
+            className="md:max-w-[600px]"
           />
         </div>
       </section>
 
-      <section className="border-y border-border bg-white">
+      <section id="invite" className="scroll-mt-20 border-y border-border bg-card">
+        <div className={`${WRAP} flex flex-col items-start gap-4 py-12 md:py-16`}>
+          <h2 className={`${DISPLAY} text-[clamp(1.875rem,3.4vw,2.625rem)] leading-[1.1]`}>
+            Have an invite link?
+          </h2>
+          <p className="max-w-[680px] text-xl leading-relaxed text-muted-foreground">
+            Open it from the email or message it came in. It names the group or household you&rsquo;re
+            invited to, asks for your name, and emails you a link to set up your account. If you
+            already have an account, sign in first, then open the link again.
+          </p>
+        </div>
+      </section>
+
+      <section className="border-b border-border">
         <div className={`${WRAP} flex flex-col gap-14 py-14 md:gap-20 md:py-20`}>
           <div className="flex max-w-[680px] flex-col gap-3">
             <Eyebrow rule="none">What&rsquo;s inside</Eyebrow>
@@ -111,13 +169,12 @@ export function LandingPage() {
                 <h3 className={`${DISPLAY} text-3xl leading-[1.1] md:text-[2.125rem]`}>{f.title}</h3>
                 <p className="text-xl leading-relaxed text-muted-foreground">{f.text}</p>
               </div>
-              <Image
+              <Screenshot
                 src={f.src}
+                phoneSrc={f.phoneSrc}
                 alt={f.alt}
-                width={1880}
-                height={1400}
                 sizes="(min-width: 768px) 50vw, 100vw"
-                className={`${SHOT} ${f.imageFirst ? "md:order-first" : ""}`}
+                className={f.imageFirst ? "md:order-first" : ""}
               />
             </div>
           ))}
@@ -150,9 +207,9 @@ export function LandingPage() {
             for a member who belongs to more than one group.
           </p>
           <p className="max-w-[880px] text-xl leading-relaxed md:text-2xl">
-            It isn&rsquo;t church management software. There&rsquo;s no staff workflow or giving
-            ledger to administer — it&rsquo;s the shared space where the people in a group keep up
-            with each other, leaders and members alike.
+            It&rsquo;s the shared space where the people in a group keep up with each other, leaders
+            and members alike. Giving works the same way: a group sets up a fund for a person or
+            cause, and members send gifts straight to whoever it goes to.
           </p>
         </div>
       </section>
@@ -174,15 +231,14 @@ export function LandingPage() {
         </p>
       </section>
 
-      <section id="contact" className="scroll-mt-20 border-t border-border bg-white">
+      <section id="contact" className="scroll-mt-20 border-t border-border bg-card">
         <div className={`${WRAP} flex flex-col items-start gap-5 pt-14 pb-16 md:pt-20 md:pb-22`}>
           <h2 className={`${DISPLAY} max-w-[760px] text-[clamp(2rem,3.6vw,2.75rem)] leading-[1.1]`}>
             Bring your church&rsquo;s groups onto two42.
           </h2>
           <p className="max-w-[640px] text-xl text-muted-foreground">
-            two42 started in one Sunday class, which still runs on it. We&rsquo;re onboarding
-            churches one at a time right now — tell us about yours and we&rsquo;ll set up your space
-            and walk your leaders through it.
+            We&rsquo;re setting up churches one at a time. Tell us about yours, and we&rsquo;ll set
+            up your space and walk your leaders through it.
           </p>
           <div className="flex flex-wrap items-center gap-4 pt-1">
             <Button
@@ -191,7 +247,7 @@ export function LandingPage() {
               nativeButton={false}
               render={<a href={`mailto:${CONTACT_EMAIL}`} />}
             >
-              Get in touch
+              Email us
             </Button>
             <span className="text-lg text-muted-foreground">{CONTACT_EMAIL}</span>
           </div>
