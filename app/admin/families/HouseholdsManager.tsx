@@ -28,21 +28,24 @@ import {
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
-import { Camera, Plus, Pencil, Trash2, Users, X } from "lucide-react";
+import { Camera, Home, Plus, Pencil, Search, Trash2, Users, X } from "lucide-react";
 import type { FamilyUnit, Profile, FamilyMember, FamilyMemberRelationship } from "@/lib/types";
-import {
-  titleCaseName,
-  titleCaseStreet,
-  titleCaseCity,
-  normalizePhone,
-  normalizeState,
-  normalizePostalCode,
-  formatPhone,
-  formatPhoneAsYouType,
-} from "@/lib/sanitize";
+import { titleCaseName, formatPhone, formatPhoneAsYouType } from "@/lib/sanitize";
 import { displayName } from "@/lib/names";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyState } from "@/components/states/EmptyState";
+import { ErrorState } from "@/components/states/ErrorState";
+import { LoadingState } from "@/components/states/LoadingState";
+import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
+import { matchesSearch } from "@/components/admin/adminSearch";
+import {
+  HOUSEHOLD_FIELDS,
+  validateHousehold,
+  type HouseholdErrors,
+  type HouseholdField,
+  type HouseholdFormState,
+} from "./householdForm";
 
 const MONTHS = [
   { value: "1", label: "January" },
@@ -71,20 +74,14 @@ interface FamilyWithMembers extends FamilyUnit {
   members: Pick<Profile, "id" | "first_name" | "last_name" | "preferred_name">[];
 }
 
-interface FamilyFormState {
-  family_name: string;
-  address_line1: string;
-  address_line2: string;
-  city: string;
-  state: string;
-  postal_code: string;
-  phone_home: string;
-  anniversary: string;
-  hide_address: boolean;
-  hide_phone_home: boolean;
-}
+const FIELD_IDS: Record<HouseholdField, string> = {
+  family_name: "family_name",
+  state: "f_state",
+  postal_code: "f_zip",
+  phone_home: "f_phone",
+};
 
-const EMPTY_FORM: FamilyFormState = {
+const EMPTY_FORM: HouseholdFormState = {
   family_name: "",
   address_line1: "",
   address_line2: "",
@@ -97,7 +94,7 @@ const EMPTY_FORM: FamilyFormState = {
   hide_phone_home: false,
 };
 
-function fromFamily(f: FamilyUnit): FamilyFormState {
+function fromFamily(f: FamilyUnit): HouseholdFormState {
   return {
     family_name: f.family_name,
     address_line1: f.address_line1 || "",
@@ -132,15 +129,17 @@ const EMPTY_MEMBER_FORM: FamilyMemberFormState = {
 
 export function HouseholdsManager() {
   const [families, setFamilies] = useState<FamilyWithMembers[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
+  const [query, setQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<FamilyUnit | null>(null);
   const [deletingFamily, setDeletingFamily] = useState<FamilyWithMembers | null>(null);
   const [removingMember, setRemovingMember] = useState<FamilyMember | null>(null);
-  const [form, setForm] = useState<FamilyFormState>(EMPTY_FORM);
+  const [form, setForm] = useState<HouseholdFormState>(EMPTY_FORM);
+  const [formErrors, setFormErrors] = useState<HouseholdErrors>({});
+  const [memberNameError, setMemberNameError] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
 
-  // Family members state (populated when editing a family)
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   // The household whose members `familyMembers` holds; delete stays disabled
   // until it matches, so the confirm never counts another household's people.
@@ -151,7 +150,7 @@ export function HouseholdsManager() {
   const [showMemberForm, setShowMemberForm] = useState(false);
   const [savingMember, setSavingMember] = useState(false);
 
-  // Family photo state (edit mode only — the path needs the family id)
+  // Edit mode only: the photo's path needs the family id.
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [removingPhoto, setRemovingPhoto] = useState(false);
@@ -165,22 +164,22 @@ export function HouseholdsManager() {
   const supabase = useMemo(() => createClient(), []);
 
   const loadFamilies = useCallback(async () => {
-    setLoading(true);
-    const { data: familyData, error: familyErr } = await supabase
-      .from("family_units")
-      .select("*")
-      .order("family_name");
+    const [
+      { data: familyData, error: familyErr },
+      { data: memberData, error: memberErr },
+    ] = await Promise.all([
+      supabase.from("family_units").select("*").order("family_name"),
+      supabase
+        .from("profiles")
+        .select("id, first_name, last_name, preferred_name, family_id")
+        .not("family_id", "is", null),
+    ]);
 
-    if (familyErr) {
-      toast.error(failureMessage("load households"));
-      setLoading(false);
+    if (familyErr || memberErr) {
+      console.error("Failed to load households:", familyErr ?? memberErr);
+      setStatus((current) => (current === "ready" ? current : "failed"));
       return;
     }
-
-    const { data: memberData } = await supabase
-      .from("profiles")
-      .select("id, first_name, last_name, preferred_name, family_id")
-      .not("family_id", "is", null);
 
     const byFamily: Record<string, FamilyWithMembers["members"]> = {};
     (memberData || []).forEach((m) => {
@@ -199,7 +198,7 @@ export function HouseholdsManager() {
         members: byFamily[f.id] || [],
       })),
     );
-    setLoading(false);
+    setStatus("ready");
   }, [supabase]);
 
   useEffect(() => {
@@ -227,6 +226,7 @@ export function HouseholdsManager() {
   function openCreate() {
     setEditing(null);
     setForm(EMPTY_FORM);
+    setFormErrors({});
     photoRequestRef.current++; // invalidate any in-flight mint
     setPhotoUrl(null);
     membersRequestRef.current++; // invalidate any in-flight load
@@ -241,6 +241,7 @@ export function HouseholdsManager() {
   function openEdit(family: FamilyUnit) {
     setEditing(family);
     setForm(fromFamily(family));
+    setFormErrors({});
     // The stored value is a private-bucket public URL — exchange it
     // for a signed URL before it reaches an <img src>.
     const requestId = ++photoRequestRef.current;
@@ -267,42 +268,13 @@ export function HouseholdsManager() {
   }
 
   async function handleSave() {
-    const familyName = titleCaseName(form.family_name);
-    if (!familyName) {
-      toast.error("Family name is required.");
+    const { errors, payload } = validateHousehold(form);
+    setFormErrors(errors);
+    const firstInvalid = HOUSEHOLD_FIELDS.find((field) => errors[field]);
+    if (firstInvalid) {
+      document.getElementById(FIELD_IDS[firstInvalid])?.focus();
       return;
     }
-
-    const stateCode = form.state ? normalizeState(form.state) : null;
-    if (form.state && !stateCode) {
-      toast.error("Invalid state.");
-      return;
-    }
-    const postal = form.postal_code
-      ? normalizePostalCode(form.postal_code)
-      : null;
-    if (form.postal_code && !postal) {
-      toast.error("Invalid ZIP code.");
-      return;
-    }
-    const phone = form.phone_home ? normalizePhone(form.phone_home) : null;
-    if (form.phone_home && !phone) {
-      toast.error("Invalid home phone.");
-      return;
-    }
-
-    const payload = {
-      family_name: familyName,
-      address_line1: titleCaseStreet(form.address_line1),
-      address_line2: titleCaseStreet(form.address_line2),
-      city: titleCaseCity(form.city),
-      state: stateCode,
-      postal_code: postal,
-      phone_home: phone,
-      anniversary: form.anniversary || null,
-      hide_address: form.hide_address,
-      hide_phone_home: form.hide_phone_home,
-    };
 
     setSaving(true);
     const { error } = editing
@@ -405,13 +377,22 @@ export function HouseholdsManager() {
     }
   }
 
+  function closeMemberForm() {
+    setShowMemberForm(false);
+    setEditingMember(null);
+    setMemberForm(EMPTY_MEMBER_FORM);
+    setMemberNameError(undefined);
+  }
+
   function startAddMember() {
+    setMemberNameError(undefined);
     setEditingMember(null);
     setMemberForm(EMPTY_MEMBER_FORM);
     setShowMemberForm(true);
   }
 
   function startEditMember(fm: FamilyMember) {
+    setMemberNameError(undefined);
     setEditingMember(fm);
     setMemberForm({
       first_name: fm.first_name,
@@ -428,9 +409,11 @@ export function HouseholdsManager() {
     if (!editing) return;
     const firstName = titleCaseName(memberForm.first_name);
     if (!firstName) {
-      toast.error("First name is required.");
+      setMemberNameError("Enter a first name.");
+      document.getElementById("fm_first")?.focus();
       return;
     }
+    setMemberNameError(undefined);
 
     const payload = {
       family_id: editing.id,
@@ -450,11 +433,11 @@ export function HouseholdsManager() {
         body: JSON.stringify(payload),
       }).catch(() => null);
       if (!res?.ok) {
-        toast.error(failureMessage("save the household member", res ? res.status : "network"));
+        toast.error(failureMessage(`save ${firstName}`, res ? res.status : "network"));
         setSavingMember(false);
         return;
       }
-      toast.success("Household member saved.");
+      toast.success(`${firstName} saved.`);
     } else {
       const res = await fetch("/api/admin/family-members", {
         method: "POST",
@@ -462,16 +445,14 @@ export function HouseholdsManager() {
         body: JSON.stringify(payload),
       }).catch(() => null);
       if (!res?.ok) {
-        toast.error(failureMessage("add the household member", res ? res.status : "network"));
+        toast.error(failureMessage(`add ${firstName}`, res ? res.status : "network"));
         setSavingMember(false);
         return;
       }
-      toast.success("Household member added.");
+      toast.success(`${firstName} added.`);
     }
     setSavingMember(false);
-    setShowMemberForm(false);
-    setEditingMember(null);
-    setMemberForm(EMPTY_MEMBER_FORM);
+    closeMemberForm();
     loadFamilyMembers(editing.id);
   }
 
@@ -495,128 +476,188 @@ export function HouseholdsManager() {
     if (editing) loadFamilyMembers(editing.id);
   }
 
-  if (loading) {
+  const header = (
+    <PageHeader
+      title="Households"
+      subtitle="People who live together share an address and home phone in the directory."
+      actions={
+        <Button size="lg" onClick={openCreate}>
+          <Plus className="mr-2 h-5 w-5" aria-hidden="true" />
+          Add household
+        </Button>
+      }
+    />
+  );
+
+  if (status !== "ready") {
     return (
       <PageContainer>
-        <p className="text-xl text-muted-foreground">Loading...</p>
+        {header}
+        {status === "loading" ? (
+          <LoadingState thing="households" />
+        ) : (
+          <ErrorState
+            thing="households"
+            onRetry={() => {
+              setStatus("loading");
+              loadFamilies();
+            }}
+          />
+        )}
       </PageContainer>
     );
   }
 
+  const shownFamilies = families.filter((f) =>
+    matchesSearch(query, [f.family_name, f.city, f.address_line1, ...f.members.map(displayName)]),
+  );
+
   return (
     <PageContainer>
-      <PageHeader
-        title="Families"
-        subtitle="Group members into households with shared address and home phone."
-        actions={
-          <Button
-            size="lg"
-            onClick={openCreate}
-          >
-            <Plus className="mr-2 h-5 w-5" />
-            New Family
-          </Button>
-        }
-      />
+      {header}
 
       {families.length === 0 ? (
-        <Card>
-          <CardContent className="pt-6 text-center">
-            <p className="text-base text-muted-foreground">
-              No families yet. Create one to group members with a shared
-              address.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={Home}
+          message="No households yet."
+          action={
+            <Button onClick={openCreate}>
+              <Plus aria-hidden="true" />
+              Add household
+            </Button>
+          }
+        />
       ) : (
-        <div className="space-y-3">
-          {families.map((family) => (
-            <Card key={family.id}>
-              <CardContent className="pt-6">
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <p className="text-xl font-semibold">{family.family_name}</p>
-                    {family.address_line1 && (
-                      <p className="text-base text-muted-foreground mt-1">
-                        {family.address_line1}
-                        {family.address_line2 && `, ${family.address_line2}`}
-                        {family.city && `, ${family.city}`}
-                        {family.state && `, ${family.state}`}
-                        {family.postal_code && ` ${family.postal_code}`}
-                      </p>
-                    )}
-                    {family.phone_home && (
-                      <p className="text-base text-muted-foreground">
-                        {formatPhone(family.phone_home)}
-                      </p>
-                    )}
-                    <div className="flex items-center gap-1 mt-2 text-sm text-muted-foreground">
-                      <Users className="h-4 w-4" />
-                      <span>
-                        {family.members.length}{" "}
-                        {family.members.length === 1 ? "member" : "members"}
-                      </span>
+        <>
+          <div className="mb-6 max-w-md space-y-2">
+            <Label htmlFor="household-search" className="text-base">
+              Search households
+            </Label>
+            <div className="relative">
+              <Search
+                className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                id="household-search"
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Household, member or address"
+                autoComplete="off"
+                className="pl-10 text-base"
+              />
+            </div>
+            {query.trim() && (
+              <p role="status" className="text-base text-muted-foreground">
+                {shownFamilies.length} of {families.length} households
+              </p>
+            )}
+          </div>
+          {shownFamilies.length === 0 ? (
+            <EmptyState
+              icon={Search}
+              message="No households match that search."
+              action={
+                <Button variant="outline" onClick={() => setQuery("")}>
+                  Clear search
+                </Button>
+              }
+            />
+          ) : (
+            <div className="space-y-3">
+              {shownFamilies.map((family) => (
+                <Card key={family.id}>
+                  <CardContent>
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xl font-semibold">{family.family_name}</p>
+                        {family.address_line1 && (
+                          <p className="text-base text-muted-foreground mt-1">
+                            {family.address_line1}
+                            {family.address_line2 && `, ${family.address_line2}`}
+                            {family.city && `, ${family.city}`}
+                            {family.state && `, ${family.state}`}
+                            {family.postal_code && ` ${family.postal_code}`}
+                          </p>
+                        )}
+                        {family.phone_home && (
+                          <p className="text-base text-muted-foreground">
+                            {formatPhone(family.phone_home)}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-1 mt-2 text-base text-muted-foreground">
+                          <Users className="h-5 w-5" aria-hidden="true" />
+                          <span>
+                            {family.members.length}{" "}
+                            {family.members.length === 1 ? "member" : "members"}
+                          </span>
+                        </div>
+                        {family.members.length > 0 && (
+                          <ul className="mt-1 text-base">
+                            {family.members.map((m) => (
+                              <li key={m.id}>
+                                <Link
+                                  href={`/admin/members/${m.id}`}
+                                  className="inline-flex min-h-11 items-center text-brand-primary-text underline underline-offset-4 hover:text-foreground"
+                                >
+                                  {displayName(m)}
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <Button
+                          variant="outline"
+                          className="w-full sm:w-auto"
+                          onClick={() => openEdit(family)}
+                          aria-label={`Edit ${family.family_name}`}
+                        >
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
+                          Edit
+                        </Button>
+                      </div>
                     </div>
-                    {family.members.length > 0 && (
-                      <ul className="mt-2 text-sm space-y-0.5">
-                        {family.members.map((m) => (
-                          <li key={m.id}>
-                            <Link
-                              href={`/admin/members/${m.id}`}
-                              className="text-brand-primary-text hover:underline"
-                            >
-                              {displayName(m)}
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                  <div className="flex gap-2 shrink-0">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openEdit(family)}
-                    >
-                      <Pencil className="mr-1 h-4 w-4" />
-                      Edit
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit family" : "New family"}</DialogTitle>
+            <DialogTitle>{editing ? "Edit household" : "Add household"}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label htmlFor="family_name">Family name</Label>
+              <Label htmlFor="family_name">Household name</Label>
               <Input
                 id="family_name"
                 value={form.family_name}
                 onChange={(e) =>
                   setForm({ ...form, family_name: e.target.value })
                 }
-                placeholder="e.g. The Smiths"
+                placeholder="The Okafor family"
+                {...invalidFieldProps("family_name", formErrors.family_name)}
               />
+              <FieldError fieldId="family_name" message={formErrors.family_name} />
             </div>
 
             {editing && (
               <div className="space-y-2">
-                <Label>Family photo</Label>
+                <Label>Household photo</Label>
                 {photoUrl ? (
                   <div className="relative">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={photoUrl}
-                      alt={`${form.family_name} family photo`}
+                      alt={`${form.family_name} household photo`}
                       className="w-full aspect-[4/3] object-cover rounded-lg"
                     />
                     <div className="absolute bottom-2 right-2 flex gap-2">
@@ -628,7 +669,7 @@ export function HouseholdsManager() {
                         onClick={() => photoInputRef.current?.click()}
                       >
                         <Camera className="mr-1 h-4 w-4" />
-                        {uploadingPhoto ? "Uploading..." : "Replace"}
+                        {uploadingPhoto ? "Uploading…" : "Replace photo"}
                       </Button>
                       <Button
                         type="button"
@@ -637,7 +678,7 @@ export function HouseholdsManager() {
                         disabled={uploadingPhoto || removingPhoto}
                         onClick={handlePhotoRemove}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
                         <span className="sr-only">Remove photo</span>
                       </Button>
                     </div>
@@ -651,7 +692,7 @@ export function HouseholdsManager() {
                     onClick={() => photoInputRef.current?.click()}
                   >
                     <Camera className="mr-1 h-4 w-4" />
-                    {uploadingPhoto ? "Uploading..." : "Upload family photo"}
+                    {uploadingPhoto ? "Uploading…" : "Add photo"}
                   </Button>
                 )}
                 <input
@@ -661,7 +702,7 @@ export function HouseholdsManager() {
                   onChange={handlePhotoUpload}
                   className="hidden"
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-base text-muted-foreground">
                   Shown on the household&apos;s directory card in place of
                   individual avatars.
                 </p>
@@ -688,8 +729,8 @@ export function HouseholdsManager() {
                 }
               />
             </div>
-            <div className="grid grid-cols-6 gap-2">
-              <div className="col-span-3 space-y-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
+              <div className="col-span-2 space-y-2 sm:col-span-3">
                 <Label htmlFor="f_city">City</Label>
                 <Input
                   id="f_city"
@@ -697,7 +738,7 @@ export function HouseholdsManager() {
                   onChange={(e) => setForm({ ...form, city: e.target.value })}
                 />
               </div>
-              <div className="col-span-1 space-y-2">
+              <div className="space-y-2 sm:col-span-1">
                 <Label htmlFor="f_state">State</Label>
                 <Input
                   id="f_state"
@@ -707,9 +748,10 @@ export function HouseholdsManager() {
                   }
                   maxLength={2}
                   className="uppercase"
+                  {...invalidFieldProps("f_state", formErrors.state)}
                 />
               </div>
-              <div className="col-span-2 space-y-2">
+              <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="f_zip">ZIP</Label>
                 <Input
                   id="f_zip"
@@ -717,7 +759,12 @@ export function HouseholdsManager() {
                   onChange={(e) =>
                     setForm({ ...form, postal_code: e.target.value })
                   }
+                  {...invalidFieldProps("f_zip", formErrors.postal_code)}
                 />
+              </div>
+              <div className="col-span-2 sm:col-span-6">
+                <FieldError fieldId="f_state" message={formErrors.state} />
+                <FieldError fieldId="f_zip" message={formErrors.postal_code} />
               </div>
             </div>
 
@@ -734,7 +781,9 @@ export function HouseholdsManager() {
                   })
                 }
                 placeholder="(555) 123-4567"
+                {...invalidFieldProps("f_phone", formErrors.phone_home)}
               />
+              <FieldError fieldId="f_phone" message={formErrors.phone_home} />
             </div>
 
             <div className="space-y-2">
@@ -747,13 +796,13 @@ export function HouseholdsManager() {
                   setForm({ ...form, anniversary: e.target.value })
                 }
               />
-              <p className="text-xs text-muted-foreground">
-                Only displayed on family card if a spouse relationship exists in the household.
+              <p className="text-base text-muted-foreground">
+                Shown on the household&apos;s directory card only when a spouse is listed.
               </p>
             </div>
 
             <div className="border-t pt-4 space-y-3">
-              <p className="text-sm font-semibold">Family-level privacy</p>
+              <p className="text-base font-semibold">Household privacy</p>
               <div className="flex items-center justify-between">
                 <Label htmlFor="f_hide_addr">Hide address</Label>
                 <Switch
@@ -776,43 +825,38 @@ export function HouseholdsManager() {
               </div>
             </div>
 
-            {/* =========================================================
-                FAMILY MEMBERS SECTION (only when editing an existing family)
-                ========================================================= */}
             {editing && (
               <>
                 <Separator />
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <p className="text-sm font-semibold">Family Members</p>
+                    <p className="text-base font-semibold">Listed without an account</p>
                     {!showMemberForm && (
                       <Button
                         type="button"
                         variant="outline"
-                        size="sm"
                         onClick={startAddMember}
                       >
-                        <Plus className="mr-1 h-3 w-3" />
-                        Add member
+                        <Plus aria-hidden="true" />
+                        Add someone
                       </Button>
                     )}
                   </div>
 
-                  {/* Existing family members list */}
                   {familyMembers.length > 0 && (
                     <ul className="space-y-2 mb-3">
                       {familyMembers.map((fm) => (
                         <li
                           key={fm.id}
-                          className="flex items-center justify-between text-sm bg-muted/40 rounded-md px-3 py-2"
+                          className="flex items-center justify-between gap-2 text-base bg-muted/40 rounded-md px-3 py-2"
                         >
                           <div>
                             <span className="font-medium">
                               {fm.first_name}
                               {fm.last_name && ` ${fm.last_name}`}
                             </span>
-                            <span className="text-muted-foreground ml-2 capitalize">
-                              · {fm.relationship}
+                            <span className="text-muted-foreground ml-2">
+                              · {RELATIONSHIPS.find((r) => r.value === fm.relationship)?.label}
                             </span>
                             {fm.birth_month && fm.birth_day && (
                               <span className="text-muted-foreground ml-2">
@@ -827,8 +871,8 @@ export function HouseholdsManager() {
                               size="icon-sm"
                               onClick={() => startEditMember(fm)}
                             >
-                              <Pencil className="h-3 w-3" />
-                              <span className="sr-only">Edit</span>
+                              <Pencil aria-hidden="true" />
+                              <span className="sr-only">Edit {fm.first_name}</span>
                             </Button>
                             <Button
                               type="button"
@@ -836,8 +880,8 @@ export function HouseholdsManager() {
                               size="icon-sm"
                               onClick={() => setRemovingMember(fm)}
                             >
-                              <Trash2 className="h-3 w-3 text-destructive" />
-                              <span className="sr-only">Remove</span>
+                              <Trash2 className="text-destructive" aria-hidden="true" />
+                              <span className="sr-only">Remove {fm.first_name}</span>
                             </Button>
                           </div>
                         </li>
@@ -846,36 +890,31 @@ export function HouseholdsManager() {
                   )}
 
                   {familyMembers.length === 0 && !showMemberForm && (
-                    <p className="text-sm text-muted-foreground mb-3">
-                      No additional family members yet.
+                    <p className="text-base text-muted-foreground mb-3">
+                      No one is listed without an account yet.
                     </p>
                   )}
 
-                  {/* Add / Edit family member inline form */}
                   {showMemberForm && (
                     <div className="border rounded-md p-3 space-y-3 bg-muted/20">
                       <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium">
-                          {editingMember ? "Edit family member" : "Add family member"}
+                        <p className="text-base font-medium">
+                          {editingMember ? `Edit ${editingMember.first_name}` : "Add someone without an account"}
                         </p>
                         <Button
                           type="button"
                           variant="ghost"
                           size="icon-sm"
-                          onClick={() => {
-                            setShowMemberForm(false);
-                            setEditingMember(null);
-                            setMemberForm(EMPTY_MEMBER_FORM);
-                          }}
+                          onClick={closeMemberForm}
                         >
-                          <X className="h-4 w-4" />
+                          <X aria-hidden="true" />
                           <span className="sr-only">Cancel</span>
                         </Button>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-1">
-                          <Label htmlFor="fm_first" className="text-xs">
+                          <Label htmlFor="fm_first">
                             First name
                           </Label>
                           <Input
@@ -884,11 +923,12 @@ export function HouseholdsManager() {
                             onChange={(e) =>
                               setMemberForm({ ...memberForm, first_name: e.target.value })
                             }
-                            className="h-8 text-sm"
+                            {...invalidFieldProps("fm_first", memberNameError)}
                           />
+                          <FieldError fieldId="fm_first" message={memberNameError} />
                         </div>
                         <div className="space-y-1">
-                          <Label htmlFor="fm_last" className="text-xs">
+                          <Label htmlFor="fm_last">
                             Last name
                           </Label>
                           <Input
@@ -897,13 +937,12 @@ export function HouseholdsManager() {
                             onChange={(e) =>
                               setMemberForm({ ...memberForm, last_name: e.target.value })
                             }
-                            className="h-8 text-sm"
                           />
                         </div>
                       </div>
 
                       <div className="space-y-1">
-                        <Label htmlFor="fm_rel" className="text-xs">
+                        <Label htmlFor="fm_rel">
                           Relationship
                         </Label>
                         <Select
@@ -916,7 +955,7 @@ export function HouseholdsManager() {
                             })
                           }
                         >
-                          <SelectTrigger id="fm_rel" className="h-8 text-sm">
+                          <SelectTrigger id="fm_rel" className="w-full">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -930,7 +969,7 @@ export function HouseholdsManager() {
                       </div>
 
                       <div>
-                        <Label className="text-xs">Birthday (optional)</Label>
+                        <Label>Birthday (optional)</Label>
                         <div className="grid grid-cols-3 gap-2 mt-1">
                           <Select
                             items={MONTHS}
@@ -939,7 +978,7 @@ export function HouseholdsManager() {
                               setMemberForm({ ...memberForm, birth_month: v ?? "" })
                             }
                           >
-                            <SelectTrigger className="h-8 text-sm">
+                            <SelectTrigger aria-label="Birthday month" className="w-full">
                               <SelectValue placeholder="Month" />
                             </SelectTrigger>
                             <SelectContent>
@@ -955,22 +994,22 @@ export function HouseholdsManager() {
                             min="1"
                             max="31"
                             placeholder="Day"
+                            aria-label="Birthday day"
                             value={memberForm.birth_day}
                             onChange={(e) =>
                               setMemberForm({ ...memberForm, birth_day: e.target.value })
                             }
-                            className="h-8 text-sm"
                           />
                           <Input
                             type="number"
                             min="1900"
                             max="2100"
                             placeholder="Year"
+                            aria-label="Birthday year"
                             value={memberForm.birth_year}
                             onChange={(e) =>
                               setMemberForm({ ...memberForm, birth_year: e.target.value })
                             }
-                            className="h-8 text-sm"
                           />
                         </div>
                       </div>
@@ -979,22 +1018,16 @@ export function HouseholdsManager() {
                         <Button
                           type="button"
                           variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setShowMemberForm(false);
-                            setEditingMember(null);
-                            setMemberForm(EMPTY_MEMBER_FORM);
-                          }}
+                          onClick={closeMemberForm}
                         >
                           Cancel
                         </Button>
                         <Button
                           type="button"
-                          size="sm"
                           disabled={savingMember}
                           onClick={handleSaveMember}
                         >
-                          {savingMember ? "Saving..." : editingMember ? "Update" : "Add"}
+                          {savingMember ? "Saving…" : editingMember ? "Save" : "Add"}
                         </Button>
                       </div>
                     </div>
@@ -1008,14 +1041,13 @@ export function HouseholdsManager() {
             {editing && (
               <Button
                 variant="destructive"
-                size="sm"
                 disabled={membersFamilyId !== editing.id}
                 onClick={() =>
                   setDeletingFamily(families.find((f) => f.id === editing.id) ?? null)
                 }
               >
-                <Trash2 className="mr-1 h-4 w-4" />
-                Delete
+                <Trash2 aria-hidden="true" />
+                Delete household
               </Button>
             )}
             <div className="flex gap-2 sm:ml-auto">
@@ -1026,7 +1058,7 @@ export function HouseholdsManager() {
                 onClick={handleSave}
                 disabled={saving}
               >
-                {saving ? "Saving..." : editing ? "Save Changes" : "Create"}
+                {saving ? "Saving…" : editing ? "Save changes" : "Add household"}
               </Button>
             </div>
           </DialogFooter>
