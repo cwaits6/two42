@@ -42,14 +42,26 @@ async function sendAgain() {
 }
 
 const alertText = () => container.querySelector('[role="alert"]')?.textContent ?? null;
+const SENT_AGAIN = "If an account uses this email, another link is on its way.";
 const statusText = () => container.querySelector('[role="status"]')?.textContent ?? null;
 
 describe("ForgotPasswordForm", () => {
-  it("stays on the form and says the send failed when it is refused", async () => {
-    answers = [{ error: { status: 429 } }];
+  it("stays on the form and says the send failed when auth is unreachable", async () => {
+    answers = [{ error: {} }];
     await submit("ada@example.com");
-    expect(alertText()).toBe("Couldn't send the link. Wait a minute, then try again.");
+    expect(alertText()).toMatch(/^Couldn't send the link\./);
     expect(container.textContent).not.toContain("Check your email");
+  });
+
+  it("answers a rate-limited send exactly like a sent one", async () => {
+    answers = [{ error: { status: 429 } }, { error: { status: 429 } }];
+    await submit("ada@example.com");
+    expect(container.textContent).toContain("Check your email");
+    expect(alertText()).toBeNull();
+
+    await sendAgain();
+    expect(statusText()).toBe(SENT_AGAIN);
+    expect(alertText()).toBeNull();
   });
 
   it("names the address once the link is sent", async () => {
@@ -60,16 +72,16 @@ describe("ForgotPasswordForm", () => {
     expect(alertText()).toBeNull();
   });
 
-  it("says Sent again only when the resend goes through", async () => {
-    answers = [{ error: null }, { error: { status: 429 } }, { error: null }];
+  it("confirms a resend only when it was not lost to an outage", async () => {
+    answers = [{ error: null }, { error: { status: 503 } }, { error: null }];
     await submit("ada@example.com");
 
     await sendAgain();
     expect(statusText()).toBeNull();
-    expect(alertText()).toBe("Couldn't send the link. Wait a minute, then try again.");
+    expect(alertText()).toMatch(/^Couldn't send the link\./);
 
     await sendAgain();
-    expect(statusText()).toBe("Sent again.");
+    expect(statusText()).toBe(SENT_AGAIN);
     expect(alertText()).toBeNull();
   });
 });
