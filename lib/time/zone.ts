@@ -34,7 +34,7 @@ export function zoned(iso: string, zone: string): DateTime {
 export function localToUTCISO(local: string, zone: string): string {
   const dt = zoned(local, zone);
   if (!dt.isValid) throw new RangeError(`Not a datetime-local value in ${zone}: ${local}`);
-  // Luxon resolves a repeated hour with today's offset, so its own answer changes with the season.
+  // Luxon picks between the two using the zone's offset when it's called, so its answer varies by season.
   const earliest = Math.min(...dt.getPossibleOffsets().map((candidate) => candidate.toMillis()));
   return new Date(earliest).toISOString();
 }
