@@ -3,34 +3,28 @@
  * message deep-links straight to the action it asks for.
  */
 import { Resend } from "resend";
-import { escapeHtml } from "@/lib/email/resend";
 import {
   formatFromHeader,
   resolveRequestEmailBranding,
   type EmailBranding,
 } from "@/lib/email/identity";
 import { formatServiceDateWithYear } from "@/lib/serving/dates";
+import {
+  button,
+  cancelTurn,
+  emailLayout,
+  escapeHtml,
+  factLines,
+  heading,
+  openDateRows,
+  panel,
+  paragraph,
+  strong,
+  viewSchedule,
+} from "@/supabase/functions/_shared/email-html";
 
 function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
-}
-
-const bodyText = `font-size: 18px; line-height: 1.6; color: #44403c;`;
-const footer = `font-size: 14px; color: #78716c; margin-top: 40px;`;
-
-function bigButton(accent: string): string {
-  return `display: inline-block; background-color: ${accent}; color: white; padding: 16px 32px; text-decoration: none; border-radius: 8px; font-size: 18px; margin-top: 20px;`;
-}
-
-// orgName, not fromName — every caller passes b.orgName, and this file's
-// sendServingBroadcastEmail also has an opts.fromName holding a MEMBER's name.
-function wrap(inner: string, orgName: string): string {
-  return `
-    <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-      ${inner}
-      <p style="${footer}">&mdash; The ${escapeHtml(orgName)} Team</p>
-    </div>
-  `;
 }
 
 export async function sendServingConfirmationEmail(opts: {
@@ -50,29 +44,14 @@ export async function sendServingConfirmationEmail(opts: {
     to: opts.to,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
     subject: `You're signed up: ${opts.teamName}, ${dateLabel}`,
-    html: wrap(`
-      <h1 style="color: ${b.accent}; font-size: 28px;">You're all set!</h1>
-      <p style="${bodyText}">
-        Hi ${escapeHtml(opts.name)}, thank you for serving with the
-        <strong>${escapeHtml(opts.teamName)}</strong>.
-      </p>
-      <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0;">
-        <p style="font-size: 18px; margin: 0; color: #44403c;">
-          <strong>When:</strong> ${dateLabel}
-        </p>
-        <p style="font-size: 18px; margin: 8px 0 0; color: #44403c;">
-          <strong>Who:</strong> ${escapeHtml(opts.attendeesLabel)}
-        </p>
-      </div>
-      <p style="${bodyText}">
-        A calendar invitation is attached so you can add it to your calendar.
-      </p>
-      <p style="${footer}">
-        Can&rsquo;t make it after all? No problem &mdash;
-        <a href="${opts.cancelUrl}" style="color: ${b.accentLight};">click here to cancel</a>
-        and that date will open back up for someone else.
-      </p>
-    `, b.orgName),
+    html: emailLayout(
+      b.orgName,
+      `${heading("You're signed up")}
+${paragraph(`Hi ${escapeHtml(opts.name)}, thank you for serving with ${strong(opts.teamName)}.`)}
+${panel(factLines([["When", dateLabel], ["Who", opts.attendeesLabel]]))}
+${paragraph("A calendar file is attached so you can add this date to your calendar.")}
+${cancelTurn(opts.cancelUrl, b.accent)}`,
+    ),
     attachments: [
       {
         filename: `serving-${opts.serviceDate}.ics`,
@@ -104,16 +83,12 @@ export async function sendServingCancelNoticeEmail(opts: {
     to: opts.to,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
     subject: `${opts.teamName}: ${dateLabel} is open again`,
-    html: wrap(`
-      <h1 style="color: ${b.accent}; font-size: 28px;">A date opened up</h1>
-      <p style="${bodyText}">
-        Hi ${escapeHtml(opts.leaderName)},
-        <strong>${escapeHtml(opts.memberLabel)}</strong> can no longer serve with the
-        <strong>${escapeHtml(opts.teamName)}</strong> on <strong>${dateLabel}</strong>,
-        so that date is open again.
-      </p>
-      <a href="${opts.servingUrl}" style="${bigButton(b.accent)}">View the Schedule</a>
-    `, b.orgName),
+    html: emailLayout(
+      b.orgName,
+      `${heading("A date opened up")}
+${paragraph(`Hi ${escapeHtml(opts.leaderName)}, ${strong(opts.memberLabel)} can no longer serve with ${strong(opts.teamName)} on ${strong(dateLabel)}, so that date is open again.`)}
+${button(opts.servingUrl, "View schedule", b.accent)}`,
+    ),
   });
 
   if (error) {
@@ -122,7 +97,7 @@ export async function sendServingCancelNoticeEmail(opts: {
   }
 }
 
-/** Leader broadcast listing the open Sundays, each with its own action link. */
+/** Leader broadcast listing the open dates, each with its own action link. */
 export async function sendServingBroadcastEmail(opts: {
   to: string;
   name: string;
@@ -130,47 +105,26 @@ export async function sendServingBroadcastEmail(opts: {
   fromName: string;
   message?: string;
   openDates: { date: string; url: string }[];
+  scheduleUrl: string;
   branding?: EmailBranding;
 }) {
   const b = opts.branding ?? (await resolveRequestEmailBranding());
-  const rows = opts.openDates
-    .map(
-      ({ date, url }) => `
-        <table role="presentation" width="100%" style="border-bottom: 1px solid #e7e5e4;">
-          <tr>
-            <td style="padding: 14px 0; font-size: 18px; color: #44403c;">
-              ${formatServiceDateWithYear(date)}
-            </td>
-            <td align="right" style="padding: 14px 0;">
-              <a href="${url}"
-                 style="display: inline-block; background-color: ${b.accent}; color: white; padding: 10px 20px; text-decoration: none; border-radius: 8px; font-size: 16px; white-space: nowrap;">
-                I&rsquo;ll do it
-              </a>
-            </td>
-          </tr>
-        </table>`
-    )
-    .join("");
-
   const { error } = await getResend().emails.send({
     from: formatFromHeader(b.orgName, b.fromAddress),
     to: opts.to,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
     subject: `${opts.teamName}: dates that still need someone`,
-    html: wrap(`
-      <h1 style="color: ${b.accent}; font-size: 28px;">Can you take one of these dates?</h1>
-      <p style="${bodyText}">
-        Hi ${escapeHtml(opts.name)}, ${escapeHtml(opts.fromName)} is looking for
-        volunteers from the <strong>${escapeHtml(opts.teamName)}</strong> for the
-        dates below. Tap a button and you&rsquo;re signed up &mdash; that&rsquo;s it.
-      </p>
-      ${opts.message ? `<p style="${bodyText}">${escapeHtml(opts.message)}</p>` : ""}
-      ${rows}
-      <p style="${footer}">
-        Already spoken for? You can always see who&rsquo;s covering each week at
-        <a href="${b.baseUrl}/serving" style="color: ${b.accentLight};">${b.baseUrl}/serving</a>.
-      </p>
-    `, b.orgName),
+    html: emailLayout(
+      b.orgName,
+      `${heading("Can you take one of these dates?")}
+${paragraph(`Hi ${escapeHtml(opts.name)}, ${escapeHtml(opts.fromName)} is looking for someone from ${strong(opts.teamName)} to take the dates below. Choose a date to sign up.`)}
+${opts.message ? paragraph(escapeHtml(opts.message)) : ""}
+${openDateRows(
+  opts.openDates.map(({ date, url }) => ({ dateLabel: formatServiceDateWithYear(date), url })),
+  b.accent
+)}
+${viewSchedule(opts.scheduleUrl)}`,
+    ),
   });
 
   if (error) {

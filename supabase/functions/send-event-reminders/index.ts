@@ -27,7 +27,7 @@ import {
 } from "../_shared/event-recipients.ts";
 import { formatReminderDate } from "../_shared/event-time.ts";
 import { listGroups, type GroupClient } from "../_shared/groups.ts";
-import { escapeHtml } from "../_shared/html.ts";
+import { eventReminderEmail } from "../_shared/email-html.ts";
 import { resolveServiceKey } from "../_shared/service-key.ts";
 import { reserveEmailQuota } from "../_shared/quota.ts";
 import {
@@ -189,25 +189,15 @@ async function runForOrg(
             to: profile.email,
             refId: profile.id,
             branding,
-            subject: `Reminder: ${event.title} is tomorrow!`,
-            html: `
-            <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-              <h1 style="color: ${branding.accent}; font-size: 28px;">Event Reminder</h1>
-              <p style="font-size: 18px; line-height: 1.6; color: #44403c;">
-                Hi ${escapeHtml(profile.preferred_name || profile.first_name || "Friend")}, just a reminder that <strong>${escapeHtml(event.title)}</strong> is coming up!
-              </p>
-              <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <p style="font-size: 18px; margin: 0; color: #44403c;">
-                  <strong>When:</strong> ${eventDate}
-                </p>
-                ${event.location ? `<p style="font-size: 18px; margin: 8px 0 0; color: #44403c;"><strong>Where:</strong> ${escapeHtml(event.location)}</p>` : ""}
-              </div>
-              <a href="${baseUrl}/g/${group.id}/calendar/${event.id}"
-                 style="display: inline-block; background-color: ${branding.accent}; color: white; padding: 16px 32px; text-decoration: none; border-radius: 8px; font-size: 18px; margin-top: 20px;">
-                View Event
-              </a>
-            </div>
-          `,
+            ...eventReminderEmail({
+              orgName: branding.orgName,
+              accent: branding.accent,
+              name: profile.preferred_name || profile.first_name || "Friend",
+              title: event.title,
+              dateLabel: eventDate,
+              location: event.location,
+              eventUrl: `${baseUrl}/g/${group.id}/calendar/${event.id}`,
+            }),
           })) sent++;
           else sendFailures++;
         }

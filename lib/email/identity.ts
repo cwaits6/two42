@@ -22,7 +22,6 @@ export type EmailBranding = {
   orgName: string;
   replyTo: string | null;
   accent: string;
-  accentLight: string;
   // The resolved From: address: `noreply@<domain>` when the org holds a
   // verified org_email_domains row whose domain passes SENDING_DOMAIN,
   // PLATFORM_ADDRESS in every other case. The local part is a fixed
@@ -148,9 +147,6 @@ function toEmailBranding(
     orgName: b.display_name,
     replyTo: b.reply_to,
     accent: b.accent,
-    // The branding contract has one color; the light variant stays the
-    // platform constant rather than inventing a color-derivation scheme.
-    accentLight: siteConfig.colors.primaryLight,
     fromAddress,
     baseUrl: siteConfig.url,
   };

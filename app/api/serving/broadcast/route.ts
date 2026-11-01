@@ -229,6 +229,7 @@ export async function POST(request: Request) {
   }
 
   const fromName = displayName(profile);
+  const scheduleUrl = `${baseUrl}/g/${group.group_id}/serving/${groupId}`;
   let sent = 0;
   for (const member of members) {
     const dates = openDates.map((date) => ({
@@ -241,7 +242,7 @@ export async function POST(request: Request) {
               d: date,
               p: member.id,
             })}`
-          : `${baseUrl}/g/${group.group_id}/serving/${groupId}`,
+          : scheduleUrl,
     }));
 
     try {
@@ -252,6 +253,7 @@ export async function POST(request: Request) {
         fromName,
         message,
         openDates: dates,
+        scheduleUrl,
         branding,
       });
       sent++;

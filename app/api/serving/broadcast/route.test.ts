@@ -109,7 +109,6 @@ beforeEach(() => {
     fromAddress: "noreply@grace.church",
     baseUrl: "https://grace.church",
     accent: "#B85C38",
-    accentLight: "#c98a68",
     replyTo: null,
   });
   vi.spyOn(console, "warn").mockImplementation(() => {});

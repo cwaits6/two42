@@ -83,7 +83,7 @@ Tokens come in two layers.
 
 **The hover fill is derived, not validated.** Primary buttons hover to a *solid* darker shade: `--primary-hover` in `app/globals.css` is `color-mix(in srgb, var(--primary) 90%, black)`, so the browser derives it from whatever `--primary` the root layout wrote for the org, and `bg-brand-primary-hover` reads it (the shadcn `Button` `default` variant uses it). Darkening strictly lowers luminance, so an accent that passed the write-path guard yields a hover that scores higher against white than the accent itself — Clay `#B85C38` (4.54:1) hovers as `#A65332` (5.38:1), and an accent sitting exactly on the floor hovers at about 5.3:1 (`lib/contrast.test.ts` pins both the declaration and that property). The earlier 90% *alpha* composite went the other way (3.84:1 over a white card), which is why no `hover:bg-*/90` survives on a primary fill. No tenant-supplied value reaches the hover beyond the `accent` in `--primary`, which is contrast-checked only at the write path — an accent stored before #319 reaches the hover unchecked, the same as it reaches `--primary`.
 
-Overriding `accent` produces a *partial* palette by design: only the fill (`--primary`, `--sidebar-primary`), its derived hover, and the focus rings (`--ring`, `--sidebar-ring`) follow the tenant. `--color-brand-primary-light`, `--color-brand-primary-text` (deep clay), `--color-brand-accent` (Marigold), `--color-brand-accent-text`, `--color-brand-warm`, and the email `accentLight` all stay bound to the platform constants rather than inventing a wider color-derivation scheme. Note the resulting name collision — `branding.accent` overrides `NEXT_PUBLIC_COLOR_PRIMARY`, *not* `NEXT_PUBLIC_COLOR_ACCENT`.
+Overriding `accent` produces a *partial* palette by design: only the fill (`--primary`, `--sidebar-primary`), its derived hover, and the focus rings (`--ring`, `--sidebar-ring`) follow the tenant. `--color-brand-primary-light`, `--color-brand-primary-text` (deep clay), `--color-brand-accent` (Marigold), `--color-brand-accent-text`, and `--color-brand-warm` all stay bound to the platform constants rather than inventing a wider color-derivation scheme. Note the resulting name collision — `branding.accent` overrides `NEXT_PUBLIC_COLOR_PRIMARY`, *not* `NEXT_PUBLIC_COLOR_ACCENT`.
 
 Tenant tokens are resolved per request and applied as CSS custom properties; there is no per-tenant CSS bundle. The root layout (`app/layout.tsx`) applies them to the whole app shell, but only for an authenticated request — it resolves the signed-in user's own org via `getRequestBranding()` (`lib/branding.ts`); an anonymous request there renders the platform defaults instead, since the root layout has no legitimate org context of its own (a request host is not a safe basis for anonymous branding — see CLAUDE.md's Multi-tenancy section). Outbound email in `lib/email/*` carries the same identity: the org's `display_name` as the From: display name and `reply_to` as Reply-To.
 
@@ -157,6 +157,17 @@ A server page splits a list read three ways with `readList()` (`lib/supabase/rea
 **Form fields** that fail validation are marked where they are, never only in a toast: the control gets `aria-invalid`, the message sits right below it and is tied to it with `aria-describedby` (`FieldError` and `invalidFieldProps()` in `components/ui/field-error.tsx`), and submitting moves focus to the first invalid field. Messages say what to enter: "Enter a first name." `ProfileForm` is the reference.
 
 **Confirmations** use `ConfirmDialog` (`components/ConfirmDialog.tsx`), never the browser's `confirm()`: the title asks the question and names the thing ("Delete General fund?"), the description is one sentence on what happens next, and the destructive button is named for the action — "Delete fund", never "OK".
+
+---
+
+## Email
+
+Every email, from the app or from an edge function, renders through one layout: `supabase/functions/_shared/email-html.ts`. It lives on the edge side because edge functions cannot import from `lib/`; `lib/email/*` imports it from there.
+
+- **Ground and text:** a card (`#FBF7F0`) on Warm Paper, Espresso text, muted `#5C5044` for small print, deep clay `#8A4227` for links, and `#F3E7D9` behind a panel of facts. All of them hold 4.5:1; `lib/email/layout.test.ts` measures every pair.
+- **Accent:** the church's accent fills buttons, with white text, and appears nowhere else. It is never text: an accent only has to hold 4.5:1 against white.
+- **Type:** Fraunces headings and Inter body, each with web-safe fallbacks, since most mail clients load neither. Body 18px, small print 16px.
+- **Copy:** sentence-case buttons named for the action, dates as dates, no exclamation marks, and a sign-off of the church's name alone.
 
 ---
 

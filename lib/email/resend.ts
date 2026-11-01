@@ -4,6 +4,17 @@ import {
   resolveRequestEmailBranding,
   type EmailBranding,
 } from "@/lib/email/identity";
+import {
+  emailLayout,
+  escapeHtml,
+  factLines,
+  heading,
+  panel,
+  paragraph,
+  primaryAction,
+  smallPrint,
+  strong,
+} from "@/supabase/functions/_shared/email-html";
 
 function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
@@ -16,35 +27,19 @@ export async function sendInviteEmail(
   branding?: EmailBranding
 ) {
   const b = branding ?? (await resolveRequestEmailBranding());
-  const safeOrgName = escapeHtml(b.orgName);
-  const safeName = escapeHtml(name);
+  const safeMagicLink = sanitizeLink(magicLink);
   const { error } = await getResend().emails.send({
     from: formatFromHeader(b.orgName, b.fromAddress),
     to: email,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
-    subject: `You're invited to ${b.orgName}!`,
-    html: `
-      <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-        <h1 style="color: ${b.accent}; font-size: 28px;">Welcome, ${safeName}!</h1>
-        <p style="font-size: 18px; line-height: 1.6; color: #44403c;">
-          Your request to join <strong>${safeOrgName}</strong> has been approved!
-        </p>
-        <p style="font-size: 18px; line-height: 1.6; color: #44403c;">
-          Click the button below to set up your password and get started.
-        </p>
-        <a href="${magicLink}"
-           style="display: inline-block; background-color: ${b.accent}; color: white; padding: 16px 32px; text-decoration: none; border-radius: 8px; font-size: 18px; margin-top: 20px;">
-          Set Up My Account
-        </a>
-        <p style="font-size: 14px; color: #78716c; margin-top: 40px;">
-          If the button doesn't work, copy and paste this link into your browser:<br />
-          <a href="${magicLink}" style="color: ${b.accentLight};">${magicLink}</a>
-        </p>
-        <p style="font-size: 14px; color: #78716c; margin-top: 20px;">
-          &mdash; The ${safeOrgName} Team
-        </p>
-      </div>
-    `,
+    subject: `You're invited to ${b.orgName}`,
+    html: emailLayout(
+      b.orgName,
+      `${heading(`Welcome, ${name}`)}
+${paragraph(`Your request to join ${strong(b.orgName)} was approved.`)}
+${paragraph("Set up your account to get started.")}
+${primaryAction(safeMagicLink, "Set up account", b.accent)}`,
+    ),
   });
 
   if (error) {
@@ -64,51 +59,26 @@ export async function sendMemberInviteEmail(
   branding: EmailBranding
 ) {
   const b = branding;
-  const safeOrgName = escapeHtml(b.orgName);
   const safeSetupLink = sanitizeLink(setupLink);
 
   const { error } = await getResend().emails.send({
     from: formatFromHeader(b.orgName, b.fromAddress),
     to: email,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
-    subject: `You're invited to join ${b.orgName}!`,
-    html: `
-      <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-        <h1 style="color: ${b.accent}; font-size: 28px;">You're invited!</h1>
-        <p style="font-size: 18px; line-height: 1.6; color: #44403c;">
-          <strong>${safeOrgName}</strong> has invited you to join our online community.
-        </p>
-        <p style="font-size: 18px; line-height: 1.6; color: #44403c;">
-          Click the button below to create your account and get started.
-        </p>
-        <a href="${safeSetupLink}"
-           style="display: inline-block; background-color: ${b.accent}; color: white; padding: 16px 32px; text-decoration: none; border-radius: 8px; font-size: 18px; margin-top: 20px;">
-          Join ${safeOrgName}
-        </a>
-        <p style="font-size: 14px; color: #78716c; margin-top: 40px;">
-          If the button doesn't work, copy and paste this link into your browser:<br />
-          <a href="${safeSetupLink}" style="color: ${b.accentLight};">${safeSetupLink}</a>
-        </p>
-        <p style="font-size: 14px; color: #78716c; margin-top: 20px;">
-          &mdash; The ${safeOrgName} Team
-        </p>
-      </div>
-    `,
+    subject: `You're invited to join ${b.orgName}`,
+    html: emailLayout(
+      b.orgName,
+      `${heading("You're invited")}
+${paragraph(`${strong(b.orgName)} invited you to join its two42 space.`)}
+${paragraph("Set up your account to get started.")}
+${primaryAction(safeSetupLink, "Set up account", b.accent)}`,
+    ),
   });
 
   if (error) {
     console.error("Failed to send member invite email:", error);
     throw error;
   }
-}
-
-export function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 /**
@@ -141,39 +111,20 @@ export async function sendFamilyInviteEmail(
   branding?: EmailBranding
 ) {
   const b = branding ?? (await resolveRequestEmailBranding());
-  const safeOrgName = escapeHtml(b.orgName);
-  const safeInviterName = escapeHtml(inviterName);
-  const safeFamilyMemberName = escapeHtml(familyMemberName);
   const safeJoinLink = sanitizeLink(joinLink);
 
   const { error } = await getResend().emails.send({
     from: formatFromHeader(b.orgName, b.fromAddress),
     to: email,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
-    subject: `${headerText(inviterName)} added you to their household on ${b.orgName}`,
-    html: `
-      <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-        <h1 style="color: ${b.accent}; font-size: 28px;">You've been invited!</h1>
-        <p style="font-size: 18px; line-height: 1.6; color: #44403c;">
-          <strong>${safeInviterName}</strong> has added <strong>${safeFamilyMemberName}</strong> to their household
-          on <strong>${safeOrgName}</strong> and would like to invite you to create your own account.
-        </p>
-        <p style="font-size: 18px; line-height: 1.6; color: #44403c;">
-          Click the button below to sign up and join your household.
-        </p>
-        <a href="${safeJoinLink}"
-           style="display: inline-block; background-color: ${b.accent}; color: white; padding: 16px 32px; text-decoration: none; border-radius: 8px; font-size: 18px; margin-top: 20px;">
-          Create My Account
-        </a>
-        <p style="font-size: 14px; color: #78716c; margin-top: 40px;">
-          If the button doesn't work, copy and paste this link into your browser:<br />
-          <a href="${safeJoinLink}" style="color: ${b.accentLight};">${safeJoinLink}</a>
-        </p>
-        <p style="font-size: 14px; color: #78716c; margin-top: 20px;">
-          &mdash; The ${safeOrgName} Team
-        </p>
-      </div>
-    `,
+    subject: `${headerText(inviterName)} added you to their household at ${b.orgName}`,
+    html: emailLayout(
+      b.orgName,
+      `${heading("You're invited")}
+${paragraph(`${strong(inviterName)} added ${strong(familyMemberName)} to their household at ${strong(b.orgName)} and invited you to create your own account.`)}
+${paragraph("Create your account to join your household.")}
+${primaryAction(safeJoinLink, "Create account", b.accent)}`,
+    ),
   });
 
   if (error) {
@@ -196,9 +147,6 @@ export async function sendGroupInviteEmail(
   branding: EmailBranding
 ) {
   const b = branding;
-  const safeOrgName = escapeHtml(b.orgName);
-  const safeName = escapeHtml(name);
-  const safeGroupName = escapeHtml(groupName);
   const safeSetupLink = sanitizeLink(setupLink);
 
   const { error } = await getResend().emails.send({
@@ -206,28 +154,13 @@ export async function sendGroupInviteEmail(
     to: email,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
     subject: `You're invited to ${headerText(groupName)} at ${b.orgName}`,
-    html: `
-      <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-        <h1 style="color: ${b.accent}; font-size: 28px;">Welcome, ${safeName}!</h1>
-        <p style="font-size: 18px; line-height: 1.6; color: #44403c;">
-          You've been invited to join <strong>${safeGroupName}</strong> at <strong>${safeOrgName}</strong>.
-        </p>
-        <p style="font-size: 18px; line-height: 1.6; color: #44403c;">
-          Click the button below to set up your password. You'll land in the group as soon as you're done.
-        </p>
-        <a href="${safeSetupLink}"
-           style="display: inline-block; background-color: ${b.accent}; color: white; padding: 16px 32px; text-decoration: none; border-radius: 8px; font-size: 18px; margin-top: 20px;">
-          Set up my account
-        </a>
-        <p style="font-size: 14px; color: #78716c; margin-top: 40px;">
-          If the button doesn't work, copy and paste this link into your browser:<br />
-          <a href="${safeSetupLink}" style="color: ${b.accentLight};">${safeSetupLink}</a>
-        </p>
-        <p style="font-size: 14px; color: #78716c; margin-top: 20px;">
-          &mdash; The ${safeOrgName} Team
-        </p>
-      </div>
-    `,
+    html: emailLayout(
+      b.orgName,
+      `${heading(`Welcome, ${name}`)}
+${paragraph(`You&#39;re invited to join ${strong(groupName)} at ${strong(b.orgName)}.`)}
+${paragraph("Set up your account, and you&#39;ll go straight to the group.")}
+${primaryAction(safeSetupLink, "Set up account", b.accent)}`,
+    ),
   });
 
   if (error) {
@@ -246,7 +179,6 @@ export async function sendFeedbackEmail(
 ) {
   const b = branding ?? (await resolveRequestEmailBranding());
   const kind = type === "problem" ? "Something's broken" : "An idea";
-  const safeSenderName = escapeHtml(senderName);
   const safeMessage = escapeHtml(message).replace(/\n/g, "<br />");
   // The member's own address must win over the org reply_to — admins answer
   // the sender directly by replying to this email.
@@ -257,28 +189,17 @@ export async function sendFeedbackEmail(
     to,
     ...(replyTo ? { replyTo } : {}),
     subject: `${b.orgName} feedback from ${headerText(senderName)}: ${kind}`,
-    html: `
-      <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-        <h1 style="color: ${b.accent}; font-size: 28px;">Member feedback</h1>
-        <p style="font-size: 18px; line-height: 1.6; color: #44403c;">
-          <strong>${safeSenderName}</strong>${senderEmail ? ` (${escapeHtml(senderEmail)})` : ""}
-          sent feedback from the Settings page.
-        </p>
-        <p style="font-size: 16px; color: #78716c; margin: 0;">Type: <strong>${kind}</strong></p>
-        <div style="background: #F3F7FB; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <p style="font-size: 18px; line-height: 1.6; margin: 0; color: #44403c;">${safeMessage}</p>
-        </div>
-        ${
-          senderEmail
-            ? `<p style="font-size: 14px; color: #78716c; margin-top: 40px;">
-          Reply to this email to answer them directly.
-        </p>`
-            : `<p style="font-size: 14px; color: #78716c; margin-top: 40px;">
-          They don't have an email address on file, so this email can't be replied to directly.
-        </p>`
-        }
-      </div>
-    `,
+    html: emailLayout(
+      b.orgName,
+      `${heading("Member feedback")}
+${paragraph(`${strong(senderName)}${senderEmail ? ` (${escapeHtml(senderEmail)})` : ""} sent feedback from the Settings page.`)}
+${panel(`${factLines([["Type", kind]])}<br /><br />${safeMessage}`)}
+${smallPrint(
+  senderEmail
+    ? "Reply to this email to answer them directly."
+    : "They don&#39;t have an email address on file, so this email can&#39;t be replied to directly."
+)}`,
+    ),
   });
 
   if (error) {
