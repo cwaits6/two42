@@ -29,7 +29,7 @@ export default async function AdminGroupPage({ params }: { params: Promise<{ id:
       .select("id, name, description, group_members(role, profile_id, profiles(first_name, last_name, preferred_name))")
       .eq("id", id)
       .maybeSingle(),
-    getGroupMemberships().catch(() => []),
+    getGroupMemberships(),
   ]);
   if (error) {
     console.error("Failed to load group:", error.code);

@@ -38,7 +38,7 @@ export async function AdminGroupsContent() {
       .eq("status", "pending")
       .order("created_at", { ascending: true }),
     listAdminGroups(supabase),
-    // Without these every row links to its admin page, which always opens.
+    // Without these every row links to its admin page rather than failing all of Groups.
     getGroupMemberships().catch(() => []),
   ]);
 
