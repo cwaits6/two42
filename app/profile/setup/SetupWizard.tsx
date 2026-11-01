@@ -411,7 +411,16 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
   const stepErrors = (): StepErrors => {
     if (step === 1) return aboutYouErrors({ firstName, lastName, birthMonth, birthDay, birthYear });
     if (step === 2) {
-      return contactErrors({ phoneMobile, phoneHome, phoneWork, hidePhoneMobile, hideEmail });
+      return contactErrors({
+        phoneMobile,
+        phoneHome,
+        phoneWork,
+        email: userEmail,
+        hidePhoneMobile,
+        hidePhoneHome: profile.hide_phone_home ?? false,
+        hidePhoneWork: profile.hide_phone_work ?? false,
+        hideEmail,
+      });
     }
     if (step === 3) return householdErrors(householdId !== null);
     return {};

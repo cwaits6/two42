@@ -37,6 +37,7 @@ import { Camera, Check } from "lucide-react";
 import { CheckRow } from "@/components/profile/CheckRow";
 import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
 import { MONTHS, birthdayColumns, birthdayErrors } from "@/components/profile/birthday";
+import { UNREACHABLE_MESSAGE, isReachable } from "@/components/profile/reachability";
 import {
   canManageAvatar,
   type AvatarEligibilityCaller,
@@ -311,17 +312,17 @@ export function ProfileForm({
       found.email = "Enter an email address like name@example.com.";
     }
 
-    // At least one phone or a visible email is required so members can be reached.
-    const hasPhone = !!(
-      (state.phone_mobile && !state.hide_phone_mobile) ||
-      (state.phone_home && !state.hide_phone_home) ||
-      (state.phone_work && !state.hide_phone_work)
-    );
-    const hasVisibleEmail = !!state.email && !state.hide_email;
-    if (!relaxValidation && !hasPhone && !hasVisibleEmail) {
-      found.phone_mobile =
-        "Add a phone number, or keep your email visible so people can reach you.";
-    }
+    const reachable = isReachable({
+      phoneMobile: state.phone_mobile,
+      phoneHome: state.phone_home,
+      phoneWork: state.phone_work,
+      email: state.email,
+      hidePhoneMobile: state.hide_phone_mobile,
+      hidePhoneHome: state.hide_phone_home,
+      hidePhoneWork: state.hide_phone_work,
+      hideEmail: state.hide_email,
+    });
+    if (!relaxValidation && !reachable) found.phone_mobile = UNREACHABLE_MESSAGE;
     if (state.phone_mobile && !phoneMobile) {
       found.phone_mobile = "Enter a valid phone number.";
     }

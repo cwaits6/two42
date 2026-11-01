@@ -2,7 +2,16 @@ import { describe, expect, it } from "vitest";
 import { aboutYouErrors, contactErrors, householdErrors, personErrors } from "./setupValidation";
 
 const aboutYou = { firstName: "Ada", lastName: "Lovelace", birthMonth: "", birthDay: "", birthYear: "" };
-const contact = { phoneMobile: "", phoneHome: "", phoneWork: "", hidePhoneMobile: false, hideEmail: false };
+const contact = {
+  phoneMobile: "",
+  phoneHome: "",
+  phoneWork: "",
+  email: "ada@example.com",
+  hidePhoneMobile: false,
+  hidePhoneHome: false,
+  hidePhoneWork: false,
+  hideEmail: false,
+};
 
 describe("aboutYouErrors", () => {
   it("lets setup continue without a birthday", () => {
@@ -31,6 +40,15 @@ describe("contactErrors", () => {
 
   it("accepts a home phone when the email is hidden", () => {
     expect(contactErrors({ ...contact, phoneHome: "(214) 867-5309", hideEmail: true })).toEqual({});
+  });
+
+  it("doesn't count a hidden home phone, or an email it doesn't have", () => {
+    expect(contactErrors({ ...contact, phoneHome: "(214) 867-5309", hidePhoneHome: true, hideEmail: true })).toEqual({
+      phone_mobile: "Add a phone number, or keep your email visible so people can reach you.",
+    });
+    expect(contactErrors({ ...contact, email: "" })).toEqual({
+      phone_mobile: "Add a phone number, or keep your email visible so people can reach you.",
+    });
   });
 
   it("marks a phone number that isn't one", () => {
