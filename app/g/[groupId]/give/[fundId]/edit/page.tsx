@@ -1,6 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound, redirect } from "next/navigation";
 import { FundForm } from "@/components/giving/FundForm";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { ErrorState } from "@/components/states/ErrorState";
 import {
   givingStewardsCanManage,
   loadFundFormData,
@@ -10,6 +13,7 @@ import { requireActiveGroup } from "@/lib/groups/server";
 import type { GivingFund, GivingFundMethod } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { groupPageTitle } from "@/lib/pageTitle";
+import { readList } from "@/lib/supabase/readList";
 
 export const generateMetadata = groupPageTitle("Edit fund");
 
@@ -33,7 +37,7 @@ export default async function EditFundPage({
   if (!profile || profile.role === "pending") redirect("/dashboard");
   const isLeader = group.role === "leader";
 
-  const [{ data: fund }, { data: methodRows }, stewardsCanManage] =
+  const [{ data: fund, error: fundError }, methods, stewardsCanManage] =
     await Promise.all([
       supabase
         .from("giving_funds")
@@ -45,31 +49,45 @@ export default async function EditFundPage({
         .from("giving_fund_methods")
         .select("*")
         .eq("fund_id", fundId)
-        .eq("group_id", group.id),
+        .eq("group_id", group.id)
+        .then((read) => readList<GivingFundMethod>(read, "fund payment methods")),
       givingStewardsCanManage(supabase, profile.org_id),
     ]);
 
-  if (!fund) notFound();
+  if (fundError) {
+    console.error("Failed to load the fund: code=%s message=%s", fundError.code, fundError.message);
+  }
+  if (!fund && !fundError) notFound();
   const canManage =
-    isLeader || (stewardsCanManage && fund.steward_id === user.id);
-  if (!canManage) redirect(giveHref);
+    isLeader || (stewardsCanManage && fund?.steward_id === user.id);
+  if (fund && !canManage) redirect(giveHref);
 
-  const { members } = await loadFundFormData(supabase, profile.org_id);
+  const { members, failed: membersFailed } = fund
+    ? await loadFundFormData(supabase, profile.org_id)
+    : { members: [], failed: false };
+  const backHref = isLeader ? groupPath(group.id, "/settings/giving") : giveHref;
 
   return (
-    <div className="container mx-auto px-4 py-12 max-w-5xl">
-      <h1 className="text-3xl md:text-4xl font-bold text-brand-primary-text mb-10">
-        Edit fund
-      </h1>
-      <FundForm
-        fund={{ ...fund, methods: (methodRows ?? []) as GivingFundMethod[] }}
-        members={members}
-        currentUserId={user.id}
-        isLeader={isLeader}
-        groupId={group.id}
-        groupName={group.name}
-        backHref={isLeader ? groupPath(group.id, "/settings/giving") : giveHref}
+    <PageContainer>
+      <PageHeader
+        title="Edit fund"
+        backHref={backHref}
+        backLabel={isLeader ? "Back to Giving" : "Back to Give"}
       />
-    </div>
+      {/* A partial read must not reach the form: saving prunes every method it doesn't show. */}
+      {!fund || methods === null || membersFailed ? (
+        <ErrorState thing="the fund" />
+      ) : (
+        <FundForm
+          fund={{ ...fund, methods }}
+          members={members}
+          currentUserId={user.id}
+          isLeader={isLeader}
+          groupId={group.id}
+          groupName={group.name}
+          backHref={backHref}
+        />
+      )}
+    </PageContainer>
   );
 }
