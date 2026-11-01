@@ -3,12 +3,12 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures/auth";
 import { GROUP_B, PERSONAS, type PersonaKey } from "./fixtures/personas";
 
-// The wall masked names before author_id was closed to clients, so this guards
-// the rendered result; prayer_anonymity_suite.sql is what proves the column
-// stays out of reach. Nothing in the UI deletes a request, so both hooks remove
-// this spec's row through the stack's own Postgres container. Tests run in
-// order: the author posts, the readers look, and the author marks it answered
-// last so the dashboard still lists it.
+// The card masks on is_anonymous by itself, so this guards the rendered result;
+// prayer_anonymity_suite.sql is what proves the column stays out of reach.
+// Nothing in the UI deletes a request, so both hooks remove this spec's row
+// through the stack's own Postgres container. Tests run in order: the author
+// posts, the readers look, and the author marks it answered last so the
+// dashboard still lists it.
 test.describe.configure({ mode: "serial" });
 
 const DB_CONTAINER = "supabase_db_small-group-hub";
