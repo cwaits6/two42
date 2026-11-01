@@ -31,7 +31,6 @@ vi.mock("@/lib/email/identity", async (importOriginal) => {
       orgName: "Grace Church",
       replyTo: null,
       accent: "#b5562f",
-      accentLight: "#d98b6a",
       fromAddress: "noreply@two42.io",
       baseUrl: "https://two42.io",
     }),

@@ -6,6 +6,7 @@
 // resolveEmailBranding() entirely — no Supabase mocking needed.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { escapeHtml } from "@/supabase/functions/_shared/email-html";
 
 const send = vi.fn().mockResolvedValue({ data: { id: "test" }, error: null });
 vi.mock("resend", () => ({
@@ -17,7 +18,6 @@ vi.mock("resend", () => ({
 }));
 
 const {
-  escapeHtml,
   sendInviteEmail,
   sendFamilyInviteEmail,
   sendGroupInviteEmail,
@@ -29,7 +29,6 @@ const BRANDING = {
   orgName: "Grace Fellowship",
   replyTo: null,
   accent: "#B85C38",
-  accentLight: "#c98a68",
   // Distinctive — never equals the platform default, so a call site that
   // reverts to PLATFORM_ADDRESS (or never wired b.fromAddress in) fails loud.
   fromAddress: "noreply@grace.church",
@@ -124,6 +123,13 @@ describe("send call sites use the resolved branding.fromAddress", () => {
     await expect(
       sendGroupInviteEmail("a@b.org", "Jane", "Group", "javascript:alert(1)", BRANDING),
     ).rejects.toThrow(/Invalid or unsafe/);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("keeps the setup token out of the error for a bad link", async () => {
+    await expect(
+      sendInviteEmail("a@b.org", "Jane", "not-a-url?token=secret-token", BRANDING),
+    ).rejects.toThrow(/^Invalid or unsafe link$/);
     expect(send).not.toHaveBeenCalled();
   });
 });

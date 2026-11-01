@@ -4,9 +4,10 @@
 // supabase/migrations/20261108000000_reminders_default_send_time.sql (not here,
 // so it survives a point-in-time restore or self-host from this repo):
 //
-//   - "send-serving-reminders-daily": remind attendees of covered Sundays
-//     (per-team reminder_days — see serving_team_settings)
-//   - "send-serving-monthly-broadcast": broadcast open Sundays on the 1st
+//   - "send-serving-reminders-daily": remind attendees of covered service
+//     dates (per-team reminder_days, matched against reminderRun() in
+//     _shared/serving-dates.ts — see serving_team_settings)
+//   - "send-serving-monthly-broadcast": broadcast open service dates on the 1st
 //
 // Runs with the service key (BYPASSRLS), so tenant isolation lives in the
 // query text: iterates every active organization and filters each query on
@@ -25,8 +26,12 @@ import {
   type EmailBranding,
 } from "../_shared/branding.ts";
 import { resolveGroupLinkMode, type GroupClient } from "../_shared/groups.ts";
-import { escapeHtml } from "../_shared/html.ts";
-import { nextSunday, upcomingSundays } from "../_shared/sundays.ts";
+import { openDatesEmail, servingReminderEmail } from "../_shared/email-html.ts";
+import {
+  formatServiceDateWithYear,
+  reminderRun,
+  upcomingServiceDates,
+} from "../_shared/serving-dates.ts";
 import { resolveServiceKey } from "../_shared/service-key.ts";
 import { reserveEmailQuota } from "../_shared/quota.ts";
 import { isOpenDatesRecipient, isServingReminderRecipient } from "../_shared/serving-recipients.ts";
@@ -36,6 +41,7 @@ import {
   OrgRunError,
   summarize,
   type ItemFailure,
+  type Org,
   type OrgListClient,
   type OrgRunCounts,
 } from "../_shared/orgs.ts";
@@ -127,17 +133,6 @@ async function createToken(
   return `${payloadB64}.${await hmacSign(payloadB64, secret)}`;
 }
 
-// ── Date formatting ───────────────────────────────────────────────────────────
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 // ── Email ─────────────────────────────────────────────────────────────────────
 
 async function sendEmail(
@@ -173,13 +168,6 @@ async function sendEmail(
   }
 }
 
-function wrap(inner: string, orgName: string): string {
-  return `<div style="font-family:Georgia,serif;max-width:600px;margin:0 auto;padding:40px 20px;">
-    ${inner}
-    <p style="font-size:14px;color:#78716c;margin-top:40px;">&mdash; The ${escapeHtml(orgName)} Team</p>
-  </div>`;
-}
-
 // ── Shared: resolve link mode ─────────────────────────────────────────────────
 
 // The link mode is a per-group setting, and several teams share a group, so
@@ -205,16 +193,18 @@ async function canSignForGroup(
   return canSign;
 }
 
-// ── Daily mode: remind attendees of the next covered Sunday ──────────────────
+// ── Daily mode: remind attendees of the next covered service date ────────────
 
 async function runDaily(
   supabase: ServiceClient,
-  orgId: string,
+  org: Org,
   linkModes: Map<string, boolean>,
   branding: EmailBranding,
   baseUrl: string
 ): Promise<OrgRunCounts> {
-  const todayDow = new Date().getDay();
+  const orgId = org.id;
+  // Before any send: a zone Intl rejects fails this org, not its emails.
+  const { weekday, serviceDate } = reminderRun(org);
 
   let sent = 0;
   let sendFailures = 0;
@@ -226,7 +216,7 @@ async function runDaily(
     .select("team_id, reminder_days")
     .eq("org_id", orgId)
     .eq("enabled", true)
-    .contains("reminder_days", [todayDow]);
+    .contains("reminder_days", [weekday]);
 
   if (teamSettingsError) {
     // Genuinely org-level: no team loop has begun, so there is nothing to
@@ -259,8 +249,6 @@ async function runDaily(
       const group_id = group.group_id as string;
       const canSign = await canSignForGroup(supabase, orgId, group_id, linkModes);
 
-      const sunday = nextSunday();
-
       // The embed carries no org_id filter and needs none: the parent row is
       // org-filtered below and composite (col, org_id) FKs keep the traversal
       // inside this tenant. See the note in _shared/orgs.ts.
@@ -269,13 +257,13 @@ async function runDaily(
         .select("id, serving_signup_attendees(profiles(id, first_name, preferred_name, email, role))")
         .eq("org_id", orgId)
         .eq("team_id", team_id)
-        .eq("service_date", sunday)
+        .eq("service_date", serviceDate)
         .maybeSingle();
       if (signupError) {
         throw new Error(`serving_signups query failed: ${signupError.message}`);
       }
 
-      if (!signup) continue; // open Sunday — no reminder to send
+      if (!signup) continue; // open date — no reminder to send
 
       const attendees = (signup.serving_signup_attendees ?? []) as unknown as Array<{
         profiles: {
@@ -309,14 +297,10 @@ async function runDaily(
       }
 
       for (const p of recipients) {
-        const name = escapeHtml(p.preferred_name || p.first_name || "Friend");
-        const safeTeam = escapeHtml(teamName);
-        const dateLabel = escapeHtml(formatDate(sunday));
-
         let cancelUrl = `${baseUrl}/g/${group_id}/serving/${team_id}`;
         if (canSign) {
           cancelUrl = `${baseUrl}/serving/go?token=${await createToken(
-            { a: "cancel", g: team_id, d: sunday, p: p.id },
+            { a: "cancel", g: team_id, d: serviceDate, p: p.id },
             SERVING_LINK_SECRET!
           )}`;
         }
@@ -325,24 +309,14 @@ async function runDaily(
           to: p.email,
           refId: p.id,
           branding,
-          subject: `Reminder: you're serving this Sunday with the ${teamName}`,
-          html: wrap(`
-          <h1 style="color:${branding.accent};font-size:28px;">See you Sunday!</h1>
-          <p style="font-size:18px;line-height:1.6;color:#44403c;">
-            Hi ${name}, just a reminder that you&rsquo;re signed up to serve with the
-            <strong>${safeTeam}</strong> this Sunday.
-          </p>
-          <div style="background:#fef3c7;padding:20px;border-radius:8px;margin:20px 0;">
-            <p style="font-size:18px;margin:0;color:#44403c;">
-              <strong>When:</strong> ${dateLabel}
-            </p>
-          </div>
-          <p style="font-size:14px;color:#78716c;">
-            Can&rsquo;t make it?
-            <a href="${cancelUrl}" style="color:${branding.accent};">Click here to cancel</a>
-            so someone else can cover.
-          </p>
-        `, branding.orgName),
+          ...servingReminderEmail({
+            orgName: branding.orgName,
+            accent: branding.accent,
+            name: p.preferred_name || p.first_name || "Friend",
+            teamName,
+            dateLabel: formatServiceDateWithYear(serviceDate),
+            cancelUrl,
+          }),
         })) sent++;
         else sendFailures++;
       }
@@ -365,15 +339,19 @@ async function runDaily(
   return { sent, sendFailures, itemFailures };
 }
 
-// ── Monthly mode: broadcast open Sundays to the whole team ───────────────────
+// ── Monthly mode: broadcast open service dates to the whole team ─────────────
 
 async function runMonthly(
   supabase: ServiceClient,
-  orgId: string,
+  org: Org,
   linkModes: Map<string, boolean>,
   branding: EmailBranding,
   baseUrl: string
 ): Promise<OrgRunCounts> {
+  const orgId = org.id;
+  // Before any send: a zone Intl rejects fails this org, not its emails.
+  const { today } = reminderRun(org);
+
   let sent = 0;
   let sendFailures = 0;
   const itemFailures: ItemFailure[] = [];
@@ -416,21 +394,21 @@ async function runMonthly(
       const group_id = group.group_id as string;
       const canSign = await canSignForGroup(supabase, orgId, group_id, linkModes);
 
-      const sundays = upcomingSundays(window_weeks ?? 8);
+      const serviceDates = upcomingServiceDates(window_weeks ?? 8, today);
 
-      // Find which Sundays are already covered
+      // Find which dates are already covered
       const { data: signups, error: signupsError } = await supabase
         .from("serving_signups")
         .select("service_date")
         .eq("org_id", orgId)
         .eq("team_id", team_id)
-        .in("service_date", sundays);
+        .in("service_date", serviceDates);
       if (signupsError) {
         throw new Error(`serving_signups query failed: ${signupsError.message}`);
       }
 
       const covered = new Set((signups ?? []).map((s) => s.service_date as string));
-      const openDates = sundays.filter((d) => !covered.has(d));
+      const openDates = serviceDates.filter((d) => !covered.has(d));
 
       if (!openDates.length) continue; // all covered — nothing to broadcast
 
@@ -478,50 +456,31 @@ async function runMonthly(
       const sendList = allowed ? recipients : [];
 
       for (const m of sendList) {
-        const name = escapeHtml(m.preferred_name || m.first_name || "Friend");
-        const safeTeam = escapeHtml(teamName);
-
-        const rows = await Promise.all(
-          openDates.map(async (date) => {
-            let signupUrl = `${baseUrl}/g/${group_id}/serving/${team_id}`;
-            if (canSign) {
-              signupUrl = `${baseUrl}/serving/go?token=${await createToken(
+        const scheduleUrl = `${baseUrl}/g/${group_id}/serving/${team_id}`;
+        const dates = await Promise.all(
+          openDates.map(async (date) => ({
+            dateLabel: formatServiceDateWithYear(date),
+            url: canSign
+              ? `${baseUrl}/serving/go?token=${await createToken(
                 { a: "signup", g: team_id, d: date, p: m.id },
                 SERVING_LINK_SECRET!
-              )}`;
-            }
-            return `
-            <table role="presentation" width="100%" style="border-bottom:1px solid #e7e5e4;">
-              <tr>
-                <td style="padding:14px 0;font-size:18px;color:#44403c;">${escapeHtml(formatDate(date))}</td>
-                <td align="right" style="padding:14px 0;">
-                  <a href="${signupUrl}"
-                     style="display:inline-block;background-color:${branding.accent};color:white;padding:10px 20px;text-decoration:none;border-radius:8px;font-size:16px;white-space:nowrap;">
-                    I&rsquo;ll do it
-                  </a>
-                </td>
-              </tr>
-            </table>`;
-          })
+              )}`
+              : scheduleUrl,
+          }))
         );
 
         if (await sendEmail({
           to: m.email,
           refId: m.id,
           branding,
-          subject: `${teamName}: open Sundays for the coming weeks`,
-          html: wrap(`
-          <h1 style="color:${branding.accent};font-size:28px;">Can you take a Sunday?</h1>
-          <p style="font-size:18px;line-height:1.6;color:#44403c;">
-            Hi ${name}, here are the upcoming Sundays for the <strong>${safeTeam}</strong>
-            that still need a volunteer. Tap a button and you&rsquo;re signed up.
-          </p>
-          ${rows.join("")}
-          <p style="font-size:14px;color:#78716c;margin-top:24px;">
-            Want to see the full schedule?
-            <a href="${baseUrl}/g/${group_id}/serving/${team_id}" style="color:${branding.accent};">View the team page</a>
-          </p>
-        `, branding.orgName),
+          ...openDatesEmail({
+            orgName: branding.orgName,
+            accent: branding.accent,
+            name: m.preferred_name || m.first_name || "Friend",
+            teamName,
+            dates,
+            scheduleUrl,
+          }),
         })) { sent++; teamSent++; }
         else sendFailures++;
       }
@@ -537,7 +496,7 @@ async function runMonthly(
         team_id,
         sent_by: null,
         org_id: orgId,
-        subject: `${teamName}: monthly open-Sunday broadcast`,
+        subject: `${teamName}: dates that still need someone`,
         open_dates: openDates,
         recipient_count: teamSent,
       });
@@ -581,7 +540,7 @@ Deno.serve(async (req) => {
   let mode = "daily";
   // An absent body is normal (the daily cron posts nothing); a present but
   // unparseable body is an alarm — it means the monthly job's {"mode":
-  // "monthly"} did not arrive, and the month's open-Sunday broadcast silently
+  // "monthly"} did not arrive, and the month's open-dates broadcast silently
   // runs as a daily instead. Detection latency for that is ~30 days, so the
   // two conditions are distinguished rather than both swallowed.
   const rawBody = await req.text().catch(() => "");
@@ -615,8 +574,8 @@ Deno.serve(async (req) => {
           org.org_email_domains[0] ?? null,
         );
         return mode === "monthly"
-          ? await runMonthly(supabase, org.id, linkModes, branding, SITE_URL)
-          : await runDaily(supabase, org.id, linkModes, branding, SITE_URL);
+          ? await runMonthly(supabase, org, linkModes, branding, SITE_URL)
+          : await runDaily(supabase, org, linkModes, branding, SITE_URL);
       }),
     );
 

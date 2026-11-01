@@ -10,7 +10,6 @@
 // lib/email/identity.ts, and vice versa.
 //
 // Differences from the app version (all deliberate):
-//   - No logo_url and no accentLight — cron mail renders neither.
 //   - Defaults are passed in by the caller (the env-derived APP_NAME /
 //     BRAND_COLOR, the non-prefixed twins of NEXT_PUBLIC_APP_NAME /
 //     NEXT_PUBLIC_COLOR_PRIMARY with the same "two42" / "#B85C38"

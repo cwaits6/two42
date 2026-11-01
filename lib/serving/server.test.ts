@@ -51,7 +51,6 @@ const BRANDING = {
   orgName: "Grace Fellowship",
   replyTo: null,
   accent: "#B85C38",
-  accentLight: "#c98a68",
   fromAddress: "noreply@grace.church",
   // Distinctive — never equals siteConfig.url, so a call site that reverts
   // to the platform default fails loud.

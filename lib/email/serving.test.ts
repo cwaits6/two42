@@ -21,12 +21,9 @@ const BRANDING = {
   orgName: "Grace Fellowship",
   replyTo: null,
   accent: "#B85C38",
-  accentLight: "#c98a68",
   // Distinctive — never equals the platform default, so a call site that
   // reverts to PLATFORM_ADDRESS (or never wired b.fromAddress in) fails loud.
   fromAddress: "noreply@grace.church",
-  // Same idea for links: never equals siteConfig.url, so a body builder that
-  // still reads the platform constant fails loud.
   baseUrl: "https://grace.church",
 };
 
@@ -73,6 +70,7 @@ describe("send call sites use the resolved branding.fromAddress", () => {
       teamName: "Welcome Team",
       fromName: "Pat",
       openDates: [{ date: "2026-09-06", url: "https://x/signup" }],
+      scheduleUrl: "https://grace.church/g/g1/serving/t1",
       branding: BRANDING,
     });
     expect(send).toHaveBeenCalledWith(
@@ -81,25 +79,24 @@ describe("send call sites use the resolved branding.fromAddress", () => {
   });
 });
 
-// ── Link origin: the in-body /serving link must use b.baseUrl ────────────────
+// ── The schedule link goes to the team's own page, the one page that lists it ─
 
-describe("sendServingBroadcastEmail builds its footer link from branding.baseUrl", () => {
+describe("sendServingBroadcastEmail links to the team's schedule", () => {
   beforeEach(() => {
     send.mockClear();
   });
 
-  it("links to /serving on branding.baseUrl, in both the href and the visible text", async () => {
+  it("uses the schedule url it is given, labelled for the action", async () => {
     await sendServingBroadcastEmail({
       to: "a@b.org",
       name: "Jane",
       teamName: "Welcome Team",
       fromName: "Pat",
       openDates: [{ date: "2026-09-06", url: "https://x/signup" }],
+      scheduleUrl: "https://grace.church/g/g1/serving/t1",
       branding: BRANDING,
     });
     const { html } = send.mock.calls[0][0];
-    expect(html).toContain('href="https://grace.church/serving"');
-    expect(html).toContain(">https://grace.church/serving</a>");
-    expect(html).not.toContain("localhost:3000");
+    expect(html).toMatch(/href="https:\/\/grace\.church\/g\/g1\/serving\/t1"[^>]*>View schedule<\/a>/);
   });
 });

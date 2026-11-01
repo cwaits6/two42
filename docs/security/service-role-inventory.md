@@ -596,7 +596,9 @@ which variable it binds is review-enforced.
 `listActiveOrgs()` also selects `organizations.timezone` on that same
 org-anchored read: `send-event-reminders` formats each reminder's event time
 through `_shared/event-time.ts` in that zone, so the mail shows the org's
-wall clock rather than the runtime's (UTC). The database stores only exact
+wall clock rather than the runtime's (UTC), and `send-serving-reminders` reads
+the date a run acts on through `reminderRun()` in `_shared/serving-dates.ts`.
+The database stores only exact
 IANA names (`organizations_timezone_check()`), so the function passes the
 stored name to `Intl` as is; a name `Intl` rejects fails that org's groups into
 `failedItems[]`, never a wrong time. No new query and no new service-role call site.
