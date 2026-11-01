@@ -141,7 +141,8 @@ export function SignInSecurityCard({ currentEmail }: SignInSecurityCardProps) {
   const handleEmailChange = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const email = normalizeEmail(newEmail);
-    if (!email) {
+    const input = e.currentTarget.elements.namedItem("new-email") as HTMLInputElement | null;
+    if (!email || input?.validity.typeMismatch) {
       accept({ "new-email": "Enter an email address like name@example.com." });
       return;
     }

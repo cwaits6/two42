@@ -273,6 +273,8 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
   const [householdAdded, setHouseholdAdded] = useState(false);
   const [creatingHousehold, setCreatingHousehold] = useState(false);
   const [pendingPeople, setPendingPeople] = useState<PendingPerson[]>([]);
+  // A retry after a later write fails must not insert these people again.
+  const savedPeople = useRef<Set<string>>(new Set());
   const [anniversary, setAnniversary] = useState(profile.anniversary ?? "");
   const [adding, setAdding] = useState<FamilyMemberRelationship | null>(null);
   const [draft, setDraft] = useState<PersonDraft>(EMPTY_DRAFT);
@@ -474,9 +476,10 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
         if (error) throw error;
       }
 
-      if (householdId && pendingPeople.length > 0) {
+      const unsavedPeople = pendingPeople.filter((m) => !savedPeople.current.has(m.tempId));
+      if (householdId && unsavedPeople.length > 0) {
         const { error } = await supabase.from("family_members").insert(
-          pendingPeople.map((m) => ({
+          unsavedPeople.map((m) => ({
             family_id: householdId,
             first_name: m.first_name,
             last_name: m.last_name || null,
@@ -486,6 +489,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
           })),
         );
         if (error) throw error;
+        for (const m of unsavedPeople) savedPeople.current.add(m.tempId);
       }
 
       // Marked complete only after every dependent write succeeds.
