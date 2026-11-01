@@ -154,9 +154,10 @@ export function LandingPage() {
             Have an invite link?
           </h2>
           <p className="max-w-[680px] text-xl leading-relaxed text-muted-foreground">
-            Open it from the email or message it came in. It names the group or household you&rsquo;re
-            invited to, asks for your name, and emails you a link to set up your account. If you
-            already have an account, sign in first, then open the link again.
+            Open it from the email or message it came in. A group invite asks for your name and emails
+            you a link to set up your account. A household invite asks for your name and sends a
+            request to your church&rsquo;s admins, who email you that link once they approve it. If
+            you already have an account, sign in first, then open the link again.
           </p>
         </div>
       </section>

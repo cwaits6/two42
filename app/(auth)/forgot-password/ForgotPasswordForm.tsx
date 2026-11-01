@@ -21,9 +21,8 @@ export function ForgotPasswordForm() {
   const [sendError, setSendError] = useState<string | null>(null);
   const supabase = createClient();
 
-  // Auth rate-limits recovery mail per account, so a 4xx (429 above all) would
-  // say an account uses the email: treat it as sent. Only an unreachable or
-  // failing auth server is reported.
+  // Auth rate-limits recovery mail per account, so a 429 would say an account
+  // uses the email: treat it as sent. Every other failure means no mail went out.
   async function sendLink(email: string): Promise<boolean> {
     setLoading(true);
     setSendError(null);
@@ -32,7 +31,7 @@ export function ForgotPasswordForm() {
     });
     setLoading(false);
     if (error) console.error(error);
-    if (error && (!error.status || error.status >= 500)) {
+    if (error && error.status !== 429) {
       setSendError(failureMessage("send the link", error.status || "network"));
       return false;
     }

@@ -64,6 +64,13 @@ describe("ForgotPasswordForm", () => {
     expect(alertText()).toBeNull();
   });
 
+  it("reports a 4xx other than the rate limit: no mail went out", async () => {
+    answers = [{ error: { status: 400 } }];
+    await submit("ada@example.com");
+    expect(container.textContent).not.toContain("Check your email");
+    expect(alertText()).not.toBeNull();
+  });
+
   it("names the address once the link is sent", async () => {
     answers = [{ error: null }];
     await submit("ada@example.com");

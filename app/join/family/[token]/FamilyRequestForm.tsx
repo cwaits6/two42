@@ -20,7 +20,7 @@ const LABEL = "font-sans text-lg font-semibold tracking-[0.08em] uppercase text-
 const NAME_REQUIRED = "Enter your name.";
 const MESSAGES: Record<number, string> = {
   404: HOUSEHOLD_INVITE_INVALID_TEXT,
-  409: "A request for this email is already in. A church admin will review it.",
+  409: "A request for this email is already in. A church admin emails you a link to set up your account once it's approved. Check your email, or ask a church admin.",
 };
 
 export function FamilyRequestForm({ token, email }: FamilyRequestFormProps) {
