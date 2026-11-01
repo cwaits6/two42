@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { displayName } from "@/lib/names";
-import { isValidServiceDate } from "@/lib/serving/sundays";
+import { isUpcomingServiceDate, todayIn } from "@/lib/serving/dates";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
 import {
   notifyLeadersOfCancel,
   resolveSignupLabel,
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
   if (!groupId || !serviceDate || attendeeIds.length === 0) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
-  if (!isValidServiceDate(serviceDate)) {
+  if (!isUpcomingServiceDate(serviceDate, todayIn(await getOrgTimeZone()))) {
     return NextResponse.json(
       { error: "Signups are for upcoming service dates only" },
       { status: 400 }

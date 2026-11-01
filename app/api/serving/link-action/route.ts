@@ -3,7 +3,8 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { displayName } from "@/lib/names";
 import { getServingLinkMode } from "@/lib/serving/config";
 import { verifyServingToken } from "@/lib/serving/links";
-import { isValidServiceDate } from "@/lib/serving/sundays";
+import { isUpcomingServiceDate, todayIn } from "@/lib/serving/dates";
+import { orgTimeZoneById } from "@/lib/time/orgZone";
 import {
   findSpouse,
   notifyLeadersOfCancel,
@@ -130,7 +131,8 @@ export async function POST(request: Request) {
   }
 
   if (payload.a === "signup") {
-    if (!isValidServiceDate(payload.d)) {
+    const today = todayIn(await orgTimeZoneById(service, group.org_id));
+    if (!isUpcomingServiceDate(payload.d, today)) {
       return NextResponse.json(
         { error: "That date has already passed" },
         { status: 400 }

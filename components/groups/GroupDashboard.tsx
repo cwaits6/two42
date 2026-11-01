@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/states/EmptyState";
 import { ErrorState } from "@/components/states/ErrorState";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { HomeGreeting } from "@/components/groups/HomeGreeting";
-import { formatServiceDate, toDateString } from "@/lib/serving/sundays";
+import { formatServiceDate, toDateString } from "@/lib/serving/dates";
 import { RsvpControl } from "@/components/events/RsvpControl";
 import { JoinMeetingBlock } from "@/components/events/JoinMeetingBlock";
 import { expandUpcomingEvents } from "@/lib/recurrence";

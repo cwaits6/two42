@@ -9,7 +9,7 @@ import {
   resolveRequestEmailBranding,
   type EmailBranding,
 } from "@/lib/email/identity";
-import { formatServiceDateWithYear } from "@/lib/serving/sundays";
+import { formatServiceDateWithYear } from "@/lib/serving/dates";
 
 function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
