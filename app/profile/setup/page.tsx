@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { mintSignedUrl } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
-import { siteConfig } from "@/lib/config";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
 import type { Profile } from "@/lib/types";
 import { SetupWizard } from "./SetupWizard";
 import { getOptionalUser } from "@/lib/supabase/current-user";
@@ -37,23 +38,29 @@ export default async function ProfileSetupPage() {
 
   // Private buckets: the wizard's avatar preview renders this
   // value; the wizard itself persists only fresh raw upload URLs.
-  profile.avatar_url = await mintSignedUrl(profile.avatar_url);
+  const [avatarUrl, household] = await Promise.all([
+    mintSignedUrl(profile.avatar_url),
+    profile.family_id
+      ? supabase
+          .from("family_units")
+          .select("family_name")
+          .eq("id", profile.family_id)
+          .maybeSingle()
+      : null,
+  ]);
+  profile.avatar_url = avatarUrl;
 
   return (
-    <div className="min-h-dvh bg-background">
-      <div className="container mx-auto px-4 py-12 max-w-2xl">
-        <div className="text-center mb-10">
-          <h1 className="text-3xl md:text-4xl font-bold text-brand-primary-text mb-3">
-            Welcome to {siteConfig.name}!
-          </h1>
-          <p className="text-lg text-muted-foreground">
-            Let&apos;s set up your profile so others in the group can connect with you.
-            This only takes a few minutes.
-          </p>
-        </div>
-
-        <SetupWizard profile={profile} userEmail={user.email ?? ""} />
-      </div>
-    </div>
+    <PageContainer size="reading">
+      <PageHeader
+        title="Set up your profile"
+        subtitle="Add how to reach you and who you live with, so people in your groups can find you."
+      />
+      <SetupWizard
+        profile={profile}
+        userEmail={user.email ?? ""}
+        householdName={household?.data?.family_name ?? null}
+      />
+    </PageContainer>
   );
 }
