@@ -63,6 +63,18 @@ describe("localToUTCISO", () => {
     expect(localToUTCISO("2026-11-01T01:30", NY)).toBe("2026-11-01T05:30:00.000Z");
   });
 
+  it.each(["2026-07-01T12:00:00Z", "2026-12-01T12:00:00Z"])(
+    "takes the first occurrence whatever the season when it runs (%s)",
+    (now) => {
+      vi.useFakeTimers({ now: new Date(now) });
+      try {
+        expect(localToUTCISO("2026-11-01T01:30", NY)).toBe("2026-11-01T05:30:00.000Z");
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it("refuses a value that is not a datetime-local string", () => {
     expect(() => localToUTCISO("yesterday", NY)).toThrow(RangeError);
   });
