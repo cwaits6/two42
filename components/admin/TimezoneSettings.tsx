@@ -22,17 +22,6 @@ import { failureMessage } from "@/lib/errorCopy";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { isValidTimeZone } from "@/lib/time/zone";
 
-/** Listed first, in the order the country reads them. */
-export const US_TIME_ZONES = [
-  "America/New_York",
-  "America/Chicago",
-  "America/Denver",
-  "America/Phoenix",
-  "America/Los_Angeles",
-  "America/Anchorage",
-  "Pacific/Honolulu",
-];
-
 export type TimeZoneOption = { value: string; label: string };
 
 // Written out rather than asked of Intl: the trigger renders on the server and
@@ -46,6 +35,9 @@ const US_ZONE_NAMES: Record<string, string> = {
   "America/Anchorage": "Alaska Time (Anchorage)",
   "Pacific/Honolulu": "Hawaii Time (Honolulu)",
 };
+
+/** Listed first, in the order the country reads them. */
+export const US_TIME_ZONES = Object.keys(US_ZONE_NAMES);
 
 /**
  * What a person reads for a zone; the stored value stays the IANA id. US zones
