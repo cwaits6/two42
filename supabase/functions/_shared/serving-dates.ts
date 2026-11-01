@@ -1,7 +1,6 @@
 // Serving dates for the reminder flows, mirroring lib/serving/dates.ts, which
 // cannot be imported here (Luxon, "@/" aliases). A serving date is a calendar
-// date ("YYYY-MM-DD"), so the arithmetic and formatting run in UTC; the one
-// zone that matters, the church's, decides what "today" is.
+// date ("YYYY-MM-DD"), so the arithmetic and formatting run in UTC.
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_DAYS = 7;
@@ -35,6 +34,25 @@ export function upcomingServiceDates(weeks: number, today: string): string[] {
   return Array.from({ length: Math.max(0, weeks) }, (_, i) =>
     new Date(first + i * WEEK_DAYS * DAY_MS).toISOString().slice(0, 10)
   );
+}
+
+/**
+ * The date a reminder run acts on: the church's, but never behind UTC's. The
+ * jobs fire once a day at 08:00 UTC, which is the previous evening west of
+ * UTC-8. There the church's own date would send a Sunday reminder after that
+ * Sunday's service, and in Alaska, where daylight saving moves the run across
+ * midnight, repeat one date and skip another. The hold can go if the schedule
+ * moves to an hour where no zone crosses midnight, such as 15:00 UTC.
+ */
+export function reminderRun(org: { timezone: string }, now: Date = new Date()) {
+  const churchDate = todayIn(org.timezone, now);
+  const utcDate = now.toISOString().slice(0, 10);
+  const today = churchDate > utcDate ? churchDate : utcDate;
+  return {
+    today,
+    weekday: weekdayOf(today),
+    serviceDate: upcomingServiceDates(1, today)[0],
+  };
 }
 
 /** "Sunday, July 12, 2026". */

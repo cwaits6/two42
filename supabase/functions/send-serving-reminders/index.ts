@@ -5,8 +5,8 @@
 // so it survives a point-in-time restore or self-host from this repo):
 //
 //   - "send-serving-reminders-daily": remind attendees of covered service
-//     dates (per-team reminder_days, read in the church's time zone — see
-//     serving_team_settings)
+//     dates (per-team reminder_days, matched against reminderRun() in
+//     _shared/serving-dates.ts — see serving_team_settings)
 //   - "send-serving-monthly-broadcast": broadcast open service dates on the 1st
 //
 // Runs with the service key (BYPASSRLS), so tenant isolation lives in the
@@ -29,9 +29,8 @@ import { resolveGroupLinkMode, type GroupClient } from "../_shared/groups.ts";
 import { openDatesEmail, servingReminderEmail } from "../_shared/email-html.ts";
 import {
   formatServiceDateWithYear,
-  todayIn,
+  reminderRun,
   upcomingServiceDates,
-  weekdayOf,
 } from "../_shared/serving-dates.ts";
 import { resolveServiceKey } from "../_shared/service-key.ts";
 import { reserveEmailQuota } from "../_shared/quota.ts";
@@ -205,7 +204,7 @@ async function runDaily(
 ): Promise<OrgRunCounts> {
   const orgId = org.id;
   // Before any send: a zone Intl rejects fails this org, not its emails.
-  const today = todayIn(org.timezone);
+  const { weekday, serviceDate } = reminderRun(org);
 
   let sent = 0;
   let sendFailures = 0;
@@ -217,7 +216,7 @@ async function runDaily(
     .select("team_id, reminder_days")
     .eq("org_id", orgId)
     .eq("enabled", true)
-    .contains("reminder_days", [weekdayOf(today)]);
+    .contains("reminder_days", [weekday]);
 
   if (teamSettingsError) {
     // Genuinely org-level: no team loop has begun, so there is nothing to
@@ -249,8 +248,6 @@ async function runDaily(
       const teamName = group.name as string;
       const group_id = group.group_id as string;
       const canSign = await canSignForGroup(supabase, orgId, group_id, linkModes);
-
-      const [serviceDate] = upcomingServiceDates(1, today);
 
       // The embed carries no org_id filter and needs none: the parent row is
       // org-filtered below and composite (col, org_id) FKs keep the traversal
@@ -353,7 +350,7 @@ async function runMonthly(
 ): Promise<OrgRunCounts> {
   const orgId = org.id;
   // Before any send: a zone Intl rejects fails this org, not its emails.
-  const today = todayIn(org.timezone);
+  const { today } = reminderRun(org);
 
   let sent = 0;
   let sendFailures = 0;

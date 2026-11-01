@@ -4,6 +4,7 @@
 import { assertEquals, assertThrows } from "jsr:@std/assert@1";
 import {
   formatServiceDateWithYear,
+  reminderRun,
   todayIn,
   upcomingServiceDates,
   weekdayOf,
@@ -59,4 +60,59 @@ Deno.test("upcomingServiceDates with zero weeks returns an empty list", () => {
 Deno.test("formatServiceDateWithYear shows the date's own weekday", () => {
   assertEquals(formatServiceDateWithYear("2026-11-08"), "Sunday, November 8, 2026");
   assertEquals(formatServiceDateWithYear("2026-11-09"), "Monday, November 9, 2026");
+});
+
+const churchIn = (timezone: string) => ({ timezone });
+const dailyRun = (date: string) => new Date(`${date}T08:00:00Z`);
+
+Deno.test("a reminder run reads the org's own time zone", () => {
+  const sundayEveningUtc = new Date("2026-11-08T20:00:00Z");
+  assertEquals(reminderRun(churchIn("UTC"), sundayEveningUtc), {
+    today: "2026-11-08",
+    weekday: 0,
+    serviceDate: "2026-11-08",
+  });
+  assertEquals(reminderRun(churchIn("Asia/Tokyo"), sundayEveningUtc), {
+    today: "2026-11-09",
+    weekday: 1,
+    serviceDate: "2026-11-15",
+  });
+  assertThrows(() => reminderRun(churchIn("Nowhere/Bogus")), RangeError);
+});
+
+Deno.test("a reminder run landing on the church's previous evening acts on the coming date", () => {
+  // 10 PM Saturday in Honolulu: Sunday's reminder, before that Sunday's service.
+  assertEquals(reminderRun(churchIn("Pacific/Honolulu"), dailyRun("2026-11-08")), {
+    today: "2026-11-08",
+    weekday: 0,
+    serviceDate: "2026-11-08",
+  });
+  // 11 PM Sunday in Anchorage, after the service: the next reminder names next Sunday.
+  assertEquals(reminderRun(churchIn("America/Anchorage"), dailyRun("2026-11-02")), {
+    today: "2026-11-02",
+    weekday: 1,
+    serviceDate: "2026-11-08",
+  });
+});
+
+Deno.test("every daily run acts on the next date across daylight saving", () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const first = dailyRun("2026-01-01").getTime();
+  // The zones that reach midnight at this hour, plus their neighbours either side.
+  const zones = [
+    "America/Anchorage", "America/Juneau", "America/Metlakatla", "America/Nome",
+    "America/Sitka", "America/Yakutat", "America/Adak", "Pacific/Honolulu",
+    "Pacific/Pago_Pago", "America/Los_Angeles", "America/New_York", "Europe/London",
+    "Asia/Tokyo", "Pacific/Norfolk", "Pacific/Auckland", "Pacific/Chatham",
+    "Pacific/Kiritimati",
+  ];
+  for (const zone of zones) {
+    for (let day = 0; day < 365; day++) {
+      const now = new Date(first + day * DAY_MS);
+      const { today, serviceDate } = reminderRun(churchIn(zone), now);
+      assertEquals(today, now.toISOString().slice(0, 10), zone);
+      // A service date already behind the church's own date would be a past turn.
+      assertEquals(serviceDate >= todayIn(zone, now), true, zone);
+    }
+  }
 });
