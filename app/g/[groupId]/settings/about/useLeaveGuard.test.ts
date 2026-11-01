@@ -132,4 +132,17 @@ describe("useLeaveGuard", () => {
     render(true);
     expect(guard.asking).toBe(false);
   });
+
+  it("keeps guarding after a Leave pressed once a Save has dropped the question", () => {
+    render(true);
+    pressBack();
+    render(false);
+    act(() => guard.leave());
+    expect(go).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+
+    render(true);
+    pressBack();
+    expect(guard.asking).toBe(true);
+  });
 });

@@ -109,9 +109,10 @@ export function useLeaveGuard(dirty: boolean) {
 
   function leave() {
     const target = leaving;
+    if (!target) return;
     released.current = true;
     setLeaving(null);
-    if (target?.kind === "back") {
+    if (target.kind === "back") {
       // One step off the spare entry, one more to where Back was going.
       window.history.go(-2);
       // With no earlier entry go() does nothing and reports nothing, and the
@@ -119,10 +120,10 @@ export function useLeaveGuard(dirty: boolean) {
       window.setTimeout(() => {
         released.current = false;
       }, BACK_SETTLE_MS);
-    } else if (target?.sameOrigin) {
+    } else if (target.sameOrigin) {
       // Replacing the spare entry stops Back from the target landing on it first.
       router.replace(target.href);
-    } else if (target) {
+    } else {
       window.location.replace(target.href);
     }
   }
