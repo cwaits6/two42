@@ -43,6 +43,23 @@ describe("SetupAccountForm verification", () => {
     expect(container.textContent).toContain("Couldn't load this signup link");
   });
 
+  it("checks the link again on Try again and shows the form once it answers", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(
+        Response.json({ name: "Ada", email: "ada@example.com", invite_token: null }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(createElement(SetupAccountForm)));
+
+    const retry = [...container.querySelectorAll("button")].find((b) => b.textContent === "Try again");
+    await act(async () => retry!.click());
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container.querySelector<HTMLInputElement>("#email")?.value).toBe("ada@example.com");
+  });
+
   it("offers a retry when the answer is not readable", async () => {
     await render(async () => new Response("<html>", { status: 200 }));
     expect(container.textContent).toContain("Couldn't load this signup link");
