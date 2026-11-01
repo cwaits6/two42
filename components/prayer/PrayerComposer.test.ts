@@ -43,6 +43,7 @@ describe("PrayerCard", () => {
         prayPending: false,
         onPray: () => {},
         onToggleAnswered: () => {},
+        timeZone: "America/New_York",
       })
     );
 

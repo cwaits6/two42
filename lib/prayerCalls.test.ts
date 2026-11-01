@@ -7,6 +7,7 @@
 // caller.
 
 import { describe, expect, it } from "vitest";
+import { DateTime } from "luxon";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { savePrayerCallSessions, type SessionDraft } from "@/lib/prayerCalls";
 import type { PrayerCallSession } from "@/lib/types";
@@ -85,6 +86,7 @@ function fakeClient(
 const ORG = "org-1";
 const GROUP = "grp-1";
 const GROUP_NAME = "Grace";
+const ZONE = "America/New_York";
 const CAL = "cal-1";
 
 function draft(overrides: Partial<SessionDraft> = {}): SessionDraft {
@@ -126,7 +128,7 @@ const byTable = (calls: Call[], table: string, op: Call["op"]) =>
 describe("savePrayerCallSessions — calendar resolution", () => {
   it("reads the group's calendar filtered on the org AND the group", async () => {
     const { client, calls } = fakeClient({ rows: { "event_calendars:select": { id: CAL } } });
-    await savePrayerCallSessions(client, ORG, GROUP, GROUP_NAME, [], []);
+    await savePrayerCallSessions(client, ORG, GROUP, GROUP_NAME, ZONE, [], []);
     const [read] = byTable(calls, "event_calendars", "select");
     expect(read.filters).toEqual([
       ["org_id", ORG],
@@ -138,7 +140,7 @@ describe("savePrayerCallSessions — calendar resolution", () => {
   it("creates the group's calendar, named after the group and stamped with both ids, when it has none", async () => {
     const { client, calls } = fakeClient({ rows: { "event_calendars:insert": { id: "cal-new" } } });
     const d = draft();
-    await savePrayerCallSessions(client, ORG, GROUP, GROUP_NAME, [d], []);
+    await savePrayerCallSessions(client, ORG, GROUP, GROUP_NAME, ZONE, [d], []);
     const [insert] = byTable(calls, "event_calendars", "insert");
     expect(insert.payload).toMatchObject({ name: GROUP_NAME, org_id: ORG, group_id: GROUP });
     const [eventInsert] = byTable(calls, "events", "insert");
@@ -149,7 +151,7 @@ describe("savePrayerCallSessions — calendar resolution", () => {
 describe("savePrayerCallSessions — removed sessions", () => {
   it("deletes the synced event and then the session, each scoped on org_id and group_id", async () => {
     const { client, calls } = fakeClient({ rows: { "event_calendars:select": { id: CAL } } });
-    await savePrayerCallSessions(client, ORG, GROUP, GROUP_NAME, [], [session({ id: "s-1", event_id: "e-1" })]);
+    await savePrayerCallSessions(client, ORG, GROUP, GROUP_NAME, ZONE, [], [session({ id: "s-1", event_id: "e-1" })]);
     const [eventDelete] = byTable(calls, "events", "delete");
     const [sessionDelete] = byTable(calls, "prayer_call_sessions", "delete");
     expect(eventDelete.filters).toEqual([
@@ -170,7 +172,7 @@ describe("savePrayerCallSessions — kept drafts", () => {
   it("updates an existing event and session, both scoped on org_id and group_id", async () => {
     const { client, calls } = fakeClient({ rows: { "event_calendars:select": { id: CAL } } });
     const d = draft({ id: "s-1", event_id: "e-1" });
-    const result = await savePrayerCallSessions(client, ORG, GROUP, GROUP_NAME, [d], []);
+    const result = await savePrayerCallSessions(client, ORG, GROUP, GROUP_NAME, ZONE, [d], []);
     expect(result).toBeNull();
     const [eventUpdate] = byTable(calls, "events", "update");
     expect(eventUpdate.filters).toEqual([
@@ -196,7 +198,7 @@ describe("savePrayerCallSessions — kept drafts", () => {
       },
     });
     const d = draft();
-    await savePrayerCallSessions(client, ORG, GROUP, GROUP_NAME, [d], []);
+    await savePrayerCallSessions(client, ORG, GROUP, GROUP_NAME, ZONE, [d], []);
     const [eventInsert] = byTable(calls, "events", "insert");
     expect(eventInsert.payload).toMatchObject({
       title: "Prayer call",
@@ -209,6 +211,18 @@ describe("savePrayerCallSessions — kept drafts", () => {
     expect(d).toMatchObject({ id: "s-new", event_id: "e-new" });
   });
 
+  it("starts the calendar event at the session's time in the church's zone", async () => {
+    const { client, calls } = fakeClient({ rows: { "event_calendars:select": { id: CAL } } });
+    await savePrayerCallSessions(client, ORG, GROUP, GROUP_NAME, ZONE, [draft({ end_time: "19:30" })], []);
+    const { start_time, end_time } = byTable(calls, "events", "insert")[0].payload as {
+      start_time: string;
+      end_time: string;
+    };
+    const start = DateTime.fromISO(start_time, { zone: ZONE });
+    expect([start.weekday, start.hour, start.minute]).toEqual([2, 19, 0]);
+    expect(DateTime.fromISO(end_time, { zone: ZONE }).toFormat("HH:mm")).toBe("19:30");
+  });
+
   it("re-creates the event when the scoped update matches nothing", async () => {
     // An event id from another group now matches zero rows on the scoped
     // update — the existing "deleted out from under us" path handles it.
@@ -217,7 +231,7 @@ describe("savePrayerCallSessions — kept drafts", () => {
       matchesNothing: ["events"],
     });
     const d = draft({ id: "s-1", event_id: "e-stale" });
-    await savePrayerCallSessions(client, ORG, GROUP, GROUP_NAME, [d], []);
+    await savePrayerCallSessions(client, ORG, GROUP, GROUP_NAME, ZONE, [d], []);
     expect(byTable(calls, "events", "update")).toHaveLength(1);
     const [eventInsert] = byTable(calls, "events", "insert");
     expect(eventInsert.payload).toMatchObject({ org_id: ORG, group_id: GROUP });
@@ -234,8 +248,8 @@ describe("savePrayerCallSessions — kept drafts", () => {
       matchesNothing: ["prayer_call_sessions"],
     });
     const d = draft({ id: "s-stale", event_id: "e-1" });
-    const result = await savePrayerCallSessions(client, ORG, GROUP, GROUP_NAME, [d], []);
-    expect(result).toBe("Couldn't save the call details. Please try again.");
+    const result = await savePrayerCallSessions(client, ORG, GROUP, GROUP_NAME, ZONE, [d], []);
+    expect(result).toBe("Couldn't save the call details. Try again.");
     expect(byTable(calls, "prayer_call_sessions", "update")).toHaveLength(1);
     expect(byTable(calls, "prayer_call_sessions", "insert")).toHaveLength(0);
   });

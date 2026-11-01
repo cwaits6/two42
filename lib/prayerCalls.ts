@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ensureGroupCalendar } from "@/lib/groups/calendar";
-import { nextOccurrence } from "@/lib/prayer";
+import { failureMessage } from "@/lib/errorCopy";
+import { nextOccurrence, sessionEnd } from "@/lib/prayer";
 import type { PrayerCallSession } from "@/lib/types";
 
 /** Editable fields of a prayer call session, as collected by the card's edit mode */
@@ -18,15 +19,9 @@ export interface SessionDraft {
   display_order: number;
 }
 
-function eventFields(draft: SessionDraft, calendarId: string | null) {
-  const start = nextOccurrence(draft.weekday, draft.start_time);
-  let end: Date | null = null;
-  if (draft.end_time) {
-    end = new Date(start);
-    const [h, m] = draft.end_time.split(":").map(Number);
-    end.setHours(h, m, 0, 0);
-    if (end <= start) end.setDate(end.getDate() + 1);
-  }
+function eventFields(draft: SessionDraft, calendarId: string | null, timeZone: string) {
+  const start = nextOccurrence(draft.weekday, draft.start_time, timeZone);
+  const end = draft.end_time ? sessionEnd(start, draft.end_time, timeZone) : null;
 
   const lines: string[] = [];
   if (draft.dial_in) {
@@ -64,6 +59,9 @@ function eventFields(draft: SessionDraft, calendarId: string | null) {
  * come from validated anchors (the caller's own profile row and the
  * verified active group), never from the browser or a request body.
  *
+ * `timeZone` is the church's zone: a session's weekday and times are its
+ * wall clock, wherever the leader's browser is.
+ *
  * @returns an error message to show the user, or null on success
  */
 export async function savePrayerCallSessions(
@@ -71,6 +69,7 @@ export async function savePrayerCallSessions(
   orgId: string,
   groupId: string,
   groupName: string,
+  timeZone: string,
   drafts: SessionDraft[],
   removed: PrayerCallSession[]
 ): Promise<string | null> {
@@ -87,7 +86,7 @@ export async function savePrayerCallSessions(
         .eq("id", s.event_id)
         .eq("org_id", orgId)
         .eq("group_id", groupId);
-      if (error) return "Couldn't remove a session. Please try again.";
+      if (error) return failureMessage("delete the call time");
     }
     const { error } = await supabase
       .from("prayer_call_sessions")
@@ -95,11 +94,11 @@ export async function savePrayerCallSessions(
       .eq("id", s.id)
       .eq("org_id", orgId)
       .eq("group_id", groupId);
-    if (error) return "Couldn't remove a session. Please try again.";
+    if (error) return failureMessage("delete the call time");
   }
 
   for (const draft of drafts) {
-    const fields = eventFields(draft, calendarId);
+    const fields = eventFields(draft, calendarId, timeZone);
 
     // Sync the event first so the session row can point at it. Only an
     // error-free update that matches no rows means the event was deleted out
@@ -116,7 +115,7 @@ export async function savePrayerCallSessions(
         .eq("group_id", groupId)
         .select("id");
       if (error) {
-        return "Couldn't update the calendar event. Please try again.";
+        return failureMessage("update the calendar event");
       }
       if (data.length === 0) eventId = null;
     }
@@ -127,7 +126,7 @@ export async function savePrayerCallSessions(
         .select("id")
         .single();
       if (error || !data) {
-        return "Couldn't create the calendar event. Please try again.";
+        return failureMessage("add the calendar event");
       }
       eventId = data.id;
     }
@@ -157,7 +156,7 @@ export async function savePrayerCallSessions(
         .eq("group_id", groupId)
         .select("id");
       if (error || !data || data.length === 0) {
-        return "Couldn't save the call details. Please try again.";
+        return failureMessage("save the call details");
       }
     } else {
       const { data, error } = await supabase
@@ -166,7 +165,7 @@ export async function savePrayerCallSessions(
         .select("id")
         .single();
       if (error || !data) {
-        return "Couldn't save the call details. Please try again.";
+        return failureMessage("save the call details");
       }
       draft.id = data.id;
     }
