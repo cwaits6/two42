@@ -11,6 +11,7 @@ vi.mock("sonner", () => ({ toast }));
 const state = vi.hoisted(() => ({
   profiles: [] as Record<string, unknown>[],
   requests: [] as Record<string, unknown>[],
+  loadError: null as { code: string } | null,
   updates: [] as { table: string; values: unknown }[],
   updateResult: { data: [{ id: "row" }], error: null } as {
     data: { id: string }[] | null;
@@ -38,7 +39,7 @@ vi.mock("@/lib/supabase/client", () => ({
             }),
           };
         },
-        then: (resolve: (value: unknown) => void) => resolve({ data: rows, error: null }),
+        then: (resolve: (value: unknown) => void) => resolve({ data: rows, error: state.loadError }),
       };
       return chain;
     },
@@ -83,6 +84,7 @@ const click = (name: string) => act(async () => button(name).click());
 beforeEach(() => {
   state.profiles = [profile("me", "Ada", "admin"), profile("you", "Ben", "member")];
   state.requests = [];
+  state.loadError = null;
   state.updates = [];
   state.updateResult = { data: [{ id: "row" }], error: null };
   toast.success.mockClear();
@@ -124,6 +126,22 @@ describe("MembersList", () => {
       "Couldn't change this role. A church needs at least one church admin.",
     );
     expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("says so when the list can't be re-read after a saved change", async () => {
+    await mount();
+    state.loadError = { code: "XX000" };
+    await click("Move Ben Test to pending");
+    await click("Move to pending");
+    expect(toast.success).toHaveBeenCalledWith("Role changed.");
+    expect(toast.error).toHaveBeenCalledWith("Couldn't load the latest members. Try again.");
+  });
+
+  it("shows the error state, not a toast, when the first load fails", async () => {
+    state.loadError = { code: "XX000" };
+    await mount();
+    expect(host.textContent).toContain("Couldn't load");
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it("does not report a role change that matched no row", async () => {

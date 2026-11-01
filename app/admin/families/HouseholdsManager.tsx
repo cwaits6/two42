@@ -161,6 +161,7 @@ export function HouseholdsManager() {
   // just-uploaded/removed one).
   const photoRequestRef = useRef(0);
 
+  const loadedOnce = useRef(false);
   const supabase = useMemo(() => createClient(), []);
 
   const loadFamilies = useCallback(async () => {
@@ -177,9 +178,11 @@ export function HouseholdsManager() {
 
     if (familyErr || memberErr) {
       console.error("Failed to load households:", familyErr ?? memberErr);
-      setStatus((current) => (current === "ready" ? current : "failed"));
+      if (loadedOnce.current) toast.error(failureMessage("load the latest households"));
+      else setStatus("failed");
       return;
     }
+    loadedOnce.current = true;
 
     const byFamily: Record<string, FamilyWithMembers["members"]> = {};
     (memberData || []).forEach((m) => {

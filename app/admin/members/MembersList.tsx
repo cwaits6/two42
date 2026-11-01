@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -58,6 +58,7 @@ export function MembersList({
   const [busyRequestId, setBusyRequestId] = useState<string | null>(null);
   const [declining, setDeclining] = useState<AccessRequest | null>(null);
   const [roleChange, setRoleChange] = useState<RoleChange | null>(null);
+  const loadedOnce = useRef(false);
   const supabase = useMemo(() => createClient(), []);
 
   const loadData = useCallback(async () => {
@@ -79,9 +80,11 @@ export function MembersList({
     ]);
     if (requestsError || membersError) {
       console.error("Failed to load members:", requestsError ?? membersError);
-      setStatus((current) => (current === "ready" ? current : "failed"));
+      if (loadedOnce.current) toast.error(failureMessage("load the latest members"));
+      else setStatus("failed");
       return;
     }
+    loadedOnce.current = true;
     setViewerId(auth.user?.id ?? null);
     setRequests(reqs || []);
     setMembers((mems || []).map((m) => ({ ...m, role: toUserRole(m.role) })));
