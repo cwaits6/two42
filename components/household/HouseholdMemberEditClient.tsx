@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { failureMessage } from "@/lib/errorCopy";
 import type { Profile, FamilyUnit, FamilyMemberRelationship } from "@/lib/types";
 
 const RELATIONSHIPS: { value: FamilyMemberRelationship; label: string }[] = [
@@ -48,10 +49,10 @@ export function HouseholdMemberEditClient({ profile, onSaved }: Props) {
     setSavingRelationship(false);
 
     if (error) {
-      toast.error("Failed to update relationship.");
+      toast.error(failureMessage("change the relationship"));
       setRelationship(profile.relationship); // revert
     } else {
-      toast.success("Relationship updated.");
+      toast.success("Relationship saved.");
       router.refresh();
     }
   }
@@ -61,7 +62,9 @@ export function HouseholdMemberEditClient({ profile, onSaved }: Props) {
       {/* Relationship — editable separately since ProfileForm doesn't expose it */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Household Role</CardTitle>
+          <CardTitle>
+            <h3 className="text-xl">Relationship</h3>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
@@ -74,7 +77,7 @@ export function HouseholdMemberEditClient({ profile, onSaved }: Props) {
               onValueChange={(v) => handleRelationshipChange(v as FamilyMemberRelationship)}
               disabled={savingRelationship}
             >
-              <SelectTrigger id="relationship" className="text-base py-5">
+              <SelectTrigger id="relationship" className="w-full py-5 text-base">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -86,7 +89,9 @@ export function HouseholdMemberEditClient({ profile, onSaved }: Props) {
               </SelectContent>
             </Select>
             {savingRelationship && (
-              <p className="text-xs text-muted-foreground">Saving...</p>
+              <p role="status" className="text-base text-muted-foreground">
+                Saving…
+              </p>
             )}
           </div>
         </CardContent>
