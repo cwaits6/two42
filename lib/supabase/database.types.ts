@@ -1642,6 +1642,9 @@ isOneToOne: false
               "created_at": string,"email": string,"first_name": string,"id": string,"last_name": string,"preferred_name": string
             }[]
                            },
+"prayer_request_visible_author":
+{ Args: { "_request_id": string }; Returns: string
+                           },
 "provision_organization":
 { Args: { "_name": string,"_owner_email": string }; Returns: string
                            },

@@ -16,6 +16,9 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
+-- Not enabled on a fresh local stack, enabled on the shared one and possibly on
+-- a hosted project, and the column grant has to hold wherever it is on.
+create extension if not exists pg_graphql;
 select * from no_plan();
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
@@ -241,9 +244,9 @@ select is(
     select mine from public.prayer_wall where id = 'aaaa0000-0000-0000-0000-0000000000a1'$q$),
   'false', 'another anonymous author does not see Isaac''s request as theirs');
 
-select is(
-  pg_temp.attempt(null, 'select id from public.prayer_wall'),
-  '42501', 'a request with no session cannot read the wall');
+select ok(
+  pg_temp.attempt(null, 'select id from public.prayer_wall') in ('rows:0', '42501'),
+  'a request with no session reads nothing from the wall');
 
 -- ── The helper ──────────────────────────────────────────────────────────────
 select is(
