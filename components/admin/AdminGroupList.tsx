@@ -1,20 +1,29 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { UsersRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GroupLeadersDialog, type LeaderGroup } from "@/components/admin/GroupLeadersDialog";
-import type { AdminGroupRow } from "@/components/admin/adminGroups";
-
+import { adminGroupHref, type AdminGroupRow } from "@/components/admin/adminGroups";
+import { EmptyState } from "@/components/states/EmptyState";
 
 /** Every group in the church, with its leaders and the way to change them. */
-export function AdminGroupList({ groups }: { groups: AdminGroupRow[] }) {
+export function AdminGroupList({
+  groups,
+  memberGroupIds,
+}: {
+  groups: AdminGroupRow[];
+  /** The groups the viewer is in, whose own pages they can open. */
+  memberGroupIds: string[];
+}) {
   const router = useRouter();
   const [open, setOpen] = useState<LeaderGroup | null>(null);
 
   if (groups.length === 0) {
-    return <p className="text-lg text-muted-foreground">No groups yet.</p>;
+    return <EmptyState icon={UsersRound} message="No groups yet." />;
   }
 
   return (
@@ -26,7 +35,12 @@ export function AdminGroupList({ groups }: { groups: AdminGroupRow[] }) {
             className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
           >
             <div className="min-w-0 space-y-1">
-              <p className="text-xl font-semibold">{g.name}</p>
+              <Link
+                href={adminGroupHref(g.id, memberGroupIds)}
+                className="inline-flex min-h-11 items-center text-xl font-semibold text-brand-primary-text underline underline-offset-4 hover:text-foreground"
+              >
+                {g.name}
+              </Link>
               {g.description && <p className="text-base text-muted-foreground">{g.description}</p>}
               {g.leaderNames.length === 0 ? (
                 <Badge variant="destructive">No leader</Badge>

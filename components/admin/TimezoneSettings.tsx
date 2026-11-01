@@ -18,24 +18,37 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Database } from "@/lib/supabase/database.types";
+import { failureMessage } from "@/lib/errorCopy";
+import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { isValidTimeZone } from "@/lib/time/zone";
-
-/** Listed first, in the order the country reads them. */
-export const US_TIME_ZONES = [
-  "America/New_York",
-  "America/Chicago",
-  "America/Denver",
-  "America/Phoenix",
-  "America/Los_Angeles",
-  "America/Anchorage",
-  "Pacific/Honolulu",
-];
 
 export type TimeZoneOption = { value: string; label: string };
 
-/** "America/New York (UTC-04:00)": the name, underscores read as spaces, with its offset at `now`. */
+// Written out rather than asked of Intl: the trigger renders on the server and
+// again in the browser, whose time zone names can differ.
+const US_ZONE_NAMES: Record<string, string> = {
+  "America/New_York": "Eastern Time (New York)",
+  "America/Chicago": "Central Time (Chicago)",
+  "America/Denver": "Mountain Time (Denver)",
+  "America/Phoenix": "Arizona Time (Phoenix)",
+  "America/Los_Angeles": "Pacific Time (Los Angeles)",
+  "America/Anchorage": "Alaska Time (Anchorage)",
+  "Pacific/Honolulu": "Hawaii Time (Honolulu)",
+};
+
+/** Listed first, in the order the country reads them. */
+export const US_TIME_ZONES = Object.keys(US_ZONE_NAMES);
+
+/**
+ * What a person reads for a zone; the stored value stays the IANA id. US zones
+ * by name, others as "London, Europe (UTC+01:00)" with the offset at `now`.
+ */
 export function timeZoneLabel(zone: string, now: DateTime = DateTime.now()): string {
-  return `${zone.replaceAll("_", " ")} (UTC${now.setZone(zone).toFormat("ZZ")})`;
+  const named = US_ZONE_NAMES[zone];
+  if (named) return named;
+  const parts = zone.replaceAll("_", " ").split("/");
+  if (parts.length === 1) return zone;
+  return `${parts[parts.length - 1]}, ${parts[0]} (UTC${now.setZone(zone).toFormat("ZZ")})`;
 }
 
 /**
@@ -75,11 +88,12 @@ interface TimezoneSettingsProps {
   timezone: string;
 }
 
-/** Org admin control for the one zone every event time is entered and shown in. */
+/** Church admin control for the one zone every event time is entered and shown in. */
 export function TimezoneSettings({ orgId, timezone }: TimezoneSettingsProps) {
   const [saved, setSaved] = useState(timezone);
   const [selected, setSelected] = useState(timezone);
   const [saving, setSaving] = useState(false);
+  const [invalid, setInvalid] = useState<string | undefined>();
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const options = useMemo(() => timeZoneOptions(saved), [saved]);
@@ -89,19 +103,20 @@ export function TimezoneSettings({ orgId, timezone }: TimezoneSettingsProps) {
 
   async function save() {
     if (!isValidTimeZone(selected)) {
-      toast.error("Choose a time zone from the list.");
+      setInvalid("Choose a time zone from the list.");
       return;
     }
+    setInvalid(undefined);
     setSaving(true);
     const ok = await saveTimeZone(supabase, orgId, selected);
     setSaving(false);
     if (!ok) {
       setSelected(saved);
-      toast.error("Failed to save the time zone.");
+      toast.error(failureMessage("save the time zone"));
       return;
     }
     setSaved(selected);
-    toast.success("Time zone saved. Event times now show in it.");
+    toast.success("Time zone saved.");
     router.refresh();
   }
 
@@ -115,7 +130,11 @@ export function TimezoneSettings({ orgId, timezone }: TimezoneSettingsProps) {
       </p>
       <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
         <Select items={options} value={selected} onValueChange={(value) => value && setSelected(value)}>
-          <SelectTrigger id="org-timezone" className="w-full text-base sm:flex-1">
+          <SelectTrigger
+            id="org-timezone"
+            className="w-full text-base sm:flex-1"
+            {...invalidFieldProps("org-timezone", invalid)}
+          >
             <SelectValue>{selectedLabel}</SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -128,7 +147,7 @@ export function TimezoneSettings({ orgId, timezone }: TimezoneSettingsProps) {
               ))}
             </SelectGroup>
             <SelectGroup>
-              <SelectLabel>All zones</SelectLabel>
+              <SelectLabel>Other time zones</SelectLabel>
               {otherOptions.map((option) => (
                 <SelectItem key={option.value} value={option.value} className="text-base">
                   {option.label}
@@ -143,9 +162,10 @@ export function TimezoneSettings({ orgId, timezone }: TimezoneSettingsProps) {
           onClick={save}
           disabled={saving || selected === saved}
         >
-          {saving ? "Saving..." : "Save time zone"}
+          {saving ? "Saving…" : "Save time zone"}
         </Button>
       </div>
+      <FieldError fieldId="org-timezone" message={invalid} />
     </div>
   );
 }

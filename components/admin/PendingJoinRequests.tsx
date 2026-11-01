@@ -2,17 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Inbox } from "lucide-react";
 import { toast } from "sonner";
 import { ApprovalQueue } from "@/components/admin/ApprovalQueue";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { EmptyState } from "@/components/states/EmptyState";
 import { createClient } from "@/lib/supabase/client";
 import {
   NO_PENDING_JOIN_REQUESTS_TEXT,
@@ -41,7 +35,8 @@ export function PendingJoinRequests({
     setRequests((prev) => prev.filter((r) => r.id !== id));
   }
 
-  async function review(request: PendingJoinRequest, approve: boolean) {
+  /** True once the request is decided, here or elsewhere, so nothing is left to retry. */
+  async function review(request: PendingJoinRequest, approve: boolean): Promise<boolean> {
     setBusyId(request.id);
     try {
       const { error } = await supabase.rpc("review_group_join_request", {
@@ -51,8 +46,9 @@ export function PendingJoinRequests({
       if (error) {
         toast.error(reviewErrorMessage(error.code));
         // Decided elsewhere already: the row no longer belongs in the queue.
-        if (error.code === "GJ004") remove(request.id);
-        return;
+        if (error.code !== "GJ004") return false;
+        remove(request.id);
+        return true;
       }
       toast.success(
         approve
@@ -62,6 +58,7 @@ export function PendingJoinRequests({
       remove(request.id);
       // The member counts further down the page are server-rendered.
       if (approve) router.refresh();
+      return true;
     } finally {
       setBusyId(null);
     }
@@ -76,7 +73,7 @@ export function PendingJoinRequests({
     ? `Decline ${displayName(declining.requester)}'s request to join ${declining.group.name}?`
     : "";
   if (sections.length === 0) {
-    return <p className="text-lg text-muted-foreground">{NO_PENDING_JOIN_REQUESTS_TEXT}</p>;
+    return <EmptyState icon={Inbox} message={NO_PENDING_JOIN_REQUESTS_TEXT} />;
   }
 
   return (
@@ -109,30 +106,17 @@ export function PendingJoinRequests({
         ))}
       </div>
 
-      <Dialog open={declining !== null} onOpenChange={(open) => !open && setDeclining(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="pr-8">{declineTitle}</DialogTitle>
-            <DialogDescription>They can ask again later.</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button size="lg" variant="outline" onClick={() => setDeclining(null)}>
-              Cancel
-            </Button>
-            <Button
-              size="lg"
-              variant="destructive"
-              onClick={() => {
-                const request = declining;
-                setDeclining(null);
-                if (request) review(request, false);
-              }}
-            >
-              Decline
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={declining !== null}
+        onOpenChange={(open) => !open && setDeclining(null)}
+        title={declineTitle}
+        description="They can ask again later."
+        confirmLabel="Decline request"
+        pendingLabel="Declining…"
+        onConfirm={async () => {
+          if (declining && (await review(declining, false))) setDeclining(null);
+        }}
+      />
     </>
   );
 }

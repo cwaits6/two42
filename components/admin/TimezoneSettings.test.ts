@@ -8,13 +8,21 @@ import { US_TIME_ZONES, saveTimeZone, timeZoneLabel, timeZoneOptions } from "./T
 const JULY = DateTime.fromISO("2026-07-01T12:00:00Z");
 
 describe("timeZoneLabel", () => {
-  it("names the zone with its UTC offset at that moment", () => {
-    expect(timeZoneLabel("America/New_York", JULY)).toBe("America/New York (UTC-04:00)");
-    expect(timeZoneLabel("America/Phoenix", JULY)).toBe("America/Phoenix (UTC-07:00)");
-    expect(timeZoneLabel("Asia/Kolkata", JULY)).toBe("Asia/Kolkata (UTC+05:30)");
-    expect(timeZoneLabel("America/New_York", DateTime.fromISO("2026-12-01T12:00:00Z"))).toBe(
-      "America/New York (UTC-05:00)"
+  it("names US zones the way people say them, with no IANA id", () => {
+    expect(timeZoneLabel("America/New_York", JULY)).toBe("Eastern Time (New York)");
+    expect(timeZoneLabel("America/Phoenix", JULY)).toBe("Arizona Time (Phoenix)");
+    expect(timeZoneLabel("Pacific/Honolulu", JULY)).toBe("Hawaii Time (Honolulu)");
+  });
+
+  it("names every other zone by city and region, with its offset at that moment", () => {
+    expect(timeZoneLabel("Asia/Kolkata", JULY)).toBe("Kolkata, Asia (UTC+05:30)");
+    expect(timeZoneLabel("America/Argentina/Buenos_Aires", JULY)).toBe(
+      "Buenos Aires, America (UTC-03:00)"
     );
+    expect(timeZoneLabel("Europe/London", DateTime.fromISO("2026-12-01T12:00:00Z"))).toBe(
+      "London, Europe (UTC+00:00)"
+    );
+    expect(timeZoneLabel("UTC", JULY)).toBe("UTC");
   });
 });
 
@@ -26,7 +34,7 @@ describe("timeZoneOptions", () => {
     expect(new Set(values).size).toBe(values.length);
     expect(values).toContain("Europe/London");
     expect(values).toContain("Asia/Tokyo");
-    expect(options[0].label).toBe("America/New York (UTC-04:00)");
+    expect(options[0]).toEqual({ value: "America/New_York", label: "Eastern Time (New York)" });
   });
 
   it("keeps the current zone listed even when the runtime's list lacks it", () => {

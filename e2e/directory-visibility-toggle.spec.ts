@@ -7,13 +7,13 @@ import { ORG_NAME } from "./fixtures/personas";
 test.describe.configure({ mode: "serial" });
 
 const EVERYONE = `Everyone in ${ORG_NAME}`;
-const ON_TOAST = "Members can now see everyone in the organization.";
+const ON_TOAST = "Members can now see everyone in the church.";
 const OFF_TOAST = "Members now see only people who share a group with them.";
 
 let admin: { context: BrowserContext; page: Page };
 
 function visibilitySwitch(page: Page) {
-  return page.getByRole("switch", { name: "Directory visible to the whole organization" });
+  return page.getByRole("switch", { name: "Directory visible to the whole church" });
 }
 
 async function setOrgWide(page: Page, on: boolean) {

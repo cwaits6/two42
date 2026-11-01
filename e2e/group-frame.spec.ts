@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures/auth";
-import { GROUP_B, GROUP_C } from "./fixtures/personas";
+import { GROUP_B, GROUP_C, PERSONAS } from "./fixtures/personas";
 
 test.describe("the org admin, in Group A and Group B", () => {
   test.use({ persona: "admin" });
@@ -21,6 +21,19 @@ test.describe("the org admin, in Group A and Group B", () => {
       const response = await page.goto(`/g/${GROUP_C}${route}`);
       expect(response?.status(), route).toBe(404);
     }
+  });
+
+  test("Admin › Groups still opens a group the admin is not in, with its people", async ({ page }) => {
+    await page.goto("/admin/groups");
+    await page.getByRole("link", { name: "Group C", exact: true }).click();
+    await page.waitForURL(`/admin/groups/${GROUP_C}`);
+
+    await expect(page.getByRole("heading", { name: "Group C", level: 1 })).toBeVisible();
+    await expect(
+      page.getByRole("listitem").filter({ hasText: PERSONAS.leadsC.name }).getByText("Leader"),
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: PERSONAS.twoGroups.name })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open group" })).toHaveCount(0);
   });
 });
 

@@ -41,7 +41,7 @@ vi.mock("@/lib/giving/server", () => ({
 vi.mock("@/lib/directory/visibility", () => ({
   getDirectoryVisibility: async () => "shared_groups",
 }));
-vi.mock("@/components/directory/DirectoryVisibilitySettings", () => ({
+vi.mock("@/components/admin/DirectoryVisibilitySettings", () => ({
   DirectoryVisibilitySettings: () => null,
 }));
 vi.mock("@/components/giving/GivingSettings", () => ({ GivingSettings: () => null }));
@@ -51,7 +51,7 @@ const sendingDomains = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/email/sendingDomains", () => sendingDomains);
 
-const { default: SettingsPage } = await import("./page");
+const { ChurchSettings } = await import("./ChurchSettings");
 
 function walk(node: ReactNode, hrefs: string[], texts: string[]): void {
   if (Array.isArray(node)) {
@@ -76,7 +76,7 @@ function walk(node: ReactNode, hrefs: string[], texts: string[]): void {
 async function render() {
   const hrefs: string[] = [];
   const texts: string[] = [];
-  walk(await SettingsPage(), hrefs, texts);
+  walk(await ChurchSettings(), hrefs, texts);
   return { hrefs, texts };
 }
 
@@ -84,7 +84,7 @@ afterEach(() => {
   sendingDomains.CUSTOM_SENDING_DOMAINS_ENABLED = false;
 });
 
-describe("SettingsPage", () => {
+describe("ChurchSettings", () => {
   it("shows no Email sending domain tile for the sample org", async () => {
     const { hrefs, texts } = await render();
 

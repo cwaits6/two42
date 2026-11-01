@@ -94,9 +94,9 @@ describe("GroupLeadersView", () => {
   });
 
   it("tells loading apart from a failed load", () => {
-    expect(render({ roster: null })).toContain("Loading leaders...");
+    expect(render({ roster: null })).toContain("Loading leaders…");
     const failed = render({ roster: null, loadFailed: true });
     expect(failed).toContain("Couldn&#x27;t load this group&#x27;s leaders.");
-    expect(failed).not.toContain("Loading leaders...");
+    expect(failed).not.toContain("Loading leaders…");
   });
 });

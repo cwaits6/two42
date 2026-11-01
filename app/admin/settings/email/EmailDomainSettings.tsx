@@ -11,6 +11,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { LoadingState } from "@/components/states/LoadingState";
 import type { Tables } from "@/lib/supabase/database.types";
 
 type EmailDomainRow = Tables<"org_email_domains">;
@@ -263,7 +264,12 @@ export function EmailDomainSettings() {
   if (loading) {
     return (
       <PageContainer size="reading">
-        <p className="text-xl text-muted-foreground">Loading...</p>
+        <PageHeader
+          title="Email sending domain"
+          backHref="/admin/settings"
+          backLabel="Back to Church settings"
+        />
+        <LoadingState thing="the sending domain" />
       </PageContainer>
     );
   }
@@ -277,7 +283,7 @@ export function EmailDomainSettings() {
         title="Email sending domain"
         subtitle="Claim a domain, publish its DNS records, then verify it. Email sends from the platform address until the domain is verified, then switches to a noreply@ address on your domain."
         backHref="/admin/settings"
-        backLabel="Back to Settings"
+        backLabel="Back to Church settings"
       />
 
       {cardState === "load-failed" ? (
@@ -299,7 +305,7 @@ export function EmailDomainSettings() {
           <CardContent>
             <p className="text-lg">
               Custom sending domains aren&apos;t available for your
-              organization yet. Contact support to request access.
+              church yet. Contact support to request access.
             </p>
           </CardContent>
         </Card>
@@ -338,7 +344,7 @@ export function EmailDomainSettings() {
                 className="w-full text-lg py-6"
                 disabled={busy || domainInput.trim().length === 0}
               >
-                {busy ? "Claiming..." : "Claim domain"}
+                {busy ? "Claiming…" : "Claim domain"}
               </Button>
             </form>
           </CardContent>
@@ -450,7 +456,7 @@ export function EmailDomainSettings() {
                   onClick={handleVerify}
                   disabled={busy}
                 >
-                  {busy ? "Working..." : "Verify"}
+                  {busy ? "Working…" : "Verify"}
                 </Button>
               )}
               <Button
@@ -461,7 +467,7 @@ export function EmailDomainSettings() {
                 onClick={() => setConfirmingRemove(true)}
                 disabled={busy}
               >
-                {busy ? "Working..." : cleanupPending ? "Retry removal" : "Remove"}
+                {busy ? "Working…" : cleanupPending ? "Retry removal" : "Remove"}
               </Button>
             </div>
           </CardContent>

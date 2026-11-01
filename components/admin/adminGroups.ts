@@ -12,6 +12,15 @@ export interface AdminGroupRow {
 }
 
 /**
+ * Where a row in Admin > Groups opens: the group itself for a church admin in
+ * it. The group's pages answer 404 to anyone else, church admins included, so
+ * otherwise it opens the group's admin page.
+ */
+export function adminGroupHref(groupId: string, memberGroupIds: readonly string[]): string {
+  return memberGroupIds.includes(groupId) ? `/g/${groupId}/dashboard` : `/admin/groups/${groupId}`;
+}
+
+/**
  * Every group in the church with its member count and leaders, read through
  * the caller's cookie-bound client, whose admin arm returns the whole org.
  * The role filter applies to the aliased leaders embed only, so groups with

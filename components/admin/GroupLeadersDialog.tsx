@@ -104,7 +104,7 @@ export function GroupLeadersView({
           Couldn&apos;t load this group&apos;s leaders. Close this and open it again.
         </p>
       ) : !roster ? (
-        <p className="py-4 text-base text-muted-foreground">Loading leaders...</p>
+        <p className="py-4 text-base text-muted-foreground">Loading leaders…</p>
       ) : adding ? (
         <AddLeaderList
           roster={roster}
@@ -204,7 +204,7 @@ function AddLeaderList({
         <Input
           type="search"
           aria-label="Search people"
-          placeholder="Search people..."
+          placeholder="Search people…"
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           className="h-12 pl-10 text-base"

@@ -9,32 +9,24 @@ export interface AdminNavItem {
 
 export interface AdminNavGroup {
   key: string;
-  label: string;
+  /** Left out for a section that needs no heading. */
+  label?: string;
   items: AdminNavItem[];
 }
 
 /**
- * Single source of truth for admin destinations, labels, and grouping —
- * shared by the admin area's sub-nav and any other admin nav surface.
+ * Single source of truth for admin destinations and labels, shared by the
+ * admin area's sub-nav and any other admin nav surface.
  */
 export const adminNavGroups: AdminNavGroup[] = [
   {
-    key: "people",
-    label: "People",
+    key: "destinations",
     items: [
       { href: "/admin/members", label: "Members", icon: Users },
-      { href: "/admin/families", label: "Families", icon: Home },
+      { href: "/admin/families", label: "Households", icon: Home },
       { href: "/admin/invite", label: "Import members", icon: MailPlus },
+      { href: "/admin/groups", label: "Groups", icon: UsersRound },
+      { href: "/admin/settings", label: "Church settings", icon: Settings },
     ],
-  },
-  {
-    key: "groups",
-    label: "Groups",
-    items: [{ href: "/admin/groups", label: "Groups", icon: UsersRound }],
-  },
-  {
-    key: "settings",
-    label: "Settings",
-    items: [{ href: "/admin/settings", label: "Org settings", icon: Settings }],
   },
 ];
