@@ -48,6 +48,9 @@ export function importCandidates(
 
 // Minimal CSV parser (no external dependency). A quote only opens at the start
 // of a cell, so a stray one inside a cell can't swallow the rows after it.
+/** Without this, an unmatched quote swallows every later row and the preview silently omits them. */
+export class UnterminatedQuoteError extends Error {}
+
 export function parseCSV(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -78,6 +81,9 @@ export function parseCSV(text: string): string[][] {
     } else if (ch !== "\r") {
       current += ch;
     }
+  }
+  if (inQuotes) {
+    throw new UnterminatedQuoteError();
   }
   if (current.length > 0 || row.length > 0) {
     row.push(current.trim());

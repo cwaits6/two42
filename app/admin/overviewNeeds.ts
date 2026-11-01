@@ -13,7 +13,8 @@ function waiting(count: number, noun: string): string {
 export function overviewNeeds(counts: {
   accessRequests: number;
   groupRequests: number;
-  joinRequests: number;
+  /** Null when the requests could not be read, so the other counts can still show. */
+  joinRequests: number | null;
   joinSummary: string;
 }): OverviewNeed[] {
   return [
@@ -31,7 +32,10 @@ export function overviewNeeds(counts: {
     },
     {
       title: "Join requests",
-      summary: counts.joinSummary,
+      summary:
+        counts.joinRequests === null
+          ? "Join requests could not be loaded. Reload the page to try again."
+          : counts.joinSummary,
       action: counts.joinRequests ? { href: "/admin/groups", label: "Review join requests" } : undefined,
     },
   ];

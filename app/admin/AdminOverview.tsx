@@ -21,8 +21,8 @@ export async function AdminOverview() {
   const joinRequests = groups.data ? await getPendingJoinRequests(groups.data) : null;
 
   const failed = [members, households, groups, accessRequests, groupRequests].find((r) => r.error);
-  if (failed || !joinRequests) {
-    if (failed) console.error("Failed to load the overview:", failed.error?.code);
+  if (failed) {
+    console.error("Failed to load the overview:", failed.error?.code);
     return <ErrorState thing="the overview" />;
   }
 
@@ -34,8 +34,8 @@ export async function AdminOverview() {
   const needs = overviewNeeds({
     accessRequests: accessRequests.count ?? 0,
     groupRequests: groupRequests.count ?? 0,
-    joinRequests: joinRequests.length,
-    joinSummary: pendingJoinRequestsSummary(joinRequests.length),
+    joinRequests: joinRequests?.length ?? null,
+    joinSummary: pendingJoinRequestsSummary(joinRequests?.length ?? 0),
   });
 
   return (

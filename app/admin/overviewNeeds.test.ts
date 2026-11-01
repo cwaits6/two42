@@ -17,6 +17,18 @@ describe("overviewNeeds", () => {
     expect(needs.every((n) => n.action === undefined)).toBe(true);
   });
 
+  it("keeps the other queues when join requests could not be read", () => {
+    const [access, , join] = overviewNeeds({
+      accessRequests: 2,
+      groupRequests: 0,
+      joinRequests: null,
+      joinSummary: "No pending join requests.",
+    });
+    expect(access.summary).toBe("2 requests waiting.");
+    expect(join.summary).toBe("Join requests could not be loaded. Reload the page to try again.");
+    expect(join.action).toBeUndefined();
+  });
+
   it("counts each queue and links to where it is reviewed", () => {
     const [access, group, join] = overviewNeeds({
       accessRequests: 2,

@@ -54,7 +54,7 @@ export function ApprovalQueue({
                 {row.subtitle && (
                   <p className="break-words text-base text-muted-foreground">{row.subtitle}</p>
                 )}
-                {row.quote && <p className="mt-2 text-base italic">&ldquo;{row.quote}&rdquo;</p>}
+                {row.quote && <p className="mt-2 break-words text-base italic">&ldquo;{row.quote}&rdquo;</p>}
                 {row.meta && <p className="text-base text-muted-foreground mt-1">{row.meta}</p>}
               </div>
               <div className="flex gap-2 shrink-0">

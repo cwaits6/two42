@@ -859,7 +859,7 @@ export function HouseholdsManager() {
                               {fm.last_name && ` ${fm.last_name}`}
                             </span>
                             <span className="text-muted-foreground ml-2">
-                              · {RELATIONSHIPS.find((r) => r.value === fm.relationship)?.label}
+                              · {RELATIONSHIPS.find((r) => r.value === fm.relationship)?.label ?? fm.relationship}
                             </span>
                             {fm.birth_month && fm.birth_day && (
                               <span className="text-muted-foreground ml-2">

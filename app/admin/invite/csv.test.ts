@@ -4,6 +4,7 @@ import {
   detectNameColumn,
   importCandidates,
   parseCSV,
+  UnterminatedQuoteError,
   uniqueByEmail,
 } from "./csv";
 
@@ -44,6 +45,12 @@ describe("CSV import", () => {
       ['Grace 5" H', "grace@example.test"],
       ["Alan", "alan@example.test"],
     ]);
+  });
+
+  it("rejects a quote that never closes rather than losing the rows after it", () => {
+    expect(() => parseCSV('Name,Email\nAda,ada@example.test\n"Grace,grace@example.test\nLin,lin@example.test\n')).toThrow(
+      UnterminatedQuoteError
+    );
   });
 
   it("leaves the name empty when the name column is the email column", () => {

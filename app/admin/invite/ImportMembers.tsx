@@ -11,7 +11,7 @@ import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
 import { Upload, Mail, AlertCircle, CheckCircle2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { detectEmailColumn, detectNameColumn, importCandidates, parseCSV } from "./csv";
+import { detectEmailColumn, detectNameColumn, importCandidates, parseCSV, UnterminatedQuoteError } from "./csv";
 
 interface ParsedRow {
   name: string;
@@ -48,7 +48,14 @@ export function ImportMembers() {
     }
 
     const text = await file.text();
-    const parsed = parseCSV(text);
+    let parsed: string[][];
+    try {
+      parsed = parseCSV(text);
+    } catch (err) {
+      if (!(err instanceof UnterminatedQuoteError)) throw err;
+      setDetectionError("This file has an opening quote with no closing quote. Fix it, then choose the file again.");
+      return;
+    }
 
     if (parsed.length < 2) {
       setDetectionError("This file has no rows to import. Add at least one row under the column names.");
