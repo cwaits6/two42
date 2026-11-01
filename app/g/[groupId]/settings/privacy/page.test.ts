@@ -15,6 +15,9 @@ vi.mock("@/lib/groups/discovery", () => ({
   getDiscoveryOn: () => getDiscoveryOn(),
 }));
 
+vi.mock("@/lib/time/orgZone", () => ({ getOrgTimeZone: async () => "America/Chicago" }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }));
+
 const groupFlags = vi.fn();
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
@@ -30,15 +33,13 @@ vi.mock("@/lib/supabase/server", () => ({
 
 vi.mock("./PrivacyAndJoiningManager", () => ({ PrivacyAndJoiningManager: () => null }));
 
+const { ErrorState } = await import("@/components/states/ErrorState");
 const { PrivacyAndJoiningManager } = await import("./PrivacyAndJoiningManager");
 const { default: GroupPrivacySettingsPage } = await import("./page");
 
 const A_ID = "11111111-1111-4111-8111-111111111111";
 const leader: ActiveGroup = { id: A_ID, name: "Grace", color: GROUP_DEFAULT_COLOR, role: "leader" };
-const UNAVAILABLE_TEXT =
-  "Couldn't load this group's privacy settings. Reload the page to try again.";
-
-type Element = ReactElement<{ children?: ReactNode; role?: string }>;
+type Element = ReactElement<{ children?: ReactNode; thing?: string }>;
 
 function flatten(node: ReactNode, out: Element[] = []): Element[] {
   if (Array.isArray(node)) {
@@ -52,25 +53,10 @@ function flatten(node: ReactNode, out: Element[] = []): Element[] {
   return out;
 }
 
-function texts(node: ReactNode, out: string[] = []): string[] {
-  if (typeof node === "string") {
-    out.push(node);
-    return out;
-  }
-  if (Array.isArray(node)) {
-    node.forEach((n) => texts(n, out));
-    return out;
-  }
-  if (!node || typeof node !== "object" || !("props" in node)) return out;
-  texts((node as ReactElement<{ children?: ReactNode }>).props.children, out);
-  return out;
-}
-
 function expectUnavailable(element: ReactElement) {
   const nodes = flatten(element);
   expect(nodes.some((e) => e.type === PrivacyAndJoiningManager)).toBe(false);
-  expect(nodes.find((e) => e.props.role === "alert")).toBeDefined();
-  expect(texts(element)).toContain(UNAVAILABLE_TEXT);
+  expect(nodes.find((e) => e.type === ErrorState)?.props.thing).toBe("this group's privacy settings");
 }
 
 beforeEach(() => {
@@ -104,6 +90,7 @@ describe("GroupPrivacySettingsPage", () => {
       initialPrivate: true,
       initialPolicy: "open",
       orgDiscoveryOn: true,
+      timeZone: "America/Chicago",
     });
   });
 

@@ -23,28 +23,47 @@ vi.mock("@/lib/supabase/current-user", () => ({
   getOptionalUser: async () => ({ id: "user-1", email: undefined }),
 }));
 
+const ORG_ID = "22222222-2222-4222-8222-222222222222";
+let profileRead: { data: { org_id: string } | null; error: { code: string } | null };
+let countRead: { count: number | null; error: { code: string } | null };
+let countFilters: [string, unknown][];
+
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
-    from: (table: string) => ({
-      select: () => ({
-        eq: () => ({
-          maybeSingle: async () =>
-            table === "groups"
-              ? { data: { name: "Grace", description: "Sunday class" } }
-              : { data: null },
-        }),
-      }),
-    }),
+    from: (table: string) => {
+      const chain = {
+        select: () => chain,
+        eq: (column: string, value: unknown) => {
+          if (table === "group_join_requests") countFilters.push([column, value]);
+          return chain;
+        },
+        maybeSingle: async () => profileRead,
+        then: (resolve: (value: unknown) => void) => resolve(countRead),
+      };
+      return chain;
+    },
   }),
 }));
-
-vi.mock("@/components/groups/GroupDetailsForm", () => ({ GroupDetailsForm: () => null }));
 
 const { default: GroupSettingsPage } = await import("./page");
 
 const A_ID = "11111111-1111-4111-8111-111111111111";
 const leader: ActiveGroup = { id: A_ID, name: "Grace", color: GROUP_DEFAULT_COLOR, role: "leader" };
 const member: ActiveGroup = { ...leader, role: "member" };
+
+function texts(node: ReactNode, out: string[] = []): string[] {
+  if (typeof node === "string") {
+    out.push(node);
+    return out;
+  }
+  if (Array.isArray(node)) {
+    node.forEach((n) => texts(n, out));
+    return out;
+  }
+  if (!node || typeof node !== "object" || !("props" in node)) return out;
+  texts((node as ReactElement<{ children?: ReactNode }>).props.children, out);
+  return out;
+}
 
 function hrefs(node: ReactNode, out: string[] = []): string[] {
   if (Array.isArray(node)) {
@@ -60,6 +79,10 @@ function hrefs(node: ReactNode, out: string[] = []): string[] {
 
 beforeEach(() => {
   requireActiveGroup.mockReset();
+  profileRead = { data: { org_id: ORG_ID }, error: null };
+  countRead = { count: 0, error: null };
+  countFilters = [];
+  vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 describe("GroupSettingsPage", () => {
@@ -79,6 +102,7 @@ describe("GroupSettingsPage", () => {
 
     expect(links.filter((h) => h.startsWith("/admin"))).toEqual([]);
     expect(links).toEqual([
+      `/g/${A_ID}/settings/details`,
       `/g/${A_ID}/settings/about`,
       `/g/${A_ID}/settings/privacy`,
       `/g/${A_ID}/settings/invites`,
@@ -89,5 +113,51 @@ describe("GroupSettingsPage", () => {
       `/g/${A_ID}/settings/teams`,
       `/g/${A_ID}/settings/labels`,
     ]);
+  });
+
+  async function renderHub() {
+    requireActiveGroup.mockResolvedValue(leader);
+    return texts(await GroupSettingsPage({ params: Promise.resolve({ groupId: A_ID }) }));
+  }
+
+  it("shows the count of this group's pending requests, read for this group and org", async () => {
+    countRead = { count: 2, error: null };
+
+    expect(await renderHub()).toContain("2 pending requests");
+    expect(countFilters).toEqual([
+      ["org_id", ORG_ID],
+      ["group_id", A_ID],
+      ["status", "pending"],
+    ]);
+  });
+
+  it("uses the singular for one pending request", async () => {
+    countRead = { count: 1, error: null };
+
+    expect(await renderHub()).toContain("1 pending request");
+  });
+
+  it("shows no count when nothing is pending", async () => {
+    expect((await renderHub()).join(" ")).not.toContain("pending request");
+  });
+
+  it("still renders the hub, with no count, when the count read fails", async () => {
+    countRead = { count: null, error: { code: "57014" } };
+
+    const rendered = await renderHub();
+    expect(rendered).toContain("Privacy and joining");
+    expect(rendered.join(" ")).not.toContain("pending request");
+  });
+
+  it("still renders the hub, with no count, when the org cannot be read", async () => {
+    profileRead = { data: null, error: { code: "57014" } };
+
+    const rendered = await renderHub();
+    expect(rendered).toContain("Privacy and joining");
+    expect(countFilters).toEqual([]);
+  });
+
+  it("does not say what role the viewer has", async () => {
+    expect((await renderHub()).join(" ")).not.toContain("Your role");
   });
 });

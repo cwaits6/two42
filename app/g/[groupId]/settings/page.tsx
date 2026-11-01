@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { GroupDetailsForm } from "@/components/groups/GroupDetailsForm";
 import { createClient } from "@/lib/supabase/server";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
@@ -12,37 +11,43 @@ import { groupPageTitle } from "@/lib/pageTitle";
 
 export const generateMetadata = groupPageTitle("Group settings");
 
-// Only tiles whose page exists render; later tickets append theirs here.
+const PRIVACY_HREF = "/settings/privacy";
+
 const TILES: { href: string; label: string; description: string }[] = [
+  {
+    href: "/settings/details",
+    label: "Name and description",
+    description: "What members see on Home and in the switcher.",
+  },
   {
     href: "/settings/about",
     label: "About",
     description: "The summary, leadership, group color and weekly calls.",
   },
   {
-    href: "/settings/privacy",
+    href: PRIVACY_HREF,
     label: "Privacy and joining",
-    description: "Who can find this group and how people join it.",
+    description: "Who can find this group, how people join it, and requests to join.",
   },
   {
     href: "/settings/invites",
     label: "Invite links",
-    description: "Links that let people join this group.",
+    description: "Add and revoke links that let people join this group.",
   },
   {
     href: "/settings/announcements",
     label: "Announcements",
-    description: "Drafts, scheduled and published announcements.",
+    description: "Write, schedule and publish announcements.",
   },
   {
     href: "/settings/lectures",
     label: "Lessons",
-    description: "Lessons, series and lesson summaries.",
+    description: "Add lessons and series, with notes and recordings.",
   },
   {
     href: "/settings/giving",
     label: "Giving",
-    description: "Funds on the Give page.",
+    description: "Add and retire the funds members can give to.",
   },
   {
     href: "/settings/serving",
@@ -52,14 +57,18 @@ const TILES: { href: string; label: string; description: string }[] = [
   {
     href: "/settings/teams",
     label: "Teams",
-    description: "Greeters, Prayer Team and other serving teams.",
+    description: "Add serving teams and choose who is on them.",
   },
   {
     href: "/settings/labels",
     label: "Labels",
-    description: "Men, Women, Tuesday table and other ways to filter your members.",
+    description: "Add the labels used to filter this group's members.",
   },
 ];
+
+function pendingRequestsLabel(count: number): string {
+  return `${count} pending request${count === 1 ? "" : "s"}`;
+}
 
 export default async function GroupSettingsPage({
   params,
@@ -76,11 +85,25 @@ export default async function GroupSettingsPage({
   const user = await getOptionalUser();
   if (!user) redirect("/login");
 
-  const { data: details } = await supabase
-    .from("groups")
-    .select("name, description")
-    .eq("id", group.id)
+  // The count is a courtesy: a failed read shows no count and never breaks the hub.
+  let pendingRequests = 0;
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("org_id")
+    .eq("id", user.id)
     .maybeSingle();
+  if (profile) {
+    const { count, error } = await supabase
+      .from("group_join_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", profile.org_id)
+      .eq("group_id", group.id)
+      .eq("status", "pending");
+    if (error) console.error("Failed to count pending join requests: code=%s", error.code);
+    pendingRequests = count ?? 0;
+  } else {
+    console.error("Failed to load the org for the pending request count:", profileError ?? "no row");
+  }
 
   return (
     <PageContainer>
@@ -89,40 +112,29 @@ export default async function GroupSettingsPage({
         subtitle={`Changes here apply to ${group.name} only.`}
       />
 
-      <p className="mb-8 text-base font-semibold text-foreground">Your role: Leader</p>
-
-      <div className="space-y-6">
-        <section id="details" className="rounded-2xl border border-border bg-card p-6">
-          <h2 className="text-xl font-bold text-foreground">Name and description</h2>
-          <p className="mt-1 mb-5 text-base text-muted-foreground">
-            What members see on Home and in the switcher.
-          </p>
-          <GroupDetailsForm
-            groupId={group.id}
-            initialName={details?.name ?? group.name}
-            initialDescription={details?.description ?? null}
-          />
-        </section>
-
-        <ul className="grid gap-4 sm:grid-cols-2">
-          {TILES.map((tile) => (
-            <li key={tile.href}>
-              <Link
-                href={groupPath(group.id, tile.href)}
-                className="flex min-h-24 items-center justify-between gap-4 rounded-2xl border border-border bg-card p-6 transition-colors hover:border-brand-primary"
-              >
-                <span className="min-w-0">
-                  <span className="block text-xl font-bold text-foreground">{tile.label}</span>
-                  <span className="mt-1 block text-base text-muted-foreground">
-                    {tile.description}
-                  </span>
+      <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
+        {TILES.map((tile) => (
+          <li key={tile.href}>
+            <Link
+              href={groupPath(group.id, tile.href)}
+              className="flex min-h-20 items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none sm:px-6"
+            >
+              <span className="min-w-0">
+                <span className="block text-lg font-semibold text-foreground">{tile.label}</span>
+                <span className="mt-0.5 block text-base text-muted-foreground">
+                  {tile.description}
                 </span>
-                <ChevronRight className="h-6 w-6 shrink-0 text-muted-foreground" aria-hidden="true" />
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </div>
+                {tile.href === PRIVACY_HREF && pendingRequests > 0 && (
+                  <span className="mt-2 inline-block rounded-full bg-brand-warm px-3 py-1 text-base font-semibold text-foreground">
+                    {pendingRequestsLabel(pendingRequests)}
+                  </span>
+                )}
+              </span>
+              <ChevronRight className="h-6 w-6 shrink-0 text-muted-foreground" aria-hidden="true" />
+            </Link>
+          </li>
+        ))}
+      </ul>
     </PageContainer>
   );
 }

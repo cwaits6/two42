@@ -21,7 +21,7 @@ async function revokeCreatedLink() {
   await admin.page.goto(`/g/${groupAId}/settings/invites`);
   // The list loads client-side; a count taken before it settles reads as
   // "already gone" and would leave the link live.
-  await expect(admin.page.getByText("Loading...")).toHaveCount(0);
+  await expect(admin.page.getByText("Loading invite links")).toHaveCount(0);
   const revokeButton = linkCard(admin.page, inviteUrl).getByRole("button", { name: "Revoke link" });
   if ((await revokeButton.count()) === 0) return;
   await revokeButton.click();
@@ -59,9 +59,9 @@ test("a leader creates a link, a stranger can use it until it is revoked, and a 
   const baseURL = test.info().project.use.baseURL!;
 
   await admin.page.goto(`/g/${groupAId}/settings/invites`);
-  await admin.page.getByRole("button", { name: "Create link" }).click();
-  await admin.page.getByRole("dialog").getByRole("button", { name: "Create link" }).click();
-  await expect(admin.page.getByText("Link created.")).toBeVisible();
+  await admin.page.getByRole("button", { name: "Add link" }).click();
+  await admin.page.getByRole("dialog").getByRole("button", { name: "Add link" }).click();
+  await expect(admin.page.getByText("Link added.")).toBeVisible();
   const firstLink = admin.page.locator("section", { hasText: "Active links" }).getByRole("listitem").first();
   inviteUrl = (await firstLink.locator("p.font-mono").innerText()).trim();
   expect(inviteUrl).toMatch(/\/join\/[0-9a-f-]{36}$/);

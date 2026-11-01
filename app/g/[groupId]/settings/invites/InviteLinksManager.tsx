@@ -1,10 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Copy, Plus } from "lucide-react";
+import { Copy, Link2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { EmptyState } from "@/components/states/EmptyState";
+import { ErrorState } from "@/components/states/ErrorState";
+import { LoadingState } from "@/components/states/LoadingState";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -47,7 +51,7 @@ import { createClient } from "@/lib/supabase/client";
 import { fetchAll } from "@/lib/supabase/fetchAll";
 import type { GroupInvite } from "@/lib/types";
 
-const EMPTY_TEXT = "No invite links yet. Create one and share it by text or email.";
+const EMPTY_TEXT = "No invite links yet. Add one and share it by text or email.";
 
 interface InviteLinksManagerProps {
   groupId: string;
@@ -69,7 +73,6 @@ export function InviteLinksManager({ groupId, groupName, timeZone }: InviteLinks
   const [uses, setUses] = useState<UsePreset>(DEFAULT_USE_PRESET);
   const [creating, setCreating] = useState(false);
   const [revoking, setRevoking] = useState<GroupInvite | null>(null);
-  const [revokeBusy, setRevokeBusy] = useState(false);
   const [focusId, setFocusId] = useState<string | null>(null);
   const copyButtons = useRef<Record<string, HTMLButtonElement | null>>({});
   // Loads can overlap (create, create, revoke); only the newest may write state.
@@ -151,7 +154,7 @@ export function InviteLinksManager({ groupId, groupName, timeZone }: InviteLinks
     } = await supabase.auth.getUser();
     if (!user) {
       setCreating(false);
-      toast.error("Sign in again to create a link.");
+      toast.error("Sign in again to add a link.");
       return;
     }
     const now = new Date();
@@ -167,7 +170,7 @@ export function InviteLinksManager({ groupId, groupName, timeZone }: InviteLinks
       .single();
     setCreating(false);
     if (error || !data) {
-      toast.error("Couldn't create the link.");
+      toast.error("Couldn't add the link. Try again.");
       return;
     }
     const created: GroupInvite = data;
@@ -175,14 +178,13 @@ export function InviteLinksManager({ groupId, groupName, timeZone }: InviteLinks
     setCreateOpen(false);
     setExpiry(DEFAULT_EXPIRY_PRESET);
     setUses(DEFAULT_USE_PRESET);
-    toast.success("Link created.");
+    toast.success("Link added.");
     setFocusId(created.id);
     load();
   }
 
   async function revokeLink() {
     if (!revoking) return;
-    setRevokeBusy(true);
     const revokedAt = new Date().toISOString();
     const { data, error } = await supabase
       .from("group_invites")
@@ -190,9 +192,8 @@ export function InviteLinksManager({ groupId, groupName, timeZone }: InviteLinks
       .eq("id", revoking.id)
       .eq("group_id", groupId)
       .select("id");
-    setRevokeBusy(false);
     if (error || !data?.length) {
-      toast.error("Couldn't revoke the link.");
+      toast.error("Couldn't revoke the link. Try again.");
       return;
     }
     setInvites((prev) => prev.map((i) => (i.id === revoking.id ? { ...i, revoked_at: revokedAt } : i)));
@@ -218,14 +219,6 @@ export function InviteLinksManager({ groupId, groupName, timeZone }: InviteLinks
     ].join(" · ");
   }
 
-  if (loading) {
-    return (
-      <PageContainer>
-        <p className="text-xl text-muted-foreground">Loading...</p>
-      </PageContainer>
-    );
-  }
-
   return (
     <PageContainer>
       <PageHeader
@@ -239,21 +232,17 @@ export function InviteLinksManager({ groupId, groupName, timeZone }: InviteLinks
             onClick={() => setCreateOpen(true)}
           >
             <Plus className="mr-2 h-5 w-5" />
-            Create link
+            Add link
           </Button>
         }
       />
 
-      {loadFailed ? (
-        <p role="alert" className="text-lg text-muted-foreground">
-          Couldn&apos;t load the invite links. Reload the page to try again.
-        </p>
+      {loading ? (
+        <LoadingState thing="invite links" />
+      ) : loadFailed ? (
+        <ErrorState thing="the invite links" onRetry={load} />
       ) : invites.length === 0 ? (
-        <Card>
-          <CardContent className="text-center">
-            <p className="text-base text-muted-foreground">{EMPTY_TEXT}</p>
-          </CardContent>
-        </Card>
+        <EmptyState icon={Link2} message={EMPTY_TEXT} />
       ) : (
         <div className="space-y-8">
           <section>
@@ -321,7 +310,7 @@ export function InviteLinksManager({ groupId, groupName, timeZone }: InviteLinks
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create invite link</DialogTitle>
+            <DialogTitle>Add invite link</DialogTitle>
             <DialogDescription className="text-base">
               Anyone with the link can join {groupName}. You can revoke it at any time.
             </DialogDescription>
@@ -381,30 +370,21 @@ export function InviteLinksManager({ groupId, groupName, timeZone }: InviteLinks
               onClick={createLink}
               disabled={creating}
             >
-              {creating ? "Creating…" : "Create link"}
+              {creating ? "Adding…" : "Add link"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={revoking !== null} onOpenChange={(open) => !open && setRevoking(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Revoke this link?</DialogTitle>
-            <DialogDescription className="text-base">
-              Anyone who has it can no longer use it.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button size="lg" variant="outline" onClick={() => setRevoking(null)} disabled={revokeBusy}>
-              Cancel
-            </Button>
-            <Button size="lg" variant="destructive" onClick={revokeLink} disabled={revokeBusy}>
-              {revokeBusy ? "Revoking…" : "Revoke link"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={revoking !== null}
+        onOpenChange={(open) => !open && setRevoking(null)}
+        title="Revoke this link?"
+        description="Anyone who has it can no longer use it."
+        confirmLabel="Revoke link"
+        pendingLabel="Revoking…"
+        onConfirm={revokeLink}
+      />
     </PageContainer>
   );
 }

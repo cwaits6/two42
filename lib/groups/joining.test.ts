@@ -122,8 +122,8 @@ describe("discoveryRowSubtitle", () => {
 });
 
 describe("privacyHelperText", () => {
-  it("names the org setting as the ceiling while discovery is on", () => {
-    expect(privacyHelperText(true)).toContain("ceiling");
+  it("names the church's setting as the limit while discovery is on", () => {
+    expect(privacyHelperText(true)).toContain("Your church's setting is the limit");
     expect(privacyHelperText(true)).toContain("never less");
   });
 

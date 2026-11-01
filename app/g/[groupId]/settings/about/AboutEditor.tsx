@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { mintSignedUrl, mintSignedUrls } from "@/lib/uploadImage";
+import { mintSignedUrls } from "@/lib/uploadImage";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CalendarSubscriptionCard } from "./CalendarSubscriptionCard";
@@ -16,205 +17,173 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { BlockEditor } from "@/components/editor";
 import { parseStoredBlocks } from "@/components/editor/normalizeBlocks";
-import type { CuratedBlock } from "@/components/editor/schema";
+import { EmptyState } from "@/components/states/EmptyState";
+import { ErrorState } from "@/components/states/ErrorState";
+import { LoadingState } from "@/components/states/LoadingState";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, Pencil, Plus, Search, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Pencil, Plus, Search, Users, X } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { failureMessage } from "@/lib/errorCopy";
 import { displayName, initials } from "@/lib/names";
 import { groupPath } from "@/lib/groups/active";
-import { ensureGroupCalendar } from "@/lib/groups/calendar";
-import { validateGroupColor, type GroupSettingsValues } from "@/lib/groups/settings";
+import type { GroupSettingsValues } from "@/lib/groups/settings";
 import type { ClassTeacherWithProfile } from "@/lib/types";
 import { STORED_MEMBER_ROLES } from "@/lib/roles";
+import {
+  aboutChanges,
+  colorError,
+  hasChanges,
+  videoCallUrlError,
+  type AboutFields,
+  type LeaderEntry,
+} from "./aboutChanges";
+import { useLeaveGuard } from "./useLeaveGuard";
 
-type MemberOption = {
-  id: string;
-  first_name: string | null;
-  last_name: string | null;
-  preferred_name: string | null;
-  avatar_url: string | null;
-};
+type Person = NonNullable<ClassTeacherWithProfile["profiles"]>;
 
 interface AboutEditorProps {
   groupId: string;
   groupName: string;
-  /** The caller's own org, resolved server-side; stamps the calendar insert when one is needed. */
-  orgId: string;
   initialBody: string;
   initialTeachers: ClassTeacherWithProfile[];
-  /** The group's calendar, or null when the group has none yet. */
-  calendarId: string | null;
   initialColor: string;
   initialSettings: GroupSettingsValues;
 }
 
-const TEACHER_SELECT =
-  "*, profiles(id, first_name, last_name, preferred_name, avatar_url)";
-
-function isHttpsOrEmpty(value: string): boolean {
-  return value === "" || /^https:\/\//i.test(value);
-}
+type FieldErrors = { color?: string; videoCallUrl?: string };
 
 export function AboutEditor({
   groupId,
   groupName,
-  orgId,
   initialBody,
   initialTeachers,
-  calendarId,
   initialColor,
   initialSettings,
 }: AboutEditorProps) {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
 
-  // --- Summary ---
-  const blocksRef = useRef<CuratedBlock[]>([]);
-  const isDirtyRef = useRef(false);
-  const [savingSummary, setSavingSummary] = useState(false);
+  const [saved, setSaved] = useState<AboutFields>(() => ({
+    color: initialColor,
+    videoCallUrl: initialSettings.weekly_zoom_url ?? "",
+    videoCallTime: initialSettings.zoom_meeting_time ?? "",
+    leaders: initialTeachers.map(({ profile_id, title, bio }) => ({ profile_id, title, bio })),
+  }));
+  const [draft, setDraft] = useState(saved);
+  // Null until the editor is edited: an untouched editor must not overwrite the stored body.
+  const [summary, setSummary] = useState<string | null>(null);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [saving, setSaving] = useState(false);
 
-  const handleSaveSummary = async () => {
-    setSavingSummary(true);
-    // If the editor was never touched, preserve the existing body instead of
-    // overwriting it with []
-    const body = isDirtyRef.current
-      ? JSON.stringify(blocksRef.current)
-      : initialBody || "[]";
+  const changes = aboutChanges(saved, draft, summary);
+  const dirty = hasChanges(changes);
+  const leaveGuard = useLeaveGuard(dirty);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  const setField = <K extends keyof AboutFields>(key: K, value: AboutFields[K]) =>
+    setDraft((prev) => ({ ...prev, [key]: value }));
 
-    const { data, error } = await supabase
-      .from("about_page")
-      .upsert({
-        group_id: groupId,
-        body,
-        updated_by: user?.id,
-        updated_at: new Date().toISOString(),
-      })
-      .select("group_id");
-
-    setSavingSummary(false);
-    if (error || !data?.length) {
-      toast.error("Failed to save the summary.");
+  const handleSave = async () => {
+    const found: FieldErrors = {
+      color: colorError(draft.color),
+      videoCallUrl: videoCallUrlError(draft.videoCallUrl),
+    };
+    setErrors(found);
+    if (found.color) {
+      document.getElementById("group-color")?.focus();
       return;
     }
-    toast.success("Summary saved.");
-    isDirtyRef.current = false;
-  };
+    if (found.videoCallUrl) {
+      document.getElementById("weekly-zoom-url")?.focus();
+      return;
+    }
 
-  // --- Group color ---
-  const [color, setColor] = useState(initialColor);
-  const [savingColor, setSavingColor] = useState(false);
-
-  const handleSaveColor = async () => {
-    const check = validateGroupColor(color);
-    if (!check.ok) {
-      toast.error(check.reason);
+    setSaving(true);
+    let failure: number | "network" | null;
+    try {
+      const res = await fetch(groupPath(groupId, "/settings/about/save"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(changes),
+      });
+      failure = res.ok ? null : res.status;
+    } catch {
+      failure = "network";
+    }
+    setSaving(false);
+    if (failure !== null) {
+      toast.error(
+        failureMessage("save the About page", failure, {
+          409: "Someone on the Leadership list isn't in this group. Remove them, then save again.",
+          410: "Another leader removed someone you edited from the Leadership list. Remove them here too, then save again.",
+        }),
+      );
       return;
     }
-    setSavingColor(true);
-    const targetCalendar =
-      calendarId ?? (await ensureGroupCalendar(supabase, orgId, groupId, groupName));
-    if (!targetCalendar) {
-      setSavingColor(false);
-      toast.error("Failed to save the group color.");
-      return;
-    }
-    const { data, error } = await supabase
-      .from("event_calendars")
-      .update({ color: check.color })
-      .eq("id", targetCalendar)
-      .eq("group_id", groupId)
-      .select("id");
-    setSavingColor(false);
-    if (error || !data?.length) {
-      toast.error("Failed to save the group color.");
-      return;
-    }
-    toast.success("Group color saved.");
+    // Only the baseline moves: the fields stay live during the request, so
+    // anything typed since it was sent must stay on screen and stay unsaved.
+    setSaved({
+      ...draft,
+      videoCallUrl: draft.videoCallUrl.trim(),
+      videoCallTime: draft.videoCallTime.trim(),
+    });
+    setSummary((current) => (current === summary ? null : current));
+    toast.success("About page saved.");
     router.refresh();
   };
 
-  // --- Weekly calls ---
-  const [calls, setCalls] = useState({
-    weekly_zoom_url: initialSettings.weekly_zoom_url ?? "",
-    zoom_meeting_time: initialSettings.zoom_meeting_time ?? "",
-  });
-  const [savingCalls, setSavingCalls] = useState(false);
-  const setCall = (key: keyof typeof calls, value: string) =>
-    setCalls((prev) => ({ ...prev, [key]: value }));
-
-  const handleSaveCalls = async () => {
-    const zoomUrl = calls.weekly_zoom_url.trim();
-    if (!isHttpsOrEmpty(zoomUrl)) {
-      toast.error("Call links must start with https://");
-      return;
-    }
-    setSavingCalls(true);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    const { data, error } = await supabase
-      .from("group_settings")
-      .upsert({
-        group_id: groupId,
-        weekly_zoom_url: zoomUrl || null,
-        zoom_meeting_time: calls.zoom_meeting_time.trim() || null,
-        updated_by: user?.id,
-        updated_at: new Date().toISOString(),
-      })
-      .select("group_id");
-    setSavingCalls(false);
-    if (error || !data?.length) {
-      toast.error("Failed to save the weekly calls.");
-      return;
-    }
-    toast.success("Weekly calls saved.");
-  };
-
   // --- Leadership ---
-  const [teachers, setTeachers] = useState(initialTeachers);
+  const [people, setPeople] = useState<Record<string, Person | null>>(() =>
+    Object.fromEntries(initialTeachers.map((t) => [t.profile_id, t.profiles])),
+  );
   const [addOpen, setAddOpen] = useState(false);
-  const [candidates, setCandidates] = useState<MemberOption[] | null>(null);
+  const [candidates, setCandidates] = useState<Person[] | null>(null);
+  const [candidatesFailed, setCandidatesFailed] = useState(false);
   const [query, setQuery] = useState("");
-  const [editing, setEditing] = useState<ClassTeacherWithProfile | null>(null);
-  const [removing, setRemoving] = useState<ClassTeacherWithProfile | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<LeaderEntry | null>(null);
+  const [removing, setRemoving] = useState<LeaderEntry | null>(null);
 
-  const openAdd = async () => {
-    setQuery("");
-    setAddOpen(true);
-    if (candidates) return;
-    // Any member of the org may be listed; leadership here is a title, not a permission.
+  const loadCandidates = async () => {
+    setCandidatesFailed(false);
     const { data, error } = await supabase
-      .from("profiles")
-      .select("id, first_name, last_name, preferred_name, avatar_url")
-      .in("role", STORED_MEMBER_ROLES)
-      .order("last_name")
-      .order("first_name");
+      .from("group_members")
+      .select("profiles!inner(id, first_name, last_name, preferred_name, avatar_url, role)")
+      .eq("group_id", groupId)
+      .in("profiles.role", STORED_MEMBER_ROLES);
     if (error) {
-      toast.error("Failed to load members.");
-      setAddOpen(false);
+      console.error("Failed to load the group's members:", error);
+      setCandidatesFailed(true);
       return;
     }
+    // The to-one embed reads as an array in the inferred type.
+    const rows = ((data ?? []) as unknown as { profiles: Person }[])
+      .map((row) => row.profiles)
+      .sort(
+        (a, b) =>
+          (a.last_name ?? "").localeCompare(b.last_name ?? "") ||
+          (a.first_name ?? "").localeCompare(b.first_name ?? ""),
+      );
     // Private buckets: exchange stored avatar URLs for signed URLs
     // before they reach the candidate-list AvatarImage renders.
-    const rows = (data ?? []) as MemberOption[];
     const signed = await mintSignedUrls(rows.map((r) => r.avatar_url));
     setCandidates(rows.map((r, i) => ({ ...r, avatar_url: signed[i] })));
   };
 
+  const openAdd = () => {
+    setQuery("");
+    setAddOpen(true);
+    if (!candidates) void loadCandidates();
+  };
+
   const visibleCandidates = useMemo(() => {
     if (!candidates) return [];
-    const taken = new Set(teachers.map((t) => t.profile_id));
+    const taken = new Set(draft.leaders.map((l) => l.profile_id));
     const available = candidates.filter((c) => !taken.has(c.id));
     if (!query.trim()) return available;
     const q = query.trim().toLowerCase();
@@ -225,118 +194,50 @@ export function AboutEditor({
         .toLowerCase()
         .includes(q),
     );
-  }, [candidates, teachers, query]);
+  }, [candidates, draft.leaders, query]);
 
-  const handleAdd = async (member: MemberOption) => {
-    setBusy(true);
-    const nextOrder =
-      teachers.reduce((max, t) => Math.max(max, t.sort_order), -1) + 1;
-    const { data, error } = await supabase
-      .from("class_teachers")
-      .insert({ profile_id: member.id, sort_order: nextOrder, group_id: groupId })
-      .select(TEACHER_SELECT)
-      .single();
-    setBusy(false);
-    if (error || !data) {
-      toast.error("Failed to add person.");
-      return;
-    }
-    const added = data as ClassTeacherWithProfile;
-    // The insert re-selects the raw stored URL — re-sign it for display.
-    // The candidate row's avatar_url is already signed, so reuse it first.
-    // The DB write above already succeeded, so a signing failure here must
-    // not stop the new person from appearing in the list.
-    if (added.profiles) {
-      let avatarUrl = member.avatar_url ?? null;
-      if (!avatarUrl) {
-        try {
-          avatarUrl = await mintSignedUrl(added.profiles.avatar_url);
-        } catch (err) {
-          console.error("handleAdd: signing new leader's avatar failed", err);
-        }
-      }
-      added.profiles = { ...added.profiles, avatar_url: avatarUrl };
-    }
-    setTeachers((prev) => [...prev, added]);
+  const handleAdd = (member: Person) => {
+    // Someone removed earlier in this edit returns with what is saved for them.
+    const entry = saved.leaders.find((l) => l.profile_id === member.id) ?? {
+      profile_id: member.id,
+      title: "",
+      bio: "",
+    };
+    setPeople((prev) => ({ ...prev, [member.id]: prev[member.id] ?? member }));
+    setField("leaders", [...draft.leaders, entry]);
     setAddOpen(false);
     // Go straight to the title form so the new entry doesn't sit empty
-    setEditing(added);
+    setEditing(entry);
   };
 
-  const handleRemove = async () => {
-    if (!removing) return;
-    const teacher = removing;
-    const { data, error } = await supabase
-      .from("class_teachers")
-      .delete()
-      .eq("id", teacher.id)
-      .eq("group_id", groupId)
-      .select("id");
-    if (error || !data?.length) {
-      toast.error("Failed to remove person.");
-      return;
-    }
-    setTeachers((prev) => prev.filter((t) => t.id !== teacher.id));
-    setRemoving(null);
-    toast.success("Person removed.");
+  const handleMove = (index: number, direction: -1 | 1) => {
+    const next = [...draft.leaders];
+    [next[index], next[index + direction]] = [next[index + direction], next[index]];
+    setField("leaders", next);
   };
 
-  const handleMove = async (index: number, direction: -1 | 1) => {
-    const target = index + direction;
-    if (target < 0 || target >= teachers.length) return;
-    setBusy(true);
-    const a = teachers[index];
-    const b = teachers[target];
-    // Swap sort_order values; fall back to indexes if they were equal
-    const aOrder = a.sort_order === b.sort_order ? target : b.sort_order;
-    const bOrder = a.sort_order === b.sort_order ? index : a.sort_order;
-    const [{ error: e1 }, { error: e2 }] = await Promise.all([
-      supabase.from("class_teachers").update({ sort_order: aOrder }).eq("id", a.id).eq("group_id", groupId),
-      supabase.from("class_teachers").update({ sort_order: bOrder }).eq("id", b.id).eq("group_id", groupId),
-    ]);
-    setBusy(false);
-    if (e1 || e2) {
-      toast.error("Failed to reorder.");
-      return;
-    }
-    setTeachers((prev) => {
-      const next = [...prev];
-      next[index] = { ...b, sort_order: bOrder };
-      next[target] = { ...a, sort_order: aOrder };
-      return next;
-    });
-  };
-
-  const handleSaveTeacher = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleEditDone = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!editing) return;
-    setBusy(true);
     const formData = new FormData(e.currentTarget);
-    const title = (formData.get("title") as string).trim() || "Teacher";
+    const title = (formData.get("title") as string).trim();
     const bio = (formData.get("bio") as string).trim();
-    const { data, error } = await supabase
-      .from("class_teachers")
-      .update({ title, bio })
-      .eq("id", editing.id)
-      .eq("group_id", groupId)
-      .select("id");
-    setBusy(false);
-    if (error || !data?.length) {
-      toast.error("Failed to save.");
-      return;
-    }
-    setTeachers((prev) =>
-      prev.map((t) => (t.id === editing.id ? { ...t, title, bio } : t)),
+    setField(
+      "leaders",
+      draft.leaders.map((l) => (l.profile_id === editing.profile_id ? { ...l, title, bio } : l)),
     );
     setEditing(null);
-    toast.success("Saved.");
   };
+
+  const nameOf = (entry: LeaderEntry) => displayName(people[entry.profile_id] ?? null);
 
   return (
     <PageContainer size="default" className="space-y-8">
       <PageHeader
         title="About"
         subtitle={`Changes here apply to ${groupName} only.`}
+        backHref={groupPath(groupId, "/settings")}
+        backLabel="Back to Group settings"
         actions={
           <Button variant="outline" nativeButton={false} render={<Link href={groupPath(groupId, "/about")} />}>
             View page
@@ -346,70 +247,44 @@ export function AboutEditor({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl text-brand-primary-text">
-            Summary
-          </CardTitle>
+          <CardTitle className="text-xl font-bold text-foreground">Summary</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent>
           <div className="rounded-lg overflow-hidden border border-border">
             <BlockEditor
               initialContent={parseStoredBlocks(initialBody) ?? undefined}
-              onChange={(blocks) => {
-                blocksRef.current = blocks;
-                isDirtyRef.current = true;
-              }}
+              onChange={(blocks) => setSummary(JSON.stringify(blocks))}
             />
           </div>
-          <Button
-            onClick={handleSaveSummary}
-            disabled={savingSummary}
-          >
-            {savingSummary ? "Saving..." : "Save summary"}
-          </Button>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl text-brand-primary-text">Group color</CardTitle>
+          <CardTitle className="text-xl font-bold text-foreground">Group color</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-base text-muted-foreground">
             Used for the group in the switcher, on Home and on calendar events.
           </p>
-          <div className="flex flex-wrap items-end gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="group-color" className="text-base">Color</Label>
-              <div className="flex items-center gap-3">
-                <input
-                  id="group-color"
-                  type="color"
-                  value={color}
-                  onChange={(e) => setColor(e.target.value)}
-                  className="block h-12 w-20 cursor-pointer rounded-md border border-input p-1"
-                />
-                <Input
-                  aria-label="Hex color"
-                  value={color}
-                  onChange={(e) => setColor(e.target.value)}
-                  maxLength={7}
-                  className="w-32 font-mono text-base"
-                />
-              </div>
-            </div>
-            <Button
-              onClick={handleSaveColor}
-              disabled={savingColor}
-            >
-              {savingColor ? "Saving..." : "Save color"}
-            </Button>
+          <div className="space-y-2">
+            <Label htmlFor="group-color" className="text-base">Color</Label>
+            <input
+              id="group-color"
+              type="color"
+              value={draft.color}
+              onChange={(e) => setField("color", e.target.value)}
+              className="block h-12 w-20 cursor-pointer rounded-md border border-input p-1"
+              {...invalidFieldProps("group-color", errors.color)}
+            />
+            <FieldError fieldId="group-color" message={errors.color} />
           </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl text-brand-primary-text">Weekly calls</CardTitle>
+          <CardTitle className="text-xl font-bold text-foreground">Weekly calls</CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="grid gap-5 sm:grid-cols-2">
@@ -419,18 +294,20 @@ export function AboutEditor({
                 id="weekly-zoom-url"
                 type="url"
                 placeholder="https://…"
-                value={calls.weekly_zoom_url}
-                onChange={(e) => setCall("weekly_zoom_url", e.target.value)}
+                value={draft.videoCallUrl}
+                onChange={(e) => setField("videoCallUrl", e.target.value)}
                 className="text-base"
+                {...invalidFieldProps("weekly-zoom-url", errors.videoCallUrl)}
               />
+              <FieldError fieldId="weekly-zoom-url" message={errors.videoCallUrl} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="zoom-meeting-time" className="text-base">Video call time</Label>
               <Input
                 id="zoom-meeting-time"
                 placeholder="Thursdays at 7pm"
-                value={calls.zoom_meeting_time}
-                onChange={(e) => setCall("zoom_meeting_time", e.target.value)}
+                value={draft.videoCallTime}
+                onChange={(e) => setField("videoCallTime", e.target.value)}
                 className="text-base"
               />
             </div>
@@ -445,12 +322,6 @@ export function AboutEditor({
             </Link>
             .
           </p>
-          <Button
-            onClick={handleSaveCalls}
-            disabled={savingCalls}
-          >
-            {savingCalls ? "Saving..." : "Save weekly calls"}
-          </Button>
         </CardContent>
       </Card>
 
@@ -465,153 +336,171 @@ export function AboutEditor({
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-2xl text-brand-primary-text">
-              Leadership
-            </CardTitle>
-            <Button
-              size="sm"
-              onClick={openAdd}
-            >
-              <Plus className="mr-1 h-4 w-4" />
-              Add person
-            </Button>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="text-xl font-bold text-foreground">Leadership</CardTitle>
+            {draft.leaders.length > 0 && (
+              <Button variant="outline" onClick={openAdd}>
+                <Plus aria-hidden="true" />
+                Add member
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
           <p className="mb-4 text-base text-muted-foreground">
-            Titles are shown on the About page. They change nothing about what a person can do.
+            Titles are shown on the About page. They change nothing about what a member can do.
           </p>
-          {teachers.length === 0 ? (
-            <p className="text-muted-foreground py-4 text-center">
-              No one listed yet. Use &ldquo;Add person&rdquo; to pick a member.
-            </p>
+          {draft.leaders.length === 0 ? (
+            <EmptyState
+              icon={Users}
+              message="No one listed yet."
+              action={
+                <Button variant="outline" onClick={openAdd}>
+                  <Plus aria-hidden="true" />
+                  Add member
+                </Button>
+              }
+            />
           ) : (
-            <div className="divide-y">
-              {teachers.map((teacher, index) => (
-                <div key={teacher.id} className="flex items-center gap-3 py-3">
-                  <Avatar className="h-10 w-10 shrink-0">
-                    {teacher.profiles?.avatar_url && (
-                      <AvatarImage
-                        src={teacher.profiles.avatar_url}
-                        alt={displayName(teacher.profiles)}
-                      />
-                    )}
-                    <AvatarFallback className="bg-brand-primary text-white text-sm">
-                      {initials(teacher.profiles)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">
-                      {displayName(teacher.profiles)}
-                      <span className="ml-2 text-base font-medium uppercase tracking-wider text-muted-foreground">
-                        {teacher.title}
-                      </span>
-                    </p>
-                    <p className="text-sm text-muted-foreground truncate">
-                      {teacher.bio || "No bio yet."}
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    disabled={busy || index === 0}
-                    onClick={() => handleMove(index, -1)}
-                    aria-label={`Move ${displayName(teacher.profiles)} up`}
+            <ul className="divide-y divide-border">
+              {draft.leaders.map((leader, index) => {
+                const person = people[leader.profile_id] ?? null;
+                const name = displayName(person);
+                return (
+                  <li
+                    key={leader.profile_id}
+                    className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:gap-3"
                   >
-                    <ArrowUp className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    disabled={busy || index === teachers.length - 1}
-                    onClick={() => handleMove(index, 1)}
-                    aria-label={`Move ${displayName(teacher.profiles)} down`}
-                  >
-                    <ArrowDown className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    disabled={busy}
-                    onClick={() => setEditing(teacher)}
-                    aria-label={`Edit ${displayName(teacher.profiles)}`}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    disabled={busy}
-                    onClick={() => setRemoving(teacher)}
-                    aria-label={`Remove ${displayName(teacher.profiles)}`}
-                    className="text-muted-foreground hover:text-destructive"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <Avatar className="h-12 w-12 shrink-0">
+                        {person?.avatar_url && <AvatarImage src={person.avatar_url} alt={name} />}
+                        <AvatarFallback className="bg-brand-primary text-white text-base">
+                          {initials(person)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="truncate text-base font-semibold text-foreground">{name}</p>
+                        <p className="truncate text-base text-muted-foreground">
+                          {[leader.title, leader.bio || "No bio yet."].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1 self-end sm:self-auto">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        disabled={index === 0}
+                        onClick={() => handleMove(index, -1)}
+                        aria-label={`Move ${name} up`}
+                      >
+                        <ArrowUp aria-hidden="true" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        disabled={index === draft.leaders.length - 1}
+                        onClick={() => handleMove(index, 1)}
+                        aria-label={`Move ${name} down`}
+                      >
+                        <ArrowDown aria-hidden="true" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => setEditing(leader)}
+                        aria-label={`Edit ${name}`}
+                      >
+                        <Pencil aria-hidden="true" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => setRemoving(leader)}
+                        aria-label={`Remove ${name}`}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <X aria-hidden="true" />
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </CardContent>
       </Card>
 
+      <div className="space-y-3">
+        <p aria-live="polite" className="min-h-6 text-base text-muted-foreground">
+          {dirty ? "You have unsaved changes." : ""}
+        </p>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Button size="lg" onClick={handleSave} disabled={saving || !dirty}>
+            {saving ? "Saving…" : "Save changes"}
+          </Button>
+          <Button
+            size="lg"
+            variant="outline"
+            nativeButton={false}
+            render={<Link href={groupPath(groupId, "/settings")} />}
+          >
+            Cancel
+          </Button>
+        </div>
+      </div>
+
       <Dialog open={addOpen} onOpenChange={(o) => !o && setAddOpen(false)}>
         <DialogContent className="max-w-md max-h-[85vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Add person</DialogTitle>
+            <DialogTitle>Add member</DialogTitle>
           </DialogHeader>
           <div className="relative shrink-0">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" aria-hidden="true" />
             <Input
               type="search"
-              placeholder="Search members..."
+              aria-label="Search members"
+              placeholder="Search members…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="pl-10"
+              className="pl-10 text-base"
             />
           </div>
           <div className="overflow-y-auto flex-1 -mx-1 px-1">
-            {!candidates ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">
-                Loading members...
-              </p>
+            {candidatesFailed ? (
+              <ErrorState thing="members" onRetry={loadCandidates} />
+            ) : !candidates ? (
+              <LoadingState thing="members" />
             ) : visibleCandidates.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-6 text-center">
+              <p className="text-base text-muted-foreground py-6 text-center">
                 {query.trim()
                   ? "No one matches your search."
-                  : "Everyone is already listed."}
+                  : "Everyone in this group is already listed."}
               </p>
             ) : (
-              <div className="divide-y">
+              <ul className="divide-y divide-border">
                 {visibleCandidates.map((member) => (
-                  <div key={member.id} className="flex items-center gap-3 py-2.5">
-                    <Avatar className="h-8 w-8 shrink-0">
+                  <li key={member.id} className="flex items-center gap-3 py-2.5">
+                    <Avatar className="h-10 w-10 shrink-0">
                       {member.avatar_url && (
-                        <AvatarImage
-                          src={member.avatar_url}
-                          alt={displayName(member)}
-                        />
+                        <AvatarImage src={member.avatar_url} alt={displayName(member)} />
                       )}
-                      <AvatarFallback className="bg-brand-primary text-white text-xs">
+                      <AvatarFallback className="bg-brand-primary text-white text-base">
                         {initials(member)}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="flex-1 min-w-0 text-sm font-medium truncate">
+                    <span className="flex-1 min-w-0 text-base font-medium truncate">
                       {displayName(member)}
                     </span>
                     <Button
                       variant="outline"
-                      size="sm"
-                      disabled={busy}
                       onClick={() => handleAdd(member)}
+                      aria-label={`Add ${displayName(member)}`}
                     >
-                      <Plus className="mr-1 h-3.5 w-3.5" />
                       Add
                     </Button>
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </div>
         </DialogContent>
@@ -620,46 +509,37 @@ export function AboutEditor({
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>
-              {editing ? displayName(editing.profiles) : ""}
-            </DialogTitle>
+            <DialogTitle>{editing ? nameOf(editing) : ""}</DialogTitle>
           </DialogHeader>
           {editing && (
-            <form onSubmit={handleSaveTeacher} className="space-y-4">
+            <form onSubmit={handleEditDone} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="teacher-title">Title</Label>
+                <Label htmlFor="teacher-title" className="text-base">Title (optional)</Label>
                 <Input
                   id="teacher-title"
                   name="title"
                   defaultValue={editing.title}
-                  placeholder="Teacher, Coordinator, Host"
+                  placeholder="Co-leader, Coordinator"
+                  className="text-base"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="teacher-bio">Bio</Label>
+                <Label htmlFor="teacher-bio" className="text-base">Bio (optional)</Label>
                 <Textarea
                   id="teacher-bio"
                   name="bio"
                   rows={6}
                   defaultValue={editing.bio}
-                  placeholder="A few sentences about this person."
+                  placeholder="A few sentences about this member."
+                  className="text-base"
                 />
               </div>
-              <div className="flex gap-3 justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setEditing(null)}
-                >
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setEditing(null)}>
                   Cancel
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={busy}
-                >
-                  {busy ? "Saving..." : "Save"}
-                </Button>
-              </div>
+                <Button type="submit">Done</Button>
+              </DialogFooter>
             </form>
           )}
         </DialogContent>
@@ -667,15 +547,23 @@ export function AboutEditor({
       <ConfirmDialog
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}
-        title={
-          removing === null
-            ? ""
-            : `Remove ${displayName(removing.profiles)} from the About page?`
-        }
-        description="They stay in the group. Only their entry on this page goes."
-        confirmLabel="Remove person"
-        pendingLabel="Removing…"
-        onConfirm={handleRemove}
+        title={removing === null ? "" : `Remove ${nameOf(removing)} from the About page?`}
+        description="They stay in the group. Only their entry on this page goes, once you save."
+        confirmLabel="Remove from page"
+        onConfirm={async () => {
+          if (!removing) return;
+          setField("leaders", draft.leaders.filter((l) => l.profile_id !== removing.profile_id));
+          setRemoving(null);
+        }}
+      />
+      <ConfirmDialog
+        open={leaveGuard.asking}
+        onOpenChange={(open) => !open && leaveGuard.stay()}
+        title="Leave without saving?"
+        description="Your changes to this page will be lost."
+        confirmLabel="Leave without saving"
+        cancelLabel="Keep editing"
+        onConfirm={async () => leaveGuard.leave()}
       />
     </PageContainer>
   );

@@ -1,5 +1,6 @@
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ErrorState } from "@/components/states/ErrorState";
 import { createClient } from "@/lib/supabase/server";
 import { getDiscoveryOn } from "@/lib/groups/discovery";
 import { groupPath } from "@/lib/groups/active";
@@ -7,11 +8,9 @@ import { parseJoinPolicy } from "@/lib/groups/joining";
 import { requireGroupLeader } from "@/lib/groups/server";
 import { PrivacyAndJoiningManager } from "./PrivacyAndJoiningManager";
 import { groupPageTitle } from "@/lib/pageTitle";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
 
 export const generateMetadata = groupPageTitle("Privacy and joining");
-
-const SETTINGS_UNAVAILABLE_TEXT =
-  "Couldn't load this group's privacy settings. Reload the page to try again.";
 
 export default async function GroupPrivacySettingsPage({
   params,
@@ -21,9 +20,10 @@ export default async function GroupPrivacySettingsPage({
   const { groupId } = await params;
   const group = await requireGroupLeader(groupId);
   const supabase = await createClient();
-  const [{ data: flags, error }, orgDiscoveryOn] = await Promise.all([
+  const [{ data: flags, error }, orgDiscoveryOn, timeZone] = await Promise.all([
     supabase.from("groups").select("is_private, join_policy").eq("id", group.id).maybeSingle(),
     getDiscoveryOn(),
+    getOrgTimeZone(),
   ]);
 
   // Never show the controls with guessed values: a leader who sees "not
@@ -38,9 +38,7 @@ export default async function GroupPrivacySettingsPage({
           backHref={groupPath(group.id, "/settings")}
           backLabel="Back to Group settings"
         />
-        <p role="alert" className="text-lg text-muted-foreground">
-          {SETTINGS_UNAVAILABLE_TEXT}
-        </p>
+        <ErrorState thing="this group's privacy settings" />
       </PageContainer>
     );
   }
@@ -52,6 +50,7 @@ export default async function GroupPrivacySettingsPage({
       initialPrivate={flags.is_private}
       initialPolicy={parseJoinPolicy(flags.join_policy)}
       orgDiscoveryOn={orgDiscoveryOn}
+      timeZone={timeZone}
     />
   );
 }
