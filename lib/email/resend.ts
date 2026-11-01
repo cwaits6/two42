@@ -99,7 +99,8 @@ function sanitizeLink(link: string): string {
     }
     return url.href;
   } catch {
-    throw new Error(`Invalid or unsafe joinLink: ${link}`);
+    // Fixed text: the link can carry a signup token, and callers log this error.
+    throw new Error("Invalid or unsafe link");
   }
 }
 

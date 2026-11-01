@@ -125,4 +125,11 @@ describe("send call sites use the resolved branding.fromAddress", () => {
     ).rejects.toThrow(/Invalid or unsafe/);
     expect(send).not.toHaveBeenCalled();
   });
+
+  it("keeps the setup token out of the error for a bad link", async () => {
+    await expect(
+      sendInviteEmail("a@b.org", "Jane", "not-a-url?token=secret-token", BRANDING),
+    ).rejects.toThrow(/^Invalid or unsafe link$/);
+    expect(send).not.toHaveBeenCalled();
+  });
 });
