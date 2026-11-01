@@ -64,7 +64,10 @@ export function GroupDetailsForm({
         <Input
           id="group-name"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value);
+            setNameError(undefined);
+          }}
           maxLength={120}
           className="h-12 text-base"
           {...invalidFieldProps("group-name", nameError)}
