@@ -6,7 +6,7 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CreateGroupDialog } from "@/components/groups/CreateGroupDialog";
 
-/** The Admin › Groups "Create group" button: the admin names the leader and stays on the page. */
+/** The Admin › Groups "Add group" button: the admin names the leader and stays on the page. */
 export function AdminCreateGroupButton() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -18,7 +18,7 @@ export function AdminCreateGroupButton() {
         onClick={() => setOpen(true)}
       >
         <Plus aria-hidden="true" />
-        Create group
+        Add group
       </Button>
       <CreateGroupDialog
         mode="create"

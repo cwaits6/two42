@@ -12,7 +12,7 @@ function group(overrides: Partial<AdminGroupRow>): AdminGroupRow {
   return { id: "g", name: "Tuesday Group", description: null, memberCount: 3, leaderNames: [], ...overrides };
 }
 
-const render = (groups: AdminGroupRow[]) => renderToStaticMarkup(createElement(AdminGroupList, { groups }));
+const render = (groups: AdminGroupRow[]) => renderToStaticMarkup(createElement(AdminGroupList, { groups, memberGroupIds: ["mine"] }));
 
 describe("AdminGroupList", () => {
   it("marks a group with no leader", () => {
@@ -27,6 +27,12 @@ describe("AdminGroupList", () => {
     const html = render([group({ leaderNames: ["Ada Lovelace", "Cy Park"] })]);
     expect(html).toContain("Leaders: </span>Ada Lovelace, Cy Park");
     expect(html).not.toContain("No leader");
+  });
+
+  it("links every row: to the group for one the viewer is in, else to its admin page", () => {
+    const html = render([group({ id: "mine" }), group({ id: "other" })]);
+    expect(html).toContain('href="/g/mine/dashboard"');
+    expect(html).toContain('href="/admin/groups/other"');
   });
 
   it("says when the church has no groups", () => {

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ApprovalQueue } from "@/components/admin/ApprovalQueue";
 import { createClient } from "@/lib/supabase/client";
+import { failureMessage } from "@/lib/errorCopy";
 import { groupCreationErrorMessage } from "@/lib/groups/creation";
 import { requestedOn } from "@/lib/groups/joinQueue";
 import { displayName } from "@/lib/names";
@@ -53,7 +54,7 @@ export function PendingGroupRequests({
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) {
-        toast.error("Session expired. Please log in again.");
+        toast.error(failureMessage("decline the request", 401));
         return;
       }
       // A write the UPDATE policy rejects matches zero rows without an error;
@@ -66,7 +67,7 @@ export function PendingGroupRequests({
         .eq("status", "pending")
         .select("id");
       if (error) {
-        toast.error("Couldn't decline the request. Please try again.");
+        toast.error(failureMessage("decline the request"));
         return;
       }
       if (!data?.length) {
