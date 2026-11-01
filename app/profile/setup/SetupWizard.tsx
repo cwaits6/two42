@@ -274,7 +274,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
   const [creatingHousehold, setCreatingHousehold] = useState(false);
   const [pendingPeople, setPendingPeople] = useState<PendingPerson[]>([]);
   // A retry after a later write fails must not insert these people again.
-  const savedPeople = useRef<Set<string>>(new Set());
+  const [savedPeople, setSavedPeople] = useState<ReadonlySet<string>>(new Set());
   const [anniversary, setAnniversary] = useState(profile.anniversary ?? "");
   const [adding, setAdding] = useState<FamilyMemberRelationship | null>(null);
   const [draft, setDraft] = useState<PersonDraft>(EMPTY_DRAFT);
@@ -476,7 +476,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
         if (error) throw error;
       }
 
-      const unsavedPeople = pendingPeople.filter((m) => !savedPeople.current.has(m.tempId));
+      const unsavedPeople = pendingPeople.filter((m) => !savedPeople.has(m.tempId));
       if (householdId && unsavedPeople.length > 0) {
         const { error } = await supabase.from("family_members").insert(
           unsavedPeople.map((m) => ({
@@ -489,7 +489,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
           })),
         );
         if (error) throw error;
-        for (const m of unsavedPeople) savedPeople.current.add(m.tempId);
+        setSavedPeople(new Set([...savedPeople, ...unsavedPeople.map((m) => m.tempId)]));
       }
 
       // Marked complete only after every dependent write succeeds.
@@ -890,16 +890,19 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
                               {relLabel(m.relationship)}
                             </span>
                           </span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            onClick={() =>
-                              setPendingPeople((prev) => prev.filter((p) => p.tempId !== m.tempId))
-                            }
-                            aria-label={`Remove ${m.first_name}`}
-                          >
-                            Remove
-                          </Button>
+                          {/* A failed finish may already have saved this person; removing them here wouldn't delete the row. */}
+                          {!savedPeople.has(m.tempId) && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              onClick={() =>
+                                setPendingPeople((prev) => prev.filter((p) => p.tempId !== m.tempId))
+                              }
+                              aria-label={`Remove ${m.first_name}`}
+                            >
+                              Remove
+                            </Button>
+                          )}
                         </li>
                       ))}
                     </ul>

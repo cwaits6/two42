@@ -91,10 +91,12 @@ export function SignInSecurityCard({ currentEmail }: SignInSecurityCardProps) {
 
   const edit = (field: Field, set: (value: string) => void) => (value: string) => {
     set(value);
+    // The confirmation's error depends on the new password too.
+    const cleared: Field[] = field === "new-password" ? [field, "confirm-password"] : [field];
     setErrors((prev) => {
-      if (!(field in prev)) return prev;
+      if (!cleared.some((f) => f in prev)) return prev;
       const next = { ...prev };
-      delete next[field];
+      for (const f of cleared) delete next[f];
       return next;
     });
   };

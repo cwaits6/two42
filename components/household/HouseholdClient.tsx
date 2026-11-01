@@ -160,6 +160,7 @@ export function HouseholdClient({
   // "Link existing account" search within the dialog
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchFailed, setSearchFailed] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [linkingId, setLinkingId] = useState<string | null>(null);
   const [linkRelationship, setLinkRelationship] = useState<FamilyMemberRelationship>("spouse");
@@ -233,6 +234,7 @@ export function HouseholdClient({
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     searchTimeout.current = setTimeout(async () => {
       setSearchLoading(true);
+      setSearchFailed(false);
       try {
         const res = await fetch(
           `/api/household/search-members?q=${encodeURIComponent(searchQuery)}`,
@@ -241,9 +243,11 @@ export function HouseholdClient({
           const body = await res.json();
           setSearchResults(body.data ?? []);
         } else {
+          setSearchFailed(true);
           toast.error(failureMessage("search for members", res.status));
         }
       } catch {
+        setSearchFailed(true);
         toast.error(failureMessage("search for members", "network"));
       } finally {
         setSearchLoading(false);
@@ -620,7 +624,7 @@ export function HouseholdClient({
               </p>
             )}
 
-            {!searchLoading && searchResults.length === 0 && searchQuery.length >= 2 && (
+            {!searchLoading && !searchFailed && searchResults.length === 0 && searchQuery.length >= 2 && (
               <p className="py-2 text-center text-base text-muted-foreground">
                 No one without a household matches that name.
               </p>
