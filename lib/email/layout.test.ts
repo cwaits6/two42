@@ -203,7 +203,9 @@ describe("copy", () => {
 });
 
 describe("the palette", () => {
-  const css = readFileSync("app/globals.css", "utf8");
+  const declarations = [
+    ...readFileSync("app/globals.css", "utf8").matchAll(/\s(--[\w-]+):\s*(#[0-9A-Fa-f]{6});/g),
+  ];
 
   it.each([
     ["page", "--background"],
@@ -215,8 +217,8 @@ describe("the palette", () => {
     ["link", "--color-brand-primary-text"],
     ["onAccent", "--primary-foreground"],
   ] as const)("EMAIL_COLORS.%s is the app's %s", (name, token) => {
-    const declared = css.match(new RegExp(`\\s${token}:\\s*(#[0-9A-Fa-f]{6});`));
-    expect(declared?.[1]).toBe(EMAIL_COLORS[name]);
+    const declared = declarations.find((declaration) => declaration[1] === token);
+    expect(declared?.[2]).toBe(EMAIL_COLORS[name]);
   });
 });
 
