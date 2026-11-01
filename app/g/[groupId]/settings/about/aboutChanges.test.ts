@@ -10,6 +10,7 @@ import {
 
 const A = "11111111-1111-4111-8111-111111111111";
 const B = "22222222-2222-4222-8222-222222222222";
+const C = "33333333-3333-4333-8333-333333333333";
 const leaderA = { profile_id: A, title: "Coordinator", bio: "" };
 const leaderB = { profile_id: B, title: "", bio: "Hi" };
 const saved: AboutFields = {
@@ -36,15 +37,29 @@ describe("aboutChanges", () => {
     expect(aboutChanges(saved, { ...saved, videoCallTime: `${saved.videoCallTime} ` }, null)).toEqual({});
   });
 
-  it("treats a reorder as a change with nothing removed", () => {
+  it("sends a reorder as the order alone, so no one's title or bio is rewritten", () => {
     expect(aboutChanges(saved, { ...saved, leaders: [leaderB, leaderA] }, null)).toEqual({
-      leaders: { list: [leaderB, leaderA], removed: [] },
+      leaders: { added: [], edited: [], removed: [], order: [B, A] },
     });
   });
 
-  it("names who was removed from the list", () => {
+  it("sends an edit as that one entry, leaving the order alone", () => {
+    const edited = { ...leaderB, bio: "Hello" };
+    expect(aboutChanges(saved, { ...saved, leaders: [leaderA, edited] }, null)).toEqual({
+      leaders: { added: [], edited: [edited], removed: [] },
+    });
+  });
+
+  it("names who was removed, without touching anyone else or the order", () => {
     expect(aboutChanges(saved, { ...saved, leaders: [leaderB] }, null)).toEqual({
-      leaders: { list: [leaderB], removed: [A] },
+      leaders: { added: [], edited: [], removed: [A] },
+    });
+  });
+
+  it("sends someone new with the order that places them", () => {
+    const leaderC = { profile_id: C, title: "", bio: "" };
+    expect(aboutChanges(saved, { ...saved, leaders: [leaderA, leaderB, leaderC] }, null)).toEqual({
+      leaders: { added: [leaderC], edited: [], removed: [], order: [A, B, C] },
     });
   });
 
@@ -80,9 +95,9 @@ describe("parseAboutChanges", () => {
 
   it("keeps an empty title empty rather than filling one in", () => {
     const parsed = parseAboutChanges({
-      leaders: { list: [{ profile_id: A, title: "  ", bio: " " }], removed: [] },
+      leaders: { added: [], edited: [{ profile_id: A, title: "  ", bio: " " }], removed: [] },
     });
-    expect(parsed?.leaders?.list).toEqual([{ profile_id: A, title: "", bio: "" }]);
+    expect(parsed?.leaders?.edited).toEqual([{ profile_id: A, title: "", bio: "" }]);
   });
 
   it.each([
@@ -91,10 +106,16 @@ describe("parseAboutChanges", () => {
     ["a color that fails the hex check", { color: "url(x)" }],
     ["a color too pale for text", { color: "#7d7d7d" }],
     ["a video call link that is not https", { videoCall: { url: "http://x", time: "" } }],
-    ["a malformed leader id", { leaders: { list: [{ profile_id: "x", title: "", bio: "" }], removed: [] } }],
-    ["a malformed removed id", { leaders: { list: [], removed: ["x"] } }],
-    ["a leader listed twice", { leaders: { list: [leaderA, leaderA], removed: [] } }],
-    ["a leader both listed and removed", { leaders: { list: [leaderA], removed: [A] } }],
+    ["a malformed leader id", { leaders: { added: [], edited: [{ profile_id: "x", title: "", bio: "" }], removed: [] } }],
+    ["a malformed removed id", { leaders: { added: [], edited: [], removed: ["x"] } }],
+    ["a malformed order id", { leaders: { added: [], edited: [], removed: [], order: ["x"] } }],
+    ["an order naming someone twice", { leaders: { added: [], edited: [], removed: [], order: [A, A] } }],
+    ["a leader edited twice", { leaders: { added: [], edited: [leaderA, leaderA], removed: [] } }],
+    ["a leader both added and edited", { leaders: { added: [leaderA], edited: [leaderA], removed: [], order: [A] } }],
+    ["a leader both edited and removed", { leaders: { added: [], edited: [leaderA], removed: [A] } }],
+    ["an order naming someone removed", { leaders: { added: [], edited: [], removed: [A], order: [A] } }],
+    ["someone added with no place in the order", { leaders: { added: [leaderA], edited: [], removed: [] } }],
+    ["a list instead of changes", { leaders: { list: [leaderA], removed: [] } }],
   ])("refuses %s", (_name, body) => {
     expect(parseAboutChanges(body)).toBeNull();
   });

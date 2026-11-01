@@ -4,6 +4,19 @@ import { validateGroupColor } from "@/lib/groups/settings";
 export type LeaderEntry = { profile_id: string; title: string; bio: string };
 
 /**
+ * Only what this leader changed, so a Save never undoes another leader's edit
+ * or removal. `added` and `edited` stay apart so that editing an entry someone
+ * else removed cannot bring it back. `order` is the whole page order, present
+ * only when this leader changed it, and is required once anyone is added.
+ */
+export type LeaderChanges = {
+  added: LeaderEntry[];
+  edited: LeaderEntry[];
+  removed: string[];
+  order?: string[];
+};
+
+/**
  * What one Save writes. A section is present only when it changed, so a Save
  * never rewrites a section this leader did not touch. Applying the same
  * changes twice lands in the same state, so a retry after a partial failure
@@ -13,8 +26,7 @@ export type AboutChanges = {
   summary?: string;
   color?: string;
   videoCall?: { url: string; time: string };
-  /** `list` is the page order. `removed` is named so a Save never drops an entry another leader just added. */
-  leaders?: { list: LeaderEntry[]; removed: string[] };
+  leaders?: LeaderChanges;
 };
 
 export type AboutFields = {
@@ -49,6 +61,27 @@ function sameLeaders(a: LeaderEntry[], b: LeaderEntry[]): boolean {
   );
 }
 
+function sameIds(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((id, i) => id === b[i]);
+}
+
+function leaderChanges(saved: LeaderEntry[], draft: LeaderEntry[]): LeaderChanges {
+  const before = new Map(saved.map((l) => [l.profile_id, l]));
+  const draftIds = draft.map((l) => l.profile_id);
+  const kept = new Set(draftIds);
+  const keptIds = saved.map((l) => l.profile_id).filter((id) => kept.has(id));
+  const changes: LeaderChanges = {
+    added: draft.filter((l) => !before.has(l.profile_id)),
+    edited: draft.filter((l) => {
+      const was = before.get(l.profile_id);
+      return was !== undefined && (was.title !== l.title || was.bio !== l.bio);
+    }),
+    removed: saved.map((l) => l.profile_id).filter((id) => !kept.has(id)),
+  };
+  if (!sameIds(keptIds, draftIds)) changes.order = draftIds;
+  return changes;
+}
+
 /** The sections that differ from what is saved. `summary` is passed only once the editor has been edited. */
 export function aboutChanges(
   saved: AboutFields,
@@ -64,11 +97,7 @@ export function aboutChanges(
     changes.videoCall = { url, time };
   }
   if (!sameLeaders(saved.leaders, draft.leaders)) {
-    const kept = new Set(draft.leaders.map((l) => l.profile_id));
-    changes.leaders = {
-      list: draft.leaders,
-      removed: saved.leaders.map((l) => l.profile_id).filter((id) => !kept.has(id)),
-    };
+    changes.leaders = leaderChanges(saved.leaders, draft.leaders);
   }
   return changes;
 }
@@ -81,24 +110,43 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseLeaders(raw: unknown): AboutChanges["leaders"] | null {
-  if (!isRecord(raw) || !Array.isArray(raw.list) || !Array.isArray(raw.removed)) return null;
-  const list: LeaderEntry[] = [];
-  for (const entry of raw.list) {
+function parseEntries(raw: unknown): LeaderEntry[] | null {
+  if (!Array.isArray(raw)) return null;
+  const entries: LeaderEntry[] = [];
+  for (const entry of raw) {
     if (!isRecord(entry)) return null;
     const { profile_id, title, bio } = entry;
     if (typeof profile_id !== "string" || !isUuid(profile_id)) return null;
     if (typeof title !== "string" || typeof bio !== "string") return null;
-    list.push({ profile_id, title: title.trim(), bio: bio.trim() });
+    entries.push({ profile_id, title: title.trim(), bio: bio.trim() });
   }
-  const removed: string[] = [];
-  for (const id of raw.removed) {
-    if (typeof id !== "string" || !isUuid(id)) return null;
-    removed.push(id);
+  return entries;
+}
+
+function parseIds(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null;
+  return raw.every((id) => typeof id === "string" && isUuid(id)) ? (raw as string[]) : null;
+}
+
+function parseLeaders(raw: unknown): LeaderChanges | null {
+  if (!isRecord(raw)) return null;
+  const added = parseEntries(raw.added);
+  const edited = parseEntries(raw.edited);
+  const removed = parseIds(raw.removed);
+  if (!added || !edited || !removed) return null;
+
+  const named = [...added.map((l) => l.profile_id), ...edited.map((l) => l.profile_id), ...removed];
+  if (new Set(named).size !== named.length) return null;
+
+  const changes: LeaderChanges = { added, edited, removed };
+  if (raw.order !== undefined) {
+    const order = parseIds(raw.order);
+    if (!order || new Set(order).size !== order.length) return null;
+    if (removed.some((id) => order.includes(id))) return null;
+    changes.order = order;
   }
-  const listed = new Set(list.map((l) => l.profile_id));
-  if (listed.size !== list.length || removed.some((id) => listed.has(id))) return null;
-  return { list, removed };
+  if (added.some((l) => !changes.order?.includes(l.profile_id))) return null;
+  return changes;
 }
 
 /** The request body as changes, or null when any part of it is malformed: nothing is written then. */

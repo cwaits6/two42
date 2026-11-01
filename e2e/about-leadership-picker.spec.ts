@@ -42,11 +42,14 @@ test("the leadership picker offers this group's members, and the save refuses an
     await expect(picker.getByRole("button", { name: "Add Mia Fakeworth" })).toBeVisible();
     await expect(picker.getByText(PERSONAS.oneGroup.name)).toHaveCount(0);
 
+    const outsider = profileId(PERSONAS.oneGroup.email);
     const res = await admin.page.request.post(`/g/${groupAId}/settings/about/save`, {
       data: {
         leaders: {
-          list: [{ profile_id: profileId(PERSONAS.oneGroup.email), title: "", bio: "" }],
+          added: [{ profile_id: outsider, title: "", bio: "" }],
+          edited: [],
           removed: [],
+          order: [outsider],
         },
       },
     });

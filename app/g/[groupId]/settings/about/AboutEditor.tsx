@@ -121,18 +121,19 @@ export function AboutEditor({
       toast.error(
         failureMessage("save the About page", failure, {
           409: "Someone on the Leadership list isn't in this group. Remove them, then save again.",
+          410: "Another leader removed someone you edited from the Leadership list. Remove them here too, then save again.",
         }),
       );
       return;
     }
-    const normalized = {
+    // Only the baseline moves: the fields stay live during the request, so
+    // anything typed since it was sent must stay on screen and stay unsaved.
+    setSaved({
       ...draft,
       videoCallUrl: draft.videoCallUrl.trim(),
       videoCallTime: draft.videoCallTime.trim(),
-    };
-    setSaved(normalized);
-    setDraft(normalized);
-    setSummary(null);
+    });
+    setSummary((current) => (current === summary ? null : current));
     toast.success("About page saved.");
     router.refresh();
   };

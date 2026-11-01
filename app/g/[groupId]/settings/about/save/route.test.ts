@@ -11,6 +11,8 @@ let role: "leader" | "member";
 let failing: string | null;
 type Write = { table: string; op: string; rows?: unknown; filters: [string, unknown][] };
 let writes: Write[];
+let listedIds: string[];
+let updateRows: number;
 
 /** Reads answer from the small fixtures above; writes are recorded and report one row per row sent. */
 function fakeClient() {
@@ -25,6 +27,7 @@ function fakeClient() {
         in: (column: string, value: unknown) => (filters.push([column, value]), chain),
         delete: () => ((write = { table, op: "delete", filters }), chain),
         update: (rows: unknown) => ((write = { table, op: "update", rows, filters }), chain),
+        insert: (rows: unknown) => ((write = { table, op: "insert", rows, filters }), chain),
         upsert: (rows: unknown) => {
           write = { table, op: "upsert", rows, filters };
           rowsSent = Array.isArray(rows) ? rows.length : 1;
@@ -34,8 +37,13 @@ function fakeClient() {
         then(resolve: (value: unknown) => void) {
           if (write) writes.push(write);
           if (failing === table) return resolve({ data: null, error: { message: "boom" } });
+          if (write?.op === "update") {
+            return resolve({ data: Array.from({ length: updateRows }, () => ({})), error: null });
+          }
           if (write) return resolve({ data: Array.from({ length: rowsSent }, () => ({})), error: null });
-          if (table === "class_teachers") return resolve({ data: [{ profile_id: LISTED }], error: null });
+          if (table === "class_teachers") {
+            return resolve({ data: listedIds.map((profile_id) => ({ profile_id })), error: null });
+          }
           if (table === "group_members") {
             const wanted = filters.find(([c]) => c === "profile_id")?.[1] as string[];
             const members = [LISTED, NEW_MEMBER];
@@ -77,6 +85,8 @@ beforeEach(() => {
   role = "leader";
   failing = null;
   writes = [];
+  listedIds = [LISTED];
+  updateRows = 1;
   ensureGroupCalendar.mockReset();
   ensureGroupCalendar.mockResolvedValue("calendar-1");
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -101,30 +111,91 @@ describe("POST settings/about/save", () => {
     const res = await save({
       summary: "[]",
       color: "#B85C38",
-      leaders: { list: [entry(LISTED), entry(OUTSIDER)], removed: [] },
+      leaders: { added: [entry(OUTSIDER)], edited: [], removed: [], order: [LISTED, OUTSIDER] },
     });
     expect(res.status).toBe(409);
     expect(writes).toEqual([]);
   });
 
-  it("adds a member of the group, in page order, stamped with the group and the caller's org", async () => {
-    const res = await save({ leaders: { list: [entry(NEW_MEMBER), entry(LISTED)], removed: [] } });
+  it("adds a member of the group at their place in the order, stamped with the group and the caller's org", async () => {
+    const res = await save({
+      leaders: { added: [entry(NEW_MEMBER)], edited: [], removed: [], order: [NEW_MEMBER, LISTED] },
+    });
     expect(res.status).toBe(200);
-    expect(writes).toHaveLength(1);
-    expect(writes[0].rows).toEqual([
-      { org_id: ORG, group_id: A, profile_id: NEW_MEMBER, title: "", bio: "", sort_order: 0 },
-      { org_id: ORG, group_id: A, profile_id: LISTED, title: "", bio: "", sort_order: 1 },
+    expect(writes[0]).toMatchObject({
+      table: "class_teachers",
+      op: "insert",
+      rows: [{ org_id: ORG, group_id: A, profile_id: NEW_MEMBER, title: "", bio: "", sort_order: 0 }],
+    });
+    expect(writes.slice(1)).toEqual([
+      {
+        table: "class_teachers",
+        op: "update",
+        rows: { sort_order: 1 },
+        filters: [
+          ["org_id", ORG],
+          ["group_id", A],
+          ["profile_id", LISTED],
+        ],
+      },
     ]);
   });
 
+  it("writes a reorder as sort_order alone, leaving titles and bios to whoever last edited them", async () => {
+    const res = await save({ leaders: { added: [], edited: [], removed: [], order: [LISTED] } });
+    expect(res.status).toBe(200);
+    expect(writes.map((w) => [w.op, w.rows])).toEqual([["update", { sort_order: 0 }]]);
+  });
+
+  it("does not bring back someone another leader removed when only the order names them", async () => {
+    const res = await save({ leaders: { added: [], edited: [], removed: [], order: [NEW_MEMBER, LISTED] } });
+    expect(res.status).toBe(200);
+    expect(writes.map((w) => [w.op, w.rows])).toEqual([["update", { sort_order: 1 }]]);
+  });
+
+  it("writes an edit to that entry's title and bio alone", async () => {
+    const res = await save({
+      leaders: { added: [], edited: [{ ...entry(LISTED), title: "Host" }], removed: [] },
+    });
+    expect(res.status).toBe(200);
+    expect(writes.map((w) => [w.op, w.rows])).toEqual([["update", { title: "Host", bio: "" }]]);
+  });
+
+  it("refuses an edit to an entry another leader removed, and applies nothing else from that Save", async () => {
+    const res = await save({
+      summary: "[]",
+      leaders: { added: [], edited: [entry(NEW_MEMBER)], removed: [] },
+    });
+    expect(res.status).toBe(410);
+    expect(writes).toEqual([]);
+  });
+
   it("keeps an entry already on the list even if that person is no longer a member", async () => {
-    // LISTED is the row the fake reports as already listed, so no membership read is asked about it.
-    const res = await save({ leaders: { list: [{ ...entry(LISTED), title: "Host" }], removed: [] } });
+    // OUTSIDER is not a member; the fake reports them listed, so no membership check may refuse the edit.
+    listedIds = [LISTED, OUTSIDER];
+    const res = await save({ leaders: { added: [], edited: [entry(OUTSIDER)], removed: [] } });
     expect(res.status).toBe(200);
   });
 
+  it("treats someone another leader just added as an edit, so a retry is safe", async () => {
+    const res = await save({
+      leaders: { added: [{ ...entry(LISTED), title: "Host" }], edited: [], removed: [], order: [LISTED] },
+    });
+    expect(res.status).toBe(200);
+    expect(writes.map((w) => [w.op, w.rows])).toEqual([
+      ["update", { title: "Host", bio: "" }],
+      ["update", { sort_order: 0 }],
+    ]);
+  });
+
+  it("answers 500 when RLS turns an update into zero rows", async () => {
+    updateRows = 0;
+    const res = await save({ leaders: { added: [], edited: [], removed: [], order: [LISTED] } });
+    expect(res.status).toBe(500);
+  });
+
   it("deletes only who was removed, scoped to this group and org", async () => {
-    const res = await save({ leaders: { list: [], removed: [LISTED] } });
+    const res = await save({ leaders: { added: [], edited: [], removed: [LISTED] } });
     expect(res.status).toBe(200);
     expect(writes).toEqual([
       {
@@ -164,7 +235,9 @@ describe("POST settings/about/save", () => {
 
   it("answers 500 rather than guessing when the membership read fails", async () => {
     failing = "group_members";
-    const res = await save({ leaders: { list: [entry(NEW_MEMBER)], removed: [] } });
+    const res = await save({
+      leaders: { added: [entry(NEW_MEMBER)], edited: [], removed: [], order: [NEW_MEMBER] },
+    });
     expect(res.status).toBe(500);
     expect(writes).toEqual([]);
   });
