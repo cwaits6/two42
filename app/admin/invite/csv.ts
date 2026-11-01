@@ -20,6 +20,16 @@ export function detectNameColumn(headers: string[]): number {
   return 0; // fallback to first column
 }
 
+// A file can list someone twice; the first row for an email wins.
+export function uniqueByEmail<T extends { email: string }>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    if (seen.has(row.email)) return false;
+    seen.add(row.email);
+    return true;
+  });
+}
+
 // Minimal CSV parser (no external dependency)
 export function parseCSV(text: string): string[][] {
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
