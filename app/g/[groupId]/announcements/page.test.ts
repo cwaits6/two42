@@ -20,9 +20,11 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/groups/server", () => ({
   requireActiveGroup: async (id: string) => ({ id, name: "Grace", role }),
 }));
+vi.mock("@/lib/time/orgZone", () => ({ getOrgTimeZone: async () => "America/New_York" }));
 vi.mock("@/components/states/ErrorState", () => ({ ErrorState: () => null }));
 vi.mock("@/components/announcements/AnnouncementCard", () => ({ AnnouncementCard: () => null }));
 
+const { PageHeader } = await import("@/components/layout/PageHeader");
 const { ErrorState } = await import("@/components/states/ErrorState");
 const { EmptyState } = await import("@/components/states/EmptyState");
 const { AnnouncementCard } = await import("@/components/announcements/AnnouncementCard");
@@ -56,6 +58,13 @@ async function emptyStateAction() {
   return empty?.props.action;
 }
 
+async function headerAction() {
+  const header = (await rendered()).find((e) => e.type === PageHeader) as
+    | ReactElement<{ actions?: ReactNode }>
+    | undefined;
+  return header?.props.actions;
+}
+
 beforeEach(() => {
   role = "leader";
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -85,6 +94,17 @@ describe("AnnouncementsPage", () => {
     role = "member";
     result = { data: [], error: null };
     expect(await emptyStateAction()).toBeFalsy();
+  });
+
+  it("offers a leader the action to add an announcement when there are some", async () => {
+    result = { data: [{ id: "a1" }], error: null };
+    expect(await headerAction()).toBeTruthy();
+  });
+
+  it("offers a member no action in the header", async () => {
+    role = "member";
+    result = { data: [{ id: "a1" }], error: null };
+    expect(await headerAction()).toBeFalsy();
   });
 
   it("lists the announcements the read returned", async () => {

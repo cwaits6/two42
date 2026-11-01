@@ -29,12 +29,17 @@ interface BlockEditorProps {
   initialContent?: CuratedPartialBlock[];
   onChange?: (blocks: CuratedBlock[]) => void;
   editable?: boolean;
+  /** The id of the visible label that names the editor for screen readers. */
+  labelledBy?: string;
 }
 
-function createEditor(initialContent?: CuratedPartialBlock[]) {
+function createEditor(initialContent?: CuratedPartialBlock[], labelledBy?: string) {
   return BlockNoteEditor.create({
     schema: curatedSchema,
     initialContent: initialContent?.length ? initialContent : undefined,
+    domAttributes: labelledBy
+      ? { editor: { role: "textbox", "aria-multiline": "true", "aria-labelledby": labelledBy } }
+      : undefined,
     // The editor's own HTML and markdown parsers map <h1>, <h4>-<h6> and inline
     // colour/alignment styles onto props the schema still allows, so pasted
     // content is curated here before it is inserted.
@@ -102,8 +107,9 @@ export default function BlockEditor({
   initialContent,
   onChange,
   editable = true,
+  labelledBy,
 }: BlockEditorProps) {
-  const [editor] = useState(() => createEditor(initialContent));
+  const [editor] = useState(() => createEditor(initialContent, labelledBy));
 
   return (
     <BlockNoteView
