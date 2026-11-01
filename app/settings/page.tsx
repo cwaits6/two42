@@ -9,6 +9,8 @@ import { FeedbackCard } from "./FeedbackCard";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { isMemberRole } from "@/lib/roles";
 import { pageTitle } from "@/lib/pageTitle";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 export const generateMetadata = () => pageTitle("Settings");
 
@@ -29,13 +31,8 @@ export default async function SettingsPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-3xl px-4 py-12">
-      <h1 className="mb-2 text-3xl font-bold text-brand-primary-text md:text-4xl">
-        Settings
-      </h1>
-      <p className="mb-8 text-muted-foreground">
-        Make the app comfortable for you. Your choices are saved automatically.
-      </p>
+    <PageContainer>
+      <PageHeader title="Settings" />
 
       <div className="space-y-6">
         <DisplayCard />
@@ -58,6 +55,6 @@ export default async function SettingsPage() {
           </Link>
         ))}
       </nav>
-    </div>
+    </PageContainer>
   );
 }

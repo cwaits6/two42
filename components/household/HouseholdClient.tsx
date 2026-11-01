@@ -6,10 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -36,7 +34,10 @@ import {
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { toast } from "sonner";
 import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
-import { Pencil, Plus, Trash2, User, UserPlus } from "lucide-react";
+import { Pencil, Plus, User, UserPlus, Users } from "lucide-react";
+import { EmptyState } from "@/components/states/EmptyState";
+import { CheckRow } from "@/components/profile/CheckRow";
+import { relLabel } from "@/components/directory/utils";
 import {
   formatPhone,
   formatPhoneAsYouType,
@@ -113,26 +114,21 @@ function MemberRow({
   action: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-3">
-        <Avatar className="h-12 w-12">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <Avatar className="h-12 w-12 shrink-0">
           {profile.avatar_url && (
             <AvatarImage src={profile.avatar_url} alt={displayName(profile)} />
           )}
-          <AvatarFallback className="bg-brand-primary text-white text-sm">
+          <AvatarFallback className="bg-brand-primary text-base text-white">
             {initials(profile)}
           </AvatarFallback>
         </Avatar>
-        <div>
-          <span className="text-base font-medium">{displayName(profile)}</span>
-          <Badge variant="outline" className="ml-2 text-base capitalize">
-            {profile.relationship}
-          </Badge>
-          {isYou && (
-            <Badge variant="secondary" className="ml-1 text-base">
-              You
-            </Badge>
-          )}
+        <div className="min-w-0">
+          <p className="text-base font-medium">{displayName(profile)}</p>
+          <p className="text-base text-muted-foreground">
+            {[relLabel(profile.relationship), isYou && "You"].filter(Boolean).join(" · ")}
+          </p>
         </div>
       </div>
       {action}
@@ -151,10 +147,10 @@ export function HouseholdClient({
   const [info, setInfo] = useState<HouseholdInfo>(fromFamily(family));
   const [savingInfo, setSavingInfo] = useState(false);
 
-  // "Add member" dialog
+  // "Add a member" dialog
   const [addDialogOpen, setAddDialogOpen] = useState(false);
 
-  // Edit sheets for another enrolled member / a family member without an account
+  // Edit sheets for another member with an account / someone without one
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [fmSheetState, setFmSheetState] = useState<
     { mode: "new" } | { mode: "edit"; member: FamilyMember } | null
@@ -164,6 +160,7 @@ export function HouseholdClient({
   // "Link existing account" search within the dialog
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchFailed, setSearchFailed] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [linkingId, setLinkingId] = useState<string | null>(null);
   const [linkRelationship, setLinkRelationship] = useState<FamilyMemberRelationship>("spouse");
@@ -198,17 +195,17 @@ export function HouseholdClient({
     if (!res.ok) {
       toast.error(
         failureMessage("save the household", res.status, {
-          400: "Couldn't save the household. Check the household name, state, ZIP code and home phone, then try again.",
+          400: "Couldn't save the household. Check the name, state, ZIP code and home phone, then try again.",
         }),
       );
       return;
     }
 
-    toast.success("Household info updated.");
+    toast.success("Household saved.");
     router.refresh();
   }
 
-  // ---- Non-auth family member delete ----
+  // ---- Remove someone without an account ----
   async function handleDeleteMember(fm: FamilyMember) {
     const res = await fetch(`/api/household/members/${fm.id}`, { method: "DELETE" }).catch(
       () => null,
@@ -237,6 +234,7 @@ export function HouseholdClient({
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     searchTimeout.current = setTimeout(async () => {
       setSearchLoading(true);
+      setSearchFailed(false);
       try {
         const res = await fetch(
           `/api/household/search-members?q=${encodeURIComponent(searchQuery)}`,
@@ -244,7 +242,13 @@ export function HouseholdClient({
         if (res.ok) {
           const body = await res.json();
           setSearchResults(body.data ?? []);
+        } else {
+          setSearchFailed(true);
+          toast.error(failureMessage("search for members", res.status));
         }
+      } catch {
+        setSearchFailed(true);
+        toast.error(failureMessage("search for members", "network"));
       } finally {
         setSearchLoading(false);
       }
@@ -285,16 +289,17 @@ export function HouseholdClient({
 
   return (
     <div className="space-y-8">
-      {/* ---- Household Info ---- */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">Household Info</CardTitle>
+          <CardTitle>
+            <h2 className="text-2xl">Household details</h2>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSaveInfo} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="family_name" className="text-base">
-                Family name <span className="text-destructive" aria-hidden>*</span>
+                Household name
               </Label>
               <Input
                 id="family_name"
@@ -413,51 +418,41 @@ export function HouseholdClient({
 
             <Separator />
 
-            <div className="space-y-3">
-              <p className="text-sm font-semibold">Privacy</p>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="hide_address" className="text-base cursor-pointer">
-                  Hide address from directory
-                </Label>
-                <Switch
-                  id="hide_address"
-                  checked={info.hide_address}
-                  onCheckedChange={(v) => setInfo({ ...info, hide_address: v })}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="hide_phone_home" className="text-base cursor-pointer">
-                  Hide home phone from directory
-                </Label>
-                <Switch
-                  id="hide_phone_home"
-                  checked={info.hide_phone_home}
-                  onCheckedChange={(v) => setInfo({ ...info, hide_phone_home: v })}
-                />
-              </div>
+            <div className="space-y-1">
+              <p className="text-base font-semibold">Privacy</p>
+              <CheckRow
+                id="hide_address"
+                label="Hide the address from the directory"
+                checked={info.hide_address}
+                onChange={(v) => setInfo({ ...info, hide_address: v })}
+              />
+              <CheckRow
+                id="hide_phone_home"
+                label="Hide the home phone from the directory"
+                checked={info.hide_phone_home}
+                onChange={(v) => setInfo({ ...info, hide_phone_home: v })}
+              />
             </div>
 
-            <div className="flex justify-end">
-              <Button
-                type="submit"
-                disabled={savingInfo}
-              >
-                {savingInfo ? "Saving..." : "Save Household Info"}
+            <div className="border-t pt-5">
+              <Button type="submit" size="lg" disabled={savingInfo}>
+                {savingInfo ? "Saving…" : "Save household"}
               </Button>
             </div>
           </form>
         </CardContent>
       </Card>
 
-      {/* ---- Enrolled Members ---- */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-xl">Members with Accounts</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle>
+              <h2 className="text-2xl">Members with an account</h2>
+            </CardTitle>
             {canEditSpouseProfiles && (
-              <Button variant="outline" size="sm" onClick={() => setAddDialogOpen(true)}>
-                <UserPlus className="mr-1 h-4 w-4" />
-                Link member
+              <Button variant="outline" onClick={() => setAddDialogOpen(true)}>
+                <UserPlus className="mr-2 h-5 w-5" aria-hidden="true" />
+                Add a member
               </Button>
             )}
           </div>
@@ -468,8 +463,8 @@ export function HouseholdClient({
             profile={currentProfile}
             isYou
             action={
-              <Button variant="outline" size="sm" onClick={onEditSelf}>
-                <Pencil className="mr-1 h-4 w-4" />
+              <Button variant="outline" onClick={onEditSelf}>
+                <Pencil className="mr-2 h-5 w-5" aria-hidden="true" />
                 Edit
               </Button>
             }
@@ -483,65 +478,58 @@ export function HouseholdClient({
                 canEditSpouseProfiles ? (
                   <Button
                     variant="outline"
-                    size="sm"
                     onClick={() => setEditingMemberId(p.id)}
+                    aria-label={`Edit ${displayName(p)}`}
                   >
-                    <Pencil className="mr-1 h-4 w-4" />
-                    Edit profile
+                    <Pencil className="mr-2 h-5 w-5" aria-hidden="true" />
+                    Edit
                   </Button>
                 ) : (
-                  <span className="text-base text-muted-foreground">Contact admin to edit</span>
+                  <span className="text-base text-muted-foreground">
+                    They edit their own profile
+                  </span>
                 )
               }
             />
           ))}
 
           {householdProfiles.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              No other enrolled members in this household yet.
+            <p className="text-base text-muted-foreground">
+              No one else in your household has an account yet.
             </p>
           )}
         </CardContent>
       </Card>
 
-      {/* ---- Non-auth Family Members ---- */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-xl">Family Members Without Accounts</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle>
+              <h2 className="text-2xl">Others in your household</h2>
+            </CardTitle>
             {canEditSpouseProfiles && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setFmSheetState({ mode: "new" })}
-              >
-                <Plus className="mr-1 h-4 w-4" />
-                Add member
+              <Button variant="outline" onClick={() => setFmSheetState({ mode: "new" })}>
+                <Plus className="mr-2 h-5 w-5" aria-hidden="true" />
+                Add someone without an account
               </Button>
             )}
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Children, parents, and others who don&apos;t have their own account. If someone
-            already has an account in the app, use{" "}
-            <button
-              type="button"
-              onClick={() => setAddDialogOpen(true)}
-              className="underline underline-offset-2 text-foreground hover:text-brand-primary-text"
-            >
-              Link member
-            </button>{" "}
-            instead.
+          <p className="text-base text-muted-foreground">
+            Children, parents and anyone else who doesn&apos;t have their own account.
+            {canEditSpouseProfiles && (
+              <> If they already have one, use Add a member instead.</>
+            )}
           </p>
 
           {initialFamilyMembers.map((fm) => (
             <div
               key={fm.id}
-              className="flex items-center justify-between bg-muted/40 rounded-md px-3 py-2"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/40 px-3 py-2"
             >
-              <div className="flex items-center gap-3">
-                <Avatar className="h-12 w-12">
+              <div className="flex min-w-0 items-center gap-3">
+                <Avatar className="h-12 w-12 shrink-0">
                   {fm.avatar_url && (
                     <AvatarImage
                       src={fm.avatar_url}
@@ -549,42 +537,38 @@ export function HouseholdClient({
                     />
                   )}
                   <AvatarFallback className="bg-muted">
-                    <User className="h-4 w-4 text-muted-foreground" />
+                    <User className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
                   </AvatarFallback>
                 </Avatar>
-                <div>
-                  <span className="text-base font-medium">
-                    {fm.preferred_name || fm.first_name}
-                    {fm.last_name && ` ${fm.last_name}`}
-                  </span>
-                  <Badge variant="outline" className="ml-2 text-base capitalize">
-                    {fm.relationship}
-                  </Badge>
+                <div className="min-w-0">
+                  <p className="text-base font-medium">{displayName(fm)}</p>
+                  <p className="text-base text-muted-foreground">{relLabel(fm.relationship)}</p>
                 </div>
               </div>
-              <div className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setFmSheetState({ mode: "edit", member: fm })}
-                >
-                  <Pencil className="mr-1 h-3.5 w-3.5" />
-                  Edit
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setRemovingMember(fm)}
-                >
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                  <span className="sr-only">Remove</span>
-                </Button>
-              </div>
+              {canEditSpouseProfiles && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setFmSheetState({ mode: "edit", member: fm })}
+                    aria-label={`Edit ${displayName(fm)}`}
+                  >
+                    <Pencil className="mr-2 h-5 w-5" aria-hidden="true" />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setRemovingMember(fm)}
+                    aria-label={`Remove ${displayName(fm)}`}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              )}
             </div>
           ))}
 
           {initialFamilyMembers.length === 0 && (
-            <p className="text-sm text-muted-foreground">No additional family members yet.</p>
+            <EmptyState icon={Users} message="No one without an account yet." />
           )}
         </CardContent>
       </Card>
@@ -593,16 +577,15 @@ export function HouseholdClient({
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Link an existing account</DialogTitle>
-            <DialogDescription>
-              Search for a member who already has an account but hasn&apos;t been assigned to a
-              household yet.
+            <DialogTitle>Add a member to your household</DialogTitle>
+            <DialogDescription className="text-base">
+              Search for someone who has an account and isn&apos;t in a household yet.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="link-relationship" className="text-sm font-medium">
+              <Label htmlFor="link-relationship" className="text-base">
                 Their relationship to your household
               </Label>
               <Select
@@ -610,7 +593,7 @@ export function HouseholdClient({
                 value={linkRelationship}
                 onValueChange={(v) => setLinkRelationship(v as FamilyMemberRelationship)}
               >
-                <SelectTrigger id="link-relationship">
+                <SelectTrigger id="link-relationship" className="w-full py-5 text-base">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -623,59 +606,61 @@ export function HouseholdClient({
               </Select>
             </div>
 
-            <Input
-              placeholder="Search by name..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+            <div className="space-y-1.5">
+              <Label htmlFor="link-search" className="text-base">
+                Search by name
+              </Label>
+              <Input
+                id="link-search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="py-5 text-base"
+              />
+            </div>
 
             {searchLoading && (
-              <p className="text-sm text-muted-foreground text-center py-2">Searching...</p>
+              <p role="status" className="py-2 text-center text-base text-muted-foreground">
+                Searching…
+              </p>
             )}
 
-            {!searchLoading && searchResults.length === 0 && searchQuery.length >= 2 && (
-              <p className="text-sm text-muted-foreground text-center py-2">
-                No unassigned members found.
+            {!searchLoading && !searchFailed && searchResults.length === 0 && searchQuery.length >= 2 && (
+              <p className="py-2 text-center text-base text-muted-foreground">
+                No one without a household matches that name.
               </p>
             )}
 
             {searchResults.map((r) => (
               <div
                 key={r.id}
-                className="flex items-center justify-between rounded-md border px-3 py-2"
+                className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2"
               >
-                <div className="flex items-center gap-2">
-                  <Avatar className="h-8 w-8">
-                    {r.avatar_url && <AvatarImage src={r.avatar_url} alt={r.first_name} />}
-                    <AvatarFallback className="text-xs bg-brand-primary text-white">
-                      {`${r.first_name.charAt(0)}${(r.last_name ?? "").charAt(0)}`.toUpperCase()}
+                <div className="flex min-w-0 items-center gap-3">
+                  <Avatar className="h-10 w-10 shrink-0">
+                    {r.avatar_url && <AvatarImage src={r.avatar_url} alt={displayName(r)} />}
+                    <AvatarFallback className="bg-brand-primary text-base text-white">
+                      {initials(r)}
                     </AvatarFallback>
                   </Avatar>
-                  <div>
-                    <p className="text-sm font-medium">
-                      {r.preferred_name || r.first_name} {r.last_name}
-                    </p>
+                  <div className="min-w-0">
+                    <p className="text-base font-medium">{displayName(r)}</p>
                     {r.email && (
-                      <p className="text-xs text-muted-foreground">{r.email}</p>
+                      <p className="truncate text-base text-muted-foreground">{r.email}</p>
                     )}
                   </div>
                 </div>
                 <Button
-                  size="sm"
                   disabled={linkingId === r.id}
                   onClick={() => handleLinkMember(r.id)}
+                  aria-label={`Add ${displayName(r)}`}
                 >
-                  {linkingId === r.id ? "Linking..." : "Add"}
+                  {linkingId === r.id ? "Adding…" : "Add"}
                 </Button>
               </div>
             ))}
           </div>
 
-          <DialogFooter showCloseButton>
-            <p className="text-xs text-muted-foreground mr-auto">
-              Only shows members with no household assigned.
-            </p>
-          </DialogFooter>
+          <DialogFooter showCloseButton />
         </DialogContent>
       </Dialog>
 
@@ -683,7 +668,7 @@ export function HouseholdClient({
       <Sheet open={editingMemberId !== null} onOpenChange={(o) => !o && setEditingMemberId(null)}>
         <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader className="border-b pb-3">
-            <SheetTitle>Edit member</SheetTitle>
+            <SheetTitle>Edit household member</SheetTitle>
           </SheetHeader>
           {editingMemberId && (() => {
             const editingProfile = householdProfiles.find((p) => p.id === editingMemberId);
@@ -707,12 +692,14 @@ export function HouseholdClient({
         </SheetContent>
       </Sheet>
 
-      {/* ---- Add / edit a family member without an account ---- */}
+      {/* ---- Add / edit someone without an account ---- */}
       <Sheet open={fmSheetState !== null} onOpenChange={(o) => !o && setFmSheetState(null)}>
         <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader className="border-b pb-3">
             <SheetTitle>
-              {fmSheetState?.mode === "edit" ? "Edit family member" : "Add family member"}
+              {fmSheetState?.mode === "edit"
+                ? `Edit ${displayName(fmSheetState.member)}`
+                : "Add someone without an account"}
             </SheetTitle>
           </SheetHeader>
           <div className="px-4 pb-6">

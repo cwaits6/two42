@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { normalizeEmail } from "@/lib/sanitize";
@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
+import { failureMessage } from "@/lib/errorCopy";
 import { Check, KeyRound, Mail } from "lucide-react";
 import { toast } from "sonner";
 
@@ -15,16 +17,21 @@ interface SignInSecurityCardProps {
   currentEmail: string;
 }
 
+type Field = "current-password" | "new-password" | "confirm-password" | "new-email";
+type FieldErrors = Partial<Record<Field, string>>;
+
 function PasswordInput({
   id,
   value,
   onChange,
   autoComplete,
+  error,
 }: {
-  id: string;
+  id: Field;
   value: string;
   onChange: (value: string) => void;
   autoComplete: string;
+  error: string | undefined;
 }) {
   const [show, setShow] = useState(false);
   return (
@@ -35,12 +42,15 @@ function PasswordInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         autoComplete={autoComplete}
-        className="py-5 pr-20 text-base"
+        className="h-12 pr-24 text-base"
+        {...invalidFieldProps(id, error)}
       />
       <button
         type="button"
         onClick={() => setShow((s) => !s)}
-        className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md bg-brand-warm px-3 py-1.5 text-sm font-semibold text-brand-primary-text"
+        aria-pressed={show}
+        aria-controls={id}
+        className="absolute right-0.5 top-1/2 inline-flex min-h-11 min-w-16 -translate-y-1/2 items-center justify-center rounded-md px-3 text-base font-semibold text-brand-primary-text hover:bg-brand-warm"
       >
         {show ? "Hide" : "Show"}
       </button>
@@ -55,21 +65,52 @@ export function SignInSecurityCard({ currentEmail }: SignInSecurityCardProps) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  // An object, so a second submit with the same first error still refocuses.
+  const [focusTarget, setFocusTarget] = useState<{ id: Field } | null>(null);
   const supabase = createClient();
 
-  const togglePanel = (target: "password" | "email") =>
+  // Focus waits for the render that ties the message to the field, so a
+  // screen reader reads the message when focus lands.
+  useEffect(() => {
+    if (focusTarget) document.getElementById(focusTarget.id)?.focus();
+  }, [focusTarget]);
+
+  const togglePanel = (target: "password" | "email") => {
+    setErrors({});
     setPanel((p) => (p === target ? "none" : target));
+  };
+
+  /** Shows the errors and focuses the first; true when there are none. */
+  const accept = (found: FieldErrors) => {
+    setErrors(found);
+    const first = (Object.keys(found) as Field[])[0];
+    if (first) setFocusTarget({ id: first });
+    return !first;
+  };
+
+  const edit = (field: Field, set: (value: string) => void) => (value: string) => {
+    set(value);
+    // The confirmation's error depends on the new password too.
+    const cleared: Field[] = field === "new-password" ? [field, "confirm-password"] : [field];
+    setErrors((prev) => {
+      if (!cleared.some((f) => f in prev)) return prev;
+      const next = { ...prev };
+      for (const f of cleared) delete next[f];
+      return next;
+    });
+  };
 
   const handlePasswordSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const found: FieldErrors = {};
+    if (!currentPassword) found["current-password"] = "Enter your current password.";
     if (newPassword.length < 8) {
-      toast.error("Your new password needs at least 8 characters.");
-      return;
+      found["new-password"] = "Enter a new password of at least 8 characters.";
+    } else if (newPassword !== confirmPassword) {
+      found["confirm-password"] = "Type the same new password again.";
     }
-    if (newPassword !== confirmPassword) {
-      toast.error("The new passwords don't match. Please type them again.");
-      return;
-    }
+    if (!accept(found)) return;
 
     setBusy(true);
     // Confirm it's really them before changing the password
@@ -79,7 +120,7 @@ export function SignInSecurityCard({ currentEmail }: SignInSecurityCardProps) {
     });
     if (verifyError) {
       setBusy(false);
-      toast.error("That current password doesn't look right.");
+      accept({ "current-password": "That isn't your current password. Try again." });
       return;
     }
 
@@ -88,7 +129,7 @@ export function SignInSecurityCard({ currentEmail }: SignInSecurityCardProps) {
 
     if (error) {
       console.error(error);
-      toast.error("Failed to update your password. Please try again.");
+      toast.error(failureMessage("change your password"));
       return;
     }
 
@@ -96,18 +137,19 @@ export function SignInSecurityCard({ currentEmail }: SignInSecurityCardProps) {
     setNewPassword("");
     setConfirmPassword("");
     setPanel("none");
-    toast.success("Your password has been updated.");
+    toast.success("Password changed.");
   };
 
   const handleEmailChange = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const email = normalizeEmail(newEmail);
-    if (!email) {
-      toast.error("Enter a valid email address.");
+    const input = e.currentTarget.elements.namedItem("new-email") as HTMLInputElement | null;
+    if (!email || input?.validity.typeMismatch) {
+      accept({ "new-email": "Enter an email address like name@example.com." });
       return;
     }
     if (email === currentEmail.toLowerCase()) {
-      toast.error("That's already your email address.");
+      accept({ "new-email": "Enter an address other than the one you use now." });
       return;
     }
 
@@ -117,22 +159,20 @@ export function SignInSecurityCard({ currentEmail }: SignInSecurityCardProps) {
 
     if (error) {
       console.error(error);
-      toast.error("Failed to start the email change. Please try again.");
+      toast.error(failureMessage("start the email change"));
       return;
     }
 
     setNewEmail("");
     setPanel("none");
-    toast.success(
-      "Confirmation links sent. Check your old and new inboxes to finish the change.",
-    );
+    toast.success("Confirmation links sent to both addresses.");
   };
 
   return (
     <Card>
       <CardContent className="pt-6">
-        <h3 className="mb-2">Sign in &amp; security</h3>
-        <p className="mb-5 text-muted-foreground">
+        <h2 className="mb-2 text-2xl">Sign-in and security</h2>
+        <p className="mb-5 text-base text-muted-foreground">
           You&apos;re signed in as{" "}
           <strong className="text-foreground">{currentEmail}</strong>
         </p>
@@ -143,22 +183,23 @@ export function SignInSecurityCard({ currentEmail }: SignInSecurityCardProps) {
             onClick={() => togglePanel("password")}
             aria-expanded={panel === "password"}
           >
-            <KeyRound className="mr-2 h-4 w-4" />
-            Change my password
+            <KeyRound className="mr-2 h-5 w-5" aria-hidden="true" />
+            Change password
           </Button>
           <Button
             variant="outline"
             onClick={() => togglePanel("email")}
             aria-expanded={panel === "email"}
           >
-            <Mail className="mr-2 h-4 w-4" />
-            Change my email
+            <Mail className="mr-2 h-5 w-5" aria-hidden="true" />
+            Change email
           </Button>
         </div>
 
         {panel === "password" && (
           <form
             onSubmit={handlePasswordSave}
+            noValidate
             className="mt-6 space-y-5 border-t border-border pt-6"
           >
             <div className="space-y-2">
@@ -168,10 +209,12 @@ export function SignInSecurityCard({ currentEmail }: SignInSecurityCardProps) {
               <PasswordInput
                 id="current-password"
                 value={currentPassword}
-                onChange={setCurrentPassword}
+                onChange={edit("current-password", setCurrentPassword)}
                 autoComplete="current-password"
+                error={errors["current-password"]}
               />
-              <p className="text-sm text-muted-foreground">
+              <FieldError fieldId="current-password" message={errors["current-password"]} />
+              <p className="text-base text-muted-foreground">
                 Can&apos;t remember it?{" "}
                 <Link
                   href="/forgot-password"
@@ -189,10 +232,12 @@ export function SignInSecurityCard({ currentEmail }: SignInSecurityCardProps) {
               <PasswordInput
                 id="new-password"
                 value={newPassword}
-                onChange={setNewPassword}
+                onChange={edit("new-password", setNewPassword)}
                 autoComplete="new-password"
+                error={errors["new-password"]}
               />
-              <p className="text-sm text-muted-foreground">
+              <FieldError fieldId="new-password" message={errors["new-password"]} />
+              <p className="text-base text-muted-foreground">
                 At least 8 characters. Tip: a short phrase of a few unrelated
                 words with a number or symbol is easy to remember and very
                 strong.
@@ -206,20 +251,22 @@ export function SignInSecurityCard({ currentEmail }: SignInSecurityCardProps) {
               <PasswordInput
                 id="confirm-password"
                 value={confirmPassword}
-                onChange={setConfirmPassword}
+                onChange={edit("confirm-password", setConfirmPassword)}
                 autoComplete="new-password"
+                error={errors["confirm-password"]}
               />
+              <FieldError fieldId="confirm-password" message={errors["confirm-password"]} />
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <Button type="submit" disabled={busy || !currentPassword || !newPassword}>
-                <Check className="mr-2 h-4 w-4" />
-                {busy ? "Saving..." : "Save my new password"}
+              <Button type="submit" disabled={busy}>
+                <Check className="mr-2 h-5 w-5" aria-hidden="true" />
+                {busy ? "Saving…" : "Save password"}
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setPanel("none")}
+                onClick={() => togglePanel("password")}
               >
                 Cancel
               </Button>
@@ -230,41 +277,41 @@ export function SignInSecurityCard({ currentEmail }: SignInSecurityCardProps) {
         {panel === "email" && (
           <form
             onSubmit={handleEmailChange}
-            className="mt-6 space-y-3 border-t border-border pt-6"
+            noValidate
+            className="mt-6 space-y-5 border-t border-border pt-6"
           >
-            <Label htmlFor="new-email" className="text-base">
-              New email address
-            </Label>
-            <p className="text-sm text-muted-foreground">
-              We&apos;ll send confirmation links to your old and new addresses;
-              the change happens after you click both.
-            </p>
-            <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="space-y-2">
+              <Label htmlFor="new-email" className="text-base">
+                New email address
+              </Label>
               <Input
                 id="new-email"
                 type="email"
+                autoComplete="email"
                 value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                placeholder="new.email@example.com"
-                className="py-5 text-base"
+                onChange={(e) => edit("new-email", setNewEmail)(e.target.value)}
+                className="h-12 text-base"
+                {...invalidFieldProps("new-email", errors["new-email"])}
               />
+              <FieldError fieldId="new-email" message={errors["new-email"]} />
+              <p className="text-base text-muted-foreground">
+                We&apos;ll email a confirmation link to your old and your new
+                address. The change happens once you open both.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button type="submit" disabled={busy}>
+                <Mail className="mr-2 h-5 w-5" aria-hidden="true" />
+                {busy ? "Sending…" : "Send confirmation links"}
+              </Button>
               <Button
-                type="submit"
+                type="button"
                 variant="outline"
-                disabled={busy || !newEmail}
-                className="shrink-0"
+                onClick={() => togglePanel("email")}
               >
-                <Mail className="mr-2 h-4 w-4" />
-                {busy ? "Sending..." : "Send confirmation links"}
+                Cancel
               </Button>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setPanel("none")}
-            >
-              Cancel
-            </Button>
           </form>
         )}
       </CardContent>

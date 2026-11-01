@@ -120,13 +120,24 @@ describe("ProfileForm inline errors", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
-  it("marks a missing birthday on the month and day it needs", async () => {
+  it("saves without a birthday", async () => {
     const form = await mount({ birth_month: null, birth_day: null });
     await form.submit();
 
-    expect(form.field("birth_month").getAttribute("aria-invalid")).toBe("true");
+    expect(document.querySelector('[aria-invalid="true"]')).toBeNull();
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ birth_month: null, birth_day: null, birth_year: null }),
+    );
+  });
+
+  it("marks the day when a birthday has only its month", async () => {
+    const form = await mount({ birth_month: 5, birth_day: null });
+    await form.submit();
+
     expect(form.field("birth_day").getAttribute("aria-invalid")).toBe("true");
-    expect(document.activeElement).toBe(form.field("birth_month"));
+    expect(form.message("birth_day")).toBe("Enter the day of the birthday.");
+    expect(document.activeElement).toBe(form.field("birth_day"));
+    expect(update).not.toHaveBeenCalled();
   });
 
   it("marks a malformed email and an out-of-range birth year", async () => {
@@ -136,7 +147,9 @@ describe("ProfileForm inline errors", () => {
     expect(form.field("email").getAttribute("aria-invalid")).toBe("true");
     expect(form.message("email")).toBe("Enter an email address like name@example.com.");
     expect(form.field("birth_year").getAttribute("aria-invalid")).toBe("true");
-    expect(form.message("birth_year")).toBe("Enter a year from 1900 to 2100, or leave it blank.");
+    expect(form.message("birth_year")).toBe(
+      `Enter a year from 1900 to ${new Date().getFullYear()}, or leave it blank.`,
+    );
     expect(document.activeElement).toBe(form.field("email"));
     expect(update).not.toHaveBeenCalled();
   });

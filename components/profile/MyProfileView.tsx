@@ -40,7 +40,7 @@ export function MyProfileView({ profile, family }: MyProfileViewProps) {
             {profile.avatar_url && (
               <AvatarImage src={profile.avatar_url} alt={displayName(profile)} />
             )}
-            <AvatarFallback className="bg-brand-accent-text text-white text-lg">
+            <AvatarFallback className="bg-brand-primary text-white text-lg">
               {initials(profile)}
             </AvatarFallback>
           </Avatar>
@@ -58,12 +58,12 @@ export function MyProfileView({ profile, family }: MyProfileViewProps) {
         </div>
       </div>
 
-      {/* Family photo */}
+      {/* Household photo */}
       {family?.photo_url && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={family.photo_url}
-          alt={`${family.family_name} family photo`}
+          alt="Household photo"
           className="h-56 w-full rounded-xl object-cover sm:h-64"
         />
       )}

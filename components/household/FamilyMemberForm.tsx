@@ -1,13 +1,11 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -18,25 +16,18 @@ import {
 import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
 import { Camera } from "lucide-react";
+import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
+import { CheckRow } from "@/components/profile/CheckRow";
+import {
+  MONTHS,
+  birthdayColumns,
+  birthdayErrors,
+  type BirthdayErrors,
+} from "@/components/profile/birthday";
 import { titleCaseName } from "@/lib/sanitize";
 import { mintSignedUrl, uploadImage } from "@/lib/uploadImage";
 import { relObjectPath } from "@/lib/storagePaths";
 import type { FamilyMember, FamilyMemberRelationship, FamilyUnit } from "@/lib/types";
-
-const MONTHS = [
-  { value: "1", label: "January" },
-  { value: "2", label: "February" },
-  { value: "3", label: "March" },
-  { value: "4", label: "April" },
-  { value: "5", label: "May" },
-  { value: "6", label: "June" },
-  { value: "7", label: "July" },
-  { value: "8", label: "August" },
-  { value: "9", label: "September" },
-  { value: "10", label: "October" },
-  { value: "11", label: "November" },
-  { value: "12", label: "December" },
-];
 
 const RELATIONSHIPS: { value: FamilyMemberRelationship; label: string }[] = [
   { value: "child", label: "Child" },
@@ -46,33 +37,7 @@ const RELATIONSHIPS: { value: FamilyMemberRelationship; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-function CheckRow({
-  id,
-  label,
-  checked,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <label
-      htmlFor={id}
-      className="flex min-h-12 cursor-pointer items-center gap-3 py-1 text-base font-medium"
-    >
-      <input
-        id={id}
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="size-5 shrink-0 accent-brand-primary"
-      />
-      {label}
-    </label>
-  );
-}
+type FieldErrors = BirthdayErrors & { first_name?: string };
 
 interface Props {
   /** null = creating new member */
@@ -85,8 +50,8 @@ interface Props {
 }
 
 export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged }: Props) {
-  // Last name defaults to the family surname unless marked different — mirrors
-  // the same convention used for enrolled members in ProfileForm. A blank
+  // Last name defaults to the household surname unless marked different, as
+  // ProfileForm does for members with an account. A blank
   // existing last name is treated as "not yet set" rather than "different",
   // so new and not-yet-named members inherit silently.
   const familySurname = family.family_name.replace(/\s+family$/i, "").trim();
@@ -106,6 +71,9 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
   const [avatarUrl, setAvatarUrl] = useState<string | null>(member?.avatar_url ?? null);
 
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  // An object, so a second submit with the same first error still refocuses.
+  const [focusTarget, setFocusTarget] = useState<{ id: string } | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -116,7 +84,20 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
   const displayLast = effectiveLastName;
   const initials =
     `${firstName.charAt(0)}${effectiveLastName.charAt(0)}`.toUpperCase() || "?";
-  const currentYear = new Date().getFullYear();
+  const birthday = { month: birthMonth, day: birthDay, year: birthYear };
+
+  // Focus waits for the render that ties the message to the field.
+  useEffect(() => {
+    if (focusTarget) document.getElementById(focusTarget.id)?.focus();
+  }, [focusTarget]);
+
+  const clearError = (field: keyof FieldErrors) =>
+    setErrors((prev) => {
+      if (!(field in prev)) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
 
   async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -156,25 +137,14 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
     e.preventDefault();
 
     const first = titleCaseName(firstName);
-    if (!first) {
-      toast.error("First name is required.");
-      return;
-    }
-
-    // Basic date sanity checks
-    const dayNum = birthDay ? Number(birthDay) : null;
-    const monthNum = birthMonth ? Number(birthMonth) : null;
-    const yearNum = birthYear ? Number(birthYear) : null;
-    if (dayNum !== null && (dayNum < 1 || dayNum > 31)) {
-      toast.error("Birthday day must be between 1 and 31.");
-      return;
-    }
-    if (yearNum !== null && (yearNum < 1900 || yearNum > currentYear)) {
-      toast.error(`Birthday year must be between 1900 and ${currentYear}.`);
-      return;
-    }
-    if ((monthNum !== null) !== (dayNum !== null)) {
-      toast.error("Please provide both a month and a day for the birthday.");
+    const found: FieldErrors = {
+      ...(first ? {} : { first_name: "Enter a first name." }),
+      ...birthdayErrors(birthday),
+    };
+    setErrors(found);
+    const firstInvalid = Object.keys(found)[0];
+    if (firstInvalid) {
+      setFocusTarget({ id: firstInvalid });
       return;
     }
 
@@ -188,9 +158,7 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
       last_name: last || null,
       preferred_name: titleCaseName(preferredName) || null,
       relationship,
-      birth_month: birthMonth ? Number(birthMonth) : null,
-      birth_day: birthDay ? Number(birthDay) : null,
-      birth_year: birthYear ? Number(birthYear) : null,
+      ...birthdayColumns(birthday),
       is_class_member: isClassMember,
     };
 
@@ -210,37 +178,35 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
       return;
     }
 
-    if (isNew) {
-      toast.success("Family member added. You can add a photo by editing them.");
-    } else {
-      toast.success("Family member updated.");
-    }
+    toast.success(isNew ? `${first} added. Edit them to add a photo.` : `${first} saved.`);
     onSaved?.();
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} noValidate className="space-y-6">
       {/* Avatar — only when editing an existing member */}
       {!isNew && (
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center gap-6">
-              <div className="relative">
-                <Avatar className="h-24 w-24">
-                  {avatarUrl && <AvatarImage src={avatarUrl} alt="Photo" />}
-                  <AvatarFallback className="text-2xl bg-brand-primary text-white">
-                    {initials}
-                  </AvatarFallback>
-                </Avatar>
+            <div className="flex flex-wrap items-center gap-6">
+              <Avatar className="h-24 w-24 shrink-0">
+                {avatarUrl && <AvatarImage src={avatarUrl} alt="Photo" />}
+                <AvatarFallback className="text-2xl bg-brand-primary text-white">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 space-y-2">
+                <p className="text-lg font-semibold">
+                  {displayFirst} {displayLast}
+                </p>
                 <Button
                   type="button"
-                  size="icon"
+                  variant="outline"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingAvatar}
-                  className="absolute -bottom-1 -right-1 rounded-full shadow-md"
-                  aria-label="Upload photo"
                 >
-                  <Camera className="h-5 w-5" />
+                  <Camera className="mr-2 h-5 w-5" aria-hidden="true" />
+                  {uploadingAvatar ? "Uploading…" : "Change photo"}
                 </Button>
                 <input
                   ref={fileInputRef}
@@ -249,14 +215,6 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
                   onChange={handleAvatarUpload}
                   className="hidden"
                 />
-              </div>
-              <div>
-                <p className="text-lg font-semibold">
-                  {displayFirst} {displayLast}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {uploadingAvatar ? "Uploading..." : "Click the camera icon to update the photo."}
-                </p>
               </div>
             </div>
           </CardContent>
@@ -269,21 +227,25 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
           <div className={familySurname ? "space-y-3" : "grid sm:grid-cols-2 gap-4"}>
             <div className="space-y-2">
               <Label htmlFor="first_name" className="text-base">
-                First name <span className="text-destructive" aria-hidden>*</span>
+                First name
               </Label>
               <Input
                 id="first_name"
                 value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
+                onChange={(e) => {
+                  setFirstName(e.target.value);
+                  clearError("first_name");
+                }}
                 onBlur={(e) => setFirstName(titleCaseName(e.target.value) || "")}
-                required
                 className="text-base py-5"
+                {...invalidFieldProps("first_name", errors.first_name)}
               />
+              <FieldError fieldId="first_name" message={errors.first_name} />
             </div>
             {familySurname && (
               <CheckRow
                 id="different_last_name"
-                label={`Last name is different from the family's (${familySurname})`}
+                label={`Last name is different from the household's (${familySurname})`}
                 checked={differentLastName}
                 onChange={setDifferentLastName}
               />
@@ -306,7 +268,7 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
 
           <div className="space-y-2">
             <Label htmlFor="preferred_name" className="text-base">
-              Preferred name / nickname{" "}
+              Preferred name{" "}
               <span className="text-muted-foreground font-normal">(optional)</span>
             </Label>
             <Input
@@ -314,21 +276,20 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
               value={preferredName}
               onChange={(e) => setPreferredName(e.target.value)}
               onBlur={(e) => setPreferredName(titleCaseName(e.target.value) || "")}
-              placeholder="Goes by..."
               className="text-base py-5"
             />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="relationship" className="text-base">
-              Relationship <span className="text-destructive" aria-hidden>*</span>
+              Relationship
             </Label>
             <Select
               items={RELATIONSHIPS}
               value={relationship}
               onValueChange={(v) => setRelationship(v as FamilyMemberRelationship)}
             >
-              <SelectTrigger id="relationship" className="text-base py-5">
+              <SelectTrigger id="relationship" className="w-full text-base py-5">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -346,14 +307,25 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
       {/* Birthday */}
       <Card>
         <CardContent className="pt-6 space-y-4">
-          <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Birthday
+          <p className="text-base font-semibold">
+            Birthday <span className="font-normal text-muted-foreground">(optional)</span>
           </p>
           <div className="grid grid-cols-[1.6fr_1fr_1fr] gap-3">
             <div className="space-y-2">
-              <Label className="text-base">Month</Label>
-              <Select items={MONTHS} value={birthMonth} onValueChange={(v) => setBirthMonth(v ?? "")}>
-                <SelectTrigger className="w-full text-base py-5">
+              <Label htmlFor="birth_month" className="text-base">Month</Label>
+              <Select
+                items={MONTHS}
+                value={birthMonth}
+                onValueChange={(v) => {
+                  setBirthMonth(v ?? "");
+                  clearError("birth_month");
+                }}
+              >
+                <SelectTrigger
+                  id="birth_month"
+                  className="w-full text-base py-5"
+                  {...invalidFieldProps("birth_month", errors.birth_month)}
+                >
                   <SelectValue placeholder="Month" />
                 </SelectTrigger>
                 <SelectContent>
@@ -373,9 +345,12 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
                 min="1"
                 max="31"
                 value={birthDay}
-                onChange={(e) => setBirthDay(e.target.value)}
-                placeholder="Day"
+                onChange={(e) => {
+                  setBirthDay(e.target.value);
+                  clearError("birth_day");
+                }}
                 className="text-base py-5"
+                {...invalidFieldProps("birth_day", errors.birth_day)}
               />
             </div>
             <div className="space-y-2">
@@ -384,52 +359,43 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
                 id="birth_year"
                 type="number"
                 min="1900"
-                max={currentYear}
                 value={birthYear}
-                onChange={(e) => setBirthYear(e.target.value)}
-                placeholder="Year"
+                onChange={(e) => {
+                  setBirthYear(e.target.value);
+                  clearError("birth_year");
+                }}
                 className="text-base py-5"
+                {...invalidFieldProps("birth_year", errors.birth_year)}
               />
             </div>
           </div>
+          <FieldError fieldId="birth_month" message={errors.birth_month} />
+          <FieldError fieldId="birth_day" message={errors.birth_day} />
+          <FieldError fieldId="birth_year" message={errors.birth_year} />
         </CardContent>
       </Card>
 
-      {/* Class membership */}
+      {/* Group attendance */}
       <Card>
         <CardContent className="pt-6">
-          <Separator className="mb-4" />
-          <div className="flex items-center justify-between">
-            <div>
-              <Label htmlFor="is_class_member" className="text-base cursor-pointer">
-                Attends small group
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                Mark this if they attend the group themselves.
-              </p>
-            </div>
-            <Switch
-              id="is_class_member"
-              checked={isClassMember}
-              onCheckedChange={setIsClassMember}
-            />
-          </div>
+          <CheckRow
+            id="is_class_member"
+            label="Attends a group"
+            checked={isClassMember}
+            onChange={setIsClassMember}
+          />
+          <p className="text-base text-muted-foreground">
+            Check this if they come to a group themselves.
+          </p>
         </CardContent>
       </Card>
 
-      <div className="flex justify-end gap-3">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => onCancel?.()}
-        >
-          Cancel
+      <div className="flex flex-wrap gap-3">
+        <Button type="submit" disabled={saving}>
+          {saving ? "Saving…" : isNew ? "Add to household" : "Save changes"}
         </Button>
-        <Button
-          type="submit"
-          disabled={saving}
-        >
-          {saving ? "Saving..." : isNew ? "Add Family Member" : "Save Changes"}
+        <Button type="button" variant="outline" onClick={() => onCancel?.()}>
+          Cancel
         </Button>
       </div>
     </form>

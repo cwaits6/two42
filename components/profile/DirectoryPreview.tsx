@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/sheet";
 import { Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
+import { failureMessage } from "@/lib/errorCopy";
 import { PersonCard } from "@/components/directory/PersonCard";
 import type {
   DirectoryProfile,
@@ -87,7 +88,7 @@ export function DirectoryPreview() {
     ]);
 
     if (error || !profile) {
-      toast.error("Failed to load your profile.");
+      toast.error(failureMessage("load your directory entry"));
       setLoading(false);
       return;
     }
@@ -141,13 +142,12 @@ export function DirectoryPreview() {
     <>
       <Button
         variant="outline"
-        size="sm"
         onClick={openPreview}
         disabled={loading}
         className="gap-2"
       >
-        <Eye className="h-4 w-4" />
-        {loading ? "Loading..." : "Preview my directory entry"}
+        <Eye className="h-5 w-5" aria-hidden="true" />
+        {loading ? "Loading…" : "Preview my directory entry"}
       </Button>
 
       <Sheet open={open} onOpenChange={setOpen}>
@@ -161,11 +161,11 @@ export function DirectoryPreview() {
 
           {unlisted ? (
             <div className="px-4 py-8 text-center space-y-2">
-              <EyeOff className="h-8 w-8 mx-auto text-muted-foreground" />
-              <p className="font-medium">You&apos;re hidden from the directory</p>
-              <p className="text-sm text-muted-foreground">
-                Turn off &ldquo;Hide from directory&rdquo; in your privacy
-                settings to appear to other members.
+              <EyeOff className="h-8 w-8 mx-auto text-muted-foreground" aria-hidden="true" />
+              <p className="font-medium">You&apos;re hidden from the directory.</p>
+              <p className="text-base text-muted-foreground">
+                To appear to other members, uncheck &ldquo;Hide me from the
+                directory&rdquo; on your profile and save.
               </p>
             </div>
           ) : (
