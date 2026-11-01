@@ -63,7 +63,6 @@ export default async function SettingsPage() {
           <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Giving</h2>
           <GivingSettings
             stewardsCanManage={givingSettings.stewardsCanManage}
-            dashboardTile={givingSettings.dashboardTile}
           />
           <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Time zone</h2>
           <TimezoneSettings orgId={profile.org_id} timezone={await getOrgTimeZone()} />

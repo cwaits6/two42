@@ -77,29 +77,15 @@ describe("givingStewardsCanManage", () => {
 });
 
 describe("getGivingSettings", () => {
-  it("reads both keys in one query scoped on the org", async () => {
+  it("reads who can manage funds, scoped on the org", async () => {
     const { client, calls } = fakeClient({
-      site_settings: [
-        { key: "giving_manage_mode", value: "admins" },
-        { key: "giving_dashboard_tile", value: "off" },
-      ],
+      site_settings: [{ key: "giving_manage_mode", value: "admins" }],
     });
-    expect(await getGivingSettings(client, ORG)).toEqual({
-      stewardsCanManage: false,
-      dashboardTile: false,
-    });
+    expect(await getGivingSettings(client, ORG)).toEqual({ stewardsCanManage: false });
     expect(calls[0].filters).toEqual([
       ["eq", "org_id", ORG],
-      ["in", "key", ["giving_manage_mode", "giving_dashboard_tile"]],
+      ["eq", "key", "giving_manage_mode"],
     ]);
-  });
-
-  it("applies both defaults when the org has no rows", async () => {
-    const { client } = fakeClient();
-    expect(await getGivingSettings(client, ORG)).toEqual({
-      stewardsCanManage: true,
-      dashboardTile: true,
-    });
   });
 });
 
@@ -118,6 +104,24 @@ describe("loadFundFormData", () => {
       ["p1", "signed:a.jpg"],
       ["p2", null],
     ]);
+  });
+
+  it("reports a failed read, so an empty picker is never taken for no members", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failing = {
+      from: () => {
+        const chain = {
+          select: () => chain,
+          order: () => chain,
+          eq: () => chain,
+          then: (resolve: (value: unknown) => unknown) =>
+            Promise.resolve(resolve({ data: null, error: { message: "boom" } })),
+        };
+        return chain;
+      },
+    } as unknown as SupabaseClient;
+    expect(await loadFundFormData(failing, ORG)).toEqual({ members: [], failed: true });
+    consoleError.mockRestore();
   });
 });
 
