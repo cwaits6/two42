@@ -14,7 +14,7 @@ vi.mock("@/lib/storageRead", () => ({
     urls.map((u) => (u ? `signed:${u}` : null)),
 }));
 
-const { getGivingSettings, givingStewardsCanManage, loadFundFormData, signStewardAvatars } =
+const { givingStewardsCanManage, loadFundFormData, signStewardAvatars } =
   await import("@/lib/giving/server");
 
 interface Call {
@@ -73,19 +73,6 @@ describe("givingStewardsCanManage", () => {
   it("returns true for an explicit stewards row", async () => {
     const { client } = fakeClient({ site_settings: [{ value: "stewards" }] });
     expect(await givingStewardsCanManage(client, ORG)).toBe(true);
-  });
-});
-
-describe("getGivingSettings", () => {
-  it("reads who can manage funds, scoped on the org", async () => {
-    const { client, calls } = fakeClient({
-      site_settings: [{ key: "giving_manage_mode", value: "admins" }],
-    });
-    expect(await getGivingSettings(client, ORG)).toEqual({ stewardsCanManage: false });
-    expect(calls[0].filters).toEqual([
-      ["eq", "org_id", ORG],
-      ["eq", "key", "giving_manage_mode"],
-    ]);
   });
 });
 

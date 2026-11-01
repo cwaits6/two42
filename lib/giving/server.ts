@@ -29,14 +29,6 @@ export async function givingStewardsCanManage(
   return (data?.value ?? "stewards") === "stewards";
 }
 
-/** The giving settings on the church settings page */
-export async function getGivingSettings(
-  supabase: SupabaseClient,
-  orgId: string
-): Promise<{ stewardsCanManage: boolean }> {
-  return { stewardsCanManage: await givingStewardsCanManage(supabase, orgId) };
-}
-
 type StewardAvatarSource = {
   steward?: { avatar_url: string | null } | null;
   co_steward?: { avatar_url: string | null } | null;

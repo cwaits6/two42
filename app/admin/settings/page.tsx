@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DirectoryVisibilitySettings } from "@/components/directory/DirectoryVisibilitySettings";
 import { GivingSettings } from "@/components/giving/GivingSettings";
 import { getDirectoryVisibility } from "@/lib/directory/visibility";
-import { getGivingSettings } from "@/lib/giving/server";
+import { givingStewardsCanManage } from "@/lib/giving/server";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { TimezoneSettings } from "@/components/admin/TimezoneSettings";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
@@ -27,8 +27,8 @@ export default async function SettingsPage() {
     .single();
   if (profile?.role !== "admin") redirect("/dashboard");
 
-  const [givingSettings, directoryVisibility] = await Promise.all([
-    getGivingSettings(supabase, profile.org_id),
+  const [stewardsCanManage, directoryVisibility] = await Promise.all([
+    givingStewardsCanManage(supabase, profile.org_id),
     getDirectoryVisibility(),
   ]);
 
@@ -61,9 +61,7 @@ export default async function SettingsPage() {
             </p>
           )}
           <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Giving</h2>
-          <GivingSettings
-            stewardsCanManage={givingSettings.stewardsCanManage}
-          />
+          <GivingSettings stewardsCanManage={stewardsCanManage} />
           <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Time zone</h2>
           <TimezoneSettings orgId={profile.org_id} timezone={await getOrgTimeZone()} />
         </CardContent>
