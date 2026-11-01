@@ -4,8 +4,8 @@
 --
 -- Every actor is a seeded person, because the rule is about real roles: Leo is
 -- a member of Group B, Zoe leads it, the church admin is a plain member of it
--- and leads Group A. Failures are captured as values, so an unfixed schema
--- reports `not ok` lines instead of aborting the transaction.
+-- and leads Group A. Failures are captured as values, so a schema without
+-- these rules reports `not ok` lines instead of aborting the transaction.
 --
 -- Run locally (rollback-safe, never mutates the shared local stack):
 --
@@ -346,6 +346,55 @@ select is(
   pg_temp.val('caleb.dummyfield@example.test',
     $q$select concat_ws('|', mine::text, first_name) from public.prayer_wall where id = 'aaaa0000-0000-0000-0000-0000000000b1'$q$),
   'false', 'a member sees no name for a by-name author they share no group with');
+insert into public.group_members (org_id, group_id, profile_id, role)
+select org_id, 'c0000000-0000-0000-0000-00000000000b', id, 'member'
+  from public.profiles where email = 'isaac.seedly@example.test';
+
+-- The helper's by-name arm is a hand copy of the profiles read policy, which a
+-- definer function cannot reuse. Every caller in the group must get the id
+-- exactly where that policy shows them the profile.
+create function pg_temp.helper_follows_profiles_policy(_state text) returns setof text language sql as $$
+  select is(
+    pg_temp.val(caller, $q$select public.prayer_request_visible_author('aaaa0000-0000-0000-0000-0000000000b1')$q$) <> '<null>',
+    pg_temp.val(caller, format('select id from public.profiles where id = %L', pg_temp.uid('isaac.seedly@example.test'))) <> '<null>',
+    caller || ' gets the id only where the profile is visible: ' || _state)
+  from unnest(array['admin@local.dev', 'caleb.dummyfield@example.test',
+                    'leo.loremsworth@example.test', 'zoe.dummyfield@example.test']) caller;
+$$;
+
+select pg_temp.helper_follows_profiles_policy('shared groups, in the group');
+
+update public.profiles set is_unlisted = true where email = 'isaac.seedly@example.test';
+select pg_temp.helper_follows_profiles_policy('shared groups, unlisted');
+
+update public.profiles
+   set family_id = (select family_id from public.profiles where email = 'isaac.seedly@example.test')
+ where email = 'caleb.dummyfield@example.test';
+select pg_temp.helper_follows_profiles_policy('shared groups, unlisted, one caller in the household');
+update public.profiles set family_id = null where email = 'caleb.dummyfield@example.test';
+update public.profiles set is_unlisted = false where email = 'isaac.seedly@example.test';
+
+update public.profiles set role = 'pending' where email = 'isaac.seedly@example.test';
+select pg_temp.helper_follows_profiles_policy('shared groups, pending');
+update public.profiles set role = 'member' where email = 'isaac.seedly@example.test';
+
+delete from public.group_members
+ where profile_id = pg_temp.uid('isaac.seedly@example.test')
+   and group_id = 'c0000000-0000-0000-0000-00000000000b';
+select pg_temp.helper_follows_profiles_policy('shared groups, left the group');
+
+update public.organizations o
+   set directory_visibility = 'org'
+ where o.id = (select org_id from public.profiles where email = 'isaac.seedly@example.test');
+select pg_temp.helper_follows_profiles_policy('whole church, left the group');
+
+update public.profiles set is_unlisted = true where email = 'isaac.seedly@example.test';
+select pg_temp.helper_follows_profiles_policy('whole church, unlisted');
+update public.profiles set is_unlisted = false where email = 'isaac.seedly@example.test';
+
+update public.organizations o
+   set directory_visibility = 'shared_groups'
+ where o.id = (select org_id from public.profiles where email = 'isaac.seedly@example.test');
 insert into public.group_members (org_id, group_id, profile_id, role)
 select org_id, 'c0000000-0000-0000-0000-00000000000b', id, 'member'
   from public.profiles where email = 'isaac.seedly@example.test';
