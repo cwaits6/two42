@@ -200,7 +200,10 @@ The permissive arms compose on the org floor as:
 
 - read: `org_id = (select app_request_org_id()) and
   is_group_member(group_id)` — published announcements for members, drafts
-  for leaders; a prayer request is readable by every member of its group;
+  for leaders; a prayer request is readable by every member of its group,
+  except `author_id`, which no client role can read: `prayer_wall` reaches it
+  only through `prayer_request_visible_author()`, and only the author can change
+  `is_anonymous`;
 - write: `org_id = (select app_request_org_id()) and
   is_group_leader(group_id)`, or the existing author rule
   (`prayer_requests`, `prayer_responses`) or steward rule (`giving_funds`,
@@ -827,6 +830,12 @@ table's own FK.
   `<org_id>/events/<event_id>/…` — the event id resolves the group, and the
   three event-image policies gate on `is_group_leader(e.group_id)` through
   it.
+- `prayer_requests` has column-level `select` and `update` grants that leave
+  out `author_id`, the same shape as `organizations`: a new column is
+  unreadable and unwritable to clients until it is listed. The grants bind
+  client sessions only. Database-level access by the operator can still link a
+  request to its author; whether that changes is decided with the prayer
+  encryption work.
 - The edge functions' `group_id` / `team_id` bindings are review-enforced:
   `check-service-role-org-scope.mjs` proves each chain names the predicate,
   not that it binds the right variable. `_shared/event-recipients.ts` and
