@@ -1,8 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+// @vitest-environment jsdom
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({}) }));
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const { leavingHref } = await import("./useLeaveGuard");
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+
+const { leavingHref, useLeaveGuard } = await import("./useLeaveGuard");
 
 const HERE = "https://two42.test/g/1/settings/about?x=1";
 const click = {
@@ -34,5 +40,86 @@ describe("leavingHref", () => {
     ["a link to a place on this page", { href: `${HERE}#leadership` }],
   ])("lets %s through", (_name, override) => {
     expect(leavingHref({ ...click, ...override }, HERE)).toBeNull();
+  });
+});
+
+describe("useLeaveGuard", () => {
+  let guard: ReturnType<typeof useLeaveGuard>;
+  let root: Root;
+  let container: HTMLElement;
+  let link: HTMLAnchorElement;
+  let go: ReturnType<typeof vi.spyOn>;
+
+  function Harness({ dirty }: { dirty: boolean }) {
+    guard = useLeaveGuard(dirty);
+    return null;
+  }
+  const render = (dirty: boolean) => act(() => root.render(createElement(Harness, { dirty })));
+  const pressBack = () => act(() => void window.dispatchEvent(new PopStateEvent("popstate")));
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    go = vi.spyOn(window.history, "go").mockImplementation(() => {});
+    vi.spyOn(window.history, "back").mockImplementation(() => {});
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    link = document.createElement("a");
+    link.href = "/elsewhere";
+    document.body.appendChild(link);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    link.remove();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("asks about Back, and goes past its spare history entry on Leave", () => {
+    render(true);
+    pressBack();
+    expect(guard.asking).toBe(true);
+    act(() => guard.leave());
+    expect(guard.asking).toBe(false);
+    expect(go).toHaveBeenCalledWith(-2);
+  });
+
+  it("lets the traversal Leave started through without asking again", () => {
+    render(true);
+    pressBack();
+    act(() => guard.leave());
+    pressBack();
+    expect(guard.asking).toBe(false);
+  });
+
+  it("keeps asking after a Leave on Back that had nowhere to go", () => {
+    render(true);
+    pressBack();
+    act(() => guard.leave());
+    act(() => void vi.runAllTimers());
+
+    pressBack();
+    expect(guard.asking).toBe(true);
+    act(() => guard.stay());
+
+    act(() => link.click());
+    expect(guard.asking).toBe(true);
+    expect(push).not.toHaveBeenCalled();
+
+    const reload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(reload);
+    expect(reload.defaultPrevented).toBe(true);
+  });
+
+  it("drops the question when a Save finishes while it is open, and does not raise it later", () => {
+    render(true);
+    pressBack();
+    expect(guard.asking).toBe(true);
+    render(false);
+    expect(guard.asking).toBe(false);
+    render(true);
+    expect(guard.asking).toBe(false);
   });
 });

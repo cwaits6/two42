@@ -27,6 +27,9 @@ export function leavingHref(click: ClickFacts, currentHref: string): string | nu
   return to.href;
 }
 
+// Long enough for a real traversal to start; a page that has left never reads it.
+const BACK_SETTLE_MS = 1000;
+
 type Leaving = { kind: "link"; href: string; sameOrigin: boolean } | { kind: "back" };
 
 /**
@@ -41,6 +44,9 @@ export function useLeaveGuard(dirty: boolean) {
   const [leaving, setLeaving] = useState<Leaving | null>(null);
   const hasSpareEntry = useRef(false);
   const released = useRef(false);
+
+  // A Save finishing while the question is open leaves nothing to ask about.
+  if (!dirty && leaving) setLeaving(null);
 
   useEffect(() => {
     if (!dirty) {
@@ -108,6 +114,11 @@ export function useLeaveGuard(dirty: boolean) {
     if (target?.kind === "back") {
       // One step off the spare entry, one more to where Back was going.
       window.history.go(-2);
+      // With no earlier entry go() does nothing and reports nothing, and the
+      // page stays open and unsaved, so it has to keep asking.
+      window.setTimeout(() => {
+        released.current = false;
+      }, BACK_SETTLE_MS);
     } else if (target?.sameOrigin) {
       router.push(target.href);
     } else if (target) {
