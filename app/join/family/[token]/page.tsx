@@ -1,41 +1,27 @@
-import { createServiceClient } from "@/lib/supabase/server";
-import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { siteConfig } from "@/lib/config";
 import { AuthShell } from "@/app/(auth)/_components/AuthShell";
-import { FamilyRequestForm } from "./FamilyRequestForm";
+import { InvalidLink } from "@/app/(auth)/_components/InvalidLink";
+import { ErrorState } from "@/components/states/ErrorState";
+import { isUuid } from "@/lib/groups/active";
 import { pageTitle } from "@/lib/pageTitle";
+import { createServiceClient } from "@/lib/supabase/server";
+import { CHURCH_ADMIN_INVALID_HELP } from "@/lib/groups/invites";
+import { FamilyRequestForm } from "./FamilyRequestForm";
 
 interface PageProps {
   params: Promise<{ token: string }>;
 }
 
-export const generateMetadata = () => pageTitle("Join your household");
+const TITLE = "Join your household";
+const EYEBROW = "Household invite";
 
-function ErrorCard({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="container mx-auto px-4 py-20 max-w-lg">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl text-brand-primary-text">{title}</CardTitle>
-          <CardDescription className="text-base">{description}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">{children}</CardContent>
-      </Card>
-    </div>
-  );
-}
+export const generateMetadata = () => pageTitle(TITLE);
 
 export default async function FamilyJoinPage({ params }: PageProps) {
   const { token } = await params;
+
+  // The column is a uuid, so anything else would fail the lookup as a
+  // database error rather than find no row.
+  if (!isUuid(token)) return <InvalidLink eyebrow={EYEBROW} help={CHURCH_ADMIN_INVALID_HELP} />;
 
   // Public page — uses service client to bypass RLS for token validation
   const supabase = await createServiceClient();
@@ -55,8 +41,7 @@ export default async function FamilyJoinPage({ params }: PageProps) {
       family_member_id,
       family_members!family_invites_family_member_id_fkey (
         first_name,
-        last_name,
-        relationship
+        last_name
       ),
       family_units!family_invites_family_id_fkey (
         family_name
@@ -66,73 +51,24 @@ export default async function FamilyJoinPage({ params }: PageProps) {
     .eq("token", token)
     .maybeSingle();
 
-  // A genuine lookup failure is distinct from an invalid token: it carries
-  // no information about which tokens exist, so unlike the fail-closed case
-  // below it can safely say "something went wrong" and point at retrying
-  // instead of implying the invite itself is dead.
+  // A lookup failure carries no information about which tokens exist, so it
+  // may say so and offer a retry; every dead-link state shares one message.
   if (inviteError) {
     console.error("Family join page: invite lookup failed:", inviteError);
     return (
-      <ErrorCard
-        title="Something Went Wrong"
-        description="We couldn't load this invite right now."
-      >
-        <p className="text-muted-foreground">
-          Please try the link again in a moment. If it still doesn&apos;t
-          work, contact your group admin.
-        </p>
-      </ErrorCard>
+      <AuthShell eyebrow={EYEBROW} title={TITLE}>
+        <ErrorState thing="this invite" />
+      </AuthShell>
     );
   }
 
-  if (!invite) {
-    return (
-      <ErrorCard
-        title="Invite Not Found"
-        description="This invite link is invalid or has expired."
-      >
-        <p className="text-muted-foreground">
-          Please check the link or contact your group admin for a new
-          invite.
-        </p>
-      </ErrorCard>
-    );
-  }
-
-  // Already accepted → redirect with message
-  if (invite.accepted_at) {
-    return (
-      <div className="container mx-auto px-4 py-20 max-w-lg">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-2xl text-brand-primary-text">
-              Invite Already Used
-            </CardTitle>
-            <CardDescription className="text-base">
-              This invite link has already been claimed.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-muted-foreground">
-              If you already created your account, you can{" "}
-              <Link href="/login" className="text-brand-primary-text underline">
-                log in here
-              </Link>
-              .
-            </p>
-            <p className="text-muted-foreground">
-              If you need help, please contact your group admin.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  // An accepted invite is as dead as a missing one; the request route
+  // refuses both alike.
+  if (!invite || invite.accepted_at) return <InvalidLink eyebrow={EYEBROW} help={CHURCH_ADMIN_INVALID_HELP} />;
 
   const familyMember = invite.family_members as unknown as {
     first_name: string;
     last_name: string | null;
-    relationship: string;
   } | null;
   const familyUnit = invite.family_units as unknown as {
     family_name: string;
@@ -146,16 +82,15 @@ export default async function FamilyJoinPage({ params }: PageProps) {
 
   return (
     <AuthShell
-      eyebrow={`${familyMember?.relationship ?? "Family"} invite`}
-      title="You've been invited to join"
-      em={siteConfig.name}
+      eyebrow={EYEBROW}
+      title={TITLE}
       kicker={
         familyUnit?.family_name
-          ? `You've been added to the ${familyUnit.family_name} household. Create your own account to appear in the member directory and connect with the group.`
-          : "Create your own account to appear in the member directory and connect with the group."
+          ? `You're listed in the ${familyUnit.family_name} household. Ask for your own account to sign in and appear in your church's directory.`
+          : "Ask for your own account to sign in and appear in your church's directory."
       }
       altPrompt="Already have an account?"
-      altLabel="Log in →"
+      altLabel="Sign in"
       altHref="/login"
     >
       <div className="space-y-6">
@@ -164,14 +99,13 @@ export default async function FamilyJoinPage({ params }: PageProps) {
           <p className="font-semibold text-lg">{memberName}</p>
           {familyUnit?.family_name && (
             <p className="text-lg text-muted-foreground">
-              {familyUnit.family_name}
+              {familyUnit.family_name} household
             </p>
           )}
         </div>
 
         <p className="text-lg text-muted-foreground">
-          After you request access, an admin will review and approve your
-          account. This usually takes less than a day.
+          A church admin reviews each request, then emails you a link to set up your account.
         </p>
 
         <FamilyRequestForm token={token} email={invite.invite_email} />

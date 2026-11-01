@@ -6,7 +6,6 @@ import { GROUP_B } from "./fixtures/personas";
 // one it creates and revokes it in afterAll whatever happened between.
 test.describe.configure({ mode: "serial" });
 
-const INVALID_TEXT = "This invite link is no longer valid. Ask the group leader for a new one.";
 
 let admin: { context: BrowserContext; page: Page };
 let groupAId: string;
@@ -86,7 +85,8 @@ test("a leader creates a link, a stranger can use it until it is revoked, and a 
   try {
     const page = await after.newPage();
     await page.goto(invitePath);
-    await expect(page.getByText(INVALID_TEXT)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "This link isn't valid anymore" })).toBeVisible();
+    await expect(page.getByText("Ask a leader of the group for a new one.")).toBeVisible();
     await expect(page.getByLabel("Email")).toHaveCount(0);
   } finally {
     await after.close();

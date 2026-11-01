@@ -8,7 +8,7 @@ import {
   inviteStatus,
   inviteUrl,
   INVITE_INVALID_TEXT,
-  INVITE_OTHER_ORG_TEXT,
+  INVITE_OTHER_ACCOUNT_TEXT,
   maxUsesFromPreset,
   parseExpiryPreset,
   parseUsePreset,
@@ -90,7 +90,7 @@ describe("labels", () => {
 
   it("maps the member-path error codes to copy and falls back generically", () => {
     expect(inviteJoinErrorMessage("GI001")).toBe(INVITE_INVALID_TEXT);
-    expect(inviteJoinErrorMessage("GI006")).toBe(INVITE_OTHER_ORG_TEXT);
+    expect(inviteJoinErrorMessage("GI006")).toBe(INVITE_OTHER_ACCOUNT_TEXT);
     expect(inviteJoinErrorMessage("GJ003")).toMatch(/try again/i);
     expect(inviteJoinErrorMessage(undefined)).toMatch(/try again/i);
   });

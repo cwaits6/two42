@@ -8,22 +8,45 @@ import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
 import { useSearchParams, useRouter } from "next/navigation";
+import { ErrorState } from "@/components/states/ErrorState";
 import { AuthShell } from "../_components/AuthShell";
+import { AuthFormLoading } from "../_components/AuthFormLoading";
+import { InvalidLink } from "../_components/InvalidLink";
+import { CHURCH_ADMIN_INVALID_HELP } from "@/lib/groups/invites";
+import { NewPasswordFields } from "../_components/NewPasswordFields";
+import {
+  PASSWORD_AUTH_ERRORS,
+  passwordFieldErrors,
+  type PasswordFieldErrors,
+} from "../_components/passwordRules";
+import { useFieldFocus } from "../_components/useFieldFocus";
 
 const SIGN_UP_ERRORS: Record<string, string> = {
+  ...PASSWORD_AUTH_ERRORS,
   user_already_exists: "An account already uses this email. Sign in instead.",
-  weak_password: "Choose a stronger password: longer, with letters and numbers.",
 };
+
+const TITLE = "Set up your account";
+
+interface SignupLink {
+  name: string;
+  email: string;
+  invite_token: string | null;
+}
+
+type View =
+  | { kind: "verifying" }
+  | { kind: "invalid" }
+  | { kind: "failed" }
+  | { kind: "ready"; link: SignupLink };
 
 export function SetupAccountForm() {
   const [loading, setLoading] = useState(false);
-  const [verifying, setVerifying] = useState(true);
-  const [tokenData, setTokenData] = useState<{
-    name: string;
-    email: string;
-    invite_token: string | null;
-  } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<View>({ kind: "verifying" });
+  const [attempt, setAttempt] = useState(0);
+  const [errors, setErrors] = useState<PasswordFieldErrors>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const focusField = useFieldFocus();
   const supabase = useMemo(() => createClient(), []);
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -32,8 +55,7 @@ export function SetupAccountForm() {
   useEffect(() => {
     async function verifyToken() {
       if (!token) {
-        setError("No signup token provided.");
-        setVerifying(false);
+        setView({ kind: "invalid" });
         return;
       }
 
@@ -53,48 +75,39 @@ export function SetupAccountForm() {
             return;
           }
         }
-        setError(
-          failureMessage("open this signup link", res.status, {
-            404: "This signup link isn't valid.",
-            410: "This signup link has expired.",
-          }),
-        );
-        setVerifying(false);
+        setView({ kind: res.status === 404 || res.status === 410 ? "invalid" : "failed" });
         return;
       }
 
       const data = await res.json();
-      setTokenData({
-        name: data.name,
-        email: data.email,
-        invite_token: data.invite_token ?? null,
+      setView({
+        kind: "ready",
+        link: { name: data.name, email: data.email, invite_token: data.invite_token ?? null },
       });
-      setVerifying(false);
     }
-    verifyToken();
-  }, [token, supabase, router]);
+    verifyToken().catch((err) => {
+      console.error(err);
+      setView({ kind: "failed" });
+    });
+  }, [token, supabase, router, attempt]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!tokenData) return;
-    setLoading(true);
+    if (view.kind !== "ready") return;
+    const tokenData = view.link;
+    setFormError(null);
 
     const formData = new FormData(e.currentTarget);
     const password = formData.get("password") as string;
-    const confirmPassword = formData.get("confirmPassword") as string;
-
-    if (password.length < 8) {
-      toast.error("Password must be at least 8 characters.");
-      setLoading(false);
+    const found = passwordFieldErrors(password, formData.get("confirmPassword") as string);
+    setErrors(found);
+    const firstInvalid = Object.keys(found)[0];
+    if (firstInvalid) {
+      focusField(firstInvalid);
       return;
     }
 
-    if (password !== confirmPassword) {
-      toast.error("Passwords do not match.");
-      setLoading(false);
-      return;
-    }
-
+    setLoading(true);
     const { error } = await supabase.auth.signUp({
       email: tokenData.email,
       password,
@@ -103,11 +116,10 @@ export function SetupAccountForm() {
       },
     });
 
-    setLoading(false);
-
     if (error) {
+      setLoading(false);
       console.error(error);
-      toast.error(
+      setFormError(
         SIGN_UP_ERRORS[error.code ?? ""] ?? failureMessage("create your account", error.status),
       );
       return;
@@ -139,73 +151,40 @@ export function SetupAccountForm() {
       }
     }
 
-    toast.success("Account created. Welcome.");
+    toast.success("Account created.");
     router.replace("/dashboard");
     router.refresh();
   };
 
-  // ── Verifying state ──
-  if (verifying) {
+  if (view.kind === "verifying") {
     return (
-      <AuthShell
-        eyebrow="Set up account"
-        title="Verifying your"
-        em="invite"
-        kicker="Just confirming this link is good…"
-      >
-        <div className="flex items-center gap-2 text-muted-foreground font-sans text-sm py-2">
-          <svg
-            className="animate-spin h-4 w-4 text-brand-primary"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            aria-hidden
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-            />
-          </svg>
-          Checking…
-        </div>
+      <AuthShell title={TITLE}>
+        <AuthFormLoading thing="your signup link" />
       </AuthShell>
     );
   }
 
-  // ── Error state ──
-  if (error) {
+  if (view.kind === "failed") {
     return (
-      <AuthShell
-        eyebrow="Set up account"
-        title="This link doesn't"
-        em="look right"
-        kicker={error}
-      >
-        <p className="font-sans text-sm text-muted-foreground">
-          Ask a church admin for a new invitation.
-        </p>
+      <AuthShell title={TITLE}>
+        <ErrorState
+          thing="this signup link"
+          onRetry={() => {
+            setView({ kind: "verifying" });
+            setAttempt((n) => n + 1);
+          }}
+        />
       </AuthShell>
     );
   }
 
-  // ── Normal form state ──
+  if (view.kind === "invalid") {
+    return <InvalidLink help={CHURCH_ADMIN_INVALID_HELP} />;
+  }
+
   return (
-    <AuthShell
-      eyebrow="Set up account"
-      title="Set up your"
-      em="account"
-      kicker="Almost there — pick a password so you can sign in next time."
-    >
-      <form onSubmit={handleSubmit} className="space-y-5">
+    <AuthShell title={TITLE} kicker="Choose a password to sign in with from now on.">
+      <form onSubmit={handleSubmit} noValidate className="space-y-5">
         <div className="space-y-1.5">
           <Label
             htmlFor="email"
@@ -216,52 +195,23 @@ export function SetupAccountForm() {
           <Input
             id="email"
             type="email"
-            value={tokenData?.email || ""}
+            value={view.link.email}
             disabled
             className="h-12 text-lg bg-muted"
           />
         </div>
-        <div className="space-y-1.5">
-          <Label
-            htmlFor="password"
-            className="font-sans text-lg font-semibold tracking-[0.08em] uppercase text-foreground"
-          >
-            Password
-          </Label>
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            required
-            minLength={8}
-            placeholder="At least 8 characters"
-            className="h-12 text-lg"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label
-            htmlFor="confirmPassword"
-            className="font-sans text-lg font-semibold tracking-[0.08em] uppercase text-foreground"
-          >
-            Confirm Password
-          </Label>
-          <Input
-            id="confirmPassword"
-            name="confirmPassword"
-            type="password"
-            required
-            minLength={8}
-            placeholder="Confirm your password"
-            className="h-12 text-lg"
-          />
-        </div>
-        <Button
-          type="submit"
-          size="lg"
-          className="w-full font-semibold"
-          disabled={loading}
-        >
-          {loading ? "Creating account…" : "Create Account"}
+        <NewPasswordFields
+          label="Password"
+          errors={errors}
+          onEdit={(field) => setErrors((prev) => ({ ...prev, [field]: undefined }))}
+        />
+        {formError && (
+          <p role="alert" className="text-base text-destructive">
+            {formError}
+          </p>
+        )}
+        <Button type="submit" size="lg" className="w-full font-semibold" disabled={loading}>
+          {loading ? "Creating account…" : "Create account"}
         </Button>
       </form>
     </AuthShell>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -41,9 +42,20 @@ export function JoinGroupButton({ token, groupId, groupName }: JoinGroupButtonPr
 
   if (requested) {
     return (
-      <p role="status" className="text-lg text-foreground">
-        Request sent. A leader will approve it.
-      </p>
+      <div className="space-y-4" role="status">
+        <p className="text-lg text-foreground">
+          Request sent. A leader of {groupName} will review it.
+        </p>
+        <Button
+          size="lg"
+          variant="outline"
+          className="w-full font-semibold"
+          nativeButton={false}
+          render={<Link href="/dashboard" />}
+        >
+          Go to Home
+        </Button>
+      </div>
     );
   }
 
