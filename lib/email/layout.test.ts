@@ -202,6 +202,24 @@ describe("copy", () => {
   });
 });
 
+describe("the palette", () => {
+  const css = readFileSync("app/globals.css", "utf8");
+
+  it.each([
+    ["page", "--background"],
+    ["card", "--card"],
+    ["panel", "--color-brand-warm"],
+    ["rule", "--color-brand-bg-muted"],
+    ["ink", "--foreground"],
+    ["muted", "--muted-foreground"],
+    ["link", "--color-brand-primary-text"],
+    ["onAccent", "--primary-foreground"],
+  ] as const)("EMAIL_COLORS.%s is the app's %s", (name, token) => {
+    const declared = css.match(new RegExp(`\\s${token}:\\s*(#[0-9A-Fa-f]{6});`));
+    expect(declared?.[1]).toBe(EMAIL_COLORS[name]);
+  });
+});
+
 describe("contrast on the email's own grounds", () => {
   const { card, panel, ink, muted, link, onAccent } = EMAIL_COLORS;
 
