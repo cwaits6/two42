@@ -86,11 +86,12 @@ export function CalendarSubscriptionCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-2xl text-brand-primary-text">Calendar subscriptions</CardTitle>
+        <CardTitle className="text-xl font-bold text-foreground">Calendar subscriptions</CardTitle>
         <CardDescription className="text-base">
           What members&apos; calendar apps get when they subscribe to this group&apos;s calendar.
           Anything turned off is replaced by a link to the event page, where signed-in members see
-          everything. An event can choose differently when it&apos;s added or edited.
+          everything. An event can choose differently when it&apos;s added or edited. These switches
+          save as soon as you change them.
         </CardDescription>
       </CardHeader>
       <CardContent className="divide-y divide-border">

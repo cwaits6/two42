@@ -1,9 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
 import { mintSignedUrls } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { ErrorState } from "@/components/states/ErrorState";
+import { groupPath } from "@/lib/groups/active";
 import { getGroupCalendar, GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
 import { requireGroupLeader } from "@/lib/groups/server";
 import { getGroupSettings } from "@/lib/groups/settings";
+import { readList } from "@/lib/supabase/readList";
 import { AboutEditor } from "./AboutEditor";
 import type { AboutPage, ClassTeacherWithProfile } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
@@ -29,7 +34,7 @@ export default async function GroupAboutSettingsPage({
     .single();
   if (!profile) redirect("/dashboard");
 
-  const [{ data: about }, { data: teachers }, calendar, settings] = await Promise.all([
+  const [aboutRead, teachersRead, calendar, settings] = await Promise.all([
     supabase.from("about_page").select("*").eq("group_id", group.id).maybeSingle(),
     supabase
       .from("class_teachers")
@@ -43,9 +48,27 @@ export default async function GroupAboutSettingsPage({
     getGroupSettings(supabase, profile.org_id, group.id),
   ]);
 
+  // Never open the editor on a failed read: its blanks would read as saved values.
+  const teacherRows = readList<ClassTeacherWithProfile>(teachersRead, "the group's leadership");
+  if (aboutRead.error) {
+    console.error("Failed to load the group's summary: code=%s", aboutRead.error.code);
+  }
+  if (!teacherRows || aboutRead.error) {
+    return (
+      <PageContainer>
+        <PageHeader
+          title="About"
+          subtitle={`Changes here apply to ${group.name} only.`}
+          backHref={groupPath(group.id, "/settings")}
+          backLabel="Back to Group settings"
+        />
+        <ErrorState thing="the About page" />
+      </PageContainer>
+    );
+  }
+
   // Private buckets: exchange stored avatar URLs for signed URLs
   // before they reach the editor's AvatarImage renders.
-  const teacherRows = (teachers ?? []) as ClassTeacherWithProfile[];
   const signedAvatars = await mintSignedUrls(
     teacherRows.map((t) => t.profiles?.avatar_url),
   );
@@ -58,10 +81,8 @@ export default async function GroupAboutSettingsPage({
     <AboutEditor
       groupId={group.id}
       groupName={group.name}
-      orgId={profile.org_id}
-      initialBody={(about as AboutPage | null)?.body ?? ""}
+      initialBody={(aboutRead.data as AboutPage | null)?.body ?? ""}
       initialTeachers={teacherList}
-      calendarId={calendar?.id ?? null}
       initialColor={calendar?.color ?? GROUP_DEFAULT_COLOR}
       initialSettings={settings}
     />
