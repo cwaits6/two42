@@ -271,6 +271,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
   const [householdId, setHouseholdId] = useState<string | null>(profile.family_id ?? null);
   const [householdName, setHouseholdName] = useState<string | null>(initialHouseholdName);
   const [householdAdded, setHouseholdAdded] = useState(false);
+  const [creatingHousehold, setCreatingHousehold] = useState(false);
   const [pendingPeople, setPendingPeople] = useState<PendingPerson[]>([]);
   const [anniversary, setAnniversary] = useState(profile.anniversary ?? "");
   const [adding, setAdding] = useState<FamilyMemberRelationship | null>(null);
@@ -389,7 +390,8 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
   };
 
   const addHousehold = async () => {
-    if (!surname) return;
+    if (!surname || creatingHousehold) return;
+    setCreatingHousehold(true);
     // The household search matches names of this form.
     const name = `${surname} Family`;
     const { data, error } = await supabase
@@ -397,6 +399,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
       .insert({ family_name: name })
       .select("id")
       .single();
+    setCreatingHousehold(false);
     if (error || !data) {
       console.error(error);
       toast.error(failureMessage("add the household"));
@@ -817,7 +820,12 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
                           </Button>
                         </div>
                       ))}
-                      <Button type="button" variant="outline" onClick={addHousehold}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={addHousehold}
+                        disabled={creatingHousehold}
+                      >
                         Add a new household
                       </Button>
                     </>
@@ -831,6 +839,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
                         id="household"
                         type="button"
                         onClick={addHousehold}
+                        disabled={creatingHousehold}
                         {...invalidFieldProps("household", errors.household)}
                       >
                         Add household
