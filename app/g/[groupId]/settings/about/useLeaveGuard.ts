@@ -120,9 +120,10 @@ export function useLeaveGuard(dirty: boolean) {
         released.current = false;
       }, BACK_SETTLE_MS);
     } else if (target?.sameOrigin) {
-      router.push(target.href);
+      // Replacing the spare entry stops Back from the target landing on it first.
+      router.replace(target.href);
     } else if (target) {
-      window.location.assign(target.href);
+      window.location.replace(target.href);
     }
   }
 

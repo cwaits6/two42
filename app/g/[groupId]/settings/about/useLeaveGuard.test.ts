@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const push = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+const replace = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
 
 const { leavingHref, useLeaveGuard } = await import("./useLeaveGuard");
 
@@ -75,6 +75,7 @@ describe("useLeaveGuard", () => {
     link.remove();
     vi.restoreAllMocks();
     vi.useRealTimers();
+    replace.mockClear();
   });
 
   it("asks about Back, and goes past its spare history entry on Leave", () => {
@@ -106,11 +107,20 @@ describe("useLeaveGuard", () => {
 
     act(() => link.click());
     expect(guard.asking).toBe(true);
-    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
 
     const reload = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(reload);
     expect(reload.defaultPrevented).toBe(true);
+  });
+
+  it("replaces its spare history entry on Leave from a link", () => {
+    render(true);
+    act(() => link.click());
+    expect(guard.asking).toBe(true);
+    act(() => guard.leave());
+    expect(guard.asking).toBe(false);
+    expect(replace).toHaveBeenCalledWith(link.href);
   });
 
   it("drops the question when a Save finishes while it is open, and does not raise it later", () => {
