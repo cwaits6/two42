@@ -36,14 +36,20 @@ function Screenshot({
 }) {
   const common = { alt, priority, ...(priority ? { fetchPriority: "high" as const } : {}) };
   const {
-    props: { srcSet: desktopSrcSet },
+    props: { srcSet: desktopSrcSet, width: desktopWidth, height: desktopHeight },
   } = getImageProps({ ...common, ...desktop, src, sizes });
   const {
     props: { srcSet: phoneSrcSet, ...img },
   } = getImageProps({ ...common, ...PHONE, src: phoneSrc, sizes: PHONE_SIZES });
   return (
     <picture className={cn("mx-auto block w-full max-w-[360px] md:max-w-none", className)}>
-      <source media="(min-width: 768px)" srcSet={desktopSrcSet} sizes={sizes} />
+      <source
+        media="(min-width: 768px)"
+        srcSet={desktopSrcSet}
+        sizes={sizes}
+        width={desktopWidth}
+        height={desktopHeight}
+      />
       <source srcSet={phoneSrcSet} sizes={PHONE_SIZES} />
       <img {...img} alt={alt} className={SHOT} />
     </picture>
