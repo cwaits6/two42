@@ -34,7 +34,9 @@ export function zoned(iso: string, zone: string): DateTime {
 export function localToUTCISO(local: string, zone: string): string {
   const dt = zoned(local, zone);
   if (!dt.isValid) throw new RangeError(`Not a datetime-local value in ${zone}: ${local}`);
-  return dt.toJSDate().toISOString();
+  // Luxon resolves a repeated hour with today's offset, so its own answer changes with the season.
+  const earliest = Math.min(...dt.getPossibleOffsets().map((candidate) => candidate.toMillis()));
+  return new Date(earliest).toISOString();
 }
 
 /** The datetime-local value (`YYYY-MM-DDTHH:mm`) that shows an instant's wall-clock time in `zone`. */
