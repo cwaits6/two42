@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -21,6 +22,18 @@ import {
 interface HouseholdOption {
   value: string;
   label: string;
+}
+
+const FIELD_IDS: Record<InvitePersonField, string> = {
+  email: "invite-email",
+  firstName: "invite-first-name",
+  lastName: "invite-last-name",
+  householdId: "invite-household",
+};
+
+function focusFirstInvalid(found: InvitePersonErrors) {
+  const first = (Object.keys(FIELD_IDS) as InvitePersonField[]).find((field) => found[field]);
+  if (first) document.getElementById(FIELD_IDS[first])?.focus();
 }
 
 const NO_HOUSEHOLD = "none";
@@ -58,7 +71,10 @@ export function InvitePersonForm({
       householdId: form.householdId === NO_HOUSEHOLD ? "" : form.householdId,
     });
     setErrors(found);
-    if (Object.keys(found).length > 0) return;
+    if (Object.keys(found).length > 0) {
+      focusFirstInvalid(found);
+      return;
+    }
 
     setSending(true);
     try {
@@ -75,6 +91,7 @@ export function InvitePersonForm({
       }
       if (data.fieldErrors) {
         setErrors(data.fieldErrors);
+        focusFirstInvalid(data.fieldErrors);
       } else {
         setFormError("Couldn't send the invite. Try again.");
       }
@@ -136,8 +153,7 @@ export function InvitePersonForm({
           <SelectTrigger
             id="invite-household"
             className="h-12 w-full text-base"
-            aria-invalid={errors.householdId ? true : undefined}
-            aria-describedby={errors.householdId ? "invite-household-error" : undefined}
+            {...invalidFieldProps("invite-household", errors.householdId)}
           >
             <SelectValue />
           </SelectTrigger>
@@ -155,7 +171,7 @@ export function InvitePersonForm({
             household later.
           </p>
         )}
-        <FieldError id="invite-household-error" message={errors.householdId} />
+        <FieldError fieldId="invite-household" message={errors.householdId} />
       </div>
 
       {formError && (
@@ -188,7 +204,6 @@ function TextField({
   type?: string;
   autoComplete?: string;
 }) {
-  const errorId = `${id}-error`;
   return (
     <div className="space-y-2">
       <Label htmlFor={id} className="text-lg">
@@ -200,20 +215,10 @@ function TextField({
         autoComplete={autoComplete}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
+        {...invalidFieldProps(id, error)}
         className="text-lg"
       />
-      <FieldError id={errorId} message={error} />
+      <FieldError fieldId={id} message={error} />
     </div>
-  );
-}
-
-function FieldError({ id, message }: { id: string; message?: string }) {
-  if (!message) return null;
-  return (
-    <p id={id} className="text-base text-destructive">
-      {message}
-    </p>
   );
 }
