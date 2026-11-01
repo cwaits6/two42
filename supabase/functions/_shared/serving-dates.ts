@@ -37,17 +37,13 @@ export function upcomingServiceDates(weeks: number, today: string): string[] {
 }
 
 /**
- * The date a reminder run acts on: the church's, but never behind UTC's. The
- * jobs fire once a day at 08:00 UTC, which is the previous evening west of
- * UTC-8. There the church's own date would send a Sunday reminder after that
- * Sunday's service, and in Alaska, where daylight saving moves the run across
- * midnight, repeat one date and skip another. The hold can go if the schedule
- * moves to an hour where no zone crosses midnight, such as 15:00 UTC.
+ * The date a reminder run acts on, in the church's time zone. The jobs fire at
+ * an hour that falls on a single date in each zone, so every run advances one
+ * date. An hour near local midnight would repeat or skip a date across daylight
+ * saving, so keep any schedule change clear of the zones churches are in.
  */
 export function reminderRun(org: { timezone: string }, now: Date = new Date()) {
-  const churchDate = todayIn(org.timezone, now);
-  const utcDate = now.toISOString().slice(0, 10);
-  const today = churchDate > utcDate ? churchDate : utcDate;
+  const today = todayIn(org.timezone, now);
   return {
     today,
     weekday: weekdayOf(today),

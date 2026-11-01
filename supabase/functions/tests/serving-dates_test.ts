@@ -63,7 +63,7 @@ Deno.test("formatServiceDateWithYear shows the date's own weekday", () => {
 });
 
 const churchIn = (timezone: string) => ({ timezone });
-const dailyRun = (date: string) => new Date(`${date}T08:00:00Z`);
+const dailyRun = (date: string) => new Date(`${date}T15:00:00Z`);
 
 Deno.test("a reminder run reads the org's own time zone", () => {
   const sundayEveningUtc = new Date("2026-11-08T20:00:00Z");
@@ -80,14 +80,14 @@ Deno.test("a reminder run reads the org's own time zone", () => {
   assertThrows(() => reminderRun(churchIn("Nowhere/Bogus")), RangeError);
 });
 
-Deno.test("a reminder run landing on the church's previous evening acts on the coming date", () => {
-  // 10 PM Saturday in Honolulu: Sunday's reminder, before that Sunday's service.
+Deno.test("a reminder run in the far west acts on that morning's date", () => {
+  // 5 AM Sunday in Honolulu.
   assertEquals(reminderRun(churchIn("Pacific/Honolulu"), dailyRun("2026-11-08")), {
     today: "2026-11-08",
     weekday: 0,
     serviceDate: "2026-11-08",
   });
-  // 11 PM Sunday in Anchorage, after the service: the next reminder names next Sunday.
+  // 6 AM Monday in Anchorage, after Sunday's service: names next Sunday.
   assertEquals(reminderRun(churchIn("America/Anchorage"), dailyRun("2026-11-02")), {
     today: "2026-11-02",
     weekday: 1,
@@ -98,7 +98,6 @@ Deno.test("a reminder run landing on the church's previous evening acts on the c
 Deno.test("every daily run acts on the next date across daylight saving", () => {
   const DAY_MS = 24 * 60 * 60 * 1000;
   const first = dailyRun("2026-01-01").getTime();
-  // The zones that reach midnight at this hour, plus their neighbours either side.
   const zones = [
     "America/Anchorage", "America/Juneau", "America/Metlakatla", "America/Nome",
     "America/Sitka", "America/Yakutat", "America/Adak", "Pacific/Honolulu",
@@ -110,9 +109,10 @@ Deno.test("every daily run acts on the next date across daylight saving", () => 
     for (let day = 0; day < 365; day++) {
       const now = new Date(first + day * DAY_MS);
       const { today, serviceDate } = reminderRun(churchIn(zone), now);
-      assertEquals(today, now.toISOString().slice(0, 10), zone);
+      const yesterday = reminderRun(churchIn(zone), new Date(now.getTime() - DAY_MS)).today;
+      assertEquals(Date.parse(`${today}T00:00:00Z`) - Date.parse(`${yesterday}T00:00:00Z`), DAY_MS, zone);
       // A service date already behind the church's own date would be a past turn.
-      assertEquals(serviceDate >= todayIn(zone, now), true, zone);
+      assertEquals(serviceDate >= today, true, zone);
     }
   }
 });
