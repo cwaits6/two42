@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import { failureMessage } from "@/lib/errorCopy";
 import { AuthShell } from "../_components/AuthShell";
 
 const BACK_TO_SIGN_IN = {
@@ -17,31 +18,43 @@ export function ForgotPasswordForm() {
   const [loading, setLoading] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [resent, setResent] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const supabase = createClient();
 
-  // A public endpoint that sends the email itself. The page reports success
-  // whatever the answer, so it never says whether an account uses the email.
-  async function sendLink(email: string) {
+  // Auth answers the same whether or not an account uses the email, so an
+  // error here (a rate limit, an outage) never says whether one does.
+  async function sendLink(email: string): Promise<boolean> {
     setLoading(true);
-    await supabase.auth.resetPasswordForEmail(email, {
+    setSendError(null);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/api/auth/callback?next=/update-password`,
     });
     setLoading(false);
+    if (error) {
+      console.error(error);
+      setSendError(failureMessage("send the link", error.status || "network"));
+      return false;
+    }
+    return true;
   }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const email = (new FormData(e.currentTarget).get("email") as string).trim();
-    await sendLink(email);
-    setSentTo(email);
+    if (await sendLink(email)) setSentTo(email);
   };
 
   async function sendAgain() {
     if (!sentTo) return;
     setResent(false);
-    await sendLink(sentTo);
-    setResent(true);
+    setResent(await sendLink(sentTo));
   }
+
+  const sendErrorAlert = sendError && (
+    <p role="alert" className="text-base text-destructive">
+      {sendError}
+    </p>
+  );
 
   if (sentTo) {
     return (
@@ -71,6 +84,7 @@ export function ForgotPasswordForm() {
               Sent again.
             </p>
           )}
+          {sendErrorAlert}
         </div>
       </AuthShell>
     );
@@ -100,6 +114,7 @@ export function ForgotPasswordForm() {
             className="h-12 text-lg"
           />
         </div>
+        {sendErrorAlert}
         <Button type="submit" size="lg" className="w-full font-semibold" disabled={loading}>
           {loading ? "Sending…" : "Send link"}
         </Button>
