@@ -5,14 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
-import { toast } from "sonner";
+import { failureMessage } from "@/lib/errorCopy";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { AuthShell } from "../_components/AuthShell";
-import { siteConfig } from "@/lib/config";
 
 export function LoginForm() {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const supabase = createClient();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -36,20 +36,25 @@ export function LoginForm() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
 
     const formData = new FormData(e.currentTarget);
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     setLoading(false);
 
-    if (error) {
-      toast.error("Invalid email or password.");
+    if (signInError) {
+      setError(
+        signInError.code === "invalid_credentials"
+          ? "That email and password don't match. Try again, or reset your password."
+          : failureMessage("sign you in", signInError.status),
+      );
       return;
     }
 
@@ -59,9 +64,10 @@ export function LoginForm() {
 
   return (
     <AuthShell
-      eyebrow="Sign in"
-      title="Sign in to"
-      em={siteConfig.name}
+      title="Sign in"
+      altPrompt="No account yet?"
+      altLabel="Use an invite link"
+      altHref="/#invite"
     >
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-1.5">
@@ -76,6 +82,7 @@ export function LoginForm() {
             name="email"
             type="email"
             required
+            autoComplete="email"
             placeholder="your@email.com"
             className="h-12 text-lg"
           />
@@ -92,22 +99,28 @@ export function LoginForm() {
             name="password"
             type="password"
             required
+            autoComplete="current-password"
             placeholder="Your password"
             className="h-12 text-lg"
           />
         </div>
+        {error && (
+          <p role="alert" className="text-base text-destructive">
+            {error}
+          </p>
+        )}
         <Button
           type="submit"
           size="lg"
           className="w-full font-semibold"
           disabled={loading}
         >
-          {loading ? "Signing in…" : "Sign In"}
+          {loading ? "Signing in…" : "Sign in"}
         </Button>
-        <p className="text-sm text-muted-foreground text-center">
+        <p className="text-center">
           <Link
             href="/forgot-password"
-            className="text-brand-primary-text hover:underline font-medium"
+            className="inline-flex min-h-11 items-center text-base font-semibold text-brand-primary-text underline underline-offset-4 hover:text-foreground"
           >
             Forgot your password?
           </Link>

@@ -89,11 +89,16 @@ export function expiryLabel(expiresAt: string | null, timeZone: string): string 
   return `Expires ${date}`;
 }
 
-/** One message for every dead state, so the page never says which. */
-export const INVITE_INVALID_TEXT =
-  "This invite link is no longer valid. Ask the group leader for a new one.";
+/**
+ * One title for every dead link on both invite pages, whatever the cause, so
+ * a page never says which — including whether the link belongs to another
+ * church. Each page names who to ask for a new one.
+ */
+export const INVITE_INVALID_TITLE = "This link isn't valid anymore";
+export const INVITE_INVALID_HELP = "Ask a leader of the group for a new one.";
+export const INVITE_INVALID_TEXT = `${INVITE_INVALID_TITLE}. ${INVITE_INVALID_HELP}`;
 
-export const INVITE_OTHER_ORG_TEXT = "This invite is for a different organization.";
+export const INVITE_OTHER_ORG_TEXT = "This invite link is for a different account.";
 
 const JOIN_ERROR_MESSAGES: Record<string, string> = {
   GI001: INVITE_INVALID_TEXT,
@@ -102,5 +107,5 @@ const JOIN_ERROR_MESSAGES: Record<string, string> = {
 
 /** Member-facing copy for a group_invite_join() error code. */
 export function inviteJoinErrorMessage(code: string | undefined): string {
-  return (code && JOIN_ERROR_MESSAGES[code]) || "Couldn't join the group. Please try again.";
+  return (code && JOIN_ERROR_MESSAGES[code]) || "Couldn't join the group. Try again.";
 }

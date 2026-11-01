@@ -2,16 +2,28 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import { failureMessage } from "@/lib/errorCopy";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { AuthShell } from "../_components/AuthShell";
+import { AuthFormLoading } from "../_components/AuthFormLoading";
+import { NewPasswordFields } from "../_components/NewPasswordFields";
+import {
+  PASSWORD_AUTH_ERRORS,
+  passwordFieldErrors,
+  type PasswordFieldErrors,
+} from "../_components/passwordRules";
+import { useFieldFocus } from "../_components/useFieldFocus";
+
+const TITLE = "Choose a new password";
 
 export function UpdatePasswordForm() {
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [errors, setErrors] = useState<PasswordFieldErrors>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const focusField = useFieldFocus();
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
 
@@ -31,92 +43,58 @@ export function UpdatePasswordForm() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setLoading(true);
+    setFormError(null);
 
     const formData = new FormData(e.currentTarget);
     const password = formData.get("password") as string;
-    const confirmPassword = formData.get("confirmPassword") as string;
-
-    if (password.length < 8) {
-      toast.error("Password must be at least 8 characters.");
-      setLoading(false);
+    const found = passwordFieldErrors(password, formData.get("confirmPassword") as string);
+    setErrors(found);
+    const firstInvalid = Object.keys(found)[0];
+    if (firstInvalid) {
+      focusField(firstInvalid);
       return;
     }
 
-    if (password !== confirmPassword) {
-      toast.error("Passwords do not match.");
-      setLoading(false);
-      return;
-    }
-
+    setLoading(true);
     const { error } = await supabase.auth.updateUser({ password });
-
     setLoading(false);
 
     if (error) {
-      toast.error("Failed to update password. Please try again.");
+      setFormError(
+        PASSWORD_AUTH_ERRORS[error.code ?? ""] ??
+          failureMessage("change your password", error.status),
+      );
       return;
     }
 
-    toast.success("Password updated successfully.");
+    toast.success("Password changed.");
     router.replace("/dashboard");
     router.refresh();
   };
 
-  // While checking session, render nothing (avoids flash of form)
   if (checkingSession) {
-    return null;
+    return (
+      <AuthShell title={TITLE}>
+        <AuthFormLoading thing="your reset link" />
+      </AuthShell>
+    );
   }
 
   return (
-    <AuthShell
-      eyebrow="Choose password"
-      title="Choose a"
-      em="new password"
-      kicker="Pick something you'll remember — at least 8 characters."
-    >
-      <form onSubmit={handleSubmit} className="space-y-5">
-        <div className="space-y-1.5">
-          <Label
-            htmlFor="password"
-            className="font-sans text-lg font-semibold tracking-[0.08em] uppercase text-foreground"
-          >
-            New Password
-          </Label>
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            required
-            minLength={8}
-            placeholder="At least 8 characters"
-            className="h-12 text-lg"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label
-            htmlFor="confirmPassword"
-            className="font-sans text-lg font-semibold tracking-[0.08em] uppercase text-foreground"
-          >
-            Confirm Password
-          </Label>
-          <Input
-            id="confirmPassword"
-            name="confirmPassword"
-            type="password"
-            required
-            minLength={8}
-            placeholder="Confirm your password"
-            className="h-12 text-lg"
-          />
-        </div>
-        <Button
-          type="submit"
-          size="lg"
-          className="w-full font-semibold"
-          disabled={loading}
-        >
-          {loading ? "Updating…" : "Update Password"}
+    <AuthShell title={TITLE} kicker="Pick something you'll remember.">
+      <form onSubmit={handleSubmit} noValidate className="space-y-5">
+        <NewPasswordFields
+          label="New password"
+          errors={errors}
+          onEdit={(field) => setErrors((prev) => ({ ...prev, [field]: undefined }))}
+        />
+        {formError && (
+          <p role="alert" className="text-base text-destructive">
+            {formError}
+          </p>
+        )}
+        <Button type="submit" size="lg" className="w-full font-semibold" disabled={loading}>
+          {loading ? "Saving…" : "Save password"}
         </Button>
       </form>
     </AuthShell>

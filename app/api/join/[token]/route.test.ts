@@ -117,7 +117,7 @@ describe("POST /api/join/[token]", () => {
 
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({
-      error: "This invite link is no longer valid. Ask the group leader for a new one.",
+      error: "This link isn't valid anymore. Ask a leader of the group for a new one.",
     });
     expect(sendGroupInviteEmail).not.toHaveBeenCalled();
     expect(reserveEmailQuota).not.toHaveBeenCalled();

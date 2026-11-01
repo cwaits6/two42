@@ -1,11 +1,12 @@
 import { cache } from "react";
 import Link from "next/link";
 import { AuthShell } from "@/app/(auth)/_components/AuthShell";
+import { InvalidLink } from "@/app/(auth)/_components/InvalidLink";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ErrorState } from "@/components/states/ErrorState";
 import { orgDisplayName } from "@/lib/branding";
 import { groupPath, isUuid } from "@/lib/groups/active";
-import { INVITE_INVALID_TEXT, INVITE_OTHER_ORG_TEXT, inviteStatus } from "@/lib/groups/invites";
+import { INVITE_INVALID_HELP, inviteStatus } from "@/lib/groups/invites";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { InviteSignupForm } from "./InviteSignupForm";
@@ -85,25 +86,14 @@ export async function generateMetadata({ params }: PageProps) {
   return pageTitle(title);
 }
 
-function Notice({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children?: React.ReactNode;
-}) {
+const EYEBROW = "Group invite";
+
+/** A lookup failure carries no information about which tokens exist, so it may say so and offer a retry. */
+function LoadFailed() {
   return (
-    <div className="container mx-auto max-w-lg px-4 py-20">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl text-brand-primary-text">{title}</CardTitle>
-          <CardDescription className="text-base">{description}</CardDescription>
-        </CardHeader>
-        {children ? <CardContent className="space-y-4">{children}</CardContent> : null}
-      </Card>
-    </div>
+    <AuthShell eyebrow={EYEBROW} title="Join a group">
+      <ErrorState thing="this invite" />
+    </AuthShell>
   );
 }
 
@@ -111,19 +101,8 @@ export default async function JoinByInvitePage({ params }: PageProps) {
   const { token } = await params;
   const lookup = await loadInvite(token);
 
-  // A lookup failure carries no information about which tokens exist, so it
-  // may say so and point at retrying; every dead-link state shares one
-  // message instead.
-  if (lookup.kind === "error") {
-    return (
-      <Notice title="Something went wrong" description="We couldn't load this invite right now.">
-        <p className="text-base text-muted-foreground">Try the link again in a moment.</p>
-      </Notice>
-    );
-  }
-  if (lookup.kind === "invalid") {
-    return <Notice title="Invite link not valid" description={INVITE_INVALID_TEXT} />;
-  }
+  if (lookup.kind === "error") return <LoadFailed />;
+  if (lookup.kind === "invalid") return <InvalidLink eyebrow={EYEBROW} help={INVITE_INVALID_HELP} />;
 
   const { invite } = lookup;
   const user = await getOptionalUser();
@@ -131,12 +110,11 @@ export default async function JoinByInvitePage({ params }: PageProps) {
   if (!user) {
     return (
       <AuthShell
-        eyebrow="Group invite"
-        title="You're invited to"
-        em={invite.groupName}
-        kicker={`${invite.groupName} is a group at ${invite.orgName}. Enter your name and email and we'll send you a link to set up your account.`}
+        eyebrow={EYEBROW}
+        title={`Join ${invite.groupName}`}
+        kicker={`${invite.groupName} is a group at ${invite.orgName}. Enter your name and email, and we'll email you a link to set up your account.`}
         altPrompt="Already have an account?"
-        altLabel="Sign in →"
+        altLabel="Sign in"
         altHref={`/login?redirect=${encodeURIComponent(`/join/${token}`)}`}
       >
         <InviteSignupForm token={token} groupName={invite.groupName} />
@@ -157,45 +135,43 @@ export default async function JoinByInvitePage({ params }: PageProps) {
     ]);
   if (profileError || membershipError) {
     console.error("Join page: viewer lookup failed:", profileError ?? membershipError);
-    return (
-      <Notice title="Something went wrong" description="We couldn't load this invite right now.">
-        <p className="text-base text-muted-foreground">Try the link again in a moment.</p>
-      </Notice>
-    );
+    return <LoadFailed />;
   }
 
   if (!profile || profile.role === "pending" || profile.org_id !== invite.orgId) {
     return (
-      <Notice title="Not for this account" description={INVITE_OTHER_ORG_TEXT}>
-        <p className="text-base text-muted-foreground">
-          Sign out, then open the link again to join with a different email address.
-        </p>
+      <AuthShell
+        eyebrow={EYEBROW}
+        title="This link is for a different account"
+        kicker="Sign out, then open the link again to join with another email address."
+      >
         <SignOutButton />
-      </Notice>
+      </AuthShell>
     );
   }
 
   if (membership) {
     return (
-      <Notice title={`You're already in ${invite.groupName}.`} description="Nothing more to do here.">
+      <AuthShell eyebrow={EYEBROW} title={`You're already in ${invite.groupName}`}>
         <Button
           size="lg"
-          className="w-full"
+          className="w-full font-semibold"
           nativeButton={false}
           render={<Link href={groupPath(invite.groupId, "/dashboard")} />}
         >
           Open group
         </Button>
-      </Notice>
+      </AuthShell>
     );
   }
 
   return (
-    <Notice
+    <AuthShell
+      eyebrow={EYEBROW}
       title={`Join ${invite.groupName}`}
-      description={`You've been invited to ${invite.groupName} at ${invite.orgName}.`}
+      kicker={`You're invited to ${invite.groupName} at ${invite.orgName}.`}
     >
       <JoinGroupButton token={token} groupId={invite.groupId} groupName={invite.groupName} />
-    </Notice>
+    </AuthShell>
   );
 }

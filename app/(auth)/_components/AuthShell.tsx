@@ -1,12 +1,14 @@
 import React from "react";
 import Link from "next/link";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 export interface AuthShellProps {
-  eyebrow: string;
+  /** Small label above the title; leave it out when it would repeat the title */
+  eyebrow?: string;
   title: string;
-  /** Italic brand-primary emphasis word that follows the title */
-  em: string;
-  kicker?: string;
+  /** Italic brand-primary emphasis word that follows the title, then a period */
+  em?: string;
+  kicker?: React.ReactNode;
   altPrompt?: string;
   altLabel?: string;
   altHref?: string;
@@ -14,13 +16,15 @@ export interface AuthShellProps {
 }
 
 /**
- * Two-column auth layout body, rendered between the global Header and Footer.
+ * Two-column body for every signed-out card, rendered between the global
+ * Header and Footer.
  *
  * Left column: verse panel (espresso ground). The wordmark lives in the
  * Header, so the panel carries no brand mark of its own.
  * Right column: form area (warm paper background).
  *
- * Mobile: stacks to single column with the verse as a short banner on top.
+ * Phone: one column with the form first, so it is on screen without
+ * scrolling; the verse follows it.
  */
 export function AuthShell({
   eyebrow,
@@ -33,9 +37,9 @@ export function AuthShell({
   children,
 }: AuthShellProps) {
   return (
-    <div className="min-h-screen grid grid-cols-1 md:grid-cols-2">
+    <div className="grid grid-cols-1 md:min-h-screen md:grid-cols-2">
       {/* ── LEFT — verse panel ── */}
-      <div className="relative flex flex-col justify-center bg-brand-navy px-8 py-10 text-white md:px-14 md:py-14">
+      <div className="relative order-last flex flex-col justify-center bg-brand-navy px-6 py-10 text-white md:order-none md:px-14 md:py-14">
         <figure className="relative max-w-[460px]">
           <div
             className="hidden font-serif text-[5rem] font-semibold leading-none text-brand-accent md:block"
@@ -55,39 +59,40 @@ export function AuthShell({
       </div>
 
       {/* ── RIGHT — form panel ── */}
-      <div className="relative bg-background flex flex-col justify-center px-6 py-12 md:px-16 md:py-14">
-        <div className="relative w-full max-w-[420px] mx-auto md:mx-0">
-          {/* Eyebrow */}
-          <div className="flex items-center gap-2.5 mb-5">
-            <div className="w-5 h-px bg-brand-accent" aria-hidden />
-            <span className="font-sans text-base font-bold tracking-[0.2em] uppercase text-brand-accent-text">
-              {eyebrow}
-            </span>
-          </div>
-
-          {/* Title */}
-          <h1 className="font-serif text-4xl md:text-5xl font-medium text-foreground tracking-tight leading-[1.05] mb-0">
-            {title}{" "}
-            <em className="not-italic italic text-brand-primary-text">{em}</em>.
-          </h1>
-
-          {kicker && (
-            <p className="font-sans text-base text-muted-foreground leading-[1.6] mt-3.5 mb-0">
-              {kicker}
-            </p>
+      <div className="relative flex flex-col justify-center bg-background px-4 py-8 sm:px-6 md:px-16 md:py-14">
+        <div className="relative mx-auto w-full max-w-[420px] md:mx-0">
+          {eyebrow && (
+            <div className="mb-4 flex items-center gap-2.5">
+              <div className="h-px w-5 bg-brand-accent" aria-hidden />
+              <span className="font-sans text-base font-bold uppercase tracking-[0.2em] text-brand-accent-text">
+                {eyebrow}
+              </span>
+            </div>
           )}
 
-          {/* Form / children */}
-          <div className="mt-8">{children}</div>
+          <PageHeader
+            className="mb-0"
+            title={
+              em ? (
+                <>
+                  {title} <em className="italic text-brand-primary-text">{em}</em>.
+                </>
+              ) : (
+                title
+              )
+            }
+            subtitle={kicker}
+          />
 
-          {/* Alt link (optional) */}
+          <div className="mt-6 md:mt-8">{children}</div>
+
           {altPrompt && altLabel && altHref && (
-            <div className="mt-8 pt-6 border-t border-border">
+            <div className="mt-6 border-t border-border pt-4 md:mt-8 md:pt-6">
               <p className="font-sans text-lg text-muted-foreground">
                 {altPrompt}{" "}
                 <Link
                   href={altHref}
-                  className="text-brand-primary-text font-semibold hover:underline"
+                  className="inline-flex min-h-11 items-center font-semibold text-brand-primary-text underline underline-offset-4 hover:text-foreground"
                 >
                   {altLabel}
                 </Link>
