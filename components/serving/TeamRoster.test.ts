@@ -3,6 +3,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
+import type { TeamRosterPerson } from "./TeamRoster";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -24,7 +25,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const { TeamRoster } = await import("./TeamRoster");
 
-const henry = {
+const henry: TeamRosterPerson = {
   id: "p-henry",
   email: "henry@example.test",
   first_name: "Henry",
@@ -32,7 +33,8 @@ const henry = {
   preferred_name: null,
   avatar_url: null,
 };
-const zoe = { ...henry, id: "p-zoe", first_name: "Zoe", last_name: "Dummyfield" };
+const zoe = { ...henry, id: "p-zoe", email: "zoe@example.test", first_name: "Zoe", last_name: "Dummyfield" };
+const nameless = { ...henry, id: "p-new", email: "newcomer@example.test", first_name: null, last_name: null };
 
 let root: Root;
 
@@ -46,7 +48,7 @@ afterEach(async () => {
   document.body.innerHTML = "";
 });
 
-async function mount() {
+async function mount(candidates: TeamRosterPerson[] = [zoe]) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -57,7 +59,7 @@ async function mount() {
         teamName: "Greeters",
         groupName: "Group B",
         members: [{ ...henry, is_leader: false }],
-        candidates: [zoe],
+        candidates,
       }),
     ),
   );
@@ -103,5 +105,34 @@ describe("TeamRoster writes that touch no row", () => {
 
     expect(toast.success).toHaveBeenCalledWith("Removed Henry Mockingham from Greeters.");
     expect(toast.error).not.toHaveBeenCalled();
+  });
+});
+
+describe("TeamRoster add-people search", () => {
+  async function search(text: string) {
+    const input = document.querySelector("input") as HTMLInputElement;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      setValue.call(input, text);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+  const addButtons = () =>
+    [...document.querySelectorAll("button")].map((b) => b.getAttribute("aria-label")).filter((l) => l?.startsWith("Add "));
+
+  it("finds someone with no name on file by the email they are shown as", async () => {
+    await mount([zoe, nameless]);
+    await click("Add person");
+    await search("newcomer");
+
+    expect(addButtons()).toEqual(["Add newcomer@example.test to Greeters"]);
+  });
+
+  it("still finds people by name", async () => {
+    await mount([zoe, nameless]);
+    await click("Add person");
+    await search("dummy");
+
+    expect(addButtons()).toEqual(["Add Zoe Dummyfield to Greeters"]);
   });
 });

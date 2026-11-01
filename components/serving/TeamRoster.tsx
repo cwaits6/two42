@@ -52,7 +52,7 @@ export function TeamRoster({ teamId, teamName, groupName, members, candidates }:
     const q = query.trim().toLowerCase();
     if (!q) return candidates;
     return candidates.filter((p) =>
-      [p.first_name, p.last_name, p.preferred_name].filter(Boolean).join(" ").toLowerCase().includes(q),
+      [personName(p), p.first_name, p.last_name, p.email].filter(Boolean).join(" ").toLowerCase().includes(q),
     );
   }, [candidates, query]);
 
