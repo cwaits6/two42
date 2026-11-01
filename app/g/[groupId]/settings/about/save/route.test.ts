@@ -122,23 +122,39 @@ describe("POST settings/about/save", () => {
       leaders: { added: [entry(NEW_MEMBER)], edited: [], removed: [], order: [NEW_MEMBER, LISTED] },
     });
     expect(res.status).toBe(200);
-    expect(writes[0]).toMatchObject({
+    expect(writes[0]).toEqual({
       table: "class_teachers",
-      op: "insert",
-      rows: [{ org_id: ORG, group_id: A, profile_id: NEW_MEMBER, title: "", bio: "", sort_order: 0 }],
+      op: "update",
+      rows: { sort_order: 1 },
+      filters: [
+        ["org_id", ORG],
+        ["group_id", A],
+        ["profile_id", LISTED],
+      ],
     });
     expect(writes.slice(1)).toEqual([
       {
         table: "class_teachers",
-        op: "update",
-        rows: { sort_order: 1 },
-        filters: [
-          ["org_id", ORG],
-          ["group_id", A],
-          ["profile_id", LISTED],
-        ],
+        op: "insert",
+        rows: [{ org_id: ORG, group_id: A, profile_id: NEW_MEMBER, title: "", bio: "", sort_order: 0 }],
+        filters: [],
       },
     ]);
+  });
+
+  it("lists nobody when an earlier write fails, so a retry can still clear a field on the addition", async () => {
+    const order = [NEW_MEMBER, LISTED];
+    updateRows = 0;
+    const first = await save({
+      leaders: { added: [{ ...entry(NEW_MEMBER), title: "Host" }], edited: [], removed: [], order },
+    });
+    expect(first.status).toBe(500);
+    expect(writes.filter((w) => w.op === "insert")).toEqual([]);
+
+    updateRows = 1;
+    const retry = await save({ leaders: { added: [entry(NEW_MEMBER)], edited: [], removed: [], order } });
+    expect(retry.status).toBe(200);
+    expect(writes.find((w) => w.op === "insert")?.rows).toMatchObject([{ profile_id: NEW_MEMBER, title: "" }]);
   });
 
   it("writes a reorder as sort_order alone, leaving titles and bios to whoever last edited them", async () => {
@@ -191,7 +207,7 @@ describe("POST settings/about/save", () => {
     expect(writes.map((w) => [w.op, w.rows])).toEqual([["update", { sort_order: 0 }]]);
   });
 
-  it("writes only the filled fields of someone already listed, so a retry is safe", async () => {
+  it("writes only the filled fields of someone already listed", async () => {
     const res = await save({
       leaders: { added: [{ ...entry(LISTED), title: "Host" }], edited: [], removed: [], order: [LISTED] },
     });

@@ -55,9 +55,11 @@ function filledFields({ profile_id, title, bio }: LeaderEntry): LeaderEdit {
 /**
  * Touches only the rows and columns this leader changed. An `order` entry
  * another leader has since removed is skipped rather than written back. Someone
- * already listed, because another leader added them or a partial failure is
- * being retried, keeps any field this addition left blank. Returns the failure
- * response, or null when it all landed.
+ * already listed, because another leader added them or a Save's response was
+ * lost, keeps any field this addition left blank. The insert is the Save's last
+ * write: a failure before it leaves the person unlisted, so a retry inserts the
+ * fields as they then stand, blanks included. Returns the failure response, or
+ * null when it all landed.
  */
 async function writeLeaders(
   supabase: RequestClient,
@@ -77,21 +79,6 @@ async function writeLeaders(
     if (error) return failed("leadership removal", error);
   }
 
-  const newEntries = added.filter((l) => !listed.has(l.profile_id));
-  if (newEntries.length > 0) {
-    const { error } = await supabase.from("class_teachers").insert(
-      newEntries.map((leader) => ({
-        org_id: orgId,
-        group_id: groupId,
-        profile_id: leader.profile_id,
-        title: leader.title,
-        bio: leader.bio,
-        sort_order: order?.indexOf(leader.profile_id) ?? 0,
-      })),
-    );
-    if (error) return failed("leadership addition", error);
-  }
-
   const update = (profileId: string, fields: Omit<LeaderEdit, "profile_id"> | { sort_order: number }) =>
     supabase
       .from("class_teachers")
@@ -108,7 +95,24 @@ async function writeLeaders(
   ]);
   // RLS rejecting a write reports zero rows, not an error.
   const failure = results.find(({ data, error }) => error || !data?.length);
-  return failure ? failed("leadership", failure.error) : null;
+  if (failure) return failed("leadership", failure.error);
+
+  const newEntries = added.filter((l) => !listed.has(l.profile_id));
+  if (newEntries.length > 0) {
+    const { error } = await supabase.from("class_teachers").insert(
+      newEntries.map((leader) => ({
+        org_id: orgId,
+        group_id: groupId,
+        profile_id: leader.profile_id,
+        title: leader.title,
+        bio: leader.bio,
+        sort_order: order?.indexOf(leader.profile_id) ?? 0,
+      })),
+    );
+    if (error) return failed("leadership addition", error);
+  }
+
+  return null;
 }
 
 /**
