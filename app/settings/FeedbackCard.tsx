@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { Send } from "lucide-react";
 import { toast } from "sonner";
+import { failureMessage } from "@/lib/errorCopy";
 import { Segmented } from "@/components/ui/segmented";
 
 type FeedbackType = "idea" | "problem";
@@ -19,13 +21,22 @@ const TYPE_OPTIONS: { value: FeedbackType; label: string }[] = [
 export function FeedbackCard() {
   const [type, setType] = useState<FeedbackType>("idea");
   const [message, setMessage] = useState("");
+  const [error, setError] = useState<string | undefined>();
   const [sending, setSending] = useState(false);
+  // An object, so a second empty submit still refocuses.
+  const [focusRequest, setFocusRequest] = useState<object | null>(null);
+
+  // Focus waits for the render that ties the message to the field.
+  useEffect(() => {
+    if (focusRequest) document.getElementById("feedback-message")?.focus();
+  }, [focusRequest]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const trimmed = message.trim();
     if (!trimmed) {
-      toast.error("Please write a short note first.");
+      setError("Enter your feedback.");
+      setFocusRequest({});
       return;
     }
 
@@ -38,14 +49,14 @@ export function FeedbackCard() {
       });
 
       if (!res.ok) {
-        toast.error("Failed to send your feedback. Please try again.");
+        toast.error(failureMessage("send your feedback", res.status));
         return;
       }
 
       setMessage("");
-      toast.success("Thank you — your feedback has been sent.");
+      toast.success("Feedback sent.");
     } catch {
-      toast.error("Failed to send your feedback. Please try again.");
+      toast.error(failureMessage("send your feedback", "network"));
     } finally {
       setSending(false);
     }
@@ -54,13 +65,13 @@ export function FeedbackCard() {
   return (
     <Card>
       <CardContent className="pt-6">
-        <h3 className="mb-2">Feedback</h3>
-        <p className="mb-5 text-muted-foreground">
+        <h2 className="mb-2 text-2xl">Feedback</h2>
+        <p className="mb-5 text-base text-muted-foreground">
           Spotted a problem, or have an idea to make the app better? Tell us
           here.
         </p>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} noValidate className="space-y-5">
           <div className="space-y-2">
             <Label className="text-base">What kind of feedback is this?</Label>
             <div>
@@ -82,14 +93,19 @@ export function FeedbackCard() {
               rows={3}
               maxLength={2000}
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(e) => {
+                setMessage(e.target.value);
+                setError(undefined);
+              }}
               className="text-base"
+              {...invalidFieldProps("feedback-message", error)}
             />
+            <FieldError fieldId="feedback-message" message={error} />
           </div>
 
-          <Button type="submit" disabled={sending || !message.trim()}>
-            <Send className="mr-2 h-4 w-4" />
-            {sending ? "Sending..." : "Send my feedback"}
+          <Button type="submit" disabled={sending}>
+            <Send className="mr-2 h-5 w-5" aria-hidden="true" />
+            {sending ? "Sending…" : "Send feedback"}
           </Button>
         </form>
       </CardContent>

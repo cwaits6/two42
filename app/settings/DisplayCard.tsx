@@ -46,7 +46,12 @@ export function DisplayCard() {
   return (
     <Card>
       <CardContent className="space-y-5 pt-6">
-        <h3>Display</h3>
+        <div>
+          <h2 className="mb-2 text-2xl">Display</h2>
+          <p className="text-base text-muted-foreground">
+            Applies right away on this device.
+          </p>
+        </div>
 
         <div className="space-y-2">
           <Label className="text-base">Text size</Label>
