@@ -20,7 +20,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -35,6 +34,9 @@ import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { Camera, Check } from "lucide-react";
+import { CheckRow } from "@/components/profile/CheckRow";
+import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
+import { MONTHS, birthdayColumns, birthdayErrors } from "@/components/profile/birthday";
 import {
   canManageAvatar,
   type AvatarEligibilityCaller,
@@ -45,9 +47,9 @@ interface ProfileFormProps {
   profile: Profile;
   families: FamilyUnit[];
   /**
-   * The member's own family. When set, last name and address default to the
-   * family's and only appear as fields behind a "different from my family"
-   * checkbox.
+   * The member's own household. When set, last name and address default to
+   * the household's and only appear as fields behind a "different from my
+   * household" checkbox.
    */
   family?: FamilyUnit | null;
   /** Admin mode allows editing family assignment + ignores privacy enforcement on save */
@@ -69,7 +71,7 @@ interface ProfileFormProps {
    */
   avatarCaller?: AvatarEligibilityCaller | null;
   /**
-   * When true, skips the birthday and visible-contact requirements.
+   * When true, skips the visible-contact requirement.
    * Used when a household primary/spouse edits another member's profile —
    * the person being edited may have an incomplete profile that they will
    * fill in themselves.
@@ -146,21 +148,6 @@ function initialState(profile: Profile): FormState {
   };
 }
 
-const MONTHS = [
-  { value: "1", label: "January" },
-  { value: "2", label: "February" },
-  { value: "3", label: "March" },
-  { value: "4", label: "April" },
-  { value: "5", label: "May" },
-  { value: "6", label: "June" },
-  { value: "7", label: "July" },
-  { value: "8", label: "August" },
-  { value: "9", label: "September" },
-  { value: "10", label: "October" },
-  { value: "11", label: "November" },
-  { value: "12", label: "December" },
-];
-
 /** Fields that can be marked invalid, keyed by their element id. */
 type FieldErrors = Partial<
   Record<
@@ -181,63 +168,8 @@ type FieldErrors = Partial<
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
 
-function Required() {
-  return <span className="font-normal text-muted-foreground">(required)</span>;
-}
-
 function Optional() {
   return <span className="font-normal text-muted-foreground">(optional)</span>;
-}
-
-/** Checkbox that reveals fields for info that differs from the family's */
-function CheckRow({
-  id,
-  label,
-  checked,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <label
-      htmlFor={id}
-      className="flex cursor-pointer items-center gap-3 py-1 text-base font-medium"
-    >
-      <input
-        id={id}
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="size-5 shrink-0 accent-brand-primary"
-      />
-      {label}
-    </label>
-  );
-}
-
-/** Inline privacy switch rendered directly under the field it hides */
-function HideRow({
-  id,
-  label,
-  checked,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 pt-2">
-      <Label htmlFor={id} className="cursor-pointer font-medium">
-        {label}
-      </Label>
-      <Switch id={id} checked={checked} onCheckedChange={onChange} />
-    </div>
-  );
 }
 
 export function ProfileForm({
@@ -253,15 +185,15 @@ export function ProfileForm({
   const [avatarUrl, setAvatarUrl] = useState<string | null>(profile.avatar_url);
   // The family assignment as last persisted — what the storage RLS policy
   // actually evaluates on an avatar write. The live state.family_id can
-  // differ while the admin has an unsaved selection in the Family select,
+  // differ while the admin has an unsaved selection in the Household select,
   // so avatar-write eligibility is derived from this value, updated only
   // after a successful save.
   const [savedFamilyId, setSavedFamilyId] = useState<string | null>(
     profile.family_id,
   );
 
-  // Family defaults: last name falls back to the family surname and address
-  // to the family's home address unless the member marks theirs different.
+  // Household defaults: last name falls back to the household surname and
+  // address to the household's address unless the member marks theirs different.
   const familySurname =
     (!isAdmin && family?.family_name?.replace(/\s+family$/i, "").trim()) || "";
   const [differentLastName, setDifferentLastName] = useState(
@@ -362,9 +294,11 @@ export function ProfileForm({
       ? normalizePhone(state.phone_work)
       : null;
 
-    const birthMonth = state.birth_month ? Number(state.birth_month) : null;
-    const birthDay = state.birth_day ? Number(state.birth_day) : null;
-    const birthYear = state.birth_year ? Number(state.birth_year) : null;
+    const birthday = {
+      month: state.birth_month,
+      day: state.birth_day,
+      year: state.birth_year,
+    };
 
     // Collected in the order the fields appear, so the first key is the
     // field focus moves to.
@@ -398,29 +332,7 @@ export function ProfileForm({
       found.phone_work = "Enter a valid phone number.";
     }
 
-    if (!relaxValidation && !birthMonth) {
-      found.birth_month = "Choose the month of the birthday.";
-    }
-    if (birthDay === null) {
-      if (!relaxValidation) found.birth_day = "Enter the day of the birthday.";
-    } else {
-      // Calendar-aware — rejects impossible dates like Feb 31. Without a
-      // year, leap year 2000 is assumed so Feb 29 stays allowed.
-      const maxDay = birthMonth
-        ? new Date(birthYear ?? 2000, birthMonth, 0).getDate()
-        : 31;
-      if (!Number.isInteger(birthDay) || birthDay < 1 || birthDay > maxDay) {
-        found.birth_day = birthMonth
-          ? `Enter a day from 1 to ${maxDay}.`
-          : "Enter a day from 1 to 31.";
-      }
-    }
-    if (
-      birthYear !== null &&
-      (!Number.isInteger(birthYear) || birthYear < 1900 || birthYear > 2100)
-    ) {
-      found.birth_year = "Enter a year from 1900 to 2100, or leave it blank.";
-    }
+    Object.assign(found, birthdayErrors(birthday));
 
     // state/zip normalize to null on malformed input.
     if (ownAddress && state.state && !stateCode) {
@@ -453,9 +365,7 @@ export function ProfileForm({
       city,
       state: stateCode,
       postal_code: postal,
-      birth_month: birthMonth,
-      birth_day: birthDay,
-      birth_year: birthYear,
+      ...birthdayColumns(birthday),
       anniversary: state.anniversary || null,
       occupation: trimText(state.occupation),
       employer: trimText(state.employer),
@@ -503,15 +413,19 @@ export function ProfileForm({
     `${state.first_name.charAt(0)}${state.last_name.charAt(0)}`.toUpperCase() ||
     "??";
 
+  const householdItems = [
+    { value: "none", label: "No household" },
+    ...families.map((f) => ({ value: f.id, label: f.family_name })),
+  ];
+
   return (
     <form onSubmit={handleSubmit} noValidate>
       <Card>
         <CardContent className="space-y-5 pt-6">
           {!isAdmin && !relaxValidation && (
             <p className="text-base text-muted-foreground">
-              Anything you fill in here is listed in the group directory. If
-              you&apos;d rather keep something private, leave it blank or turn
-              on its hide switch.
+              Anything you fill in here is listed in the directory. To keep
+              something private, leave it blank or check its hide box.
             </p>
           )}
 
@@ -534,12 +448,8 @@ export function ProfileForm({
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploadingAvatar}
               >
-                <Camera className="mr-2 h-4 w-4" />
-                {uploadingAvatar
-                  ? "Uploading..."
-                  : relaxValidation
-                    ? "Change their photo"
-                    : "Change my photo"}
+                <Camera className="mr-2 h-5 w-5" aria-hidden="true" />
+                {uploadingAvatar ? "Uploading…" : "Change photo"}
               </Button>
               <input
                 ref={fileInputRef}
@@ -573,7 +483,7 @@ export function ProfileForm({
             {familySurname && (
               <CheckRow
                 id="different_last_name"
-                label={`My last name is different from my family's (${familySurname})`}
+                label={`My last name is different from my household's (${familySurname})`}
                 checked={differentLastName}
                 onChange={setDifferentLastName}
               />
@@ -601,7 +511,7 @@ export function ProfileForm({
 
           <div className="space-y-2">
             <Label htmlFor="preferred_name" className="text-base">
-              Nickname <Optional />
+              Preferred name <Optional />
             </Label>
             <Input
               id="preferred_name"
@@ -631,19 +541,8 @@ export function ProfileForm({
               {...invalidFieldProps("email", errors.email)}
             />
             <FieldError fieldId="email" message={errors.email} />
-            {!isAdmin && (
-              <p className="text-sm text-muted-foreground">
-                To change your email, use the{" "}
-                <Link
-                  href="/settings"
-                  className="text-brand-primary-text underline underline-offset-4"
-                >
-                  Settings page
-                </Link>
-                .
-              </p>
-            )}
-            <HideRow
+            {!isAdmin && <EmailChangeHint />}
+            <CheckRow
               id="hide_email"
               label="Hide my email from the directory"
               checked={state.hide_email}
@@ -669,7 +568,7 @@ export function ProfileForm({
               {...invalidFieldProps("phone_mobile", errors.phone_mobile)}
             />
             <FieldError fieldId="phone_mobile" message={errors.phone_mobile} />
-            <HideRow
+            <CheckRow
               id="hide_phone_mobile"
               label="Hide my mobile number"
               checked={state.hide_phone_mobile}
@@ -694,7 +593,7 @@ export function ProfileForm({
             />
             <FieldError fieldId="phone_home" message={errors.phone_home} />
             {state.phone_home && (
-              <HideRow
+              <CheckRow
                 id="hide_phone_home"
                 label="Hide my home number"
                 checked={state.hide_phone_home}
@@ -720,7 +619,7 @@ export function ProfileForm({
             />
             <FieldError fieldId="phone_work" message={errors.phone_work} />
             {state.phone_work && (
-              <HideRow
+              <CheckRow
                 id="hide_phone_work"
                 label="Hide my work number"
                 checked={state.hide_phone_work}
@@ -734,7 +633,7 @@ export function ProfileForm({
           {/* Birthday */}
           <div className="space-y-2">
             <Label className="text-base">
-              Birthday {relaxValidation ? <Optional /> : <Required />}
+              Birthday <Optional />
             </Label>
             <div className="grid grid-cols-[1.6fr_1fr_1fr] gap-3">
               <Select
@@ -786,11 +685,10 @@ export function ProfileForm({
             <FieldError fieldId="birth_month" message={errors.birth_month} />
             <FieldError fieldId="birth_day" message={errors.birth_day} />
             <FieldError fieldId="birth_year" message={errors.birth_year} />
-            <p className="text-sm text-muted-foreground">
-              The year is optional — the directory only shows the month and
-              day.
+            <p className="text-base text-muted-foreground">
+              The year is optional.
             </p>
-            <HideRow
+            <CheckRow
               id="hide_birthday"
               label="Hide my birthday"
               checked={state.hide_birthday}
@@ -800,7 +698,7 @@ export function ProfileForm({
 
           <div className="space-y-2">
             <Label htmlFor="anniversary" className="text-base">
-              Anniversary
+              Anniversary <Optional />
             </Label>
             <Input
               id="anniversary"
@@ -810,7 +708,7 @@ export function ProfileForm({
               className="py-5 text-base"
             />
             {state.anniversary && (
-              <HideRow
+              <CheckRow
                 id="hide_anniversary"
                 label="Hide my anniversary"
                 checked={state.hide_anniversary}
@@ -825,7 +723,7 @@ export function ProfileForm({
           {familyHasAddress && (
             <CheckRow
               id="different_address"
-              label="My address is different from my family's home address"
+              label="My address is different from my household's"
               checked={differentAddress}
               onChange={setDifferentAddress}
             />
@@ -915,7 +813,7 @@ export function ProfileForm({
                   <FieldError fieldId="postal_code" message={errors.postal_code} />
                 </div>
               </div>
-              <HideRow
+              <CheckRow
                 id="hide_address"
                 label="Hide my address from the directory"
                 checked={state.hide_address}
@@ -953,12 +851,12 @@ export function ProfileForm({
               />
             </div>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Sharing what you do helps others in your group find help from
+          <p className="text-base text-muted-foreground">
+            Sharing what you do helps people in your groups find help from
             someone they know.
           </p>
           {(state.occupation || state.employer) && (
-            <HideRow
+            <CheckRow
               id="hide_occupation"
               label="Hide my occupation and employer"
               checked={state.hide_occupation}
@@ -970,58 +868,49 @@ export function ProfileForm({
 
           {/* Directory listing */}
           <div className="space-y-1">
-            <HideRow
+            <CheckRow
               id="is_unlisted"
-              label="Hide me from the directory entirely"
+              label={relaxValidation || isAdmin ? "Hide from the directory" : "Hide me from the directory"}
               checked={state.is_unlisted}
               onChange={(v) => update("is_unlisted", v)}
             />
-            <p className="text-sm text-muted-foreground">
-              The profile will not appear in the member directory at all.
+            <p className="text-base text-muted-foreground">
+              The profile won&apos;t appear in the directory at all.
             </p>
           </div>
 
-          {/* Family assignment (admin only) */}
+          {/* Household assignment (admin only) */}
           {isAdmin && (
             <>
               <Separator />
               <div className="space-y-2">
                 <Label htmlFor="family_id" className="text-base">
-                  Family
+                  Household
                 </Label>
                 <Select
+                  items={householdItems}
                   value={state.family_id || "none"}
                   onValueChange={(v) =>
                     update("family_id", !v || v === "none" ? "" : v)
                   }
                 >
-                  <SelectTrigger className="py-5 text-base">
-                    <SelectValue placeholder="No family assigned">
-                      {(v: string | null | undefined) => {
-                        if (!v || v === "none") return "No family assigned";
-                        return families.find((f) => f.id === v)?.family_name ?? "(Unknown family)";
-                      }}
-                    </SelectValue>
+                  <SelectTrigger id="family_id" className="py-5 text-base">
+                    <SelectValue placeholder="No household" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">— No family —</SelectItem>
-                    {families.map((f) => (
-                      <SelectItem key={f.id} value={f.id}>
-                        {f.family_name}
+                    {householdItems.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-sm text-muted-foreground">
-                  Manage families on the{" "}
-                  <Link
-                    href="/admin/families"
-                    className="text-brand-primary-text underline"
-                  >
-                    Families page
-                  </Link>
-                  .
-                </p>
+                <Link
+                  href="/admin/families"
+                  className="inline-flex min-h-11 items-center text-base font-semibold text-brand-primary-text underline underline-offset-4"
+                >
+                  Manage households
+                </Link>
               </div>
             </>
           )}
@@ -1033,8 +922,8 @@ export function ProfileForm({
               disabled={saving}
               className="text-base"
             >
-              <Check className="mr-2 h-4 w-4" />
-              {saving ? "Saving..." : "Save my changes"}
+              <Check className="mr-2 h-5 w-5" aria-hidden="true" />
+              {saving ? "Saving…" : "Save changes"}
             </Button>
           </div>
         </CardContent>

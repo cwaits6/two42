@@ -3,6 +3,7 @@ import { mintSignedUrls } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ErrorState } from "@/components/states/ErrorState";
 import { ProfileHouseholdTabs } from "@/components/profile/ProfileHouseholdTabs";
 import { canEditSpouseProfiles as computeCanEditSpouseProfiles, type HouseholdSummary } from "@/lib/household";
 import type { Profile, FamilyUnit, FamilyMember } from "@/lib/types";
@@ -33,6 +34,10 @@ export default async function ProfilePage() {
   if (!profile.setup_completed) {
     redirect("/profile/setup");
   }
+
+  const header = (
+    <PageHeader title="My profile" subtitle="Your contact details and your household." />
+  );
 
   let family: FamilyUnit | null = null;
   let householdProfiles: (Profile | HouseholdSummary)[] = [];
@@ -67,7 +72,7 @@ export default async function ProfilePage() {
             .neq("id", user.id)
             .order("first_name")
             .returns<HouseholdSummary[]>(),
-      // Family members without accounts (children etc.)
+      // Household people without accounts (children etc.)
       supabase
         .from("family_members")
         .select("*")
@@ -76,11 +81,16 @@ export default async function ProfilePage() {
         .order("relationship")
         .returns<FamilyMember[]>(),
     ]);
-    // Fail loudly rather than rendering an empty household over a query error.
+    // Never render an empty household over a query error.
     const queryError = familyRes.error ?? othersRes.error ?? fmsRes.error;
     if (queryError) {
       console.error("Failed to load household data:", queryError);
-      throw new Error("Failed to load your household information.");
+      return (
+        <PageContainer>
+          {header}
+          <ErrorState thing="your household" />
+        </PageContainer>
+      );
     }
     family = familyRes.data ?? null;
     householdProfiles = othersRes.data ?? [];
@@ -107,10 +117,7 @@ export default async function ProfilePage() {
 
   return (
     <PageContainer>
-      <PageHeader
-        title="My Profile"
-        subtitle="Manage your info and your household."
-      />
+      {header}
 
       <ProfileHouseholdTabs
         profile={profile}
