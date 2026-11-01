@@ -35,7 +35,8 @@ export function PendingJoinRequests({
     setRequests((prev) => prev.filter((r) => r.id !== id));
   }
 
-  async function review(request: PendingJoinRequest, approve: boolean) {
+  /** True once the request is decided, here or elsewhere, so nothing is left to retry. */
+  async function review(request: PendingJoinRequest, approve: boolean): Promise<boolean> {
     setBusyId(request.id);
     try {
       const { error } = await supabase.rpc("review_group_join_request", {
@@ -45,8 +46,9 @@ export function PendingJoinRequests({
       if (error) {
         toast.error(reviewErrorMessage(error.code));
         // Decided elsewhere already: the row no longer belongs in the queue.
-        if (error.code === "GJ004") remove(request.id);
-        return;
+        if (error.code !== "GJ004") return false;
+        remove(request.id);
+        return true;
       }
       toast.success(
         approve
@@ -56,6 +58,7 @@ export function PendingJoinRequests({
       remove(request.id);
       // The member counts further down the page are server-rendered.
       if (approve) router.refresh();
+      return true;
     } finally {
       setBusyId(null);
     }
@@ -111,8 +114,7 @@ export function PendingJoinRequests({
         confirmLabel="Decline request"
         pendingLabel="Declining…"
         onConfirm={async () => {
-          if (declining) await review(declining, false);
-          setDeclining(null);
+          if (declining && (await review(declining, false))) setDeclining(null);
         }}
       />
     </>
