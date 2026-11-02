@@ -491,6 +491,38 @@ argument, not for where that value came from. The compensating controls are
 the `service_role`-only grant, the grant-matrix and behaviour assertions in
 `supabase/tests/org_email_domains_suite.sql`, and the route's unit suite.
 
+## Prayer author helper — a definer-function bypass surface
+
+`prayer_requests.author_id` is unreadable to every client role
+(`20261109000000_prayer_author_private.sql`). `prayer_wall` stays
+`security_invoker`, so it runs with the caller's rights and reaches the author
+only through one `SECURITY DEFINER` function:
+
+- `prayer_request_visible_author(_request_id)` — returns the author only to
+  the author themselves, or, on a by-name request, to someone the `profiles`
+  read policy lets see that person: a church admin, their household, or a
+  member while the author is listed and either shares a group with them or the
+  church's directory is open. Otherwise NULL. Anonymous means NULL for every
+  other member, leader and church admin. EXECUTE: `authenticated` only; revoked
+  from `public`, `anon` and `service_role`.
+
+The parameter is only the row key. The org and group come from the
+`prayer_requests` row, checked against `app_request_org_id()` and
+`is_group_member(r.group_id)`; the profile is joined on the row's own `org_id`.
+`SECURITY DEFINER` bypasses RLS, so **those checks and the by-name arm are the
+boundary, and no lint sees them.** The by-name arm repeats the `profiles` read
+policy: if that policy changes, change the arm with it, or an id can be returned
+where the name is hidden, which links a person's requests to each other. The
+grant matrix and each arm are pinned by
+`supabase/tests/prayer_anonymity_suite.sql`.
+
+Two plain (not definer) triggers from the same migration close write oracles:
+`prayer_requests_author_sets_anonymity` lets only the author change
+`is_anonymous`, and `profiles_keep_id` refuses a client's change to
+`profiles.id` before a foreign key error can name `prayer_requests`.
+`service_role` is outside both, and no service-role client reads
+`prayer_requests` or `prayer_wall`.
+
 ## App routes and pages (26 sites)
 
 | File | Why service-role is used | Org derived from | Scoped queries |
