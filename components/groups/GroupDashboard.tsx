@@ -44,7 +44,8 @@ import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { cn } from "@/lib/utils";
 
 const CARD = "rounded-2xl border border-border bg-card";
-const ROW = "flex min-h-16 items-center gap-3 rounded-2xl px-3 py-3 transition-colors hover:bg-muted";
+const ROW = "flex min-h-16 items-center gap-3 rounded-2xl px-2 py-3 transition-colors hover:bg-muted";
+const ROW_LEAD = "flex w-10 shrink-0 justify-center";
 const ROW_TITLE = "font-sans text-lg font-semibold leading-snug text-foreground";
 const ROW_DETAIL = "truncate font-sans text-base text-muted-foreground";
 const EYEBROW = "font-sans text-sm font-semibold text-brand-accent-text";
@@ -284,7 +285,9 @@ function TodoSection({ rows }: { rows: TodoRow[] }) {
           return (
             <li key={row.key}>
               <Link href={row.href} className={ROW}>
-                <Icon className="mx-3 h-6 w-6 shrink-0 text-brand-primary-text" aria-hidden="true" />
+                <span className={ROW_LEAD}>
+                  <Icon className="h-6 w-6 text-brand-primary-text" aria-hidden="true" />
+                </span>
                 <RowText title={row.title} detail={row.detail} />
                 <RowChevron />
               </Link>
@@ -349,23 +352,25 @@ function ThisWeek({
   const nothingFailed = home.weekRows !== null && home.celebrations !== null;
 
   return (
-    <section className="min-w-0 space-y-3">
+    <section className="min-w-0">
       <SectionHeading title="This week" link={{ href: href("/calendar"), label: "Calendar" }} />
-      {home.weekRows === null && <ErrorState thing="this week's events" />}
-      {home.celebrations === null && <ErrorState thing="birthdays and anniversaries" />}
-      {hasRows && (
-        <ul className={cn(CARD, "p-1")}>
-          {rows.map((row) => (
-            <WeekListRow key={row.key} row={row} userId={userId} />
-          ))}
-          {celebrations.map((row) => (
-            <CelebrationListRow key={row.kind} row={row} />
-          ))}
-        </ul>
-      )}
-      {!hasRows && nothingFailed && isLeader && (
-        <AddAction href={href("/calendar/new")} label="Add event" />
-      )}
+      <div className="space-y-3">
+        {home.weekRows === null && <ErrorState thing="this week's events" />}
+        {hasRows && (
+          <ul className={cn(CARD, "p-1")}>
+            {rows.map((row) => (
+              <WeekListRow key={row.key} row={row} userId={userId} />
+            ))}
+            {celebrations.map((row) => (
+              <CelebrationListRow key={row.kind} row={row} />
+            ))}
+          </ul>
+        )}
+        {home.celebrations === null && <ErrorState thing="birthdays and anniversaries" />}
+        {!hasRows && nothingFailed && isLeader && (
+          <AddAction href={href("/calendar/new")} label="Add event" />
+        )}
+      </div>
     </section>
   );
 }
@@ -374,7 +379,7 @@ function WeekListRow({ row, userId }: { row: WeekRow; userId: string }) {
   return (
     <li>
       <Link href={row.href} className={ROW}>
-        <span className="flex w-12 shrink-0 flex-col items-center leading-tight">
+        <span className={cn(ROW_LEAD, "flex-col items-center leading-tight")}>
           <span className="font-sans text-sm font-semibold text-muted-foreground">{row.weekday}</span>
           <span className="font-serif text-2xl font-medium text-foreground">{row.day}</span>
         </span>
@@ -391,7 +396,7 @@ function WeekListRow({ row, userId }: { row: WeekRow; userId: string }) {
         <RowChevron />
       </Link>
       {row.reply && (
-        <div className="px-3 pb-3 pl-[4.5rem]">
+        <div className="pb-3 pl-[3.75rem] pr-2">
           <RsvpControl
             eventId={row.reply.eventId}
             userId={userId}
@@ -409,7 +414,7 @@ function CelebrationListRow({ row }: { row: CelebrationRow }) {
   return (
     <li>
       <Link href={row.href} className={ROW}>
-        <span className="flex w-12 shrink-0 justify-center">
+        <span className={ROW_LEAD}>
           <Icon className="h-6 w-6 text-brand-primary-text" aria-hidden="true" />
         </span>
         <RowText title={row.title} detail={row.names} />
@@ -477,7 +482,7 @@ function Tile({ tile, timeZone, now }: { tile: NewTile; timeZone: string; now: D
 
 function AddAction({ href, label }: { href: string; label: string }) {
   return (
-    <Link href={href} className={buttonVariants({ variant: "outline" })}>
+    <Link href={href} className={buttonVariants({ variant: "secondary" })}>
       <Plus aria-hidden="true" />
       {label}
     </Link>
@@ -499,7 +504,7 @@ function RowChevron() {
 
 function SectionHeading({ title, link }: { title: string; link?: { href: string; label: string } }) {
   return (
-    <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4">
+    <div className="mb-3 flex min-h-11 flex-wrap items-baseline justify-between gap-x-4">
       <h2 className="font-serif text-3xl font-medium tracking-tight text-foreground">{title}</h2>
       {link && (
         <Link
