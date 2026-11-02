@@ -506,7 +506,7 @@ describe("celebrations", () => {
     const family = {
       id: "f1",
       family_name: "Bell",
-      anniversary: "2010-11-05",
+      anniversary_month: 11, anniversary_day: 5, anniversary_year: 2010,
       photo_url: null,
       members: [
         { id: "m", relationship: "primary", first_name: "Marcus", preferred_name: null },
