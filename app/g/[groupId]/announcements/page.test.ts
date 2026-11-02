@@ -1,15 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ReactElement, ReactNode } from "react";
+import { createElement, type ReactElement, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 let result: { data: unknown[] | null; error: { code: string; message: string } | null };
+let leaderResult: { data: unknown[] | null; error: { code: string; message: string } | null };
+let leaderReads: number;
 let role: "leader" | "member" = "leader";
 
 function query() {
+  let publishedOnly = false;
   const chain = {
     select: () => chain,
     eq: () => chain,
-    lte: () => chain,
-    order: () => Promise.resolve(result),
+    lte: () => {
+      publishedOnly = true;
+      return chain;
+    },
+    order: () => {
+      if (publishedOnly) return Promise.resolve(result);
+      leaderReads += 1;
+      return Promise.resolve(leaderResult);
+    },
   };
   return chain;
 }
@@ -23,6 +34,10 @@ vi.mock("@/lib/groups/server", () => ({
 vi.mock("@/lib/time/orgZone", () => ({ getOrgTimeZone: async () => "America/New_York" }));
 vi.mock("@/components/states/ErrorState", () => ({ ErrorState: () => null }));
 vi.mock("@/components/announcements/AnnouncementCard", () => ({ AnnouncementCard: () => null }));
+vi.mock("next/link", () => ({
+  default: ({ href, children }: { href: string; children?: ReactNode }) =>
+    createElement("a", { href }, children),
+}));
 
 const { PageHeader } = await import("@/components/layout/PageHeader");
 const { ErrorState } = await import("@/components/states/ErrorState");
@@ -65,8 +80,32 @@ async function headerAction() {
   return header?.props.actions;
 }
 
+const DRAFT = {
+  id: "d1",
+  title: "Picnic plans",
+  is_published: false,
+  published_at: null,
+  created_at: "2026-01-01T12:00:00Z",
+};
+const SCHEDULED = {
+  id: "s1",
+  title: "Next year",
+  is_published: true,
+  published_at: "2999-01-01T12:00:00Z",
+  created_at: "2026-01-01T12:00:00Z",
+};
+const PUBLISHED = {
+  id: "p1",
+  title: "Old news",
+  is_published: true,
+  published_at: "2026-01-01T12:00:00Z",
+  created_at: "2026-01-01T12:00:00Z",
+};
+
 beforeEach(() => {
   role = "leader";
+  leaderResult = { data: [], error: null };
+  leaderReads = 0;
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -105,6 +144,49 @@ describe("AnnouncementsPage", () => {
     role = "member";
     result = { data: [{ id: "a1" }], error: null };
     expect(await headerAction()).toBeFalsy();
+  });
+
+  it("links each card to its editor for a leader", async () => {
+    result = { data: [{ id: "a1" }], error: null };
+    const card = (await rendered()).find((e) => e.type === AnnouncementCard) as ReactElement<{
+      editHref?: string;
+    }>;
+    expect(card.props.editHref).toBe("/g/g1/announcements/a1/edit");
+  });
+
+  it("gives a member's card no editor link, and never reads unpublished rows for them", async () => {
+    role = "member";
+    result = { data: [{ id: "a1" }], error: null };
+    leaderResult = { data: [DRAFT], error: null };
+    const card = (await rendered()).find((e) => e.type === AnnouncementCard) as ReactElement<{
+      editHref?: string;
+    }>;
+    expect(card.props.editHref).toBeUndefined();
+    expect(leaderReads).toBe(0);
+  });
+
+  it("shows a leader their drafts and scheduled announcements, not the published ones twice", async () => {
+    result = { data: [PUBLISHED], error: null };
+    leaderResult = { data: [DRAFT, SCHEDULED, PUBLISHED], error: null };
+    const html = renderToStaticMarkup(
+      await AnnouncementsPage({ params: Promise.resolve({ groupId: "g1" }) }),
+    );
+    expect(html).toContain("Drafts and scheduled");
+    expect(html).toContain('href="/g/g1/announcements/d1/edit"');
+    expect(html).toContain('href="/g/g1/announcements/s1/edit"');
+    expect(html).not.toContain('href="/g/g1/announcements/p1/edit"');
+  });
+
+  it("does not call the list empty when a leader has only a draft", async () => {
+    result = { data: [], error: null };
+    leaderResult = { data: [DRAFT], error: null };
+    expect(await renderedTypes()).not.toContain(EmptyState);
+  });
+
+  it("shows ErrorState when a leader's read of unpublished rows fails", async () => {
+    result = { data: [], error: null };
+    leaderResult = { data: null, error: { code: "57014", message: "canceling statement" } };
+    expect(await renderedTypes()).toContain(ErrorState);
   });
 
   it("lists the announcements the read returned", async () => {

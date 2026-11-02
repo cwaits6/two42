@@ -94,7 +94,7 @@ describe("GroupSettingsPage", () => {
     });
   });
 
-  it("shows a leader the content tiles under the group and nothing under /admin", async () => {
+  it("shows a leader only the configuration pages, under the group and nothing under /admin", async () => {
     requireActiveGroup.mockResolvedValue(leader);
 
     const element = await GroupSettingsPage({ params: Promise.resolve({ groupId: A_ID }) });
@@ -103,12 +103,8 @@ describe("GroupSettingsPage", () => {
     expect(links.filter((h) => h.startsWith("/admin"))).toEqual([]);
     expect(links).toEqual([
       `/g/${A_ID}/settings/details`,
-      `/g/${A_ID}/settings/about`,
       `/g/${A_ID}/settings/privacy`,
       `/g/${A_ID}/settings/invites`,
-      `/g/${A_ID}/settings/announcements`,
-      `/g/${A_ID}/settings/lectures`,
-      `/g/${A_ID}/settings/giving`,
       `/g/${A_ID}/settings/serving`,
       `/g/${A_ID}/settings/teams`,
       `/g/${A_ID}/settings/labels`,

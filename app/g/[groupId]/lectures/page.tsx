@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen, Play, Plus } from "lucide-react";
+import { BookOpen, CircleCheck, Play, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { SegmentedLinks } from "@/components/ui/segmented";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
-import { formatLessonDate, lessonThumbnail, partNumbers } from "@/lib/lessons";
+import { formatLessonDate, lessonThumbnail, needsSummary, partNumbers } from "@/lib/lessons";
 import { groupPageTitle } from "@/lib/pageTitle";
 import { readList } from "@/lib/supabase/readList";
 import { LessonList, MetaLine } from "./LessonList";
@@ -39,12 +39,13 @@ export default async function LessonsPage({
   searchParams,
 }: {
   params: Promise<{ groupId: string }>;
-  searchParams: Promise<{ view?: string }>;
+  searchParams: Promise<{ view?: string; filter?: string }>;
 }) {
   const { groupId } = await params;
   const group = await requireActiveGroup(groupId);
   const libraryHref = groupPath(group.id, "/lectures");
-  const { view } = await searchParams;
+  const isLeader = group.role === "leader";
+  const { view, filter } = await searchParams;
   const supabase = await createClient();
 
   const [lessons, series] = await Promise.all([
@@ -65,33 +66,44 @@ export default async function LessonsPage({
       .then((read) => readList<Series>(read, "lesson series")),
   ]);
 
+  const addLesson = isLeader && (
+    <Button nativeButton={false} render={<Link href={`${libraryHref}/new`} />}>
+      <Plus aria-hidden="true" />
+      Add lesson
+    </Button>
+  );
+
   return (
     <PageContainer>
-      <PageHeader title="Lessons" subtitle={`Recordings and lesson summaries from ${group.name}.`} />
+      <PageHeader
+        title="Lessons"
+        subtitle={`Recordings and lesson summaries from ${group.name}.`}
+        actions={
+          isLeader && (
+            <>
+              <Button
+                variant="outline"
+                nativeButton={false}
+                render={<Link href={`${libraryHref}/series`} />}
+              >
+                Manage series
+              </Button>
+              {addLesson}
+            </>
+          )
+        }
+      />
       {lessons === null || series === null ? (
         <ErrorState thing="lessons" />
       ) : lessons.length === 0 ? (
-        <EmptyState
-          icon={BookOpen}
-          message="No lessons yet."
-          action={
-            group.role === "leader" && (
-              <Button
-                nativeButton={false}
-                render={<Link href={groupPath(group.id, "/settings/lectures/new")} />}
-              >
-                <Plus aria-hidden="true" />
-                Add lesson
-              </Button>
-            )
-          }
-        />
+        <EmptyState icon={BookOpen} message="No lessons yet." action={addLesson} />
       ) : (
         <Library
           libraryHref={libraryHref}
           lessons={lessons}
           series={series}
-          isAllView={view === "all"}
+          isLeader={isLeader}
+          shown={isLeader && filter === "needs-summary" ? "needs-summary" : view === "all" ? "all" : "series"}
         />
       )}
     </PageContainer>
@@ -102,12 +114,14 @@ function Library({
   libraryHref,
   lessons,
   series,
-  isAllView,
+  isLeader,
+  shown,
 }: {
   libraryHref: string;
   lessons: Lesson[];
   series: Series[];
-  isAllView: boolean;
+  isLeader: boolean;
+  shown: "series" | "all" | "needs-summary";
 }) {
   const parts = partNumbers(lessons);
   const partLabel = (id: string) => {
@@ -116,6 +130,8 @@ function Library({
   };
   const dateLabel = (lesson: Lesson) =>
     lesson.lecture_date ? formatLessonDate(lesson.lecture_date) : null;
+
+  const editHref = (lesson: Lesson) => (isLeader ? `${libraryHref}/${lesson.id}/edit` : undefined);
 
   const seriesName = (lesson: Lesson) =>
     series.find((s) => s.id === lesson.series_id)?.name;
@@ -126,6 +142,13 @@ function Library({
   const standalone = lessons.filter((l) => !l.series_id);
   const latest =
     lessons.find((l) => l.series_id && currentIds.has(l.series_id)) ?? standalone[0] ?? null;
+  const awaiting = lessons.filter((l) => needsSummary(l.summary));
+  const flatList = (shown === "all" ? lessons : awaiting).map((l) => ({
+    id: l.id,
+    title: l.title,
+    meta: [seriesName(l), partLabel(l.id), dateLabel(l)],
+    editHref: editHref(l),
+  }));
 
   return (
     <>
@@ -134,6 +157,7 @@ function Library({
           libraryHref={libraryHref}
           lesson={latest}
           meta={[seriesName(latest), partLabel(latest.id), dateLabel(latest)]}
+          editHref={editHref(latest)}
         />
       )}
 
@@ -141,20 +165,26 @@ function Library({
         label="Show lessons"
         className="mt-10 mb-8"
         options={[
-          { href: libraryHref, label: "By series", current: !isAllView },
-          { href: `${libraryHref}?view=all`, label: "All lessons", current: isAllView },
+          { href: libraryHref, label: "By series", current: shown === "series" },
+          { href: `${libraryHref}?view=all`, label: "All lessons", current: shown === "all" },
+          ...(isLeader
+            ? [
+                {
+                  href: `${libraryHref}?filter=needs-summary`,
+                  label: `Needs summary (${awaiting.length})`,
+                  current: shown === "needs-summary",
+                },
+              ]
+            : []),
         ]}
       />
 
-      {isAllView ? (
-        <LessonList
-          libraryHref={libraryHref}
-          lessons={lessons.map((l) => ({
-            id: l.id,
-            title: l.title,
-            meta: [seriesName(l), partLabel(l.id), dateLabel(l)],
-          }))}
-        />
+      {shown !== "series" ? (
+        flatList.length > 0 ? (
+          <LessonList libraryHref={libraryHref} lessons={flatList} />
+        ) : (
+          <EmptyState icon={CircleCheck} message="Every lesson has a summary." />
+        )
       ) : (
         <div className="space-y-12">
           {currentSeries.map((s) => {
@@ -177,14 +207,26 @@ function Library({
                       ]}
                     />
                   </div>
-                  <Button
-                    variant="outline"
-                    nativeButton={false}
-                    render={<Link href={`${libraryHref}/series/${s.id}`} />}
-                    aria-label={`View series ${s.name}`}
-                  >
-                    View series
-                  </Button>
+                  <div className="flex shrink-0 flex-wrap gap-3">
+                    <Button
+                      variant="outline"
+                      nativeButton={false}
+                      render={<Link href={`${libraryHref}/series/${s.id}`} />}
+                      aria-label={`View series ${s.name}`}
+                    >
+                      View series
+                    </Button>
+                    {isLeader && (
+                      <Button
+                        variant="outline"
+                        nativeButton={false}
+                        render={<Link href={`${libraryHref}/series/${s.id}/edit`} />}
+                        aria-label={`Edit series ${s.name}`}
+                      >
+                        Edit series
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <LessonList
                   libraryHref={libraryHref}
@@ -193,6 +235,7 @@ function Library({
                     title: l.title,
                     description: l.description,
                     meta: [partLabel(l.id), dateLabel(l)],
+                    editHref: editHref(l),
                   }))}
                 />
               </section>
@@ -214,6 +257,7 @@ function Library({
                   title: l.title,
                   description: l.description,
                   meta: [dateLabel(l)],
+                  editHref: editHref(l),
                 }))}
               />
             </section>
@@ -258,10 +302,12 @@ function LatestLesson({
   libraryHref,
   lesson,
   meta,
+  editHref,
 }: {
   libraryHref: string;
   lesson: Lesson;
   meta: React.ReactNode[];
+  editHref?: string;
 }) {
   const href = `${libraryHref}/${lesson.id}`;
   const thumbnail = lessonThumbnail(lesson);
@@ -295,7 +341,7 @@ function LatestLesson({
           id="latest-lesson"
           className="mt-1 font-serif text-3xl font-medium text-foreground"
         >
-          <Link href={href} className="hover:text-brand-primary-text">
+          <Link href={href} className="inline-flex min-h-11 items-center hover:text-brand-primary-text">
             {lesson.title}
           </Link>
         </h2>
@@ -311,14 +357,25 @@ function LatestLesson({
             </p>
           </div>
         )}
-        <Button
-          className="mt-5"
-          nativeButton={false}
-          render={<Link href={href} />}
-          aria-label={`View lesson ${lesson.title}`}
-        >
-          View lesson
-        </Button>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <Button
+            nativeButton={false}
+            render={<Link href={href} />}
+            aria-label={`View lesson ${lesson.title}`}
+          >
+            View lesson
+          </Button>
+          {editHref && (
+            <Button
+              variant="outline"
+              nativeButton={false}
+              render={<Link href={editHref} />}
+              aria-label={`Edit ${lesson.title}`}
+            >
+              Edit
+            </Button>
+          )}
+        </div>
       </div>
     </section>
   );

@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import { PlayCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 /** Joins the parts that are present with " · ", so a missing part leaves no stray separator. */
 export function MetaLine({
@@ -29,6 +30,8 @@ export type LessonListItem = {
   title: string;
   description?: string | null;
   meta: React.ReactNode[];
+  /** Present only for someone who may edit it. */
+  editHref?: string;
 };
 
 export function LessonList({
@@ -41,10 +44,10 @@ export function LessonList({
   return (
     <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
       {lessons.map((lesson) => (
-        <li key={lesson.id}>
+        <li key={lesson.id} className="flex items-center">
           <Link
             href={`${libraryHref}/${lesson.id}`}
-            className="group flex min-h-16 items-center gap-4 px-5 py-4 transition-colors hover:bg-muted/50"
+            className="group flex min-h-16 min-w-0 flex-1 items-center gap-4 px-5 py-4 transition-colors hover:bg-muted/50"
           >
             <span className="min-w-0 flex-1">
               <span className="block text-lg font-medium text-foreground group-hover:text-brand-primary-text">
@@ -59,6 +62,17 @@ export function LessonList({
             </span>
             <PlayCircle className="size-6 shrink-0 text-brand-primary-text" aria-hidden="true" />
           </Link>
+          {lesson.editHref && (
+            <Button
+              variant="outline"
+              nativeButton={false}
+              render={<Link href={lesson.editHref} />}
+              aria-label={`Edit ${lesson.title}`}
+              className="mr-4"
+            >
+              Edit
+            </Button>
+          )}
         </li>
       ))}
     </ul>

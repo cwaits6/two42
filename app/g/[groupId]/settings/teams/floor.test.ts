@@ -62,7 +62,7 @@ describe("group pages", () => {
     expect(files).toEqual(
       expect.arrayContaining([
         "calendar/[id]/edit/EditEventForm.tsx",
-        "settings/about/AboutEditor.tsx",
+        "about/edit/AboutEditor.tsx",
         "settings/teams/TeamsManager.tsx",
       ]),
     );

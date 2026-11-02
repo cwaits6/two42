@@ -59,7 +59,7 @@ export default async function AboutGroupPage({
     <Button
       variant="outline"
       nativeButton={false}
-      render={<Link href={groupPath(group.id, "/settings/about")} />}
+      render={<Link href={groupPath(group.id, "/about/edit")} />}
     >
       Edit page
     </Button>
@@ -146,7 +146,7 @@ export default async function AboutGroupPage({
                 <Button
                   variant="outline"
                   nativeButton={false}
-                  render={<Link href={groupPath(group.id, "/settings/about")} />}
+                  render={<Link href={groupPath(group.id, "/about/edit")} />}
                 >
                   Add member
                 </Button>

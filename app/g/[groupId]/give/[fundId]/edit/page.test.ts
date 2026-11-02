@@ -98,7 +98,7 @@ describe("EditFundPage role checks", () => {
   it("opens the form for a leader, on any fund, whatever the setting", async () => {
     state.groupRole = "leader";
     state.manageMode = "admins";
-    expect(await render()).toContain("fund form, back to /g/g1/settings/giving");
+    expect(await render()).toContain("fund form, back to /g/g1/give");
   });
 
   it("sends a pending profile to the dashboard", async () => {

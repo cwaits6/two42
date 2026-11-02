@@ -68,14 +68,13 @@ export default async function EditFundPage({
   const { members, failed: membersFailed } = fund
     ? await loadFundFormData(supabase, profile.org_id)
     : { members: [], failed: false };
-  const backHref = isLeader ? groupPath(group.id, "/settings/giving") : giveHref;
 
   return (
     <PageContainer>
       <PageHeader
         title="Edit fund"
-        backHref={backHref}
-        backLabel={isLeader ? "Back to Giving" : "Back to Give"}
+        backHref={giveHref}
+        backLabel="Back to Give"
       />
       {/* A partial read must not reach the form: saving prunes every method it doesn't show. */}
       {!fund || methods === null || membersFailed ? (
@@ -88,7 +87,7 @@ export default async function EditFundPage({
           isLeader={isLeader}
           groupId={group.id}
           groupName={group.name}
-          backHref={backHref}
+          backHref={giveHref}
           today={todayIn(timeZone)}
         />
       )}
