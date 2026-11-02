@@ -1463,6 +1463,70 @@ COMMENT ON FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") I
 
 
 
+CREATE OR REPLACE FUNCTION "public"."prayer_request_visible_author"("_request_id" "uuid") RETURNS "uuid"
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select r.author_id
+  from public.prayer_requests r
+  join public.profiles p on p.id = r.author_id and p.org_id = r.org_id
+  where r.id = _request_id
+    and r.org_id = public.app_request_org_id()
+    and public.is_group_member(r.group_id)
+    and (
+      r.author_id = auth.uid()
+      or (
+        not r.is_anonymous
+        and (
+          public.is_admin()
+          or (p.family_id is not null and p.family_id = public.current_family_id())
+          or (
+            not p.is_unlisted
+            and p.role in ('member', 'admin')
+            and (public.org_directory_visible() or public.shares_group_with(p.id))
+          )
+        )
+      )
+    );
+$$;
+
+
+ALTER FUNCTION "public"."prayer_request_visible_author"("_request_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."prayer_requests_author_sets_anonymity"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  if current_user in ('anon', 'authenticated') and auth.uid() is distinct from old.author_id then
+    raise exception 'only the author can change whether a request is anonymous'
+      using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."prayer_requests_author_sets_anonymity"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."profiles_keep_id"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  if current_user in ('anon', 'authenticated') then
+    raise exception 'a profile id cannot change' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."profiles_keep_id"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."profiles_keep_one_church_admin"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     SET "search_path" TO ''
@@ -2833,29 +2897,19 @@ CREATE OR REPLACE VIEW "public"."prayer_wall" WITH ("security_invoker"='true') A
     "r"."is_anonymous",
     "r"."is_answered",
     "r"."created_at",
-    ("r"."author_id" = ( SELECT "auth"."uid"() AS "uid")) AS "mine",
-        CASE
-            WHEN ("r"."is_anonymous" AND ("r"."author_id" <> ( SELECT "auth"."uid"() AS "uid"))) THEN NULL::"text"
-            ELSE "p"."first_name"
-        END AS "first_name",
-        CASE
-            WHEN ("r"."is_anonymous" AND ("r"."author_id" <> ( SELECT "auth"."uid"() AS "uid"))) THEN NULL::"text"
-            ELSE "p"."last_name"
-        END AS "last_name",
-        CASE
-            WHEN ("r"."is_anonymous" AND ("r"."author_id" <> ( SELECT "auth"."uid"() AS "uid"))) THEN NULL::"text"
-            ELSE "p"."preferred_name"
-        END AS "preferred_name",
-        CASE
-            WHEN ("r"."is_anonymous" AND ("r"."author_id" <> ( SELECT "auth"."uid"() AS "uid"))) THEN NULL::"text"
-            ELSE "p"."avatar_url"
-        END AS "avatar_url",
+    COALESCE(("a"."author_id" = ( SELECT "auth"."uid"() AS "uid")), false) AS "mine",
+    "p"."first_name",
+    "p"."last_name",
+    "p"."preferred_name",
+    "p"."avatar_url",
     COALESCE("pc"."praying_count", 0) AS "praying_count",
     COALESCE("pc"."i_am_praying", false) AS "i_am_praying",
     "r"."org_id",
     "r"."group_id"
-   FROM (("public"."prayer_requests" "r"
-     LEFT JOIN "public"."profiles" "p" ON ((("p"."id" = "r"."author_id") AND ("p"."org_id" = "r"."org_id"))))
+   FROM ((("public"."prayer_requests" "r"
+     CROSS JOIN LATERAL ( SELECT "public"."prayer_request_visible_author"("r"."id") AS "author_id"
+         OFFSET 0) "a")
+     LEFT JOIN "public"."profiles" "p" ON ((("p"."id" = "a"."author_id") AND ("p"."org_id" = "r"."org_id"))))
      LEFT JOIN LATERAL ( SELECT ("count"(*))::integer AS "praying_count",
             "bool_or"(("pr"."profile_id" = ( SELECT "auth"."uid"() AS "uid"))) AS "i_am_praying"
            FROM "public"."prayer_responses" "pr"
@@ -3840,7 +3894,15 @@ CREATE OR REPLACE TRIGGER "prayer_call_sessions_touch_updated_at" BEFORE UPDATE 
 
 
 
+CREATE OR REPLACE TRIGGER "prayer_requests_author_sets_anonymity" BEFORE UPDATE OF "is_anonymous" ON "public"."prayer_requests" FOR EACH ROW WHEN (("old"."is_anonymous" IS DISTINCT FROM "new"."is_anonymous")) EXECUTE FUNCTION "public"."prayer_requests_author_sets_anonymity"();
+
+
+
 CREATE OR REPLACE TRIGGER "prayer_requests_touch_updated_at" BEFORE UPDATE ON "public"."prayer_requests" FOR EACH ROW EXECUTE FUNCTION "public"."touch_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "profiles_keep_id" BEFORE UPDATE OF "id" ON "public"."profiles" FOR EACH ROW WHEN (("old"."id" IS DISTINCT FROM "new"."id")) EXECUTE FUNCTION "public"."profiles_keep_id"();
 
 
 
@@ -5555,6 +5617,23 @@ GRANT ALL ON FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid")
 
 
 
+REVOKE ALL ON FUNCTION "public"."prayer_request_visible_author"("_request_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."prayer_request_visible_author"("_request_id" "uuid") TO "authenticated";
+
+
+
+GRANT ALL ON FUNCTION "public"."prayer_requests_author_sets_anonymity"() TO "anon";
+GRANT ALL ON FUNCTION "public"."prayer_requests_author_sets_anonymity"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."prayer_requests_author_sets_anonymity"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."profiles_keep_id"() TO "anon";
+GRANT ALL ON FUNCTION "public"."profiles_keep_id"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."profiles_keep_id"() TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."profiles_keep_one_church_admin"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."profiles_keep_one_church_admin"() TO "service_role";
 
@@ -5861,9 +5940,49 @@ GRANT ALL ON TABLE "public"."prayer_call_sessions" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."prayer_requests" TO "anon";
-GRANT ALL ON TABLE "public"."prayer_requests" TO "authenticated";
+GRANT INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."prayer_requests" TO "anon";
+GRANT INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."prayer_requests" TO "authenticated";
 GRANT ALL ON TABLE "public"."prayer_requests" TO "service_role";
+
+
+
+GRANT SELECT("id"),UPDATE("id") ON TABLE "public"."prayer_requests" TO "anon";
+GRANT SELECT("id"),UPDATE("id") ON TABLE "public"."prayer_requests" TO "authenticated";
+
+
+
+GRANT SELECT("body"),UPDATE("body") ON TABLE "public"."prayer_requests" TO "anon";
+GRANT SELECT("body"),UPDATE("body") ON TABLE "public"."prayer_requests" TO "authenticated";
+
+
+
+GRANT SELECT("is_anonymous"),UPDATE("is_anonymous") ON TABLE "public"."prayer_requests" TO "anon";
+GRANT SELECT("is_anonymous"),UPDATE("is_anonymous") ON TABLE "public"."prayer_requests" TO "authenticated";
+
+
+
+GRANT SELECT("is_answered"),UPDATE("is_answered") ON TABLE "public"."prayer_requests" TO "anon";
+GRANT SELECT("is_answered"),UPDATE("is_answered") ON TABLE "public"."prayer_requests" TO "authenticated";
+
+
+
+GRANT SELECT("created_at"),UPDATE("created_at") ON TABLE "public"."prayer_requests" TO "anon";
+GRANT SELECT("created_at"),UPDATE("created_at") ON TABLE "public"."prayer_requests" TO "authenticated";
+
+
+
+GRANT SELECT("updated_at"),UPDATE("updated_at") ON TABLE "public"."prayer_requests" TO "anon";
+GRANT SELECT("updated_at"),UPDATE("updated_at") ON TABLE "public"."prayer_requests" TO "authenticated";
+
+
+
+GRANT SELECT("org_id"),UPDATE("org_id") ON TABLE "public"."prayer_requests" TO "anon";
+GRANT SELECT("org_id"),UPDATE("org_id") ON TABLE "public"."prayer_requests" TO "authenticated";
+
+
+
+GRANT SELECT("group_id"),UPDATE("group_id") ON TABLE "public"."prayer_requests" TO "anon";
+GRANT SELECT("group_id"),UPDATE("group_id") ON TABLE "public"."prayer_requests" TO "authenticated";
 
 
 
