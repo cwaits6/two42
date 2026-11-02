@@ -17,7 +17,7 @@ pastoral never syncs at all.
 
 | Rock-owned (pull in) | Two42-owned (never overwritten) | Never synced |
 |---|---|---|
-| first/last/nick name | the nine `hide_*` privacy flags | prayer requests |
+| first/last/nick name | `hide_email` | prayer requests |
 | email, phone numbers | `is_unlisted` | giving funds/methods |
 | address | `email_announcements` | serving signups |
 | birthdate parts | `bio`, `avatar_url` | feedback |
@@ -42,7 +42,7 @@ existing pure parser:
 | `Group(Family).Name` | `household_name` |
 | `GroupMember.GroupRole` (Adult/Child) | `relationship` — **not a fixed mapping, see Q2** |
 | `Group(Family).GroupLocation` | `address_line1` … `postal_code` |
-| `Person.AnniversaryDate` | `anniversary` |
+| `Person.AnniversaryDate` | `anniversary` — `YYYY-MM-DD` or `MM-DD`, stored on the household |
 | `Person.RecordStatus` | no CSV column carries this — **see Q4** |
 
 Rock has no equivalents for `has_login`, `role`, `is_class_member`,
@@ -51,11 +51,10 @@ Rock pull leaves them blank (blank means "not provided", so existing values
 survive). Concretely: **only Rock's Family groups are read at all.** Every
 other Rock group membership — ministry teams, small groups, serving teams —
 is ignored, and two42's `groups` / `leads` columns stay blank on every Rock
-row, so group assignments remain entirely admin-managed in two42. The single
-`hidden_fields` column expands to the nine `hide_*` privacy flags
-(`hide_email`, `hide_phone_mobile`, `hide_phone_home`, `hide_phone_work`,
-`hide_address`, `hide_birthday`, `hide_birth_year`, `hide_anniversary`,
-`hide_occupation`); Rock has no concept corresponding to any of them.
+row, so group assignments remain entirely admin-managed in two42. In the single
+`hidden_fields` column, `email` sets `hide_email`; every other token means the
+row's value for that field isn't stored at all. Rock has no concept
+corresponding to any of them.
 
 ## Integration shape (v1: pull-only)
 

@@ -39,21 +39,12 @@ function profile(
     city: null,
     state: null,
     postal_code: null,
-    anniversary: null,
     occupation: null,
     employer: null,
     family_id: null,
     is_unlisted: false,
     email_announcements: true,
     hide_email: false,
-    hide_phone_mobile: false,
-    hide_phone_home: false,
-    hide_phone_work: false,
-    hide_address: false,
-    hide_birthday: false,
-    hide_birth_year: false,
-    hide_anniversary: false,
-    hide_occupation: false,
     ...overrides,
   };
 }
@@ -149,21 +140,12 @@ function makeFixtureSnapshot(): OrgSnapshot {
         city: "Springfield",
         state: "TX",
         postal_code: "75001",
-        anniversary: "1972-06-15",
         occupation: "Teacher",
         employer: "ISD",
         family_id: "f1",
         is_unlisted: true,
         email_announcements: false,
         hide_email: true,
-        hide_phone_mobile: true,
-        hide_phone_home: true,
-        hide_phone_work: true,
-        hide_address: true,
-        hide_birthday: true,
-        hide_birth_year: true,
-        hide_anniversary: true,
-        hide_occupation: true,
       }),
       profile({
         id: "p2",
@@ -208,8 +190,8 @@ function makeFixtureSnapshot(): OrgSnapshot {
       }),
     ],
     families: [
-      { id: "f1", family_name: "Alpha" },
-      { id: "f2", family_name: "Beta" },
+      { id: "f1", family_name: "Alpha", anniversary_month: 6, anniversary_day: 15, anniversary_year: 1972 },
+      { id: "f2", family_name: "Beta", anniversary_month: null, anniversary_day: null, anniversary_year: null },
     ],
     familyMembers: [
       familyMember({
@@ -271,8 +253,8 @@ describe("planImport error codes", () => {
     const snapshot: OrgSnapshot = {
       ...emptySnapshot,
       families: [
-        { id: "f1", family_name: "Same" },
-        { id: "f2", family_name: "Same" },
+        { id: "f1", family_name: "Same", anniversary_month: null, anniversary_day: null, anniversary_year: null },
+        { id: "f2", family_name: "Same", anniversary_month: null, anniversary_day: null, anniversary_year: null },
       ],
     };
     const plan = planImport(
@@ -747,7 +729,7 @@ describe("planImport semantics", () => {
     ];
     const afterFirstRun: OrgSnapshot = {
       ...emptySnapshot,
-      families: [{ id: "f9", family_name: "Zeta Family" }],
+      families: [{ id: "f9", family_name: "Zeta Family", anniversary_month: null, anniversary_day: null, anniversary_year: null }],
       familyMembers: [
         familyMember({
           id: "m9",
@@ -835,21 +817,230 @@ describe("planImport semantics", () => {
     ).toBe(true);
   });
 
-  it("warns rather than silently ignoring a blank hidden_fields cell for a member who has flags", () => {
+  it("warns when a row leaves the email setting out, and never turns it off", () => {
     const plan = planImport(
       [
         makeRow({
           email: "al@example.org",
           has_login: true,
           first_name: "Al",
-          hidden_fields: [],
+          hidden_fields: ["phone_mobile"],
         }),
       ],
       makeFixtureSnapshot()
     );
-    expect(
-      plan.rows[0].warnings.some((w) => w.includes("hidden_fields is blank"))
-    ).toBe(true);
+    expect(plan.rows[0].warnings.some((w) => w.includes("email stays hidden"))).toBe(true);
+    const writes = plan.writes.filter((w) => w.kind === "update_profile");
+    for (const write of writes) expect(write.values).not.toHaveProperty("hide_email");
+  });
+
+  it("turns the email setting on when a row asks", () => {
+    const plan = planImport(
+      [makeRow({ email: "bea@example.org", has_login: true, first_name: "Bea", last_name: "Alpha", hidden_fields: ["email"] })],
+      makeFixtureSnapshot()
+    );
+    expect(plan.rows[0].changes?.hide_email).toEqual([false, true]);
+    expect(plan.writes).toContainEqual(
+      expect.objectContaining({ kind: "update_profile", id: "p2", values: { hide_email: true } })
+    );
+  });
+
+  it("doesn't store a value the file marks hidden, and says so", () => {
+    const plan = planImport(
+      [
+        makeRow({
+          email: "bea@example.org",
+          has_login: true,
+          first_name: "Bea",
+          last_name: "Alpha",
+          phone_mobile: "+15559990000",
+          occupation: "Secret",
+          employer: "Also secret",
+          city: "Visible City",
+          hidden_fields: ["phone_mobile", "occupation"],
+        }),
+      ],
+      makeFixtureSnapshot()
+    );
+    expect(plan.writes).toEqual([
+      expect.objectContaining({ kind: "update_profile", id: "p2", values: { city: "Visible City" } }),
+    ]);
+    expect(plan.rows[0].warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("hidden_fields marks phone_mobile hidden"),
+        expect.stringContaining("hidden_fields marks occupation hidden"),
+      ])
+    );
+    expect(JSON.stringify(plan)).not.toContain("Secret");
+  });
+
+  it("leaves a hidden birthday off a new family member, and doesn't add one who exists twice", () => {
+    const created = planImport(
+      [
+        makeRow({
+          first_name: "Newkid",
+          household_name: "Alpha",
+          birth_month: 3,
+          birth_day: 4,
+          birth_year: 2010,
+          hidden_fields: ["birthday"],
+        }),
+      ],
+      makeFixtureSnapshot()
+    );
+    expect(created.writes).toEqual([
+      expect.objectContaining({
+        kind: "insert_family_member",
+        values: expect.not.objectContaining({ birth_month: expect.anything() }),
+      }),
+    ]);
+
+    const snapshot = makeFixtureSnapshot();
+    const [existing] = snapshot.familyMembers;
+    const matched = planImport(
+      [
+        makeRow({
+          first_name: existing.first_name,
+          last_name: existing.last_name,
+          household_name: "Alpha",
+          relationship: existing.relationship,
+          birth_month: existing.birth_month,
+          birth_day: existing.birth_day,
+          birth_year: existing.birth_year,
+          hidden_fields: ["birthday"],
+        }),
+      ],
+      snapshot
+    );
+    expect(matched.writes).toEqual([]);
+    expect(matched.rows[0].matchedBy).toBe("household_name_birth");
+  });
+
+  describe("birthday parts", () => {
+    it("refuses a new person's month with no day", () => {
+      const plan = planImport(
+        [makeRow({ first_name: "Kid", household_name: "Alpha", birth_month: 3 })],
+        makeFixtureSnapshot()
+      );
+      expect(plan.rows[0].errors).toEqual([
+        expect.objectContaining({ code: "INVALID_BIRTH_PART", field: "birth_day" }),
+      ]);
+    });
+
+    it("accepts a year alone for someone whose month and day are stored", () => {
+      const plan = planImport(
+        [makeRow({ email: "al@example.org", has_login: true, first_name: "Al", birth_year: 1951 })],
+        makeFixtureSnapshot()
+      );
+      expect(plan.rows[0].errors).toEqual([]);
+    });
+
+    it("keeps an org's own export importable when a stored birthday is incomplete", () => {
+      const snapshot = makeFixtureSnapshot();
+      snapshot.profiles[1] = { ...snapshot.profiles[1], birth_month: 5, birth_day: null };
+      const plan = planImport(memberRowsFromSnapshot(snapshot), snapshot);
+      expect(plan.summary.error).toBe(0);
+    });
+  });
+
+  describe("household anniversary", () => {
+    const couple = (over: { al?: Partial<MemberRow>; bea?: Partial<MemberRow> }) => [
+      makeRow({ email: "al@example.org", has_login: true, first_name: "Al", household_primary: true, ...over.al }),
+      makeRow({ email: "bea@example.org", has_login: true, first_name: "Bea", ...over.bea }),
+    ];
+    const snapshotWith = (
+      anniversary_month: number | null,
+      anniversary_day: number | null,
+      anniversary_year: number | null
+    ) => {
+      const snapshot = makeFixtureSnapshot();
+      snapshot.families[0] = { ...snapshot.families[0], anniversary_month, anniversary_day, anniversary_year };
+      return snapshot;
+    };
+
+    it("writes the household, from the household_primary row, naming the disagreement", () => {
+      const plan = planImport(
+        couple({ al: { anniversary: "2009-10-03" }, bea: { anniversary: "2010-01-01" } }),
+        snapshotWith(null, null, null)
+      );
+      expect(plan.writes).toContainEqual({
+        kind: "update_family_unit",
+        line: 1,
+        id: "f1",
+        values: { anniversary_month: 10, anniversary_day: 3, anniversary_year: 2009 },
+      });
+      expect(plan.rows[0].action).toBe("update_profile");
+      expect(plan.rows[0].changes?.anniversary).toEqual([null, "2009-10-03"]);
+      expect(plan.rows[0].warnings.some((w) => w.includes("disagree on: anniversary"))).toBe(true);
+      expect(JSON.stringify(plan.rows[0].warnings)).not.toContain("2010");
+    });
+
+    it("stores a yearless date, and treats a matching month and day as no change", () => {
+      expect(
+        planImport(couple({ al: { anniversary: "10-03" } }), snapshotWith(null, null, null)).writes
+      ).toContainEqual(
+        expect.objectContaining({
+          kind: "update_family_unit",
+          values: { anniversary_month: 10, anniversary_day: 3, anniversary_year: null },
+        })
+      );
+      expect(
+        planImport(couple({ al: { anniversary: "10-03" } }), snapshotWith(10, 3, 2009)).writes.filter(
+          (w) => w.kind === "update_family_unit"
+        )
+      ).toEqual([]);
+    });
+
+    it("writes nothing when either spouse marks it hidden, even with the other's cell filled", () => {
+      const plan = planImport(
+        couple({ al: { anniversary: "2009-10-03" }, bea: { anniversary: "2009-10-03", hidden_fields: ["anniversary"] } }),
+        snapshotWith(null, null, null)
+      );
+      expect(plan.writes.filter((w) => w.kind === "update_family_unit")).toEqual([]);
+      expect(plan.rows[0].warnings.some((w) => w.includes("couple's anniversary hidden"))).toBe(true);
+      expect(plan.rows[1].warnings.some((w) => w.includes("hidden_fields marks anniversary hidden"))).toBe(true);
+    });
+
+    it("finds the couple through their match when the rows name no household", () => {
+      const plan = planImport(
+        couple({ al: { household_primary: false, anniversary: "2009-10-03" }, bea: { hidden_fields: ["anniversary"] } }),
+        snapshotWith(null, null, null)
+      );
+      expect(plan.writes.filter((w) => w.kind === "update_family_unit")).toEqual([]);
+    });
+
+    it("sets it on a household this run creates", () => {
+      const plan = planImport(
+        [makeRow({ first_name: "Newkid", household_name: "Newfam", relationship: "primary", anniversary: "2009-10-03" })],
+        makeFixtureSnapshot()
+      );
+      expect(plan.writes[0]).toMatchObject({
+        kind: "insert_family_unit",
+        values: { family_name: "Newfam", anniversary_month: 10, anniversary_day: 3, anniversary_year: 2009 },
+      });
+    });
+
+    it("ignores it on a child's row, and on a row with no household", () => {
+      const child = planImport(
+        [makeRow({ email: "al@example.org", has_login: true, first_name: "Al", relationship: "child", anniversary: "2009-10-03" })],
+        snapshotWith(null, null, null)
+      );
+      expect(child.writes.filter((w) => w.kind === "update_family_unit")).toEqual([]);
+      expect(child.rows[0].warnings.some((w) => w.includes("belongs to the couple"))).toBe(true);
+
+      const unhoused = planImport(
+        [makeRow({ email: "evil@example.org", has_login: true, anniversary: "2009-10-03" })],
+        makeFixtureSnapshot()
+      );
+      expect(unhoused.rows[0].warnings.some((w) => w.includes("this row has none"))).toBe(true);
+    });
+
+    it("round-trips a yearless date as no change", () => {
+      const snapshot = snapshotWith(10, 3, null);
+      const plan = planImport(parseMembers(serializeMembers(memberRowsFromSnapshot(snapshot))).rows, snapshot);
+      expect(plan.writes.filter((w) => w.kind === "update_family_unit")).toEqual([]);
+      expect(plan.summary.update).toBe(0);
+    });
   });
 
   it("creates a new household then its family member, linked by household key", () => {
@@ -1052,8 +1243,8 @@ describe("planImport — household identity hazards", () => {
     const snapshot: OrgSnapshot = {
       ...emptySnapshot,
       families: [
-        { id: "f1", family_name: "Origin" },
-        { id: "f2", family_name: "Destination" },
+        { id: "f1", family_name: "Origin", anniversary_month: null, anniversary_day: null, anniversary_year: null },
+        { id: "f2", family_name: "Destination", anniversary_month: null, anniversary_day: null, anniversary_year: null },
       ],
       familyMembers: [
         familyMember({
@@ -1095,7 +1286,7 @@ describe("planImport — household identity hazards", () => {
     // The guard must not fire on the ordinary update path.
     const snapshot: OrgSnapshot = {
       ...emptySnapshot,
-      families: [{ id: "f1", family_name: "Origin" }],
+      families: [{ id: "f1", family_name: "Origin", anniversary_month: null, anniversary_day: null, anniversary_year: null }],
       familyMembers: [
         familyMember({
           id: "m1",

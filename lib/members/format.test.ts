@@ -11,6 +11,8 @@ import {
   parseMembers,
   serializeMembers,
   type MemberRow,
+  parseAnniversaryCell,
+  withoutHiddenValues,
 } from "@/lib/members/format";
 import type { OrgSnapshot } from "@/lib/members/snapshot";
 
@@ -336,8 +338,8 @@ describe("memberRowsFromSnapshot", () => {
     const snapshot: OrgSnapshot = {
       ...emptySnapshot,
       families: [
-        { id: "f2", family_name: "Zeta" },
-        { id: "f1", family_name: "Alpha" },
+        { id: "f2", family_name: "Zeta", anniversary_month: null, anniversary_day: null, anniversary_year: null },
+        { id: "f1", family_name: "Alpha", anniversary_month: null, anniversary_day: null, anniversary_year: null },
       ],
       profiles: [
         {
@@ -359,21 +361,12 @@ describe("memberRowsFromSnapshot", () => {
           city: null,
           state: null,
           postal_code: null,
-          anniversary: null,
           occupation: null,
           employer: null,
           family_id: null,
           is_unlisted: false,
           email_announcements: true,
           hide_email: false,
-          hide_phone_mobile: false,
-          hide_phone_home: false,
-          hide_phone_work: false,
-          hide_address: false,
-          hide_birthday: false,
-          hide_birth_year: false,
-          hide_anniversary: false,
-          hide_occupation: false,
         },
         {
           id: "p2",
@@ -394,21 +387,12 @@ describe("memberRowsFromSnapshot", () => {
           city: null,
           state: null,
           postal_code: null,
-          anniversary: null,
           occupation: null,
           employer: null,
           family_id: "f1",
           is_unlisted: false,
           email_announcements: true,
           hide_email: false,
-          hide_phone_mobile: false,
-          hide_phone_home: false,
-          hide_phone_work: false,
-          hide_address: false,
-          hide_birthday: false,
-          hide_birth_year: false,
-          hide_anniversary: false,
-          hide_occupation: false,
         },
         {
           id: "p1",
@@ -429,21 +413,12 @@ describe("memberRowsFromSnapshot", () => {
           city: null,
           state: null,
           postal_code: null,
-          anniversary: null,
           occupation: null,
           employer: null,
           family_id: "f1",
           is_unlisted: false,
           email_announcements: true,
           hide_email: false,
-          hide_phone_mobile: false,
-          hide_phone_home: false,
-          hide_phone_work: false,
-          hide_address: false,
-          hide_birthday: false,
-          hide_birth_year: false,
-          hide_anniversary: false,
-          hide_occupation: false,
         },
       ],
       familyMembers: [
@@ -474,7 +449,7 @@ describe("memberRowsFromSnapshot", () => {
     expect(rows.map((r) => r.line)).toEqual([1, 2, 3, 4]);
   });
 
-  it("exports hide_* flags as canonical hidden_fields tokens", () => {
+  it("exports hide_email as the one hidden_fields token", () => {
     const snapshot: OrgSnapshot = {
       ...emptySnapshot,
       profiles: [
@@ -497,29 +472,118 @@ describe("memberRowsFromSnapshot", () => {
           city: null,
           state: null,
           postal_code: null,
-          anniversary: null,
           occupation: null,
           employer: null,
           family_id: null,
           is_unlisted: false,
           email_announcements: true,
           hide_email: true,
-          hide_phone_mobile: false,
-          hide_phone_home: false,
-          hide_phone_work: false,
-          hide_address: true,
-          hide_birthday: false,
-          hide_birth_year: false,
-          hide_anniversary: false,
-          hide_occupation: true,
         },
       ],
     };
-    expect(memberRowsFromSnapshot(snapshot)[0].hidden_fields).toEqual([
-      "email",
-      "address",
-      "occupation",
-    ]);
+    expect(memberRowsFromSnapshot(snapshot)[0].hidden_fields).toEqual(["email"]);
     expect(HIDDEN_FIELD_TOKENS).toHaveLength(9);
+  });
+});
+
+describe("withoutHiddenValues", () => {
+  const full = makeRow({
+    email: "a@example.org",
+    phone_mobile: "1",
+    phone_home: "2",
+    phone_work: "3",
+    birth_month: 4,
+    birth_day: 5,
+    birth_year: 1980,
+    address_line1: "1 Main",
+    address_line2: "Apt 2",
+    city: "Springfield",
+    state: "IL",
+    postal_code: "62703",
+    anniversary: "2001-02-03",
+    occupation: "Teacher",
+    employer: "School",
+  });
+
+  it.each([
+    ["phone_mobile", ["phone_mobile"]],
+    ["phone_home", ["phone_home"]],
+    ["phone_work", ["phone_work"]],
+    ["address", ["address_line1", "address_line2", "city", "state", "postal_code"]],
+    ["birthday", ["birth_month", "birth_day", "birth_year"]],
+    ["birth_year", ["birth_year"]],
+    ["anniversary", ["anniversary"]],
+    ["occupation", ["occupation", "employer"]],
+  ] as const)("%s blanks exactly its own cells and reports it", (token, cells) => {
+    const { row, dropped } = withoutHiddenValues({ ...full, hidden_fields: [token] });
+    expect(dropped).toEqual([token]);
+    const expected: Record<string, unknown> = { ...full, hidden_fields: [token] };
+    for (const cell of cells) expected[cell] = null;
+    expect(row).toEqual(expected);
+  });
+
+  it("keeps the email, which stays stored", () => {
+    const { row, dropped } = withoutHiddenValues({ ...full, hidden_fields: ["email"] });
+    expect(dropped).toEqual([]);
+    expect(row.email).toBe("a@example.org");
+  });
+
+  it("reports nothing when the marked cell was already blank", () => {
+    expect(withoutHiddenValues(makeRow({ hidden_fields: ["occupation"] })).dropped).toEqual([]);
+  });
+});
+
+describe("parseAnniversaryCell", () => {
+  it("reads a full date and a month and day", () => {
+    expect(parseAnniversaryCell("2009-10-03")).toEqual({ month: 10, day: 3, year: 2009 });
+    expect(parseAnniversaryCell("10-03")).toEqual({ month: 10, day: 3, year: null });
+    expect(parseAnniversaryCell("02-29")).toEqual({ month: 2, day: 29, year: null });
+  });
+
+  it.each(["2023-02-29", "02-30", "13-01", "10", "2009-10", "1850-01-01", "soon"])("refuses %s", (cell) => {
+    expect(parseAnniversaryCell(cell)).toBeNull();
+  });
+});
+
+describe("the household anniversary on export", () => {
+  it("is written on the couple's rows, without a year when there is none", () => {
+    const person = (id: string, relationship: string): OrgSnapshot["profiles"][number] => ({
+      id,
+      email: `${id}@example.org`,
+      role: "member",
+      relationship,
+      first_name: id,
+      last_name: null,
+      preferred_name: null,
+      phone_mobile: null,
+      phone_home: null,
+      phone_work: null,
+      birth_month: null,
+      birth_day: null,
+      birth_year: null,
+      address_line1: null,
+      address_line2: null,
+      city: null,
+      state: null,
+      postal_code: null,
+      occupation: null,
+      employer: null,
+      family_id: "f1",
+      is_unlisted: false,
+      email_announcements: true,
+      hide_email: false,
+    });
+    const rows = memberRowsFromSnapshot({
+      ...emptySnapshot,
+      families: [
+        { id: "f1", family_name: "Mock", anniversary_month: 10, anniversary_day: 3, anniversary_year: null },
+      ],
+      profiles: [person("a", "primary"), person("b", "spouse"), person("c", "child")],
+    });
+    expect(rows.map((r) => [r.first_name, r.anniversary])).toEqual([
+      ["a", "10-03"],
+      ["b", "10-03"],
+      ["c", null],
+    ]);
   });
 });
