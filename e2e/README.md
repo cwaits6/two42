@@ -42,7 +42,10 @@ builds a Group B team (Leo as its lead, Henry as a member) through the same
 container in `beforeAll` and deletes it in `afterAll`, because the seed has
 no team lead. `prayer-anonymity.spec.ts` posts one request through the page and
 deletes it through the same container in `beforeAll` and `afterAll`, because no
-UI deletes a request.
+UI deletes a request. `serving-cancel.spec.ts` builds a Group B team (Leo as its
+lead, Henry, Chloe and Isaac as members) through the same container in
+`beforeAll`, puts Henry and Chloe's date back before each test, and deletes the
+team in `afterAll`.
 
 ## Personas
 
@@ -59,6 +62,8 @@ persona looks signed out.
 | `twoGroups` | leo.loremsworth@example.test      | B, C              |
 | `leadsC`    | amelia.demoski@example.test       | leads C           |
 | `leadsB`    | zoe.dummyfield@example.test       | leads B           |
+| `householdPrimary` | henry.mockingham@example.test | A, B          |
+| `spouse`    | chloe.mockingham@example.test     | A, B              |
 
 Group B and Group C are addressed by the fixed ids the seed inserts
 (`fixtures/personas.ts`). Group A is the migration-created group and has no
@@ -84,6 +89,7 @@ not covered here.
 | `about-leadership-picker.spec.ts`    | Settings → About's leadership picker lists the group's members and no one from another group, and its save answers 409 for someone outside the group; nothing is written |
 | `team-lead-roster.spec.ts`           | A team lead who does not lead the group sees the team's members with Remove on non-leads only; Add person lists the group's members not on the team and no one from another group; an add and a remove go through; a group member not on the team sees no roster controls; with serving signups off the Serving page links the team for its lead, who still gets the roster, while that member sees no link and is sent back to the Serving page; the team is deleted in afterAll |
 | `prayer-anonymity.spec.ts`          | A member, the group's leader and a church admin in the group see an anonymous request as "Anonymous", with no author name, no "You" and no "Mark answered", and not under My requests; its author sees it as theirs, under My requests, and can mark it answered; a request shared by name still shows the name; the request is deleted in afterAll |
+| `serving-cancel.spec.ts`            | A spouse listed on a date, who did not tap Sign up, cancels it from the team schedule at 390 and 1280 and the date opens up; the person who tapped Sign up, the team lead and the group leader can each still cancel it; a team member not listed sees no Cancel or Remove button and the API refuses them with the date still taken; the team is deleted in afterAll |
 
 ## Adding a spec
 

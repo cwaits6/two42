@@ -1,6 +1,7 @@
 // Pins that the signup route judges "already passed" against today in the
 // church's time zone, not the server's (UTC on Vercel): on a Sunday evening
-// in New York it is already Monday in UTC.
+// in New York it is already Monday in UTC. And that a cancel tells leaders only
+// when a row went: a delete RLS refuses still succeeds, with 0 rows.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const createClient = vi.fn();
@@ -9,7 +10,14 @@ vi.mock("@/lib/supabase/server", () => ({
   createServiceClient: vi.fn(),
 }));
 
-const { POST } = await import("@/app/api/serving/signups/route");
+const notifyLeadersOfCancel = vi.fn();
+vi.mock("@/lib/serving/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/serving/server")>()),
+  notifyLeadersOfCancel: (...args: unknown[]) => notifyLeadersOfCancel(...args),
+  resolveSignupLabel: async () => "The Mockingham household",
+}));
+
+const { DELETE, POST } = await import("@/app/api/serving/signups/route");
 
 // Every read resolves to `terminal`, so a request that clears the date check
 // stops at the "not enabled" 404 for the missing team row.
@@ -65,5 +73,58 @@ describe("POST /api/serving/signups date check", () => {
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "Signups are for upcoming service dates only" });
+  });
+});
+
+describe("DELETE /api/serving/signups", () => {
+  const signupRow = {
+    id: "signup-1",
+    org_id: "org-1",
+    team_id: "team-1",
+    service_date: "2026-11-08",
+    family_id: "family-1",
+    created_by: "someone-else",
+    teams: { name: "Greeters", group_id: "group-1" },
+    serving_signup_attendees: [],
+  };
+
+  function cancelAs(deleted: unknown[]) {
+    createClient.mockResolvedValue({
+      auth: { getUser: async () => ({ data: { user: { id: "user-1" } } }) },
+      from: () => ({
+        ...chain({ data: signupRow, error: null }),
+        delete: () => ({ eq: () => ({ select: async () => ({ data: deleted, error: null }) }) }),
+      }),
+    });
+    return DELETE(
+      new Request("http://localhost/api/serving/signups", {
+        method: "DELETE",
+        body: JSON.stringify({ signupId: "signup-1" }),
+      }),
+    );
+  }
+
+  beforeEach(() => notifyLeadersOfCancel.mockClear());
+
+  it("gives leaders the usual notice when someone who did not sign up cancels", async () => {
+    const res = await cancelAs([{ id: "signup-1" }]);
+
+    expect(res.status).toBe(200);
+    expect(notifyLeadersOfCancel).toHaveBeenCalledTimes(1);
+    expect(notifyLeadersOfCancel.mock.calls[0][1]).toMatchObject({
+      groupId: "group-1",
+      teamId: "team-1",
+      orgId: "org-1",
+      serviceDate: "2026-11-08",
+      memberLabel: "The Mockingham household",
+      excludeProfileId: "user-1",
+    });
+  });
+
+  it("answers 403 and tells nobody when the delete removes 0 rows", async () => {
+    const res = await cancelAs([]);
+
+    expect(res.status).toBe(403);
+    expect(notifyLeadersOfCancel).not.toHaveBeenCalled();
   });
 });

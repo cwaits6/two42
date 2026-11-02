@@ -572,7 +572,7 @@ select is(
       and (qual like '%is_team_lead%' or with_check like '%is_team_lead%')
       and (tablename, policyname) in (
         ('serving_signups', 'Team members and group leaders can create serving signups'),
-        ('serving_signups', 'Owners, team leads and group leaders can delete serving signups'),
+        ('serving_signups', 'Owners, attendees, team leads and group leaders can delete serving signups'),
         ('serving_signup_attendees', 'Signup owners can remove attendees'),
         ('serving_broadcasts', 'Team leads and group leaders can view serving broadcasts'),
         ('serving_broadcasts', 'Team leads and group leaders can log serving broadcasts'),

@@ -235,6 +235,10 @@ on exactly the events they can see; `serving_signups`,
 — one FK hop, the shape `team_members` writes already used. The team-lead
 arms (`is_team_lead(team_id)`) stay beside the group-leader arms, and
 `serving_signup_create()` re-checks the same three arms before delegating.
+Deleting a `serving_signups` row is open to the same arms plus whoever signed
+up and anyone listed on the date, the second through
+`is_serving_signup_attendee(id)`, a row-dependent definer helper called bare,
+because a direct read of the attendee table from that policy recurses (42P17).
 Those arms are sound only because a team member is always a member of the
 team's group: `team_members_require_group_membership` refuses any other
 row (including an org admin enrolling themselves through the admin arm),
