@@ -242,6 +242,17 @@ and `group_members_leave_teams` removes a departing member from the group's
 teams, so no serving row stays reachable through a membership that no
 longer exists.
 
+Deleting a `serving_signups` row has no plain team-member arm: it is open to
+the team lead, a group leader, whoever signed up and anyone listed on the date,
+the last through `is_serving_signup_attendee(id)`, a row-dependent definer
+helper called bare, because a direct read of the attendee table from that
+policy recurses (42P17). The triggers above remove `team_members` rows, not
+`created_by` or attendee rows, so those two arms stay true for someone who has
+left the group. The group-member select policy is what stops them: Postgres
+applies it to any delete that reads a column, and `safeupdate` on the
+`authenticator` role refuses the one shape that reads none, a delete with no
+`WHERE`, through the API.
+
 Where both sides of a parent→child FK carry `group_id`, the FK is
 three-column — `events.calendar_id`, `events.series_id`,
 `lectures.series_id`, `prayer_call_sessions.event_id`,

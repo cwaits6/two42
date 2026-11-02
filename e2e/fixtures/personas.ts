@@ -21,6 +21,10 @@ export const PERSONAS = {
   leadsC: { email: "amelia.demoski@example.test", name: "Amelia Demoski" },
   /** Leads Group B. */
   leadsB: { email: "zoe.dummyfield@example.test", name: "Zoe Dummyfield" },
+  /** Member of Group A and Group B; the household's primary, married to `spouse`. */
+  householdPrimary: { email: "henry.mockingham@example.test", name: "Henry Mockingham" },
+  /** Member of Group A and Group B; the household's spouse, married to `householdPrimary`. */
+  spouse: { email: "chloe.mockingham@example.test", name: "Chloe Mockingham" },
 } as const;
 
 export type PersonaKey = keyof typeof PERSONAS;

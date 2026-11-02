@@ -1603,6 +1603,9 @@ isOneToOne: false
 "is_platform_admin":
 { Args: Record<PropertyKey, never>; Returns: boolean
                            },
+"is_serving_signup_attendee":
+{ Args: { "_signup_id": string }; Returns: boolean
+                           },
 "is_team_lead":
 { Args: { "_team_id": string }; Returns: boolean
                            },

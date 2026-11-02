@@ -230,8 +230,9 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Signup not found" }, { status: 404 });
   }
 
-  // RLS allows deletes only by the signup owner, a leader of the group, or an
-  // admin — an empty result means the caller is none of those
+  // RLS allows deletes only by whoever signed up, anyone listed on the date, the
+  // team's lead, or a leader of the group — an empty result means the caller is
+  // none of those. The delete cancels the date for everyone on it.
   const { data: deleted, error } = await supabase
     .from("serving_signups")
     .delete()

@@ -213,6 +213,16 @@ from resolving another tenant's row. EXECUTE: revoked from `public` and
 `anon`, granted to `authenticated` (the policies that call them are all
 `to authenticated`).
 
+`is_serving_signup_attendee(_signup_id)` (`20261110000000_serving_signup_attendee_cancel.sql`)
+has the same shape and grants: a `serving_signup_attendees` row for
+`auth.uid()` on the given signup, with the same org predicate and non-pending
+check. It is read-only and only the `serving_signups` delete policy calls it. It
+exists because that policy cannot read the attendee table directly: the attendee
+select policy reads `serving_signups`, and Postgres raises 42P17 when policy
+expansion revisits a relation, whichever command the second policy is for.
+`supabase/tests/serving_cancel_suite.sql` pins its grants and each cancel arm's
+row count.
+
 `group_model_backfill()` — the one-group-per-org data migration — is
 deliberately **not** `SECURITY DEFINER` and has no client grant (EXECUTE
 revoked from `public`, `anon`, `authenticated` and `service_role`): it
