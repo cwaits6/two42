@@ -16,6 +16,7 @@ import {
   serializeCsv,
   unguardCell,
 } from "@/lib/members/csv";
+import { anniversaryErrors } from "@/components/profile/birthday";
 import type { OrgSnapshot, SnapshotProfile } from "@/lib/members/snapshot";
 
 /** Ordered header contract. Column order in an uploaded file is irrelevant;
@@ -129,18 +130,17 @@ export interface AnniversaryParts {
 
 const ANNIVERSARY_CELL = /^(?:(\d{4})-)?(\d{2})-(\d{2})$/;
 
-/** `YYYY-MM-DD` or `MM-DD`; null when the cell isn't a real date in the range the columns hold. */
+/**
+ * `YYYY-MM-DD` or `MM-DD`; null when the cell isn't one the household forms
+ * would accept, so an imported date can always be saved again there.
+ */
 export function parseAnniversaryCell(cell: string): AnniversaryParts | null {
   const match = ANNIVERSARY_CELL.exec(cell);
   if (match === null) return null;
-  const year = match[1] === undefined ? null : Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  if (year !== null && (year < 1900 || year > 2100)) return null;
-  // Without a year, leap year 2000 keeps Feb 29 allowed.
-  const date = new Date(Date.UTC(year ?? 2000, month - 1, day));
-  const real = date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
-  return real ? { month, day, year } : null;
+  const [, year, month, day] = match;
+  const errors = anniversaryErrors({ month, day, year: year ?? "" });
+  if (Object.keys(errors).length > 0) return null;
+  return { month: Number(month), day: Number(day), year: year === undefined ? null : Number(year) };
 }
 
 /** The household's anniversary as the file writes it. */

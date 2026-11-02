@@ -139,7 +139,7 @@ do $$
 declare
   org_a uuid := current_setting('nh.org_a')::uuid;
   fam_hide_addr uuid; fam_hide_phone uuid; fam_control uuid;
-  fam_either uuid; fam_child_flag uuid; fam_moved uuid; fam_own_wins uuid; fam_typo uuid;
+  fam_either uuid; fam_child_flag uuid; fam_moved uuid; fam_own_wins uuid; fam_typo uuid; fam_future uuid;
   fm_claimed_bday uuid; fm_claimed_year uuid; fm_unclaimed uuid;
   e text;
 begin
@@ -154,6 +154,7 @@ begin
   insert into public.family_units (org_id, family_name) values (org_a, 'Moved Copy') returning id into fam_moved;
   insert into public.family_units (org_id, family_name, anniversary) values (org_a, 'Own Value', '2005-06-07') returning id into fam_own_wins;
   insert into public.family_units (org_id, family_name, anniversary) values (org_a, 'Typo Year', '1850-07-08') returning id into fam_typo;
+  insert into public.family_units (org_id, family_name, anniversary) values (org_a, 'Future Year', '2050-07-08') returning id into fam_future;
 
   perform set_config('nh.fam_hide_addr', fam_hide_addr::text, true);
   perform set_config('nh.fam_hide_phone', fam_hide_phone::text, true);
@@ -163,6 +164,7 @@ begin
   perform set_config('nh.fam_moved', fam_moved::text, true);
   perform set_config('nh.fam_own_wins', fam_own_wins::text, true);
   perform set_config('nh.fam_typo', fam_typo::text, true);
+  perform set_config('nh.fam_future', fam_future::text, true);
 
   foreach e in array array['either_a', 'either_b', 'child_p', 'child_c', 'moved_p', 'moved_s', 'own_p', 'unhoused', 'claim_bday', 'claim_year'] loop
     insert into public.access_requests (org_id, name, email, status)
@@ -308,6 +310,8 @@ select is(
   '2012-12-12', 'a copy with no household stays where it is');
 select is(pg_temp.family_fields(current_setting('nh.fam_typo')::uuid),
   '-|-|-|-|-|-|1850-07-08|7|8|-', 'a year the check refuses is dropped instead of blocking the deploy');
+select is(pg_temp.family_fields(current_setting('nh.fam_future')::uuid),
+  '-|-|-|-|-|-|2050-07-08|7|8|-', 'a year the household forms refuse is dropped, keeping the month and day');
 
 -- ── Claimed birthdays ───────────────────────────────────────────────────────
 select is(
@@ -388,6 +392,14 @@ select is(pg_temp.as_write(current_setting('nh.henry')::uuid,
     format('update public.family_units set anniversary = ''2009-10-03'' where id = %L', current_setting('nh.fam'))),
   'rows=1', 'an old form writes a full date');
 select is(pg_temp.seen('anniversary_year'), '2009', 'an old form''s date reaches the parts');
+select is(pg_temp.as_write(current_setting('nh.henry')::uuid,
+    format('update public.family_units set anniversary = ''2050-10-03'' where id = %L', current_setting('nh.fam'))),
+  'rows=1', 'an old form writes a year the household forms refuse');
+select is(pg_temp.seen('anniversary_month') || '/' || pg_temp.seen('anniversary_day') || '/' || pg_temp.seen('anniversary_year'),
+  '10/3/-', 'that year stays out of the parts');
+select is(pg_temp.as_write(current_setting('nh.henry')::uuid,
+    format('update public.family_units set anniversary = ''2009-10-03'' where id = %L', current_setting('nh.fam'))),
+  'rows=1', 'an old form writes the full date back');
 
 update public.profiles set hide_anniversary = true where id = current_setting('nh.chloe')::uuid;
 select is(pg_temp.seen('anniversary') || pg_temp.seen('anniversary_month') || pg_temp.seen('anniversary_day') || pg_temp.seen('anniversary_year'),

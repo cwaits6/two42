@@ -202,13 +202,14 @@ begin
      and family_id is not null
      and relationship = any (array['primary', 'spouse']);
 
-  -- The year check is 1900-2100 and only a typo falls outside it; losing that
-  -- year beats a check violation that blocks the deploy.
+  -- Only a typo falls outside the years the household forms accept. Losing that
+  -- year beats a check violation that blocks the deploy, or a form that refuses a
+  -- year nobody saving it typed.
   update public.family_units
      set anniversary_month = extract(month from anniversary)::smallint,
          anniversary_day = extract(day from anniversary)::smallint,
          anniversary_year = case
-           when extract(year from anniversary) between 1900 and 2100
+           when extract(year from anniversary) between 1900 and extract(year from current_date)
              then extract(year from anniversary)::smallint
          end
    where anniversary is not null
@@ -243,7 +244,7 @@ begin
     new.anniversary_month := extract(month from new.anniversary)::smallint;
     new.anniversary_day := extract(day from new.anniversary)::smallint;
     new.anniversary_year := case
-      when extract(year from new.anniversary) between 1900 and 2100
+      when extract(year from new.anniversary) between 1900 and extract(year from current_date)
         then extract(year from new.anniversary)::smallint
     end;
   elsif tg_op = 'INSERT'

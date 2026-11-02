@@ -372,7 +372,7 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
         code: "INVALID_DATE",
         field: "anniversary",
         message:
-          "anniversary must be a real date in YYYY-MM-DD or MM-DD form, with a year from 1900 to 2100",
+          `anniversary must be a real date in YYYY-MM-DD or MM-DD form, with a year from 1900 to ${currentYear}`,
       });
     }
   }

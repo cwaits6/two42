@@ -14,6 +14,7 @@ import {
   parseAnniversaryCell,
   withoutHiddenValues,
 } from "@/lib/members/format";
+import { anniversaryErrors } from "@/components/profile/birthday";
 import type { OrgSnapshot } from "@/lib/members/snapshot";
 
 describe("filenameSlug", () => {
@@ -540,8 +541,20 @@ describe("parseAnniversaryCell", () => {
     expect(parseAnniversaryCell("02-29")).toEqual({ month: 2, day: 29, year: null });
   });
 
-  it.each(["2023-02-29", "02-30", "13-01", "10", "2009-10", "1850-01-01", "soon"])("refuses %s", (cell) => {
+  it.each(["2023-02-29", "02-30", "13-01", "00-10", "10-00", "10", "2009-10", "1850-01-01", "soon"])("refuses %s", (cell) => {
     expect(parseAnniversaryCell(cell)).toBeNull();
+  });
+
+  it("accepts exactly the years the household forms accept", () => {
+    const thisYear = new Date().getFullYear();
+    for (const year of [1899, 1900, thisYear, thisYear + 1, 2100]) {
+      const accepted = parseAnniversaryCell(`${year}-06-01`) !== null;
+      const formAccepts =
+        Object.keys(anniversaryErrors({ month: "06", day: "01", year: String(year) })).length === 0;
+      expect(accepted).toBe(formAccepts);
+    }
+    expect(parseAnniversaryCell(`${thisYear}-06-01`)?.year).toBe(thisYear);
+    expect(parseAnniversaryCell(`${thisYear + 1}-06-01`)).toBeNull();
   });
 });
 
