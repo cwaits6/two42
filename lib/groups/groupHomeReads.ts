@@ -109,6 +109,7 @@ export async function loadGroupHomeReads(
     lessons,
     announcements,
     answeredPrayers,
+    hasOpenPrayer,
     openPrayers,
   ] = await Promise.all([
     client
@@ -212,18 +213,29 @@ export async function loadGroupHomeReads(
       .order("lecture_date", { ascending: false, nullsFirst: true })
       .limit(20)
       .then((read) => readList<LessonRow>(read, "new lessons")),
+    // Not limited to the new window: an empty result has to mean the group has none.
     client
       .from("announcements")
       .select("id, title, content, published_at, created_at")
       .eq("org_id", orgId)
       .eq("group_id", groupId)
       .eq("is_published", true)
-      .gte("published_at", newSinceIso)
       .lte("published_at", nowIso)
       .order("published_at", { ascending: false })
       .limit(3)
       .then((read) => readList<AnnouncementRow>(read, "new announcements")),
     loadAnsweredPrayers(client, { orgId, groupId, since: newSinceIso }),
+    client
+      .from("prayer_wall")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("group_id", groupId)
+      .eq("is_answered", false)
+      .limit(1)
+      .then((read) => {
+        const rows = readList(read, "whether the group has a prayer request");
+        return rows && rows.length > 0;
+      }),
     client
       .from("prayer_wall")
       .select(PRAYER_WALL_COLUMNS)
@@ -252,6 +264,7 @@ export async function loadGroupHomeReads(
     lessons,
     announcements,
     answeredPrayers,
+    hasOpenPrayer,
     openPrayers,
   };
 }

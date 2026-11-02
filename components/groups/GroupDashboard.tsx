@@ -190,7 +190,12 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
                     home.prayer && (
                       <ul>
                         <li>
-                          <HomePrayerCard request={home.prayer} userId={user.id} groupId={group.id} />
+                          <HomePrayerCard
+                            key={home.prayer.id}
+                            request={home.prayer}
+                            userId={user.id}
+                            groupId={group.id}
+                          />
                         </li>
                       </ul>
                     )

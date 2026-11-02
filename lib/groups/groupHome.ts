@@ -73,6 +73,8 @@ export type GroupHomeReads = {
   announcements: AnnouncementRow[] | null;
   answeredPrayers: AnsweredPrayerRow[] | null;
   openPrayers: PrayerWallRow[] | null;
+  /** Any open request at all, including the viewer's own and ones they're praying for. */
+  hasOpenPrayer: boolean | null;
 };
 
 export type HomeContext = {
@@ -165,9 +167,16 @@ export type GroupHome = {
   newTiles: NewTile[] | null;
   prayer: PrayerWallRow | null;
   prayerFailed: boolean;
-  /** Every read succeeded and there is nothing to show anywhere on the page. */
+  /**
+   * Every read succeeded, nothing on the page has anything to show, and the
+   * group has no upcoming event, published announcement or open prayer request
+   * outside the page's windows either: the empty states say so in those words.
+   */
   nothingAtAll: boolean;
 };
+
+const hasEnded = (occurrence: Event, now: Date) =>
+  meetingEndMs(occurrence.start_time, occurrence.end_time) <= now.getTime();
 
 function inNextWeek(iso: string, now: Date): boolean {
   const ms = new Date(iso).getTime();
@@ -340,7 +349,8 @@ function repeatsOften(event: Event, anchors: Map<string, Event>): boolean {
 /**
  * This week's rows in date order. serving_signups has no link to events, so a
  * serving date matches on the calendar date in the church's zone, on that
- * day's earliest event. A date with no event at all gets its own row.
+ * day's earliest listed event. A date with none listed gets its own row, unless
+ * all of that day's events have ended.
  */
 export function weekRows(
   occurrences: Event[],
@@ -358,44 +368,42 @@ export function weekRows(
   );
   const myDates = new Set(mine.map((s) => s.service_date));
 
-  const earliestOnDay = new Map<string, Event>();
-  for (const o of occurrences) {
+  const listed = occurrences.filter(
+    (o) =>
+      o !== skip && !hasEnded(o, now) && new Date(o.start_time).getTime() < now.getTime() + WEEK_MS,
+  );
+  const earliestListed = new Map<string, Event>();
+  for (const o of listed) {
     const day = dayKey(o.start_time, zone);
-    if (!earliestOnDay.has(day)) earliestOnDay.set(day, o);
+    if (!earliestListed.has(day)) earliestListed.set(day, o);
   }
 
-  const dated: { at: number; row: WeekRow }[] = occurrences
-    .filter((o) => {
-      if (o === skip) return false;
-      const start = new Date(o.start_time).getTime();
-      return (
-        meetingEndMs(o.start_time, o.end_time) > now.getTime() && start < now.getTime() + WEEK_MS
-      );
-    })
-    .map((o) => {
-      const quiet = repeatsOften(o, anchors);
-      const day = dayKey(o.start_time, zone);
-      return {
-        at: new Date(o.start_time).getTime(),
-        row: {
-          key: `${o.id}-${o.start_time}`,
-          weekday: formatInZone(o.start_time, zone, { weekday: "short" }),
-          day: formatInZone(o.start_time, zone, { day: "numeric" }),
-          title: o.title,
-          time: formatEventTime(o.start_time, zone),
-          place: quiet ? null : o.location,
-          serving: myDates.has(day) && earliestOnDay.get(day) === o,
-          href: occurrenceHref(groupId, o),
-          reply:
-            !quiet && o.is_rsvp_enabled
-              ? { eventId: o.id, status: status.get(o.id) ?? null }
-              : null,
-        },
-      };
-    });
+  const dated: { at: number; row: WeekRow }[] = listed.map((o) => {
+    const quiet = repeatsOften(o, anchors);
+    const day = dayKey(o.start_time, zone);
+    return {
+      at: new Date(o.start_time).getTime(),
+      row: {
+        key: `${o.id}-${o.start_time}`,
+        weekday: formatInZone(o.start_time, zone, { weekday: "short" }),
+        day: formatInZone(o.start_time, zone, { day: "numeric" }),
+        title: o.title,
+        time: formatEventTime(o.start_time, zone),
+        place: quiet ? null : o.location,
+        serving: myDates.has(day) && earliestListed.get(day) === o,
+        href: occurrenceHref(groupId, o),
+        reply:
+          !quiet && o.is_rsvp_enabled
+            ? { eventId: o.id, status: status.get(o.id) ?? null }
+            : null,
+      },
+    };
+  });
 
   for (const s of mine) {
-    if (earliestOnDay.has(s.service_date) || daysUntil(s.service_date, today) >= 7) continue;
+    if (earliestListed.has(s.service_date) || daysUntil(s.service_date, today) >= 7) continue;
+    const onDay = occurrences.filter((o) => dayKey(o.start_time, zone) === s.service_date);
+    if (onDay.length > 0 && onDay.every((o) => hasEnded(o, now))) continue;
     const date = zoned(s.service_date, zone);
     dated.push({
       at: date.toMillis(),
@@ -722,6 +730,7 @@ export function buildGroupHome(reads: GroupHomeReads, ctx: HomeContext): GroupHo
   let notices: HomeNotice[] = [];
   let starting: ReturnType<typeof startingNowEvent> = null;
   let rows: WeekRow[] | null = null;
+  let eventsAhead = false;
   if (events) {
     const anchors = anchorsOf(events);
     const occurrences = expandUpcomingEvents(
@@ -731,10 +740,12 @@ export function buildGroupHome(reads: GroupHomeReads, ctx: HomeContext): GroupHo
     );
     notices = dateNotices(events, ctx);
     starting = startingNowEvent(occurrences, anchors, ctx);
-    // The replies decide which button shows as chosen, so the rows fail with them.
-    rows = rsvps
-      ? weekRows(occurrences, anchors, rsvps, signups ?? [], starting?.occurrence ?? null, ctx)
-      : null;
+    eventsAhead = occurrences.some((o) => !hasEnded(o, now));
+    // Replies pick the chosen button and signups the serving tag, so the rows fail with either.
+    rows =
+      rsvps && signups
+        ? weekRows(occurrences, anchors, rsvps, signups, starting?.occurrence ?? null, ctx)
+        : null;
   }
 
   const celebrations =
@@ -755,7 +766,10 @@ export function buildGroupHome(reads: GroupHomeReads, ctx: HomeContext): GroupHo
     rows?.length === 0 &&
     celebrations?.length === 0 &&
     tiles?.length === 0 &&
-    reads.openPrayers?.length === 0;
+    !eventsAhead &&
+    reads.announcements?.length === 0 &&
+    reads.openPrayers?.length === 0 &&
+    reads.hasOpenPrayer === false;
 
   return {
     notices,
@@ -766,7 +780,7 @@ export function buildGroupHome(reads: GroupHomeReads, ctx: HomeContext): GroupHo
     celebrations,
     newTiles: tiles,
     prayer,
-    prayerFailed: reads.openPrayers === null,
+    prayerFailed: reads.openPrayers === null || (prayer === null && reads.hasOpenPrayer === null),
     nothingAtAll,
   };
 }

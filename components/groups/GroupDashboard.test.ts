@@ -96,17 +96,21 @@ function failedSections(node: ReactNode, out: string[] = []): string[] {
   return out;
 }
 
-/** The props of every element of `type` in the tree. */
-function propsOf<P>(node: ReactNode, type: unknown, out: P[] = []): P[] {
+/** Every element of `type` in the tree. */
+function elementsOf<P>(node: ReactNode, type: unknown, out: ReactElement<P>[] = []): ReactElement<P>[] {
   if (Array.isArray(node)) {
-    node.forEach((n) => propsOf(n, type, out));
+    node.forEach((n) => elementsOf(n, type, out));
     return out;
   }
   if (!node || typeof node !== "object" || !("props" in node)) return out;
   const element = node as ReactElement<P & { children?: ReactNode }>;
-  if (element.type === type) out.push(element.props);
-  propsOf(element.props.children, type, out);
+  if (element.type === type) out.push(element);
+  elementsOf(element.props.children, type, out);
   return out;
+}
+
+function propsOf<P>(node: ReactNode, type: unknown): P[] {
+  return elementsOf<P>(node, type).map((element) => element.props);
 }
 
 function linkHrefs(node: ReactNode): string[] {
@@ -205,6 +209,36 @@ describe("GroupDashboard", () => {
     }
   });
 
+  it("filters every group-owned read on this group", async () => {
+    reads.prayer_requests = {
+      data: [{ id: "p2", updated_at: "2026-11-02T14:00:00Z" }],
+      error: null,
+    };
+
+    await render(LEADER);
+
+    const expectOnGroup = (tables: string[], column: string) => {
+      for (const table of tables) {
+        expect(filtersByTable[table], table).toBeDefined();
+        for (const filters of filtersByTable[table]) expect(filters[column], table).toBe("b");
+      }
+    };
+    expectOnGroup(
+      [
+        "events",
+        "lectures",
+        "group_members",
+        "announcements",
+        "prayer_wall",
+        "prayer_requests",
+        "group_join_requests",
+      ],
+      "eq:group_id",
+    );
+    expectOnGroup(["serving_signups", "serving_team_settings"], "eq:teams.group_id");
+    expect(filtersByTable.prayer_wall).toHaveLength(3);
+  });
+
   it("keeps the empty states for a group with nothing at all, with the add actions for a leader only", async () => {
     const leader = await render(LEADER);
     const leaderText = texts(leader).join("");
@@ -233,6 +267,48 @@ describe("GroupDashboard", () => {
     expect(text).not.toContain("Prayer");
     expect(text).not.toContain("To do");
     expect(text).not.toContain("No upcoming events.");
+  });
+
+  it.each([
+    [
+      "an event past the week",
+      () => {
+        reads.events = { data: [{ ...oneTimeEvent, start_time: "2026-11-13T14:00:00Z" }], error: null };
+      },
+    ],
+    [
+      "an announcement past the new window",
+      () => {
+        reads.announcements = {
+          data: [
+            {
+              id: "a1",
+              title: "Old news",
+              content: "",
+              published_at: "2026-10-01T14:00:00Z",
+              created_at: "2026-10-01T14:00:00Z",
+            },
+          ],
+          error: null,
+        };
+      },
+    ],
+    [
+      "only requests the viewer can't be shown",
+      () => {
+        reads.prayer_wall = (filters) =>
+          filters["eq:mine"] === false ? { data: [], error: null } : { data: [{ id: "mine" }], error: null };
+      },
+    ],
+  ])("doesn't claim the group has nothing when it has %s", async (_, seed) => {
+    seed();
+
+    const text = texts(await render()).join("");
+
+    expect(text).not.toContain("No upcoming events.");
+    expect(text).not.toContain("No announcements yet.");
+    expect(text).not.toContain("No prayer requests yet.");
+    expect(text).not.toContain("Old news");
   });
 
   it("keeps a leader's add action where a section is empty", async () => {
@@ -379,6 +455,14 @@ describe("GroupDashboard", () => {
     });
   });
 
+  it("gives each request its own card, so a response never carries over to the next one", async () => {
+    reads.prayer_wall = { data: [openPrayer], error: null };
+
+    const [card] = elementsOf(await render(), HomePrayerCard);
+
+    expect(card.key).toBe("p1");
+  });
+
   it("reads the answered time from prayer_requests and the text from the wall", async () => {
     reads.prayer_requests = {
       data: [{ id: "p2", updated_at: "2026-11-02T14:00:00Z" }],
@@ -452,6 +536,27 @@ describe("GroupDashboard's failed reads", () => {
     expect(failedSections(tree)).toContain(thing);
     expect(text).not.toContain("No upcoming events.");
     expect(text).not.toContain("No announcements yet.");
+  });
+
+  it("reports failed serving dates on This week too, for a member and a leader", async () => {
+    someContent();
+    reads.serving_signups = FAILED;
+
+    for (const group of [MEMBER, LEADER]) {
+      const tree = await render(group);
+      expect(failedSections(tree)).toContain("this week's events");
+      expect(texts(tree).join("")).not.toContain("Sunday morning");
+    }
+  });
+
+  it("shows a failed check for any request as a failed section when there's no request to show", async () => {
+    reads.prayer_wall = (filters) =>
+      filters["eq:mine"] === false ? { data: [], error: null } : FAILED;
+
+    const tree = await render();
+
+    expect(failedSections(tree)).toEqual(["prayer requests"]);
+    expect(texts(tree).join("")).not.toContain("No prayer requests yet.");
   });
 
   it("reports a failed roster in both sections that need it", async () => {

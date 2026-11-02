@@ -16,7 +16,7 @@ import {
   type ServingSignupRow,
   type ServingTeamRow,
 } from "@/lib/groups/groupHome";
-import type { DirectoryProfile, Event, FamilyDirectoryFull, Rsvp } from "@/lib/types";
+import type { DirectoryProfile, Event, FamilyDirectoryFull, PrayerWallRow, Rsvp } from "@/lib/types";
 
 const ZONE = "America/New_York";
 // Tuesday, Nov 3, 2026, 9:00 AM in New York.
@@ -109,6 +109,7 @@ function reads(over: Partial<GroupHomeReads> = {}): GroupHomeReads {
     lessons: [],
     announcements: [],
     answeredPrayers: [],
+    hasOpenPrayer: false,
     openPrayers: [],
     ...over,
   };
@@ -370,6 +371,50 @@ describe("This week", () => {
     ]);
   });
 
+  describe("a date you're serving when its earliest event isn't listed", () => {
+    const servingToday = [signup("Greeters", TODAY, [USER])];
+    const service = event({ id: "service", start_time: "2026-11-03T14:30:00Z" });
+    const finished = event({
+      id: "finished",
+      start_time: "2026-11-03T13:00:00Z",
+      end_time: "2026-11-03T13:30:00Z",
+    });
+    const call = event({
+      id: "call",
+      start_time: "2026-11-03T13:50:00Z",
+      end_time: "2026-11-03T14:20:00Z",
+      meeting_url: "https://zoom.us/j/1",
+    });
+    const rowsFor = (events: Event[]) =>
+      (buildGroupHome(reads({ events, signups: servingToday }), ctx()).weekRows ?? []).map((r) => [
+        r.title,
+        r.serving,
+      ]);
+
+    it("tags the next event once an earlier one has ended", () => {
+      expect(rowsFor([finished, service])).toEqual([["service", true]]);
+    });
+
+    it("tags the next event while an earlier one holds the join panel", () => {
+      expect(rowsFor([call, service])).toEqual([["service", true]]);
+    });
+
+    it("gives the date its own row while its only event holds the join panel", () => {
+      expect(rowsFor([call])).toEqual([["Greeters", true]]);
+    });
+
+    it("drops the date once all its events have ended", () => {
+      expect(rowsFor([finished])).toEqual([]);
+    });
+
+    it("drops the date while its only event sits in the join panel's ended grace period", () => {
+      const endedCall = { ...call, start_time: "2026-11-03T13:00:00Z", end_time: "2026-11-03T13:50:00Z" };
+      const home = buildGroupHome(reads({ events: [endedCall], signups: servingToday }), ctx());
+      expect(home.startingNow?.title).toBe("call");
+      expect(home.weekRows).toEqual([]);
+    });
+  });
+
   it("gives a serving date with no event its own row, in date order", () => {
     const wed = event({ id: "wed", start_time: "2026-11-04T23:00:00Z" });
     const rows =
@@ -399,6 +444,13 @@ describe("This week", () => {
     const home = buildGroupHome(reads({ rsvps: null }), ctx());
     expect(home.weekRows).toBeNull();
     expect(home.nothingAtAll).toBe(false);
+  });
+
+  it("fails with the serving dates, so a server never reads as not serving", () => {
+    const events = [event({ id: "e", start_time: "2026-11-05T14:00:00Z" })];
+    for (const isLeader of [false, true]) {
+      expect(buildGroupHome(reads({ events, signups: null }), ctx({ isLeader })).weekRows).toBeNull();
+    }
   });
 });
 
@@ -751,6 +803,36 @@ describe("a quiet or failed page", () => {
     expect(buildGroupHome(reads(), ctx()).nothingAtAll).toBe(true);
   });
 
+  it("doesn't call a group nothing at all when what it has falls outside the page's windows", () => {
+    const quiet = [
+      { events: [event({ id: "later", start_time: "2026-11-13T14:00:00Z" })] },
+      {
+        announcements: [
+          {
+            id: "old",
+            title: "Old news",
+            content: "",
+            published_at: "2026-10-01T14:00:00Z",
+            created_at: "2026-10-01T14:00:00Z",
+          },
+        ],
+      },
+      { hasOpenPrayer: true },
+    ] satisfies Partial<GroupHomeReads>[];
+    for (const over of quiet) {
+      const home = buildGroupHome(reads(over), ctx());
+      expect(home.nothingAtAll).toBe(false);
+      expect(home.weekRows).toEqual([]);
+      expect(home.newTiles).toEqual([]);
+      expect(home.prayer).toBeNull();
+    }
+  });
+
+  it("calls a group whose only event has passed nothing at all", () => {
+    const past = event({ id: "past", start_time: "2026-11-03T12:00:00Z", end_time: "2026-11-03T13:00:00Z" });
+    expect(buildGroupHome(reads({ events: [past] }), ctx()).nothingAtAll).toBe(true);
+  });
+
   it("never calls a failed read nothing at all", () => {
     for (const failed of [
       { events: null },
@@ -765,6 +847,7 @@ describe("a quiet or failed page", () => {
       { announcements: null },
       { answeredPrayers: null },
       { openPrayers: null },
+      { hasOpenPrayer: null },
     ] satisfies Partial<GroupHomeReads>[]) {
       expect(buildGroupHome(reads(failed), ctx()).nothingAtAll).toBe(false);
     }
@@ -774,5 +857,13 @@ describe("a quiet or failed page", () => {
     const open = { id: "p" } as GroupHomeReads["openPrayers"] extends (infer R)[] | null ? R : never;
     expect(buildGroupHome(reads({ openPrayers: [open] }), ctx()).prayer).toBe(open);
     expect(buildGroupHome(reads({ openPrayers: null }), ctx()).prayerFailed).toBe(true);
+  });
+
+  it("flags a failed check for any request only when there is no request to show", () => {
+    const open = { id: "p" } as PrayerWallRow;
+    expect(buildGroupHome(reads({ hasOpenPrayer: null }), ctx()).prayerFailed).toBe(true);
+    const home = buildGroupHome(reads({ hasOpenPrayer: null, openPrayers: [open] }), ctx());
+    expect(home.prayerFailed).toBe(false);
+    expect(home.prayer).toBe(open);
   });
 });
