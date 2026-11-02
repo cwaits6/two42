@@ -77,10 +77,11 @@ export function isThisWeek(month: number, day: number, today: Date): boolean {
 }
 
 /**
- * A claimed spouse counts only when their profile is in `members`: the view
- * drops an unlisted profile from there but keeps their family_members row.
+ * A claimed spouse is named only when their profile is in `members`: the view
+ * drops an unlisted or pending profile from there but keeps their family_members
+ * row, and nothing in the row tells the two apart.
  */
-function listedSpouse(family: FamilyDirectoryFull) {
+function nameableSpouse(family: FamilyDirectoryFull) {
   return (
     family.members.find((m) => m.relationship === "spouse") ||
     family.family_members_list.find(
@@ -94,7 +95,7 @@ function listedSpouse(family: FamilyDirectoryFull) {
 /** "Frank & Susan Miller" — the couple's first names plus the family name */
 export function coupleName(family: FamilyDirectoryFull): string {
   const primary = family.members.find((m) => m.relationship === "primary");
-  const firsts = [primary, listedSpouse(family)]
+  const firsts = [primary, nameableSpouse(family)]
     .filter(Boolean)
     .map((p) => p!.preferred_name || p!.first_name)
     .filter(Boolean)
@@ -154,7 +155,10 @@ export function anniversaryEntries(
   const result: AnniversaryEntry[] = [];
 
   for (const family of families) {
-    if (!family.anniversary || !listedSpouse(family)) continue;
+    const hasSpouse =
+      family.members.some((m) => m.relationship === "spouse") ||
+      family.family_members_list.some((fm) => fm.relationship === "spouse");
+    if (!family.anniversary || !hasSpouse) continue;
 
     const married = new Date(family.anniversary + "T00:00:00");
     const month = married.getMonth() + 1;

@@ -249,7 +249,7 @@ describe("anniversaryEntries", () => {
     expect(anniversaryEntries(families, NOV_3)).toEqual([]);
   });
 
-  it("leaves out a couple whose claimed spouse is unlisted, and never names them", () => {
+  it("keeps a couple whose claimed spouse is unlisted or pending, and never names that spouse", () => {
     const family = household({
       anniversary: "2004-11-05",
       members: [asMember("a", "primary", "Frank")],
@@ -257,8 +257,7 @@ describe("anniversaryEntries", () => {
         householdRecord({ first_name: "Susan", relationship: "spouse", claimed_profile_id: "b" }),
       ],
     });
-    expect(anniversaryEntries([family], NOV_3)).toEqual([]);
-    expect(coupleName(family)).toBe("Frank Miller");
+    expect(anniversaryEntries([family], NOV_3).map((e) => e.coupleName)).toEqual(["Frank Miller"]);
   });
 });
 
