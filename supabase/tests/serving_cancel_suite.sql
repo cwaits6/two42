@@ -259,5 +259,23 @@ select is(pg_temp.attempt('chloe.mockingham@example.test', pg_temp.cancel_sql('e
   'someone moved back to pending removes 0 rows from a date they are listed on');
 update public.profiles set role = 'member' where email = 'chloe.mockingham@example.test';
 
+-- ── Left the group ──────────────────────────────────────────────────────────
+-- Leaving removes team_members rows but not attendee rows or created_by, so the
+-- delete policy's arms stay true and the group-member select policy has to refuse.
+delete from public.group_members gm
+ using public.profiles p
+ where gm.profile_id = p.id
+   and gm.group_id = 'c0000000-0000-0000-0000-00000000000b'
+   and p.email in ('henry.mockingham@example.test', 'chloe.mockingham@example.test');
+select is(
+  pg_temp.val('chloe.mockingham@example.test',
+    format('select public.is_serving_signup_attendee(%L)::text', pg_temp.signup('e1'))),
+  'true', 'someone who left the group is still listed, so the helper alone does not stop them');
+select is(pg_temp.attempt('chloe.mockingham@example.test', pg_temp.cancel_sql('e1')), 'rows:0',
+  'someone listed who left the group removes 0 rows');
+select is(pg_temp.attempt('henry.mockingham@example.test', pg_temp.cancel_sql('e1')), 'rows:0',
+  'the person who tapped Sign up and left the group removes 0 rows');
+select ok(pg_temp.signup_exists('e1'), 'the date stays on the schedule after they left');
+
 select * from finish();
 rollback;
