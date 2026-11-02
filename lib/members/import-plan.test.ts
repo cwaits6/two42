@@ -916,6 +916,89 @@ describe("planImport semantics", () => {
     expect(matched.rows[0].matchedBy).toBe("household_name_birth");
   });
 
+  describe("a birthday the file marks hidden still says who the row is", () => {
+    const sam = {
+      first_name: "Sam",
+      last_name: "Smith",
+      birth_month: 3,
+      birth_day: 4,
+      birth_year: 2010,
+    };
+    const samRow = (overrides: Partial<MemberRow> = {}) =>
+      makeRow({ ...sam, household_name: "Smith Family", hidden_fields: ["birthday"], ...overrides });
+    const withFamilies = (rest: Partial<OrgSnapshot>): OrgSnapshot => ({
+      ...emptySnapshot,
+      families: [
+        { id: "smith", family_name: "Smith Family", anniversary_month: null, anniversary_day: null, anniversary_year: null },
+        { id: "jones", family_name: "Jones Family", anniversary_month: null, anniversary_day: null, anniversary_year: null },
+      ],
+      ...rest,
+    });
+
+    it.each(["birthday", "birth_year"] as const)(
+      "refuses a person in another household, with %s hidden",
+      (token) => {
+        const plan = planImport(
+          [samRow({ hidden_fields: [token] })],
+          withFamilies({ familyMembers: [familyMember({ id: "fm", family_id: "jones", ...sam })] })
+        );
+        expect(plan.rows[0].errors.map((e) => e.code)).toEqual(["HOUSEHOLD_MOVE"]);
+        expect(plan.writes).toEqual([]);
+      }
+    );
+
+    it("refuses a person who has a login in this household", () => {
+      const plan = planImport(
+        [samRow()],
+        withFamilies({ profiles: [profile({ id: "p", family_id: "smith", ...sam })] })
+      );
+      expect(plan.rows[0].errors.map((e) => e.code)).toEqual(["HAS_LOGIN_CHANGE"]);
+      expect(plan.writes).toEqual([]);
+    });
+
+    it("refuses a person whose stored birthday is already gone", () => {
+      const { first_name, last_name } = sam;
+      const elsewhere = planImport(
+        [samRow()],
+        withFamilies({ familyMembers: [familyMember({ id: "fm", family_id: "jones", first_name, last_name })] })
+      );
+      expect(elsewhere.rows[0].errors.map((e) => e.code)).toEqual(["HOUSEHOLD_MOVE"]);
+
+      const withLogin = planImport(
+        [samRow()],
+        withFamilies({ profiles: [profile({ id: "p", family_id: "smith", first_name, last_name })] })
+      );
+      expect(withLogin.rows[0].errors.map((e) => e.code)).toEqual(["HAS_LOGIN_CHANGE"]);
+    });
+
+    it("refuses a login row for a family member already in this household", () => {
+      const plan = planImport(
+        [samRow({ has_login: true, email: "sam@example.org" })],
+        withFamilies({ familyMembers: [familyMember({ id: "fm", family_id: "smith", ...sam })] })
+      );
+      expect(plan.rows[0].errors.map((e) => e.code)).toEqual(["HAS_LOGIN_CHANGE"]);
+    });
+
+    it("keeps two people with one name apart in a file, and stores neither birthday", () => {
+      const plan = planImport(
+        [samRow({ line: 1 }), samRow({ line: 2, birth_year: 1980 })],
+        withFamilies({})
+      );
+      expect(plan.rows.map((r) => r.action)).toEqual(["create_family_member", "create_family_member"]);
+      const inserts = plan.writes.filter((w) => w.kind === "insert_family_member");
+      expect(inserts).toHaveLength(2);
+      for (const insert of inserts) {
+        expect(insert.values).not.toHaveProperty("birth_month");
+        expect(insert.values).not.toHaveProperty("birth_year");
+      }
+    });
+
+    it("still refuses the same person twice in a file", () => {
+      const plan = planImport([samRow({ line: 1 }), samRow({ line: 2 })], withFamilies({}));
+      expect(plan.rows[1].errors.map((e) => e.code)).toEqual(["DUPLICATE_IN_FILE"]);
+    });
+  });
+
   describe("birthday parts", () => {
     it("refuses a new person's month with no day", () => {
       const plan = planImport(

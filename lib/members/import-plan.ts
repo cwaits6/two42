@@ -218,19 +218,19 @@ const EMAIL = /^[^\s@<>,;:"\\]+@[^\s@<>,;:"\\]+\.[^\s@<>,;:"\\]+$/;
 const norm = (value: string | null): string => (value ?? "").trim().toLowerCase();
 
 /** Identity key for a person within a household: name + birth triple. */
-function personKey(
-  firstName: string | null,
-  lastName: string | null,
-  birthMonth: number | null,
-  birthDay: number | null,
-  birthYear: number | null
-): string {
+function personKey(person: {
+  first_name: string | null;
+  last_name: string | null;
+  birth_month: number | null;
+  birth_day: number | null;
+  birth_year: number | null;
+}): string {
   return [
-    norm(firstName),
-    norm(lastName),
-    birthMonth ?? "",
-    birthDay ?? "",
-    birthYear ?? "",
+    norm(person.first_name),
+    norm(person.last_name),
+    person.birth_month ?? "",
+    person.birth_day ?? "",
+    person.birth_year ?? "",
   ].join("\u0000");
 }
 
@@ -248,6 +248,11 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
   const stripped = fileRows.map(withoutHiddenValues);
   const rows = stripped.map(({ row }) => row);
   const fileRowOf = new Map(rows.map((row, i) => [row, fileRows[i]]));
+  // A birthday the file marks hidden still says who the row is, and the stored
+  // one may already be gone, so a row is matched on both. Missing a match would
+  // add the person a second time.
+  const identityKeys = (row: MemberRow): Set<string> =>
+    new Set([personKey(row), personKey(fileRowOf.get(row)!)]);
 
   // ---- snapshot lookups --------------------------------------------------
   const profilesByEmail = new Map<string, SnapshotProfile[]>();
@@ -274,13 +279,7 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
   // new person there (see the HOUSEHOLD_MOVE check).
   const familyMembersByPerson = new Map<string, SnapshotFamilyMember[]>();
   for (const member of snapshot.familyMembers) {
-    const key = personKey(
-      member.first_name,
-      member.last_name,
-      member.birth_month,
-      member.birth_day,
-      member.birth_year
-    );
+    const key = personKey(member);
     familyMembersByPerson.set(key, [
       ...(familyMembersByPerson.get(key) ?? []),
       member,
@@ -417,13 +416,7 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     if (!row.has_login) {
       const key = [
         groupKey(row),
-        personKey(
-          row.first_name,
-          row.last_name,
-          row.birth_month,
-          row.birth_day,
-          row.birth_year
-        ),
+        personKey(fileRowOf.get(row)!),
       ].join("\u0000");
       if (seenPeople.has(key)) {
         fail(row, {
@@ -555,32 +548,10 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     if (row.has_login) continue;
     const resolution = resolutions.get(groupKey(row))!;
     if (resolution.error !== null || resolution.familyId === null) continue;
-    // Matched on what the file says as well: a birthday it marks hidden is still
-    // who the row is, and missing the match would add the person a second time.
-    const fileRow = fileRowOf.get(row)!;
-    const rowKeys = new Set([
-      personKey(row.first_name, row.last_name, row.birth_month, row.birth_day, row.birth_year),
-      personKey(
-        fileRow.first_name,
-        fileRow.last_name,
-        fileRow.birth_month,
-        fileRow.birth_day,
-        fileRow.birth_year
-      ),
-    ]);
+    const rowKeys = identityKeys(row);
     const candidates = (
       familyMembersByFamily.get(resolution.familyId) ?? []
-    ).filter((member) =>
-      rowKeys.has(
-        personKey(
-          member.first_name,
-          member.last_name,
-          member.birth_month,
-          member.birth_day,
-          member.birth_year
-        )
-      )
-    );
+    ).filter((member) => rowKeys.has(personKey(member)));
     if (candidates.length > 1) {
       fail(row, {
         code: "AMBIGUOUS_MATCH",
@@ -692,21 +663,7 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
         const shadow = (
           familyMembersByFamily.get(resolution.familyId) ?? []
         ).some(
-          (member) =>
-            personKey(
-              member.first_name,
-              member.last_name,
-              member.birth_month,
-              member.birth_day,
-              member.birth_year
-            ) ===
-            personKey(
-              row.first_name,
-              row.last_name,
-              row.birth_month,
-              row.birth_day,
-              row.birth_year
-            )
+          (member) => identityKeys(row).has(personKey(member))
         );
         if (shadow) {
           fail(row, {
@@ -788,21 +745,7 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     // already has a login — the reverse has_login flip.
     if (resolution.familyId !== null) {
       const shadow = (profilesByFamily.get(resolution.familyId) ?? []).some(
-        (profile) =>
-          personKey(
-            profile.first_name,
-            profile.last_name,
-            profile.birth_month,
-            profile.birth_day,
-            profile.birth_year
-          ) ===
-          personKey(
-            row.first_name,
-            row.last_name,
-            row.birth_month,
-            row.birth_day,
-            row.birth_year
-          )
+        (profile) => identityKeys(row).has(personKey(profile))
       );
       if (shadow) {
         fail(row, {
@@ -840,17 +783,9 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     // and how it interacts with household_primary — product questions this
     // module should not answer by guessing. Failing names both households so
     // the admin can do it deliberately in the app.
-    const existingElsewhere = (
-      familyMembersByPerson.get(
-        personKey(
-          row.first_name,
-          row.last_name,
-          row.birth_month,
-          row.birth_day,
-          row.birth_year
-        )
-      ) ?? []
-    ).filter((member) => member.family_id !== resolution.familyId);
+    const existingElsewhere = [...identityKeys(row)]
+      .flatMap((key) => familyMembersByPerson.get(key) ?? [])
+      .filter((member) => member.family_id !== resolution.familyId);
     if (existingElsewhere.length > 0) {
       fail(row, {
         code: "HOUSEHOLD_MOVE",
