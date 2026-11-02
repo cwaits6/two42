@@ -36,7 +36,8 @@ import { toast } from "sonner";
 import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
 import { Pencil, Plus, User, UserPlus, Users } from "lucide-react";
 import { EmptyState } from "@/components/states/EmptyState";
-import { CheckRow } from "@/components/profile/CheckRow";
+import { AnniversaryFields } from "@/components/profile/AnniversaryFields";
+import { anniversaryErrors, type AnniversaryErrors } from "@/components/profile/birthday";
 import { relLabel } from "@/components/directory/utils";
 import {
   formatPhone,
@@ -65,11 +66,15 @@ interface HouseholdInfo {
   city: string;
   state: string;
   postal_code: string;
+  /** SHARED_PHONE, or the id of the spouse whose mobile is the household phone. */
+  phone_choice: string;
   phone_home: string;
-  anniversary: string;
-  hide_address: boolean;
-  hide_phone_home: boolean;
+  anniversary_month: string;
+  anniversary_day: string;
+  anniversary_year: string;
 }
+
+const SHARED_PHONE = "shared";
 
 interface SearchResult {
   id: string;
@@ -97,10 +102,11 @@ function fromFamily(f: FamilyUnit): HouseholdInfo {
     city: f.city ?? "",
     state: f.state ?? "",
     postal_code: f.postal_code ?? "",
+    phone_choice: f.phone_profile_id ?? SHARED_PHONE,
     phone_home: formatPhone(f.phone_home) ?? "",
-    anniversary: f.anniversary ?? "",
-    hide_address: f.hide_address,
-    hide_phone_home: f.hide_phone_home,
+    anniversary_month: f.anniversary_month?.toString() ?? "",
+    anniversary_day: f.anniversary_day?.toString() ?? "",
+    anniversary_year: f.anniversary_year?.toString() ?? "",
   };
 }
 
@@ -146,6 +152,7 @@ export function HouseholdClient({
   const router = useRouter();
   const [info, setInfo] = useState<HouseholdInfo>(fromFamily(family));
   const [savingInfo, setSavingInfo] = useState(false);
+  const [anniversaryProblems, setAnniversaryProblems] = useState<AnniversaryErrors>({});
 
   // "Add a member" dialog
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -168,11 +175,50 @@ export function HouseholdClient({
 
   const canEditSpouseProfiles = computeCanEditSpouseProfiles(currentProfile);
 
+  // Another spouse's number can only be kept or cleared here; the server lets
+  // nobody else choose it.
+  const savedOwner = householdProfiles.find((p) => p.id === family.phone_profile_id);
+  const phoneChoices = [
+    { value: SHARED_PHONE, label: "Shared home phone" },
+    ...(canEditSpouseProfiles && (currentProfile.phone_mobile || family.phone_profile_id === currentProfile.id)
+      ? [
+          {
+            value: currentProfile.id,
+            label: currentProfile.phone_mobile
+              ? `My mobile, ${formatPhone(currentProfile.phone_mobile)}`
+              : "My mobile",
+          },
+        ]
+      : []),
+    ...(family.phone_profile_id && family.phone_profile_id !== currentProfile.id
+      ? [
+          {
+            value: family.phone_profile_id,
+            label: `${savedOwner?.preferred_name || savedOwner?.first_name || "Spouse"}'s mobile`,
+          },
+        ]
+      : []),
+  ];
+
   // ---- Household info ----
   async function handleSaveInfo(e: React.FormEvent) {
     e.preventDefault();
+
+    const found = anniversaryErrors({
+      month: info.anniversary_month,
+      day: info.anniversary_day,
+      year: info.anniversary_year,
+    });
+    setAnniversaryProblems(found);
+    const firstInvalid = Object.keys(found)[0];
+    if (firstInvalid) {
+      document.getElementById(firstInvalid)?.focus();
+      return;
+    }
+
     setSavingInfo(true);
 
+    const choice = info.phone_choice === SHARED_PHONE ? null : info.phone_choice;
     const res = await fetch("/api/household", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -183,10 +229,11 @@ export function HouseholdClient({
         city: info.city,
         state: info.state,
         postal_code: info.postal_code,
-        phone_home: info.phone_home,
-        anniversary: info.anniversary || null,
-        hide_address: info.hide_address,
-        hide_phone_home: info.hide_phone_home,
+        anniversary_month: info.anniversary_month,
+        anniversary_day: info.anniversary_day,
+        anniversary_year: info.anniversary_year,
+        ...(choice === null ? { phone_home: info.phone_home } : {}),
+        ...(choice !== family.phone_profile_id ? { phone_profile_id: choice } : {}),
       }),
     });
 
@@ -195,7 +242,8 @@ export function HouseholdClient({
     if (!res.ok) {
       toast.error(
         failureMessage("save the household", res.status, {
-          400: "Couldn't save the household. Check the name, state, ZIP code and home phone, then try again.",
+          400: "Couldn't save the household. Check the name, state, ZIP code, home phone and anniversary, then try again.",
+          403: "Only that spouse can choose their own number. Choose a shared home phone, or ask them to.",
         }),
       );
       return;
@@ -384,53 +432,64 @@ export function HouseholdClient({
 
             <Separator />
 
-            <div className="space-y-2">
-              <Label htmlFor="phone_home" className="text-base">
-                Home phone{" "}
-                <span className="text-muted-foreground font-normal">(optional)</span>
-              </Label>
-              <Input
-                id="phone_home"
-                type="tel"
-                inputMode="tel"
-                value={info.phone_home}
-                onChange={(e) =>
-                  setInfo({ ...info, phone_home: formatPhoneAsYouType(e.target.value) })
-                }
-                placeholder="(555) 123-4567"
-                className="text-base py-5"
-              />
-            </div>
+            {phoneChoices.length > 1 && (
+              <div className="space-y-2">
+                <Label htmlFor="phone_choice" className="text-base">
+                  Household phone
+                </Label>
+                <Select
+                  items={phoneChoices}
+                  value={info.phone_choice}
+                  onValueChange={(v) => setInfo({ ...info, phone_choice: v ?? SHARED_PHONE })}
+                >
+                  <SelectTrigger id="phone_choice" className="w-full py-5 text-base">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {phoneChoices.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {info.phone_choice === SHARED_PHONE && (
+              <div className="space-y-2">
+                <Label htmlFor="phone_home" className="text-base">
+                  Home phone{" "}
+                  <span className="text-muted-foreground font-normal">(optional)</span>
+                </Label>
+                <Input
+                  id="phone_home"
+                  type="tel"
+                  inputMode="tel"
+                  value={info.phone_home}
+                  onChange={(e) =>
+                    setInfo({ ...info, phone_home: formatPhoneAsYouType(e.target.value) })
+                  }
+                  placeholder="(555) 123-4567"
+                  className="text-base py-5"
+                />
+              </div>
+            )}
 
             <div className="space-y-2">
-              <Label htmlFor="anniversary" className="text-base">
+              <p className="text-base font-medium">
                 Anniversary{" "}
                 <span className="text-muted-foreground font-normal">(optional)</span>
-              </Label>
-              <Input
-                id="anniversary"
-                type="date"
-                value={info.anniversary}
-                onChange={(e) => setInfo({ ...info, anniversary: e.target.value })}
-                className="text-base py-5"
-              />
-            </div>
-
-            <Separator />
-
-            <div className="space-y-1">
-              <p className="text-base font-semibold">Privacy</p>
-              <CheckRow
-                id="hide_address"
-                label="Hide the address from the directory"
-                checked={info.hide_address}
-                onChange={(v) => setInfo({ ...info, hide_address: v })}
-              />
-              <CheckRow
-                id="hide_phone_home"
-                label="Hide the home phone from the directory"
-                checked={info.hide_phone_home}
-                onChange={(v) => setInfo({ ...info, hide_phone_home: v })}
+              </p>
+              <AnniversaryFields
+                month={info.anniversary_month}
+                day={info.anniversary_day}
+                year={info.anniversary_year}
+                onChange={(field, value) => {
+                  setInfo({ ...info, [field]: value });
+                  setAnniversaryProblems((prev) => ({ ...prev, [field]: undefined }));
+                }}
+                errors={anniversaryProblems}
               />
             </div>
 

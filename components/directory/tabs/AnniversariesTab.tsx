@@ -37,9 +37,13 @@ function AnniversariesTabInner() {
           }
           title={entry.coupleName}
           subtitle={formatOccurrence(entry.month, entry.day, today)}
-          below={<span className="block text-base text-muted-foreground">Married {entry.marriedYear}</span>}
+          below={
+            entry.marriedYear !== null ? (
+              <span className="block text-base text-muted-foreground">Married {entry.marriedYear}</span>
+            ) : undefined
+          }
           trailing={
-            soon ? (
+            soon && entry.years !== null ? (
               <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-brand-accent bg-brand-bg-light px-3.5 py-1 text-sm font-semibold text-brand-accent-text">
                 <Heart className="h-4 w-4" aria-hidden="true" />
                 {entry.years} years

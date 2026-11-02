@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { birthdayColumns, birthdayErrors } from "./birthday";
+import { anniversaryColumns, anniversaryErrors, birthdayColumns, birthdayErrors } from "./birthday";
 
 const today = new Date(2026, 9, 31);
 const errors = (month: string, day: string, year = "") =>
@@ -49,6 +49,38 @@ describe("birthdayColumns", () => {
       birth_month: 7,
       birth_day: 4,
       birth_year: null,
+    });
+  });
+});
+
+describe("anniversaryErrors", () => {
+  const check = (month: string, day: string, year = "") => anniversaryErrors({ month, day, year }, today);
+
+  it("accepts it blank, or with a month and day and no year", () => {
+    expect(check("", "")).toEqual({});
+    expect(check("2", "29")).toEqual({});
+  });
+
+  it("says what is missing in plain words", () => {
+    expect(check("5", "")).toEqual({ anniversary_day: "Enter the day of the anniversary." });
+    expect(check("", "12")).toEqual({ anniversary_month: "Choose the month of the anniversary." });
+  });
+
+  it("refuses a month that isn't one, and a day the year doesn't have", () => {
+    expect(check("13", "1")).toEqual({ anniversary_month: "Choose the month of the anniversary." });
+    expect(check("2", "29", "2023")).toEqual({ anniversary_day: "Enter a day from 1 to 28." });
+  });
+
+  it("stores blanks as null", () => {
+    expect(anniversaryColumns({ month: "10", day: "3", year: "" })).toEqual({
+      anniversary_month: 10,
+      anniversary_day: 3,
+      anniversary_year: null,
+    });
+    expect(anniversaryColumns({ month: "", day: "", year: "" })).toEqual({
+      anniversary_month: null,
+      anniversary_day: null,
+      anniversary_year: null,
     });
   });
 });

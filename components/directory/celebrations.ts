@@ -62,8 +62,9 @@ export interface AnniversaryEntry extends RecurringDate {
   coupleName: string;
   photoUrl: string | null;
   initial: string;
-  marriedYear: number;
-  years: number;
+  /** Null when the couple gave no year, so "Married" and the count are left out. */
+  marriedYear: number | null;
+  years: number | null;
 }
 
 export interface CelebrationSection<T> {
@@ -104,9 +105,9 @@ export function coupleName(family: FamilyDirectoryFull): string {
 }
 
 /**
- * Everyone with a birthday on record. The views already null a hidden birthday
- * and drop unlisted people. A household record claimed by a profile is skipped:
- * the profile speaks for that person.
+ * Everyone with a birthday on record. The views drop unlisted people. A
+ * household record claimed by a profile is skipped: the profile speaks for
+ * that person.
  */
 export function birthdayEntries(
   members: readonly DirectoryProfile[],
@@ -158,11 +159,11 @@ export function anniversaryEntries(
     const hasSpouse =
       family.members.some((m) => m.relationship === "spouse") ||
       family.family_members_list.some((fm) => fm.relationship === "spouse");
-    if (!family.anniversary || !hasSpouse) continue;
+    const month = family.anniversary_month;
+    const day = family.anniversary_day;
+    const year = family.anniversary_year;
+    if (!month || !day || !hasSpouse) continue;
 
-    const married = new Date(family.anniversary + "T00:00:00");
-    const month = married.getMonth() + 1;
-    const day = married.getDate();
     result.push({
       key: family.id,
       path: `/families?family=${family.id}`,
@@ -171,8 +172,8 @@ export function anniversaryEntries(
       initial: family.family_name.charAt(0).toUpperCase(),
       month,
       day,
-      marriedYear: married.getFullYear(),
-      years: nextOccurrence(month, day, today).getFullYear() - married.getFullYear(),
+      marriedYear: year,
+      years: year === null ? null : nextOccurrence(month, day, today).getFullYear() - year,
     });
   }
 

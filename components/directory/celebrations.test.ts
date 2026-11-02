@@ -46,7 +46,10 @@ function household(overrides: Partial<FamilyDirectoryFull>): FamilyDirectoryFull
     id: "family",
     family_name: "Miller",
     photo_url: null,
-    anniversary: null,
+    anniversary_month: null,
+    anniversary_day: null,
+    anniversary_year: null,
+    phone_profile_id: null,
     members: [],
     family_members_list: [],
     ...overrides,
@@ -215,7 +218,9 @@ describe("birthdayEntries", () => {
 
 describe("anniversaryEntries", () => {
   const couple = {
-    anniversary: "2004-11-05",
+    anniversary_month: 11,
+      anniversary_day: 5,
+      anniversary_year: 2004,
     members: [asMember("a", "primary", "Frank"), asMember("b", "spouse", "Susan")],
   };
 
@@ -231,9 +236,30 @@ describe("anniversaryEntries", () => {
     });
   });
 
+  it("keeps a couple with no year, and leaves the year and count out", () => {
+    const [entry] = anniversaryEntries(
+      [household({ ...couple, anniversary_year: null })],
+      NOV_3,
+    );
+    expect(entry).toMatchObject({ month: 11, day: 5, marriedYear: null, years: null });
+  });
+
+  it("shows nothing from the old date column, which a hidden anniversary can still be in", () => {
+    const oldView = {
+      ...household({ members: couple.members }),
+      anniversary: "2004-11-05",
+    } as FamilyDirectoryFull;
+    delete (oldView as Partial<FamilyDirectoryFull>).anniversary_month;
+    delete (oldView as Partial<FamilyDirectoryFull>).anniversary_day;
+    delete (oldView as Partial<FamilyDirectoryFull>).anniversary_year;
+    expect(anniversaryEntries([oldView], NOV_3)).toEqual([]);
+  });
+
   it("names a spouse without an account", () => {
     const family = household({
-      anniversary: "2004-11-05",
+      anniversary_month: 11,
+      anniversary_day: 5,
+      anniversary_year: 2004,
       members: [asMember("a", "primary", "Frank")],
       family_members_list: [householdRecord({ first_name: "Susan", relationship: "spouse" })],
     });
@@ -243,7 +269,7 @@ describe("anniversaryEntries", () => {
 
   it("leaves out a household with no anniversary on record or no spouse", () => {
     const families = [
-      household({ ...couple, anniversary: null }),
+      household({ ...couple, anniversary_month: null, anniversary_day: null, anniversary_year: null }),
       household({ ...couple, members: [asMember("a", "primary", "Frank")] }),
     ];
     expect(anniversaryEntries(families, NOV_3)).toEqual([]);
@@ -251,7 +277,9 @@ describe("anniversaryEntries", () => {
 
   it("keeps a couple whose claimed spouse is unlisted or pending, and never names that spouse", () => {
     const family = household({
-      anniversary: "2004-11-05",
+      anniversary_month: 11,
+      anniversary_day: 5,
+      anniversary_year: 2004,
       members: [asMember("a", "primary", "Frank")],
       family_members_list: [
         householdRecord({ first_name: "Susan", relationship: "spouse", claimed_profile_id: "b" }),
@@ -270,7 +298,9 @@ describe("celebrationsThisWeek", () => {
     household({
       id: "in-group-household",
       family_name: "Miller",
-      anniversary: "2004-11-04",
+      anniversary_month: 11,
+      anniversary_day: 4,
+      anniversary_year: 2004,
       members: [asMember("in-group", "primary", "Frank"), asMember("b", "spouse", "Susan")],
       family_members_list: [
         householdRecord({ id: "kid", is_class_member: false, birth_month: 11, birth_day: 4 }),
@@ -279,7 +309,9 @@ describe("celebrationsThisWeek", () => {
     household({
       id: "other-household",
       family_name: "Okafor",
-      anniversary: "2004-11-04",
+      anniversary_month: 11,
+      anniversary_day: 4,
+      anniversary_year: 2004,
       members: [asMember("elsewhere", "primary", "Ruth"), asMember("c", "spouse", "Sam")],
     }),
   ];

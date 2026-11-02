@@ -26,8 +26,10 @@ import {
 } from "@/components/ui/select";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { CheckRow } from "@/components/profile/CheckRow";
+import { AnniversaryFields, type AnniversaryField } from "@/components/profile/AnniversaryFields";
+import { DirectoryNotice } from "@/components/profile/DirectoryNotice";
 import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
-import { MONTHS, birthdayColumns } from "@/components/profile/birthday";
+import { MONTHS, anniversaryColumns, birthdayColumns } from "@/components/profile/birthday";
 import { relLabel } from "@/components/directory/utils";
 import { toast } from "sonner";
 import { Camera, Check, Plus } from "lucide-react";
@@ -68,6 +70,12 @@ const EMPTY_DRAFT: PersonDraft = {
   birth_month: "",
   birth_day: "",
   birth_year: "",
+};
+
+const ANNIVERSARY_PART: Record<AnniversaryField, "month" | "day" | "year"> = {
+  anniversary_month: "month",
+  anniversary_day: "day",
+  anniversary_year: "year",
 };
 
 const optional = (
@@ -250,7 +258,6 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
   const [birthMonth, setBirthMonth] = useState(profile.birth_month?.toString() ?? "");
   const [birthDay, setBirthDay] = useState(profile.birth_day?.toString() ?? "");
   const [birthYear, setBirthYear] = useState(profile.birth_year?.toString() ?? "");
-  const [hideBirthYear, setHideBirthYear] = useState(profile.hide_birth_year ?? false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(profile.avatar_url);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -263,7 +270,6 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
     !!(profile.phone_home || profile.phone_work),
   );
   const [hideEmail, setHideEmail] = useState(profile.hide_email ?? false);
-  const [hidePhoneMobile, setHidePhoneMobile] = useState(profile.hide_phone_mobile ?? false);
 
   // Household
   const [searchDone, setSearchDone] = useState(false);
@@ -275,7 +281,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
   const [pendingPeople, setPendingPeople] = useState<PendingPerson[]>([]);
   // A retry after a later write fails must not insert these people again.
   const [savedPeople, setSavedPeople] = useState<ReadonlySet<string>>(new Set());
-  const [anniversary, setAnniversary] = useState(profile.anniversary ?? "");
+  const [anniversary, setAnniversary] = useState({ month: "", day: "", year: "" });
   const [adding, setAdding] = useState<FamilyMemberRelationship | null>(null);
   const [draft, setDraft] = useState<PersonDraft>(EMPTY_DRAFT);
 
@@ -416,18 +422,9 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
   const stepErrors = (): StepErrors => {
     if (step === 1) return aboutYouErrors({ firstName, lastName, birthMonth, birthDay, birthYear });
     if (step === 2) {
-      return contactErrors({
-        phoneMobile,
-        phoneHome,
-        phoneWork,
-        email: userEmail,
-        hidePhoneMobile,
-        hidePhoneHome: profile.hide_phone_home ?? false,
-        hidePhoneWork: profile.hide_phone_work ?? false,
-        hideEmail,
-      });
+      return contactErrors({ phoneMobile, phoneHome, phoneWork });
     }
-    if (step === 3) return householdErrors(householdId !== null);
+    if (step === 3) return householdErrors(householdId !== null, hasSpouse ? anniversary : undefined);
     return {};
   };
 
@@ -455,12 +452,10 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
           last_name: titleCaseName(lastName) ?? "",
           preferred_name: titleCaseName(preferredName),
           ...birthdayColumns({ month: birthMonth, day: birthDay, year: birthYear }),
-          hide_birth_year: hideBirthYear,
           phone_mobile: phoneMobile ? normalizePhone(phoneMobile) : null,
           phone_home: phoneHome ? normalizePhone(phoneHome) : null,
           phone_work: phoneWork ? normalizePhone(phoneWork) : null,
           hide_email: hideEmail,
-          hide_phone_mobile: hidePhoneMobile,
           family_id: householdId,
           occupation: occupation.trim() || null,
           employer: employer.trim() || null,
@@ -468,10 +463,10 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
         .eq("id", profile.id);
       if (profileError) throw profileError;
 
-      if (householdId && hasSpouse && anniversary) {
+      if (householdId && hasSpouse && anniversary.month) {
         const { error } = await supabase
           .from("family_units")
-          .update({ anniversary })
+          .update(anniversaryColumns(anniversary))
           .eq("id", householdId);
         if (error) throw error;
       }
@@ -548,6 +543,8 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
 
       <Card className="py-6">
         <CardContent className="space-y-6">
+          <DirectoryNotice />
+
           <div ref={headingRef} tabIndex={-1} className="outline-none">
             {step === 1 && (
               <StepHeading step={1} intro="Your name and photo, as the directory shows them." />
@@ -671,14 +668,6 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
                   errors={errors}
                 />
                 <p className="text-base text-muted-foreground">The year is optional.</p>
-                {birthYear && (
-                  <CheckRow
-                    id="hide_birth_year"
-                    label="Hide my birth year"
-                    checked={hideBirthYear}
-                    onChange={setHideBirthYear}
-                  />
-                )}
               </div>
             </>
           )}
@@ -704,15 +693,6 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
                   {...invalidFieldProps("phone_mobile", errors.phone_mobile)}
                 />
                 <FieldError fieldId="phone_mobile" message={errors.phone_mobile} />
-                <CheckRow
-                  id="hide_phone_mobile"
-                  label="Hide my mobile number"
-                  checked={hidePhoneMobile}
-                  onChange={(v) => {
-                    setHidePhoneMobile(v);
-                    clearError("phone_mobile");
-                  }}
-                />
               </div>
 
               <div className="space-y-2">
@@ -725,10 +705,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
                   id="hide_email"
                   label="Hide my email from the directory"
                   checked={hideEmail}
-                  onChange={(v) => {
-                    setHideEmail(v);
-                    clearError("phone_mobile");
-                  }}
+                  onChange={setHideEmail}
                 />
               </div>
 
@@ -752,7 +729,6 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
                       onChange={(e) => {
                         setPhoneHome(formatPhoneAsYouType(e.target.value));
                         clearError("phone_home");
-                        clearError("phone_mobile");
                       }}
                       placeholder="(555) 123-4567"
                       className="py-5 text-base"
@@ -772,7 +748,6 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
                       onChange={(e) => {
                         setPhoneWork(formatPhoneAsYouType(e.target.value));
                         clearError("phone_work");
-                        clearError("phone_mobile");
                       }}
                       placeholder="(555) 123-4567"
                       className="py-5 text-base"
@@ -910,15 +885,16 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
 
                   {hasSpouse && (
                     <div className="space-y-2">
-                      <Label htmlFor="anniversary" className="text-base">
-                        Anniversary {optional}
-                      </Label>
-                      <Input
-                        id="anniversary"
-                        type="date"
-                        value={anniversary}
-                        onChange={(e) => setAnniversary(e.target.value)}
-                        className="py-5 text-base"
+                      <p className="text-base font-medium">Anniversary {optional}</p>
+                      <AnniversaryFields
+                        month={anniversary.month}
+                        day={anniversary.day}
+                        year={anniversary.year}
+                        onChange={(field, value) => {
+                          setAnniversary((a) => ({ ...a, [ANNIVERSARY_PART[field]]: value }));
+                          clearError(field);
+                        }}
+                        errors={errors}
                       />
                     </div>
                   )}

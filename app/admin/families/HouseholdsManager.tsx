@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
@@ -38,6 +37,8 @@ import { EmptyState } from "@/components/states/EmptyState";
 import { ErrorState } from "@/components/states/ErrorState";
 import { LoadingState } from "@/components/states/LoadingState";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
+import { AnniversaryFields } from "@/components/profile/AnniversaryFields";
+import { birthdayErrors, type BirthdayErrors } from "@/components/profile/birthday";
 import { matchesSearch } from "@/components/admin/adminSearch";
 import {
   HOUSEHOLD_FIELDS,
@@ -79,6 +80,9 @@ const FIELD_IDS: Record<HouseholdField, string> = {
   state: "f_state",
   postal_code: "f_zip",
   phone_home: "f_phone",
+  anniversary_month: "f_anniversary_month",
+  anniversary_day: "f_anniversary_day",
+  anniversary_year: "f_anniversary_year",
 };
 
 const EMPTY_FORM: HouseholdFormState = {
@@ -89,9 +93,10 @@ const EMPTY_FORM: HouseholdFormState = {
   state: "",
   postal_code: "",
   phone_home: "",
-  anniversary: "",
-  hide_address: false,
-  hide_phone_home: false,
+  phone_profile_id: null,
+  anniversary_month: "",
+  anniversary_day: "",
+  anniversary_year: "",
 };
 
 function fromFamily(f: FamilyUnit): HouseholdFormState {
@@ -103,9 +108,10 @@ function fromFamily(f: FamilyUnit): HouseholdFormState {
     state: f.state || "",
     postal_code: f.postal_code || "",
     phone_home: formatPhone(f.phone_home),
-    anniversary: f.anniversary || "",
-    hide_address: f.hide_address,
-    hide_phone_home: f.hide_phone_home,
+    phone_profile_id: f.phone_profile_id,
+    anniversary_month: f.anniversary_month?.toString() || "",
+    anniversary_day: f.anniversary_day?.toString() || "",
+    anniversary_year: f.anniversary_year?.toString() || "",
   };
 }
 
@@ -138,6 +144,7 @@ export function HouseholdsManager() {
   const [form, setForm] = useState<HouseholdFormState>(EMPTY_FORM);
   const [formErrors, setFormErrors] = useState<HouseholdErrors>({});
   const [memberNameError, setMemberNameError] = useState<string | undefined>();
+  const [memberBirthErrors, setMemberBirthErrors] = useState<BirthdayErrors>({});
   const [saving, setSaving] = useState(false);
 
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
@@ -270,6 +277,11 @@ export function HouseholdsManager() {
     loadFamilyMembers(family.id);
   }
 
+  const phoneOwner = families
+    .find((f) => f.id === editing?.id)
+    ?.members.find((m) => m.id === form.phone_profile_id);
+  const phoneOwnerName = phoneOwner?.preferred_name || phoneOwner?.first_name || "a spouse";
+
   async function handleSave() {
     const { errors, payload } = validateHousehold(form);
     setFormErrors(errors);
@@ -381,6 +393,7 @@ export function HouseholdsManager() {
   }
 
   function closeMemberForm() {
+    setMemberBirthErrors({});
     setShowMemberForm(false);
     setEditingMember(null);
     setMemberForm(EMPTY_MEMBER_FORM);
@@ -389,6 +402,7 @@ export function HouseholdsManager() {
 
   function startAddMember() {
     setMemberNameError(undefined);
+    setMemberBirthErrors({});
     setEditingMember(null);
     setMemberForm(EMPTY_MEMBER_FORM);
     setShowMemberForm(true);
@@ -396,6 +410,7 @@ export function HouseholdsManager() {
 
   function startEditMember(fm: FamilyMember) {
     setMemberNameError(undefined);
+    setMemberBirthErrors({});
     setEditingMember(fm);
     setMemberForm({
       first_name: fm.first_name,
@@ -411,12 +426,22 @@ export function HouseholdsManager() {
   async function handleSaveMember() {
     if (!editing) return;
     const firstName = titleCaseName(memberForm.first_name);
+    const birthErrors = birthdayErrors({
+      month: memberForm.birth_month,
+      day: memberForm.birth_day,
+      year: memberForm.birth_year,
+    });
+    setMemberNameError(firstName ? undefined : "Enter a first name.");
+    setMemberBirthErrors(birthErrors);
     if (!firstName) {
-      setMemberNameError("Enter a first name.");
       document.getElementById("fm_first")?.focus();
       return;
     }
-    setMemberNameError(undefined);
+    const firstBirthError = Object.keys(birthErrors)[0];
+    if (firstBirthError) {
+      document.getElementById(`fm_${firstBirthError}`)?.focus();
+      return;
+    }
 
     const payload = {
       family_id: editing.id,
@@ -771,61 +796,53 @@ export function HouseholdsManager() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="f_phone">Home phone</Label>
-              <Input
-                id="f_phone"
-                type="tel"
-                value={form.phone_home}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    phone_home: formatPhoneAsYouType(e.target.value),
-                  })
-                }
-                placeholder="(555) 123-4567"
-                {...invalidFieldProps("f_phone", formErrors.phone_home)}
-              />
-              <FieldError fieldId="f_phone" message={formErrors.phone_home} />
-            </div>
+            {form.phone_profile_id ? (
+              <div className="space-y-2">
+                <p className="text-base font-medium">Home phone</p>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-base">Uses {phoneOwnerName}&apos;s mobile</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setForm({ ...form, phone_profile_id: null })}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="f_phone">Home phone</Label>
+                <Input
+                  id="f_phone"
+                  type="tel"
+                  value={form.phone_home}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      phone_home: formatPhoneAsYouType(e.target.value),
+                    })
+                  }
+                  placeholder="(555) 123-4567"
+                  {...invalidFieldProps("f_phone", formErrors.phone_home)}
+                />
+                <FieldError fieldId="f_phone" message={formErrors.phone_home} />
+              </div>
+            )}
 
             <div className="space-y-2">
-              <Label htmlFor="f_anniversary">Anniversary</Label>
-              <Input
-                id="f_anniversary"
-                type="date"
-                value={form.anniversary}
-                onChange={(e) =>
-                  setForm({ ...form, anniversary: e.target.value })
-                }
+              <p className="text-base font-medium">Anniversary</p>
+              <AnniversaryFields
+                idPrefix="f_"
+                month={form.anniversary_month}
+                day={form.anniversary_day}
+                year={form.anniversary_year}
+                onChange={(field, value) => setForm({ ...form, [field]: value })}
+                errors={formErrors}
               />
               <p className="text-base text-muted-foreground">
                 Shown on the household&apos;s directory card only when a spouse is listed.
               </p>
-            </div>
-
-            <div className="border-t pt-4 space-y-3">
-              <p className="text-base font-semibold">Household privacy</p>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="f_hide_addr">Hide address</Label>
-                <Switch
-                  id="f_hide_addr"
-                  checked={form.hide_address}
-                  onCheckedChange={(v) =>
-                    setForm({ ...form, hide_address: v })
-                  }
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="f_hide_phone">Hide home phone</Label>
-                <Switch
-                  id="f_hide_phone"
-                  checked={form.hide_phone_home}
-                  onCheckedChange={(v) =>
-                    setForm({ ...form, hide_phone_home: v })
-                  }
-                />
-              </div>
             </div>
 
             {editing && (
@@ -981,7 +998,12 @@ export function HouseholdsManager() {
                               setMemberForm({ ...memberForm, birth_month: v ?? "" })
                             }
                           >
-                            <SelectTrigger aria-label="Birthday month" className="w-full">
+                            <SelectTrigger
+                              id="fm_birth_month"
+                              aria-label="Birthday month"
+                              className="w-full"
+                              {...invalidFieldProps("fm_birth_month", memberBirthErrors.birth_month)}
+                            >
                               <SelectValue placeholder="Month" />
                             </SelectTrigger>
                             <SelectContent>
@@ -997,7 +1019,9 @@ export function HouseholdsManager() {
                             min="1"
                             max="31"
                             placeholder="Day"
+                            id="fm_birth_day"
                             aria-label="Birthday day"
+                            {...invalidFieldProps("fm_birth_day", memberBirthErrors.birth_day)}
                             value={memberForm.birth_day}
                             onChange={(e) =>
                               setMemberForm({ ...memberForm, birth_day: e.target.value })
@@ -1008,13 +1032,18 @@ export function HouseholdsManager() {
                             min="1900"
                             max="2100"
                             placeholder="Year"
+                            id="fm_birth_year"
                             aria-label="Birthday year"
+                            {...invalidFieldProps("fm_birth_year", memberBirthErrors.birth_year)}
                             value={memberForm.birth_year}
                             onChange={(e) =>
                               setMemberForm({ ...memberForm, birth_year: e.target.value })
                             }
                           />
                         </div>
+                        <FieldError fieldId="fm_birth_month" message={memberBirthErrors.birth_month} />
+                        <FieldError fieldId="fm_birth_day" message={memberBirthErrors.birth_day} />
+                        <FieldError fieldId="fm_birth_year" message={memberBirthErrors.birth_year} />
                       </div>
 
                       <div className="flex justify-end gap-2">

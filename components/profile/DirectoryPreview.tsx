@@ -22,10 +22,10 @@ import type {
 } from "@/lib/types";
 
 /**
- * Apply the same privacy masking as the profiles_directory SQL view so the
- * preview shows exactly what other members see.
+ * The profile as the profiles_directory SQL view returns it, so the preview
+ * shows exactly what other members see.
  */
-function maskProfile(p: Profile, groups: GroupChip[]): DirectoryProfile {
+function directoryEntry(p: Profile, groups: GroupChip[]): DirectoryProfile {
   return {
     id: p.id,
     first_name: p.first_name,
@@ -37,20 +37,19 @@ function maskProfile(p: Profile, groups: GroupChip[]): DirectoryProfile {
     bio: p.bio,
     family_id: p.family_id,
     email: p.hide_email ? null : p.email,
-    phone_mobile: p.hide_phone_mobile ? null : p.phone_mobile,
-    phone_home: p.hide_phone_home ? null : p.phone_home,
-    phone_work: p.hide_phone_work ? null : p.phone_work,
-    address_line1: p.hide_address ? null : p.address_line1,
-    address_line2: p.hide_address ? null : p.address_line2,
-    city: p.hide_address ? null : p.city,
-    state: p.hide_address ? null : p.state,
-    postal_code: p.hide_address ? null : p.postal_code,
-    birth_month: p.hide_birthday ? null : p.birth_month,
-    birth_day: p.hide_birthday ? null : p.birth_day,
-    birth_year: p.hide_birthday || p.hide_birth_year ? null : p.birth_year,
-    anniversary: p.hide_anniversary ? null : p.anniversary,
-    occupation: p.hide_occupation ? null : p.occupation,
-    employer: p.hide_occupation ? null : p.employer,
+    phone_mobile: p.phone_mobile,
+    phone_home: p.phone_home,
+    phone_work: p.phone_work,
+    address_line1: p.address_line1,
+    address_line2: p.address_line2,
+    city: p.city,
+    state: p.state,
+    postal_code: p.postal_code,
+    birth_month: p.birth_month,
+    birth_day: p.birth_day,
+    birth_year: p.birth_year,
+    occupation: p.occupation,
+    employer: p.employer,
     groups,
     created_at: p.created_at,
   };
@@ -58,7 +57,7 @@ function maskProfile(p: Profile, groups: GroupChip[]): DirectoryProfile {
 
 /**
  * "How others see me" — opens a sheet rendering the exact directory profile
- * card with the member's privacy settings applied.
+ * card with the member's email setting applied.
  */
 export function DirectoryPreview() {
   const [open, setOpen] = useState(false);
@@ -132,7 +131,7 @@ export function DirectoryPreview() {
     }
 
     setUnlisted(profile.is_unlisted);
-    setEntry(profile.is_unlisted ? null : maskProfile(profile, groups));
+    setEntry(profile.is_unlisted ? null : directoryEntry(profile, groups));
     setFamily(familyRow);
     setLoading(false);
     setOpen(true);

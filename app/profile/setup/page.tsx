@@ -54,7 +54,7 @@ export default async function ProfileSetupPage() {
     <PageContainer size="reading">
       <PageHeader
         title="Set up your profile"
-        subtitle="Add how to reach you and who you live with, so people in your groups can find you."
+        subtitle="Add what you want to share and who you live with, so people in your groups can find you."
       />
       <SetupWizard
         profile={profile}

@@ -43,20 +43,11 @@ const profile: Profile = {
   birth_month: 12,
   birth_day: 10,
   birth_year: null,
-  anniversary: null,
   occupation: null,
   employer: null,
   family_id: null,
   is_unlisted: false,
-  hide_phone_mobile: false,
-  hide_phone_home: false,
-  hide_phone_work: false,
   hide_email: false,
-  hide_address: false,
-  hide_birthday: false,
-  hide_anniversary: false,
-  hide_occupation: false,
-  hide_birth_year: false,
   relationship: "primary",
   email_announcements: true,
   setup_completed: true,
@@ -182,6 +173,35 @@ describe("ProfileForm inline errors", () => {
     expect(form.field("first_name").hasAttribute("aria-invalid")).toBe(false);
     expect(form.message("first_name")).toBeUndefined();
     expect(form.field("postal_code").getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("saves with only a name and email, showing neither a phone nor the email", async () => {
+    const form = await mount({ birth_month: null, birth_day: null, hide_email: true });
+    await form.submit();
+
+    expect(document.querySelector('[aria-invalid="true"]')).toBeNull();
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ phone_mobile: null, hide_email: true }));
+  });
+
+  it("writes hide_email and no retired hide setting or anniversary", async () => {
+    const form = await mount();
+    await form.submit();
+
+    const payload = update.mock.calls[0][0] as Record<string, unknown>;
+    expect(Object.keys(payload).filter((key) => key.startsWith("hide_"))).toEqual(["hide_email"]);
+    expect(payload).not.toHaveProperty("anniversary");
+  });
+
+  it("offers no hide setting but the email one, with the notice above the fields", async () => {
+    await mount({ phone_home: "+15125550134", occupation: "Teacher", city: "Austin" });
+
+    const hideBoxes = [...document.querySelectorAll('input[type="checkbox"], button[role="checkbox"]')]
+      .map((box) => box.id)
+      .filter((id) => id.startsWith("hide_"));
+    expect(hideBoxes).toEqual(["hide_email"]);
+    expect(document.body.textContent).toContain(
+      "Everything you add here shows in the directory. Leave out anything you don't want shown.",
+    );
   });
 
   it("saves when every field is valid", async () => {
