@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 let result: { data: unknown[] | null; error: { code: string; message: string } | null };
 let leaderResult: { data: unknown[] | null; error: { code: string; message: string } | null };
 let leaderReads: number;
+let leaderFilter: string | undefined;
 let role: "leader" | "member" = "leader";
 
 function query() {
@@ -12,6 +13,10 @@ function query() {
   const chain = {
     select: () => chain,
     eq: () => chain,
+    or: (filter: string) => {
+      leaderFilter = filter;
+      return chain;
+    },
     lte: () => {
       publishedOnly = true;
       return chain;
@@ -106,6 +111,7 @@ beforeEach(() => {
   role = "leader";
   leaderResult = { data: [], error: null };
   leaderReads = 0;
+  leaderFilter = undefined;
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -167,10 +173,11 @@ describe("AnnouncementsPage", () => {
 
   it("shows a leader their drafts and scheduled announcements, not the published ones twice", async () => {
     result = { data: [PUBLISHED], error: null };
-    leaderResult = { data: [DRAFT, SCHEDULED, PUBLISHED], error: null };
+    leaderResult = { data: [DRAFT, SCHEDULED], error: null };
     const html = renderToStaticMarkup(
       await AnnouncementsPage({ params: Promise.resolve({ groupId: "g1" }) }),
     );
+    expect(leaderFilter).toMatch(/^is_published\.eq\.false,published_at\.gt\.\d{4}-/);
     expect(html).toContain("Drafts and scheduled");
     expect(html).toContain('href="/g/g1/announcements/d1/edit"');
     expect(html).toContain('href="/g/g1/announcements/s1/edit"');

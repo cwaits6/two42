@@ -36,14 +36,16 @@ export default async function AnnouncementsPage({
   const isLeader = group.role === "leader";
   const listHref = groupPath(group.id, "/announcements");
   const supabase = await createClient();
+  const now = new Date();
+  const nowIso = now.toISOString();
 
-  const [announcements, leaderRows, timeZone] = await Promise.all([
+  const [announcements, unpublished, timeZone] = await Promise.all([
     supabase
       .from("announcements")
       .select("*")
       .eq("group_id", group.id)
       .eq("is_published", true)
-      .lte("published_at", new Date().toISOString())
+      .lte("published_at", nowIso)
       .order("published_at", { ascending: false })
       .then((read) => readList(read, "announcements")),
     isLeader
@@ -51,13 +53,12 @@ export default async function AnnouncementsPage({
           .from("announcements")
           .select("id, title, is_published, published_at, created_at")
           .eq("group_id", group.id)
+          .or(`is_published.eq.false,published_at.gt.${nowIso}`)
           .order("created_at", { ascending: false })
           .then((read) => readList<LeaderRow>(read, "announcements"))
       : [],
     getOrgTimeZone(),
   ]);
-  const now = new Date();
-  const unpublished = leaderRows?.filter((a) => announcementStatus(a, now) !== "Published");
 
   const addAnnouncement = isLeader && (
     <Button nativeButton={false} render={<Link href={`${listHref}/new`} />}>
