@@ -112,6 +112,17 @@ export default async function LessonPage({
         backHref={libraryHref}
         backLabel="Back to Lessons"
         className="mb-4"
+        actions={
+          group.role === "leader" && (
+            <Button
+              variant="outline"
+              nativeButton={false}
+              render={<Link href={`${libraryHref}/${lesson.id}/edit`} />}
+            >
+              Edit lesson
+            </Button>
+          )
+        }
       />
 
       <MetaLine
@@ -121,7 +132,7 @@ export default async function LessonPage({
             <Link
               key="series"
               href={`${libraryHref}/series/${series.id}`}
-              className="font-medium text-brand-primary-text underline underline-offset-4 hover:text-foreground"
+              className="inline-flex min-h-11 items-center font-medium text-brand-primary-text underline underline-offset-4 hover:text-foreground"
             >
               {series.name}
             </Link>

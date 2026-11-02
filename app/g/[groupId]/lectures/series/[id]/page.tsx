@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BookOpen } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -5,6 +6,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/states/EmptyState";
 import { ErrorState } from "@/components/states/ErrorState";
+import { Button } from "@/components/ui/button";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 import { formatLessonDate, lessonsInOrder, partNumbers, seriesDateRange } from "@/lib/lessons";
@@ -44,6 +46,7 @@ export default async function SeriesPage({
   const { groupId, id } = await params;
   const group = await requireActiveGroup(groupId);
   const libraryHref = groupPath(group.id, "/lectures");
+  const isLeader = group.role === "leader";
   const supabase = await createClient();
 
   const [seriesRead, lessonsRead] = await Promise.all([
@@ -87,6 +90,26 @@ export default async function SeriesPage({
         backHref={libraryHref}
         backLabel="Back to Lessons"
         className="mb-4"
+        actions={
+          isLeader && (
+            <>
+              <Button
+                variant="outline"
+                nativeButton={false}
+                render={<Link href={`${libraryHref}/series/${series.id}/edit`} />}
+              >
+                Edit series
+              </Button>
+              <Button
+                variant="outline"
+                nativeButton={false}
+                render={<Link href={`${libraryHref}/new?series=${series.id}`} />}
+              >
+                Add lesson
+              </Button>
+            </>
+          )
+        }
       />
       <MetaLine
         className="mb-8 block text-lg text-muted-foreground"
@@ -114,6 +137,7 @@ export default async function SeriesPage({
                 `Part ${parts.get(l.id)}`,
                 l.lecture_date && formatLessonDate(l.lecture_date),
               ],
+              editHref: isLeader ? `${libraryHref}/${l.id}/edit` : undefined,
             }))}
         />
       )}

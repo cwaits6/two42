@@ -37,7 +37,7 @@ let teachersRead: { data: unknown[] | null; error: { code: string } | null };
 const { default: AboutGroupPage } = await import("./page");
 
 const ID = "11111111-1111-4111-8111-111111111111";
-const EDIT_HREF = `href="/g/${ID}/settings/about"`;
+const EDIT_HREF = `href="/g/${ID}/about/edit"`;
 
 async function render(role: "leader" | "member") {
   requireActiveGroup.mockResolvedValue({ id: ID, name: "Grace", color: GROUP_DEFAULT_COLOR, role });
@@ -56,7 +56,7 @@ describe("AboutGroupPage", () => {
     expect(html).toContain(EDIT_HREF);
   });
 
-  it("offers a member no link into settings, which would be a 404 for them", async () => {
+  it("offers a member no link to the editor, which would be a 404 for them", async () => {
     const html = await render("member");
     expect(html).not.toContain("Edit page");
     expect(html).not.toContain(EDIT_HREF);

@@ -12,6 +12,7 @@ import { fundThroughTag } from "@/lib/giving/funds";
 import { resolveFundMethods } from "@/lib/giving/methods";
 import { givingStewardsCanManage, signStewardAvatars } from "@/lib/giving/server";
 import { GiveList, type FundView } from "@/components/giving/GiveList";
+import { HiddenFunds, type HiddenFundRow } from "./HiddenFunds";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 import type { GivingFund, GivingFundMethod } from "@/lib/types";
@@ -135,6 +136,31 @@ export default async function GivePage({
     ];
   });
 
+  // Retired funds and those naming no one to receive them never reach the list
+  // above, and this is the one way a leader can get back to them.
+  const shownIds = new Set(views.map((v) => v.id));
+  const [allFunds, allMethods] = isLeader
+    ? await Promise.all([
+        supabase
+          .from("giving_funds")
+          .select(
+            "*, steward:profiles!giving_funds_steward_id_fkey(first_name, last_name, preferred_name)"
+          )
+          .eq("group_id", group.id)
+          .order("is_active", { ascending: false })
+          .order("created_at", { ascending: false })
+          .then((read) => readList<HiddenFundRow>(read, "funds")),
+        supabase
+          .from("giving_fund_methods")
+          .select("fund_id, method")
+          .eq("group_id", group.id)
+          .then((read) =>
+            readList<Pick<GivingFundMethod, "fund_id" | "method">>(read, "fund payment methods")
+          ),
+      ])
+    : [[], []];
+  const hiddenFunds = allFunds?.filter((f) => !shownIds.has(f.id));
+
   const addFund = canCreate && (
     <Button nativeButton={false} render={<Link href={newFundHref} />}>
       <Plus aria-hidden="true" />
@@ -148,10 +174,22 @@ export default async function GivePage({
 
       {fundRows === null || methods === null ? (
         <ErrorState thing="funds" />
-      ) : views.length > 0 ? (
-        <GiveList funds={views} groupId={group.id} />
       ) : (
-        <EmptyState icon={HandCoins} message="No funds yet." action={addFund} />
+        <>
+          {views.length > 0 ? (
+            <GiveList funds={views} groupId={group.id} />
+          ) : (
+            hiddenFunds?.length === 0 &&
+            allMethods !== null && (
+              <EmptyState icon={HandCoins} message="No funds yet." action={addFund} />
+            )
+          )}
+          {!hiddenFunds || allMethods === null ? (
+            <ErrorState thing="hidden funds" className="mt-10" />
+          ) : (
+            <HiddenFunds groupId={group.id} funds={hiddenFunds} methods={allMethods} today={today} />
+          )}
+        </>
       )}
     </PageContainer>
   );

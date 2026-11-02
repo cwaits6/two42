@@ -59,7 +59,7 @@ export default async function AboutGroupPage({
     <Button
       variant="outline"
       nativeButton={false}
-      render={<Link href={groupPath(group.id, "/settings/about")} />}
+      render={<Link href={groupPath(group.id, "/about/edit")} />}
     >
       Edit page
     </Button>
@@ -89,7 +89,7 @@ export default async function AboutGroupPage({
     profiles: t.profiles ? { ...t.profiles, avatar_url: signedAvatars[i] } : t.profiles,
   }));
 
-  // Only an https link reaches an anchor; the editor enforces the same rule.
+  // Only an https link reaches an anchor; Group details enforces the same rule.
   const videoCallUrl = settings.weekly_zoom_url?.startsWith("https://")
     ? settings.weekly_zoom_url
     : null;
@@ -146,7 +146,7 @@ export default async function AboutGroupPage({
                 <Button
                   variant="outline"
                   nativeButton={false}
-                  render={<Link href={groupPath(group.id, "/settings/about")} />}
+                  render={<Link href={groupPath(group.id, "/about/edit")} />}
                 >
                   Add member
                 </Button>

@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { CONTENT_REDIRECTS } from "./lib/groups/contentRedirects";
 
 const securityHeaders = [
   // CSP is now generated dynamically per-request in lib/supabase/middleware.ts
@@ -31,6 +32,9 @@ const nextConfig: NextConfig = {
   // instrumentations dynamically require packages this app does not install
   // (e.g. @nestjs/core), which Turbopack treats as a build error.
   serverExternalPackages: ["@opentelemetry/auto-instrumentations-node"],
+  async redirects() {
+    return CONTENT_REDIRECTS;
+  },
   async headers() {
     return [
       {

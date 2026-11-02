@@ -16,13 +16,8 @@ const PRIVACY_HREF = "/settings/privacy";
 const TILES: { href: string; label: string; description: string }[] = [
   {
     href: "/settings/details",
-    label: "Name and description",
-    description: "What members see on Home and in the switcher.",
-  },
-  {
-    href: "/settings/about",
-    label: "About",
-    description: "The summary, leadership, group color and weekly calls.",
+    label: "Group details",
+    description: "Name, description, color, weekly calls and calendar details.",
   },
   {
     href: PRIVACY_HREF,
@@ -33,21 +28,6 @@ const TILES: { href: string; label: string; description: string }[] = [
     href: "/settings/invites",
     label: "Invite links",
     description: "Add and revoke links that let people join this group.",
-  },
-  {
-    href: "/settings/announcements",
-    label: "Announcements",
-    description: "Write, schedule and publish announcements.",
-  },
-  {
-    href: "/settings/lectures",
-    label: "Lessons",
-    description: "Add lessons and series, with notes and recordings.",
-  },
-  {
-    href: "/settings/giving",
-    label: "Giving",
-    description: "Add and retire the funds members can give to.",
   },
   {
     href: "/settings/serving",
