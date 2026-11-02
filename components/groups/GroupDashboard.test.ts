@@ -96,7 +96,7 @@ function failedSections(node: ReactNode, out: string[] = []): string[] {
   return out;
 }
 
-/** Every element of `type` in the tree, by its props. */
+/** The props of every element of `type` in the tree. */
 function propsOf<P>(node: ReactNode, type: unknown, out: P[] = []): P[] {
   if (Array.isArray(node)) {
     node.forEach((n) => propsOf(n, type, out));
@@ -109,7 +109,6 @@ function propsOf<P>(node: ReactNode, type: unknown, out: P[] = []): P[] {
   return out;
 }
 
-/** Link text beside its href, for asserting where a row opens. */
 function linkHrefs(node: ReactNode): string[] {
   return propsOf<{ href: string }>(node, Link).map((l) => l.href);
 }
