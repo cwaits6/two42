@@ -2,7 +2,15 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { greeting, todayLabel } from "@/lib/groups/greeting";
 
 /** Home's page heading, shared by the group dashboard and the launcher. */
-export function HomeGreeting({ name, timeZone }: { name: string | null; timeZone: string }) {
+export function HomeGreeting({
+  name,
+  timeZone,
+  groupName,
+}: {
+  name: string | null;
+  timeZone: string;
+  groupName?: string;
+}) {
   return (
     <PageHeader
       title={
@@ -14,7 +22,7 @@ export function HomeGreeting({ name, timeZone }: { name: string | null; timeZone
           `${greeting(timeZone)}.`
         )
       }
-      subtitle={todayLabel(timeZone)}
+      subtitle={groupName ? `${groupName} · ${todayLabel(timeZone)}` : todayLabel(timeZone)}
     />
   );
 }

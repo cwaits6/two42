@@ -617,5 +617,11 @@ select is(
   array['prayer_request_visible_author'],
   'the helper is the only definer function a member can call that reads prayer rows');
 
+-- Home dates an answered prayer by this column, which prayer_wall does not carry.
+select matches(
+  pg_temp.attempt('leo.loremsworth@example.test', 'select updated_at from public.prayer_requests'),
+  '^rows:[1-9]',
+  'a member can read when a request last changed');
+
 select * from finish();
 rollback;

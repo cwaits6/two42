@@ -89,16 +89,6 @@ export function formatServingDate(date: string, today?: string): string {
   });
 }
 
-/** "Sunday, July 12" — for emails and the dashboard. */
-export function formatServiceDate(dateStr: string): string {
-  return new Date(toMs(dateStr)).toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-}
-
 /** "Sunday, July 12, 2026" — when the year matters (emails, ICS text). */
 export function formatServiceDateWithYear(dateStr: string): string {
   return new Date(toMs(dateStr)).toLocaleDateString("en-US", {
