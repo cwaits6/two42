@@ -544,6 +544,10 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
 
   // ---- step 5: family_member matching (has_login=false) -----------------
   const matchedFamilyMember = new Map<MemberRow, SnapshotFamilyMember>();
+  // A hidden or blank birthday lets rows that step 2 keeps apart match one stored
+  // family member. Nothing says which of them it is, and letting both through
+  // would drop one person or overwrite the other's details.
+  const claimedFamilyMembers = new Set<string>();
   for (const row of rows) {
     if (row.has_login) continue;
     const resolution = resolutions.get(groupKey(row))!;
@@ -560,7 +564,19 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
       });
       continue;
     }
-    if (candidates.length === 1) matchedFamilyMember.set(row, candidates[0]);
+    if (candidates.length === 0) continue;
+    const [member] = candidates;
+    if (claimedFamilyMembers.has(member.id)) {
+      if (resultByRow.get(row)!.errors.length === 0) {
+        fail(row, {
+          code: "AMBIGUOUS_MATCH",
+          message: "another row in this file matches the same existing family member",
+        });
+      }
+      continue;
+    }
+    claimedFamilyMembers.add(member.id);
+    matchedFamilyMember.set(row, member);
   }
 
   // A birthday needs its month and day together. Checked against the match, not

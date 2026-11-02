@@ -997,6 +997,74 @@ describe("planImport semantics", () => {
       const plan = planImport([samRow({ line: 1 }), samRow({ line: 2 })], withFamilies({}));
       expect(plan.rows[1].errors.map((e) => e.code)).toEqual(["DUPLICATE_IN_FILE"]);
     });
+
+    describe("two rows that could each be one stored family member", () => {
+      const { first_name, last_name } = sam;
+      const storedSam = (overrides: Partial<SnapshotFamilyMember> = {}) =>
+        withFamilies({
+          familyMembers: [familyMember({ id: "fm", family_id: "smith", first_name, last_name, ...overrides })],
+        });
+
+      it.each<[string, Partial<MemberRow>[]]>([
+        ["both birthdays hidden, nothing else to store", [{}, { birth_year: 1980 }]],
+        ["both birthdays hidden, details differ", [{ occupation: "Nurse" }, { birth_year: 1980, occupation: "Pilot" }]],
+        ["one birthday blank, one hidden", [{ birth_month: null, birth_day: null, birth_year: null, hidden_fields: [] }, {}]],
+        [
+          "one birthday hidden, one blank",
+          [{}, { birth_month: null, birth_day: null, birth_year: null, hidden_fields: [] }],
+        ],
+        [
+          "two household keys naming one household",
+          [
+            { household_key: "a" },
+            { household_key: "b", birth_year: 1980 },
+          ],
+        ],
+        [
+          "two household keys naming one household, no birthdays at all",
+          [
+            { household_key: "a", birth_month: null, birth_day: null, birth_year: null, hidden_fields: [] },
+            { household_key: "b", birth_month: null, birth_day: null, birth_year: null, hidden_fields: [] },
+          ],
+        ],
+      ])("refuses the second row: %s", (_case, overrides) => {
+        const plan = planImport(
+          overrides.map((o, i) => samRow({ line: i + 1, ...o })),
+          storedSam()
+        );
+        expect(plan.rows[0].errors).toEqual([]);
+        expect(plan.rows[1].errors.map((e) => e.code)).toEqual(["AMBIGUOUS_MATCH"]);
+        expect(plan.rows[1].action).toBe("error");
+      });
+
+      it("reports one error when the second row is already a duplicate in the file", () => {
+        const plan = planImport([samRow({ line: 1 }), samRow({ line: 2 })], storedSam());
+        expect(plan.rows[1].errors.map((e) => e.code)).toEqual(["DUPLICATE_IN_FILE"]);
+      });
+
+      it("still matches each row to its own stored family member", () => {
+        const plan = planImport(
+          [samRow({ line: 1 }), samRow({ line: 2, birth_year: 1980 })],
+          withFamilies({
+            familyMembers: [
+              familyMember({ id: "fm1", family_id: "smith", ...sam }),
+              familyMember({ id: "fm2", family_id: "smith", ...sam, birth_year: 1980 }),
+            ],
+          })
+        );
+        expect(plan.rows.flatMap((r) => r.errors)).toEqual([]);
+        expect(plan.rows.map((r) => r.action)).toEqual(["no_change", "no_change"]);
+      });
+
+      it("adds the second person when only the first row matches", () => {
+        const plan = planImport(
+          [samRow({ line: 1 }), samRow({ line: 2, birth_year: 1980 })],
+          storedSam({ birth_month: sam.birth_month, birth_day: sam.birth_day, birth_year: sam.birth_year })
+        );
+        expect(plan.rows.flatMap((r) => r.errors)).toEqual([]);
+        expect(plan.rows.map((r) => r.action)).toEqual(["no_change", "create_family_member"]);
+      });
+    });
   });
 
   describe("birthday parts", () => {
