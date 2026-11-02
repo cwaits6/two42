@@ -74,39 +74,43 @@ export default async function AnnouncementsPage({
         actions={addAnnouncement}
       />
 
-      {announcements === null || !unpublished ? (
+      {announcements === null ? (
         <ErrorState thing="announcements" />
       ) : (
         <>
-          {unpublished.length > 0 && (
-            <section aria-labelledby="unpublished-announcements" className="mb-10">
-              <h2
-                id="unpublished-announcements"
-                className="mb-4 font-serif text-2xl font-medium text-foreground"
-              >
-                Drafts and scheduled
-              </h2>
-              <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
-                {unpublished.map((a) => {
-                  const status = announcementStatus(a, now);
-                  const when = status === "Draft" ? a.created_at : (a.published_at ?? a.created_at);
-                  return (
-                    <li key={a.id}>
-                      <Link
-                        href={`${listHref}/${a.id}/edit`}
-                        className="flex min-h-14 flex-wrap items-center justify-between gap-x-6 gap-y-2 px-5 py-4 transition-colors hover:bg-muted/50"
-                      >
-                        <span className="text-lg font-medium text-foreground">{a.title}</span>
-                        <span className="flex items-center gap-3 text-base text-muted-foreground">
-                          <AnnouncementStatusBadge status={status} />
-                          {formatInZone(when, timeZone, { month: "short", day: "numeric", year: "numeric" })}
-                        </span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
+          {!unpublished ? (
+            <ErrorState thing="drafts and scheduled announcements" className="mb-10" />
+          ) : (
+            unpublished.length > 0 && (
+              <section aria-labelledby="unpublished-announcements" className="mb-10">
+                <h2
+                  id="unpublished-announcements"
+                  className="mb-4 font-serif text-2xl font-medium text-foreground"
+                >
+                  Drafts and scheduled
+                </h2>
+                <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
+                  {unpublished.map((a) => {
+                    const status = announcementStatus(a, now);
+                    const when = status === "Draft" ? a.created_at : (a.published_at ?? a.created_at);
+                    return (
+                      <li key={a.id}>
+                        <Link
+                          href={`${listHref}/${a.id}/edit`}
+                          className="flex min-h-14 flex-wrap items-center justify-between gap-x-6 gap-y-2 px-5 py-4 transition-colors hover:bg-muted/50"
+                        >
+                          <span className="text-lg font-medium text-foreground">{a.title}</span>
+                          <span className="flex items-center gap-3 text-base text-muted-foreground">
+                            <AnnouncementStatusBadge status={status} />
+                            {formatInZone(when, timeZone, { month: "short", day: "numeric", year: "numeric" })}
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            )
           )}
           {announcements.length > 0 ? (
             <div className="space-y-6">
@@ -120,7 +124,7 @@ export default async function AnnouncementsPage({
               ))}
             </div>
           ) : (
-            unpublished.length === 0 && (
+            unpublished?.length === 0 && (
               <EmptyState icon={Megaphone} message="No announcements yet." action={addAnnouncement} />
             )
           )}

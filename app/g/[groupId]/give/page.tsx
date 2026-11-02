@@ -172,18 +172,23 @@ export default async function GivePage({
     <PageContainer>
       <PageHeader title="Give" actions={addFund} />
 
-      {fundRows === null || methods === null || !hiddenFunds || allMethods === null ? (
+      {fundRows === null || methods === null ? (
         <ErrorState thing="funds" />
       ) : (
         <>
           {views.length > 0 ? (
             <GiveList funds={views} groupId={group.id} />
           ) : (
-            hiddenFunds.length === 0 && (
+            hiddenFunds?.length === 0 &&
+            allMethods !== null && (
               <EmptyState icon={HandCoins} message="No funds yet." action={addFund} />
             )
           )}
-          <HiddenFunds groupId={group.id} funds={hiddenFunds} methods={allMethods} today={today} />
+          {!hiddenFunds || allMethods === null ? (
+            <ErrorState thing="hidden funds" className="mt-10" />
+          ) : (
+            <HiddenFunds groupId={group.id} funds={hiddenFunds} methods={allMethods} today={today} />
+          )}
         </>
       )}
     </PageContainer>

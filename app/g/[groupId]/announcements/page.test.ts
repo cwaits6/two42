@@ -183,10 +183,22 @@ describe("AnnouncementsPage", () => {
     expect(await renderedTypes()).not.toContain(EmptyState);
   });
 
-  it("shows ErrorState when a leader's read of unpublished rows fails", async () => {
+  it("keeps the published list and the add action when a leader's read of unpublished rows fails", async () => {
+    result = { data: [{ id: "a1" }], error: null };
+    leaderResult = { data: null, error: { code: "57014", message: "canceling statement" } };
+    const elements = await rendered();
+    const failures = elements.filter((e) => e.type === ErrorState) as ReactElement<{ thing: string }>[];
+    expect(failures.map((e) => e.props.thing)).toEqual(["drafts and scheduled announcements"]);
+    expect(elements.filter((e) => e.type === AnnouncementCard)).toHaveLength(1);
+    expect(await headerAction()).toBeTruthy();
+  });
+
+  it("does not call the list empty when a leader's read of unpublished rows fails", async () => {
     result = { data: [], error: null };
     leaderResult = { data: null, error: { code: "57014", message: "canceling statement" } };
-    expect(await renderedTypes()).toContain(ErrorState);
+    const types = await renderedTypes();
+    expect(types).toContain(ErrorState);
+    expect(types).not.toContain(EmptyState);
   });
 
   it("lists the announcements the read returned", async () => {

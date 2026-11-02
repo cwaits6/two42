@@ -6,23 +6,38 @@ const state = vi.hoisted(() => ({
   manageMode: "stewards",
   role: "member",
   funds: [] as unknown[],
+  failedRead: null as "hidden funds" | "hidden fund methods" | null,
   settingFilters: [] as [string, unknown][],
 }));
 
 function query(table: string) {
+  // Only the member-visible reads narrow with or() and in().
+  let memberRead = false;
   const chain = {
     select: () => chain,
     eq: (column: string, value: unknown) => {
       if (table === "site_settings") state.settingFilters.push([column, value]);
       return chain;
     },
-    or: () => chain,
+    or: () => {
+      memberRead = true;
+      return chain;
+    },
     order: () => chain,
     single: () => Promise.resolve({ data: { role: "member", org_id: "o1" }, error: null }),
     maybeSingle: () => Promise.resolve({ data: { value: state.manageMode }, error: null }),
-    in: () => chain,
-    then: (resolve: (r: unknown) => unknown) =>
-      Promise.resolve(resolve({ data: table === "giving_funds" ? state.funds : [], error: null })),
+    in: () => {
+      memberRead = true;
+      return chain;
+    },
+    then: (resolve: (r: unknown) => unknown) => {
+      const failed =
+        !memberRead &&
+        ((table === "giving_funds" && state.failedRead === "hidden funds") ||
+          (table === "giving_fund_methods" && state.failedRead === "hidden fund methods"));
+      if (failed) return Promise.resolve(resolve({ data: null, error: { code: "57014", message: "x" } }));
+      return Promise.resolve(resolve({ data: table === "giving_funds" ? state.funds : [], error: null }));
+    },
   };
   return chain;
 }
@@ -31,6 +46,7 @@ vi.mock("next/navigation", () => ({
   redirect: (to: string) => {
     throw new Error(`redirect:${to}`);
   },
+  useRouter: () => ({ refresh: () => {} }),
 }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ from: (table: string) => query(table) }),
@@ -56,7 +72,9 @@ beforeEach(() => {
   state.manageMode = "stewards";
   state.role = "member";
   state.funds = [];
+  state.failedRead = null;
   state.settingFilters = [];
+  vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 describe("GivePage", () => {
@@ -86,6 +104,39 @@ describe("GivePage", () => {
     expect(html).toContain("Hidden from members");
     expect(html).toContain("Old roof");
     expect(html).toContain('href="/g/g1/give/f1/edit"');
+    expect(html).not.toContain("No funds yet.");
+  });
+
+  const LIVE = {
+    id: "f2",
+    name: "New roof",
+    is_active: true,
+    retire_on: null,
+    steward_id: "s1",
+    steward: { id: "s1", first_name: "Ann", last_name: "Lee", preferred_name: null, avatar_url: null },
+    co_steward: null,
+    steward_role: null,
+  };
+
+  it.each(["hidden funds", "hidden fund methods"] as const)(
+    "keeps the funds members see when a leader's read of %s fails",
+    async (failedRead) => {
+      state.role = "leader";
+      state.funds = [LIVE];
+      state.failedRead = failedRead;
+      const html = await render();
+      expect(html).toContain("New roof");
+      expect(html).toContain("Add fund");
+      expect(html).toContain("load hidden funds.");
+      expect(html).not.toContain("No funds yet.");
+    }
+  );
+
+  it("does not call the page empty when a leader's read of hidden funds fails", async () => {
+    state.role = "leader";
+    state.failedRead = "hidden funds";
+    const html = await render();
+    expect(html).toContain("load hidden funds.");
     expect(html).not.toContain("No funds yet.");
   });
 
