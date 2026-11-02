@@ -86,6 +86,178 @@ $$;
 ALTER FUNCTION "public"."current_family_id"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."directory_retire_hidden_values"() RETURNS "jsonb"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _counts jsonb := '{}';
+  _n bigint;
+begin
+  -- Before the per-flag updates below reset the flags this reads. Either
+  -- spouse hiding clears both copies, or the other spouse's would still show.
+  update public.family_units f
+     set anniversary = null,
+         anniversary_month = null,
+         anniversary_day = null,
+         anniversary_year = null
+   where (f.anniversary is not null or f.anniversary_month is not null)
+     and exists (
+       select 1 from public.profiles h
+        where h.family_id = f.id
+          and h.org_id = f.org_id
+          and h.relationship = any (array['primary', 'spouse'])
+          and h.hide_anniversary
+     );
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('household_anniversary', _n);
+
+  update public.profiles p
+     set anniversary = null
+   where p.anniversary is not null
+     and p.family_id is not null
+     and p.relationship = any (array['primary', 'spouse'])
+     and exists (
+       select 1 from public.profiles h
+        where h.family_id = p.family_id
+          and h.org_id = p.org_id
+          and h.relationship = any (array['primary', 'spouse'])
+          and h.hide_anniversary
+     );
+
+  -- families_directory_full returns a claimed row's birthday with no gate, and
+  -- it is the same person's birthday.
+  update public.family_members fm
+     set birth_month = case when p.hide_birthday then null else fm.birth_month end,
+         birth_day = case when p.hide_birthday then null else fm.birth_day end,
+         birth_year = null
+    from public.profiles p
+   where fm.claimed_profile_id = p.id
+     and fm.org_id = p.org_id
+     and (p.hide_birthday or p.hide_birth_year)
+     and (fm.birth_month is not null or fm.birth_day is not null or fm.birth_year is not null);
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('claimed_birthday', _n);
+
+  -- profiles.phone predates phone_mobile: nothing reads it, but raw profiles
+  -- rows are readable by other members, so a copy of the number can't stay.
+  update public.profiles
+     set phone_mobile = null, phone = null, hide_phone_mobile = false
+   where hide_phone_mobile;
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('hide_phone_mobile', _n);
+
+  update public.profiles
+     set phone_home = null, hide_phone_home = false
+   where hide_phone_home;
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('hide_phone_home', _n);
+
+  update public.profiles
+     set phone_work = null, hide_phone_work = false
+   where hide_phone_work;
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('hide_phone_work', _n);
+
+  update public.profiles
+     set address_line1 = null, address_line2 = null, city = null, state = null,
+         postal_code = null, hide_address = false
+   where hide_address;
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('hide_address', _n);
+
+  update public.profiles
+     set birth_year = null, hide_birth_year = false
+   where hide_birth_year;
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('hide_birth_year', _n);
+
+  update public.profiles
+     set birth_month = null, birth_day = null, birth_year = null, hide_birthday = false
+   where hide_birthday;
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('hide_birthday', _n);
+
+  update public.profiles
+     set anniversary = null, hide_anniversary = false
+   where hide_anniversary;
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('hide_anniversary', _n);
+
+  update public.profiles
+     set occupation = null, employer = null, hide_occupation = false
+   where hide_occupation;
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('hide_occupation', _n);
+
+  update public.family_units
+     set address_line1 = null, address_line2 = null, city = null, state = null,
+         postal_code = null, hide_address = false
+   where hide_address;
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('household_hide_address', _n);
+
+  update public.family_units
+     set phone_home = null, hide_phone_home = false
+   where hide_phone_home;
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('household_hide_phone_home', _n);
+
+  -- What wasn't hidden moves to the household, which keeps its own value if it
+  -- has one; a primary's copy goes before a spouse's.
+  update public.family_units f
+     set anniversary = m.anniversary
+    from (
+      select distinct on (p.family_id, p.org_id) p.family_id, p.org_id, p.anniversary
+        from public.profiles p
+       where p.anniversary is not null
+         and p.family_id is not null
+         and p.relationship = any (array['primary', 'spouse'])
+       order by p.family_id, p.org_id, (p.relationship = 'primary') desc, p.id
+    ) m
+   where f.id = m.family_id
+     and f.org_id = m.org_id
+     and f.anniversary is null
+     and f.anniversary_month is null;
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('anniversary_moved', _n);
+
+  -- The household is the one place, and "either spouse clears it" can't reach a
+  -- stale copy. A copy with no household or outside the couple has nowhere to go
+  -- and stays, unread, until the column is dropped.
+  update public.profiles
+     set anniversary = null
+   where anniversary is not null
+     and family_id is not null
+     and relationship = any (array['primary', 'spouse']);
+
+  -- Only a typo falls outside the years the household forms accept. Losing that
+  -- year beats a check violation that blocks the deploy, or a form that refuses a
+  -- year nobody saving it typed.
+  update public.family_units
+     set anniversary_month = extract(month from anniversary)::smallint,
+         anniversary_day = extract(day from anniversary)::smallint,
+         anniversary_year = case
+           when extract(year from anniversary) between 1900 and extract(year from current_date)
+             then extract(year from anniversary)::smallint
+         end
+   where anniversary is not null
+     and anniversary_month is null;
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('anniversary_split', _n);
+
+  return _counts;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."directory_retire_hidden_values"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."directory_retire_hidden_values"() IS 'Deletes values hidden with the retired flags and moves anniversaries to the household parts. Idempotent. The release that drops the retired columns re-runs it, to sweep anything hidden through the old app in between, then drops it.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."discoverable_groups"() RETURNS TABLE("id" "uuid", "name" "text", "description" "text", "member_count" integer, "is_private" boolean, "join_policy" "text", "viewer_role" "text", "request_status" "text")
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO ''
@@ -175,6 +347,102 @@ ALTER FUNCTION "public"."email_quota_consume"("_org_id" "uuid", "_n" integer) OW
 
 
 COMMENT ON FUNCTION "public"."email_quota_consume"("_org_id" "uuid", "_n" integer) IS 'Atomic per-org daily email quota reserve. Tenant anchor: service_role-only EXECUTE — _org_id must come from an anchor the server-side caller already validated (its RLS-scoped profile, an RLS-checked group row, listActiveOrgs()), never trusted from a request. Returns false when the reservation would exceed the org''s daily cap (org_email_limits.daily_cap, default 500).';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."family_anniversary_hidden"("_family_id" "uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select exists (
+    select 1
+      from public.profiles p
+     where p.family_id = _family_id
+       and p.org_id = public.app_current_org_id()
+       and p.relationship = any (array['primary', 'spouse'])
+       and p.hide_anniversary
+  );
+$$;
+
+
+ALTER FUNCTION "public"."family_anniversary_hidden"("_family_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."family_anniversary_hidden"("_family_id" "uuid") IS 'Whether either spouse in the caller''s org marked this household''s anniversary hidden. Remove with profiles.hide_anniversary.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."family_units_phone_owner_guard"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  if new.phone_profile_id is null then
+    return new;
+  end if;
+
+  -- A stale shared number can't resurface when the choice is cleared.
+  new.phone_home := null;
+
+  if tg_op = 'INSERT' or new.phone_profile_id is distinct from old.phone_profile_id then
+    if new.phone_profile_id is distinct from auth.uid()
+       or not exists (
+         select 1 from public.profiles p
+          where p.id = new.phone_profile_id
+            and p.org_id = new.org_id
+            and p.family_id = new.id
+            and p.relationship = any (array['primary', 'spouse'])
+       ) then
+      raise exception 'family_units: only that spouse can choose their own number'
+        using errcode = 'HP001';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."family_units_phone_owner_guard"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."family_units_phone_owner_guard"() IS 'Only a spouse in the household can point the household phone at their own number; clearing it stays open to anyone the update policy allows.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."family_units_sync_anniversary"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  if (tg_op = 'INSERT' and new.anniversary is not null)
+     or (tg_op = 'UPDATE'
+         and new.anniversary is distinct from old.anniversary
+         and (new.anniversary_month, new.anniversary_day, new.anniversary_year)
+             is not distinct from (old.anniversary_month, old.anniversary_day, old.anniversary_year)) then
+    new.anniversary_month := extract(month from new.anniversary)::smallint;
+    new.anniversary_day := extract(day from new.anniversary)::smallint;
+    new.anniversary_year := case
+      when extract(year from new.anniversary) between 1900 and extract(year from current_date)
+        then extract(year from new.anniversary)::smallint
+    end;
+  elsif tg_op = 'INSERT'
+     or (new.anniversary_month, new.anniversary_day, new.anniversary_year)
+        is distinct from (old.anniversary_month, old.anniversary_day, old.anniversary_year) then
+    new.anniversary := case
+      when new.anniversary_year is not null
+        then make_date(new.anniversary_year, new.anniversary_month, new.anniversary_day)
+    end;
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."family_units_sync_anniversary"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."family_units_sync_anniversary"() IS 'Keeps family_units.anniversary and its parts in step while both exist: the deployed app may write either. A yearless value has no date, so the old column reads null. Remove when family_units.anniversary is dropped.';
 
 
 
@@ -2253,76 +2521,23 @@ CREATE TABLE IF NOT EXISTS "public"."family_units" (
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "anniversary" "date",
     "photo_url" "text",
-    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "anniversary_month" smallint,
+    "anniversary_day" smallint,
+    "anniversary_year" smallint,
+    "phone_profile_id" "uuid",
+    CONSTRAINT "family_units_anniversary_day_check" CHECK ((("anniversary_day" >= 1) AND ("anniversary_day" <= (ARRAY[31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31])["anniversary_month"]))),
+    CONSTRAINT "family_units_anniversary_month_check" CHECK ((("anniversary_month" >= 1) AND ("anniversary_month" <= 12))),
+    CONSTRAINT "family_units_anniversary_parts_check" CHECK (((("anniversary_month" IS NULL) = ("anniversary_day" IS NULL)) AND (("anniversary_year" IS NULL) OR ("anniversary_month" IS NOT NULL)))),
+    CONSTRAINT "family_units_anniversary_year_check" CHECK ((("anniversary_year" >= 1900) AND ("anniversary_year" <= 2100)))
 );
 
 
 ALTER TABLE "public"."family_units" OWNER TO "postgres";
 
 
-CREATE OR REPLACE VIEW "public"."families_directory" WITH ("security_invoker"='true') AS
- SELECT "id",
-    "family_name",
-    "photo_url",
-        CASE
-            WHEN "hide_address" THEN NULL::"text"
-            ELSE "address_line1"
-        END AS "address_line1",
-        CASE
-            WHEN "hide_address" THEN NULL::"text"
-            ELSE "address_line2"
-        END AS "address_line2",
-        CASE
-            WHEN "hide_address" THEN NULL::"text"
-            ELSE "city"
-        END AS "city",
-        CASE
-            WHEN "hide_address" THEN NULL::"text"
-            ELSE "state"
-        END AS "state",
-        CASE
-            WHEN "hide_address" THEN NULL::"text"
-            ELSE "postal_code"
-        END AS "postal_code",
-        CASE
-            WHEN "hide_phone_home" THEN NULL::"text"
-            ELSE "phone_home"
-        END AS "phone_home",
-    "anniversary",
-    "created_at",
-    "updated_at",
-    "org_id"
-   FROM "public"."family_units" "f"
-  WHERE ("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"));
+COMMENT ON COLUMN "public"."family_units"."phone_profile_id" IS 'The household phone is this spouse''s mobile number, read live through the household views. phone_home is null while this is set.';
 
-
-ALTER VIEW "public"."families_directory" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."family_members" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "family_id" "uuid" NOT NULL,
-    "first_name" "text" NOT NULL,
-    "last_name" "text",
-    "preferred_name" "text",
-    "birth_month" smallint,
-    "birth_day" smallint,
-    "birth_year" smallint,
-    "relationship" "text" NOT NULL,
-    "avatar_url" "text",
-    "is_class_member" boolean DEFAULT false NOT NULL,
-    "claimed_profile_id" "uuid",
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
-    CONSTRAINT "family_members_birth_day_check" CHECK ((("birth_day" >= 1) AND ("birth_day" <= 31))),
-    CONSTRAINT "family_members_birth_month_check" CHECK ((("birth_month" >= 1) AND ("birth_month" <= 12))),
-    CONSTRAINT "family_members_birth_year_check" CHECK ((("birth_year" >= 1900) AND ("birth_year" <= 2100))),
-    CONSTRAINT "family_members_relationship_check" CHECK (("relationship" = ANY (ARRAY['primary'::"text", 'spouse'::"text", 'child'::"text", 'parent'::"text", 'sibling'::"text", 'other'::"text"])))
-);
-
-
-ALTER TABLE "public"."family_members" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."profiles" (
@@ -2379,6 +2594,81 @@ CREATE TABLE IF NOT EXISTS "public"."profiles" (
 ALTER TABLE "public"."profiles" OWNER TO "postgres";
 
 
+CREATE OR REPLACE VIEW "public"."families_directory" WITH ("security_invoker"='true') AS
+ SELECT "id",
+    "family_name",
+    "photo_url",
+        CASE
+            WHEN "hide_address" THEN NULL::"text"
+            ELSE "address_line1"
+        END AS "address_line1",
+        CASE
+            WHEN "hide_address" THEN NULL::"text"
+            ELSE "address_line2"
+        END AS "address_line2",
+        CASE
+            WHEN "hide_address" THEN NULL::"text"
+            ELSE "city"
+        END AS "city",
+        CASE
+            WHEN "hide_address" THEN NULL::"text"
+            ELSE "state"
+        END AS "state",
+        CASE
+            WHEN "hide_address" THEN NULL::"text"
+            ELSE "postal_code"
+        END AS "postal_code",
+        CASE
+            WHEN ("phone_profile_id" IS NOT NULL) THEN ( SELECT
+                    CASE
+                        WHEN "o"."hide_phone_mobile" THEN NULL::"text"
+                        ELSE "o"."phone_mobile"
+                    END AS "phone_mobile"
+               FROM "public"."profiles" "o"
+              WHERE (("o"."id" = "f"."phone_profile_id") AND ("o"."org_id" = "f"."org_id") AND ("o"."family_id" = "f"."id") AND ("o"."is_unlisted" = false) AND ("o"."role" = ANY (ARRAY['member'::"text", 'admin'::"text"]))))
+            WHEN "hide_phone_home" THEN NULL::"text"
+            ELSE "phone_home"
+        END AS "phone_home",
+        CASE
+            WHEN "public"."family_anniversary_hidden"("id") THEN NULL::"date"
+            ELSE "anniversary"
+        END AS "anniversary",
+    "created_at",
+    "updated_at",
+    "org_id"
+   FROM "public"."family_units" "f"
+  WHERE ("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"));
+
+
+ALTER VIEW "public"."families_directory" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."family_members" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "family_id" "uuid" NOT NULL,
+    "first_name" "text" NOT NULL,
+    "last_name" "text",
+    "preferred_name" "text",
+    "birth_month" smallint,
+    "birth_day" smallint,
+    "birth_year" smallint,
+    "relationship" "text" NOT NULL,
+    "avatar_url" "text",
+    "is_class_member" boolean DEFAULT false NOT NULL,
+    "claimed_profile_id" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    CONSTRAINT "family_members_birth_day_check" CHECK ((("birth_day" >= 1) AND ("birth_day" <= 31))),
+    CONSTRAINT "family_members_birth_month_check" CHECK ((("birth_month" >= 1) AND ("birth_month" <= 12))),
+    CONSTRAINT "family_members_birth_year_check" CHECK ((("birth_year" >= 1900) AND ("birth_year" <= 2100))),
+    CONSTRAINT "family_members_relationship_check" CHECK (("relationship" = ANY (ARRAY['primary'::"text", 'spouse'::"text", 'child'::"text", 'parent'::"text", 'sibling'::"text", 'other'::"text"])))
+);
+
+
+ALTER TABLE "public"."family_members" OWNER TO "postgres";
+
+
 CREATE OR REPLACE VIEW "public"."families_directory_full" WITH ("security_invoker"='true') AS
  SELECT "id",
     "family_name",
@@ -2404,10 +2694,20 @@ CREATE OR REPLACE VIEW "public"."families_directory_full" WITH ("security_invoke
             ELSE "postal_code"
         END AS "postal_code",
         CASE
+            WHEN ("phone_profile_id" IS NOT NULL) THEN ( SELECT
+                    CASE
+                        WHEN "o"."hide_phone_mobile" THEN NULL::"text"
+                        ELSE "o"."phone_mobile"
+                    END AS "phone_mobile"
+               FROM "public"."profiles" "o"
+              WHERE (("o"."id" = "f"."phone_profile_id") AND ("o"."org_id" = "f"."org_id") AND ("o"."family_id" = "f"."id") AND ("o"."is_unlisted" = false) AND ("o"."role" = ANY (ARRAY['member'::"text", 'admin'::"text"]))))
             WHEN "hide_phone_home" THEN NULL::"text"
             ELSE "phone_home"
         END AS "phone_home",
-    "anniversary",
+        CASE
+            WHEN "public"."family_anniversary_hidden"("id") THEN NULL::"date"
+            ELSE "anniversary"
+        END AS "anniversary",
     "created_at",
     "updated_at",
     COALESCE(( SELECT "jsonb_agg"("jsonb_build_object"('id', "p"."id", 'first_name', "p"."first_name", 'last_name', "p"."last_name", 'preferred_name', "p"."preferred_name", 'avatar_url', "p"."avatar_url", 'relationship', "p"."relationship", 'is_class_member', true, 'phone_mobile',
@@ -2432,7 +2732,20 @@ CREATE OR REPLACE VIEW "public"."families_directory_full" WITH ("security_invoke
     COALESCE(( SELECT "jsonb_agg"("jsonb_build_object"('id', "fm"."id", 'first_name', "fm"."first_name", 'last_name', "fm"."last_name", 'preferred_name', "fm"."preferred_name", 'avatar_url', "fm"."avatar_url", 'relationship', "fm"."relationship", 'is_class_member', "fm"."is_class_member", 'birth_month', "fm"."birth_month", 'birth_day', "fm"."birth_day", 'birth_year', "fm"."birth_year", 'claimed_profile_id', "fm"."claimed_profile_id") ORDER BY "fm"."relationship") AS "jsonb_agg"
            FROM "public"."family_members" "fm"
           WHERE (("fm"."family_id" = "f"."id") AND ("fm"."org_id" = "f"."org_id"))), '[]'::"jsonb") AS "family_members_list",
-    "org_id"
+    "org_id",
+        CASE
+            WHEN "public"."family_anniversary_hidden"("id") THEN NULL::smallint
+            ELSE "anniversary_month"
+        END AS "anniversary_month",
+        CASE
+            WHEN "public"."family_anniversary_hidden"("id") THEN NULL::smallint
+            ELSE "anniversary_day"
+        END AS "anniversary_day",
+        CASE
+            WHEN "public"."family_anniversary_hidden"("id") THEN NULL::smallint
+            ELSE "anniversary_year"
+        END AS "anniversary_year",
+    "phone_profile_id"
    FROM "public"."family_units" "f"
   WHERE ("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"));
 
@@ -3888,6 +4201,14 @@ CREATE OR REPLACE TRIGGER "family_members_touch_updated_at" BEFORE UPDATE ON "pu
 
 
 
+CREATE OR REPLACE TRIGGER "family_units_phone_owner_guard" BEFORE INSERT OR UPDATE ON "public"."family_units" FOR EACH ROW EXECUTE FUNCTION "public"."family_units_phone_owner_guard"();
+
+
+
+CREATE OR REPLACE TRIGGER "family_units_sync_anniversary" BEFORE INSERT OR UPDATE ON "public"."family_units" FOR EACH ROW EXECUTE FUNCTION "public"."family_units_sync_anniversary"();
+
+
+
 CREATE OR REPLACE TRIGGER "family_units_touch_updated_at" BEFORE UPDATE ON "public"."family_units" FOR EACH ROW EXECUTE FUNCTION "public"."touch_updated_at"();
 
 
@@ -4105,6 +4426,11 @@ ALTER TABLE ONLY "public"."family_members"
 
 ALTER TABLE ONLY "public"."family_units"
     ADD CONSTRAINT "family_units_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."family_units"
+    ADD CONSTRAINT "family_units_phone_profile_id_fkey" FOREIGN KEY ("phone_profile_id", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE SET NULL ("phone_profile_id");
 
 
 
@@ -5446,6 +5772,10 @@ GRANT ALL ON FUNCTION "public"."current_family_id"() TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."directory_retire_hidden_values"() FROM PUBLIC;
+
+
+
 REVOKE ALL ON FUNCTION "public"."discoverable_groups"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."discoverable_groups"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."discoverable_groups"() TO "service_role";
@@ -5454,6 +5784,22 @@ GRANT ALL ON FUNCTION "public"."discoverable_groups"() TO "service_role";
 
 REVOKE ALL ON FUNCTION "public"."email_quota_consume"("_org_id" "uuid", "_n" integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."email_quota_consume"("_org_id" "uuid", "_n" integer) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."family_anniversary_hidden"("_family_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."family_anniversary_hidden"("_family_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."family_anniversary_hidden"("_family_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."family_units_phone_owner_guard"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."family_units_phone_owner_guard"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."family_units_sync_anniversary"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."family_units_sync_anniversary"() TO "service_role";
 
 
 
@@ -5771,6 +6117,12 @@ GRANT ALL ON TABLE "public"."family_units" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."profiles" TO "anon";
+GRANT ALL ON TABLE "public"."profiles" TO "authenticated";
+GRANT ALL ON TABLE "public"."profiles" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."families_directory" TO "anon";
 GRANT ALL ON TABLE "public"."families_directory" TO "authenticated";
 GRANT ALL ON TABLE "public"."families_directory" TO "service_role";
@@ -5780,12 +6132,6 @@ GRANT ALL ON TABLE "public"."families_directory" TO "service_role";
 GRANT ALL ON TABLE "public"."family_members" TO "anon";
 GRANT ALL ON TABLE "public"."family_members" TO "authenticated";
 GRANT ALL ON TABLE "public"."family_members" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."profiles" TO "anon";
-GRANT ALL ON TABLE "public"."profiles" TO "authenticated";
-GRANT ALL ON TABLE "public"."profiles" TO "service_role";
 
 
 
