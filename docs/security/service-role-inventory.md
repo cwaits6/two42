@@ -533,6 +533,20 @@ Two plain (not definer) triggers from the same migration close write oracles:
 `service_role` is outside both, and no service-role client reads
 `prayer_requests` or `prayer_wall`.
 
+## Household anniversary gate — a definer-function bypass surface (`family_anniversary_hidden`)
+
+`public.family_anniversary_hidden(_family_id)`
+(`supabase/migrations/20261111000000_directory_no_hide_settings.sql`) is a
+read-only `SECURITY DEFINER` over `profiles`: whether either spouse in the household
+has `hide_anniversary` set. Both household views call it, because they are
+`security_invoker` and an unlisted spouse's row is invisible to the caller, which
+would make an `EXISTS` inside the view fail open.
+
+It returns a boolean and writes nothing. Its org comes from
+`app_current_org_id()`, never from a parameter, so a family id from another org
+answers false. `search_path = ''`; execute is revoked from `public, anon` and
+granted to `authenticated, service_role`. Remove it with `profiles.hide_anniversary`.
+
 ## App routes and pages (26 sites)
 
 | File | Why service-role is used | Org derived from | Scoped queries |

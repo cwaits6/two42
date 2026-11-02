@@ -442,21 +442,21 @@ select is(pg_temp.as_write(current_setting('nh.kid')::uuid, pg_temp.point_at(cur
 select is(pg_temp.as_write(current_setting('nh.outsider')::uuid, pg_temp.point_at(current_setting('nh.outsider')::uuid)),
   'rows=0', 'someone outside the household reaches no row');
 select is(pg_temp.as_write(current_setting('nh.owner')::uuid, pg_temp.point_at(current_setting('nh.chloe')::uuid)),
-  'HP001', 'a church admin cannot choose it for her');
+  'HP001', 'a church admin cannot choose it for them');
 select is(pg_temp.as_write(current_setting('nh.chloe')::uuid, pg_temp.point_at(current_setting('nh.chloe')::uuid)),
   'rows=1', 'a spouse chooses their own number');
 select is((select phone_home from public.family_units where id = current_setting('nh.fam')::uuid), null,
   'the shared number is cleared, not kept behind the choice');
-select is(pg_temp.seen('phone_home'), '+15558880005', 'the household phone reads her current number');
+select is(pg_temp.seen('phone_home'), '+15558880005', 'the household phone reads their current number');
 select is(pg_temp.seen('phone_profile_id'), current_setting('nh.chloe'), 'and says whose it is');
 
 select is(pg_temp.as_write(current_setting('nh.chloe')::uuid,
     format('update public.profiles set phone_mobile = ''+15558881111'' where id = %L', current_setting('nh.chloe'))),
-  'rows=1', 'she changes her number on her profile');
+  'rows=1', 'the owner changes the number on their profile');
 select is(pg_temp.seen('phone_home'), '+15558881111', 'the household phone follows the change');
 select is(pg_temp.as_write(current_setting('nh.chloe')::uuid,
     format('update public.profiles set phone_mobile = null where id = %L', current_setting('nh.chloe'))),
-  'rows=1', 'she clears her number on her profile');
+  'rows=1', 'the owner clears the number on their profile');
 select is(pg_temp.seen('phone_home'), '-', 'the household phone clears with it');
 update public.profiles set phone_mobile = '+15558880005' where id = current_setting('nh.chloe')::uuid;
 
@@ -485,7 +485,7 @@ select throws_ok(
 alter table public.family_units enable trigger family_units_phone_owner_guard;
 
 select is(pg_temp.as_write(current_setting('nh.chloe')::uuid, pg_temp.point_at(current_setting('nh.chloe')::uuid)),
-  'rows=1', 'she chooses her number again');
+  'rows=1', 'the owner chooses the number again');
 delete from public.family_members where claimed_profile_id = current_setting('nh.chloe')::uuid;
 delete from auth.users where id = current_setting('nh.chloe')::uuid;
 select is(
