@@ -66,7 +66,7 @@ afterEach(async () => {
   document.body.innerHTML = "";
 });
 
-async function mount(overrides: Partial<Profile> = {}, props: { isAdmin?: boolean } = {}) {
+async function mount(overrides: Partial<Profile> = {}, props: { isAdmin?: boolean; editingOther?: boolean } = {}) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -202,6 +202,41 @@ describe("ProfileForm inline errors", () => {
     expect(document.body.textContent).toContain(
       "Everything you add here shows in the directory. Leave out anything you don't want shown.",
     );
+  });
+
+  it("shows the notice to someone editing another household member, not to an admin", async () => {
+    await mount({}, { editingOther: true });
+    expect(document.body.textContent).toContain("Everything you add here shows in the directory.");
+    await act(async () => root.unmount());
+    document.body.innerHTML = "";
+
+    await mount({}, { isAdmin: true });
+    expect(document.body.textContent).not.toContain("Everything you add here shows in the directory.");
+  });
+
+  it("makes an admin enter an email", async () => {
+    const form = await mount({ email: "" }, { isAdmin: true });
+    await form.submit();
+
+    expect(form.message("email")).toBe("Enter an email address.");
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("doesn't ask a member for an email, which isn't theirs to edit here", async () => {
+    const form = await mount({ email: "" });
+    await form.submit();
+
+    expect(update).toHaveBeenCalledOnce();
+  });
+
+  it("resets a retired flag only for a number that replaced the hidden one", async () => {
+    const form = await mount({ phone_mobile: "+15125550100", phone_work: "+15125550111" });
+    await form.type("phone_mobile", "(512) 555-0199");
+    await form.submit();
+
+    const written = update.mock.calls[0][0];
+    expect(written.hide_phone_mobile).toBe(false);
+    expect(written).not.toHaveProperty("hide_phone_work");
   });
 
   it("saves when every field is valid", async () => {

@@ -28,6 +28,7 @@ import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { CheckRow } from "@/components/profile/CheckRow";
 import { AnniversaryFields, type AnniversaryField } from "@/components/profile/AnniversaryFields";
 import { DirectoryNotice } from "@/components/profile/DirectoryNotice";
+import { retiredFlagResets } from "@/lib/members/retiredHideFlags";
 import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
 import { MONTHS, anniversaryColumns, birthdayColumns } from "@/components/profile/birthday";
 import { relLabel } from "@/components/directory/utils";
@@ -445,21 +446,22 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
   const handleFinish = async () => {
     setSaving(true);
     try {
+      const updates = {
+        first_name: titleCaseName(firstName) ?? "",
+        last_name: titleCaseName(lastName) ?? "",
+        preferred_name: titleCaseName(preferredName),
+        ...birthdayColumns({ month: birthMonth, day: birthDay, year: birthYear }),
+        phone_mobile: phoneMobile ? normalizePhone(phoneMobile) : null,
+        phone_home: phoneHome ? normalizePhone(phoneHome) : null,
+        phone_work: phoneWork ? normalizePhone(phoneWork) : null,
+        hide_email: hideEmail,
+        family_id: householdId,
+        occupation: occupation.trim() || null,
+        employer: employer.trim() || null,
+      };
       const { error: profileError } = await supabase
         .from("profiles")
-        .update({
-          first_name: titleCaseName(firstName) ?? "",
-          last_name: titleCaseName(lastName) ?? "",
-          preferred_name: titleCaseName(preferredName),
-          ...birthdayColumns({ month: birthMonth, day: birthDay, year: birthYear }),
-          phone_mobile: phoneMobile ? normalizePhone(phoneMobile) : null,
-          phone_home: phoneHome ? normalizePhone(phoneHome) : null,
-          phone_work: phoneWork ? normalizePhone(phoneWork) : null,
-          hide_email: hideEmail,
-          family_id: householdId,
-          occupation: occupation.trim() || null,
-          employer: employer.trim() || null,
-        })
+        .update({ ...updates, ...retiredFlagResets(profile, updates) })
         .eq("id", profile.id);
       if (profileError) throw profileError;
 

@@ -38,6 +38,7 @@ import { CheckRow } from "@/components/profile/CheckRow";
 import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
 import { MONTHS, birthdayColumns, birthdayErrors } from "@/components/profile/birthday";
 import { DirectoryNotice } from "@/components/profile/DirectoryNotice";
+import { retiredFlagResets } from "@/lib/members/retiredHideFlags";
 import {
   canManageAvatar,
   type AvatarEligibilityCaller,
@@ -285,7 +286,9 @@ export function ProfileForm({
     if (!lastName) found.last_name = "Enter a last name.";
     // Only admins can edit the email; a member's own is managed in Settings.
     const email = state.email.trim();
-    if (isAdmin && email && !EMAIL_PATTERN.test(email)) {
+    if (isAdmin && !email) {
+      found.email = "Enter an email address.";
+    } else if (isAdmin && !EMAIL_PATTERN.test(email)) {
       found.email = "Enter an email address like name@example.com.";
     }
 
@@ -344,7 +347,7 @@ export function ProfileForm({
 
     const { error } = await supabase
       .from("profiles")
-      .update(updates)
+      .update({ ...updates, ...retiredFlagResets(profile, updates) })
       .eq("id", profile.id);
 
     setSaving(false);
@@ -380,7 +383,7 @@ export function ProfileForm({
     <form onSubmit={handleSubmit} noValidate>
       <Card>
         <CardContent className="space-y-5 pt-6">
-          {!isAdmin && !editingOther && <DirectoryNotice />}
+          {!isAdmin && <DirectoryNotice />}
 
           {/* Photo — hidden for admins editing a profile they have no
               storage write arm for: not themselves, and not a household

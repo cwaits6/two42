@@ -23,6 +23,18 @@ export function householdPhoneLabel(
   return name ? `${name}'s mobile` : "home";
 }
 
+/**
+ * On one person's card, a number pointing at them is the mobile line already shown,
+ * and a shared number gives way to their own home phone. A spouse's number is neither.
+ */
+export function showsHouseholdPhone(
+  profile: Pick<DirectoryProfile, "id" | "phone_home">,
+  family: Pick<FamilyDirectoryFull, "phone_profile_id">,
+): boolean {
+  if (family.phone_profile_id === profile.id) return false;
+  return Boolean(family.phone_profile_id) || !profile.phone_home;
+}
+
 export function relLabel(rel: string): string {
   switch (rel) {
     case "primary": return "Primary";
