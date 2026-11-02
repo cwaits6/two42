@@ -1,13 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Video, Copy, Check, Play } from "lucide-react";
-import {
-  getJoinState,
-  msUntilNextJoinTransition,
-  joinButtonLabel,
-  type JoinState,
-} from "@/lib/meetings";
+import { useJoinState } from "@/components/events/useJoinState";
+import { joinButtonLabel } from "@/lib/meetings";
 import { formatEventTime } from "@/lib/time/zone";
 
 interface JoinMeetingBlockProps {
@@ -83,21 +79,7 @@ export function JoinMeetingBlock({
   timeZone,
   recordingsHref,
 }: JoinMeetingBlockProps) {
-  const [state, setState] = useState<JoinState>(() =>
-    getJoinState(new Date(), startTime, endTime, leadMinutes)
-  );
-
-  // Re-evaluate exactly when the state next changes (upcoming → live → ended).
-  useEffect(() => {
-    setState(getJoinState(new Date(), startTime, endTime, leadMinutes));
-    const ms = msUntilNextJoinTransition(new Date(), startTime, endTime, leadMinutes);
-    if (ms === null) return;
-    const timer = setTimeout(
-      () => setState(getJoinState(new Date(), startTime, endTime, leadMinutes)),
-      ms + 250
-    );
-    return () => clearTimeout(timer);
-  }, [state, startTime, endTime, leadMinutes]);
+  const state = useJoinState(startTime, endTime, leadMinutes);
 
   const provider = meetingUrl ? providerName(meetingUrl) : null;
   const buttonLabel = meetingUrl ? joinButtonLabel(meetingUrl) : null;

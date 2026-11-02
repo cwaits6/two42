@@ -1,450 +1,500 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Calendar, ChevronRight, Clock, HeartHandshake, MapPin, Megaphone, Plus } from "lucide-react";
+import {
+  Cake,
+  Calendar,
+  CalendarX,
+  ChevronRight,
+  CircleCheck,
+  HandHeart,
+  Heart,
+  HeartHandshake,
+  MapPin,
+  Megaphone,
+  Play,
+  Plus,
+  UserPlus,
+  type LucideIcon,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { groupPath, type ActiveGroup } from "@/lib/groups/active";
 import { greetingName } from "@/lib/groups/greeting";
-import { readList } from "@/lib/supabase/readList";
+import {
+  buildGroupHome,
+  tileAge,
+  type CelebrationRow,
+  type GroupHome,
+  type HomeNotice,
+  type NewTile,
+  type ServingCard,
+  type TodoRow,
+  type WeekRow,
+} from "@/lib/groups/groupHome";
+import { loadGroupHomeReads } from "@/lib/groups/groupHomeReads";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { EmptyState } from "@/components/states/EmptyState";
 import { ErrorState } from "@/components/states/ErrorState";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { HomeGreeting } from "@/components/groups/HomeGreeting";
-import { formatServiceDate, todayIn } from "@/lib/serving/dates";
+import { HomePrayerCard } from "@/components/groups/home/HomePrayerCard";
+import { StartingNowPanel } from "@/components/groups/home/StartingNowPanel";
 import { RsvpControl } from "@/components/events/RsvpControl";
-import { JoinMeetingBlock } from "@/components/events/JoinMeetingBlock";
-import { expandUpcomingEvents } from "@/lib/recurrence";
-import { meetingEndMs, ENDED_GRACE_MS, hasMeeting, type MeetingFields } from "@/lib/meetings";
-import { prayerAuthorLabel } from "@/lib/prayer";
-import type { Event, Rsvp } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
-import { formatEventTime, formatInZone, relativeDay } from "@/lib/time/zone";
+import { cn } from "@/lib/utils";
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+const CARD = "rounded-2xl border border-border bg-card";
+const ROW = "flex min-h-16 items-center gap-3 rounded-2xl px-3 py-3 transition-colors hover:bg-muted";
+const ROW_TITLE = "font-sans text-lg font-semibold leading-snug text-foreground";
+const ROW_DETAIL = "truncate font-sans text-base text-muted-foreground";
+const EYEBROW = "font-sans text-sm font-semibold text-brand-accent-text";
+const TILE_TITLE = "font-serif text-xl font-medium leading-snug tracking-tight text-foreground";
 
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return "Today";
-  if (days === 1) return "Yesterday";
-  if (days < 7) return `${days} days ago`;
-  if (days < 14) return "1 week ago";
-  return `${Math.floor(days / 7)} weeks ago`;
-}
-
-// Every time below is the org's wall clock: `timeZone` is the org zone the
-// component resolves once per request.
-
-function eventWeekday(startTime: string, timeZone: string): string {
-  return formatInZone(startTime, timeZone, { weekday: "long" });
-}
-
-function eventMonth(startTime: string, timeZone: string): string {
-  return formatInZone(startTime, timeZone, { month: "short" });
-}
-
-function excerpt(content: string): string {
-  // Plain-text excerpt from content (may be JSON blocks or HTML)
-  try {
-    const blocks: Array<{ content?: Array<{ text?: string }> }> = JSON.parse(content);
-    return blocks
-      .flatMap((b) => b.content ?? [])
-      .map((c) => c.text ?? "")
-      .join(" ")
-      .slice(0, 140);
-  } catch {
-    return content.replace(/<[^>]+>/g, "").slice(0, 140);
-  }
-}
-
-// ── component ────────────────────────────────────────────────────────────────
-
-/** One group's dashboard: its next meeting, your serving turns, its announcements and prayer. */
+/** One group's Home: what changed, what needs you, this week, and what's new. */
 export async function GroupDashboard({ group }: { group: ActiveGroup }) {
   const supabase = await createClient();
   const user = await getOptionalUser();
   if (!user) redirect("/login");
 
-  const nowDate = new Date();
-  const now = nowDate.toISOString();
-
-  // Next event for the hero. Recurring series are stored as a single anchor
-  // row and expanded at render time, so fetch a window that also includes
-  // anchors and recently-started occurrences (for the live/ended join states).
-  const windowStart = new Date(nowDate.getTime() - 24 * 60 * 60 * 1000);
-  const windowStartISO = windowStart.toISOString();
-
-  // Every query below is independent of `nextEvent`; fire them together
-  // instead of awaiting one at a time.
-  const [
-    { data: viewer },
-    eventsRead,
-    rsvpsRead,
-    announcementsRead,
-    { count: lectureCount },
-    prayersRead,
-    servingsRead,
-    timeZone,
-  ] = await Promise.all([
+  const [{ data: viewer }, timeZone] = await Promise.all([
     supabase
       .from("profiles")
-      .select("preferred_name, first_name")
+      .select("org_id, preferred_name, first_name")
       .eq("id", user.id)
       .maybeSingle(),
-    supabase
-      .from("events")
-      .select("*")
-      .eq("group_id", group.id)
-      .or(
-        `start_time.gte.${windowStartISO},` +
-        `and(recurrence_frequency.not.is.null,or(recurrence_until.is.null,recurrence_until.gte.${windowStartISO}))`
-      )
-      .order("start_time", { ascending: true })
-      .limit(500),
-    supabase
-      .from("rsvps")
-      .select("*")
-      .eq("user_id", user.id),
-    supabase
-      .from("announcements")
-      .select("*")
-      .eq("group_id", group.id)
-      .eq("is_published", true)
-      .lte("published_at", now)
-      .order("published_at", { ascending: false })
-      .limit(3),
-    supabase
-      .from("lectures")
-      .select("id", { count: "exact", head: true })
-      .eq("group_id", group.id),
-    supabase
-      .from("prayer_wall")
-      .select("id, body, is_anonymous, first_name, last_name, preferred_name, created_at")
-      .eq("group_id", group.id)
-      .eq("is_answered", false)
-      .order("created_at", { ascending: false })
-      .limit(3),
-    // This member's upcoming turns on the group's teams (both inner joins filter)
-    getOrgTimeZone().then((zone) =>
-      supabase
-        .from("serving_signups")
-        .select("id, service_date, team_id, teams!inner(id, name, group_id), serving_signup_attendees!inner(profile_id)")
-        .eq("teams.group_id", group.id)
-        .eq("serving_signup_attendees.profile_id", user.id)
-        .gte("service_date", todayIn(zone))
-        .order("service_date", { ascending: true })
-        .limit(3),
-    ),
     getOrgTimeZone(),
   ]);
 
-  // Each section reports its own failed read; the rest of the page still renders.
-  const rawEvents = readList(eventsRead, "dashboard events");
-  // The hero's RSVP control needs the viewer's replies, so it fails with them.
-  const rsvps = readList(rsvpsRead, "the viewer's RSVPs");
-  const announcements = readList(announcementsRead, "dashboard announcements");
-  const prayers = readList(prayersRead, "dashboard prayer requests");
-  const upcomingServings = readList(servingsRead, "the viewer's serving turns") as Array<{
-    id: string;
-    service_date: string;
-    team_id: string;
-    teams: { id: string; name: string } | Array<{ id: string; name: string }> | null;
-  }> | null;
-  const eventsFailed = rawEvents === null || rsvps === null;
-
-  // Keep the current occurrence on the hero through its live window plus a
-  // short grace period (ended state points to the recording), then roll over.
-  const occurrences = expandUpcomingEvents((rawEvents ?? []) as Event[], timeZone, windowStart);
-  const nextEvent = eventsFailed
-    ? null
-    : (occurrences.find(
-        (e) => meetingEndMs(e.start_time, e.end_time) + ENDED_GRACE_MS > nowDate.getTime()
-      ) ?? null);
-
-  const userRsvps: Record<string, Rsvp> = Object.fromEntries(
-    (rsvps ?? []).map((r) => [r.event_id, r])
+  const greeting = (
+    <HomeGreeting name={greetingName(viewer)} timeZone={timeZone} groupName={group.name} />
   );
 
-  // Meeting fields live on the series anchor; exception rows inherit them.
-  let meeting: MeetingFields | null = null;
-  let goingCount = 0;
-  let maybeCount = 0;
-
-  // These depend on `nextEvent`. The anchor lookup and the event's RSVP list
-  // are mutually independent, so fetch them together.
-  if (nextEvent) {
-    const [anchor, { data: eventRsvps }] = await Promise.all([
-      nextEvent.series_id
-        ? supabase
-            .from("events")
-            .select(
-              "meeting_url, meeting_id, meeting_passcode, meeting_show_on_dashboard, meeting_lead_minutes"
-            )
-            .eq("id", nextEvent.series_id)
-            .eq("group_id", group.id)
-            .maybeSingle()
-            .then(({ data }) => data)
-        : Promise.resolve(null),
-      supabase
-        .from("rsvps")
-        .select("status")
-        .eq("event_id", nextEvent.id),
-    ]);
-
-    let source: MeetingFields = nextEvent;
-    if (anchor) source = anchor;
-    if (hasMeeting(source) && source.meeting_show_on_dashboard) meeting = source;
-
-    if (eventRsvps) {
-      goingCount = eventRsvps.filter((r) => r.status === "yes").length;
-      maybeCount = eventRsvps.filter((r) => r.status === "maybe").length;
-    }
+  // Every read below filters on this org, so without it there is nothing to ask for.
+  if (!viewer) {
+    return (
+      <PageContainer>
+        {greeting}
+        <ErrorState thing="Home" />
+      </PageContainer>
+    );
   }
 
-  const href = (path: string) => groupPath(group.id, path);
+  const now = new Date();
   const isLeader = group.role === "leader";
+  const context = { groupId: group.id, isLeader, userId: user.id, timeZone, now };
+  const reads = await loadGroupHomeReads(supabase, { ...context, orgId: viewer.org_id });
+  const home = buildGroupHome(reads, context);
+  const href = (path: string) => groupPath(group.id, path);
+  const recordingsHref = reads.lessonCount > 0 ? href("/lectures") : null;
+
+  if (home.nothingAtAll) {
+    return (
+      <PageContainer size="wide">
+        {greeting}
+        <NothingYet isLeader={isLeader} href={href} />
+      </PageContainer>
+    );
+  }
+
+  const showWeek =
+    home.weekRows === null ||
+    home.celebrations === null ||
+    home.weekRows.length > 0 ||
+    home.celebrations.length > 0 ||
+    isLeader;
+  const showNew = home.newTiles === null || home.newTiles.length > 0 || isLeader;
+  const showPrayer = home.prayerFailed || home.prayer !== null;
 
   return (
-    <PageContainer>
-      <HomeGreeting name={greetingName(viewer)} timeZone={timeZone} />
+    <PageContainer size="wide">
+      {greeting}
 
       <div className="space-y-12">
-        {/* ── The next event ───────────────────────────────────────────────── */}
-        {eventsFailed ? (
-          <ErrorState thing="upcoming events" />
-        ) : nextEvent ? (
-          <div
-            className="rounded-2xl p-6 text-white md:p-7"
-            style={{
-              background: "var(--color-brand-primary)",
-              boxShadow:
-                "0 14px 40px color-mix(in srgb, var(--color-brand-primary) 20%, transparent)",
-            }}
-          >
-            <div className="mb-4 flex items-center gap-2.5 font-sans text-base font-semibold">
-              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-brand-accent" />
-              Next event · {relativeDay(nextEvent.start_time, timeZone)}
-            </div>
-
-            <div className="flex flex-wrap items-start gap-5">
-              {/* Date tile: Warm Paper ground, Espresso text */}
-              <div
-                className="flex h-24 w-24 shrink-0 flex-col items-center justify-center gap-1 rounded-2xl"
-                style={{ background: "var(--color-brand-warm)", color: "var(--color-brand-navy)" }}
-              >
-                <span className="font-sans text-sm font-semibold leading-none text-secondary-foreground">
-                  {eventWeekday(nextEvent.start_time, timeZone).slice(0, 3)}
-                </span>
-                <span className="font-serif text-4xl font-semibold leading-none">
-                  {formatInZone(nextEvent.start_time, timeZone, { day: "numeric" })}
-                </span>
-                <span className="font-sans text-sm font-semibold leading-none text-muted-foreground">
-                  {eventMonth(nextEvent.start_time, timeZone)}
-                </span>
-              </div>
-
-              <div className="min-w-0 flex-1 pt-1">
-                <h2 className="font-serif text-3xl font-medium leading-tight tracking-tight">
-                  {nextEvent.title}
-                </h2>
-                <div className="mt-2.5 flex flex-wrap items-center gap-x-5 gap-y-2 font-sans text-lg">
-                  <span className="inline-flex items-center gap-2">
-                    <Clock className="h-5 w-5" aria-hidden="true" />
-                    {formatEventTime(nextEvent.start_time, timeZone)}
-                  </span>
-                  {nextEvent.location && (
-                    <span className="inline-flex items-center gap-2">
-                      <MapPin className="h-5 w-5" aria-hidden="true" />
-                      {nextEvent.location}
-                    </span>
-                  )}
-                </div>
-                {nextEvent.description && (
-                  <p className="mt-3 max-w-[52ch] font-sans text-lg leading-normal text-white/90">
-                    {nextEvent.description.length > 160
-                      ? nextEvent.description.slice(0, 160) + "…"
-                      : nextEvent.description}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-white/25 pt-5">
-              <div className="flex flex-wrap items-center gap-x-2.5 font-sans text-base">
-                <span className="font-semibold">Are you going?</span>
-                {(goingCount > 0 || maybeCount > 0) && (
-                  <span className="text-white/90">
-                    {[
-                      goingCount > 0 && `${goingCount} going`,
-                      maybeCount > 0 && `${maybeCount} maybe`,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </span>
-                )}
-              </div>
-              <RsvpControl
-                eventId={nextEvent.id}
-                userId={user.id}
-                currentStatus={userRsvps[nextEvent.id]?.status ?? null}
-                tone="primary"
-              />
-            </div>
-
-            {/* Join the call — time-aware, set on the recurring event */}
-            {meeting && (
-              <div className="mt-4">
-                <JoinMeetingBlock
-                  meetingUrl={meeting.meeting_url}
-                  meetingId={meeting.meeting_id}
-                  passcode={meeting.meeting_passcode}
-                  startTime={nextEvent.start_time}
-                  endTime={nextEvent.end_time}
-                  leadMinutes={meeting.meeting_lead_minutes}
-                  timeZone={timeZone}
-                  recordingsHref={lectureCount && lectureCount > 0 ? href("/lectures") : null}
-                />
-              </div>
-            )}
-          </div>
-        ) : (
-          <EmptyState
-            icon={Calendar}
-            message="No upcoming events."
-            action={
-              isLeader && (
-                <Link href={href("/calendar/new")} className={buttonVariants()}>
-                  <Plus aria-hidden="true" />
-                  Add event
-                </Link>
-              )
-            }
-          />
+        {home.startingNow && (
+          <StartingNowPanel event={home.startingNow} recordingsHref={recordingsHref} />
         )}
 
-        {/* ── Your turn to serve ───────────────────────────────────────────── */}
-        {upcomingServings === null ? (
+        {home.notices.length > 0 && (
+          <div className="space-y-3">
+            {home.notices.map((notice) => (
+              <NoticeCard key={notice.key} notice={notice} />
+            ))}
+          </div>
+        )}
+
+        {home.todo === null ? (
           <section>
-            <SectionHeading title="Your turn to serve" />
-            <ErrorState thing="your serving turns" />
+            <SectionHeading title="To do" />
+            <ErrorState thing="your to do list" />
           </section>
         ) : (
-          upcomingServings.length > 0 && (
-            <section>
-              <SectionHeading title="Your turn to serve" />
-              <ul>
-                {upcomingServings.map((s) => (
-                  <li key={s.id} className="border-t border-border first:border-0">
-                    <Link
-                      href={href(`/serving/${s.team_id}`)}
-                      className="flex min-h-16 items-center justify-between gap-4 py-3 transition-colors hover:text-brand-primary-text"
-                    >
-                      <div>
-                        <div className="font-serif text-xl font-medium text-foreground">
-                          {(Array.isArray(s.teams) ? s.teams[0]?.name : s.teams?.name) ?? "Serving team"}
-                        </div>
-                        <div className="mt-0.5 font-sans text-base text-muted-foreground">
-                          {formatServiceDate(s.service_date)}
-                        </div>
-                      </div>
-                      <ChevronRight className="h-6 w-6 shrink-0 text-brand-primary-text" aria-hidden="true" />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </section>
+          home.todo.length > 0 && <TodoSection rows={home.todo} />
+        )}
+
+        {home.servingCards === null ? (
+          <section>
+            <SectionHeading title="Serving" />
+            <ErrorState thing="serving dates" />
+          </section>
+        ) : (
+          home.servingCards.length > 0 && (
+            <div className="space-y-3">
+              {home.servingCards.map((card) => (
+                <ServingAsk key={card.teamId} card={card} />
+              ))}
+            </div>
           )
         )}
 
-        {/* ── Announcements + Prayer ───────────────────────────────────────── */}
-        <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1.3fr_1fr] lg:gap-8">
-          <section>
-            <SectionHeading
-              title="Announcements"
-              link={{ href: href("/announcements"), label: "All announcements" }}
-            />
-            {announcements === null ? (
-              <ErrorState thing="announcements" />
-            ) : announcements.length === 0 ? (
-              <EmptyState
-                icon={Megaphone}
-                message="No announcements yet."
-                action={
-                  isLeader && (
-                    <Link
-                      href={href("/settings/announcements/new")}
-                      className={buttonVariants()}
-                    >
-                      <Plus aria-hidden="true" />
-                      Add announcement
-                    </Link>
-                  )
-                }
-              />
-            ) : (
-              <ul>
-                {announcements.map((a) => {
-                  const publishedAt = a.published_at || a.created_at;
-                  const text = excerpt(a.content);
-                  return (
-                    <li key={a.id} className="border-t border-border py-4 first:border-0 first:pt-0">
-                      <h3 className="font-serif text-xl font-medium leading-snug tracking-tight">
-                        <Link
-                          href={href(`/announcements#${a.id}`)}
-                          className="inline-flex min-h-11 items-center text-foreground hover:text-brand-primary-text hover:underline"
-                        >
-                          {a.title}
-                        </Link>
-                      </h3>
-                      {text && (
-                        <p className="line-clamp-2 font-sans text-base leading-relaxed text-muted-foreground">
-                          {text}
-                        </p>
-                      )}
-                      <p className="mt-2 font-sans text-base text-muted-foreground">
-                        {timeAgo(publishedAt)}
-                      </p>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
+        <div
+          className={cn(
+            "grid grid-cols-1 gap-12",
+            showWeek && (showNew || showPrayer) && "lg:grid-cols-[1.3fr_1fr] lg:gap-10",
+          )}
+        >
+          {showWeek && (
+            <ThisWeek home={home} userId={user.id} isLeader={isLeader} href={href} />
+          )}
 
-          <section>
-            <SectionHeading title="Prayer" link={{ href: href("/prayer"), label: "All prayer requests" }} />
-            {prayers === null ? (
-              <ErrorState thing="prayer requests" />
-            ) : prayers.length === 0 ? (
-              <EmptyState icon={HeartHandshake} message="No prayer requests yet." />
-            ) : (
-              <ul>
-                {prayers.map((p, i) => (
-                  <li
-                    key={p.id ?? i}
-                    className="flex gap-3.5 border-t border-border py-4 first:border-0 first:pt-0"
-                  >
-                    <span className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-warm">
-                      <HeartHandshake className="h-4 w-4 text-brand-primary" aria-hidden="true" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-sans text-base font-semibold text-muted-foreground">
-                        {prayerAuthorLabel(p)}
-                      </div>
-                      <div className="line-clamp-2 font-sans text-base text-foreground">
-                        {p.body}
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          {(showNew || showPrayer) && (
+            <div className="min-w-0 space-y-12">
+              {showNew && (
+                <section>
+                  <SectionHeading title="New in the group" />
+                  {home.newTiles === null ? (
+                    <ErrorState thing="what's new in the group" />
+                  ) : home.newTiles.length === 0 ? (
+                    <AddAction href={href("/settings/announcements/new")} label="Add announcement" />
+                  ) : (
+                    <ul className="space-y-3">
+                      {home.newTiles.map((tile) => (
+                        <li key={tile.key}>
+                          <Tile tile={tile} timeZone={timeZone} now={now} />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              )}
+
+              {showPrayer && (
+                <section>
+                  <SectionHeading
+                    title="Prayer"
+                    link={{ href: href("/prayer"), label: "All requests" }}
+                  />
+                  {home.prayerFailed ? (
+                    <ErrorState thing="prayer requests" />
+                  ) : (
+                    home.prayer && (
+                      <ul>
+                        <li>
+                          <HomePrayerCard request={home.prayer} userId={user.id} groupId={group.id} />
+                        </li>
+                      </ul>
+                    )
+                  )}
+                </section>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </PageContainer>
   );
+}
+
+/** A group with nothing at all: the empty states, and for a leader the way to add the first thing. */
+function NothingYet({ isLeader, href }: { isLeader: boolean; href: (path: string) => string }) {
+  return (
+    <div className="space-y-12">
+      <EmptyState
+        icon={Calendar}
+        message="No upcoming events."
+        action={
+          isLeader && (
+            <Link href={href("/calendar/new")} className={buttonVariants()}>
+              <Plus aria-hidden="true" />
+              Add event
+            </Link>
+          )
+        }
+      />
+      <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1.3fr_1fr] lg:gap-8">
+        <section>
+          <SectionHeading
+            title="Announcements"
+            link={{ href: href("/announcements"), label: "All announcements" }}
+          />
+          <EmptyState
+            icon={Megaphone}
+            message="No announcements yet."
+            action={
+              isLeader && (
+                <Link href={href("/settings/announcements/new")} className={buttonVariants()}>
+                  <Plus aria-hidden="true" />
+                  Add announcement
+                </Link>
+              )
+            }
+          />
+        </section>
+        <section>
+          <SectionHeading title="Prayer" link={{ href: href("/prayer"), label: "All requests" }} />
+          <EmptyState icon={HeartHandshake} message="No prayer requests yet." />
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function NoticeCard({ notice }: { notice: HomeNotice }) {
+  const Icon = notice.kind === "skipped" ? CalendarX : MapPin;
+  return (
+    <Link
+      href={notice.href}
+      className="flex min-h-11 gap-3 rounded-2xl bg-brand-accent/25 p-4 transition-colors hover:bg-brand-accent/35"
+    >
+      <Icon className="mt-0.5 h-6 w-6 shrink-0 text-brand-accent-text" aria-hidden="true" />
+      <span className="min-w-0">
+        <span className="block font-serif text-xl font-medium leading-snug tracking-tight text-foreground">
+          {notice.title}
+        </span>
+        {notice.detail && (
+          <span className="mt-0.5 block font-sans text-base text-foreground">{notice.detail}</span>
+        )}
+      </span>
+    </Link>
+  );
+}
+
+const TODO_ICONS: Record<TodoRow["kind"], LucideIcon> = {
+  join: UserPlus,
+  serving: HandHeart,
+  announcement: Megaphone,
+};
+
+function TodoSection({ rows }: { rows: TodoRow[] }) {
+  return (
+    <section>
+      <SectionHeading title="To do" />
+      <ul className={cn(CARD, "p-1")}>
+        {rows.map((row) => {
+          const Icon = TODO_ICONS[row.kind];
+          return (
+            <li key={row.key}>
+              <Link href={row.href} className={ROW}>
+                <Icon className="mx-3 h-6 w-6 shrink-0 text-brand-primary-text" aria-hidden="true" />
+                <RowText title={row.title} detail={row.detail} />
+                <RowChevron />
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+/** The ask, or once the viewer is on a date in the window, a plain card without the Clay button. */
+function ServingAsk({ card }: { card: ServingCard }) {
+  if (card.signedUp) {
+    return (
+      <section className={cn(CARD, "p-4")}>
+        <h2 className={TILE_TITLE}>{card.title}</h2>
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-x-4">
+          <p className="flex items-center gap-2 font-sans text-base font-semibold text-foreground">
+            <CircleCheck className="h-5 w-5 shrink-0 text-brand-success" aria-hidden="true" />
+            You&apos;re signed up
+          </p>
+          <Link
+            href={card.href}
+            className="inline-flex min-h-11 items-center font-sans text-base font-semibold text-brand-primary-text hover:underline"
+          >
+            See open dates
+          </Link>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section className="flex flex-col gap-4 rounded-2xl bg-brand-warm p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <h2 className="font-serif text-2xl font-medium leading-snug tracking-tight text-foreground">
+          {card.title}
+        </h2>
+        <p className="mt-1 font-sans text-base text-muted-foreground">{card.detail}</p>
+      </div>
+      <Link href={card.href} className={cn(buttonVariants({ size: "lg" }), "w-full sm:w-auto")}>
+        See open dates
+      </Link>
+    </section>
+  );
+}
+
+function ThisWeek({
+  home,
+  userId,
+  isLeader,
+  href,
+}: {
+  home: GroupHome;
+  userId: string;
+  isLeader: boolean;
+  href: (path: string) => string;
+}) {
+  const rows = home.weekRows ?? [];
+  const celebrations = home.celebrations ?? [];
+  const hasRows = rows.length > 0 || celebrations.length > 0;
+  const nothingFailed = home.weekRows !== null && home.celebrations !== null;
+
+  return (
+    <section className="min-w-0 space-y-3">
+      <SectionHeading title="This week" link={{ href: href("/calendar"), label: "Calendar" }} />
+      {home.weekRows === null && <ErrorState thing="this week's events" />}
+      {home.celebrations === null && <ErrorState thing="birthdays and anniversaries" />}
+      {hasRows && (
+        <ul className={cn(CARD, "p-1")}>
+          {rows.map((row) => (
+            <WeekListRow key={row.key} row={row} userId={userId} />
+          ))}
+          {celebrations.map((row) => (
+            <CelebrationListRow key={row.kind} row={row} />
+          ))}
+        </ul>
+      )}
+      {!hasRows && nothingFailed && isLeader && (
+        <AddAction href={href("/calendar/new")} label="Add event" />
+      )}
+    </section>
+  );
+}
+
+function WeekListRow({ row, userId }: { row: WeekRow; userId: string }) {
+  return (
+    <li>
+      <Link href={row.href} className={ROW}>
+        <span className="flex w-12 shrink-0 flex-col items-center leading-tight">
+          <span className="font-sans text-sm font-semibold text-muted-foreground">{row.weekday}</span>
+          <span className="font-serif text-2xl font-medium text-foreground">{row.day}</span>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className={cn(ROW_TITLE, "block")}>{row.title}</span>
+          <span className={cn(ROW_DETAIL, "block")}>
+            {[row.time, row.place].filter(Boolean).join(" · ")}
+            {row.time && row.serving && " · "}
+            {row.serving && (
+              <span className="font-semibold text-brand-accent-text">You&apos;re serving</span>
+            )}
+          </span>
+        </span>
+        <RowChevron />
+      </Link>
+      {row.reply && (
+        <div className="px-3 pb-3 pl-[4.5rem]">
+          <RsvpControl
+            eventId={row.reply.eventId}
+            userId={userId}
+            currentStatus={row.reply.status}
+            tone="quiet"
+          />
+        </div>
+      )}
+    </li>
+  );
+}
+
+function CelebrationListRow({ row }: { row: CelebrationRow }) {
+  const Icon = row.kind === "birthday" ? Cake : Heart;
+  return (
+    <li>
+      <Link href={row.href} className={ROW}>
+        <span className="flex w-12 shrink-0 justify-center">
+          <Icon className="h-6 w-6 text-brand-primary-text" aria-hidden="true" />
+        </span>
+        <RowText title={row.title} detail={row.names} />
+        <RowChevron />
+      </Link>
+    </li>
+  );
+}
+
+function Tile({ tile, timeZone, now }: { tile: NewTile; timeZone: string; now: Date }) {
+  const age = tileAge(tile.at, timeZone, now);
+  const shell = cn(CARD, "block p-4 transition-colors hover:bg-muted");
+
+  switch (tile.kind) {
+    case "lesson":
+      return (
+        <Link href={tile.href} className={cn(shell, "flex items-center gap-4")}>
+          <span className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-brand-warm">
+            {tile.thumbnail ? (
+              // eslint-disable-next-line @next/next/no-img-element -- Lesson thumbnails can be arbitrary stored URLs.
+              <img src={tile.thumbnail} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <Play className="h-7 w-7 text-brand-primary-text" aria-hidden="true" />
+            )}
+          </span>
+          <span className="min-w-0">
+            <span className={cn(EYEBROW, "block")}>Lesson</span>
+            <span className={cn(TILE_TITLE, "block")}>{tile.title}</span>
+            {tile.detail && <span className={cn(ROW_DETAIL, "block")}>{tile.detail}</span>}
+          </span>
+        </Link>
+      );
+    case "announcement":
+      return (
+        <Link href={tile.href} className={shell}>
+          <span className={cn(EYEBROW, "block")}>Announcement · {age}</span>
+          <span className={cn(TILE_TITLE, "block")}>{tile.title}</span>
+          {tile.text && (
+            <span className="mt-0.5 line-clamp-2 hidden font-sans text-base text-muted-foreground lg:block">
+              {tile.text}
+            </span>
+          )}
+        </Link>
+      );
+    case "prayer":
+      return (
+        <Link href={tile.href} className={shell}>
+          <span className={cn(EYEBROW, "flex items-center gap-1.5")}>
+            <CircleCheck className="h-4 w-4 shrink-0 text-brand-success" aria-hidden="true" />
+            Prayer answered · {age}
+          </span>
+          <span className={cn(TILE_TITLE, "line-clamp-2")}>{tile.body}</span>
+          {tile.name && <span className={cn(ROW_DETAIL, "block")}>{tile.name}</span>}
+        </Link>
+      );
+    case "joined":
+      return (
+        <Link href={tile.href} className={shell}>
+          <span className={cn(EYEBROW, "block")}>New to the group · {age}</span>
+          <span className={cn(TILE_TITLE, "block")}>{tile.names} joined</span>
+        </Link>
+      );
+  }
+}
+
+function AddAction({ href, label }: { href: string; label: string }) {
+  return (
+    <Link href={href} className={buttonVariants({ variant: "outline" })}>
+      <Plus aria-hidden="true" />
+      {label}
+    </Link>
+  );
+}
+
+function RowText({ title, detail }: { title: string; detail: string }) {
+  return (
+    <span className="min-w-0 flex-1">
+      <span className={cn(ROW_TITLE, "block")}>{title}</span>
+      <span className={cn(ROW_DETAIL, "block")}>{detail}</span>
+    </span>
+  );
+}
+
+function RowChevron() {
+  return <ChevronRight className="h-5 w-5 shrink-0 text-brand-primary-text" aria-hidden="true" />;
 }
 
 function SectionHeading({ title, link }: { title: string; link?: { href: string; label: string } }) {

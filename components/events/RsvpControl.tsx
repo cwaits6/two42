@@ -15,8 +15,8 @@ interface RsvpControlProps {
   eventId: string;
   userId: string;
   currentStatus: RsvpStatus | null;
-  /** `primary` sits on a Clay fill (the Home hero, the event card); `default` on a light card. */
-  tone?: "default" | "primary";
+  /** `primary` sits on a Clay fill (the event card); `default` on a light card; `quiet` on a light card that keeps its Clay for something else. */
+  tone?: "default" | "primary" | "quiet";
 }
 
 const TONES = {
@@ -29,6 +29,11 @@ const TONES = {
     chosen: "border-brand-accent bg-brand-accent text-foreground",
     open: "border-white/60 bg-transparent text-white hover:bg-white/15",
     error: "font-semibold text-white",
+  },
+  quiet: {
+    chosen: "border-brand-primary-text bg-brand-warm text-brand-primary-text",
+    open: "border-border bg-card text-foreground hover:bg-muted",
+    error: "text-destructive",
   },
 } as const;
 

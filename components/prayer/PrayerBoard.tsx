@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { failureMessage } from "@/lib/errorCopy";
 import { prayerAuthorLabel } from "@/lib/prayer";
 import { PrayerCard } from "@/components/prayer/PrayerCard";
+import { savePrayerResponse } from "@/components/prayer/savePrayerResponse";
 import { PrayerComposer } from "@/components/prayer/PrayerComposer";
 import { PrayerCallCard, type PrayerCall } from "@/components/prayer/PrayerCallCard";
 import { EmptyState } from "@/components/states/EmptyState";
@@ -96,22 +97,17 @@ export function PrayerBoard({
   const handlePray = async (row: PrayerWallRow) => {
     if (prayPending.has(row.id)) return;
     setPrayPending((prev) => new Set(prev).add(row.id));
-    const supabase = createClient();
     const praying = !row.i_am_praying;
     patchRequest(row.id, {
       i_am_praying: praying,
       praying_count: row.praying_count + (praying ? 1 : -1),
     });
-    const { error } = praying
-      ? await supabase
-          .from("prayer_responses")
-          .insert({ request_id: row.id, profile_id: me.id, group_id: group.id })
-      : await supabase
-          .from("prayer_responses")
-          .delete()
-          .eq("request_id", row.id)
-          .eq("group_id", group.id)
-          .eq("profile_id", me.id);
+    const { error } = await savePrayerResponse({
+      requestId: row.id,
+      profileId: me.id,
+      groupId: group.id,
+      praying,
+    });
     if (error) {
       patchRequest(row.id, {
         i_am_praying: row.i_am_praying,
