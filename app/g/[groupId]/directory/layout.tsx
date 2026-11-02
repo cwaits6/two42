@@ -4,7 +4,9 @@ import { getRequestBranding } from "@/lib/branding";
 import { getDirectoryVisibility } from "@/lib/directory/visibility";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
+import { todayIn } from "@/lib/serving/dates";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { getOrgTimeZone } from "@/lib/time/orgZone";
 
 // The group-level entry to the one directory: opens at "This group".
 export default async function GroupDirectoryLayout({
@@ -18,7 +20,11 @@ export default async function GroupDirectoryLayout({
   const user = await getOptionalUser();
   if (!user) redirect("/login");
   const group = await requireActiveGroup(groupId);
-  const [branding, visibility] = await Promise.all([getRequestBranding(), getDirectoryVisibility()]);
+  const [branding, visibility, timeZone] = await Promise.all([
+    getRequestBranding(),
+    getDirectoryVisibility(),
+    getOrgTimeZone(),
+  ]);
 
   return (
     <DirectoryShell
@@ -27,6 +33,7 @@ export default async function GroupDirectoryLayout({
       orgVisible={visibility === "org"}
       basePath={groupPath(group.id, "/directory")}
       currentUserId={user.id}
+      today={todayIn(timeZone)}
     >
       {children}
     </DirectoryShell>

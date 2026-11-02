@@ -1,0 +1,95 @@
+"use client";
+
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import type { ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
+import { DirSection } from "@/components/directory/DirRow";
+import {
+  celebrationSections,
+  isThisWeek,
+  parseWhen,
+  type CelebrationWhen,
+} from "@/components/directory/celebrations";
+import { useDirectory } from "@/components/directory/DirectoryContext";
+import { EmptyState } from "@/components/states/EmptyState";
+import { Button } from "@/components/ui/button";
+import { SegmentedLinks } from "@/components/ui/segmented";
+
+const EMPTY_LINK: Partial<Record<CelebrationWhen, { query: string; label: string }>> = {
+  week: { query: "?when=month", label: "Show this month" },
+  month: { query: "", label: "Show all" },
+};
+
+const EMPTY_SUFFIX: Record<CelebrationWhen, string> = {
+  week: "this week.",
+  month: "this month.",
+  all: "on record yet.",
+};
+
+/**
+ * The This week / This month / All filter and the rows it selects, for a tab
+ * whose rows recur on a date. The choice lives in the URL, so Back keeps it.
+ */
+export function CelebrationList<T extends { key: string; month: number; day: number }>({
+  path,
+  noun,
+  icon,
+  entries,
+  renderRow,
+}: {
+  /** The tab's path under the directory's base path */
+  path: string;
+  /** Plural, lower case: "birthdays" */
+  noun: string;
+  icon: LucideIcon;
+  entries: readonly T[];
+  /** `soon` is true only where a row itself has to say a date is close: the headings of the other filters already do. */
+  renderRow: (entry: T, soon: boolean) => ReactNode;
+}) {
+  const { basePath, today } = useDirectory();
+  const when = parseWhen(useSearchParams().get("when"));
+  const href = `${basePath}${path}`;
+  const sections = celebrationSections(entries, when, today);
+  const emptyLink = EMPTY_LINK[when];
+
+  return (
+    <>
+      <SegmentedLinks
+        label={`Show ${noun} from`}
+        className="mb-7 flex w-full *:grow sm:w-fit"
+        options={[
+          { href: `${href}?when=week`, label: "This week", current: when === "week" },
+          { href: `${href}?when=month`, label: "This month", current: when === "month" },
+          { href, label: "All", current: when === "all" },
+        ]}
+      />
+
+      {sections.length === 0 ? (
+        <EmptyState
+          icon={icon}
+          message={`No ${noun} ${EMPTY_SUFFIX[when]}`}
+          action={
+            emptyLink && (
+              <Button
+                nativeButton={false}
+                variant="outline"
+                render={<Link href={`${href}${emptyLink.query}`} />}
+              >
+                {emptyLink.label}
+              </Button>
+            )
+          }
+        />
+      ) : (
+        sections.map((section) => (
+          <DirSection key={section.label} label={section.label}>
+            {section.entries.map((entry) =>
+              renderRow(entry, when === "all" && isThisWeek(entry.month, entry.day, today)),
+            )}
+          </DirSection>
+        ))
+      )}
+    </>
+  );
+}
