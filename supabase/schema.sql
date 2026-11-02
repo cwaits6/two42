@@ -1178,6 +1178,28 @@ $$;
 ALTER FUNCTION "public"."is_platform_admin"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."is_serving_signup_attendee"("_signup_id" "uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select exists (
+    select 1 from public.serving_signup_attendees a
+    join public.profiles p on p.id = a.profile_id and p.org_id = a.org_id
+    where a.signup_id = _signup_id
+      and a.profile_id = auth.uid()
+      and a.org_id = public.app_current_org_id()
+      and p.role <> 'pending'
+  );
+$$;
+
+
+ALTER FUNCTION "public"."is_serving_signup_attendee"("_signup_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."is_serving_signup_attendee"("_signup_id" "uuid") IS 'True when the caller (auth.uid()) is a non-pending person listed on the given serving signup in their own org. Caller resolved from auth.uid() only.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."is_team_lead"("_team_id" "uuid") RETURNS boolean
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO ''
@@ -5026,7 +5048,7 @@ CREATE POLICY "Org readable within request org" ON "public"."organizations" FOR 
 
 
 
-CREATE POLICY "Owners, team leads and group leaders can delete serving signups" ON "public"."serving_signups" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("created_by" = ( SELECT "auth"."uid"() AS "uid")) OR "public"."is_team_lead"("team_id") OR (EXISTS ( SELECT 1
+CREATE POLICY "Owners, attendees, team leads and group leaders can delete serv" ON "public"."serving_signups" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("created_by" = ( SELECT "auth"."uid"() AS "uid")) OR "public"."is_serving_signup_attendee"("id") OR "public"."is_team_lead"("team_id") OR (EXISTS ( SELECT 1
    FROM "public"."teams" "t"
   WHERE (("t"."id" = "serving_signups"."team_id") AND ("t"."org_id" = "serving_signups"."org_id") AND "public"."is_group_leader"("t"."group_id")))))));
 
@@ -5560,6 +5582,12 @@ GRANT ALL ON FUNCTION "public"."is_member"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."is_platform_admin"() TO "anon";
 GRANT ALL ON FUNCTION "public"."is_platform_admin"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."is_platform_admin"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."is_serving_signup_attendee"("_signup_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."is_serving_signup_attendee"("_signup_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_serving_signup_attendee"("_signup_id" "uuid") TO "service_role";
 
 
 
