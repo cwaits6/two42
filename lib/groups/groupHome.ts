@@ -24,7 +24,7 @@ import type {
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
 export const NEW_WINDOW_MS = 14 * DAY_MS;
-/** Reaches back past today so an occurrence that started earlier can still hold the join panel. */
+/** How far back the events read reaches, so an occurrence already under way can hold the join panel. */
 export const EVENTS_LOOKBACK_MS = DAY_MS;
 const MAX_NEW_TILES = 3;
 const MAX_SERVING_CARDS = 2;
