@@ -35,6 +35,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { toast } from "sonner";
 import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
 import { Pencil, Plus, User, UserPlus, Users } from "lucide-react";
+import { DirectoryNotice } from "@/components/profile/DirectoryNotice";
 import { EmptyState } from "@/components/states/EmptyState";
 import { AnniversaryFields } from "@/components/profile/AnniversaryFields";
 import { anniversaryErrors, type AnniversaryErrors } from "@/components/profile/birthday";
@@ -345,6 +346,7 @@ export function HouseholdClient({
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSaveInfo} className="space-y-4">
+            <DirectoryNotice />
             <div className="space-y-2">
               <Label htmlFor="family_name" className="text-base">
                 Household name
@@ -364,7 +366,10 @@ export function HouseholdClient({
             <Separator />
 
             <div className="space-y-2">
-              <Label htmlFor="address_line1" className="text-base">Street address</Label>
+              <Label htmlFor="address_line1" className="text-base">
+                Street address{" "}
+                <span className="text-muted-foreground font-normal">(optional)</span>
+              </Label>
               <Input
                 id="address_line1"
                 value={info.address_line1}
@@ -396,7 +401,10 @@ export function HouseholdClient({
 
             <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
               <div className="sm:col-span-3 space-y-2">
-                <Label htmlFor="city" className="text-base">City</Label>
+                <Label htmlFor="city" className="text-base">
+                  City{" "}
+                  <span className="text-muted-foreground font-normal">(optional)</span>
+                </Label>
                 <Input
                   id="city"
                   value={info.city}
@@ -408,7 +416,10 @@ export function HouseholdClient({
                 />
               </div>
               <div className="sm:col-span-1 space-y-2">
-                <Label htmlFor="state" className="text-base">State</Label>
+                <Label htmlFor="state" className="text-base">
+                  State{" "}
+                  <span className="text-muted-foreground font-normal">(optional)</span>
+                </Label>
                 <Input
                   id="state"
                   value={info.state}
@@ -419,7 +430,10 @@ export function HouseholdClient({
                 />
               </div>
               <div className="sm:col-span-2 space-y-2">
-                <Label htmlFor="postal_code" className="text-base">ZIP</Label>
+                <Label htmlFor="postal_code" className="text-base">
+                  ZIP{" "}
+                  <span className="text-muted-foreground font-normal">(optional)</span>
+                </Label>
                 <Input
                   id="postal_code"
                   value={info.postal_code}

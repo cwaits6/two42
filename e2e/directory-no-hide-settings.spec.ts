@@ -88,6 +88,7 @@ test.describe("what a spouse and a church admin can set", () => {
 
       await householdTab(page);
       await expect(page.getByLabel("Household name")).toBeVisible();
+      await expect(page.getByText(NOTICE)).toBeVisible();
       expect(await hideSettings(page)).toEqual([]);
       await expect(page.getByText("Privacy", { exact: true })).toHaveCount(0);
 

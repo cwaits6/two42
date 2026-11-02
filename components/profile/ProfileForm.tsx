@@ -676,7 +676,7 @@ export function ProfileForm({
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-6">
                 <div className="space-y-2 sm:col-span-3">
                   <Label htmlFor="city" className="text-base">
-                    City
+                    City <Optional />
                   </Label>
                   <Input
                     id="city"
@@ -690,7 +690,7 @@ export function ProfileForm({
                 </div>
                 <div className="space-y-2 sm:col-span-1">
                   <Label htmlFor="state" className="text-base">
-                    State
+                    State <Optional />
                   </Label>
                   <Input
                     id="state"
@@ -707,7 +707,7 @@ export function ProfileForm({
                 </div>
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="postal_code" className="text-base">
-                    ZIP
+                    ZIP <Optional />
                   </Label>
                   <Input
                     id="postal_code"
