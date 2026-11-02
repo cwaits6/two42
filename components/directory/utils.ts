@@ -51,6 +51,12 @@ export function downloadVCard(profileId: string) {
   window.location.href = `/api/members/${profileId}/vcard`;
 }
 
+/** Local midnight of a "YYYY-MM-DD" date, so the helpers below count whole calendar days in any runtime zone */
+export function calendarDate(date: string): Date {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 /** Days until the next occurrence of a recurring month/day date */
 export function daysUntilNextOccurrence(month: number, day: number, today: Date): number {
   return Math.round(
@@ -58,16 +64,32 @@ export function daysUntilNextOccurrence(month: number, day: number, today: Date)
   );
 }
 
-/** The next calendar date a recurring month/day date falls on */
-export function nextOccurrence(month: number, day: number, today: Date): Date {
-  const year = today.getFullYear();
-  const thisYear = new Date(year, month - 1, day);
-  return thisYear >= today ? thisYear : new Date(year + 1, month - 1, day);
+/** The calendar date a recurring month/day date falls on this year, passed or not */
+export function occurrenceThisYear(month: number, day: number, today: Date): Date {
+  return new Date(today.getFullYear(), month - 1, day);
 }
 
-/** "Friday, July 11" — weekday and date of the next occurrence */
-export function formatNextOccurrence(month: number, day: number, today: Date): string {
-  return nextOccurrence(month, day, today).toLocaleDateString("en-US", {
+/** The next calendar date a recurring month/day date falls on */
+export function nextOccurrence(month: number, day: number, today: Date): Date {
+  const thisYear = occurrenceThisYear(month, day, today);
+  return thisYear >= today ? thisYear : new Date(today.getFullYear() + 1, month - 1, day);
+}
+
+/** Whether a recurring month/day date falls in today's calendar month this year */
+export function isInCurrentMonth(month: number, day: number, today: Date): boolean {
+  return occurrenceThisYear(month, day, today).getMonth() === today.getMonth();
+}
+
+/**
+ * "Friday, July 11" — a date in the current month keeps this year's weekday
+ * even once it has passed, because the row sits in this month's list. Any
+ * other date shows its next occurrence.
+ */
+export function formatOccurrence(month: number, day: number, today: Date): string {
+  const date = isInCurrentMonth(month, day, today)
+    ? occurrenceThisYear(month, day, today)
+    : nextOccurrence(month, day, today);
+  return date.toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",

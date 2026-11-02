@@ -12,6 +12,7 @@ import {
   type ScopeOption,
 } from "@/components/directory/scope";
 import { useDirectoryData } from "@/components/directory/useDirectoryData";
+import { calendarDate } from "@/components/directory/utils";
 import type { ActiveGroup } from "@/lib/groups/active";
 import type { DirectoryProfile, FamilyDirectoryFull } from "@/lib/types";
 
@@ -33,6 +34,8 @@ export interface DirectoryContextValue {
   orgName: string;
   basePath: string;
   currentUserId: string;
+  /** Local midnight of the church's calendar date, never the browser's. */
+  today: Date;
   loading: boolean;
   error: boolean;
   reload: () => void;
@@ -46,6 +49,8 @@ export interface DirectoryProviderProps {
   orgVisible: boolean;
   basePath: string;
   currentUserId: string;
+  /** The church's calendar date, "YYYY-MM-DD", read by the layout in the org's time zone. */
+  today: string;
   children: ReactNode;
 }
 
@@ -60,8 +65,10 @@ export function DirectoryProvider({
   orgVisible,
   basePath,
   currentUserId,
+  today,
   children,
 }: DirectoryProviderProps) {
+  const churchToday = useMemo(() => calendarDate(today), [today]);
   const memberships = useGroupMemberships();
   const membershipIds = useMemo(() => memberships.map((g) => g.id), [memberships]);
   const data = useDirectoryData(membershipIds);
@@ -101,6 +108,7 @@ export function DirectoryProvider({
     orgName,
     basePath,
     currentUserId,
+    today: churchToday,
     loading: data.loading,
     error: data.error,
     reload: data.reload,

@@ -22,8 +22,8 @@ export function ScopeControl() {
   if (!showControl || onGroupsTab) return null;
 
   return (
-    <div className="mb-7 flex flex-wrap items-center gap-3">
-      <Label htmlFor="directory-scope" className="text-base text-muted-foreground">
+    <div className="mb-4 flex items-center gap-3">
+      <Label htmlFor="directory-scope" className="shrink-0 whitespace-nowrap text-base text-muted-foreground">
         Show people from
       </Label>
       <Select
@@ -34,7 +34,7 @@ export function ScopeControl() {
           if (next) setScope(next.scope);
         }}
       >
-        <SelectTrigger id="directory-scope" className="min-w-56 text-base">
+        <SelectTrigger id="directory-scope" className="w-auto min-w-0 flex-1 text-base sm:min-w-56 sm:flex-none">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
