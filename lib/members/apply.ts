@@ -156,7 +156,7 @@ export async function applyWrites(
         case "insert_family_unit": {
           const { data, error } = await supabase
             .from("family_units")
-            .insert({ family_name: write.values.family_name, org_id: orgId })
+            .insert({ ...write.values, org_id: orgId })
             .select("id")
             .single();
           if (error || !data) {
@@ -164,6 +164,16 @@ export async function applyWrites(
             break;
           }
           familyIdByKey.set(write.householdKey, data.id);
+          break;
+        }
+        case "update_family_unit": {
+          const { data, error } = await supabase
+            .from("family_units")
+            .update(write.values)
+            .eq("id", write.id)
+            .eq("org_id", orgId)
+            .select("id");
+          failure = error ?? noRowsTouched(data, "update_family_unit");
           break;
         }
         case "insert_family_member": {

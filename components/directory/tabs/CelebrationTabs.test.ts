@@ -34,7 +34,9 @@ const couple = (id: string, family_name: string, anniversary: string) =>
   ({
     id,
     family_name,
-    anniversary,
+    anniversary_year: anniversary.length > 5 ? Number(anniversary.slice(0, 4)) : null,
+    anniversary_month: Number(anniversary.slice(-5, -3)),
+    anniversary_day: Number(anniversary.slice(-2)),
     photo_url: null,
     members: [
       { id: `${id}-a`, relationship: "primary", first_name: "Frank", preferred_name: null },
@@ -236,6 +238,14 @@ describe("AnniversariesTab", () => {
     expect(html).toContain("Married 2004");
     expect(html).not.toContain("· married");
     expect(html).toContain("22 years");
+  });
+
+  it("leaves out Married and the count for a couple with no year", () => {
+    provide([], [couple("yearless", "Bell", "11-05")]);
+    const html = render(null, AnniversariesTab);
+    expect(html).toContain("Thursday, November 5");
+    expect(html).not.toContain("Married");
+    expect(html).not.toContain("years");
   });
 
   it("drops the pill on this month, under the headings", () => {

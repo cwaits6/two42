@@ -16,6 +16,7 @@ import {
   serializeCsv,
   unguardCell,
 } from "@/lib/members/csv";
+import { anniversaryErrors } from "@/components/profile/birthday";
 import type { OrgSnapshot, SnapshotProfile } from "@/lib/members/snapshot";
 
 /** Ordered header contract. Column order in an uploaded file is irrelevant;
@@ -63,7 +64,12 @@ export const REQUIRED_CSV_COLUMNS: readonly MemberCsvColumn[] = [
   "has_login",
 ];
 
-/** The nine hidden_fields tokens in canonical serialization order. */
+/**
+ * The hidden_fields tokens in canonical serialization order. Only `email` is a
+ * setting two42 keeps. Every other token stays accepted so older files and
+ * church management exports still parse, and means "don't store this row's
+ * value": see withoutHiddenValues.
+ */
 export const HIDDEN_FIELD_TOKENS = [
   "email",
   "phone_mobile",
@@ -78,18 +84,72 @@ export const HIDDEN_FIELD_TOKENS = [
 
 export type HiddenFieldToken = (typeof HIDDEN_FIELD_TOKENS)[number];
 
-/** Token → profiles.hide_* column. */
-export const HIDDEN_FIELD_COLUMNS = {
-  email: "hide_email",
-  phone_mobile: "hide_phone_mobile",
-  phone_home: "hide_phone_home",
-  phone_work: "hide_phone_work",
-  address: "hide_address",
-  birthday: "hide_birthday",
-  birth_year: "hide_birth_year",
-  anniversary: "hide_anniversary",
-  occupation: "hide_occupation",
-} as const satisfies Record<HiddenFieldToken, keyof SnapshotProfile>;
+type StringCell = {
+  [K in keyof MemberRow]: MemberRow[K] extends string | null ? K : never;
+}[keyof MemberRow];
+type NumberCell = "birth_month" | "birth_day" | "birth_year";
+
+/** The cells a token keeps out of the database. `email` has none: email stays stored. */
+const HIDDEN_FIELD_CELLS: Record<HiddenFieldToken, readonly (StringCell | NumberCell)[]> = {
+  email: [],
+  phone_mobile: ["phone_mobile"],
+  phone_home: ["phone_home"],
+  phone_work: ["phone_work"],
+  address: ["address_line1", "address_line2", "city", "state", "postal_code"],
+  birthday: ["birth_month", "birth_day", "birth_year"],
+  birth_year: ["birth_year"],
+  anniversary: ["anniversary"],
+  occupation: ["occupation", "employer"],
+};
+
+/**
+ * A row with the cells its hidden_fields marks blanked, and the tokens that
+ * blanked something. A blank cell means "not provided", so a value already
+ * stored stays as it is.
+ */
+export function withoutHiddenValues(row: MemberRow): {
+  row: MemberRow;
+  dropped: HiddenFieldToken[];
+} {
+  const stored = { ...row };
+  const dropped: HiddenFieldToken[] = [];
+  for (const token of row.hidden_fields) {
+    const cells = HIDDEN_FIELD_CELLS[token].filter((cell) => stored[cell] !== null);
+    if (cells.length === 0) continue;
+    dropped.push(token);
+    for (const cell of cells) Object.assign(stored, { [cell]: null });
+  }
+  return { row: stored, dropped };
+}
+
+export interface AnniversaryParts {
+  month: number;
+  day: number;
+  year: number | null;
+}
+
+const ANNIVERSARY_CELL = /^(?:(\d{4})-)?(\d{2})-(\d{2})$/;
+
+/**
+ * `YYYY-MM-DD` or `MM-DD`; null when the cell isn't one the household forms
+ * would accept, so an imported date can always be saved again there.
+ */
+export function parseAnniversaryCell(cell: string): AnniversaryParts | null {
+  const match = ANNIVERSARY_CELL.exec(cell);
+  if (match === null) return null;
+  const [, year, month, day] = match;
+  const errors = anniversaryErrors({ month, day, year: year ?? "" });
+  if (Object.keys(errors).length > 0) return null;
+  return { month: Number(month), day: Number(day), year: year === undefined ? null : Number(year) };
+}
+
+/** The household's anniversary as the file writes it. */
+export function anniversaryCell(family: OrgSnapshot["families"][number]): string | null {
+  const { anniversary_month: month, anniversary_day: day, anniversary_year: year } = family;
+  if (month === null || day === null) return null;
+  const monthDay = `${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  return year === null ? monthDay : `${year}-${monthDay}`;
+}
 
 /**
  * One data row of the file. Blank cells parse to null (strings/numbers/tri-
@@ -136,8 +196,8 @@ export interface MemberRow {
   employer: string | null;
   is_unlisted: boolean | null;
   email_announcements: boolean | null;
-  /** Canonical-order subset of HIDDEN_FIELD_TOKENS. Non-empty = the complete
-   *  set of hidden fields for this person; [] = not provided. */
+  /** Canonical-order subset of HIDDEN_FIELD_TOKENS. `email` hides the email;
+   *  the rest mark cells not to store. [] = not provided. */
   hidden_fields: HiddenFieldToken[];
   /** Team names. Non-empty = authoritative membership set; [] = not
    *  provided (no group changes). */
@@ -535,14 +595,16 @@ export function memberRowsFromSnapshot(snapshot: OrgSnapshot): MemberRow[] {
         city: p.city,
         state: p.state,
         postal_code: p.postal_code,
-        anniversary: p.anniversary,
+        // The anniversary lives on the household and belongs to the couple.
+        anniversary:
+          family !== null && (p.relationship === "primary" || p.relationship === "spouse")
+            ? anniversaryCell(family)
+            : null,
         occupation: p.occupation,
         employer: p.employer,
         is_unlisted: p.is_unlisted,
         email_announcements: p.email_announcements,
-        hidden_fields: HIDDEN_FIELD_TOKENS.filter(
-          (token) => p[HIDDEN_FIELD_COLUMNS[token]]
-        ),
+        hidden_fields: p.hide_email ? ["email"] : [],
         groups: groupList.map((g) => g.name),
         leads: groupList.filter((g) => g.isLeader).map((g) => g.name),
       });

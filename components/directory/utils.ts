@@ -9,13 +9,30 @@ export function formatBirthdayShort(month: number, day: number): string {
   return `${MONTH_NAMES[month - 1]} ${day}`;
 }
 
-export function formatAnniversary(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
+export function formatAnniversary(month: number, day: number, year: number | null): string {
+  const monthDay = formatBirthdayShort(month, day);
+  return year === null ? monthDay : `${monthDay}, ${year}`;
+}
+
+/** Whose number the household phone is: the spouse it points at, or the home's own. */
+export function householdPhoneLabel(
+  family: Pick<FamilyDirectoryFull, "phone_profile_id" | "members">,
+): string {
+  const owner = family.members.find((m) => m.id === family.phone_profile_id);
+  const name = owner?.preferred_name || owner?.first_name;
+  return name ? `${name}'s mobile` : "home";
+}
+
+/**
+ * On one person's card, a number pointing at them is the mobile line already shown,
+ * and a shared number gives way to their own home phone. A spouse's number is neither.
+ */
+export function showsHouseholdPhone(
+  profile: Pick<DirectoryProfile, "id" | "phone_home">,
+  family: Pick<FamilyDirectoryFull, "phone_profile_id">,
+): boolean {
+  if (family.phone_profile_id === profile.id) return false;
+  return Boolean(family.phone_profile_id) || !profile.phone_home;
 }
 
 export function relLabel(rel: string): string {

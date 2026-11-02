@@ -1,10 +1,5 @@
 import { normalizePhone, titleCaseName } from "@/lib/sanitize";
-import { birthdayErrors } from "@/components/profile/birthday";
-import {
-  type ContactVisibility,
-  UNREACHABLE_MESSAGE,
-  isReachable,
-} from "@/components/profile/reachability";
+import { anniversaryErrors, birthdayErrors, type DateParts } from "@/components/profile/birthday";
 
 /** Messages keyed by the id of the field they belong to, in the order the fields appear. */
 export type StepErrors = Record<string, string>;
@@ -27,10 +22,14 @@ export function aboutYouErrors(v: AboutYouFields): StepErrors {
   };
 }
 
-/** Setup applies the profile form's reachability rule, so setup can't save a profile the form would refuse. */
-export function contactErrors(v: ContactVisibility): StepErrors {
+export interface ContactFields {
+  phoneMobile: string;
+  phoneHome: string;
+  phoneWork: string;
+}
+
+export function contactErrors(v: ContactFields): StepErrors {
   const found: StepErrors = {};
-  if (!isReachable(v)) found.phone_mobile = UNREACHABLE_MESSAGE;
   if (v.phoneMobile && !normalizePhone(v.phoneMobile)) {
     found.phone_mobile = "Enter a valid phone number.";
   }
@@ -39,8 +38,10 @@ export function contactErrors(v: ContactVisibility): StepErrors {
   return found;
 }
 
-export function householdErrors(resolved: boolean): StepErrors {
-  return resolved ? {} : { household: "Find your household, or add a new one." };
+/** `anniversary` is the wizard's field set, present only while a spouse is being added. */
+export function householdErrors(resolved: boolean, anniversary?: DateParts): StepErrors {
+  if (!resolved) return { household: "Find your household, or add a new one." };
+  return anniversary ? anniversaryErrors(anniversary) : {};
 }
 
 export interface PersonDraft {

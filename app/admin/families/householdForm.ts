@@ -6,6 +6,7 @@ import {
   normalizePostalCode,
   normalizeState,
 } from "@/lib/sanitize";
+import { anniversaryColumns, anniversaryErrors } from "@/components/profile/birthday";
 
 export interface HouseholdFormState {
   family_name: string;
@@ -15,13 +16,23 @@ export interface HouseholdFormState {
   state: string;
   postal_code: string;
   phone_home: string;
-  anniversary: string;
-  hide_address: boolean;
-  hide_phone_home: boolean;
+  /** Kept or cleared here, never chosen: only that spouse can choose their own number. */
+  phone_profile_id: string | null;
+  anniversary_month: string;
+  anniversary_day: string;
+  anniversary_year: string;
 }
 
 /** In the form's order, so the first invalid field is the first one here. */
-export const HOUSEHOLD_FIELDS = ["family_name", "state", "postal_code", "phone_home"] as const;
+export const HOUSEHOLD_FIELDS = [
+  "family_name",
+  "state",
+  "postal_code",
+  "phone_home",
+  "anniversary_month",
+  "anniversary_day",
+  "anniversary_year",
+] as const;
 export type HouseholdField = (typeof HOUSEHOLD_FIELDS)[number];
 export type HouseholdErrors = Partial<Record<HouseholdField, string>>;
 
@@ -31,11 +42,18 @@ export function validateHousehold(form: HouseholdFormState) {
   const postal = form.postal_code ? normalizePostalCode(form.postal_code) : null;
   const phone = form.phone_home ? normalizePhone(form.phone_home) : null;
 
+  const anniversary = {
+    month: form.anniversary_month,
+    day: form.anniversary_day,
+    year: form.anniversary_year,
+  };
+
   const errors: HouseholdErrors = {};
   if (!familyName) errors.family_name = "Enter a household name.";
   if (form.state && !state) errors.state = "Enter a state, like TX.";
   if (form.postal_code && !postal) errors.postal_code = "Enter a ZIP code, like 78701.";
   if (form.phone_home && !phone) errors.phone_home = "Enter a 10-digit phone number.";
+  Object.assign(errors, anniversaryErrors(anniversary));
 
   return {
     errors,
@@ -47,9 +65,8 @@ export function validateHousehold(form: HouseholdFormState) {
       state,
       postal_code: postal,
       phone_home: phone,
-      anniversary: form.anniversary || null,
-      hide_address: form.hide_address,
-      hide_phone_home: form.hide_phone_home,
+      phone_profile_id: form.phone_profile_id,
+      ...anniversaryColumns(anniversary),
     },
   };
 }

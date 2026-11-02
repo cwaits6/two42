@@ -349,14 +349,14 @@ isOneToOne: false
                   ]
                 },"family_units": {
                   Row: {
-                    "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"city": string | null,"created_at": string,"family_name": string,"hide_address": boolean,"hide_phone_home": boolean,"id": string,"org_id": string,"phone_home": string | null,"photo_url": string | null,"postal_code": string | null,"state": string | null,"updated_at": string
+                    "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"anniversary_day": number | null,"anniversary_month": number | null,"anniversary_year": number | null,"city": string | null,"created_at": string,"family_name": string,"hide_address": boolean,"hide_phone_home": boolean,"id": string,"org_id": string,"phone_home": string | null,"phone_profile_id": string | null,"photo_url": string | null,"postal_code": string | null,"state": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "address_line1"?: string | null,"address_line2"?: string | null,"anniversary"?: string | null,"city"?: string | null,"created_at"?: string,"family_name": string,"hide_address"?: boolean,"hide_phone_home"?: boolean,"id"?: string,"org_id"?: string,"phone_home"?: string | null,"photo_url"?: string | null,"postal_code"?: string | null,"state"?: string | null,"updated_at"?: string
+                    "address_line1"?: string | null,"address_line2"?: string | null,"anniversary"?: string | null,"anniversary_day"?: number | null,"anniversary_month"?: number | null,"anniversary_year"?: number | null,"city"?: string | null,"created_at"?: string,"family_name": string,"hide_address"?: boolean,"hide_phone_home"?: boolean,"id"?: string,"org_id"?: string,"phone_home"?: string | null,"phone_profile_id"?: string | null,"photo_url"?: string | null,"postal_code"?: string | null,"state"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "address_line1"?: string | null,"address_line2"?: string | null,"anniversary"?: string | null,"city"?: string | null,"created_at"?: string,"family_name"?: string,"hide_address"?: boolean,"hide_phone_home"?: boolean,"id"?: string,"org_id"?: string,"phone_home"?: string | null,"photo_url"?: string | null,"postal_code"?: string | null,"state"?: string | null,"updated_at"?: string
+                    "address_line1"?: string | null,"address_line2"?: string | null,"anniversary"?: string | null,"anniversary_day"?: number | null,"anniversary_month"?: number | null,"anniversary_year"?: number | null,"city"?: string | null,"created_at"?: string,"family_name"?: string,"hide_address"?: boolean,"hide_phone_home"?: boolean,"id"?: string,"org_id"?: string,"phone_home"?: string | null,"phone_profile_id"?: string | null,"photo_url"?: string | null,"postal_code"?: string | null,"state"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -365,6 +365,18 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "organizations"
       referencedColumns: ["id"]
+    },{
+      foreignKeyName: "family_units_phone_profile_id_fkey"
+      columns: ["phone_profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "family_units_phone_profile_id_fkey"
+      columns: ["phone_profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
     }
                   ]
                 },"feedback": {
@@ -1438,10 +1450,10 @@ isOneToOne: false
                   }
                   ComputedFields: never
                   Insert: {
-                           "address_line1"?: never,"address_line2"?: never,"anniversary"?: string | null,"city"?: never,"created_at"?: string | null,"family_name"?: string | null,"id"?: string | null,"org_id"?: string | null,"phone_home"?: never,"photo_url"?: string | null,"postal_code"?: never,"state"?: never,"updated_at"?: string | null
+                           "address_line1"?: never,"address_line2"?: never,"anniversary"?: never,"city"?: never,"created_at"?: string | null,"family_name"?: string | null,"id"?: string | null,"org_id"?: string | null,"phone_home"?: never,"photo_url"?: string | null,"postal_code"?: never,"state"?: never,"updated_at"?: string | null
                          }
                         Update: {
-                           "address_line1"?: never,"address_line2"?: never,"anniversary"?: string | null,"city"?: never,"created_at"?: string | null,"family_name"?: string | null,"id"?: string | null,"org_id"?: string | null,"phone_home"?: never,"photo_url"?: string | null,"postal_code"?: never,"state"?: never,"updated_at"?: string | null
+                           "address_line1"?: never,"address_line2"?: never,"anniversary"?: never,"city"?: never,"created_at"?: string | null,"family_name"?: string | null,"id"?: string | null,"org_id"?: string | null,"phone_home"?: never,"photo_url"?: string | null,"postal_code"?: never,"state"?: never,"updated_at"?: string | null
                          }
                         Relationships: [
                     {
@@ -1454,14 +1466,14 @@ isOneToOne: false
                   ]
                 },"families_directory_full": {
                   Row: {
-                    "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"city": string | null,"created_at": string,"family_members_list": Json | null,"family_name": string,"id": string,"members": Json | null,"org_id": string,"phone_home": string | null,"photo_url": string | null,"postal_code": string | null,"state": string | null,"updated_at": string
+                    "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"anniversary_day": number | null,"anniversary_month": number | null,"anniversary_year": number | null,"city": string | null,"created_at": string,"family_members_list": Json | null,"family_name": string,"id": string,"members": Json | null,"org_id": string,"phone_home": string | null,"phone_profile_id": string | null,"photo_url": string | null,"postal_code": string | null,"state": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                           "address_line1"?: never,"address_line2"?: never,"anniversary"?: string | null,"city"?: never,"created_at"?: string | null,"family_members_list"?: never,"family_name"?: string | null,"id"?: string | null,"members"?: never,"org_id"?: string | null,"phone_home"?: never,"photo_url"?: string | null,"postal_code"?: never,"state"?: never,"updated_at"?: string | null
+                           "address_line1"?: never,"address_line2"?: never,"anniversary"?: never,"anniversary_day"?: never,"anniversary_month"?: never,"anniversary_year"?: never,"city"?: never,"created_at"?: string | null,"family_members_list"?: never,"family_name"?: string | null,"id"?: string | null,"members"?: never,"org_id"?: string | null,"phone_home"?: never,"phone_profile_id"?: string | null,"photo_url"?: string | null,"postal_code"?: never,"state"?: never,"updated_at"?: string | null
                          }
                         Update: {
-                           "address_line1"?: never,"address_line2"?: never,"anniversary"?: string | null,"city"?: never,"created_at"?: string | null,"family_members_list"?: never,"family_name"?: string | null,"id"?: string | null,"members"?: never,"org_id"?: string | null,"phone_home"?: never,"photo_url"?: string | null,"postal_code"?: never,"state"?: never,"updated_at"?: string | null
+                           "address_line1"?: never,"address_line2"?: never,"anniversary"?: never,"anniversary_day"?: never,"anniversary_month"?: never,"anniversary_year"?: never,"city"?: never,"created_at"?: string | null,"family_members_list"?: never,"family_name"?: string | null,"id"?: string | null,"members"?: never,"org_id"?: string | null,"phone_home"?: never,"phone_profile_id"?: string | null,"photo_url"?: string | null,"postal_code"?: never,"state"?: never,"updated_at"?: string | null
                          }
                         Relationships: [
                     {
@@ -1470,6 +1482,18 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "organizations"
       referencedColumns: ["id"]
+    },{
+      foreignKeyName: "family_units_phone_profile_id_fkey"
+      columns: ["phone_profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "family_units_phone_profile_id_fkey"
+      columns: ["phone_profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
     }
                   ]
                 },"prayer_wall": {
@@ -1536,6 +1560,9 @@ isOneToOne: false
 "current_family_id":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
+"directory_retire_hidden_values":
+{ Args: Record<PropertyKey, never>; Returns: Json
+                           },
 "discoverable_groups":
 { Args: Record<PropertyKey, never>; Returns: {
               "description": string,"id": string,"is_private": boolean,"join_policy": string,"member_count": number,"name": string,"request_status": string,"viewer_role": string
@@ -1543,6 +1570,9 @@ isOneToOne: false
                            },
 "email_quota_consume":
 { Args: { "_n": number,"_org_id": string }; Returns: boolean
+                           },
+"family_anniversary_hidden":
+{ Args: { "_family_id": string }; Returns: boolean
                            },
 "get_own_email":
 { Args: Record<PropertyKey, never>; Returns: string

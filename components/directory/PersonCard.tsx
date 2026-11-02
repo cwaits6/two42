@@ -21,6 +21,8 @@ import {
   formatBirthdayShort,
   relLabel,
   resolveAddress,
+  householdPhoneLabel,
+  showsHouseholdPhone,
 } from "@/components/directory/utils";
 import type { DirectoryProfile, FamilyDirectoryFull } from "@/lib/types";
 import type { ComponentType, ReactNode } from "react";
@@ -133,8 +135,8 @@ export function PersonCard({ profile, family }: PersonCardProps) {
             </a>
           </ContactLine>
         )}
-        {!profile.phone_home && family?.phone_home && (
-          <ContactLine icon={Home} kind="household">
+        {family?.phone_home && showsHouseholdPhone(profile, family) && (
+          <ContactLine icon={Home} kind={householdPhoneLabel(family)}>
             <a href={`tel:${family.phone_home}`} className={telLink}>
               {formatPhone(family.phone_home)}
             </a>

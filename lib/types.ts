@@ -27,20 +27,11 @@ export interface Profile {
   birth_month: number | null;
   birth_day: number | null;
   birth_year: number | null;
-  anniversary: string | null;
   occupation: string | null;
   employer: string | null;
   family_id: string | null;
   is_unlisted: boolean;
-  hide_phone_mobile: boolean;
-  hide_phone_home: boolean;
-  hide_phone_work: boolean;
   hide_email: boolean;
-  hide_address: boolean;
-  hide_birthday: boolean;
-  hide_anniversary: boolean;
-  hide_occupation: boolean;
-  hide_birth_year: boolean;
   relationship: FamilyMemberRelationship;
   email_announcements: boolean;
   setup_completed: boolean;
@@ -60,17 +51,18 @@ export interface FamilyUnit {
   state: string | null;
   postal_code: string | null;
   phone_home: string | null;
-  anniversary: string | null;
-  hide_address: boolean;
-  hide_phone_home: boolean;
+  /** The spouse whose mobile is the household phone; phone_home is null while set. */
+  phone_profile_id: string | null;
+  anniversary_month: number | null;
+  anniversary_day: number | null;
+  anniversary_year: number | null;
   created_at: string;
   updated_at: string;
 }
 
 /**
- * Directory projection of a profile with privacy flags applied — hidden
- * fields come back as null. Queried from the `profiles_directory` view.
- * Admins should query the raw `profiles` table to bypass privacy.
+ * Directory projection of a profile — a hidden email comes back as null.
+ * Queried from the `profiles_directory` view.
  */
 export interface DirectoryProfile {
   id: string;
@@ -94,26 +86,10 @@ export interface DirectoryProfile {
   birth_month: number | null;
   birth_day: number | null;
   birth_year: number | null;
-  anniversary: string | null;
   occupation: string | null;
   employer: string | null;
   groups: GroupChip[];
   created_at: string;
-}
-
-export interface DirectoryFamily {
-  id: string;
-  family_name: string;
-  photo_url: string | null;
-  address_line1: string | null;
-  address_line2: string | null;
-  city: string | null;
-  state: string | null;
-  postal_code: string | null;
-  phone_home: string | null;
-  anniversary: string | null;
-  created_at: string;
-  updated_at: string;
 }
 
 export interface AccessRequest {
@@ -376,7 +352,11 @@ export interface FamilyDirectoryFull {
   state: string | null;
   postal_code: string | null;
   phone_home: string | null;
-  anniversary: string | null;
+  /** The spouse whose mobile `phone_home` reads through; named in `members`. */
+  phone_profile_id: string | null;
+  anniversary_month: number | null;
+  anniversary_day: number | null;
+  anniversary_year: number | null;
   created_at: string;
   updated_at: string;
   members: HouseholdMember[];

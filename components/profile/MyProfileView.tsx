@@ -19,14 +19,12 @@ const eyebrow =
 export function MyProfileView({ profile, family }: MyProfileViewProps) {
   const router = useRouter();
 
-  // Summary line mirrors what the directory shows: hidden fields stay hidden.
-  const visiblePhone = profile.hide_phone_mobile ? null : profile.phone_mobile;
-  const visibleCity = !profile.hide_address && profile.city
+  const city = profile.city
     ? `${profile.city}${profile.state ? `, ${profile.state}` : ""}`
-    : family && !family.hide_address && family.city
+    : family?.city
       ? `${family.city}${family.state ? `, ${family.state}` : ""}`
       : null;
-  const summary = [visiblePhone && formatPhone(visiblePhone), visibleCity]
+  const summary = [profile.phone_mobile && formatPhone(profile.phone_mobile), city]
     .filter(Boolean)
     .join(" · ");
 

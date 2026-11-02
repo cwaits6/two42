@@ -43,20 +43,11 @@ const profile: Profile = {
   birth_month: 12,
   birth_day: 10,
   birth_year: null,
-  anniversary: null,
   occupation: null,
   employer: null,
   family_id: null,
   is_unlisted: false,
-  hide_phone_mobile: false,
-  hide_phone_home: false,
-  hide_phone_work: false,
   hide_email: false,
-  hide_address: false,
-  hide_birthday: false,
-  hide_anniversary: false,
-  hide_occupation: false,
-  hide_birth_year: false,
   relationship: "primary",
   email_announcements: true,
   setup_completed: true,
@@ -75,7 +66,7 @@ afterEach(async () => {
   document.body.innerHTML = "";
 });
 
-async function mount(overrides: Partial<Profile> = {}, props: { isAdmin?: boolean } = {}) {
+async function mount(overrides: Partial<Profile> = {}, props: { isAdmin?: boolean; editingOther?: boolean } = {}) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -182,6 +173,70 @@ describe("ProfileForm inline errors", () => {
     expect(form.field("first_name").hasAttribute("aria-invalid")).toBe(false);
     expect(form.message("first_name")).toBeUndefined();
     expect(form.field("postal_code").getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("saves with only a name and email, showing neither a phone nor the email", async () => {
+    const form = await mount({ birth_month: null, birth_day: null, hide_email: true });
+    await form.submit();
+
+    expect(document.querySelector('[aria-invalid="true"]')).toBeNull();
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ phone_mobile: null, hide_email: true }));
+  });
+
+  it("writes hide_email and no retired hide setting or anniversary", async () => {
+    const form = await mount();
+    await form.submit();
+
+    const payload = update.mock.calls[0][0] as Record<string, unknown>;
+    expect(Object.keys(payload).filter((key) => key.startsWith("hide_"))).toEqual(["hide_email"]);
+    expect(payload).not.toHaveProperty("anniversary");
+  });
+
+  it("offers no hide setting but the email one, with the notice above the fields", async () => {
+    await mount({ phone_home: "+15125550134", occupation: "Teacher", city: "Austin" });
+
+    const hideBoxes = [...document.querySelectorAll('input[type="checkbox"], button[role="checkbox"]')]
+      .map((box) => box.id)
+      .filter((id) => id.startsWith("hide_"));
+    expect(hideBoxes).toEqual(["hide_email"]);
+    expect(document.body.textContent).toContain(
+      "Everything you add here shows in the directory. Leave out anything you don't want shown.",
+    );
+  });
+
+  it("shows the notice to someone editing another household member, not to an admin", async () => {
+    await mount({}, { editingOther: true });
+    expect(document.body.textContent).toContain("Everything you add here shows in the directory.");
+    await act(async () => root.unmount());
+    document.body.innerHTML = "";
+
+    await mount({}, { isAdmin: true });
+    expect(document.body.textContent).not.toContain("Everything you add here shows in the directory.");
+  });
+
+  it("makes an admin enter an email", async () => {
+    const form = await mount({ email: "" }, { isAdmin: true });
+    await form.submit();
+
+    expect(form.message("email")).toBe("Enter an email address.");
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("doesn't ask a member for an email, which isn't theirs to edit here", async () => {
+    const form = await mount({ email: "" });
+    await form.submit();
+
+    expect(update).toHaveBeenCalledOnce();
+  });
+
+  it("resets a retired flag only for a number that replaced the hidden one", async () => {
+    const form = await mount({ phone_mobile: "+15125550100", phone_work: "+15125550111" });
+    await form.type("phone_mobile", "(512) 555-0199");
+    await form.submit();
+
+    const written = update.mock.calls[0][0];
+    expect(written.hide_phone_mobile).toBe(false);
+    expect(written).not.toHaveProperty("hide_phone_work");
   });
 
   it("saves when every field is valid", async () => {

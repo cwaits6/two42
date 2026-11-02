@@ -82,6 +82,26 @@ const ORG = "org-1";
 const USER = "user-1";
 
 describe("applyWrites — write routing", () => {
+  it("scopes a household anniversary update by id and org, and fails on no row", async () => {
+    const write: PlannedWrite = {
+      kind: "update_family_unit",
+      line: 2,
+      id: "f1",
+      values: { anniversary_month: 10, anniversary_day: 3, anniversary_year: null },
+    };
+    const { client, calls } = fakeClient();
+    expect((await applyWrites(client, USER, ORG, [write])).ok).toBe(true);
+    expect(calls[0]).toMatchObject({
+      table: "family_units",
+      op: "update",
+      payload: write.values,
+      filters: expect.arrayContaining([
+        ["id", "f1"],
+        ["org_id", ORG],
+      ]),
+    });
+  });
+
   it("inserts a household, then links its family member by the per-file key", async () => {
     // The familyIdByKey hand-off is the one place the plan's ORDERING is
     // load-bearing: the member insert has no family_id of its own.

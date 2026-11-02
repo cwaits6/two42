@@ -5,7 +5,7 @@ import { Heart, Home, MapPin } from "lucide-react";
 import { formatPhone } from "@/lib/sanitize";
 import { displayName, initials } from "@/lib/names";
 import { DirRow, PhoneText } from "@/components/directory/DirRow";
-import { formatAnniversary, relLabel } from "@/components/directory/utils";
+import { formatAnniversary, householdPhoneLabel, relLabel } from "@/components/directory/utils";
 import type {
   DirectoryProfile,
   FamilyDirectoryFull,
@@ -51,6 +51,8 @@ export function FamilyCard({ family, profileMap, onOpenPerson }: FamilyCardProps
   const hasSpouse =
     family.members.some((m) => m.relationship === "spouse") ||
     family.family_members_list.some((fm) => fm.relationship === "spouse");
+
+  const showAnniversary = !!(family.anniversary_month && family.anniversary_day && hasSpouse);
 
   const members = [...family.members].sort(
     (a, b) => relRank(a.relationship) - relRank(b.relationship),
@@ -105,7 +107,7 @@ export function FamilyCard({ family, profileMap, onOpenPerson }: FamilyCardProps
         ))}
       </div>
 
-      {(family.phone_home || family.address_line1 || (family.anniversary && hasSpouse)) && (
+      {(family.phone_home || family.address_line1 || showAnniversary) && (
         <div>
           {family.phone_home && (
             <div className="flex items-center gap-3 py-1.5">
@@ -116,7 +118,7 @@ export function FamilyCard({ family, profileMap, onOpenPerson }: FamilyCardProps
               >
                 {formatPhone(family.phone_home)}
               </a>
-              <span className="text-base text-muted-foreground">home</span>
+              <span className="text-base text-muted-foreground">{householdPhoneLabel(family)}</span>
             </div>
           )}
           {family.address_line1 && (
@@ -137,11 +139,12 @@ export function FamilyCard({ family, profileMap, onOpenPerson }: FamilyCardProps
               </span>
             </div>
           )}
-          {family.anniversary && hasSpouse && (
+          {showAnniversary && (
             <div className="flex items-center gap-3 py-1.5">
               <Heart className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
               <span className="text-base">
-                Anniversary — {formatAnniversary(family.anniversary)}
+                Anniversary —{" "}
+                {formatAnniversary(family.anniversary_month!, family.anniversary_day!, family.anniversary_year)}
               </span>
             </div>
           )}

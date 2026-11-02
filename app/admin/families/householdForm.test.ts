@@ -9,9 +9,10 @@ const form = (overrides: Partial<HouseholdFormState> = {}): HouseholdFormState =
   state: "",
   postal_code: "",
   phone_home: "",
-  anniversary: "",
-  hide_address: false,
-  hide_phone_home: false,
+  phone_profile_id: null,
+  anniversary_month: "",
+  anniversary_day: "",
+  anniversary_year: "",
   ...overrides,
 });
 
@@ -19,7 +20,7 @@ describe("validateHousehold", () => {
   it("accepts a household with only a name, leaving the rest empty", () => {
     const { errors, payload } = validateHousehold(form());
     expect(errors).toEqual({});
-    expect(payload).toMatchObject({ state: null, postal_code: null, phone_home: null, anniversary: null });
+    expect(payload).toMatchObject({ state: null, postal_code: null, phone_home: null, anniversary_month: null });
     expect(payload.family_name).toBeTruthy();
   });
 
@@ -41,5 +42,25 @@ describe("validateHousehold", () => {
     );
     expect(errors).toEqual({});
     expect(payload).toMatchObject({ state: "TX", postal_code: "78701-1234", phone_home: "+15125550134" });
+  });
+
+  it("takes an anniversary with no year, and refuses a month with no day", () => {
+    const yearless = validateHousehold(form({ anniversary_month: "10", anniversary_day: "3" }));
+    expect(yearless.errors).toEqual({});
+    expect(yearless.payload).toMatchObject({
+      anniversary_month: 10,
+      anniversary_day: 3,
+      anniversary_year: null,
+    });
+    expect(validateHousehold(form({ anniversary_month: "10" })).errors).toEqual({
+      anniversary_day: "Enter the day of the anniversary.",
+    });
+  });
+
+  it("writes no hide setting, and keeps or clears the phone choice it was given", () => {
+    const { payload } = validateHousehold(form({ phone_profile_id: "chloe" }));
+    expect(payload.phone_profile_id).toBe("chloe");
+    expect(Object.keys(payload).filter((key) => key.startsWith("hide_"))).toEqual([]);
+    expect(validateHousehold(form()).payload.phone_profile_id).toBeNull();
   });
 });

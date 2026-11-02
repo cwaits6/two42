@@ -27,8 +27,9 @@
  * already landed. Single invites and invite-bulk write that row through the
  * service client in lib/members/invite.ts instead.
  */
-import type { HiddenFieldToken, MemberRow } from "@/lib/members/format";
-import { HIDDEN_FIELD_COLUMNS, HIDDEN_FIELD_TOKENS } from "@/lib/members/format";
+import type { MemberRow } from "@/lib/members/format";
+import { anniversaryCell, parseAnniversaryCell, withoutHiddenValues } from "@/lib/members/format";
+import { retiredFlagResets } from "@/lib/members/retiredHideFlags";
 import type {
   OrgSnapshot,
   SnapshotFamilyMember,
@@ -98,7 +99,6 @@ export interface ProfileUpdateValues {
   city?: string;
   state?: string;
   postal_code?: string;
-  anniversary?: string;
   occupation?: string;
   employer?: string;
   is_unlisted?: boolean;
@@ -110,7 +110,6 @@ export interface ProfileUpdateValues {
   hide_address?: boolean;
   hide_birthday?: boolean;
   hide_birth_year?: boolean;
-  hide_anniversary?: boolean;
   hide_occupation?: boolean;
 }
 
@@ -131,13 +130,25 @@ export interface FamilyMemberUpdateValues {
   is_class_member?: boolean;
 }
 
+export interface HouseholdAnniversaryValues {
+  anniversary_month: number;
+  anniversary_day: number;
+  anniversary_year: number | null;
+}
+
 export type PlannedWrite =
   | {
       kind: "insert_family_unit";
       line: number;
       /** Per-file synthetic key — resolved to the inserted id at apply time. */
       householdKey: string;
-      values: { family_name: string };
+      values: { family_name: string } & Partial<HouseholdAnniversaryValues>;
+    }
+  | {
+      kind: "update_family_unit";
+      line: number;
+      id: string;
+      values: HouseholdAnniversaryValues;
     }
   | {
       kind: "insert_family_member";
@@ -187,8 +198,8 @@ export interface ImportPlan {
     householdsCreate: number;
     groupAssignments: number;
   };
-  /** Ordered, ready to apply: family_units inserts → family_members
-   *  inserts/updates → profiles updates → team_members changes. */
+  /** Ordered, ready to apply: family_units inserts and updates →
+   *  family_members inserts/updates → profiles updates → team_members changes. */
   writes: PlannedWrite[];
 }
 
@@ -212,24 +223,22 @@ const RELATIONSHIPS: ReadonlySet<string> = new Set<FamilyMemberRelationship>([
 // would make this module untestable in vitest's node environment.
 const EMAIL = /^[^\s@<>,;:"\\]+@[^\s@<>,;:"\\]+\.[^\s@<>,;:"\\]+$/;
 
-const ANNIVERSARY = /^(\d{4})-(\d{2})-(\d{2})$/;
-
 const norm = (value: string | null): string => (value ?? "").trim().toLowerCase();
 
 /** Identity key for a person within a household: name + birth triple. */
-function personKey(
-  firstName: string | null,
-  lastName: string | null,
-  birthMonth: number | null,
-  birthDay: number | null,
-  birthYear: number | null
-): string {
+function personKey(person: {
+  first_name: string | null;
+  last_name: string | null;
+  birth_month: number | null;
+  birth_day: number | null;
+  birth_year: number | null;
+}): string {
   return [
-    norm(firstName),
-    norm(lastName),
-    birthMonth ?? "",
-    birthDay ?? "",
-    birthYear ?? "",
+    norm(person.first_name),
+    norm(person.last_name),
+    person.birth_month ?? "",
+    person.birth_day ?? "",
+    person.birth_year ?? "",
   ].join("\u0000");
 }
 
@@ -242,7 +251,17 @@ interface HouseholdResolution {
   warnings: string[];
 }
 
-export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan {
+export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): ImportPlan {
+  // Before anything reads a cell, so no branch below can store a hidden value.
+  const stripped = fileRows.map(withoutHiddenValues);
+  const rows = stripped.map(({ row }) => row);
+  const fileRowOf = new Map(rows.map((row, i) => [row, fileRows[i]]));
+  // A birthday the file marks hidden still says who the row is, and the stored
+  // one may already be gone, so a row is matched on both. Missing a match would
+  // add the person a second time.
+  const identityKeys = (row: MemberRow): Set<string> =>
+    new Set([personKey(row), personKey(fileRowOf.get(row)!)]);
+
   // ---- snapshot lookups --------------------------------------------------
   const profilesByEmail = new Map<string, SnapshotProfile[]>();
   for (const profile of snapshot.profiles) {
@@ -268,13 +287,7 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
   // new person there (see the HOUSEHOLD_MOVE check).
   const familyMembersByPerson = new Map<string, SnapshotFamilyMember[]>();
   for (const member of snapshot.familyMembers) {
-    const key = personKey(
-      member.first_name,
-      member.last_name,
-      member.birth_month,
-      member.birth_day,
-      member.birth_year
-    );
+    const key = personKey(member);
     familyMembersByPerson.set(key, [
       ...(familyMembersByPerson.get(key) ?? []),
       member,
@@ -298,10 +311,15 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
   const accessRequestEmails = new Set(snapshot.accessRequestEmails);
 
   // ---- per-row state -----------------------------------------------------
-  const results: RowResult[] = rows.map((row) => ({
+  const results: RowResult[] = stripped.map(({ row, dropped }) => ({
     line: row.line,
     action: "no_change",
-    warnings: [],
+    // Names the token only: this report may carry member data, but a value
+    // marked hidden has no reason to come back in it.
+    warnings: dropped.map(
+      (token) =>
+        `hidden_fields marks ${token} hidden, so this file's value was not stored; any value already stored is unchanged`
+    ),
     errors: [],
   }));
   const resultByRow = new Map(rows.map((row, i) => [row, results[i]]));
@@ -357,26 +375,13 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
     birthPart("birth_month", 1, 12);
     birthPart("birth_day", 1, 31);
     birthPart("birth_year", 1900, currentYear);
-    if (row.anniversary !== null) {
-      const match = ANNIVERSARY.exec(row.anniversary);
-      const valid =
-        match !== null &&
-        (() => {
-          const [, y, m, d] = match;
-          const date = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
-          return (
-            date.getUTCFullYear() === Number(y) &&
-            date.getUTCMonth() === Number(m) - 1 &&
-            date.getUTCDate() === Number(d)
-          );
-        })();
-      if (!valid) {
-        fail(row, {
-          code: "INVALID_DATE",
-          field: "anniversary",
-          message: "anniversary must be a real date in YYYY-MM-DD form",
-        });
-      }
+    if (row.anniversary !== null && parseAnniversaryCell(row.anniversary) === null) {
+      fail(row, {
+        code: "INVALID_DATE",
+        field: "anniversary",
+        message:
+          `anniversary must be a real date in YYYY-MM-DD or MM-DD form, with a year from 1900 to ${currentYear}`,
+      });
     }
   }
 
@@ -419,13 +424,7 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
     if (!row.has_login) {
       const key = [
         groupKey(row),
-        personKey(
-          row.first_name,
-          row.last_name,
-          row.birth_month,
-          row.birth_day,
-          row.birth_year
-        ),
+        personKey(fileRowOf.get(row)!),
       ].join("\u0000");
       if (seenPeople.has(key)) {
         fail(row, {
@@ -553,29 +552,18 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
 
   // ---- step 5: family_member matching (has_login=false) -----------------
   const matchedFamilyMember = new Map<MemberRow, SnapshotFamilyMember>();
+  // A hidden or blank birthday lets rows that step 2 keeps apart match one stored
+  // family member. Nothing says which of them it is, and letting both through
+  // would drop one person or overwrite the other's details.
+  const claimedFamilyMembers = new Set<string>();
   for (const row of rows) {
     if (row.has_login) continue;
     const resolution = resolutions.get(groupKey(row))!;
     if (resolution.error !== null || resolution.familyId === null) continue;
+    const rowKeys = identityKeys(row);
     const candidates = (
       familyMembersByFamily.get(resolution.familyId) ?? []
-    ).filter(
-      (member) =>
-        personKey(
-          member.first_name,
-          member.last_name,
-          member.birth_month,
-          member.birth_day,
-          member.birth_year
-        ) ===
-        personKey(
-          row.first_name,
-          row.last_name,
-          row.birth_month,
-          row.birth_day,
-          row.birth_year
-        )
-    );
+    ).filter((member) => rowKeys.has(personKey(member)));
     if (candidates.length > 1) {
       fail(row, {
         code: "AMBIGUOUS_MATCH",
@@ -584,11 +572,48 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
       });
       continue;
     }
-    if (candidates.length === 1) matchedFamilyMember.set(row, candidates[0]);
+    if (candidates.length === 0) continue;
+    const [member] = candidates;
+    if (claimedFamilyMembers.has(member.id)) {
+      if (resultByRow.get(row)!.errors.length === 0) {
+        fail(row, {
+          code: "AMBIGUOUS_MATCH",
+          message: "another row in this file matches the same existing family member",
+        });
+      }
+      continue;
+    }
+    claimedFamilyMembers.add(member.id);
+    matchedFamilyMember.set(row, member);
+  }
+
+  // A birthday needs its month and day together. Checked against the match, not
+  // just the cells: a blank cell means "not provided", so a year alone is a fine
+  // update to a stored month and day, and an org's own export must stay
+  // importable when a stored birthday is already incomplete.
+  for (const row of rows) {
+    const cells = [row.birth_month, row.birth_day, row.birth_year];
+    if (cells.every((cell) => cell === null) || cells.some(Number.isNaN)) continue;
+    const stored = matchedProfile.get(row) ?? matchedFamilyMember.get(row);
+    const month = row.birth_month ?? stored?.birth_month ?? null;
+    const day = row.birth_day ?? stored?.birth_day ?? null;
+    const unchanged =
+      stored !== undefined &&
+      month === stored.birth_month &&
+      day === stored.birth_day &&
+      (row.birth_year === null || row.birth_year === stored.birth_year);
+    if (month !== null && day !== null) continue;
+    if (unchanged) continue;
+    fail(row, {
+      code: "INVALID_BIRTH_PART",
+      field: month === null ? "birth_month" : "birth_day",
+      message: "a birthday needs birth_month and birth_day together",
+    });
   }
 
   // ---- steps 5-8: per-row planning ---------------------------------------
-  const familyUnitInserts: PlannedWrite[] = [];
+  const familyUnitInserts: Extract<PlannedWrite, { kind: "insert_family_unit" }>[] = [];
+  const familyUnitUpdates: PlannedWrite[] = [];
   const familyMemberWrites: PlannedWrite[] = [];
   const profileUpdates: PlannedWrite[] = [];
   const profileGroupWrites: PlannedWrite[] = [];
@@ -662,21 +687,7 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
         const shadow = (
           familyMembersByFamily.get(resolution.familyId) ?? []
         ).some(
-          (member) =>
-            personKey(
-              member.first_name,
-              member.last_name,
-              member.birth_month,
-              member.birth_day,
-              member.birth_year
-            ) ===
-            personKey(
-              row.first_name,
-              row.last_name,
-              row.birth_month,
-              row.birth_day,
-              row.birth_year
-            )
+          (member) => identityKeys(row).has(personKey(member))
         );
         if (shadow) {
           fail(row, {
@@ -758,21 +769,7 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
     // already has a login — the reverse has_login flip.
     if (resolution.familyId !== null) {
       const shadow = (profilesByFamily.get(resolution.familyId) ?? []).some(
-        (profile) =>
-          personKey(
-            profile.first_name,
-            profile.last_name,
-            profile.birth_month,
-            profile.birth_day,
-            profile.birth_year
-          ) ===
-          personKey(
-            row.first_name,
-            row.last_name,
-            row.birth_month,
-            row.birth_day,
-            row.birth_year
-          )
+        (profile) => identityKeys(row).has(personKey(profile))
       );
       if (shadow) {
         fail(row, {
@@ -810,17 +807,9 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
     // and how it interacts with household_primary — product questions this
     // module should not answer by guessing. Failing names both households so
     // the admin can do it deliberately in the app.
-    const existingElsewhere = (
-      familyMembersByPerson.get(
-        personKey(
-          row.first_name,
-          row.last_name,
-          row.birth_month,
-          row.birth_day,
-          row.birth_year
-        )
-      ) ?? []
-    ).filter((member) => member.family_id !== resolution.familyId);
+    const existingElsewhere = [...identityKeys(row)]
+      .flatMap((key) => familyMembersByPerson.get(key) ?? [])
+      .filter((member) => member.family_id !== resolution.familyId);
     if (existingElsewhere.length > 0) {
       fail(row, {
         code: "HOUSEHOLD_MOVE",
@@ -884,7 +873,6 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
         | "city"
         | "state"
         | "postal_code"
-        | "anniversary"
         | "occupation"
         | "employer"
     ) => {
@@ -922,7 +910,6 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
     diffString("city");
     diffString("state");
     diffString("postal_code");
-    diffString("anniversary");
     diffString("occupation");
     diffString("employer");
     diffNumber("birth_month");
@@ -949,37 +936,25 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
       values.role = row.role;
     }
 
-    // Non-empty hidden_fields is the complete hidden set for this person, so
-    // all nine flags are diffed; empty means "not provided".
-    //
-    // The list fields inherit "blank = not provided" from the scalar rule,
-    // but with a sharper consequence: a member's LAST hidden flag and LAST
-    // group cannot be removed by clearing the cell, and bulk privacy
-    // correction is plausibly the main reason to hand-edit this column. That
-    // trade-off stands for v1 (a sentinel for "the empty set" is a contract
-    // decision, not a patch) — but a silent no-op on an explicit edit is the
-    // worst available behavior, so say what was ignored.
-    if (
-      row.hidden_fields.length === 0 &&
-      HIDDEN_FIELD_TOKENS.some((token) => profile[HIDDEN_FIELD_COLUMNS[token]])
-    ) {
-      result.warnings.push(
-        "hidden_fields is blank, which means \"not provided\" — this member's existing hidden fields were left as they are"
-      );
-    }
-    if (row.hidden_fields.length > 0) {
-      const desired = new Set<HiddenFieldToken>(row.hidden_fields);
-      for (const token of HIDDEN_FIELD_TOKENS) {
-        const column = HIDDEN_FIELD_COLUMNS[token];
-        const next = desired.has(token);
-        if (next === profile[column]) continue;
-        changes[column] = [profile[column], next];
-        values[column] = next;
+    Object.assign(values, retiredFlagResets(profile, values));
+
+    // `email` turns the setting on; leaving it out never turns it off, or a
+    // file could reveal an email someone chose to hide. Turning it off is theirs
+    // to do on their profile, so say what was left alone.
+    if (row.hidden_fields.includes("email")) {
+      if (!profile.hide_email) {
+        changes.hide_email = [false, true];
+        values.hide_email = true;
       }
+    } else if (profile.hide_email) {
+      result.warnings.push(
+        "hidden_fields doesn't list email, and an import can't turn that setting off — this member's email stays hidden"
+      );
     }
 
     // Non-empty groups is the authoritative membership set for this person;
-    // blank is "not provided" — see the hidden_fields note above.
+    // blank is "not provided": a member's last group can't be removed by
+    // clearing the cell, so say what was left alone.
     const groupWrites: PlannedWrite[] = [];
     if (
       row.groups.length === 0 &&
@@ -1108,6 +1083,109 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
     });
   }
 
+  // ---- household anniversaries ------------------------------------------
+  // Runs last because a new household's insert only exists once a row needed
+  // it. Grouped by the resolved household, not the file's grouping key: two
+  // rows naming no household can still be the same couple through their match.
+  const familiesById = new Map(snapshot.families.map((f) => [f.id, f]));
+  const inCouple = (row: MemberRow): boolean => {
+    const relationship = row.relationship ?? matchedProfile.get(row)?.relationship ?? null;
+    return (
+      row.household_primary ||
+      relationship === null ||
+      relationship === "primary" ||
+      relationship === "spouse"
+    );
+  };
+  const rowsByHousehold = new Map<string, MemberRow[]>();
+  for (const row of rows) {
+    const resolution = resolutions.get(groupKey(row))!;
+    const household =
+      resolution.error === null ? (resolution.familyId ?? resolution.pendingKey) : null;
+    const knownHousehold =
+      household !== null &&
+      (resolution.familyId !== null || plannedHouseholds.has(household));
+    if (!knownHousehold) {
+      if (row.anniversary !== null) {
+        resultByRow.get(row)!.warnings.push(
+          "anniversary is kept on a household, and this row has none; the cell was ignored"
+        );
+      }
+      continue;
+    }
+    rowsByHousehold.set(household, [...(rowsByHousehold.get(household) ?? []), row]);
+  }
+
+  for (const [household, householdRows] of rowsByHousehold) {
+    const couple = householdRows.filter(inCouple);
+    for (const row of householdRows) {
+      if (row.anniversary !== null && !inCouple(row)) {
+        resultByRow.get(row)!.warnings.push(
+          "anniversary belongs to the couple in a household; this row's cell was ignored"
+        );
+      }
+    }
+    const given = couple.filter((row) => row.anniversary !== null);
+    if (given.length === 0) continue;
+
+    // Either spouse hiding it means it isn't stored, whichever row carries it.
+    if (couple.some((row) => row.hidden_fields.includes("anniversary"))) {
+      for (const row of given) {
+        resultByRow.get(row)!.warnings.push(
+          "hidden_fields marks this couple's anniversary hidden, so this file's value was not stored; any value already stored is unchanged"
+        );
+      }
+      continue;
+    }
+
+    const source = given.find((row) => row.household_primary) ?? given[0];
+    const sourceResult = resultByRow.get(source)!;
+    if (given.some((row) => row.anniversary !== source.anniversary)) {
+      sourceResult.warnings.push(
+        `rows for this household disagree on: anniversary (using the ${
+          source.household_primary ? "household_primary" : "first"
+        } row's value)`
+      );
+    }
+    const next = parseAnniversaryCell(source.anniversary!);
+    if (next === null) continue; // already a row error, which empties the plan
+
+    const stored = familiesById.get(household);
+    if (stored === undefined) {
+      const insert = familyUnitInserts.find((write) => write.householdKey === household);
+      if (insert !== undefined) {
+        insert.values.anniversary_month = next.month;
+        insert.values.anniversary_day = next.day;
+        insert.values.anniversary_year = next.year;
+      }
+      continue;
+    }
+
+    // MM-DD says nothing about the year, so one matching the stored date is no change.
+    const sameDate =
+      stored.anniversary_month === next.month &&
+      stored.anniversary_day === next.day &&
+      (next.year === null || stored.anniversary_year === next.year);
+    if (sameDate) continue;
+    familyUnitUpdates.push({
+      kind: "update_family_unit",
+      line: source.line,
+      id: stored.id,
+      values: {
+        anniversary_month: next.month,
+        anniversary_day: next.day,
+        anniversary_year: next.year,
+      },
+    });
+    sourceResult.changes = {
+      ...sourceResult.changes,
+      anniversary: [anniversaryCell(stored), source.anniversary],
+    };
+    if (sourceResult.action === "no_change") {
+      sourceResult.action = source.has_login ? "update_profile" : "update_family_member";
+    }
+  }
+
   // ---- summary + write ordering -----------------------------------------
   const summary = {
     rows: rows.length,
@@ -1145,6 +1223,7 @@ export function planImport(rows: MemberRow[], snapshot: OrgSnapshot): ImportPlan
       ? []
       : [
           ...familyUnitInserts,
+          ...familyUnitUpdates,
           ...familyMemberWrites,
           ...profileUpdates,
           ...profileGroupWrites,

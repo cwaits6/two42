@@ -101,7 +101,7 @@ export function HouseholdMemberEditClient({ profile, onSaved }: Props) {
         profile={profile}
         families={[] as FamilyUnit[]}
         isAdmin={false}
-        relaxValidation={true}
+        editingOther
         onSaved={onSaved}
       />
     </div>

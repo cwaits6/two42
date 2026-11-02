@@ -37,7 +37,8 @@ import { Camera, Check } from "lucide-react";
 import { CheckRow } from "@/components/profile/CheckRow";
 import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
 import { MONTHS, birthdayColumns, birthdayErrors } from "@/components/profile/birthday";
-import { UNREACHABLE_MESSAGE, isReachable } from "@/components/profile/reachability";
+import { DirectoryNotice } from "@/components/profile/DirectoryNotice";
+import { retiredFlagResets } from "@/lib/members/retiredHideFlags";
 import {
   canManageAvatar,
   type AvatarEligibilityCaller,
@@ -53,7 +54,7 @@ interface ProfileFormProps {
    * household" checkbox.
    */
   family?: FamilyUnit | null;
-  /** Admin mode allows editing family assignment + ignores privacy enforcement on save */
+  /** Admin mode allows editing family assignment and the email */
   isAdmin?: boolean;
   /**
    * Identity + household context of the person editing, used to decide
@@ -71,13 +72,8 @@ interface ProfileFormProps {
    * the control's visibility on save without a page refresh.
    */
   avatarCaller?: AvatarEligibilityCaller | null;
-  /**
-   * When true, skips the visible-contact requirement.
-   * Used when a household primary/spouse edits another member's profile —
-   * the person being edited may have an incomplete profile that they will
-   * fill in themselves.
-   */
-  relaxValidation?: boolean;
+  /** A household primary/spouse is editing another member's profile. */
+  editingOther?: boolean;
   /** Called after successful save so parent can refresh/redirect */
   onSaved?: () => void;
 }
@@ -99,19 +95,10 @@ interface FormState {
   birth_month: string;
   birth_day: string;
   birth_year: string;
-  anniversary: string;
   occupation: string;
   employer: string;
   family_id: string;
-  hide_phone_mobile: boolean;
-  hide_phone_home: boolean;
-  hide_phone_work: boolean;
   hide_email: boolean;
-  hide_address: boolean;
-  hide_birthday: boolean;
-  hide_birth_year: boolean;
-  hide_anniversary: boolean;
-  hide_occupation: boolean;
   is_unlisted: boolean;
 }
 
@@ -132,19 +119,10 @@ function initialState(profile: Profile): FormState {
     birth_month: profile.birth_month?.toString() || "",
     birth_day: profile.birth_day?.toString() || "",
     birth_year: profile.birth_year?.toString() || "",
-    anniversary: profile.anniversary || "",
     occupation: profile.occupation || "",
     employer: profile.employer || "",
     family_id: profile.family_id || "",
-    hide_phone_mobile: profile.hide_phone_mobile ?? false,
-    hide_phone_home: profile.hide_phone_home ?? false,
-    hide_phone_work: profile.hide_phone_work ?? false,
     hide_email: profile.hide_email ?? false,
-    hide_address: profile.hide_address ?? false,
-    hide_birthday: profile.hide_birthday ?? false,
-    hide_birth_year: profile.hide_birth_year ?? false,
-    hide_anniversary: profile.hide_anniversary ?? false,
-    hide_occupation: profile.hide_occupation ?? false,
     is_unlisted: profile.is_unlisted ?? false,
   };
 }
@@ -178,7 +156,7 @@ export function ProfileForm({
   families,
   family = null,
   isAdmin = false,
-  relaxValidation = false,
+  editingOther = false,
   avatarCaller = null,
   onSaved,
 }: ProfileFormProps) {
@@ -308,21 +286,12 @@ export function ProfileForm({
     if (!lastName) found.last_name = "Enter a last name.";
     // Only admins can edit the email; a member's own is managed in Settings.
     const email = state.email.trim();
-    if (isAdmin && email && !EMAIL_PATTERN.test(email)) {
+    if (isAdmin && !email) {
+      found.email = "Enter an email address.";
+    } else if (isAdmin && !EMAIL_PATTERN.test(email)) {
       found.email = "Enter an email address like name@example.com.";
     }
 
-    const reachable = isReachable({
-      phoneMobile: state.phone_mobile,
-      phoneHome: state.phone_home,
-      phoneWork: state.phone_work,
-      email: state.email,
-      hidePhoneMobile: state.hide_phone_mobile,
-      hidePhoneHome: state.hide_phone_home,
-      hidePhoneWork: state.hide_phone_work,
-      hideEmail: state.hide_email,
-    });
-    if (!relaxValidation && !reachable) found.phone_mobile = UNREACHABLE_MESSAGE;
     if (state.phone_mobile && !phoneMobile) {
       found.phone_mobile = "Enter a valid phone number.";
     }
@@ -367,27 +336,18 @@ export function ProfileForm({
       state: stateCode,
       postal_code: postal,
       ...birthdayColumns(birthday),
-      anniversary: state.anniversary || null,
       occupation: trimText(state.occupation),
       employer: trimText(state.employer),
       ...(isAdmin
         ? { family_id: state.family_id || null }
         : {}),
-      hide_phone_mobile: state.hide_phone_mobile,
-      hide_phone_home: state.hide_phone_home,
-      hide_phone_work: state.hide_phone_work,
       hide_email: state.hide_email,
-      hide_address: state.hide_address,
-      hide_birthday: state.hide_birthday,
-      hide_birth_year: state.hide_birth_year,
-      hide_anniversary: state.hide_anniversary,
-      hide_occupation: state.hide_occupation,
       is_unlisted: state.is_unlisted,
     };
 
     const { error } = await supabase
       .from("profiles")
-      .update(updates)
+      .update({ ...updates, ...retiredFlagResets(profile, updates) })
       .eq("id", profile.id);
 
     setSaving(false);
@@ -423,12 +383,7 @@ export function ProfileForm({
     <form onSubmit={handleSubmit} noValidate>
       <Card>
         <CardContent className="space-y-5 pt-6">
-          {!isAdmin && !relaxValidation && (
-            <p className="text-base text-muted-foreground">
-              Anything you fill in here is listed in the directory. To keep
-              something private, leave it blank or check its hide box.
-            </p>
-          )}
+          {!isAdmin && <DirectoryNotice />}
 
           {/* Photo — hidden for admins editing a profile they have no
               storage write arm for: not themselves, and not a household
@@ -554,7 +509,7 @@ export function ProfileForm({
           {/* Phones */}
           <div className="space-y-2">
             <Label htmlFor="phone_mobile" className="text-base">
-              Mobile phone
+              Mobile phone <Optional />
             </Label>
             <Input
               id="phone_mobile"
@@ -569,12 +524,6 @@ export function ProfileForm({
               {...invalidFieldProps("phone_mobile", errors.phone_mobile)}
             />
             <FieldError fieldId="phone_mobile" message={errors.phone_mobile} />
-            <CheckRow
-              id="hide_phone_mobile"
-              label="Hide my mobile number"
-              checked={state.hide_phone_mobile}
-              onChange={(v) => update("hide_phone_mobile", v)}
-            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="phone_home" className="text-base">
@@ -593,14 +542,6 @@ export function ProfileForm({
               {...invalidFieldProps("phone_home", errors.phone_home)}
             />
             <FieldError fieldId="phone_home" message={errors.phone_home} />
-            {state.phone_home && (
-              <CheckRow
-                id="hide_phone_home"
-                label="Hide my home number"
-                checked={state.hide_phone_home}
-                onChange={(v) => update("hide_phone_home", v)}
-              />
-            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="phone_work" className="text-base">
@@ -619,14 +560,6 @@ export function ProfileForm({
               {...invalidFieldProps("phone_work", errors.phone_work)}
             />
             <FieldError fieldId="phone_work" message={errors.phone_work} />
-            {state.phone_work && (
-              <CheckRow
-                id="hide_phone_work"
-                label="Hide my work number"
-                checked={state.hide_phone_work}
-                onChange={(v) => update("hide_phone_work", v)}
-              />
-            )}
           </div>
 
           <Separator />
@@ -689,33 +622,6 @@ export function ProfileForm({
             <p className="text-base text-muted-foreground">
               The year is optional.
             </p>
-            <CheckRow
-              id="hide_birthday"
-              label="Hide my birthday"
-              checked={state.hide_birthday}
-              onChange={(v) => update("hide_birthday", v)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="anniversary" className="text-base">
-              Anniversary <Optional />
-            </Label>
-            <Input
-              id="anniversary"
-              type="date"
-              value={state.anniversary}
-              onChange={(e) => update("anniversary", e.target.value)}
-              className="py-5 text-base"
-            />
-            {state.anniversary && (
-              <CheckRow
-                id="hide_anniversary"
-                label="Hide my anniversary"
-                checked={state.hide_anniversary}
-                onChange={(v) => update("hide_anniversary", v)}
-              />
-            )}
           </div>
 
           <Separator />
@@ -770,7 +676,7 @@ export function ProfileForm({
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-6">
                 <div className="space-y-2 sm:col-span-3">
                   <Label htmlFor="city" className="text-base">
-                    City
+                    City <Optional />
                   </Label>
                   <Input
                     id="city"
@@ -784,7 +690,7 @@ export function ProfileForm({
                 </div>
                 <div className="space-y-2 sm:col-span-1">
                   <Label htmlFor="state" className="text-base">
-                    State
+                    State <Optional />
                   </Label>
                   <Input
                     id="state"
@@ -801,7 +707,7 @@ export function ProfileForm({
                 </div>
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="postal_code" className="text-base">
-                    ZIP
+                    ZIP <Optional />
                   </Label>
                   <Input
                     id="postal_code"
@@ -814,12 +720,6 @@ export function ProfileForm({
                   <FieldError fieldId="postal_code" message={errors.postal_code} />
                 </div>
               </div>
-              <CheckRow
-                id="hide_address"
-                label="Hide my address from the directory"
-                checked={state.hide_address}
-                onChange={(v) => update("hide_address", v)}
-              />
             </>
           )}
 
@@ -856,14 +756,6 @@ export function ProfileForm({
             Sharing what you do helps people in your groups find help from
             someone they know.
           </p>
-          {(state.occupation || state.employer) && (
-            <CheckRow
-              id="hide_occupation"
-              label="Hide my occupation and employer"
-              checked={state.hide_occupation}
-              onChange={(v) => update("hide_occupation", v)}
-            />
-          )}
 
           <Separator />
 
@@ -871,7 +763,7 @@ export function ProfileForm({
           <div className="space-y-1">
             <CheckRow
               id="is_unlisted"
-              label={relaxValidation || isAdmin ? "Hide from the directory" : "Hide me from the directory"}
+              label={editingOther || isAdmin ? "Hide from the directory" : "Hide me from the directory"}
               checked={state.is_unlisted}
               onChange={(v) => update("is_unlisted", v)}
             />

@@ -806,6 +806,39 @@ Supabase default so the Phase 4 server-side caller does not depend on it;
 `service_role` is never reachable from a client, so it does not re-open
 PostgREST RPC.
 
+## Directory: what's stored is what's shown
+
+Only two directory settings remain: `is_unlisted` and `hide_email` (email stays
+stored because it is how people sign in). The other flags on `profiles`
+(`hide_phone_mobile`, `hide_phone_home`, `hide_phone_work`, `hide_address`,
+`hide_birthday`, `hide_birth_year`, `hide_anniversary`, `hide_occupation`) and on
+`family_units` (`hide_address`, `hide_phone_home`) are retired: the app neither
+reads nor writes them, and the values they hid were deleted by
+`directory_retire_hidden_values()`. The columns and the view gates over them stay
+until a later release drops them, so nothing hidden through the app still
+deployed can show in the meantime. That release re-runs the sweep first.
+
+Two pieces of this cross a boundary worth naming:
+
+- **`family_anniversary_hidden(uuid)`** gates the household's anniversary in both
+  household views. The views are `security_invoker`, so an `EXISTS` over
+  `profiles` inside them runs under the caller's RLS, and an unlisted spouse's row
+  is invisible to other members: the check would fail open, showing the
+  anniversary that spouse hid. The function is a read-only `SECURITY DEFINER` that
+  takes its org from `app_current_org_id()`. It goes when `hide_anniversary` does.
+- **`family_units.phone_profile_id`** points the household phone at a spouse's
+  mobile, by composite FK with `on delete set null (phone_profile_id)`. The views
+  read the number from the owner's profile under the caller's RLS, with the same
+  listed and member filters as `members`, so an unlisted or moved-out owner gives a
+  blank number and a number that shows always has its owner's name beside it. Only
+  that spouse can choose their own number: `family_units_phone_owner_guard` raises
+  `HP001` otherwise, because a `WITH CHECK` cannot compare old and new values.
+  Clearing it is open to anyone the update policy allows.
+
+A pending spouse has no household write path: `is_member()` is false for them, so
+the update policy matches no row and `/api/household` refuses them. The other
+spouse or a church admin clears a household detail on their behalf.
+
 ## Enforcement in CI
 
 `supabase/tests/schema_tenancy_lint.sql` asserts, each with a negative

@@ -1,4 +1,4 @@
-/** Month options for a birthday picker; Base UI Select takes them as `items`. */
+/** Month options for a date picker; Base UI Select takes them as `items`. */
 export const MONTHS = [
   { value: "1", label: "January" },
   { value: "2", label: "February" },
@@ -14,23 +14,28 @@ export const MONTHS = [
   { value: "12", label: "December" },
 ];
 
-export interface BirthdayInput {
+export interface DateParts {
   month: string;
   day: string;
   year: string;
 }
 
 export type BirthdayErrors = Partial<Record<"birth_month" | "birth_day" | "birth_year", string>>;
+export type AnniversaryErrors = Partial<
+  Record<"anniversary_month" | "anniversary_day" | "anniversary_year", string>
+>;
 
 /**
- * A birthday is optional, but once any part is given the month and day must
- * both be there: the directory lists birthdays by month and day.
+ * A date is optional, but once any part is given the month and day must both
+ * be there: the directory places dates by month and day. The year stays
+ * optional.
  */
-export function birthdayErrors(
-  { month, day, year }: BirthdayInput,
-  today: Date = new Date(),
-): BirthdayErrors {
-  const found: BirthdayErrors = {};
+function datePartErrors(
+  noun: "birthday" | "anniversary",
+  { month, day, year }: DateParts,
+  today: Date,
+): { month?: string; day?: string; year?: string } {
+  const found: { month?: string; day?: string; year?: string } = {};
   if (!month && !day && !year) return found;
 
   const monthNum = month ? Number(month) : null;
@@ -40,29 +45,57 @@ export function birthdayErrors(
   const yearValid =
     yearNum === null || (Number.isInteger(yearNum) && yearNum >= 1900 && yearNum <= maxYear);
 
-  if (!monthNum) found.birth_month = "Choose the month of the birthday.";
+  const monthValid = monthNum !== null && Number.isInteger(monthNum) && monthNum >= 1 && monthNum <= 12;
+  if (!monthValid) found.month = `Choose the month of the ${noun}.`;
   if (dayNum === null) {
-    found.birth_day = "Enter the day of the birthday.";
+    found.day = `Enter the day of the ${noun}.`;
   } else {
     // Without a usable year, leap year 2000 keeps Feb 29 allowed.
-    const maxDay = monthNum
+    const maxDay = monthValid
       ? new Date(yearValid && yearNum !== null ? yearNum : 2000, monthNum, 0).getDate()
       : 31;
     if (!Number.isInteger(dayNum) || dayNum < 1 || dayNum > maxDay) {
-      found.birth_day = `Enter a day from 1 to ${maxDay}.`;
+      found.day = `Enter a day from 1 to ${maxDay}.`;
     }
   }
   if (!yearValid) {
-    found.birth_year = `Enter a year from 1900 to ${maxYear}, or leave it blank.`;
+    found.year = `Enter a year from 1900 to ${maxYear}, or leave it blank.`;
   }
   return found;
 }
 
+export function birthdayErrors(parts: DateParts, today: Date = new Date()): BirthdayErrors {
+  const found = datePartErrors("birthday", parts, today);
+  const errors: BirthdayErrors = {};
+  if (found.month) errors.birth_month = found.month;
+  if (found.day) errors.birth_day = found.day;
+  if (found.year) errors.birth_year = found.year;
+  return errors;
+}
+
+export function anniversaryErrors(parts: DateParts, today: Date = new Date()): AnniversaryErrors {
+  const found = datePartErrors("anniversary", parts, today);
+  const errors: AnniversaryErrors = {};
+  if (found.month) errors.anniversary_month = found.month;
+  if (found.day) errors.anniversary_day = found.day;
+  if (found.year) errors.anniversary_year = found.year;
+  return errors;
+}
+
 /** The stored columns for a birthday that passed `birthdayErrors`. */
-export function birthdayColumns({ month, day, year }: BirthdayInput) {
+export function birthdayColumns({ month, day, year }: DateParts) {
   return {
     birth_month: month ? Number(month) : null,
     birth_day: day ? Number(day) : null,
     birth_year: year ? Number(year) : null,
+  };
+}
+
+/** The stored columns for an anniversary that passed `anniversaryErrors`. */
+export function anniversaryColumns({ month, day, year }: DateParts) {
+  return {
+    anniversary_month: month ? Number(month) : null,
+    anniversary_day: day ? Number(day) : null,
+    anniversary_year: year ? Number(year) : null,
   };
 }
