@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   anniversaryEntries,
   birthdayEntries,
+  celebrationHref,
   celebrationSections,
   celebrationsThisWeek,
   coupleName,
   isThisWeek,
+  parseIncludeNonAttendees,
   parseWhen,
 } from "@/components/directory/celebrations";
 import {
@@ -300,5 +302,37 @@ describe("celebrationsThisWeek", () => {
     const scoped = [inGroup, later];
     const tab = celebrationSections(birthdayEntries(scoped, [families[0]], false), "week", NOV_3);
     expect(celebrationsThisWeek(input).birthdays).toEqual(tab[0].entries);
+  });
+});
+
+describe("celebrationHref", () => {
+  const href = "/directory/birthdays";
+
+  it("sets a value and keeps the others", () => {
+    expect(celebrationHref(href, "household=all", "when", "week")).toBe(
+      `${href}?household=all&when=week`,
+    );
+    expect(celebrationHref(href, "when=week", "household", "all")).toBe(
+      `${href}?when=week&household=all`,
+    );
+  });
+
+  it("replaces a value rather than adding a second one", () => {
+    expect(celebrationHref(href, "when=week", "when", "month")).toBe(`${href}?when=month`);
+  });
+
+  it("clears a value, leaving no stray question mark", () => {
+    expect(celebrationHref(href, "when=week&household=all", "household", null)).toBe(
+      `${href}?when=week`,
+    );
+    expect(celebrationHref(href, "when=week", "when", null)).toBe(href);
+  });
+});
+
+describe("parseIncludeNonAttendees", () => {
+  it("is on only for the value the switch writes", () => {
+    expect(parseIncludeNonAttendees("all")).toBe(true);
+    expect(parseIncludeNonAttendees(null)).toBe(false);
+    expect(parseIncludeNonAttendees("true")).toBe(false);
   });
 });

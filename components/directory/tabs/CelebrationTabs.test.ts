@@ -1,18 +1,19 @@
 // @vitest-environment jsdom
-import { createElement } from "react";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { calendarDate } from "@/components/directory/utils";
 import type { DirectoryProfile, FamilyDirectoryFull } from "@/lib/types";
 
 const directory = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
-const search = vi.hoisted(() => ({ when: null as string | null }));
+const search = vi.hoisted(() => ({ query: "" }));
 
 vi.mock("@/components/directory/DirectoryContext", () => ({
   useDirectory: () => directory.value,
 }));
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams(search.when ? `when=${search.when}` : ""),
+  useSearchParams: () => new URLSearchParams(search.query),
 }));
 
 import { AnniversariesTab } from "./AnniversariesTab";
@@ -55,7 +56,7 @@ function provide(members: DirectoryProfile[], families: FamilyDirectoryFull[]) {
 }
 
 function render(when: string | null, tab: typeof BirthdaysTab | typeof AnniversariesTab) {
-  search.when = when;
+  search.query = when ? `when=${when}` : "";
   return renderToStaticMarkup(createElement(tab));
 }
 
@@ -137,6 +138,79 @@ describe("BirthdaysTab", () => {
     expect(render(null, BirthdaysTab)).toContain(
       'href="/g/group/directory/families?family=household"',
     );
+  });
+
+  describe("with the household switch in the URL", () => {
+    const nonAttendee = {
+      ...couple("household", "Miller", "2004-05-15"),
+      family_members_list: [
+        {
+          id: "fm",
+          first_name: "Theo",
+          last_name: "Miller",
+          preferred_name: null,
+          avatar_url: null,
+          relationship: "child",
+          is_class_member: false,
+          birth_month: 11,
+          birth_day: 4,
+          birth_year: null,
+          claimed_profile_id: null,
+        },
+      ],
+    } as FamilyDirectoryFull;
+
+    const renderQuery = (query: string) => {
+      search.query = query;
+      return renderToStaticMarkup(createElement(BirthdaysTab));
+    };
+
+    beforeEach(() => {
+      provide([], [nonAttendee]);
+    });
+
+    it("shows a household member who doesn't attend only while the URL asks for it", () => {
+      expect(renderQuery("household=all")).toContain("Theo Miller");
+      expect(renderQuery("")).not.toContain("Theo Miller");
+    });
+
+    it("keeps the switch on the filter links, and the filter when reading the switch", () => {
+      const html = renderQuery("when=week&household=all");
+      expect(html).toContain("Theo Miller");
+      expect(html).toContain(
+        'href="/g/group/directory/birthdays?when=month&amp;household=all"',
+      );
+      expect(html).toContain('href="/g/group/directory/birthdays?household=all"');
+    });
+
+    it("writes the switch to the URL, keeping the filter, without adding a history entry", async () => {
+      (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+      const replaceState = vi.spyOn(window.history, "replaceState");
+      const pushState = vi.spyOn(window.history, "pushState");
+      search.query = "when=week";
+      const container = document.body.appendChild(document.createElement("div"));
+      const root = createRoot(container);
+      await act(async () => root.render(createElement(BirthdaysTab)));
+
+      await act(async () => container.querySelector<HTMLElement>('[role="switch"]')!.click());
+
+      expect(replaceState).toHaveBeenCalledWith(
+        null,
+        "",
+        "/g/group/directory/birthdays?when=week&household=all",
+      );
+      expect(pushState).not.toHaveBeenCalled();
+      await act(async () => root.unmount());
+      container.remove();
+      vi.restoreAllMocks();
+    });
+
+    it("keeps the switch on the link out of an empty filter", () => {
+      provide([person("Far", 2, 27)], []);
+      expect(renderQuery("when=month&household=all")).toMatch(
+        /href="\/g\/group\/directory\/birthdays\?household=all"[^>]*>Show all</,
+      );
+    });
   });
 
   it("says when a filter is empty and links onward, keeping the switch", () => {

@@ -19,6 +19,28 @@ export function parseWhen(value: string | null): CelebrationWhen {
   return value === "week" || value === "month" ? value : "all";
 }
 
+/** Whether the URL has the Birthdays tab showing household members who don't attend a group. */
+export function parseIncludeNonAttendees(value: string | null): boolean {
+  return value === "all";
+}
+
+/**
+ * `href` with one query value set or cleared and the others kept, so the filter
+ * and the household switch carry each other through a link.
+ */
+export function celebrationHref(
+  href: string,
+  search: string,
+  name: "when" | "household",
+  value: string | null,
+): string {
+  const params = new URLSearchParams(search);
+  if (value === null) params.delete(name);
+  else params.set(name, value);
+  const query = params.toString();
+  return query ? `${href}?${query}` : href;
+}
+
 interface RecurringDate {
   month: number;
   day: number;

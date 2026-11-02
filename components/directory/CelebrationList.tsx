@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { DirSection } from "@/components/directory/DirRow";
 import {
+  celebrationHref,
   celebrationSections,
   isThisWeek,
   parseWhen,
@@ -16,9 +17,9 @@ import { EmptyState } from "@/components/states/EmptyState";
 import { Button } from "@/components/ui/button";
 import { SegmentedLinks } from "@/components/ui/segmented";
 
-const EMPTY_LINK: Partial<Record<CelebrationWhen, { query: string; label: string }>> = {
-  week: { query: "?when=month", label: "Show this month" },
-  month: { query: "", label: "Show all" },
+const EMPTY_LINK: Partial<Record<CelebrationWhen, { when: CelebrationWhen; label: string }>> = {
+  week: { when: "month", label: "Show this month" },
+  month: { when: "all", label: "Show all" },
 };
 
 const EMPTY_SUFFIX: Record<CelebrationWhen, string> = {
@@ -48,8 +49,15 @@ export function CelebrationList<T extends { key: string; month: number; day: num
   renderRow: (entry: T, soon: boolean) => ReactNode;
 }) {
   const { basePath, today } = useDirectory();
-  const when = parseWhen(useSearchParams().get("when"));
-  const href = `${basePath}${path}`;
+  const searchParams = useSearchParams();
+  const when = parseWhen(searchParams.get("when"));
+  const filterHref = (filter: CelebrationWhen) =>
+    celebrationHref(
+      `${basePath}${path}`,
+      searchParams.toString(),
+      "when",
+      filter === "all" ? null : filter,
+    );
   const sections = celebrationSections(entries, when, today);
   const emptyLink = EMPTY_LINK[when];
 
@@ -59,9 +67,9 @@ export function CelebrationList<T extends { key: string; month: number; day: num
         label={`Show ${noun} from`}
         className="mb-7 flex w-full *:grow sm:w-fit"
         options={[
-          { href: `${href}?when=week`, label: "This week", current: when === "week" },
-          { href: `${href}?when=month`, label: "This month", current: when === "month" },
-          { href, label: "All", current: when === "all" },
+          { href: filterHref("week"), label: "This week", current: when === "week" },
+          { href: filterHref("month"), label: "This month", current: when === "month" },
+          { href: filterHref("all"), label: "All", current: when === "all" },
         ]}
       />
 
@@ -74,7 +82,7 @@ export function CelebrationList<T extends { key: string; month: number; day: num
               <Button
                 nativeButton={false}
                 variant="outline"
-                render={<Link href={`${href}${emptyLink.query}`} />}
+                render={<Link href={filterHref(emptyLink.when)} />}
               >
                 {emptyLink.label}
               </Button>

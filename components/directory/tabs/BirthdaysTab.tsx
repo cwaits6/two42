@@ -1,6 +1,7 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useMemo } from "react";
 import { Cake } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Label } from "@/components/ui/label";
@@ -9,7 +10,11 @@ import { DirRow } from "@/components/directory/DirRow";
 import { CelebrationList } from "@/components/directory/CelebrationList";
 import { DirectoryLoadState } from "@/components/directory/DirectoryLoadState";
 import { useDirectory } from "@/components/directory/DirectoryContext";
-import { birthdayEntries } from "@/components/directory/celebrations";
+import {
+  birthdayEntries,
+  celebrationHref,
+  parseIncludeNonAttendees,
+} from "@/components/directory/celebrations";
 import {
   daysUntilNextOccurrence,
   formatDaysUntil,
@@ -18,7 +23,8 @@ import {
 
 function BirthdaysTabInner() {
   const { members, families, basePath, today } = useDirectory();
-  const [includeNonAttendees, setIncludeNonAttendees] = useState(false);
+  const searchParams = useSearchParams();
+  const includeNonAttendees = parseIncludeNonAttendees(searchParams.get("household"));
 
   const entries = useMemo(
     () => birthdayEntries(members, families, includeNonAttendees),
@@ -64,7 +70,19 @@ function BirthdaysTabInner() {
         <Switch
           id="include-non-attendees"
           checked={includeNonAttendees}
-          onCheckedChange={setIncludeNonAttendees}
+          onCheckedChange={(checked) =>
+            // Replaces the entry, so Back leaves the tab instead of undoing each toggle.
+            window.history.replaceState(
+              null,
+              "",
+              celebrationHref(
+                `${basePath}/birthdays`,
+                searchParams.toString(),
+                "household",
+                checked ? "all" : null,
+              ),
+            )
+          }
         />
         <Label htmlFor="include-non-attendees" className="cursor-pointer text-base text-foreground">
           Also show household members who don&apos;t attend a group
