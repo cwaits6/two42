@@ -1,5 +1,4 @@
 import { defineConfig, devices } from "@playwright/test";
-import { localServiceKey } from "./e2e/fixtures/localServiceKey";
 
 // Several dev servers share this machine, so the suite stays off :3000.
 const port = Number(process.env.E2E_PORT ?? 3142);
@@ -27,6 +26,5 @@ export default defineConfig({
         url: baseURL,
         reuseExistingServer: false,
         timeout: 240_000,
-        env: { SUPABASE_SECRET_KEY: localServiceKey() },
       },
 });

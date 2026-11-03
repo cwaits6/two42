@@ -43,10 +43,6 @@ const CONFIG: Record<ImageUploadType, UploadConfig> = {
   },
 };
 
-function objectKey(orgId: string, path: string): string {
-  return `${orgObjectPath(orgId, path)}.jpg`;
-}
-
 // Every object key is org-partitioned: the caller passes a key
 // relative to the org prefix and this resolves `<orgId>/` in front of it.
 // Resolved per call, never cached in module scope — a stale org id would
@@ -62,7 +58,7 @@ async function resolveOrgPrefixedPath(
   if (!orgId) {
     throw new Error(`${label} failed: could not resolve organization`);
   }
-  return objectKey(orgId, path);
+  return `${orgObjectPath(orgId, path)}.jpg`;
 }
 
 /**
@@ -110,23 +106,11 @@ export async function uploadImage(
 }
 
 /**
- * What a server caller with no browser session passes to deleteImage(): its
- * own client, and the org it already validated. The org still prefixes the
- * key, so the key layout stays encoded in this one function.
- */
-export interface ServerImageDelete {
-  client: SupabaseClient;
-  orgId: string;
-}
-
-/**
  * Deletes an uploaded image from Supabase Storage.
  *
  * @param type - Same bucket selector as uploadImage()
  * @param path - Storage path **relative to the org prefix**, without
  *   extension — the same value that was passed to uploadImage()
- * @param server - Set only on the server; a browser caller resolves its org
- *   from its session
  * @returns `{ removed }` — whether Storage actually deleted an object.
  *   `remove()` returns the rows it deleted with `error: null`, so a key the
  *   RLS floor filtered out is indistinguishable from one that was never
@@ -140,13 +124,10 @@ export interface ServerImageDelete {
 export async function deleteImage(
   type: ImageUploadType,
   path: string,
-  server?: ServerImageDelete,
 ): Promise<{ removed: boolean }> {
   const config = CONFIG[type];
-  const supabase = server?.client ?? createClient();
-  const fullPath = server
-    ? objectKey(server.orgId, path)
-    : await resolveOrgPrefixedPath(supabase, "deleteImage", path);
+  const supabase = createClient();
+  const fullPath = await resolveOrgPrefixedPath(supabase, "deleteImage", path);
 
   const { data, error } = await supabase.storage
     .from(config.bucket)

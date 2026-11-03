@@ -1560,6 +1560,9 @@ isOneToOne: false
 "current_family_id":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
+"delete_person":
+{ Args: { "_org_id": string,"_person_id": string }; Returns: Json
+                           },
 "directory_retire_hidden_values":
 { Args: Record<PropertyKey, never>; Returns: Json
                            },
