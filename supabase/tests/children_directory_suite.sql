@@ -547,7 +547,12 @@ select ok(
   'an invite holds a share lock on the person until it commits, which a relabel waits for');
 
 -- ── The directory's gate runs once per call ─────────────────────────────────
-set local track_functions = 'all';
+-- A stack on an older image can't set track_functions, and then skips the counts.
+do $$ begin
+  set local track_functions = 'all';
+exception when insufficient_privilege then
+  null;
+end $$;
 create function pg_temp.gate_calls() returns bigint
   language sql as $$
   select coalesce(sum(calls), 0)::bigint from pg_stat_xact_user_functions
@@ -561,15 +566,6 @@ begin
   perform pg_temp.as_text(_actor, format('select public.family_directory_people(%L)::text', _family));
   return pg_temp.gate_calls() - _before;
 end $$;
-select is(
-  (select count(*) >= 3 from public.family_members where family_id = pg_temp.id('fam')),
-  true, 'the household measured below lists several people');
-select cmp_ok(
-  pg_temp.gate_calls_for(pg_temp.id('sharer'), pg_temp.id('fam')), '<=', 5::bigint,
-  'a member''s read calls each of the five gate helpers at most once, however many people are listed');
-select is(
-  pg_temp.gate_calls_for(pg_temp.id('owner_a'), pg_temp.id('fam')), 1::bigint,
-  'a church admin''s read stops at the first gate helper');
 do $$
 declare _id uuid;
 begin
@@ -578,8 +574,20 @@ begin
   perform set_config('cd.fam_empty', _id::text, true);
 end $$;
 select is(
-  pg_temp.gate_calls_for(pg_temp.id('sharer'), pg_temp.id('fam_empty')), 0::bigint,
-  'a household listing nobody doesn''t pay for the gate');
+  (select count(*) >= 3 from public.family_members where family_id = pg_temp.id('fam')),
+  true, 'the household measured below lists several people');
+select case when current_setting('track_functions') = 'all' then cmp_ok(
+    pg_temp.gate_calls_for(pg_temp.id('sharer'), pg_temp.id('fam')), '<=', 5::bigint,
+    'a member''s read calls each of the five gate helpers at most once, however many people are listed')
+  else skip('track_functions can''t be set here') end;
+select case when current_setting('track_functions') = 'all' then is(
+    pg_temp.gate_calls_for(pg_temp.id('owner_a'), pg_temp.id('fam')), 1::bigint,
+    'a church admin''s read stops at the first gate helper')
+  else skip('track_functions can''t be set here') end;
+select case when current_setting('track_functions') = 'all' then is(
+    pg_temp.gate_calls_for(pg_temp.id('sharer'), pg_temp.id('fam_empty')), 0::bigint,
+    'a household listing nobody doesn''t pay for the gate')
+  else skip('track_functions can''t be set here') end;
 select is(
   (select count(*) from regexp_matches(
     pg_get_functiondef('public.family_directory_people(uuid)'::regprocedure),
