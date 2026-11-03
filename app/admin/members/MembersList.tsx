@@ -316,8 +316,8 @@ export function MembersList({
                 return (
                   <Card key={member.id}>
                     <CardContent>
-                      <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-end 2xl:justify-between">
-                        <div className="min-w-0">
+                      <div className="flex flex-col gap-4">
+                        <div>
                           <p className="text-xl font-semibold">{displayName(member)}</p>
                           {member.email && (
                             <p className="break-words text-base text-muted-foreground">{member.email}</p>
