@@ -43,6 +43,10 @@ const CONFIG: Record<ImageUploadType, UploadConfig> = {
   },
 };
 
+function objectKey(orgId: string, path: string): string {
+  return `${orgObjectPath(orgId, path)}.jpg`;
+}
+
 // Every object key is org-partitioned: the caller passes a key
 // relative to the org prefix and this resolves `<orgId>/` in front of it.
 // Resolved per call, never cached in module scope — a stale org id would
@@ -58,7 +62,7 @@ async function resolveOrgPrefixedPath(
   if (!orgId) {
     throw new Error(`${label} failed: could not resolve organization`);
   }
-  return `${orgObjectPath(orgId, path)}.jpg`;
+  return objectKey(orgId, path);
 }
 
 /**
@@ -141,7 +145,7 @@ export async function deleteImage(
   const config = CONFIG[type];
   const supabase = server?.client ?? createClient();
   const fullPath = server
-    ? `${orgObjectPath(server.orgId, path)}.jpg`
+    ? objectKey(server.orgId, path)
     : await resolveOrgPrefixedPath(supabase, "deleteImage", path);
 
   const { data, error } = await supabase.storage
