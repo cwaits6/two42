@@ -23,6 +23,15 @@ function client(result: Result, calls: Record<string, unknown>) {
 }
 
 describe("savePrayerRetention", () => {
+  it("is not a save when the request throws", async () => {
+    const throwing = {
+      from: () => {
+        throw new Error("network down");
+      },
+    } as unknown as Parameters<typeof savePrayerRetention>[0];
+    expect(await savePrayerRetention(throwing, "org-1", 6)).toBe(false);
+  });
+
   it("writes the months for a period, on the caller's own org", async () => {
     const calls: Record<string, unknown> = {};
     const ok = await savePrayerRetention(client({ data: [{}], error: null }, calls), "org-1", 12);

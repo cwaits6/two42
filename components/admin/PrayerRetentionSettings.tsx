@@ -29,12 +29,16 @@ export async function savePrayerRetention(
   orgId: string,
   retention: PrayerRetention
 ): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("organizations")
-    .update({ prayer_request_retention_months: retention === "off" ? null : retention })
-    .eq("id", orgId)
-    .select("prayer_request_retention_months");
-  return !error && (data?.length ?? 0) > 0;
+  try {
+    const { data, error } = await supabase
+      .from("organizations")
+      .update({ prayer_request_retention_months: retention === "off" ? null : retention })
+      .eq("id", orgId)
+      .select("prayer_request_retention_months");
+    return !error && (data?.length ?? 0) > 0;
+  } catch {
+    return false;
+  }
 }
 
 interface PrayerRetentionSettingsProps {
