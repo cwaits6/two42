@@ -38,7 +38,7 @@ import { ErrorState } from "@/components/states/ErrorState";
 import { LoadingState } from "@/components/states/LoadingState";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { AnniversaryFields } from "@/components/profile/AnniversaryFields";
-import { birthdayErrors, type BirthdayErrors } from "@/components/profile/birthday";
+import { birthdayErrors, birthdayErrorsWithoutYear, type BirthdayErrors } from "@/components/profile/birthday";
 import { ChildListingNotice, DirectoryNotice } from "@/components/profile/DirectoryNotice";
 import { RelabelChildConfirm, relabelToChildLoss } from "@/components/household/RelabelChildConfirm";
 import { isChildWithoutAccount } from "@/lib/household";
@@ -1016,7 +1016,12 @@ export function HouseholdsManager() {
                                 claimed_profile_id: editingMember?.claimed_profile_id,
                               })
                             ) {
-                              setMemberBirthErrors((prev) => ({ ...prev, birth_year: undefined }));
+                              setMemberBirthErrors((prev) =>
+                                birthdayErrorsWithoutYear(prev, {
+                                  month: memberForm.birth_month,
+                                  day: memberForm.birth_day,
+                                }),
+                              );
                             }
                           }}
                         >

@@ -222,4 +222,27 @@ describe("the year's validation error", () => {
     expect(document.getElementById("birth_year")).toBeNull();
     expect(document.body.textContent).not.toContain("Enter a year from 1900");
   });
+
+  it("takes the month and day errors the year caused with it", async () => {
+    await mount({ ...ADULT, birth_month: 2, birth_day: 29, birth_year: 2023 });
+    await click("Save changes");
+    expect(document.body.textContent).toContain("Enter a day from 1 to 28.");
+    await click("Child");
+    expect(document.body.textContent).not.toContain("Enter a day from");
+    await act(async () => root.unmount());
+
+    await mount({ ...ADULT, birth_month: null, birth_day: null, birth_year: 1980 });
+    await click("Save changes");
+    expect(document.body.textContent).toContain("Choose the month of the birthday.");
+    await click("Child");
+    expect(document.body.textContent).not.toContain("Choose the month of the birthday.");
+    expect(document.body.textContent).not.toContain("Enter the day of the birthday.");
+  });
+
+  it("keeps a day error the year didn't cause", async () => {
+    await mount({ ...ADULT, birth_month: 2, birth_day: 31, birth_year: 2023 });
+    await click("Save changes");
+    await click("Child");
+    expect(document.body.textContent).toContain("Enter a day from 1 to 29.");
+  });
 });

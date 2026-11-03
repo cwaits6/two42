@@ -23,6 +23,7 @@ import {
   MONTHS,
   birthdayColumns,
   birthdayErrors,
+  birthdayErrorsWithoutYear,
   type BirthdayErrors,
 } from "@/components/profile/birthday";
 import { RelabelChildConfirm, relabelToChildLoss } from "@/components/household/RelabelChildConfirm";
@@ -335,7 +336,10 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
                     claimed_profile_id: member?.claimed_profile_id,
                   })
                 ) {
-                  clearError("birth_year");
+                  setErrors((prev) => ({
+                    ...prev,
+                    ...birthdayErrorsWithoutYear(prev, { month: birthMonth, day: birthDay }),
+                  }));
                 }
               }}
             >

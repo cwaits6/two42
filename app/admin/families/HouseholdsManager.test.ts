@@ -181,6 +181,28 @@ describe("HouseholdsManager", () => {
     expect(document.body.textContent).not.toContain("Enter a year from 1900");
   });
 
+  it("clears the month and day errors the year caused when the year field goes", async () => {
+    state.members = [{ ...LIAM, birth_month: 2, birth_day: 29, birth_year: 2023 }];
+    await mount();
+    await click("Edit Test");
+    await click("Edit Liam");
+    await click("Save");
+    expect(document.body.textContent).toContain("Enter a day from 1 to 28.");
+
+    await click("Child");
+    expect(document.body.textContent).not.toContain("Enter a day from");
+  });
+
+  it("keeps a day error the year didn't cause", async () => {
+    state.members = [{ ...LIAM, birth_month: 2, birth_day: 31, birth_year: 2023 }];
+    await mount();
+    await click("Edit Test");
+    await click("Edit Liam");
+    await click("Save");
+    await click("Child");
+    expect(document.body.textContent).toContain("Enter a day from 1 to 29.");
+  });
+
   it("shows the error state, not a toast, when the first load fails", async () => {
     state.loadError = { code: "XX000" };
     await mount();

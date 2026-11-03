@@ -73,6 +73,24 @@ export function birthdayErrors(parts: DateParts, today: Date = new Date()): Birt
   return errors;
 }
 
+/**
+ * What a form should show once its year field goes: month and day are judged
+ * again without a year, and a field showing no error stays clear until the next
+ * save.
+ */
+export function birthdayErrorsWithoutYear(
+  shown: BirthdayErrors,
+  { month, day }: Pick<DateParts, "month" | "day">,
+  today: Date = new Date(),
+): BirthdayErrors {
+  const rejudged = birthdayErrors({ month, day, year: "" }, today);
+  return {
+    birth_month: shown.birth_month && rejudged.birth_month,
+    birth_day: shown.birth_day && rejudged.birth_day,
+    birth_year: undefined,
+  };
+}
+
 export function anniversaryErrors(parts: DateParts, today: Date = new Date()): AnniversaryErrors {
   const found = datePartErrors("anniversary", parts, today);
   const errors: AnniversaryErrors = {};
