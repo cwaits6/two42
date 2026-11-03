@@ -19,7 +19,7 @@ const { POST } = await import("@/app/api/family-invites/route");
 const { CHILD_INVITE_REFUSED } = await import("@/lib/household");
 
 function makeClient(opts: {
-  member: { claimed_profile_id: string | null };
+  member: { claimed_profile_id: string | null } | null;
   insertError?: { code: string } | null;
 }) {
   const insert = vi.fn(() => ({
@@ -49,8 +49,8 @@ function makeClient(opts: {
           select: () => ({
             eq: () => ({
               single: async () => ({
-                data: { id: "m1", family_id: "f1", first_name: "Jack", last_name: "M", ...opts.member },
-                error: null,
+                data: opts.member && { id: "m1", family_id: "f1", first_name: "Jack", last_name: "M", ...opts.member },
+                error: opts.member ? null : { code: "PGRST116" },
               }),
             }),
           }),
@@ -121,6 +121,15 @@ describe("POST /api/family-invites", () => {
     expect(res.status).toBe(200);
     expect(insert).toHaveBeenCalledTimes(1);
     expect(sendFamilyInviteEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers 404 for someone in another household, whose row RLS hides", async () => {
+    const { client, insert } = makeClient({ member: null });
+    createClient.mockResolvedValue(client);
+
+    expect((await post()).status).toBe(404);
+    expect(insert).not.toHaveBeenCalled();
+    expect(sendFamilyInviteEmail).not.toHaveBeenCalled();
   });
 
   it("answers 409 for someone who already has an account", async () => {

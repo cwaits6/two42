@@ -40,15 +40,23 @@ create function public.family_invites_refuse_child()
   security definer
   set search_path = ''
 as $$
+declare
+  _relationship text;
+  _claimed_profile_id uuid;
 begin
-  if exists (
-    select 1
-      from public.family_members fm
-     where fm.id = new.family_member_id
-       and fm.org_id = new.org_id
-       and fm.relationship = 'child'
-       and fm.claimed_profile_id is null
-  ) then
+  -- FOR SHARE conflicts with the lock a relabel takes, so of an invite and a
+  -- relabel the later one waits for the earlier to commit: this read then sees
+  -- the relabel, or the relabel's retiring trigger sees this invite. The row is
+  -- judged after the read because a filter on relationship would leave an adult
+  -- unlocked, and an adult is who a relabel races.
+  select fm.relationship, fm.claimed_profile_id
+    into _relationship, _claimed_profile_id
+    from public.family_members fm
+   where fm.id = new.family_member_id
+     and fm.org_id = new.org_id
+     for share of fm;
+
+  if _relationship = 'child' and _claimed_profile_id is null then
     raise exception 'family_invites: a child without an account cannot be invited'
       using errcode = 'HP002';
   end if;
@@ -160,9 +168,12 @@ comment on function public.family_members_retire_child_details() is
 
 select public.family_members_retire_child_details();
 
--- SECURITY DEFINER because other members lose direct reads of family_members
--- below, and families_directory_full is security_invoker. The WHERE clause repeats
--- the arm those policies drop, so a direct call is gated the same way.
+-- SECURITY DEFINER because the policies below keep other members from reading
+-- family_members, and families_directory_full is security_invoker. The WHERE clause
+-- gates a direct call the same way the directory is gated. Each subselect in the gate
+-- runs once per call however many people are listed. OFFSET 0 and the gate's reference
+-- to fm keep the planner from checking it before the scan, so a household listing
+-- nobody, the common case, doesn't pay for it.
 create function public.family_directory_people(_family_id uuid)
   returns jsonb
   language sql
@@ -188,17 +199,19 @@ as $$
     'birth_day', fm.birth_day,
     'claimed_profile_id', fm.claimed_profile_id
   ) order by fm.relationship), '[]'::jsonb)
-  from public.family_members fm
-  where fm.family_id = _family_id
-    and fm.org_id = public.app_current_org_id()
-    and (
-      public.is_admin()
-      or (public.is_member() and (
-        fm.family_id = public.current_family_id()
-        or public.org_directory_visible()
-        or public.shares_group_with_household(_family_id)
-      ))
-    );
+  from (
+    select *
+      from public.family_members
+     where family_id = _family_id
+       and org_id = (select public.app_current_org_id())
+    offset 0
+  ) fm
+  where (select public.is_admin())
+    or ((select public.is_member()) and (
+      fm.family_id = (select public.current_family_id())
+      or (select public.org_directory_visible())
+      or (select public.shares_group_with_household(_family_id))
+    ));
 $$;
 
 revoke execute on function public.family_directory_people(uuid) from public, anon;
@@ -207,8 +220,6 @@ grant execute on function public.family_directory_people(uuid) to authenticated,
 comment on function public.family_directory_people(uuid) is
   'The people in a household as the directory shows them, for anyone who can see that household. No birth year, for anyone.';
 
--- Every column keeps its name, type and order for the deployed app, which never
--- read the birth_year key this list loses.
 create or replace view public.families_directory_full
   with (security_invoker = true)
 as

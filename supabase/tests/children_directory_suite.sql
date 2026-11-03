@@ -520,6 +520,72 @@ select is(
   'rows=1', 'the trigger doesn''t refuse a child who has an account');
 delete from public.family_invites where invite_email = 'grown2@children-directory.example.test';
 
+-- ── An invite and a relabel can't both commit ───────────────────────────────
+-- Two sessions can't run inside this transaction, so this proves the lock that
+-- makes the second one wait, on an adult, where a read filtered on relationship
+-- would lock nothing. The foreign key check alone takes only Key Share, which a
+-- relabel doesn't wait for.
+create extension if not exists pgrowlocks with schema extensions;
+do $$
+declare _id uuid;
+begin
+  insert into public.family_members (org_id, family_id, first_name, relationship)
+    values (pg_temp.id('org_a'), pg_temp.id('fam'), 'Lock', 'other') returning id into _id;
+  perform set_config('cd.fm_adult_unlocked', _id::text, true);
+end $$;
+select is(
+  (select count(*) from extensions.pgrowlocks('public.family_members') l
+    join public.family_members fm on fm.ctid = l.locked_row
+   where fm.id = pg_temp.id('fm_adult_unlocked')),
+  0::bigint, 'an adult with no invite under way holds no row lock');
+insert into public.family_invites (org_id, family_id, family_member_id, invite_email)
+  values (pg_temp.id('org_a'), pg_temp.id('fam'), pg_temp.id('fm_adult_unlocked'), 'lock@children-directory.example.test');
+select ok(
+  (select 'For Share' = any (l.modes) from extensions.pgrowlocks('public.family_members') l
+    join public.family_members fm on fm.ctid = l.locked_row
+   where fm.id = pg_temp.id('fm_adult_unlocked')),
+  'an invite holds a share lock on the person until it commits, which a relabel waits for');
+
+-- ── The directory's gate runs once per call ─────────────────────────────────
+set local track_functions = 'all';
+create function pg_temp.gate_calls() returns bigint
+  language sql as $$
+  select coalesce(sum(calls), 0)::bigint from pg_stat_xact_user_functions
+   where schemaname = 'public'
+     and funcname in ('is_admin', 'is_member', 'current_family_id', 'org_directory_visible', 'shares_group_with_household');
+$$;
+create function pg_temp.gate_calls_for(_actor uuid, _family uuid) returns bigint
+  language plpgsql as $$
+declare _before bigint := pg_temp.gate_calls();
+begin
+  perform pg_temp.as_text(_actor, format('select public.family_directory_people(%L)::text', _family));
+  return pg_temp.gate_calls() - _before;
+end $$;
+select is(
+  (select count(*) >= 3 from public.family_members where family_id = pg_temp.id('fam')),
+  true, 'the household measured below lists several people');
+select cmp_ok(
+  pg_temp.gate_calls_for(pg_temp.id('sharer'), pg_temp.id('fam')), '<=', 5::bigint,
+  'a member''s read calls each of the five gate helpers at most once, however many people are listed');
+select is(
+  pg_temp.gate_calls_for(pg_temp.id('owner_a'), pg_temp.id('fam')), 1::bigint,
+  'a church admin''s read stops at the first gate helper');
+do $$
+declare _id uuid;
+begin
+  insert into public.family_units (org_id, family_name)
+    values (pg_temp.id('org_a'), 'Nobody Listed') returning id into _id;
+  perform set_config('cd.fam_empty', _id::text, true);
+end $$;
+select is(
+  pg_temp.gate_calls_for(pg_temp.id('sharer'), pg_temp.id('fam_empty')), 0::bigint,
+  'a household listing nobody doesn''t pay for the gate');
+select is(
+  (select count(*) from regexp_matches(
+    pg_get_functiondef('public.family_directory_people(uuid)'::regprocedure),
+    '(?<!\(select )public\.(app_current_org_id|is_admin|is_member|current_family_id|org_directory_visible)\(\)', 'g')),
+  0::bigint, 'every zero-argument helper in the gate is wrapped in a subselect');
+
 -- ── Becoming a child without an account ends the invite ─────────────────────
 select is(
   pg_temp.as_write(pg_temp.id('parent'), format(
