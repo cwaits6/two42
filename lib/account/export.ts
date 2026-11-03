@@ -9,6 +9,7 @@
  * RSVPs, and no one who prayed for a request.
  */
 import { createServiceClient } from "@/lib/supabase/server";
+import { rowsOf } from "./rows";
 
 const PROFILE_COLUMNS =
   "first_name, last_name, preferred_name, email, phone, phone_mobile, phone_home, phone_work, " +
@@ -19,11 +20,6 @@ const PROFILE_COLUMNS =
 const HOUSEHOLD_COLUMNS =
   "family_name, address_line1, address_line2, city, state, postal_code, phone_home, " +
   "anniversary_month, anniversary_day, anniversary_year";
-
-function listOf<T>(read: { data: unknown; error: { code?: string } | null }, what: string): T[] {
-  if (read.error) throw new Error(`${what}: code=${read.error.code}`);
-  return (read.data ?? []) as T[];
-}
 
 const HOUSEHOLD_ENTRY_INTERNALS = new Set([
   "id",
@@ -47,7 +43,7 @@ function householdEntry(row: Record<string, unknown>) {
 export async function buildAccountExport(orgId: string, personId: string) {
   const service = await createServiceClient();
 
-  const [profile] = listOf<Record<string, unknown> & { family_id: string | null }>(
+  const [profile] = rowsOf<Record<string, unknown> & { family_id: string | null }>(
     await service
       .from("profiles")
       .select(`${PROFILE_COLUMNS}, family_id`)
@@ -114,17 +110,17 @@ export async function buildAccountExport(orgId: string, personId: string) {
 
   return {
     profile: ownProfile,
-    household: listOf<Record<string, unknown>>(households, "household")[0] ?? null,
-    household_entries: listOf<Record<string, unknown>>(entries, "household entries").map(householdEntry),
-    groups: listOf<{ role: string; joined_at: string; groups: { name: string } | null }>(
+    household: rowsOf<Record<string, unknown>>(households, "household")[0] ?? null,
+    household_entries: rowsOf<Record<string, unknown>>(entries, "household entries").map(householdEntry),
+    groups: rowsOf<{ role: string; joined_at: string; groups: { name: string } | null }>(
       groups,
       "groups",
     ).map((g) => ({ group: named(g.groups), role: g.role, joined_at: g.joined_at })),
-    teams: listOf<{ is_leader: boolean; assigned_at: string; teams: { name: string } | null }>(
+    teams: rowsOf<{ is_leader: boolean; assigned_at: string; teams: { name: string } | null }>(
       teams,
       "teams",
     ).map((t) => ({ team: named(t.teams), is_team_lead: t.is_leader, joined_at: t.assigned_at })),
-    rsvps: listOf<{
+    rsvps: rowsOf<{
       status: string;
       created_at: string;
       events: { title: string; start_time: string } | null;
@@ -134,13 +130,13 @@ export async function buildAccountExport(orgId: string, personId: string) {
       status: r.status,
       answered_at: r.created_at,
     })),
-    serving_turns: listOf<{
+    serving_turns: rowsOf<{
       serving_signups: { service_date: string; teams: { name: string } | null } | null;
     }>(serving, "serving turns").map((s) => ({
       team: named(s.serving_signups?.teams),
       date: s.serving_signups?.service_date ?? null,
     })),
-    prayer_requests: listOf<{
+    prayer_requests: rowsOf<{
       body: string;
       is_anonymous: boolean;
       is_answered: boolean;
@@ -153,7 +149,7 @@ export async function buildAccountExport(orgId: string, personId: string) {
       answered: p.is_answered,
       posted_at: p.created_at,
     })),
-    funds_you_receive: listOf<{
+    funds_you_receive: rowsOf<{
       name: string;
       description: string | null;
       is_active: boolean;
@@ -171,7 +167,7 @@ export async function buildAccountExport(orgId: string, personId: string) {
         handle: m.custom_handle,
       })),
     })),
-    feedback: listOf<{ type: string; message: string; created_at: string }>(feedback, "feedback").map((f) => ({
+    feedback: rowsOf<{ type: string; message: string; created_at: string }>(feedback, "feedback").map((f) => ({
       type: f.type,
       message: f.message,
       sent_at: f.created_at,

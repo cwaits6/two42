@@ -11,18 +11,13 @@ import { notifyLeadersOfCancel } from "@/lib/serving/server";
 import { removeAvatarObjects } from "@/lib/storageDelete";
 import { createServiceClient } from "@/lib/supabase/server";
 import type { DeletionSummary, DeletionViewer } from "./deletionCopy";
+import { rowsOf } from "./rows";
 
 type ServiceClient = Awaited<ReturnType<typeof createServiceClient>>;
 
 export type PersonDeletionResult =
   | { outcome: "deleted"; photosNotRemoved: number }
   | { outcome: "not_found" | "platform_operator" | "last_church_admin" | "failed" };
-
-function rowsOf<T>(read: { data: unknown; error: { code?: string } | null }, step: string): T[] {
-  // The step and code only: a PostgrestError's details echo row content.
-  if (read.error) throw new Error(`${step}: code=${read.error.code}`);
-  return (read.data ?? []) as T[];
-}
 
 interface FundRow {
   name: string;
