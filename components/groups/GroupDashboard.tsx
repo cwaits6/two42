@@ -165,7 +165,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
                   {home.newTiles === null ? (
                     <ErrorState thing="what's new in the group" />
                   ) : home.newTiles.length === 0 ? (
-                    <AddAction href={href("/settings/announcements/new")} label="Add announcement" />
+                    <AddAction href={href("/announcements/new")} label="Add announcement" />
                   ) : (
                     <ul className="space-y-3">
                       {home.newTiles.map((tile) => (
@@ -237,7 +237,7 @@ function NothingYet({ isLeader, href }: { isLeader: boolean; href: (path: string
             message="No announcements yet."
             action={
               isLeader && (
-                <Link href={href("/settings/announcements/new")} className={buttonVariants()}>
+                <Link href={href("/announcements/new")} className={buttonVariants()}>
                   <Plus aria-hidden="true" />
                   Add announcement
                 </Link>

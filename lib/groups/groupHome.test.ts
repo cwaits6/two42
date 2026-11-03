@@ -612,7 +612,7 @@ describe("To do", () => {
     );
     expect(home.todo?.map((r) => [r.title, r.detail, r.href])).toEqual([
       ["2 people asked to join", "Approve or decline", `/g/${GROUP}/settings/privacy`],
-      ["1 announcement to publish", "Meal train", `/g/${GROUP}/settings/announcements`],
+      ["1 announcement to publish", "Meal train", `/g/${GROUP}/announcements`],
     ]);
   });
 

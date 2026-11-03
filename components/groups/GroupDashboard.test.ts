@@ -317,7 +317,7 @@ describe("GroupDashboard", () => {
     const tree = await render(LEADER);
 
     expect(texts(tree).join("")).toContain("Add announcement");
-    expect(linkHrefs(tree)).toContain("/g/b/settings/announcements/new");
+    expect(linkHrefs(tree)).toContain("/g/b/announcements/new");
   });
 
   it("offers a leader Add event when only the week is empty", async () => {
@@ -435,7 +435,7 @@ describe("GroupDashboard", () => {
     expect(leaderText).toContain("2 people asked to join");
     expect(leaderText).toContain("1 announcement to publish");
     expect(linkHrefs(leader)).toEqual(
-      expect.arrayContaining(["/g/b/settings/privacy", "/g/b/settings/announcements"]),
+      expect.arrayContaining(["/g/b/settings/privacy", "/g/b/announcements"]),
     );
 
     expect(texts(await render(MEMBER)).join("")).not.toContain("To do");
