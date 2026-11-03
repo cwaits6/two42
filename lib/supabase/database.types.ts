@@ -445,14 +445,14 @@ isOneToOne: false
                   ]
                 },"giving_funds": {
                   Row: {
-                    "co_steward_id": string | null,"created_at": string,"created_by": string | null,"description": string | null,"display_order": number,"group_id": string,"id": string,"is_active": boolean,"name": string,"org_id": string,"retire_on": string | null,"steward_id": string,"steward_role": string | null,"updated_at": string
+                    "co_steward_id": string | null,"created_at": string,"created_by": string | null,"description": string | null,"display_order": number,"group_id": string,"id": string,"is_active": boolean,"name": string,"needs_review": boolean,"org_id": string,"retire_on": string | null,"steward_id": string | null,"steward_role": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "co_steward_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"display_order"?: number,"group_id": string,"id"?: string,"is_active"?: boolean,"name": string,"org_id"?: string,"retire_on"?: string | null,"steward_id": string,"steward_role"?: string | null,"updated_at"?: string
+                    "co_steward_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"display_order"?: number,"group_id": string,"id"?: string,"is_active"?: boolean,"name": string,"needs_review"?: boolean,"org_id"?: string,"retire_on"?: string | null,"steward_id"?: string | null,"steward_role"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "co_steward_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"display_order"?: number,"group_id"?: string,"id"?: string,"is_active"?: boolean,"name"?: string,"org_id"?: string,"retire_on"?: string | null,"steward_id"?: string,"steward_role"?: string | null,"updated_at"?: string
+                    "co_steward_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"display_order"?: number,"group_id"?: string,"id"?: string,"is_active"?: boolean,"name"?: string,"needs_review"?: boolean,"org_id"?: string,"retire_on"?: string | null,"steward_id"?: string | null,"steward_role"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -1597,6 +1597,9 @@ isOneToOne: false
                            },
 "giving_can_manage_fund":
 { Args: { "_fund_id": string }; Returns: boolean
+                           },
+"giving_funds_apply_recipient_rules":
+{ Args: Record<PropertyKey, never>; Returns: Record<string, unknown>
                            },
 "giving_stewards_can_manage":
 { Args: Record<PropertyKey, never>; Returns: boolean

@@ -388,6 +388,8 @@ begin
     values (org_a, grp_a, owner_a, 'leader');
   insert into public.team_members (org_id, profile_id, team_id, is_leader)
     values (org_a, owner_a, group_a, true);
+  insert into public.group_members (org_id, group_id, profile_id)
+    values (org_b, grp_b, current_setting('su.app_meta_user')::uuid);
   insert into public.giving_funds (org_id, group_id, name, steward_id)
     values (org_b, grp_b, 'B fund', current_setting('su.app_meta_user')::uuid)
     returning id into fund_b;

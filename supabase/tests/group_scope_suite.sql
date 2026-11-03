@@ -283,7 +283,7 @@ declare
     format('insert into public.events (org_id, group_id, calendar_id, title, start_time, created_by) values (%L, %L, %L, ''x'', now(), $1)', org, grp_a, cal_a),
     format('insert into public.lectures (org_id, group_id, title, video_url) values (%L, %L, ''x'', ''https://example.test/x'')', org, grp_a),
     format('insert into public.lecture_series (org_id, group_id, name) values (%L, %L, ''x'')', org, grp_a),
-    format('insert into public.giving_funds (org_id, group_id, name, steward_id, created_by) values (%L, %L, ''x'', $1, $1)', org, grp_a),
+    format('insert into public.giving_funds (org_id, group_id, name, steward_id, created_by) values (%L, %L, ''x'', %L, $1)', org, grp_a, current_setting('gs.member_a')),
     format('insert into public.prayer_call_sessions (org_id, group_id, weekday, start_time) values (%L, %L, 1, ''07:00'')', org, grp_a),
     format('insert into public.class_teachers (org_id, group_id, profile_id) values (%L, %L, $1)', org, grp_a),
     format('insert into public.group_settings (org_id, group_id, zoom_meeting_time) values (%L, %L, ''x'') on conflict (group_id) do update set zoom_meeting_time = ''x''', org, grp_a)];
@@ -436,7 +436,7 @@ select is(current_setting('gs.mv_prayer'), '42501',
   'a poster cannot move their own prayer request into a group they are not in');
 select is(current_setting('gs.ok_prayer_update'), '1',
   'non-vacuity: the poster can still edit the request inside their group');
-select is(current_setting('gs.mv_fund'), '42501',
+select is(current_setting('gs.mv_fund'), '23514',
   'a steward cannot move their fund into a group they are not in');
 select is(current_setting('gs.ok_fund_update'), '1',
   'non-vacuity: the steward can still edit the fund inside their group');
