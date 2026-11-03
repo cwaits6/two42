@@ -256,12 +256,11 @@ describe("deletePerson: sign-up records at other addresses", () => {
     expect(tables.access_requests).toEqual([]);
   });
 
-  it("finds an old address through the group invite they came in by", async () => {
+  it("finds a request at an old address through the group invite they came in by", async () => {
     const { tables } = setup({
       access_requests: [
-        { id: "linked", org_id: ORG, email: "old@example.test" },
-        { id: "same-address", org_id: ORG, email: "OLD@example.test" },
-        { id: "someone-else", org_id: ORG, email: "ben@example.test" },
+        { id: "linked", org_id: ORG, email: "old@example.test", signup_token: null },
+        { id: "someone-else", org_id: ORG, email: "ben@example.test", signup_token: null },
       ],
       group_invite_uses: [
         { id: "u1", org_id: ORG, profile_id: "ada", email: "old@example.test", access_request_id: "linked" },
@@ -272,18 +271,21 @@ describe("deletePerson: sign-up records at other addresses", () => {
     expect(tables.group_invite_uses).toEqual([]);
   });
 
-  it("finds an old address through the household invite they accepted", async () => {
+  it("finds a request at an old address through the household invite they accepted", async () => {
     const { tables } = setup({
       family_members: [
         { id: "m1", org_id: ORG, family_id: "f1", first_name: "Ada", claimed_profile_id: "ada" },
       ],
       family_invites: [
-        { id: "i1", org_id: ORG, family_member_id: "m1", invite_email: "old@example.test", accepted_at: "2026-01-01" },
+        { id: "i1", org_id: ORG, family_member_id: "m1", invite_email: "old@example.test", token: "t1", accepted_at: "2026-01-01" },
       ],
-      access_requests: [{ id: "r1", org_id: ORG, email: "old@example.test" }],
+      access_requests: [
+        { id: "r1", org_id: ORG, email: "old@example.test", invite_token: "t1", signup_token: null },
+        { id: "other-church", org_id: OTHER_ORG, email: "old@example.test", invite_token: "t1", signup_token: null },
+      ],
     });
     expect(await deletePerson(ORG, "ada")).toBe("deleted");
-    expect(tables.access_requests).toEqual([]);
+    expect(tables.access_requests.map((r) => r.id)).toEqual(["other-church"]);
   });
 
   it("leaves what belongs to someone else at an old address they shared", async () => {
@@ -297,36 +299,78 @@ describe("deletePerson: sign-up records at other addresses", () => {
         { id: "spouse", org_id: ORG, family_member_id: "m2", invite_email: "family@example.test", token: "t2", accepted_at: null },
       ],
       access_requests: [
-        { id: "own-request", org_id: ORG, email: "family@example.test", invite_token: "t1" },
-        { id: "unlinked-request", org_id: ORG, email: "family@example.test", invite_token: null },
-        { id: "spouse-request", org_id: ORG, email: "family@example.test", invite_token: "t2" },
+        { id: "own-request", org_id: ORG, email: "family@example.test", invite_token: "t1", signup_token: null },
+        { id: "approved-request", org_id: ORG, email: "family@example.test", invite_token: null, status: "approved", signup_token: "ben-link" },
+        { id: "denied-request", org_id: ORG, email: "family@example.test", invite_token: null, status: "denied", signup_token: null },
+        { id: "spouse-request", org_id: ORG, email: "family@example.test", invite_token: "t2", signup_token: null },
       ],
       group_invite_uses: [
-        { id: "spouse-use", org_id: ORG, profile_id: "ben", email: "family@example.test" },
+        { id: "signed-up-use", org_id: ORG, profile_id: "ben", email: "family@example.test", access_request_id: null },
+        { id: "pending-use", org_id: ORG, profile_id: null, email: "family@example.test", access_request_id: "approved-request" },
       ],
     });
     expect(await deletePerson(ORG, "ada")).toBe("deleted");
     expect(tables.family_invites.map((i) => i.id)).toContain("spouse");
-    expect(tables.access_requests.map((r) => r.id)).toEqual(["spouse-request"]);
-    expect(tables.group_invite_uses.map((u) => u.id)).toEqual(["spouse-use"]);
+    expect(tables.access_requests.map((r) => r.id)).toEqual(["approved-request", "denied-request", "spouse-request"]);
+    expect(tables.group_invite_uses.map((u) => u.id)).toEqual(["signed-up-use", "pending-use"]);
+    expect(tables.group_invite_uses[1].access_request_id).toBe("approved-request");
   });
 
-  const oldAddressSteps = [
+  for (const route of ["group link", "household invite"] as const) {
+    it(`keeps a request someone else reused at an old address, found through their ${route}`, async () => {
+      const { tables } = setup({
+        family_members: [
+          { id: "m1", org_id: ORG, family_id: "f1", first_name: "Ada", claimed_profile_id: "ada" },
+        ],
+        family_invites: [
+          { id: "accepted", org_id: ORG, family_member_id: "m1", invite_email: "family@example.test", token: "t1", accepted_at: "2026-01-01" },
+        ],
+        access_requests: [
+          {
+            id: "reused",
+            org_id: ORG,
+            email: "family@example.test",
+            invite_token: route === "household invite" ? "t1" : null,
+            signup_token: "ben-link",
+          },
+        ],
+        group_invite_uses: [
+          {
+            id: "own",
+            org_id: ORG,
+            profile_id: "ada",
+            email: "family@example.test",
+            access_request_id: route === "group link" ? "reused" : null,
+          },
+        ],
+      });
+      expect(await deletePerson(ORG, "ada")).toBe("deleted");
+      expect(tables.access_requests.map((r) => r.id)).toEqual(["reused"]);
+      expect(tables.group_invite_uses).toEqual([]);
+    });
+  }
+
+  it("removes a request with a setup link at an address they hold", async () => {
+    const { tables } = setup({
+      access_requests: [{ id: "r1", org_id: ORG, email: "ada@example.test", signup_token: "live" }],
+    });
+    expect(await deletePerson(ORG, "ada")).toBe("deleted");
+    expect(tables.access_requests).toEqual([]);
+  });
+
+  const signupRecordSteps = [
     { name: "the uses found by address", failure: { table: "group_invite_uses", op: "delete" } },
     { name: "the requests", failure: { table: "access_requests", op: "delete" } },
     { name: "their own uses", failure: { table: "group_invite_uses", op: "delete", skip: 1 } },
   ] as const;
 
-  for (const { name, failure } of oldAddressSteps) {
-    it(`still clears an old address on retry after deleting ${name} fails`, async () => {
+  for (const { name, failure } of signupRecordSteps) {
+    it(`still clears a linked request on retry after deleting ${name} fails`, async () => {
       const { failures, log, tables } = setup({
-        access_requests: [
-          { id: "linked", org_id: ORG, email: "old@example.test" },
-          { id: "same-address", org_id: ORG, email: "old@example.test" },
-        ],
+        access_requests: [{ id: "linked", org_id: ORG, email: "old@example.test", signup_token: null }],
         group_invite_uses: [
           { id: "own", org_id: ORG, profile_id: "ada", email: "old@example.test", access_request_id: "linked" },
-          { id: "at-address", org_id: ORG, profile_id: null, email: "old@example.test", access_request_id: null },
+          { id: "at-address", org_id: ORG, profile_id: null, email: "ada@example.test", access_request_id: null },
         ],
       });
       failures.push({ ...failure });
