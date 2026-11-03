@@ -148,7 +148,7 @@ test("a paused fund is off Give for a member, and a leader can reach it with its
     await expect(hidden.getByText("Needs review")).toBeVisible();
     await expect(hidden.getByText(NO_RECIPIENT)).toBeVisible();
     await expect(hidden.getByText("Needs a recipient")).toBeVisible();
-    await expect(hidden.getByRole("link", { name: `Review ${NO_RECIPIENT}` })).toBeVisible();
+    await expect(hidden.getByLabel(`Review ${NO_RECIPIENT}`)).toBeVisible();
   } finally {
     await member.context.close();
     await leader.context.close();
