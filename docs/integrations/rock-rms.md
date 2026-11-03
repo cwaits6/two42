@@ -71,14 +71,17 @@ Adults, and a child with an account, keep their birth year and match on name,
 month, day and year as before. So a row with a year that names another
 relationship, or leaves `relationship` blank, doesn't match a child who shares
 that name and birthday. Nothing stored says whether that row is the child, so it
-adds a separate person, with its year, and a warning. Clearing its `birth_year`
-makes it match the child, and a row naming a relationship then relabels them. The
-relabel can't write a year, so add it under Households before the next file: a row
-with a year doesn't match someone with none stored, and adds them again with the
-same warning.
+adds a separate person, with its year, and a warning. A year the file marks hidden
+keeps the row apart the same way, and isn't stored, though a row hiding its whole
+birthday still matches on name someone with no birthday stored. Clearing its `birth_year` makes
+it match the child, and a row naming a relationship then relabels them. The relabel
+can't write a year, so add it under Households before the next file: a row with a
+year doesn't match someone with none stored, and adds them again with the same
+warning.
 
 A row with `has_login` and a blank `relationship` matches a family member only on
-name, month, day and year, so its year decides whether it is a `HAS_LOGIN_CHANGE`.
+name, month, day and year, so its year, hidden or not, decides whether it is a
+`HAS_LOGIN_CHANGE`.
 
 A row that relabels a stored adult with no account as a `child` removes their
 stored birth year, which the row's changes and a warning show, and deletes any

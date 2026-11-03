@@ -269,14 +269,23 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     new Set([personKey(row), personKey(fileRowOf.get(row)!)]);
   const yearlessKeys = (row: MemberRow): Set<string> =>
     new Set([yearlessKey(row), yearlessKey(fileRowOf.get(row)!)]);
-  // A row naming another relationship, or a blank one with a year, keeps that year
-  // in the key, so it stays apart from a child who shares the name and birthday.
-  // Nothing stored says it isn't that child, so the create path warns.
+  // A year the file hides on its own still tells this row from a child stored with
+  // that name and birthday. Hiding the whole birthday leaves nothing to compare.
+  const matchesExactly = (row: MemberRow, member: SnapshotFamilyMember): boolean => {
+    const fileRow = fileRowOf.get(row)!;
+    return isChildWithoutAccount(member) &&
+      fileRow.birth_year !== null &&
+      !row.hidden_fields.includes("birthday")
+      ? personKey(fileRow) === personKey(member)
+      : identityKeys(row).has(personKey(member));
+  };
+  // Nothing stored says a row kept apart isn't that child, so the create path warns.
   const matchesFamilyMember = (row: MemberRow, member: SnapshotFamilyMember): boolean =>
     isChildWithoutAccount(member) &&
-    (row.relationship === "child" || (row.relationship === null && row.birth_year === null))
+    (row.relationship === "child" ||
+      (row.relationship === null && fileRowOf.get(row)!.birth_year === null))
       ? yearlessKeys(row).has(yearlessKey(member))
-      : identityKeys(row).has(personKey(member));
+      : matchesExactly(row, member);
 
   // ---- snapshot lookups --------------------------------------------------
   const profilesByEmail = new Map<string, SnapshotProfile[]>();
@@ -741,7 +750,7 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
         ).some((member) =>
           // A blank relationship can't say this person is that child.
           row.relationship === null
-            ? identityKeys(row).has(personKey(member))
+            ? matchesExactly(row, member)
             : matchesFamilyMember(row, member)
         );
         if (shadow) {
