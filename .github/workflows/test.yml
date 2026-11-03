@@ -99,8 +99,9 @@ jobs:
       # bind, so the listing is what shows a socket that was already there.
       - name: Reserve the Supabase ports
         run: |
-          sysctl net.ipv4.ip_local_reserved_ports
-          sudo sysctl -w net.ipv4.ip_local_reserved_ports=54320-54329
+          existing=$(sysctl -n net.ipv4.ip_local_reserved_ports)
+          echo "Already reserved: ${existing:-none}"
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports="${existing:+$existing,}54320-54329"
           sudo ss -tanp '( sport >= :54320 and sport <= :54329 )'
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
