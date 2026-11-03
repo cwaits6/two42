@@ -54,7 +54,7 @@ export function photosNotRemovedMessage(count: number, subject: DeletionSubject)
 }
 
 export const DOWNLOAD_COVERS =
-  "The file holds your profile, household, groups, RSVPs, serving turns, prayer requests, the funds you receive and your feedback.";
+  "The file holds your profile, your household and anyone listed in it without their own account, your groups, RSVPs, serving turns, prayer requests, the funds you receive and your feedback.";
 
 export const DOWNLOAD_LEAVES_OUT =
   "It doesn't include your photo, prayers you responded to, funds you're second on, or anything you added for a group, like events and announcements.";

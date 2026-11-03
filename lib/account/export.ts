@@ -2,9 +2,11 @@
  * One person's own data, for their download. Every read is on the service
  * client because the author of an anonymous prayer request isn't readable
  * otherwise, and because memberships and RSVPs outlive the group access that
- * RLS would need to read them. Each chain filters on the org and on this person,
- * and selects no column naming anyone else: no co-attendees of a serving date,
- * no one else's RSVPs, and no one who prayed for a request.
+ * RLS would need to read them. Each chain filters on the org and on this person
+ * or the household on their own profile row. Only unclaimed household entries
+ * name anyone else, with their details, since nothing records who typed them.
+ * Nothing else selected does: no co-attendees of a serving date, no one else's
+ * RSVPs, and no one who prayed for a request.
  */
 import { createServiceClient } from "@/lib/supabase/server";
 
