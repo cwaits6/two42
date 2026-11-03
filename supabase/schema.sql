@@ -3290,7 +3290,7 @@ CREATE TABLE IF NOT EXISTS "public"."group_invites" (
 ALTER TABLE "public"."group_invites" OWNER TO "postgres";
 
 
-COMMENT ON TABLE "public"."group_invites" IS 'A link into one group. token is the plaintext the link carries; the row is read by the service client on /join/<token> and is the org anchor for everything that follows. Dead when revoked_at is set, expires_at has passed, or group_invite_uses holds max_uses rows. Never deleted by the app.';
+COMMENT ON TABLE "public"."group_invites" IS 'A link into one group. token is the plaintext the link carries; the row is read by the service client on /join/<token> and is the org anchor for everything that follows. Dead when revoked_at is set, expires_at has passed, or group_invite_uses holds max_uses rows. The nightly clean-up-expired-data job deletes it 90 days after it is revoked or expires; no client can delete it.';
 
 
 
@@ -3563,8 +3563,10 @@ CREATE TABLE IF NOT EXISTS "public"."organizations" (
     "group_creation_policy" "text" DEFAULT 'approval'::"text" NOT NULL,
     "group_discovery" boolean DEFAULT true NOT NULL,
     "timezone" "text" DEFAULT 'America/New_York'::"text" NOT NULL,
+    "prayer_request_retention_months" integer,
     CONSTRAINT "organizations_directory_visibility_check" CHECK (("directory_visibility" = ANY (ARRAY['shared_groups'::"text", 'org'::"text"]))),
-    CONSTRAINT "organizations_group_creation_policy_check" CHECK (("group_creation_policy" = ANY (ARRAY['open'::"text", 'approval'::"text", 'admins'::"text"])))
+    CONSTRAINT "organizations_group_creation_policy_check" CHECK (("group_creation_policy" = ANY (ARRAY['open'::"text", 'approval'::"text", 'admins'::"text"]))),
+    CONSTRAINT "organizations_prayer_request_retention_months_check" CHECK (("prayer_request_retention_months" = ANY (ARRAY[6, 12, 24])))
 );
 
 
@@ -3588,6 +3590,10 @@ COMMENT ON COLUMN "public"."organizations"."group_discovery" IS 'Ceiling for gro
 
 
 COMMENT ON COLUMN "public"."organizations"."timezone" IS 'IANA zone every event time is entered and displayed in. organizations_timezone_check() refuses anything but an exact IANA name; the app falls back to its configured default only when no org row resolves.';
+
+
+
+COMMENT ON COLUMN "public"."organizations"."prayer_request_retention_months" IS 'Age in months, from created_at, at which the nightly job deletes a prayer request. NULL keeps them.';
 
 
 
@@ -6768,6 +6774,10 @@ GRANT SELECT("group_discovery"),UPDATE("group_discovery") ON TABLE "public"."org
 
 
 GRANT SELECT("timezone"),UPDATE("timezone") ON TABLE "public"."organizations" TO "authenticated";
+
+
+
+GRANT SELECT("prayer_request_retention_months"),UPDATE("prayer_request_retention_months") ON TABLE "public"."organizations" TO "authenticated";
 
 
 
