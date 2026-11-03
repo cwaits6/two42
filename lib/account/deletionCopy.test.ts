@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   alreadyGoneMessage,
   deletionCopy,
+  DOWNLOAD_COVERS,
   DOWNLOAD_LEAVES_OUT,
   photosNotRemovedMessage,
   refusalMessage,
@@ -130,6 +131,19 @@ describe("photosNotRemovedMessage", () => {
   it("says the account is gone and how many photos aren't", () => {
     expect(photosNotRemovedMessage(1, "self")).toContain("deleted, but 1 photo is still stored");
     expect(photosNotRemovedMessage(2, "other")).toContain("deleted, but 2 photos are still stored");
+  });
+});
+
+describe("the download's copy", () => {
+  it("says the file holds what the person wrote in their requests", () => {
+    expect(DOWNLOAD_COVERS).toMatch(/group requests/);
+    expect(DOWNLOAD_COVERS).toMatch(/request for access/);
+  });
+
+  it("names what the file leaves out", () => {
+    for (const left of [/requests to join a group/, /teacher/, /calendar link/]) {
+      expect(DOWNLOAD_LEAVES_OUT).toMatch(left);
+    }
   });
 });
 

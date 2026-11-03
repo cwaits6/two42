@@ -14,8 +14,8 @@ const OTHER_ORG = "org-2";
 function setup() {
   const tables: Tables = {
     profiles: [
-      { id: "ada", org_id: ORG, first_name: "Ada", family_id: "f1" },
-      { id: "ben", org_id: ORG, first_name: "Ben", family_id: "f1" },
+      { id: "ada", org_id: ORG, first_name: "Ada", email: "ada_o@example.test", family_id: "f1" },
+      { id: "ben", org_id: ORG, first_name: "Ben", email: "ben@example.test", family_id: "f1" },
     ],
     family_units: [{ id: "f1", org_id: ORG, family_name: "Okafor" }],
     family_members: [
@@ -47,6 +47,18 @@ function setup() {
       { org_id: ORG, profile_id: "ada", type: "idea", message: "Her idea", created_at: "t" },
       { org_id: ORG, profile_id: "ben", type: "idea", message: "Someone elses idea", created_at: "t" },
       { org_id: OTHER_ORG, profile_id: "ada", type: "idea", message: "Far idea", created_at: "t" },
+    ],
+    group_requests: [
+      { org_id: ORG, requested_by: "ada", name: "Young couples", description: "Her pitch", status: "pending", created_at: "t" },
+      { org_id: ORG, requested_by: "ben", name: "Bens group", description: "His pitch", status: "pending", created_at: "t" },
+      { org_id: OTHER_ORG, requested_by: "ada", name: "Far group", description: "Far pitch", status: "pending", created_at: "t" },
+    ],
+    access_requests: [
+      { org_id: ORG, email: "ADA_O@example.test", message: "Her note", status: "approved", created_at: "t" },
+      { org_id: ORG, email: "ada_o@example.test", message: null, status: "approved", created_at: "t" },
+      { org_id: ORG, email: "adaxo@example.test", message: "Lookalike note", status: "approved", created_at: "t" },
+      { org_id: ORG, email: "ben@example.test", message: "Bens note", status: "approved", created_at: "t" },
+      { org_id: OTHER_ORG, email: "ada_o@example.test", message: "Far note", status: "approved", created_at: "t" },
     ],
     prayer_requests: [
       { org_id: ORG, author_id: "ada", body: "By name", is_anonymous: false, is_answered: false, created_at: "t", groups: { name: "Grace" } },
@@ -125,12 +137,47 @@ describe("buildAccountExport", () => {
     expect(data?.household_entries[1]).toEqual({ first_name: "Kid", birth_year: 2015 });
   });
 
+  it("leaves a new household entry column out until it's listed", async () => {
+    const { tables } = setup();
+    tables.family_members[2].some_internal_flag = true;
+    const data = await buildAccountExport(ORG, "ada");
+    expect(JSON.stringify(data?.household_entries)).not.toContain("some_internal_flag");
+  });
+
+  it("carries a null birth year as a null, for a child whose year was cleared", async () => {
+    const { tables } = setup();
+    tables.family_members[2].birth_year = null;
+    const data = await buildAccountExport(ORG, "ada");
+    expect(data?.household_entries[1]).toEqual({ first_name: "Kid", birth_year: null });
+  });
+
+  it("includes the group requests they wrote, in this church only", async () => {
+    setup();
+    const data = await buildAccountExport(ORG, "ada");
+    expect(data?.group_requests).toEqual([
+      { name: "Young couples", description: "Her pitch", status: "pending", requested_at: "t" },
+    ]);
+  });
+
+  it("includes the message on their access request, matched exactly on their address", async () => {
+    setup();
+    const data = await buildAccountExport(ORG, "ada");
+    expect(data?.access_requests).toEqual([{ message: "Her note", status: "approved", sent_at: "t" }]);
+  });
+
+  it("has no access requests when their profile has no address", async () => {
+    const { tables } = setup();
+    tables.profiles[0].email = null;
+    const data = await buildAccountExport(ORG, "ada");
+    expect(data?.access_requests).toEqual([]);
+  });
+
   it("is null for someone with no profile in this church", async () => {
     setup();
     expect(await buildAccountExport(OTHER_ORG, "ada")).toBeNull();
   });
 
-  it.each(["group_members", "team_members", "rsvps", "serving_signup_attendees", "prayer_requests", "giving_funds", "feedback", "family_units", "family_members"])(
+  it.each(["group_members", "team_members", "rsvps", "serving_signup_attendees", "prayer_requests", "giving_funds", "feedback", "family_units", "family_members", "group_requests", "access_requests"])(
     "throws rather than build a partial file when %s can't be read",
     async (table) => {
       const { failures } = setup();

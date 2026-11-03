@@ -2,9 +2,10 @@
  * One person's own data, for their download. Every read is on the service
  * client because the author of an anonymous prayer request isn't readable
  * otherwise, and because memberships and RSVPs outlive the group access that
- * RLS would need to read them. Each chain filters on the org and on this person
- * or the household on their own profile row. Only unclaimed household entries
- * name anyone else, with their details, since nothing records who typed them.
+ * RLS would need to read them. Each chain filters on the org and on this person,
+ * their current address, or the household on their own profile row. Only unclaimed
+ * household entries name anyone else, with their details, since nothing records
+ * who typed them.
  * Nothing else selected does: no co-attendees of a serving date, no one else's
  * RSVPs, and no one who prayed for a request.
  */
@@ -21,29 +22,14 @@ const HOUSEHOLD_COLUMNS =
   "family_name, address_line1, address_line2, city, state, postal_code, phone_home, " +
   "anniversary_month, anniversary_day, anniversary_year";
 
-const HOUSEHOLD_ENTRY_INTERNALS = new Set([
-  "id",
-  "family_id",
-  "org_id",
-  "claimed_profile_id",
-  "avatar_url",
-  "created_at",
-  "updated_at",
-]);
-
-// Everything but the internals, not a list of columns, so a column the household
-// form stops storing simply stops appearing here.
-function householdEntry(row: Record<string, unknown>) {
-  return Object.fromEntries(
-    Object.entries(row).filter(([column]) => !HOUSEHOLD_ENTRY_INTERNALS.has(column)),
-  );
-}
+const HOUSEHOLD_ENTRY_COLUMNS =
+  "first_name, last_name, preferred_name, relationship, birth_month, birth_day, birth_year, is_class_member";
 
 /** Null when the person has no profile in this org. Throws on any failed read, never a partial file. */
 export async function buildAccountExport(orgId: string, personId: string) {
   const service = await createServiceClient();
 
-  const [profile] = rowsOf<Record<string, unknown> & { family_id: string | null }>(
+  const [profile] = rowsOf<Record<string, unknown> & { family_id: string | null; email: string | null }>(
     await service
       .from("profiles")
       .select(`${PROFILE_COLUMNS}, family_id`)
@@ -54,7 +40,7 @@ export async function buildAccountExport(orgId: string, personId: string) {
   if (!profile) return null;
   const { family_id: familyId, ...ownProfile } = profile;
 
-  const [groups, teams, rsvps, serving, prayers, funds, feedback, households, entries] = await Promise.all([
+  const [groups, teams, rsvps, serving, prayers, funds, feedback, households, entries, groupRequests, accessRequests] = await Promise.all([
     service
       .from("group_members")
       .select("role, joined_at, groups(name)")
@@ -99,10 +85,27 @@ export async function buildAccountExport(orgId: string, personId: string) {
     familyId
       ? service
           .from("family_members")
-          .select("*")
+          .select(HOUSEHOLD_ENTRY_COLUMNS)
           .eq("org_id", orgId)
           .eq("family_id", familyId)
           .or(`claimed_profile_id.is.null,claimed_profile_id.eq.${personId}`)
+      : { data: [], error: null },
+    service
+      .from("group_requests")
+      .select("name, description, status, created_at")
+      .eq("org_id", orgId)
+      .eq("requested_by", personId)
+      .order("created_at", { ascending: false }),
+    // Their current address only. A request at an address they have left may be
+    // someone else's, and nothing records whose.
+    profile.email
+      ? service
+          .from("access_requests")
+          .select("message, status, created_at")
+          .eq("org_id", orgId)
+          .ilike("email", profile.email.replace(/[\\%_]/g, "\\$&"))
+          .not("message", "is", null)
+          .order("created_at", { ascending: false })
       : { data: [], error: null },
   ]);
 
@@ -111,7 +114,7 @@ export async function buildAccountExport(orgId: string, personId: string) {
   return {
     profile: ownProfile,
     household: rowsOf<Record<string, unknown>>(households, "household")[0] ?? null,
-    household_entries: rowsOf<Record<string, unknown>>(entries, "household entries").map(householdEntry),
+    household_entries: rowsOf<Record<string, unknown>>(entries, "household entries"),
     groups: rowsOf<{ role: string; joined_at: string; groups: { name: string } | null }>(
       groups,
       "groups",
@@ -172,5 +175,13 @@ export async function buildAccountExport(orgId: string, personId: string) {
       message: f.message,
       sent_at: f.created_at,
     })),
+    group_requests: rowsOf<{ name: string; description: string | null; status: string; created_at: string }>(
+      groupRequests,
+      "group requests",
+    ).map((r) => ({ name: r.name, description: r.description, status: r.status, requested_at: r.created_at })),
+    access_requests: rowsOf<{ message: string; status: string; created_at: string }>(
+      accessRequests,
+      "access requests",
+    ).map((r) => ({ message: r.message, status: r.status, sent_at: r.created_at })),
   };
 }

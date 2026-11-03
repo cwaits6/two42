@@ -10,6 +10,20 @@ export interface Failure {
   skip?: number;
 }
 
+// Case-insensitive LIKE: walks the pattern, because a regex built from an argument
+// is blocked by the repo's static analysis.
+function likeMatches(value: string, pattern: string): boolean {
+  const matchFrom = (v: number, p: number): boolean => {
+    if (p === pattern.length) return v === value.length;
+    if (pattern[p] === "%") return matchFrom(v, p + 1) || (v < value.length && matchFrom(v + 1, p));
+    if (v === value.length) return false;
+    if (pattern[p] === "_") return matchFrom(v + 1, p + 1);
+    const at = pattern[p] === "\\" ? p + 1 : p;
+    return value[v].toLowerCase() === pattern[at]?.toLowerCase() && matchFrom(v + 1, at + 1);
+  };
+  return matchFrom(0, 0);
+}
+
 export function fakeService(tables: Tables) {
   const failures: Failure[] = [];
   const log = {
@@ -31,9 +45,15 @@ export function fakeService(tables: Tables) {
     let op: Failure["op"] = "select";
     let patch: Row = {};
     let limit = Infinity;
+    let columns: string[] | null = null;
 
     const builder = {
-      select: () => builder,
+      // A plain column list is honoured, so a column left off an allow-list stays out.
+      // One with an embed or a * returns rows as they are.
+      select: (list?: string) => {
+        if (list && !/[(*]/.test(list)) columns = list.split(",").map((c) => c.trim());
+        return builder;
+      },
       order: () => builder,
       limit: (n: number) => {
         limit = n;
@@ -56,6 +76,11 @@ export function fakeService(tables: Tables) {
       neq: (column: string, value: unknown) => {
         filters.push(column);
         predicates.push((row) => row[column] !== value);
+        return builder;
+      },
+      ilike: (column: string, pattern: string) => {
+        filters.push(column);
+        predicates.push((row) => typeof row[column] === "string" && likeMatches(row[column], pattern));
         return builder;
       },
       in: (column: string, values: unknown[]) => {
@@ -85,7 +110,9 @@ export function fakeService(tables: Tables) {
         if (op !== "select") log.writes.push({ table, op, filters });
         if (op === "update") matched.forEach((row) => Object.assign(row, patch));
         if (op === "delete") tables[table] = rows.filter((row) => !matched.includes(row));
-        resolve({ data: matched.map((row) => ({ ...row })), error: null });
+        const project = (row: Row) =>
+          columns ? Object.fromEntries(Object.entries(row).filter(([c]) => columns!.includes(c))) : { ...row };
+        resolve({ data: matched.map(project), error: null });
       },
     };
     return builder;
