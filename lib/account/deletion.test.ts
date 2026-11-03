@@ -217,6 +217,19 @@ describe("loadDeletionSummary", () => {
     });
   });
 
+  it("doesn't pass a fund on to a pending second person, as the database won't", async () => {
+    setup({
+      giving_funds: funds,
+      group_members: memberships,
+      profiles: [person("ada"), person("ben", { role: "pending" }), person("cam")],
+    });
+    const summary = await loadDeletionSummary(ORG, "ada", "self");
+    expect(summary?.groupContent).toMatchObject({
+      fundsPassedOn: [],
+      fundsNeedingRecipient: [{ name: "Passes on" }, { name: "No second" }, { name: "Second left" }],
+    });
+  });
+
   it("names each fund's fate for the person, in this church only", async () => {
     setup({ giving_funds: funds, group_members: memberships, profiles: [person("ada"), person("ben"), person("cam")] });
     const summary = await loadDeletionSummary(ORG, "ada", "self");

@@ -30,6 +30,11 @@ alter table public.giving_funds
 -- trigger order, and neither order changes the result, because the rule lives
 -- here. RLS WITH CHECK runs after this, so a person can't use promotion to hand
 -- away a fund they may not reassign.
+--
+-- A person qualifies by a group_members row and not being pending, the test
+-- is_group_member() makes. FOR KEY SHARE closes the race with their removal: the
+-- removal waits for this write, so its trigger sees this fund, or this read waits
+-- for the removal and finds no row.
 create function public.giving_fund_recipients_guard() returns trigger
   language plpgsql security definer set search_path = ''
 as $$
@@ -43,9 +48,12 @@ begin
       new.steward_role := null;
       if new.co_steward_id is distinct from old.steward_id and exists (
         select 1 from public.group_members gm
+        join public.profiles p on p.id = gm.profile_id and p.org_id = gm.org_id
         where gm.group_id = new.group_id
           and gm.org_id = new.org_id
           and gm.profile_id = new.co_steward_id
+          and p.role <> 'pending'
+        for key share of gm
       ) then
         new.steward_id := new.co_steward_id;
       end if;
@@ -72,9 +80,12 @@ begin
     where named.person is not null
       and not exists (
         select 1 from public.group_members gm
+        join public.profiles p on p.id = gm.profile_id and p.org_id = gm.org_id
         where gm.group_id = new.group_id
           and gm.org_id = new.org_id
-          and gm.profile_id = named.person)
+          and gm.profile_id = named.person
+          and p.role <> 'pending'
+        for key share of gm)
   ) then
     raise exception 'giving_funds: a fund''s people must be members of its group'
       using errcode = 'check_violation';

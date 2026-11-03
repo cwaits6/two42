@@ -510,5 +510,66 @@ select results_eq('select promoted, no_recipient, second_person_removed from pub
   $$ values (0::bigint, 0::bigint, 0::bigint) $$, 'run again, it changes nothing');
 select is(pg_temp.state(pg_temp.fx('bf_alone')), 'none|none|no role|review|active', 'and a fund it already paused stays paused');
 
+-- ── A person the pickers can't offer ────────────────────────────────────────
+insert into fx values
+  ('pending', pg_temp.new_person(pg_temp.fx('org'), 'pending@funds.test', 'pending')),
+  ('unlisted', pg_temp.new_person(pg_temp.fx('org'), 'unlisted@funds.test')),
+  ('p_recipient', pg_temp.new_person(pg_temp.fx('org'), 'p_recipient@funds.test')),
+  ('u_recipient', pg_temp.new_person(pg_temp.fx('org'), 'u_recipient@funds.test')),
+  ('late_pending', pg_temp.new_person(pg_temp.fx('org'), 'late_pending@funds.test'));
+update public.profiles set is_unlisted = true where id = pg_temp.fx('unlisted');
+insert into public.group_members (org_id, group_id, profile_id)
+select pg_temp.fx('org'), pg_temp.fx('group'), pg_temp.fx(k)
+from unnest(array['pending', 'unlisted', 'p_recipient', 'u_recipient', 'late_pending']) k;
+
+select is(pg_temp.attempt('leader', pg_temp.insert_sql('pending', null)), '23514',
+  'an insert naming a pending recipient in the group is refused');
+select is(pg_temp.attempt('leader', pg_temp.insert_sql('member', 'pending')), '23514',
+  'an insert naming a pending second person in the group is refused');
+
+insert into fx values
+  ('to_pending', pg_temp.new_fund('ToPending', 'p_recipient', 'late_pending')),
+  ('to_unlisted', pg_temp.new_fund('ToUnlisted', 'u_recipient', 'unlisted')),
+  ('stays_named', pg_temp.new_fund('StaysNamed', 'member', 'late_pending'));
+update public.profiles set role = 'pending' where id = pg_temp.fx('late_pending');
+
+select is(
+  pg_temp.attempt('leader', format('update public.giving_funds set name = ''z'' where id = %L', pg_temp.fx('stays_named'))),
+  'rows:1', 'an edit that doesn''t name them is not refused for someone already on the fund');
+select is(
+  pg_temp.attempt('leader', format('update public.giving_funds set steward_id = %L where id = %L', pg_temp.fx('late_pending'), pg_temp.fx('stays_named'))),
+  '23514', 'but they can''t be moved into the other slot');
+
+select pg_temp.leave('p_recipient');
+select is(pg_temp.state(pg_temp.fx('to_pending')), 'none|none|no role|review|active',
+  'recipient leaves with a pending second person: nobody is promoted and the slot empties');
+
+select pg_temp.leave('u_recipient');
+select is(pg_temp.state(pg_temp.fx('to_unlisted')), 'unlisted|none|no role|review|active',
+  'an unlisted second person is a member of the group, so they take over and it needs review');
+
+alter table public.giving_funds disable trigger giving_funds_keep_recipients_in_group;
+insert into fx values ('bf_pending', pg_temp.new_fund('BfPending', 'outside', 'late_pending'));
+alter table public.giving_funds enable trigger giving_funds_keep_recipients_in_group;
+select results_eq('select promoted, no_recipient, second_person_removed from public.giving_funds_apply_recipient_rules()',
+  $$ values (0::bigint, 1::bigint, 0::bigint) $$, 'the backfill counts a fund with a pending second person as having no recipient');
+select is(pg_temp.state(pg_temp.fx('bf_pending')), 'none|none|no role|review|active',
+  'and doesn''t promote them');
+
+-- The removal side of the race needs a second connection; what can be seen from
+-- one is that the row carries this transaction's lock once the guard has read it.
+insert into fx values ('locked', pg_temp.new_person(pg_temp.fx('org'), 'locked@funds.test'));
+insert into public.group_members (org_id, group_id, profile_id)
+values (pg_temp.fx('org'), pg_temp.fx('group'), pg_temp.fx('locked'));
+select is(
+  (select xmax::text from public.group_members
+    where group_id = pg_temp.fx('group') and profile_id = pg_temp.fx('locked')),
+  '0', 'non-vacuity: nothing holds the membership row before a write names them');
+update public.giving_funds set co_steward_id = pg_temp.fx('locked') where id = pg_temp.fx('to_unlisted');
+select is(
+  (select xmax::text from public.group_members
+    where group_id = pg_temp.fx('group') and profile_id = pg_temp.fx('locked')),
+  pg_current_xact_id()::text, 'naming a person locks their membership row until the write commits');
+
 select * from finish();
 rollback;

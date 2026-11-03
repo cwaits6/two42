@@ -222,9 +222,11 @@ trigger functions that write `giving_funds`, and a backfill function. All three
 - `giving_fund_recipients_guard()` — `BEFORE INSERT OR UPDATE OF steward_id,
   co_steward_id, group_id, org_id, needs_review` on `giving_funds`. Reads the
   row's own `group_id` and `org_id`, and refuses a named person who has no
-  `group_members` row with both, which also refuses another church's person.
-  Every loss of a recipient reaches it as `steward_id` going null, whichever
-  path caused it: promotes a second person still in the group, empties the
+  `group_members` row with both, which also refuses another church's person, or
+  who is pending. It takes `FOR KEY SHARE` on the membership row it reads, so a
+  removal running alongside the write can't miss the fund. Every loss of a
+  recipient reaches it as `steward_id` going null, whichever path caused it:
+  promotes a second person still in the group and not pending, empties the
   second slot and `steward_role`, and sets `needs_review`. Refuses clearing
   `needs_review` unless `is_group_leader(old.group_id)`, which reads
   `auth.uid()`; there is no exemption for a null `auth.uid()`, so the service
