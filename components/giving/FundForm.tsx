@@ -531,7 +531,7 @@ export function FundForm({
             <Button
               disabled={saving}
               onClick={() => {
-                // A recipient this leader can't read isn't one they can check.
+                // A recipient the picker doesn't offer can't be checked, or read by members on Give.
                 if (validate(steward ? stewardId : "")) setConfirmingFund(true);
               }}
             >

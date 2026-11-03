@@ -66,6 +66,7 @@ type PickerProfile = {
   preferred_name: string | null;
   avatar_url: string | null;
   role: string;
+  is_unlisted: boolean;
 };
 
 function byLastThenFirstName(a: PickerProfile, b: PickerProfile): number {
@@ -79,7 +80,9 @@ function byLastThenFirstName(a: PickerProfile, b: PickerProfile): number {
  * Picker options for a fund: the group's current members, whoever is asking, so
  * a church admin or an open directory doesn't widen them. `failed` tells an empty
  * list from a failed read. A null embed is a profile RLS hides from the viewer,
- * and a pending person can't be named on anything.
+ * and a pending person can't be named on anything. An unlisted person stays out
+ * even for a viewer who can read them: Give drops a fund whose recipient members
+ * can't read.
  */
 export async function loadFundFormData(
   supabase: SupabaseClient,
@@ -92,7 +95,7 @@ export async function loadFundFormData(
   const memberships = readList<{ profiles: PickerProfile | null }>(
     await supabase
       .from("group_members")
-      .select("profiles(id, first_name, last_name, preferred_name, avatar_url, role)")
+      .select("profiles(id, first_name, last_name, preferred_name, avatar_url, role, is_unlisted)")
       .eq("org_id", orgId)
       .eq("group_id", groupId)
       .returns<{ profiles: PickerProfile | null }[]>(),
@@ -101,7 +104,9 @@ export async function loadFundFormData(
   if (memberships === null) return { members: [], failed: true };
 
   const rows = memberships
-    .flatMap((m) => (m.profiles && m.profiles.role !== "pending" ? [m.profiles] : []))
+    .flatMap((m) =>
+      m.profiles && m.profiles.role !== "pending" && !m.profiles.is_unlisted ? [m.profiles] : []
+    )
     .sort(byLastThenFirstName);
 
   return { members: await toMemberOptions(rows), failed: false };
@@ -135,7 +140,7 @@ export async function loadDirectoryMemberOptions(
 // the pickers. Signing goes through lib/storageRead's own cookie-bound client,
 // never the caller's `supabase` parameter: a passed-in client is untyped as to
 // privilege (Tier C).
-async function toMemberOptions(rows: Omit<PickerProfile, "role">[]): Promise<MemberOption[]> {
+async function toMemberOptions(rows: Omit<PickerProfile, "role" | "is_unlisted">[]): Promise<MemberOption[]> {
   const signedAvatars = await mintSignedUrls(rows.map((p) => p.avatar_url));
   return rows.map((p, i) => ({
     id: p.id,

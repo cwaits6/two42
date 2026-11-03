@@ -9,6 +9,11 @@ const OTHER_PERSON = {
   email: "fund.picker.other@example.test",
   name: "Otto Otherchurch",
 };
+const UNLISTED_PERSON = {
+  id: "f0000000-0000-4000-8000-0000000000f3",
+  email: "fund.picker.unlisted@example.test",
+  name: "Ursula Unlisted",
+};
 const IN_REVIEW = "Spec fund in review";
 const NO_RECIPIENT = "Spec fund with no recipient";
 
@@ -25,8 +30,8 @@ function removeEverythingCreated() {
     delete from public.giving_funds where name in ('${IN_REVIEW}', '${NO_RECIPIENT}');
     delete from public.group_members where group_id = '${GROUP_B}'
       and profile_id = (select id from public.profiles where email = '${PERSONAS.leadsC.email}');
-    delete from auth.users where id = '${OTHER_PERSON.id}';
-    delete from public.access_requests where email = '${OTHER_PERSON.email}';
+    delete from auth.users where id in ('${OTHER_PERSON.id}', '${UNLISTED_PERSON.id}');
+    delete from public.access_requests where email in ('${OTHER_PERSON.email}', '${UNLISTED_PERSON.email}');
     delete from public.organizations where id = '${OTHER_ORG}';`);
 }
 
@@ -42,9 +47,21 @@ test.beforeAll(() => {
                             raw_app_meta_data, raw_user_meta_data)
       values ('${OTHER_PERSON.id}', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
               '${OTHER_PERSON.email}', 'x', now(), now(),
-              '{"org_id": "${OTHER_ORG}"}', '{"first_name": "Otto", "last_name": "Otherchurch"}');
+              '{"org_id": "${OTHER_ORG}"}', '{}');
+    update public.profiles set first_name = 'Otto', last_name = 'Otherchurch' where id = '${OTHER_PERSON.id}';
+    insert into public.access_requests (org_id, name, email, status, approved_role, reviewed_at)
+      values ('${orgId}', '${UNLISTED_PERSON.name}', '${UNLISTED_PERSON.email}', 'approved', 'member', now());
+    insert into auth.users (id, instance_id, aud, role, email, encrypted_password, created_at, updated_at,
+                            raw_app_meta_data, raw_user_meta_data)
+      values ('${UNLISTED_PERSON.id}', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+              '${UNLISTED_PERSON.email}', 'x', now(), now(),
+              '{"org_id": "${orgId}"}', '{}');
+    update public.profiles set first_name = 'Ursula', last_name = 'Unlisted', is_unlisted = true
+      where id = '${UNLISTED_PERSON.id}';
     insert into public.group_members (org_id, group_id, profile_id, role)
-      values ('${orgId}', '${GROUP_B}', ${profile(PERSONAS.leadsC.email)}, 'leader');
+      values ('${orgId}', '${GROUP_B}', ${profile(PERSONAS.leadsC.email)}, 'leader'),
+             ('${orgId}', (select id from public.groups where org_id = '${orgId}' and name = 'Group A'),
+              '${UNLISTED_PERSON.id}', 'member');
     insert into public.giving_funds (org_id, group_id, name, steward_id, needs_review)
       values ('${orgId}', '${GROUP_B}', '${IN_REVIEW}', ${profile(PERSONAS.twoGroups.email)}, true),
              ('${orgId}', '${GROUP_B}', '${NO_RECIPIENT}', null, true);
@@ -93,7 +110,7 @@ test("a leader of two groups is offered only the current group's members in both
   }
 });
 
-test("a church admin is offered only the current group's members, not everyone they can read", async ({ browser }) => {
+test("a church admin is offered only the current group's listed members, not everyone they can read", async ({ browser }) => {
   const baseURL = test.info().project.use.baseURL!;
   const admin = await openAs(browser, baseURL, "admin");
   try {
@@ -109,6 +126,7 @@ test("a church admin is offered only the current group's members, not everyone t
     for (const label of [RECIPIENT, SECOND_PERSON]) {
       const names = await optionsIn(admin.page, label);
       expect(names).toContain("Mia Fakeworth");
+      expect(names).not.toContain(UNLISTED_PERSON.name);
       expect(names).not.toContain(PERSONAS.oneGroup.name);
       expect(names).not.toContain(PERSONAS.leadsC.name);
       expect(names).not.toContain(OTHER_PERSON.name);

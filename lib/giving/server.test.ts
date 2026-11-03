@@ -91,7 +91,7 @@ describe("loadDirectoryMemberOptions", () => {
 
 describe("loadFundFormData", () => {
   const profile = (id: string, first: string, last: string, extra: object = {}) => ({
-    profiles: { id, first_name: first, last_name: last, preferred_name: null, avatar_url: null, role: "member", ...extra },
+    profiles: { id, first_name: first, last_name: last, preferred_name: null, avatar_url: null, role: "member", is_unlisted: false, ...extra },
   });
 
   it("reads this group's members scoped on the org, sorted, and signs each avatar", async () => {
@@ -116,6 +116,14 @@ describe("loadFundFormData", () => {
   it("leaves out a profile RLS hides and a pending person", async () => {
     const { client } = fakeClient({
       group_members: [{ profiles: null }, profile("p1", "Ada", "L"), profile("p2", "Bo", "M", { role: "pending" })],
+    });
+    const { members } = await loadFundFormData(client, ORG, "g1");
+    expect(members.map((m) => m.id)).toEqual(["p1"]);
+  });
+
+  it("leaves out an unlisted person, whom members can't read on Give", async () => {
+    const { client } = fakeClient({
+      group_members: [profile("p1", "Ada", "L"), profile("p2", "Bo", "M", { is_unlisted: true })],
     });
     const { members } = await loadFundFormData(client, ORG, "g1");
     expect(members.map((m) => m.id)).toEqual(["p1"]);
