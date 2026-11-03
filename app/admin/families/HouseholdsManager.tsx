@@ -39,6 +39,8 @@ import { LoadingState } from "@/components/states/LoadingState";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { AnniversaryFields } from "@/components/profile/AnniversaryFields";
 import { birthdayErrors, type BirthdayErrors } from "@/components/profile/birthday";
+import { ChildListingNotice, DirectoryNotice } from "@/components/profile/DirectoryNotice";
+import { isChildWithoutAccount } from "@/lib/household";
 import { matchesSearch } from "@/components/admin/adminSearch";
 import {
   HOUSEHOLD_FIELDS,
@@ -423,13 +425,19 @@ export function HouseholdsManager() {
     setShowMemberForm(true);
   }
 
+  const memberIsChildWithoutAccount = isChildWithoutAccount({
+    relationship: memberForm.relationship,
+    claimed_profile_id: editingMember?.claimed_profile_id,
+  });
+
   async function handleSaveMember() {
     if (!editing) return;
     const firstName = titleCaseName(memberForm.first_name);
+    const birthYear = memberIsChildWithoutAccount ? "" : memberForm.birth_year;
     const birthErrors = birthdayErrors({
       month: memberForm.birth_month,
       day: memberForm.birth_day,
-      year: memberForm.birth_year,
+      year: birthYear,
     });
     setMemberNameError(firstName ? undefined : "Enter a first name.");
     setMemberBirthErrors(birthErrors);
@@ -450,7 +458,7 @@ export function HouseholdsManager() {
       relationship: memberForm.relationship,
       birth_month: memberForm.birth_month ? Number(memberForm.birth_month) : null,
       birth_day: memberForm.birth_day ? Number(memberForm.birth_day) : null,
-      birth_year: memberForm.birth_year ? Number(memberForm.birth_year) : null,
+      birth_year: birthYear ? Number(birthYear) : null,
     };
 
     setSavingMember(true);
@@ -932,6 +940,9 @@ export function HouseholdsManager() {
                         </Button>
                       </div>
 
+                      <DirectoryNotice />
+                      {memberIsChildWithoutAccount && <ChildListingNotice />}
+
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-1">
                           <Label htmlFor="fm_first">
@@ -990,7 +1001,7 @@ export function HouseholdsManager() {
 
                       <div>
                         <Label>Birthday (optional)</Label>
-                        <div className="grid grid-cols-3 gap-2 mt-1">
+                        <div className={`grid gap-2 mt-1 ${memberIsChildWithoutAccount ? "grid-cols-2" : "grid-cols-3"}`}>
                           <Select
                             items={MONTHS}
                             value={memberForm.birth_month}
@@ -1027,19 +1038,21 @@ export function HouseholdsManager() {
                               setMemberForm({ ...memberForm, birth_day: e.target.value })
                             }
                           />
-                          <Input
-                            type="number"
-                            min="1900"
-                            max="2100"
-                            placeholder="Year"
-                            id="fm_birth_year"
-                            aria-label="Birthday year"
-                            {...invalidFieldProps("fm_birth_year", memberBirthErrors.birth_year)}
-                            value={memberForm.birth_year}
-                            onChange={(e) =>
-                              setMemberForm({ ...memberForm, birth_year: e.target.value })
-                            }
-                          />
+                          {!memberIsChildWithoutAccount && (
+                            <Input
+                              type="number"
+                              min="1900"
+                              max="2100"
+                              placeholder="Year"
+                              id="fm_birth_year"
+                              aria-label="Birthday year"
+                              {...invalidFieldProps("fm_birth_year", memberBirthErrors.birth_year)}
+                              value={memberForm.birth_year}
+                              onChange={(e) =>
+                                setMemberForm({ ...memberForm, birth_year: e.target.value })
+                              }
+                            />
+                          )}
                         </div>
                         <FieldError fieldId="fm_birth_month" message={memberBirthErrors.birth_month} />
                         <FieldError fieldId="fm_birth_day" message={memberBirthErrors.birth_day} />

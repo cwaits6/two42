@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
 import { useSearchParams, useRouter } from "next/navigation";
 import { ErrorState } from "@/components/states/ErrorState";
+import { AccountAgeNotice } from "../_components/AccountAgeNotice";
 import { AuthShell } from "../_components/AuthShell";
 import { AuthFormLoading } from "../_components/AuthFormLoading";
 import { InvalidLink } from "../_components/InvalidLink";
@@ -210,6 +211,7 @@ export function SetupAccountForm() {
             {formError}
           </p>
         )}
+        <AccountAgeNotice />
         <Button type="submit" size="lg" className="w-full font-semibold" disabled={loading}>
           {loading ? "Creating account…" : "Create account"}
         </Button>

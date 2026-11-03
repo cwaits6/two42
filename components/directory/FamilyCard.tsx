@@ -102,7 +102,7 @@ export function FamilyCard({ family, profileMap, onOpenPerson }: FamilyCardProps
             key={fm.id}
             avatar={<MemberAvatar member={fm} />}
             title={displayName(fm)}
-            subtitle={relLabel(fm.relationship)}
+            subtitle={fm.relationship === "child" ? undefined : relLabel(fm.relationship)}
           />
         ))}
       </div>

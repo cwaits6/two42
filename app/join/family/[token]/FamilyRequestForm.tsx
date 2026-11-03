@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { failureMessage } from "@/lib/errorCopy";
+import { AccountAgeNotice } from "@/app/(auth)/_components/AccountAgeNotice";
 import { useFieldFocus } from "@/app/(auth)/_components/useFieldFocus";
 import { HOUSEHOLD_INVITE_INVALID_TEXT } from "@/lib/groups/invites";
 
@@ -129,6 +130,7 @@ export function FamilyRequestForm({ token, email }: FamilyRequestFormProps) {
           {error}
         </p>
       ) : null}
+      <AccountAgeNotice />
       <Button type="submit" size="lg" className="w-full font-semibold" disabled={sending}>
         {sending ? "Sending…" : "Request access"}
       </Button>

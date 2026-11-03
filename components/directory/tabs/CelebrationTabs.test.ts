@@ -130,7 +130,6 @@ describe("BirthdaysTab", () => {
               is_class_member: true,
               birth_month: 11,
               birth_day: 4,
-              birth_year: null,
               claimed_profile_id: null,
             },
           ],
@@ -156,8 +155,7 @@ describe("BirthdaysTab", () => {
           is_class_member: false,
           birth_month: 11,
           birth_day: 4,
-          birth_year: null,
-          claimed_profile_id: null,
+                    claimed_profile_id: null,
         },
       ],
     } as FamilyDirectoryFull;

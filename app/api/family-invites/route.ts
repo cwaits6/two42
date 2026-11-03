@@ -4,6 +4,7 @@ import { resolveEmailBranding } from "@/lib/email/identity";
 import { NextResponse } from "next/server";
 import { siteConfig } from "@/lib/config";
 import { isMemberRole } from "@/lib/roles";
+import { CHILD_INVITE_REFUSED, isChildWithoutAccount } from "@/lib/household";
 
 /**
  * POST /api/family-invites
@@ -11,6 +12,9 @@ import { isMemberRole } from "@/lib/roles";
  * Sends an invite email to a person who exists as a family_members record
  * (lightweight non-auth record) so they can create their own account and
  * be linked to the household.
+ *
+ * A child without an account can't be invited: 403, also raised by the
+ * family_invites_refuse_child() trigger for a direct write.
  *
  * Caller must be:
  *   - An admin, OR
@@ -65,7 +69,7 @@ export async function POST(request: Request) {
   // Load the family_members record
   const { data: familyMember, error: fmError } = await supabase
     .from("family_members")
-    .select("id, family_id, first_name, last_name, claimed_profile_id")
+    .select("id, family_id, first_name, last_name, relationship, claimed_profile_id")
     .eq("id", family_member_id)
     .single();
 
@@ -93,6 +97,10 @@ export async function POST(request: Request) {
       { error: "This family member already has an account" },
       { status: 409 },
     );
+  }
+
+  if (isChildWithoutAccount(familyMember)) {
+    return NextResponse.json({ error: CHILD_INVITE_REFUSED }, { status: 403 });
   }
 
   // Check for an existing pending invite for this family member
@@ -127,6 +135,11 @@ export async function POST(request: Request) {
     })
     .select("token, org_id")
     .single();
+
+  // family_invites_refuse_child(), for a row relabelled after the read above.
+  if (insertError?.code === "HP002") {
+    return NextResponse.json({ error: CHILD_INVITE_REFUSED }, { status: 403 });
+  }
 
   if (insertError || !invite) {
     console.error("family-invites insert error:", insertError);

@@ -6,6 +6,7 @@ import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { INVITE_INVALID_TEXT } from "@/lib/groups/invites";
+import { AccountAgeNotice } from "@/app/(auth)/_components/AccountAgeNotice";
 import { useFieldFocus } from "@/app/(auth)/_components/useFieldFocus";
 
 interface InviteSignupFormProps {
@@ -146,6 +147,7 @@ export function InviteSignupForm({ token, groupName }: InviteSignupFormProps) {
           {error}
         </p>
       ) : null}
+      <AccountAgeNotice />
       <Button type="submit" size="lg" className="w-full font-semibold" disabled={sending}>
         {sending ? "Sending…" : "Continue"}
       </Button>

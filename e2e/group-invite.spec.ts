@@ -74,6 +74,7 @@ test("a leader creates a link, a stranger can use it until it is revoked, and a 
     await page.goto(invitePath);
     await expect(page.getByRole("heading", { name: /Group A/ })).toBeVisible();
     await expect(page.getByLabel("Email")).toBeVisible();
+    await expect(page.getByText("You must be 13 or older to have an account.")).toBeVisible();
   } finally {
     await anonymous.close();
   }

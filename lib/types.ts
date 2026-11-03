@@ -334,7 +334,6 @@ export interface HouseholdFamilyMember {
   is_class_member: boolean;
   birth_month: number | null;
   birth_day: number | null;
-  birth_year: number | null;
   claimed_profile_id: string | null;
 }
 
