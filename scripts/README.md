@@ -160,3 +160,16 @@ The same command also enforces:
 - **Seeded-UUID sweep** — no tracked file outside a named, commented
   exclusion list may hardcode the retired default-org UUID. The default is
   in-scope: new files are swept unless the list says why not.
+
+## `start-supabase-stack.sh` — the e2e job's stack start
+
+The `Playwright boundaries` job in `.github/workflows/test.yml` calls this in
+place of `npx supabase start`, and passes its `-x` list through. A start that
+fails on a host port bind logs the socket holders (`ss -ltnp`, then every TCP
+socket using that port, in any state), emits a `::warning::` so the retry shows
+in the run's annotations, runs `supabase stop --no-backup`, and starts once more.
+Any other failure exits with the start's own status, with no retry. Tested
+against sample outputs in `scripts/start-supabase-stack.test.mjs`.
+
+It is for the job's ephemeral stack only. Never run it locally: the stop would
+take down the shared stack.

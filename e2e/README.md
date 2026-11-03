@@ -25,7 +25,9 @@ suite there. It runs when a change
 touches `app/`, `components/`, `lib/`, `supabase/migrations/`,
 `supabase/seed.sql`, `e2e/`, `playwright.config.ts`, `package.json`,
 `package-lock.json`, `next.config.ts`, `proxy.ts`, `instrumentation.ts`,
-`supabase/config.toml`, or the workflow file itself.
+`supabase/config.toml`, `scripts/start-supabase-stack.sh`, or the workflow file
+itself. The job reserves the stack's ports as its first step, and that script
+retries the start once if it fails on a port bind.
 
 On a shared local stack the specs assume the seed defaults for
 `directory_visibility`, `group_creation_policy` (`approval`) and

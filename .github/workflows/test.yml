@@ -91,6 +91,18 @@ jobs:
     permissions:
       contents: read
     steps:
+      # First because every later step opens outgoing connections, and the
+      # kernel may pick their source ports from this block. 54320-54329 holds
+      # every ephemeral-range host port the pinned CLI defaults to, and
+      # config.toml overrides none; of them the job's stack binds 54321 and
+      # 54322. A reservation evicts nothing and does not stop an explicit
+      # bind, so the listing is what shows a socket that was already there.
+      - name: Reserve the Supabase ports
+        run: |
+          sysctl net.ipv4.ip_local_reserved_ports
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports=54320-54329
+          sudo ss -tanp '( sport >= :54320 and sport <= :54329 )'
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -106,7 +118,7 @@ jobs:
           set -o pipefail
           git fetch --no-tags --depth=1 origin "$BASE"
           changed=$(git diff --name-only "$BASE" HEAD)
-          if grep -Eq '^(app|components|lib|e2e)/|^supabase/migrations/|^supabase/seed\.sql$|^supabase/config\.toml$|^playwright\.config\.ts$|^package\.json$|^package-lock\.json$|^next\.config\.ts$|^proxy\.ts$|^instrumentation\.ts$|^\.github/workflows/test\.yml$' <<< "$changed"; then
+          if grep -Eq '^(app|components|lib|e2e)/|^supabase/migrations/|^supabase/seed\.sql$|^supabase/config\.toml$|^playwright\.config\.ts$|^package\.json$|^package-lock\.json$|^next\.config\.ts$|^proxy\.ts$|^instrumentation\.ts$|^\.github/workflows/test\.yml$|^scripts/start-supabase-stack\.sh$' <<< "$changed"; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             echo "Playwright boundaries: ran" >> "$GITHUB_STEP_SUMMARY"
           else
@@ -128,7 +140,7 @@ jobs:
       # Services the specs never reach are left out to keep the start short.
       - name: Start the local Supabase stack
         if: steps.changes.outputs.run == 'true'
-        run: npx supabase start -x studio,imgproxy,mailpit,postgres-meta,edge-runtime,logflare,vector
+        run: scripts/start-supabase-stack.sh -x studio,imgproxy,mailpit,postgres-meta,edge-runtime,logflare,vector
 
       - name: Point the build at the local stack
         if: steps.changes.outputs.run == 'true'
