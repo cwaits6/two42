@@ -199,7 +199,7 @@ begin
   -- 1. access_requests.invite_token ← family_invites.token
   insert into public.family_units (org_id, family_name) values (org_a, 'A family') returning id into _family;
   insert into public.family_members (org_id, family_id, first_name, relationship)
-    values (org_a, _family, 'A kid', 'child') returning id into _fm;
+    values (org_a, _family, 'A kid', 'other') returning id into _fm;
   insert into public.family_invites (org_id, family_id, family_member_id, invite_email)
     values (org_a, _family, _fm, 'setnull-1@leak.example.test') returning token into _invite_token;
   insert into public.access_requests (org_id, name, email, status, invite_token)

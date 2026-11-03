@@ -244,7 +244,11 @@ select is(
 select is(
   pg_temp.as_count(current_setting('dv.m1')::uuid,
     format('select count(*) from public.family_members where family_id = %L', current_setting('dv.fam3'))),
-  1::bigint, 'with directory_visibility = org, m1 reads the child in m3''s household');
+  0::bigint, 'with directory_visibility = org, m1 reads no family_members row in m3''s household');
+select is(
+  pg_temp.as_count(current_setting('dv.m1')::uuid,
+    format('select jsonb_array_length(family_members_list) from public.families_directory_full where id = %L', current_setting('dv.fam3'))),
+  1::bigint, 'with directory_visibility = org, m1 sees the child in m3''s household through the directory');
 update public.organizations set directory_visibility = 'shared_groups'
   where id = current_setting('dv.org_a')::uuid;
 

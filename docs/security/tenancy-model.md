@@ -315,13 +315,22 @@ shape. `profiles` ("Profiles are visible per access rules"): self, org
 admin, own household (`is_member()`-gated, as before), or the directory
 arm — `is_member() and is_unlisted = false and role in (member, admin)` **and**
 `(org_directory_visible() or shares_group_with(id))`. `family_units`
-("Members can view family units") and `family_members` ("Members can view
-family members"): org admin, own household (`is_member()`-gated, so a
-pending account linked by a family-invite claim still reads neither table),
+("Members can view family units"): org admin, own household (`is_member()`-gated,
+so a pending account linked by a family-invite claim still reads neither table),
 or `is_member() and (org_directory_visible() or
 shares_group_with_household(<family id>))`.
 The three directory views are `security_invoker` and narrow with the base
 tables; nothing else changed.
+
+`family_members` ("Members can view family members") is narrower
+(`20261112000000_children_directory.sql`): org admin or own household only, so
+another member can't read a stored column the directory doesn't show.
+`families_directory_full.family_members_list` reads people through
+`family_directory_people(_family_id)`, a `SECURITY DEFINER` function that
+repeats the directory arm above in its own `WHERE` clause and returns only what
+the directory uses: no `birth_year` for anyone, and a child without an account
+(`relationship = 'child'` with no `claimed_profile_id`) under their preferred name
+alone when they have one. No view reads the table directly.
 
 The helpers are `SECURITY DEFINER`, `STABLE`, `set search_path = ''`,
 EXECUTE revoked from `anon` and granted to `authenticated`:
@@ -355,7 +364,9 @@ no shared group is absent from that household's card. Linking a household
 member by search (`app/api/household/search-members/route.ts`) and the
 giving steward picker (`loadFundFormData()` in `lib/giving/server.ts`)
 find only people the viewer may read; both are whole-org again under
-`'org'`. `family_invites` stays `is_member()`-wide.
+`'org'`. `family_invites` is readable by a church admin and the invite's own
+household only (`20261112000000_children_directory.sql`): its row holds an email
+and a bearer token.
 
 **The write path.** `organizations` had Supabase's default table-level
 UPDATE grant and no permissive write policy. The migration revokes that
@@ -745,6 +756,12 @@ the email. Zero matches → the signup raises (`TN001`); matches in more than
 one org → raises (`TN002`). Server-set `raw_app_meta_data ->> 'org_id'` may
 disambiguate within the matched set, never widen it; client-supplied
 `raw_user_meta_data` is never consulted for org selection.
+
+A child without an account never has a `family_invites` row, so their email can't
+sign up through that match: `family_invites_refuse_child()` raises `HP002` on any
+write naming one, including the service role's, and
+`family_members_retire_child_invites()` removes the invite and its unused access
+request from a person who becomes one.
 
 `provision_organization(name, owner_email)` builds a complete org in one
 transaction: the org row — its `branding` jsonb seeded with the full

@@ -547,6 +547,32 @@ It returns a boolean and writes nothing. Its org comes from
 answers false. `search_path = ''`; execute is revoked from `public, anon` and
 granted to `authenticated, service_role`. Remove it with `profiles.hide_anniversary`.
 
+## Children in the directory — definer-function bypass surfaces
+
+Three `SECURITY DEFINER` functions in
+`supabase/migrations/20261112000000_children_directory.sql`. Each has
+`search_path = ''`, and each is read or fired only as described here.
+
+- `public.family_directory_people(_family_id)` is read-only over `family_members`.
+  `families_directory_full` calls it, because other members have no direct read of
+  that table. Its org comes from `app_current_org_id()`, never from a parameter, and
+  its `WHERE` clause repeats the directory arm, so a direct call for a household the
+  caller can't see, for another org or by a pending account returns `[]`. Execute is
+  revoked from `public, anon` and granted to `authenticated, service_role`; with no
+  principal, the service role gets `[]` too.
+- `public.family_invites_refuse_child()` is a BEFORE trigger on `family_invites`,
+  read-only over `family_members`. It has to see a row the caller can't, or naming
+  another household's child would pass. It reads the member by `(id, org_id)` from
+  the invite row, whose composite FK already ties the two together. A service-role
+  insert has no request org to read instead.
+- `public.family_members_retire_child_invites()` is an AFTER UPDATE trigger on
+  `family_members` that deletes that member's `family_invites` and the unused
+  `access_requests` naming them. A primary can relabel someone but has no DELETE
+  policy on invites, and `access_requests` has no client policy. Every delete is
+  scoped to the updated row's `org_id`, and only runs for that row.
+
+Execute on both trigger functions is revoked from `public, anon, authenticated`.
+
 ## App routes and pages (26 sites)
 
 | File | Why service-role is used | Org derived from | Scoped queries |

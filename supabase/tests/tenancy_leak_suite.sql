@@ -73,7 +73,7 @@ begin
   insert into public.family_units (org_id, family_name)
     values (_org, _tag || ' family') returning id into _family;
   insert into public.family_members (org_id, family_id, first_name, relationship)
-    values (_org, _family, _tag || ' kid', 'child') returning id into _family_member;
+    values (_org, _family, _tag || ' kid', 'other') returning id into _family_member;
   insert into public.family_invites (org_id, family_id, family_member_id, invite_email)
     values (_org, _family, _family_member, _tag || '-invite@leak.example.test')
     returning id, token into _invite, _invite_token;
