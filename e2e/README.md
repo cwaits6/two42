@@ -17,6 +17,14 @@ stack on `:54321`, whose seed is already applied. Nothing is reset. Set
 `E2E_PORT` if 3142 is taken, or `E2E_BASE_URL` to use a server that is
 already up. `npx playwright show-report` opens the last HTML report.
 
+The config starts that server with a service key from
+`fixtures/localServiceKey.ts`, signed by the stack's own Auth container, because
+the key `supabase status` prints is refused by Auth's admin API and deleting a
+login needs that API. The same refusal reaches a plain `npm run dev` on the local
+stack, where Delete my account reports that it failed and deletes the login of
+nobody. A server behind `E2E_BASE_URL` needs that key set itself for
+`account-deletion.spec.ts` to pass.
+
 In CI the `e2e` job in `.github/workflows/test.yml` stands up an ephemeral
 stack with `npx supabase start` (the pinned CLI, never the remote project),
 hands the build that stack's own service key (the token pages read their
@@ -40,9 +48,11 @@ moves Isaac to pending and back through the same container, and sets him
 back to member in `beforeAll` and `afterAll`. `team-lead-roster.spec.ts`
 builds a Group B team (Leo as its lead, Henry as a member) through the same
 container in `beforeAll` and deletes it in `afterAll`, because the seed has
-no team lead. `prayer-anonymity.spec.ts` posts one request through the page and
-deletes it through the same container in `beforeAll` and `afterAll`, because no
-UI deletes a request. `serving-cancel.spec.ts` builds a Group B team (Leo as its
+no team lead. `prayer-anonymity.spec.ts` posts one request through the page, its author
+deletes it through the page in the last test, and the same container removes it
+in `beforeAll` and `afterAll` if a test stops first. `account-deletion.spec.ts`
+never deletes a seeded person: it creates its own people through the same
+container, deletes them through the pages, and removes any left in `afterAll`. `serving-cancel.spec.ts` builds a Group B team (Leo as its
 lead, Henry, Chloe and Isaac as members) through the same container in
 `beforeAll`, puts Henry and Chloe's date back before each test, and deletes the
 team in `afterAll`. `directory-no-hide-settings.spec.ts` changes the Mockingham
@@ -93,7 +103,8 @@ not covered here.
 | `signed-in-frame.spec.ts`            | At 390 a one-group member, a two-group member and the church admin get the same header — the wordmark and one Menu button, no footer — and the menu holds their nav, Privacy, Terms, Help and one Sign out; the group switcher is inside the menu; signed in, `/login` and `/forgot-password` land on Home |
 | `about-leadership-picker.spec.ts`    | Edit About's leadership picker lists the group's members and no one from another group, and its save answers 409 for someone outside the group; nothing is written |
 | `team-lead-roster.spec.ts`           | A team lead who does not lead the group sees the team's members with Remove on non-leads only; Add person lists the group's members not on the team and no one from another group; an add and a remove go through; a group member not on the team sees no roster controls; with serving signups off the Serving page links the team for its lead, who still gets the roster, while that member sees no link and is sent back to the Serving page; the team is deleted in afterAll |
-| `prayer-anonymity.spec.ts`          | A member, the group's leader and a church admin in the group see an anonymous request as "Anonymous", with no author name, no "You" and no "Mark answered", and not under My requests; its author sees it as theirs, under My requests, and can mark it answered; a request shared by name still shows the name; the request is deleted in afterAll |
+| `prayer-anonymity.spec.ts`          | A member, the group's leader and a church admin in the group see an anonymous request as "Anonymous", with no author name, no "You" and no "Mark answered", and not under My requests; its author sees it as theirs, under My requests, and can mark it answered; a request shared by name still shows the name; only the author sees Delete, by name or anonymous, and deleting takes a confirmation; the request is deleted in afterAll |
+| `account-deletion.spec.ts`          | A person the spec created deletes their account from Settings, the confirmation naming the fund that goes with it, and can't sign in afterwards; their download holds their own anonymous request and no other member; a church admin sees Remove from church on others and not on their own row, removing someone leaves no row for them on Members, and the last church admin is told so with no confirmation offered; a member is refused the admin route and a church admin gets a 404 for someone in another church, with both people still there; the people created are removed in afterAll |
 | `serving-cancel.spec.ts`            | A spouse listed on a date, who did not tap Sign up, cancels it from the team schedule at 390 and 1280 and the date opens up; the person who tapped Sign up, the team lead and the group leader can each still cancel it; a team member not listed sees no Cancel or Remove button and the API refuses them with the date still taken; the team is deleted in afterAll |
 | `directory-no-hide-settings.spec.ts` | No hide setting but email and the listing on the profile, household and admin forms at 390 and 1280; a yearless anniversary shows month and day with no "Married"; a couple where a spouse hid it is on no Anniversaries filter; the email and listing settings remove the email and the person; the household phone shows a spouse's number under their name, follows them clearing it, and either spouse can clear the choice; the seed is restored in afterAll |
 | `children-directory.spec.ts`         | A child's Year field is gone from the add form, which says entered details are shown and that a child can't be invited; a child with only a name shows only that name to a member in the same group, with no "Child" label and no birthday; a seeded child's birthday shows without a year; the household's primary and the church admin still list and manage the children; the household invite and account setup forms state the 13 or older requirement; the added rows are deleted in afterAll |
