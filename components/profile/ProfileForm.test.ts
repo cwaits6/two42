@@ -200,18 +200,18 @@ describe("ProfileForm inline errors", () => {
       .filter((id) => id.startsWith("hide_"));
     expect(hideBoxes).toEqual(["hide_email"]);
     expect(document.body.textContent).toContain(
-      "Everything you add here shows in the directory. Leave out anything you don't want shown.",
+      "Everything you add here shows in the directory, except a birth year. Leave out anything you don't want shown.",
     );
   });
 
   it("shows the notice to someone editing another household member, not to an admin", async () => {
     await mount({}, { editingOther: true });
-    expect(document.body.textContent).toContain("Everything you add here shows in the directory.");
+    expect(document.body.textContent).toContain("Everything you add here shows in the directory, except a birth year.");
     await act(async () => root.unmount());
     document.body.innerHTML = "";
 
     await mount({}, { isAdmin: true });
-    expect(document.body.textContent).not.toContain("Everything you add here shows in the directory.");
+    expect(document.body.textContent).not.toContain("Everything you add here shows in the directory, except a birth year.");
   });
 
   it("makes an admin enter an email", async () => {

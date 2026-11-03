@@ -9,7 +9,7 @@ const DB_CONTAINER = "supabase_db_small-group-hub";
 const HOUSEHOLD = "f0000000-0000-0000-0000-000000000005";
 const HOUSEHOLD_CARD = `/directory/families?family=${HOUSEHOLD}`;
 const ADDED_CHILD = "Nameonly";
-const NOTICE = "Everything you add here shows in the directory. Leave out anything you don't want shown.";
+const NOTICE = "Everything you add here shows in the directory, except a birth year. Leave out anything you don't want shown.";
 const CHILD_NOTICE = /You don't have to list a child\. .*can't be invited to their own account/;
 const AGE_NOTICE = "You must be 13 or older to have an account.";
 const INVITED_ADULT = "Invitedadult";

@@ -4,7 +4,7 @@ import { CHILD_INVITE_REFUSED } from "@/lib/household";
 export function DirectoryNotice() {
   return (
     <p className="text-base text-muted-foreground">
-      Everything you add here shows in the directory. Leave out anything you don&apos;t want shown.
+      Everything you add here shows in the directory, except a birth year. Leave out anything you don&apos;t want shown.
     </p>
   );
 }
