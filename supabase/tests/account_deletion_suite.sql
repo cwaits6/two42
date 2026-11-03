@@ -240,6 +240,19 @@ insert into public.group_invite_uses (id, org_id, invite_id, group_id, email, ou
   ('b1000000-0000-4000-8000-000000000002', pg_temp.fx('org'), 'b0000000-0000-4000-8000-000000000001', pg_temp.fx('group'), 'a.old2@deletion.test', 'joined', pg_temp.fx('spouse_a'), 'a0000000-0000-4000-8000-000000000003'),
   ('b1000000-0000-4000-8000-000000000003', pg_temp.fx('org'), 'b0000000-0000-4000-8000-000000000001', pg_temp.fx('group'), 'a.spouse@deletion.test', 'signup_sent', null, null),
   ('b1000000-0000-4000-8000-000000000004', pg_temp.fx('org'), 'b0000000-0000-4000-8000-000000000001', pg_temp.fx('group'), 'a.old3@deletion.test', 'signup_sent', null, null);
+
+-- Links their uses have used up, one for each way a use is matched to them, and
+-- one with a use left to prove the refusals below come from the count.
+insert into public.group_invites (id, org_id, group_id, max_uses) values
+  ('b0000000-0000-4000-8000-000000000002', pg_temp.fx('org'), pg_temp.fx('group'), 1),
+  ('b0000000-0000-4000-8000-000000000003', pg_temp.fx('org'), pg_temp.fx('group'), 1),
+  ('b0000000-0000-4000-8000-000000000004', pg_temp.fx('org'), pg_temp.fx('group'), 1),
+  ('b0000000-0000-4000-8000-000000000005', pg_temp.fx('org'), pg_temp.fx('group'), 2);
+insert into public.group_invite_uses (id, org_id, invite_id, group_id, email, outcome, profile_id) values
+  ('b1000000-0000-4000-8000-000000000005', pg_temp.fx('org'), 'b0000000-0000-4000-8000-000000000002', pg_temp.fx('group'), 'a.spouse@deletion.test', 'joined', pg_temp.fx('spouse_a')),
+  ('b1000000-0000-4000-8000-000000000006', pg_temp.fx('org'), 'b0000000-0000-4000-8000-000000000003', pg_temp.fx('group'), 'a.old4@deletion.test', 'signup_sent', pg_temp.fx('spouse_a')),
+  ('b1000000-0000-4000-8000-000000000007', pg_temp.fx('org'), 'b0000000-0000-4000-8000-000000000004', pg_temp.fx('group'), 'A.Spouse@deletion.test', 'signup_sent', null),
+  ('b1000000-0000-4000-8000-000000000008', pg_temp.fx('org'), 'b0000000-0000-4000-8000-000000000005', pg_temp.fx('group'), 'a.old5@deletion.test', 'joined', pg_temp.fx('spouse_a'));
 insert into public.family_invites (id, org_id, family_id, family_member_id, invite_email, accepted_at) values
   ('b2000000-0000-4000-8000-000000000001', pg_temp.fx('org'), pg_temp.fx('family'), pg_temp.e(5), 'A.Spouse@deletion.test', null),
   ('b2000000-0000-4000-8000-000000000002', pg_temp.fx('org'), pg_temp.fx('family'), pg_temp.e(5), 'a.old3@deletion.test', null);
@@ -430,8 +443,53 @@ select is((select array_agg(name order by name) from public.access_requests wher
 select is((select count(*) from public.access_requests where id = 'a0000000-0000-4000-8000-000000000006'), 1::bigint,
   'the same address in another church stays');
 select is((select count(*) from public.group_invite_uses where id in (
-    'b1000000-0000-4000-8000-000000000001', 'b1000000-0000-4000-8000-000000000002', 'b1000000-0000-4000-8000-000000000003')), 0::bigint,
-  'their invite uses go, and one at their address with no profile');
+    'b1000000-0000-4000-8000-000000000001', 'b1000000-0000-4000-8000-000000000002', 'b1000000-0000-4000-8000-000000000003',
+    'b1000000-0000-4000-8000-000000000005', 'b1000000-0000-4000-8000-000000000006', 'b1000000-0000-4000-8000-000000000007',
+    'b1000000-0000-4000-8000-000000000008')), 7::bigint,
+  'their invite uses stay, and one at their address with no profile, because max_uses counts them');
+select is((select count(*) from public.group_invite_uses where id in (
+    'b1000000-0000-4000-8000-000000000001', 'b1000000-0000-4000-8000-000000000002', 'b1000000-0000-4000-8000-000000000003',
+    'b1000000-0000-4000-8000-000000000005', 'b1000000-0000-4000-8000-000000000006', 'b1000000-0000-4000-8000-000000000007',
+    'b1000000-0000-4000-8000-000000000008')
+    and (profile_id is not null or access_request_id is not null or coalesce(email, 'deleted') <> 'deleted')), 0::bigint,
+  'and none of them holds a profile, a request or an address');
+select is((select count(*) from public.group_invite_uses where email = 'deleted'), 3::bigint,
+  'a signup_sent use holds the placeholder its constraint requires, not an address');
+select is((select count(*) from public.group_invite_uses
+    where lower(email) in ('a.spouse@deletion.test', 'a.old@deletion.test', 'a.old2@deletion.test',
+                           'a.old4@deletion.test', 'a.old5@deletion.test')), 0::bigint,
+  'no use anywhere holds an address of theirs');
+
+-- rows on success, the SQLSTATE on refusal: what someone holding the link gets.
+create function pg_temp.redeem(_invite uuid) returns text language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims', '', true);
+  perform public.group_invite_redeem(
+    (select i.token from public.group_invites i where i.id = _invite),
+    'Someone New', 'someone.new@deletion.test', 'deletion-suite-new-link', now() + interval '1 day');
+  return 'redeemed';
+exception when others then
+  return sqlstate;
+end $$;
+create function pg_temp.join_link(_who uuid, _invite uuid) returns text language plpgsql as $$
+declare _token uuid := (select i.token from public.group_invites i where i.id = _invite); r text;
+begin
+  perform pg_temp.enter(_who);
+  begin
+    r := public.group_invite_join(_token);
+  exception when others then
+    r := sqlstate;
+  end;
+  set local role none;
+  return r;
+end $$;
+
+delete from public.group_members where group_id = pg_temp.fx('group') and profile_id = pg_temp.fx('spouse_b');
+select is(pg_temp.redeem('b0000000-0000-4000-8000-000000000002'), 'GI001', 'a link they used up stays dead for a new person');
+select is(pg_temp.redeem('b0000000-0000-4000-8000-000000000003'), 'GI001', 'so does one they used through a setup link');
+select is(pg_temp.redeem('b0000000-0000-4000-8000-000000000004'), 'GI001', 'and one used at their address with no profile');
+select is(pg_temp.join_link(pg_temp.fx('spouse_b'), 'b0000000-0000-4000-8000-000000000002'), 'GI001', 'and for a signed-in member');
+select is(pg_temp.redeem('b0000000-0000-4000-8000-000000000005'), 'redeemed', 'positive control: a link with a use left still works');
 select is((select count(*) from public.group_invite_uses where id = 'b1000000-0000-4000-8000-000000000004'), 1::bigint,
   'one at an old address with no profile stays');
 select is((select array_agg(id) from public.family_invites where id in

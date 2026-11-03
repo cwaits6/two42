@@ -165,10 +165,16 @@ begin
   delete from public.family_invites i
   where i.org_id = _org and i.accepted_at is null and pg_catalog.lower(i.invite_email) = any (_addresses);
 
-  delete from public.group_invite_uses u
-  where u.org_id = _org
-    and (u.id = any (_own_uses)
-         or (u.profile_id is null and pg_catalog.lower(u.email) = any (_addresses)));
+  -- The rows stay, because max_uses counts them: without them a used-up link
+  -- would admit someone again. The profile link clears through its foreign key.
+  -- group_invite_uses_signup_has_email requires an email on signup_sent, and the
+  -- placeholder can't equal an address, since group_invite_redeem() requires an @.
+  update public.group_invite_uses u
+     set email = case when u.outcome = 'signup_sent' then 'deleted' end,
+         access_request_id = null
+   where u.org_id = _org
+     and (u.id = any (_own_uses)
+          or (u.profile_id is null and pg_catalog.lower(u.email) = any (_addresses)));
 
   delete from public.access_requests r
   where r.org_id = _org
@@ -221,6 +227,7 @@ begin
     'first_name', _first_name,
     'last_name', _last_name,
     'preferred_name', _preferred_name,
+    'email', _profile_email,
     'opened_dates', _opened,
     'photo_keys', to_jsonb(_photo_keys));
 end;
