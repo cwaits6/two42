@@ -21,8 +21,9 @@ The config starts that server with a service key from
 `fixtures/localServiceKey.ts`, signed by the stack's own Auth container, because
 the key `supabase status` prints is refused by Auth's admin API and deleting a
 login needs that API. The same refusal reaches a plain `npm run dev` on the local
-stack, where Delete my account reports that it failed and deletes the login of
-nobody. A server behind `E2E_BASE_URL` needs that key set itself for
+stack, where Delete my account reports that it failed with the login still there,
+after the steps before the login have already run, so don't try it on a seeded
+person. A server behind `E2E_BASE_URL` needs that key set itself for
 `account-deletion.spec.ts` to pass.
 
 In CI the `e2e` job in `.github/workflows/test.yml` stands up an ephemeral
