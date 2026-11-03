@@ -138,8 +138,11 @@ test.beforeAll(async () => {
   await photo("POST", seedOrg);
 });
 test.afterAll(async () => {
-  await photo("DELETE", seedOrg);
-  removeEverythingCreated();
+  try {
+    await photo("DELETE", seedOrg);
+  } finally {
+    removeEverythingCreated();
+  }
 });
 
 async function signIn(page: Page, email: string) {
