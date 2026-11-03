@@ -8,6 +8,8 @@
 // orgObjectPath(). Deliberately dependency-free so it runs in vitest's node
 // environment.
 
+// A new kind in the avatars bucket also goes in the keys delete_person() collects,
+// or a deleted person's photo of that kind stays stored.
 export type StorageKind = "profiles" | "family-members" | "families" | "events";
 
 const STORAGE_KINDS: ReadonlySet<string> = new Set<StorageKind>([
