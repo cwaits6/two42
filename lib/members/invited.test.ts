@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { AccessRequest } from "@/lib/types";
 import { invitedNotSignedUp } from "./invited";
 
-const request = (over: Partial<Pick<AccessRequest, "status" | "email" | "signup_token">> = {}) => ({
-  status: "approved" as AccessRequest["status"],
+type Row = Pick<AccessRequest, "status" | "email" | "signup_token" | "token_expires_at">;
+
+const request = (over: Partial<Row> = {}): Row => ({
+  status: "approved",
   email: "ana@example.test",
   signup_token: "token",
+  token_expires_at: "2026-11-10T00:00:00Z",
   ...over,
 });
 
@@ -39,6 +42,11 @@ describe("invitedNotSignedUp", () => {
     expect(
       invitedNotSignedUp([request({ signup_token: null })], [{ email: "new.ana@example.test" }]),
     ).toEqual([]);
+  });
+
+  it("keeps an invitee whose setup email failed to send", () => {
+    const unsent = request({ signup_token: null, token_expires_at: null });
+    expect(invitedNotSignedUp([unsent], [{ email: "other@example.test" }])).toEqual([unsent]);
   });
 
   it("drops someone who signed up when clearing their token failed", () => {
