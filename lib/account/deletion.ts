@@ -311,6 +311,7 @@ async function deleteSignupRecords(
   orgId: string,
   personId: string,
   currentEmails: (string | null | undefined)[],
+  ownEntryIds: string[],
 ) {
   const ownUses = rowsOf<{ id: string; access_request_id: string | null }>(
     await service
@@ -333,23 +334,15 @@ async function deleteSignupRecords(
           "linked access requests",
         );
 
-  const ownEntries = rowsOf<{ id: string }>(
-    await service
-      .from("family_members")
-      .select("id")
-      .eq("org_id", orgId)
-      .eq("claimed_profile_id", personId),
-    "own household entry",
-  );
   const acceptedTokens =
-    ownEntries.length === 0
+    ownEntryIds.length === 0
       ? []
       : rowsOf<{ token: string }>(
           await service
             .from("family_invites")
             .select("token")
             .eq("org_id", orgId)
-            .in("family_member_id", ownEntries.map((e) => e.id))
+            .in("family_member_id", ownEntryIds)
             .not("accepted_at", "is", null),
           "accepted household invites",
         ).map((i) => i.token);
@@ -411,21 +404,14 @@ async function deleteHouseholdEntries(
   orgId: string,
   personId: string,
   familyId: string | null,
+  ownEntryIds: string[],
 ) {
   const server = { client: service, orgId };
 
-  const own = rowsOf<{ id: string }>(
-    await service
-      .from("family_members")
-      .select("id")
-      .eq("org_id", orgId)
-      .eq("claimed_profile_id", personId),
-    "own household entry",
-  ).map((e) => e.id);
-  for (const id of own) {
+  for (const id of ownEntryIds) {
     await deleteImage("avatar", relObjectPath("family-members", id, "avatar"), server);
   }
-  await deleteExactly(service, "family_members", orgId, own, "delete own household entry");
+  await deleteExactly(service, "family_members", orgId, ownEntryIds, "delete own household entry");
 
   if (!familyId) return;
   const household = await loadHousehold(service, orgId, personId, familyId);
@@ -456,8 +442,16 @@ export async function deletePerson(
     if (loginError) throw new DeletionStepFailed("read login", loginError.code);
 
     await settleServingDates(service, orgId, personId);
-    await deleteSignupRecords(service, orgId, personId, [target.email, login.user.email]);
-    await deleteHouseholdEntries(service, orgId, personId, target.family_id);
+    const ownEntryIds = rowsOf<{ id: string }>(
+      await service
+        .from("family_members")
+        .select("id")
+        .eq("org_id", orgId)
+        .eq("claimed_profile_id", personId),
+      "own household entry",
+    ).map((e) => e.id);
+    await deleteSignupRecords(service, orgId, personId, [target.email, login.user.email], ownEntryIds);
+    await deleteHouseholdEntries(service, orgId, personId, target.family_id, ownEntryIds);
     await deleteImage("avatar", relObjectPath("profiles", personId, "avatar"), {
       client: service,
       orgId,
