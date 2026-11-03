@@ -1517,8 +1517,8 @@ describe("a child without an account", () => {
       ...overrides,
     });
   const YEAR_IGNORED = "birth_year is not stored for a child without an account";
-  const SAME_AS_STORED_CHILD =
-    "a child without an account has the same name and birthday, and this row adds a separate person; if this row is that child, clear its birth_year or edit them on the members page";
+  const SAME_WITHOUT_YEAR =
+    "someone with no stored birth_year has the same name and birthday, and this row adds a separate person; if this row is them, clear its birth_year or edit them under Households";
 
   it("matches an old export's year against a stored row with no year", () => {
     const plan = planImport([childRow()], snapshotWith(child()));
@@ -1700,7 +1700,7 @@ describe("a child without an account", () => {
       const plan = planImport([fatherRow()], snapshotWith(child()));
       expect(plan.rows[0].action).toBe("create_family_member");
       expect(plan.rows[0].warnings).not.toContain(YEAR_IGNORED);
-      expect(plan.rows[0].warnings).toContain(SAME_AS_STORED_CHILD);
+      expect(plan.rows[0].warnings).toContain(SAME_WITHOUT_YEAR);
       expect(plan.writes.filter((w) => w.kind === "update_family_member")).toEqual([]);
       const write = plan.writes.find((w) => w.kind === "insert_family_member");
       expect(write && "values" in write ? write.values : null).toMatchObject({
@@ -1713,7 +1713,7 @@ describe("a child without an account", () => {
       const father = child({ id: "m2", relationship: "other", birth_year: 1970 });
       const plan = planImport([fatherRow()], snapshotWith(child(), father));
       expect(plan.rows[0].action).toBe("no_change");
-      expect(plan.rows[0].warnings).not.toContain(SAME_AS_STORED_CHILD);
+      expect(plan.rows[0].warnings).not.toContain(SAME_WITHOUT_YEAR);
       expect(plan.writes).toEqual([]);
     });
 
@@ -1721,7 +1721,7 @@ describe("a child without an account", () => {
       const plan = planImport([fatherRow({ household_name: "Elsewhere" })], snapshotWith(child()));
       expect(plan.rows[0].errors).toEqual([]);
       expect(plan.rows[0].action).toBe("create_family_member");
-      expect(plan.rows[0].warnings).toContain(SAME_AS_STORED_CHILD);
+      expect(plan.rows[0].warnings).toContain(SAME_WITHOUT_YEAR);
     });
 
     it("becomes a relabel, or a move, once the warned row's year is cleared", () => {
@@ -1734,6 +1734,44 @@ describe("a child without an account", () => {
       expect(elsewhere.rows[0].errors.map((e) => e.code)).toEqual(["HOUSEHOLD_MOVE"]);
     });
 
+    it("warns about a stored child still holding a year while the old schema is live", () => {
+      const plan = planImport([fatherRow()], snapshotWith(child({ birth_year: 2016 })));
+      expect(plan.rows[0].action).toBe("create_family_member");
+      expect(plan.rows[0].warnings).toContain(SAME_WITHOUT_YEAR);
+    });
+
+    describe("once the warned row has relabelled the child", () => {
+      const relabelled = child({ relationship: "other" });
+
+      it("relabels the child first, with no year to write", () => {
+        const plan = planImport([fatherRow({ birth_year: null })], snapshotWith(child()));
+        expect(plan.rows[0].action).toBe("update_family_member");
+        expect(plan.writes).toEqual([
+          expect.objectContaining({ kind: "update_family_member", values: { relationship: "other" } }),
+        ]);
+      });
+
+      it("warns when the next file carries the year, in any household", () => {
+        for (const row of [fatherRow(), fatherRow({ household_name: "Elsewhere" }), childRow()]) {
+          const plan = planImport([row], snapshotWith(relabelled));
+          expect(plan.rows[0].action).toBe("create_family_member");
+          expect(plan.rows[0].warnings).toContain(SAME_WITHOUT_YEAR);
+        }
+      });
+
+      it("is a no-op when the next file leaves the year blank", () => {
+        const plan = planImport([fatherRow({ birth_year: null })], snapshotWith(relabelled));
+        expect(plan.rows[0].action).toBe("no_change");
+        expect(plan.writes).toEqual([]);
+      });
+
+      it("is a no-op with no warning once the year is added under Households", () => {
+        const plan = planImport([fatherRow()], snapshotWith(child({ relationship: "other", birth_year: 1970 })));
+        expect(plan.rows[0].action).toBe("no_change");
+        expect(plan.rows[0].warnings).not.toContain(SAME_WITHOUT_YEAR);
+      });
+    });
+
     it("isn't warned about a stored adult or a child with an account", () => {
       for (const stored of [
         child({ relationship: "sibling", birth_year: 1990 }),
@@ -1741,7 +1779,7 @@ describe("a child without an account", () => {
       ]) {
         const plan = planImport([fatherRow()], snapshotWith(stored));
         expect(plan.rows[0].action).toBe("create_family_member");
-        expect(plan.rows[0].warnings).not.toContain(SAME_AS_STORED_CHILD);
+        expect(plan.rows[0].warnings).not.toContain(SAME_WITHOUT_YEAR);
       }
     });
 

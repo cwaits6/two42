@@ -877,12 +877,14 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
         "groups are ignored for family members without a login"
       );
     }
-    const sharesStoredChildsIdentity = [...yearlessKeys(row)]
-      .flatMap((key) => familyMembersByPerson.get(key) ?? [])
-      .some((member) => isChildWithoutAccount(member));
-    if (sharesStoredChildsIdentity) {
+    // Under a yearless key the map holds only a child without an account or
+    // someone else with no stored year, and a row's year can match neither.
+    const sharesIdentityWithoutYear = [...yearlessKeys(row)].some((key) =>
+      familyMembersByPerson.has(key)
+    );
+    if (sharesIdentityWithoutYear) {
       result.warnings.push(
-        "a child without an account has the same name and birthday, and this row adds a separate person; if this row is that child, clear its birth_year or edit them on the members page"
+        "someone with no stored birth_year has the same name and birthday, and this row adds a separate person; if this row is them, clear its birth_year or edit them under Households"
       );
     }
     if (resolution.pendingKey !== null) ensureHouseholdInsert(row, resolution);

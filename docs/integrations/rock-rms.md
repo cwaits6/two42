@@ -69,7 +69,9 @@ with an account, keep their birth year and match on name, month, day and year as
 before, so an adult's row with a year doesn't match a child who shares their name
 and birthday. Nothing stored says whether that row is the child, so it adds a
 separate person with a warning; clearing its `birth_year` makes it match the child
-and relabel them. A row that relabels a stored adult with no account as a `child`
+and relabel them. The relabel can't write a year, so add it under Households
+before the next file: a row with a year doesn't match someone with none stored, and
+adds them again with the same warning. A row that relabels a stored adult with no account as a `child`
 removes their stored birth year, which the row's changes and a warning show.
 
 ## Integration shape (v1: pull-only)
