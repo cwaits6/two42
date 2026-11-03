@@ -9,6 +9,10 @@ const notifyLeadersOfCancel = vi.fn();
 vi.mock("@/lib/serving/server", () => ({
   notifyLeadersOfCancel: (...args: unknown[]) => notifyLeadersOfCancel(...args),
 }));
+const afterResponse: (() => Promise<void>)[] = [];
+vi.mock("next/server", () => ({
+  after: (task: () => Promise<void>) => afterResponse.push(task),
+}));
 const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 const { deletePerson, deletionResponse, loadDeletionSummary } = await import("./deletion");
@@ -33,6 +37,7 @@ const DELETED = {
   first_name: "Ada",
   last_name: "Okafor",
   preferred_name: null,
+  email: "ada@example.test",
   photo_keys: [],
   opened_dates: [],
 };
@@ -56,6 +61,7 @@ function setup(overrides: Partial<Tables> = {}) {
 beforeEach(() => {
   createServiceClient.mockReset();
   notifyLeadersOfCancel.mockReset();
+  afterResponse.length = 0;
   consoleError.mockClear();
 });
 
@@ -78,6 +84,7 @@ describe("deletePerson", () => {
     expect(await deletePerson(ORG, "ada")).toEqual({ outcome });
     expect(log.removedObjects).toEqual([]);
     expect(notifyLeadersOfCancel).not.toHaveBeenCalled();
+    expect(afterResponse).toEqual([]);
   });
 
   it("reports failure when the service client can't be built", async () => {
@@ -111,31 +118,66 @@ describe("deletePerson: photos, after the transaction", () => {
   });
 });
 
-describe("deletePerson: team leads, after the transaction", () => {
+describe("deletePerson: team leads, after the response", () => {
   const date = { team_id: "t1", group_id: "g1", team_name: "Set-up", service_date: "2090-01-08" };
+  const runAfterResponse = () => Promise.all(afterResponse.map((task) => task()));
 
-  it("tells them about each date that opened, naming who left", async () => {
+  it("has told nobody by the time it answers", async () => {
     const { state } = setup();
-    state.rpcResult = { ...DELETED, opened_dates: [date, { ...date, service_date: "2090-01-15" }] };
+    state.rpcResult = { ...DELETED, opened_dates: [date] };
+    expect(await deletePerson(ORG, "ada", "admin")).toEqual({ outcome: "deleted", photosNotRemoved: 0 });
+    expect(notifyLeadersOfCancel).not.toHaveBeenCalled();
+    expect(afterResponse).toHaveLength(1);
+  });
+
+  it("sends each team's dates together, naming who left", async () => {
+    const { state } = setup();
+    state.rpcResult = {
+      ...DELETED,
+      opened_dates: [
+        date,
+        { team_id: "t2", group_id: "g1", team_name: "Coffee", service_date: "2090-01-08" },
+        { ...date, service_date: "2090-01-15" },
+      ],
+    };
     await deletePerson(ORG, "ada", "admin");
+    await runAfterResponse();
     expect(notifyLeadersOfCancel).toHaveBeenCalledTimes(2);
     expect(notifyLeadersOfCancel.mock.calls[0][1]).toEqual({
       groupId: "g1",
       teamId: "t1",
       orgId: ORG,
       teamName: "Set-up",
-      serviceDate: "2090-01-08",
+      serviceDates: ["2090-01-08", "2090-01-15"],
       memberLabel: "Ada Okafor",
       excludeProfileId: "admin",
     });
+    expect(notifyLeadersOfCancel.mock.calls[1][1]).toMatchObject({
+      teamId: "t2",
+      serviceDates: ["2090-01-08"],
+    });
   });
 
-  it("is still deleted when a notice fails, and tries the next one", async () => {
+  it("names someone with no name by their email", async () => {
     const { state } = setup();
-    state.rpcResult = { ...DELETED, opened_dates: [date, date] };
-    notifyLeadersOfCancel.mockRejectedValueOnce(new Error("x"));
+    state.rpcResult = { ...DELETED, first_name: null, last_name: null, opened_dates: [date] };
+    await deletePerson(ORG, "ada");
+    await runAfterResponse();
+    expect(notifyLeadersOfCancel.mock.calls[0][1].memberLabel).toBe("ada@example.test");
+  });
+
+  it("logs a failed team without its message, and tries the next team", async () => {
+    const { state } = setup();
+    state.rpcResult = {
+      ...DELETED,
+      opened_dates: [date, { ...date, team_id: "t2" }],
+    };
+    notifyLeadersOfCancel.mockRejectedValueOnce(new Error("Ada Okafor <ada@example.test> bounced"));
     expect(await deletePerson(ORG, "ada")).toEqual({ outcome: "deleted", photosNotRemoved: 0 });
+    await runAfterResponse();
     expect(notifyLeadersOfCancel).toHaveBeenCalledTimes(2);
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    expect(consoleError.mock.calls.flat().map(String).join(" ")).not.toMatch(/Ada|example\.test/);
   });
 });
 
@@ -155,6 +197,24 @@ describe("loadDeletionSummary", () => {
   it("is null for someone in another church", async () => {
     setup();
     expect(await loadDeletionSummary(ORG, "outsider", "church_admin")).toBeNull();
+  });
+
+  it("names someone with no name by their email", async () => {
+    setup({ profiles: [person("ada", { first_name: null, last_name: null, email: "ada@example.test" })] });
+    const summary = await loadDeletionSummary(ORG, "ada", "church_admin");
+    expect(summary?.name).toBe("ada@example.test");
+  });
+
+  it("names a second person with no name by their email", async () => {
+    setup({
+      giving_funds: funds,
+      group_members: memberships,
+      profiles: [person("ada"), person("ben", { first_name: null, last_name: null, email: "ben@example.test" })],
+    });
+    const summary = await loadDeletionSummary(ORG, "ada", "self");
+    expect(summary?.groupContent).toMatchObject({
+      fundsRetired: [{ name: "Passes on", recipient: "ben@example.test" }],
+    });
   });
 
   it("names each fund's fate for the person, in this church only", async () => {

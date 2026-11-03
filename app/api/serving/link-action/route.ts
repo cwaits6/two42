@@ -327,7 +327,7 @@ export async function POST(request: Request) {
       teamId: payload.g,
       orgId: group.org_id,
       teamName: group.name,
-      serviceDate: payload.d,
+      serviceDates: [payload.d],
       memberLabel: await resolveSignupLabel(
         service,
         attendeeProfiles,

@@ -135,7 +135,7 @@ describe("notifyLeadersOfCancel", () => {
     teamId: "team-1",
     orgId: "org-1",
     teamName: "Greeters",
-    serviceDate: "2026-09-13",
+    serviceDates: ["2026-09-13"],
     memberLabel: "Sam",
   };
 
@@ -187,5 +187,48 @@ describe("notifyLeadersOfCancel", () => {
     await notifyLeadersOfCancel(service, baseOpts);
 
     expect(sendServingCancelNoticeEmail).not.toHaveBeenCalled();
+  });
+
+  const leader = {
+    profiles: {
+      id: "leader-1",
+      first_name: "Leah",
+      last_name: "Doe",
+      preferred_name: null,
+      email: "leah@example.com",
+      role: "member",
+    },
+  };
+
+  it("reads a team's leaders once for several dates, and sends one notice per date", async () => {
+    const stub = stubClient({ team_members: { data: [leader], error: null } }) as unknown as {
+      from: (table: string) => unknown;
+    };
+    const from = vi.fn(stub.from);
+
+    await notifyLeadersOfCancel({ from } as never, {
+      ...baseOpts,
+      serviceDates: ["2026-09-13", "2026-09-20"],
+    });
+
+    expect(from.mock.calls.filter(([table]) => table === "team_members")).toHaveLength(1);
+    expect(reserveEmailQuota).toHaveBeenCalledWith("org-1", 2);
+    expect(sendServingCancelNoticeEmail.mock.calls.map(([call]) => call.serviceDate)).toEqual([
+      "2026-09-13",
+      "2026-09-20",
+    ]);
+  });
+
+  it("logs a failed send without a name or address, and sends the next", async () => {
+    const consoleError = vi.mocked(console.error);
+    consoleError.mockClear();
+    const service = stubClient({ team_members: { data: [leader, leader], error: null } });
+    sendServingCancelNoticeEmail.mockRejectedValueOnce(new Error("Leah Doe <leah@example.com> bounced"));
+
+    await notifyLeadersOfCancel(service, baseOpts);
+
+    expect(sendServingCancelNoticeEmail).toHaveBeenCalledTimes(2);
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    expect(consoleError.mock.calls.flat().map(String).join(" ")).not.toMatch(/Leah|example\.com/);
   });
 });

@@ -22,6 +22,7 @@ import type { AccessRequest, Profile, UserRole } from "@/lib/types";
 import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
 import { requestedOn } from "@/lib/groups/joinQueue";
 import { displayName } from "@/lib/names";
+import { personName } from "@/lib/serving/display";
 import { toUserRole } from "@/lib/roles";
 import { ApprovalQueue } from "@/components/admin/ApprovalQueue";
 import { matchesSearch } from "@/components/admin/adminSearch";
@@ -388,7 +389,7 @@ export function MembersList({
                                 url={`/api/admin/members/${member.id}`}
                                 subject="other"
                                 label="Delete account"
-                                ariaLabel={`Delete ${displayName(member)}'s account`}
+                                ariaLabel={`Delete ${personName(member)}'s account`}
                                 onDeleted={loadData}
                               />
                             )}

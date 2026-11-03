@@ -132,7 +132,7 @@ export async function sendSignupConfirmation(
   });
 }
 
-/** Quietly tell the team's leaders a Sunday opened back up. */
+/** Quietly tell the team's leaders Sundays opened back up, reading them once and sending one notice per date. */
 export async function notifyLeadersOfCancel(
   service: SupabaseClient,
   opts: {
@@ -141,14 +141,14 @@ export async function notifyLeadersOfCancel(
     teamId: string;
     orgId: string;
     teamName: string;
-    serviceDate: string;
+    serviceDates: string[];
     memberLabel: string;
     excludeProfileId?: string;
   }
 ) {
   // orgId is required rather than self-resolving: this function's anonymous
-  // signed-link caller has no session to resolve an org from. Both callers
-  // hold an already-authorized org_id and pass it.
+  // signed-link caller has no session to resolve an org from. Every caller
+  // holds an already-authorized org_id and passes it.
 
   // org_id filter is required: this is an email fan-out surface on a
   // service-role client — an unscoped read would mail another org's leaders.
@@ -163,11 +163,12 @@ export async function notifyLeadersOfCancel(
   // a graceful degradation — it means the team's leaders are never told the
   // slot opened, with no other signal that it happened. Log it.
   if (error) {
+    // The code only: a PostgrestError's details echo row content.
     console.error(
-      "Serving leaders lookup failed for team %s (org=%s):",
+      "Serving leaders lookup failed for team %s (org=%s): code=%s",
       opts.teamId,
       opts.orgId,
-      error
+      error.code
     );
   }
 
@@ -195,7 +196,7 @@ export async function notifyLeadersOfCancel(
   const branding = await resolveEmailBranding(opts.orgId);
   const baseUrl = siteConfig.url;
 
-  const allowed = await reserveEmailQuota(opts.orgId, recipients.length);
+  const allowed = await reserveEmailQuota(opts.orgId, recipients.length * opts.serviceDates.length);
   if (!allowed) {
     console.warn(
       "Serving cancel notice skipped — org %s hit its daily email cap",
@@ -204,19 +205,26 @@ export async function notifyLeadersOfCancel(
     return;
   }
 
-  for (const leader of recipients) {
-    try {
-      await sendServingCancelNoticeEmail({
-        to: leader.email,
-        leaderName: displayName(leader),
-        memberLabel: opts.memberLabel,
-        teamName: opts.teamName,
-        serviceDate: opts.serviceDate,
-        servingUrl: `${baseUrl}/g/${opts.groupId}/serving/${opts.teamId}`,
-        branding,
-      });
-    } catch (err) {
-      console.error("Failed to send serving cancel notice to leader:", leader.id, err);
+  for (const serviceDate of opts.serviceDates) {
+    for (const leader of recipients) {
+      try {
+        await sendServingCancelNoticeEmail({
+          to: leader.email,
+          leaderName: displayName(leader),
+          memberLabel: opts.memberLabel,
+          teamName: opts.teamName,
+          serviceDate,
+          servingUrl: `${baseUrl}/g/${opts.groupId}/serving/${opts.teamId}`,
+          branding,
+        });
+      } catch (err) {
+        // The error's name only: a provider's message can echo the address.
+        console.error(
+          "Failed to send serving cancel notice to leader %s: %s",
+          leader.id,
+          err instanceof Error ? err.name : typeof err
+        );
+      }
     }
   }
 }

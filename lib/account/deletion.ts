@@ -5,8 +5,9 @@
  * failure leaves everything as it was. What can't join that transaction runs
  * after it commits, and can't turn a finished deletion back into a failure.
  */
+import { after } from "next/server";
 import { displayName } from "@/lib/names";
-import { signupDisplayName } from "@/lib/serving/display";
+import { personName } from "@/lib/serving/display";
 import { notifyLeadersOfCancel } from "@/lib/serving/server";
 import { removeAvatarObjects } from "@/lib/storageDelete";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -50,16 +51,22 @@ async function loadFunds(service: ServiceClient, orgId: string, personId: string
       .in("profile_id", seconds),
     "second people's groups",
   );
-  const people = rowsOf<{ id: string; first_name: string | null; last_name: string | null; preferred_name: string | null }>(
+  const people = rowsOf<{
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    preferred_name: string | null;
+    email: string | null;
+  }>(
     await service
       .from("profiles")
-      .select("id, first_name, last_name, preferred_name")
+      .select("id, first_name, last_name, preferred_name, email")
       .eq("org_id", orgId)
       .in("id", seconds),
     "second people",
   );
   const inGroup = new Set(memberships.map((m) => `${m.group_id}:${m.profile_id}`));
-  const names = new Map(people.map((p) => [p.id, displayName(p)]));
+  const names = new Map(people.map((p) => [p.id, personName(p)]));
 
   const passesOn = (f: FundRow) => !!f.co_steward_id && inGroup.has(`${f.group_id}:${f.co_steward_id}`);
   return {
@@ -92,10 +99,11 @@ export async function loadDeletionSummary(
     first_name: string | null;
     last_name: string | null;
     preferred_name: string | null;
+    email: string | null;
   }>(
     await service
       .from("profiles")
-      .select("role, family_id, first_name, last_name, preferred_name")
+      .select("role, family_id, first_name, last_name, preferred_name, email")
       .eq("id", personId)
       .eq("org_id", orgId),
     "target profile",
@@ -152,7 +160,7 @@ export async function loadDeletionSummary(
     .map((g) => g.groups?.name ?? "");
 
   return {
-    name: displayName(target),
+    name: personName(target),
     lastChurchAdmin: target.role === "admin" && otherAdmins.length === 0,
     platformOperator: operators.length > 0,
     groupContent:
@@ -218,6 +226,7 @@ interface DeletedPerson {
   first_name: string | null;
   last_name: string | null;
   preferred_name: string | null;
+  email: string | null;
   photo_keys: string[];
   opened_dates: { team_id: string; group_id: string; team_name: string; service_date: string }[];
 }
@@ -234,19 +243,25 @@ async function tellLeadersDatesOpened(
   person: DeletedPerson,
   actorId: string | undefined,
 ) {
-  for (const date of person.opened_dates) {
+  const teams = Map.groupBy(person.opened_dates, (date) => date.team_id);
+  for (const [teamId, dates] of teams) {
     try {
       await notifyLeadersOfCancel(service, {
-        groupId: date.group_id,
-        teamId: date.team_id,
+        groupId: dates[0].group_id,
+        teamId,
         orgId,
-        teamName: date.team_name,
-        serviceDate: date.service_date,
-        memberLabel: signupDisplayName([person], null),
+        teamName: dates[0].team_name,
+        serviceDates: dates.map((date) => date.service_date),
+        memberLabel: personName(person),
         excludeProfileId: actorId,
       });
     } catch (err) {
-      console.error("Serving cancel notice failed:", err instanceof Error ? err.message : typeof err);
+      // The error's name only: a provider's message can echo a name or an address.
+      console.error(
+        "Serving cancel notices failed for team %s: %s",
+        teamId,
+        err instanceof Error ? err.name : typeof err,
+      );
     }
   }
 }
@@ -279,7 +294,10 @@ export async function deletePerson(
   }
 
   const notRemoved = await removeAvatarObjects(orgId, person.photo_keys);
-  await tellLeadersDatesOpened(service, orgId, person, actorId);
+  // After the response, so a slow or dropped send can't report a committed delete as failed.
+  if (person.opened_dates.length > 0) {
+    after(() => tellLeadersDatesOpened(service, orgId, person, actorId));
+  }
   return { outcome: "deleted", photosNotRemoved: notRemoved.length };
 }
 
