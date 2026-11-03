@@ -1,3 +1,4 @@
+import { verifiedUser } from "@/lib/members/access";
 import { createClient } from "@/lib/supabase/server";
 
 export type CurrentPerson =
@@ -12,9 +13,7 @@ export type CurrentPerson =
  */
 export async function currentPerson(): Promise<CurrentPerson> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await verifiedUser(supabase, "Current person lookup");
   if (!user) return { ok: false, status: 401 };
 
   const { data: profile, error } = await supabase
