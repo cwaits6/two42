@@ -316,7 +316,7 @@ export function MembersList({
                 return (
                   <Card key={member.id}>
                     <CardContent>
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                      <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-end 2xl:justify-between">
                         <div className="min-w-0">
                           <p className="text-xl font-semibold">{displayName(member)}</p>
                           {member.email && (
@@ -387,8 +387,8 @@ export function MembersList({
                               <DeletePersonButton
                                 url={`/api/admin/members/${member.id}`}
                                 subject="other"
-                                label="Remove from church"
-                                ariaLabel={`Remove ${displayName(member)} from the church`}
+                                label="Delete account"
+                                ariaLabel={`Delete ${displayName(member)}'s account`}
                                 onDeleted={loadData}
                               />
                             )}

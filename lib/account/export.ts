@@ -56,7 +56,7 @@ export async function buildAccountExport(orgId: string, personId: string) {
   if (!profile) return null;
   const { family_id: familyId, ...ownProfile } = profile;
 
-  const [groups, teams, rsvps, serving, prayers, households, entries] = await Promise.all([
+  const [groups, teams, rsvps, serving, prayers, funds, feedback, households, entries] = await Promise.all([
     service
       .from("group_members")
       .select("role, joined_at, groups(name)")
@@ -82,6 +82,18 @@ export async function buildAccountExport(orgId: string, personId: string) {
       .select("body, is_anonymous, is_answered, created_at, groups(name)")
       .eq("org_id", orgId)
       .eq("author_id", personId)
+      .order("created_at", { ascending: false }),
+    service
+      .from("giving_funds")
+      .select("name, description, is_active, retire_on, groups(name), giving_fund_methods(method, custom_handle)")
+      .eq("org_id", orgId)
+      .eq("steward_id", personId)
+      .order("name"),
+    service
+      .from("feedback")
+      .select("type, message, created_at")
+      .eq("org_id", orgId)
+      .eq("profile_id", personId)
       .order("created_at", { ascending: false }),
     familyId
       ? service.from("family_units").select(HOUSEHOLD_COLUMNS).eq("id", familyId).eq("org_id", orgId)
@@ -138,6 +150,29 @@ export async function buildAccountExport(orgId: string, personId: string) {
       anonymous: p.is_anonymous,
       answered: p.is_answered,
       posted_at: p.created_at,
+    })),
+    funds_you_receive: listOf<{
+      name: string;
+      description: string | null;
+      is_active: boolean;
+      retire_on: string | null;
+      groups: { name: string } | null;
+      giving_fund_methods: { method: string; custom_handle: string }[] | null;
+    }>(funds, "funds").map((f) => ({
+      fund: f.name,
+      group: named(f.groups),
+      description: f.description,
+      active: f.is_active,
+      retire_on: f.retire_on,
+      payment_methods: (f.giving_fund_methods ?? []).map((m) => ({
+        method: m.method,
+        handle: m.custom_handle,
+      })),
+    })),
+    feedback: listOf<{ type: string; message: string; created_at: string }>(feedback, "feedback").map((f) => ({
+      type: f.type,
+      message: f.message,
+      sent_at: f.created_at,
     })),
   };
 }

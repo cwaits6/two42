@@ -7,6 +7,9 @@ import { Button } from "@/components/ui/button";
 import {
   deletionCopy,
   LAST_CHURCH_ADMIN_MESSAGE,
+  photosNotRemovedMessage,
+  PLATFORM_OPERATOR_MESSAGE,
+  refusalMessage,
   type DeletionCopy,
   type DeletionSubject,
   type DeletionSummary,
@@ -44,7 +47,7 @@ export function DeletePersonButton({
 }) {
   const [loading, setLoading] = useState(false);
   const [copy, setCopy] = useState<DeletionCopy | null>(null);
-  const action = subject === "self" ? "delete your account" : "remove this person";
+  const action = subject === "self" ? "delete your account" : "delete this account";
 
   async function openConfirmation() {
     setLoading(true);
@@ -55,6 +58,10 @@ export function DeletePersonButton({
         return;
       }
       const summary: DeletionSummary = await res.json();
+      if (summary.platformOperator) {
+        toast.error(PLATFORM_OPERATOR_MESSAGE[subject]);
+        return;
+      }
       if (summary.lastChurchAdmin) {
         toast.error(LAST_CHURCH_ADMIN_MESSAGE[subject]);
         return;
@@ -70,9 +77,13 @@ export function DeletePersonButton({
   async function confirm() {
     try {
       const res = await fetch(url, { method: "DELETE" });
+      const body = await res.json().catch(() => null);
       if (!res.ok) {
-        toast.error(failureMessage(action, res.status, { 409: LAST_CHURCH_ADMIN_MESSAGE[subject] }));
+        toast.error(refusalMessage(body?.error, subject) ?? failureMessage(action, res.status));
         return;
+      }
+      if (body?.photosNotRemoved > 0) {
+        toast.error(photosNotRemovedMessage(body.photosNotRemoved, subject));
       }
     } catch {
       toast.error(NETWORK_ERROR);

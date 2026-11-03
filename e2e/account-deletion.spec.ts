@@ -1,7 +1,6 @@
 import { execFileSync } from "node:child_process";
 import type { Browser, Page } from "@playwright/test";
 import { expect, test } from "./fixtures/auth";
-import { localServiceKey } from "./fixtures/localServiceKey";
 import { GROUP_B, PASSWORD, PERSONAS } from "./fixtures/personas";
 
 // Every person deleted here is created here, through the stack's own Postgres
@@ -11,6 +10,7 @@ import { GROUP_B, PASSWORD, PERSONAS } from "./fixtures/personas";
 test.describe.configure({ mode: "serial" });
 
 const DB_CONTAINER = "supabase_db_small-group-hub";
+const STORAGE_CONTAINER = "supabase_storage_small-group-hub";
 const OTHER_ORG = "0e2e0000-0000-4000-8000-000000000154";
 
 const LEAVER = {
@@ -29,6 +29,8 @@ const OUTSIDER = {
   name: "Outsider Spec",
 };
 const FUND = "Spec fund for the leaver";
+const SECOND_FUND = "Spec fund with a second person";
+const SECOND_PERSON = PERSONAS.oneGroup;
 const OLD_ADDRESS = "leaver.old@deletion.spec.test";
 const SPOUSE_NAME = "Spec Spouse";
 const SPOUSE_SETUP_LINK = "deletion-spec-spouse-setup-link";
@@ -71,7 +73,9 @@ function photoKey(org: string) {
 }
 
 async function photo(method: "POST" | "DELETE", org: string) {
-  const key = localServiceKey();
+  const key = execFileSync("docker", ["exec", STORAGE_CONTAINER, "printenv", "SERVICE_KEY"], {
+    encoding: "utf8",
+  }).trim();
   const res = await fetch(`${STORAGE_API}/${photoKey(org)}`, {
     method,
     headers: {
@@ -92,7 +96,7 @@ function removeEverythingCreated() {
   const ids = [LEAVER, REMOVED, OUTSIDER].map((p) => `'${p.id}'`).join(",");
   const emails = [LEAVER, REMOVED, OUTSIDER].map((p) => `'${p.email}'`).join(",");
   sql(`
-    delete from public.giving_funds where name = '${FUND}';
+    delete from public.giving_funds where name in ('${FUND}', '${SECOND_FUND}');
     delete from auth.users where id in (${ids});
     delete from public.access_requests where email in (${emails}, '${OLD_ADDRESS}');
     delete from public.family_units where family_name = '${HOUSEHOLD}';
@@ -116,6 +120,10 @@ test.beforeAll(async () => {
     values ('${seedOrg}', '${GROUP_B}', '${LEAVER.id}', '${ANONYMOUS_BODY}', true);
     insert into public.giving_funds (org_id, group_id, name, steward_id)
     values ('${seedOrg}', '${GROUP_B}', '${FUND}', '${LEAVER.id}');
+    insert into public.giving_funds (org_id, group_id, name, steward_id, co_steward_id, steward_role)
+    select '${seedOrg}', '${GROUP_B}', '${SECOND_FUND}', '${LEAVER.id}', m.profile_id, 'Treasurer'
+    from public.group_members m join public.profiles p on p.id = m.profile_id
+    where m.group_id = '${GROUP_B}' and p.email = '${SECOND_PERSON.email}';
     insert into public.access_requests (org_id, name, email, status, approved_role, reviewed_at, signup_token)
     values ('${seedOrg}', '${LEAVER.name}', '${LEAVER.email}', 'approved', 'member', now(), null),
            ('${seedOrg}', '${SPOUSE_NAME}', '${OLD_ADDRESS}', 'approved', 'member', now(), '${SPOUSE_SETUP_LINK}');
@@ -126,7 +134,7 @@ test.beforeAll(async () => {
       select '${seedOrg}', id, 'Leaver', 'primary', '${LEAVER.id}' from household returning id, family_id
     ), child as (
       insert into public.family_members (org_id, family_id, first_name, relationship)
-      select '${seedOrg}', id, 'Child', 'child' from household returning id, family_id
+      select '${seedOrg}', id, 'Invited', 'other' from household returning id, family_id
     )
     insert into public.family_invites (org_id, family_id, family_member_id, invite_email, accepted_at)
     select '${seedOrg}'::uuid, family_id, id, '${OLD_ADDRESS}', now() from own
@@ -180,6 +188,7 @@ test("a member's download holds their own data and no other member's", async ({ 
 
   expect(text).toContain(LEAVER.email);
   expect(text).toContain(ANONYMOUS_BODY);
+  expect(JSON.parse(text).funds_you_receive.map((f: { fund: string }) => f.fund)).toContain(FUND);
   for (const other of Object.values(PERSONAS)) {
     expect(text).not.toContain(other.name);
     expect(text).not.toContain(other.email);
@@ -195,6 +204,10 @@ test("a person deletes their own account and can't sign in afterwards", async ({
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText("Your prayer requests, including anonymous ones")).toBeVisible();
   await expect(dialog.getByText(new RegExp(`The ${FUND} fund in .*payment methods`))).toBeVisible();
+  await expect(
+    dialog.getByText(new RegExp(`The ${SECOND_FUND} fund in .*goes to ${SECOND_PERSON.name}, retired`)),
+  ).toBeVisible();
+  await expect(dialog.getByText(/doesn't include your photo/)).toBeVisible();
 
   await dialog.getByRole("button", { name: "Cancel" }).click();
   expect(countOf("public.profiles", "id", LEAVER.id)).toBe("1");
@@ -208,6 +221,12 @@ test("a person deletes their own account and can't sign in afterwards", async ({
   expect(countOf("public.profiles", "id", LEAVER.id)).toBe("0");
   expect(photoCount(seedOrg)).toBe("0");
   expect(sql(`select count(*) from public.prayer_requests where body = '${ANONYMOUS_BODY}';`)).toBe("0");
+  expect(sql(`select count(*) from public.giving_funds where name = '${FUND}';`)).toBe("0");
+  expect(
+    sql(`select concat_ws('|', p.email, f.co_steward_id is null, f.steward_role is null, f.is_active)
+         from public.giving_funds f join public.profiles p on p.id = f.steward_id
+         where f.name = '${SECOND_FUND}';`),
+  ).toBe(`${SECOND_PERSON.email}|t|t|f`);
   expect(sql(`select count(*) from public.access_requests where email = '${LEAVER.email}';`)).toBe("0");
   expect(sql(`select name from public.access_requests where email = '${OLD_ADDRESS}';`)).toBe(SPOUSE_NAME);
   expect(sql(`select count(*) from public.family_invites where invite_email in ('${LEAVER.email}', '${OLD_ADDRESS}');`)).toBe("0");
@@ -247,18 +266,24 @@ test.describe("a church admin", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });
 
-  test("removes a member of their church, who leaves no row behind", async ({ page }) => {
+  test("is refused their own id on the admin route", async ({ page }) => {
+    const id = sql(`select id from public.profiles where email = '${PERSONAS.admin.email}';`);
+    expect((await page.request.delete(`/api/admin/members/${id}`)).status()).toBe(403);
+    expect(countOf("auth.users", "id", id)).toBe("1");
+  });
+
+  test("deletes a member's account, who leaves no row behind", async ({ page }) => {
     await page.goto("/admin/members");
     const search = page.getByLabel("Search members");
     await search.fill(PERSONAS.admin.email);
     await expect(page.getByRole("button", { name: /^Edit / })).toHaveCount(1);
-    await expect(page.getByRole("button", { name: /^Remove .* from the church$/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Delete .*'s account$/ })).toHaveCount(0);
 
     await search.fill(REMOVED.email);
-    await page.getByRole("button", { name: `Remove ${REMOVED.name} from the church` }).click();
+    await page.getByRole("button", { name: `Delete ${REMOVED.name}'s account` }).click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByRole("heading", { name: `Remove ${REMOVED.name} from the church?` })).toBeVisible();
-    await dialog.getByRole("button", { name: "Remove from church" }).click();
+    await expect(dialog.getByRole("heading", { name: `Delete ${REMOVED.name}'s account?` })).toBeVisible();
+    await dialog.getByRole("button", { name: "Delete account" }).click();
 
     await expect(dialog).toHaveCount(0);
     await expect(page.getByText("No members match that search.")).toBeVisible();

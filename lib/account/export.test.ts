@@ -38,6 +38,16 @@ function setup() {
       { org_id: ORG, profile_id: "ada", serving_signups: { service_date: "2026-11-01", teams: { name: "Set-up" } } },
       { org_id: ORG, profile_id: "ben", serving_signups: { service_date: "2026-12-01", teams: { name: "Set-up" } } },
     ],
+    giving_funds: [
+      { org_id: ORG, steward_id: "ada", name: "Mission trip", description: "Summer", is_active: true, retire_on: null, groups: { name: "Grace" }, giving_fund_methods: [{ method: "venmo", custom_handle: "@ada" }] },
+      { org_id: ORG, steward_id: "ben", co_steward_id: "ada", name: "Bens fund", groups: { name: "Grace" }, giving_fund_methods: [{ method: "venmo", custom_handle: "@bens-handle" }] },
+      { org_id: OTHER_ORG, steward_id: "ada", name: "Far fund", groups: { name: "Far" }, giving_fund_methods: [] },
+    ],
+    feedback: [
+      { org_id: ORG, profile_id: "ada", type: "idea", message: "Her idea", created_at: "t" },
+      { org_id: ORG, profile_id: "ben", type: "idea", message: "Someone elses idea", created_at: "t" },
+      { org_id: OTHER_ORG, profile_id: "ada", type: "idea", message: "Far idea", created_at: "t" },
+    ],
     prayer_requests: [
       { org_id: ORG, author_id: "ada", body: "By name", is_anonymous: false, is_answered: false, created_at: "t", groups: { name: "Grace" } },
       { org_id: ORG, author_id: "ada", body: "Quietly", is_anonymous: true, is_answered: true, created_at: "t", groups: { name: "Grace" } },
@@ -77,6 +87,30 @@ describe("buildAccountExport", () => {
     ]);
   });
 
+  it("includes the funds they receive, with their payment methods, and no one else's", async () => {
+    setup();
+    const data = await buildAccountExport(ORG, "ada");
+    expect(data?.funds_you_receive).toEqual([
+      {
+        fund: "Mission trip",
+        group: "Grace",
+        description: "Summer",
+        active: true,
+        retire_on: null,
+        payment_methods: [{ method: "venmo", handle: "@ada" }],
+      },
+    ]);
+    const text = JSON.stringify(data);
+    expect(text).not.toContain("@bens-handle");
+    expect(text).not.toContain("Far fund");
+  });
+
+  it("includes their own feedback and no one else's", async () => {
+    setup();
+    const data = await buildAccountExport(ORG, "ada");
+    expect(data?.feedback).toEqual([{ type: "idea", message: "Her idea", sent_at: "t" }]);
+  });
+
   it("lists household entries except ones claimed by someone else, with no internal ids", async () => {
     setup();
     const data = await buildAccountExport(ORG, "ada");
@@ -96,7 +130,7 @@ describe("buildAccountExport", () => {
     expect(await buildAccountExport(OTHER_ORG, "ada")).toBeNull();
   });
 
-  it.each(["group_members", "team_members", "rsvps", "serving_signup_attendees", "prayer_requests", "family_units", "family_members"])(
+  it.each(["group_members", "team_members", "rsvps", "serving_signup_attendees", "prayer_requests", "giving_funds", "feedback", "family_units", "family_members"])(
     "throws rather than build a partial file when %s can't be read",
     async (table) => {
       const { failures } = setup();

@@ -9,7 +9,7 @@ export async function GET() {
   const person = await currentPerson();
   if (!person.ok) return denied(person.status);
   try {
-    const summary = await loadDeletionSummary(person.orgId, person.id);
+    const summary = await loadDeletionSummary(person.orgId, person.id, "self");
     return summary
       ? Response.json(summary)
       : Response.json({ error: "Not found" }, { status: 404 });
@@ -24,6 +24,6 @@ export async function DELETE() {
   if (!person.ok) return denied(person.status);
   const result = await deletePerson(person.orgId, person.id);
   // The account is already gone, so a failed sign-out only leaves a dead cookie.
-  if (result === "deleted") await person.signOut().catch(() => undefined);
+  if (result.outcome === "deleted") await person.signOut().catch(() => undefined);
   return deletionResponse(result);
 }

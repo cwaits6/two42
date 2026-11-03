@@ -18,7 +18,7 @@ export async function GET(_request: Request, { params }: Params) {
   const { id } = await params;
   if (!isUuid(id)) return notFound();
   try {
-    const summary = await loadDeletionSummary(gate.orgId, id);
+    const summary = await loadDeletionSummary(gate.orgId, id, "church_admin");
     return summary ? Response.json(summary) : notFound();
   } catch (err) {
     console.error("Deletion summary failed:", err instanceof Error ? err.message : typeof err);
@@ -31,5 +31,9 @@ export async function DELETE(_request: Request, { params }: Params) {
   if (!gate.ok) return denied(gate.status);
   const { id } = await params;
   if (!isUuid(id)) return notFound();
-  return deletionResponse(await deletePerson(gate.orgId, id));
+  // A UUID in a URL can arrive in any case. Their own account goes through /api/account.
+  if (id.toLowerCase() === gate.user.id) {
+    return Response.json({ error: "own_account" }, { status: 403 });
+  }
+  return deletionResponse(await deletePerson(gate.orgId, id, gate.user.id));
 }

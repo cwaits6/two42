@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { DeletePersonButton } from "@/components/account/DeletePersonButton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { DOWNLOAD_COVERS, DOWNLOAD_LEAVES_OUT } from "@/lib/account/deletionCopy";
 import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
 
 export function YourDataCard() {
@@ -45,8 +46,7 @@ export function YourDataCard() {
       <CardContent className="pt-6">
         <h2 className="mb-2 text-2xl">Your data</h2>
         <p className="mb-4 text-base text-muted-foreground">
-          Get a copy of your profile, household, groups, RSVPs, serving turns and prayer requests, or
-          delete your account.
+          Download a copy of your data, or delete your account. {DOWNLOAD_COVERS} {DOWNLOAD_LEAVES_OUT}
         </p>
         <div className="flex flex-col gap-3 sm:flex-row">
           <Button variant="outline" onClick={download} disabled={downloading}>

@@ -1,161 +1,133 @@
 /**
- * The one path that deletes a person, whether they asked or a church admin
- * did. The service client is built here rather than passed in, and `orgId`
- * must come from the caller's own RLS-scoped profile: the target is looked up
- * inside that org before anything else, so someone from another church is
- * "not found" and auth.admin.deleteUser() is never reached for them.
- *
- * Deleting the login is last and the only step a retry can't come back from.
- * It cascades to the profile in one transaction, and through the profile to
- * everything the foreign keys cover. The steps before it each tolerate having
- * already run, so a failure anywhere leaves a person who can still sign in and
- * try again.
+ * The one path that deletes a person, whether they asked or a church admin did.
+ * `orgId` must come from the caller's own RLS-scoped profile. The database side
+ * is one transaction in delete_person(), including the login, so a refusal or a
+ * failure leaves everything as it was. What can't join that transaction runs
+ * after it commits, and can't turn a finished deletion back into a failure.
  */
 import { displayName } from "@/lib/names";
-import { relObjectPath } from "@/lib/storagePaths";
+import { signupDisplayName } from "@/lib/serving/display";
+import { notifyLeadersOfCancel } from "@/lib/serving/server";
+import { removeAvatarObjects } from "@/lib/storageDelete";
 import { createServiceClient } from "@/lib/supabase/server";
-import { deleteImage } from "@/lib/uploadImage";
-import type { DeletionSummary } from "./deletionCopy";
+import type { DeletionSummary, DeletionViewer } from "./deletionCopy";
 
 type ServiceClient = Awaited<ReturnType<typeof createServiceClient>>;
 
 export type PersonDeletionResult =
-  | "deleted"
-  | "not_found"
-  | "last_church_admin"
-  | "failed";
-
-class DeletionStepFailed extends Error {
-  constructor(step: string, code?: string) {
-    // The step and code only: a PostgrestError's details echo row content.
-    super(`${step}${code ? `: code=${code}` : ""}`);
-  }
-}
+  | { outcome: "deleted"; photosNotRemoved: number }
+  | { outcome: "not_found" | "platform_operator" | "last_church_admin" | "failed" };
 
 function rowsOf<T>(read: { data: unknown; error: { code?: string } | null }, step: string): T[] {
-  if (read.error) throw new DeletionStepFailed(step, read.error.code);
+  // The step and code only: a PostgrestError's details echo row content.
+  if (read.error) throw new Error(`${step}: code=${read.error.code}`);
   return (read.data ?? []) as T[];
 }
 
-// A filtered delete that matches nothing reports success, so the rows it
-// returned are compared with the rows it was meant to remove.
-async function deleteExactly(
-  service: ServiceClient,
-  table: string,
-  orgId: string,
-  ids: string[],
-  step: string,
-) {
-  if (ids.length === 0) return;
-  const removed = rowsOf<{ id: string }>(
-    await service.from(table).delete().eq("org_id", orgId).in("id", ids).select("id"),
-    step,
-  );
-  if (removed.length !== ids.length) throw new DeletionStepFailed(step);
+interface FundRow {
+  name: string;
+  group_id: string;
+  co_steward_id: string | null;
+  groups: { name: string } | null;
 }
 
-async function isLastChurchAdmin(service: ServiceClient, orgId: string, personId: string) {
-  const others = rowsOf<{ id: string }>(
-    await service
-      .from("profiles")
-      .select("id")
-      .eq("org_id", orgId)
-      .eq("role", "admin")
-      .neq("id", personId)
-      .limit(1),
-    "other church admins",
-  );
-  return others.length === 0;
-}
-
-interface TargetProfile {
-  role: string;
-  email: string | null;
-  family_id: string | null;
-  first_name: string | null;
-  last_name: string | null;
-  preferred_name: string | null;
-}
-
-async function loadTarget(service: ServiceClient, orgId: string, personId: string) {
-  const [target] = rowsOf<TargetProfile>(
-    await service
-      .from("profiles")
-      .select("role, email, family_id, first_name, last_name, preferred_name")
-      .eq("id", personId)
-      .eq("org_id", orgId),
-    "target profile",
-  );
-  return target ?? null;
-}
-
-interface HouseholdEntry {
-  id: string;
-  first_name: string;
-  last_name: string | null;
-  preferred_name: string | null;
-  claimed_profile_id: string | null;
-}
-
-// A household belongs to everyone in it, so it goes only when no one else is
-// left: no other profile points at it and no entry is claimed by someone else.
-async function loadHousehold(
-  service: ServiceClient,
-  orgId: string,
-  personId: string,
-  familyId: string,
-) {
-  const [family] = rowsOf<{ family_name: string }>(
-    await service.from("family_units").select("family_name").eq("id", familyId).eq("org_id", orgId),
-    "household",
-  );
-  if (!family) return null;
-  const otherProfiles = rowsOf<{ id: string }>(
-    await service
-      .from("profiles")
-      .select("id")
-      .eq("org_id", orgId)
-      .eq("family_id", familyId)
-      .neq("id", personId)
-      .limit(1),
-    "household profiles",
-  );
-  const entries = rowsOf<HouseholdEntry>(
-    await service
-      .from("family_members")
-      .select("id, first_name, last_name, preferred_name, claimed_profile_id")
-      .eq("org_id", orgId)
-      .eq("family_id", familyId),
-    "household entries",
-  );
-  const shared =
-    otherProfiles.length > 0 ||
-    entries.some((e) => e.claimed_profile_id && e.claimed_profile_id !== personId);
-  return {
-    name: family.family_name,
-    shared,
-    entries: entries.filter((e) => e.claimed_profile_id !== personId),
-  };
-}
-
-/** What the confirmation names; null when the person isn't in this church. */
-export async function loadDeletionSummary(
-  orgId: string,
-  personId: string,
-): Promise<DeletionSummary | null> {
-  const service = await createServiceClient();
-  const target = await loadTarget(service, orgId, personId);
-  if (!target) return null;
-
-  const funds = rowsOf<{ name: string; groups: { name: string } | null }>(
+// The rule delete_person() applies, read ahead of time for the confirmation.
+async function loadFunds(service: ServiceClient, orgId: string, personId: string) {
+  const funds = rowsOf<FundRow>(
     await service
       .from("giving_funds")
-      .select("name, groups(name)")
+      .select("name, group_id, co_steward_id, groups(name)")
       .eq("org_id", orgId)
       .eq("steward_id", personId)
       .order("name"),
     "funds",
   );
+  const seconds = [
+    ...new Set(funds.flatMap((f) => (f.co_steward_id && f.co_steward_id !== personId ? f.co_steward_id : []))),
+  ];
+  if (seconds.length === 0) return { retired: [], deleted: funds.map(namedFund) };
+
+  const memberships = rowsOf<{ group_id: string; profile_id: string }>(
+    await service
+      .from("group_members")
+      .select("group_id, profile_id")
+      .eq("org_id", orgId)
+      .in("profile_id", seconds),
+    "second people's groups",
+  );
+  const people = rowsOf<{ id: string; first_name: string | null; last_name: string | null; preferred_name: string | null }>(
+    await service
+      .from("profiles")
+      .select("id, first_name, last_name, preferred_name")
+      .eq("org_id", orgId)
+      .in("id", seconds),
+    "second people",
+  );
+  const inGroup = new Set(memberships.map((m) => `${m.group_id}:${m.profile_id}`));
+  const names = new Map(people.map((p) => [p.id, displayName(p)]));
+
+  const passesOn = (f: FundRow) => !!f.co_steward_id && inGroup.has(`${f.group_id}:${f.co_steward_id}`);
+  return {
+    retired: funds.filter(passesOn).map((f) => ({
+      ...namedFund(f),
+      recipient: names.get(f.co_steward_id ?? "") ?? "",
+    })),
+    deleted: funds.filter((f) => !passesOn(f)).map(namedFund),
+  };
+}
+
+function namedFund(fund: FundRow) {
+  return { name: fund.name, group: fund.groups?.name ?? "" };
+}
+
+/**
+ * What the confirmation names; null when the person isn't in this church. Fund
+ * and group names are group content, which a church admin has no access to, so
+ * they get only the counts.
+ */
+export async function loadDeletionSummary(
+  orgId: string,
+  personId: string,
+  viewer: DeletionViewer,
+): Promise<DeletionSummary | null> {
+  const service = await createServiceClient();
+  const [target] = rowsOf<{
+    role: string;
+    family_id: string | null;
+    first_name: string | null;
+    last_name: string | null;
+    preferred_name: string | null;
+  }>(
+    await service
+      .from("profiles")
+      .select("role, family_id, first_name, last_name, preferred_name")
+      .eq("id", personId)
+      .eq("org_id", orgId),
+    "target profile",
+  );
+  if (!target) return null;
+
+  const operators = rowsOf<{ profile_id: string }>(
+    // org-anchor: platform_admins has no org_id; personId was just read inside this org
+    await service.from("platform_admins").select("profile_id").eq("profile_id", personId),
+    "platform operator",
+  );
+
+  const otherAdmins =
+    target.role === "admin"
+      ? rowsOf<{ id: string }>(
+          await service
+            .from("profiles")
+            .select("id")
+            .eq("org_id", orgId)
+            .eq("role", "admin")
+            .neq("id", personId)
+            .limit(1),
+          "other church admins",
+        )
+      : [];
+
+  const funds = await loadFunds(service, orgId, personId);
 
   const led = rowsOf<{ group_id: string; groups: { name: string } | null }>(
     await service
@@ -180,315 +152,152 @@ export async function loadDeletionSummary(
           "other leaders",
         );
   const stillLed = new Set(otherLeaders.map((l) => l.group_id));
-
-  const household = target.family_id
-    ? await loadHousehold(service, orgId, personId, target.family_id)
-    : null;
+  const groupsLosingLeader = led
+    .filter((g) => !stillLed.has(g.group_id))
+    .map((g) => g.groups?.name ?? "");
 
   return {
     name: displayName(target),
-    lastChurchAdmin: target.role === "admin" && (await isLastChurchAdmin(service, orgId, personId)),
-    funds: funds.map((f) => ({ name: f.name, group: f.groups?.name ?? "" })),
-    household: household && {
-      name: household.name,
-      shared: household.shared,
-      entries: household.entries.map((e) => displayName(e)),
-    },
-    groupsLosingLeader: led
-      .filter((g) => !stillLed.has(g.group_id))
-      .map((g) => g.groups?.name ?? ""),
+    lastChurchAdmin: target.role === "admin" && otherAdmins.length === 0,
+    platformOperator: operators.length > 0,
+    groupContent:
+      viewer === "self"
+        ? { kind: "names", fundsRetired: funds.retired, fundsDeleted: funds.deleted, groupsLosingLeader }
+        : {
+            kind: "counts",
+            fundsRetired: funds.retired.length,
+            fundsDeleted: funds.deleted.length,
+            groupsLosingLeader: groupsLosingLeader.length,
+          },
+    household: target.family_id
+      ? await loadHousehold(service, orgId, personId, target.family_id)
+      : null,
   };
 }
 
-// serving_signups.created_by cascades, so a date this person booked would
-// disappear for whoever serves it with them unless it moves to them first. A
-// date someone else booked for this person alone is left with nobody on it, so
-// it opens back up.
-async function settleServingDates(service: ServiceClient, orgId: string, personId: string) {
-  const booked = rowsOf<{ id: string }>(
+// The same household rule delete_person() applies.
+async function loadHousehold(
+  service: ServiceClient,
+  orgId: string,
+  personId: string,
+  familyId: string,
+) {
+  const [family] = rowsOf<{ family_name: string }>(
+    await service.from("family_units").select("family_name").eq("id", familyId).eq("org_id", orgId),
+    "household",
+  );
+  if (!family) return null;
+  const otherProfiles = rowsOf<{ id: string }>(
     await service
-      .from("serving_signups")
+      .from("profiles")
       .select("id")
       .eq("org_id", orgId)
-      .eq("created_by", personId),
-    "booked serving dates",
-  ).map((s) => s.id);
-  const attending = rowsOf<{ signup_id: string }>(
-    await service
-      .from("serving_signup_attendees")
-      .select("signup_id")
-      .eq("org_id", orgId)
-      .eq("profile_id", personId),
-    "attended serving dates",
-  ).map((a) => a.signup_id);
-
-  const involved = [...new Set([...booked, ...attending])];
-  if (involved.length === 0) return;
-
-  const others = rowsOf<{ signup_id: string; profile_id: string }>(
-    await service
-      .from("serving_signup_attendees")
-      .select("signup_id, profile_id")
-      .eq("org_id", orgId)
-      .in("signup_id", involved)
-      .neq("profile_id", personId),
-    "other attendees",
+      .eq("family_id", familyId)
+      .neq("id", personId)
+      .limit(1),
+    "household profiles",
   );
-  const remainingOn = new Map(others.map((a) => [a.signup_id, a.profile_id]));
-
-  for (const signupId of booked) {
-    const remaining = remainingOn.get(signupId);
-    if (!remaining) continue;
-    const moved = rowsOf<{ id: string }>(
-      await service
-        .from("serving_signups")
-        .update({ created_by: remaining })
-        .eq("id", signupId)
-        .eq("org_id", orgId)
-        .eq("created_by", personId)
-        .select("id"),
-      "move serving date",
-    );
-    if (moved.length !== 1) throw new DeletionStepFailed("move serving date");
-  }
-
-  const bookedSet = new Set(booked);
-  await deleteExactly(
-    service,
-    "serving_signups",
-    orgId,
-    attending.filter((id) => !bookedSet.has(id) && !remainingOn.has(id)),
-    "open serving date",
+  const entries = rowsOf<{
+    first_name: string;
+    last_name: string | null;
+    preferred_name: string | null;
+    claimed_profile_id: string | null;
+  }>(
+    await service
+      .from("family_members")
+      .select("first_name, last_name, preferred_name, claimed_profile_id")
+      .eq("org_id", orgId)
+      .eq("family_id", familyId),
+    "household entries",
   );
+  return {
+    name: family.family_name,
+    shared:
+      otherProfiles.length > 0 ||
+      entries.some((e) => e.claimed_profile_id && e.claimed_profile_id !== personId),
+    entries: entries.filter((e) => e.claimed_profile_id !== personId).map((e) => displayName(e)),
+  };
 }
 
-// PostgREST reads `*` in an ilike pattern as a wildcard, so the pattern only
-// narrows the read and the exact match decides which rows are this person's.
-async function rowsAtAddresses<T extends { id: string }>(
-  service: ServiceClient,
-  table: string,
-  column: string,
-  orgId: string,
-  addresses: Set<string>,
-  step: string,
-  extraColumns = "",
-): Promise<T[]> {
-  const found: T[] = [];
-  for (const address of addresses) {
-    const rows = rowsOf<T & Record<string, unknown>>(
-      await service
-        .from(table)
-        .select(`id, ${column}${extraColumns}`)
-        .eq("org_id", orgId)
-        .ilike(column, address.replace(/[\\%_]/g, "\\$&")),
-      step,
-    );
-    found.push(...rows.filter((row) => String(row[column]).toLowerCase() === address));
-  }
-  return found;
+interface DeletedPerson {
+  first_name: string | null;
+  last_name: string | null;
+  preferred_name: string | null;
+  photo_keys: string[];
+  opened_dates: { team_id: string; group_id: string; team_name: string; service_date: string }[];
 }
 
-interface LinkedRequest {
-  id: string;
-  signup_token: string | null;
-}
+const REFUSALS: Record<string, "not_found" | "platform_operator" | "last_church_admin"> = {
+  AD001: "not_found",
+  AD002: "platform_operator",
+  CA001: "last_church_admin",
+};
 
-function lowercased(emails: (string | null | undefined)[]) {
-  return emails.flatMap((email) => (email ? [email.toLowerCase()] : []));
-}
-
-// No foreign key to the profile clears these, and an approved request or an
-// unclaimed household invite left behind would let handle_new_user() sign that
-// address back into the church. Everything at an address they still hold is theirs,
-// since group_invite_redeem() refuses an address that has a profile. An address
-// they have left may be shared and nothing records whose a row there is, so only
-// a request linked to them through an invite goes, and not one with a setup link
-// waiting: theirs was spent when they signed up, so that link is for someone
-// else, who reused the row. Deleting a request clears its link on their invite
-// uses, so a retry only finds it if their uses go after it.
-async function deleteSignupRecords(
+async function tellLeadersDatesOpened(
   service: ServiceClient,
   orgId: string,
-  personId: string,
-  currentEmails: (string | null | undefined)[],
-  ownEntryIds: string[],
+  person: DeletedPerson,
+  actorId: string | undefined,
 ) {
-  const ownUses = rowsOf<{ id: string; access_request_id: string | null }>(
-    await service
-      .from("group_invite_uses")
-      .select("id, access_request_id")
-      .eq("org_id", orgId)
-      .eq("profile_id", personId),
-    "invite uses",
-  );
-  const linkedIds = ownUses.flatMap((u) => u.access_request_id ?? []);
-  const requestsByLink =
-    linkedIds.length === 0
-      ? []
-      : rowsOf<LinkedRequest>(
-          await service
-            .from("access_requests")
-            .select("id, signup_token")
-            .eq("org_id", orgId)
-            .in("id", linkedIds),
-          "linked access requests",
-        );
-
-  const acceptedTokens =
-    ownEntryIds.length === 0
-      ? []
-      : rowsOf<{ token: string }>(
-          await service
-            .from("family_invites")
-            .select("token")
-            .eq("org_id", orgId)
-            .in("family_member_id", ownEntryIds)
-            .not("accepted_at", "is", null),
-          "accepted household invites",
-        ).map((i) => i.token);
-  const requestsByToken =
-    acceptedTokens.length === 0
-      ? []
-      : rowsOf<LinkedRequest>(
-          await service
-            .from("access_requests")
-            .select("id, signup_token")
-            .eq("org_id", orgId)
-            .in("invite_token", acceptedTokens),
-          "accepted invites' access requests",
-        );
-
-  const current = new Set(lowercased(currentEmails));
-
-  const invites = await rowsAtAddresses<{ id: string; accepted_at: string | null }>(
-    service, "family_invites", "invite_email", orgId, current, "household invites", ", accepted_at",
-  );
-  await deleteExactly(
-    service,
-    "family_invites",
-    orgId,
-    invites.filter((i) => i.accepted_at === null).map((i) => i.id),
-    "delete household invites",
-  );
-
-  const usesAtAddress = await rowsAtAddresses<{ id: string; profile_id: string | null }>(
-    service, "group_invite_uses", "email", orgId, current, "invite uses by email", ", profile_id",
-  );
-  await deleteExactly(
-    service,
-    "group_invite_uses",
-    orgId,
-    usesAtAddress.filter((u) => u.profile_id === null).map((u) => u.id),
-    "delete invite uses by email",
-  );
-
-  const requestsAtAddress = await rowsAtAddresses<{ id: string }>(
-    service, "access_requests", "email", orgId, current, "access requests",
-  );
-  const spentLinked = [...requestsByLink, ...requestsByToken].filter((r) => !r.signup_token);
-  await deleteExactly(
-    service,
-    "access_requests",
-    orgId,
-    [...new Set([...requestsAtAddress, ...spentLinked].map((r) => r.id))],
-    "delete access requests",
-  );
-
-  await deleteExactly(service, "group_invite_uses", orgId, ownUses.map((u) => u.id), "delete invite uses");
+  for (const date of person.opened_dates) {
+    try {
+      await notifyLeadersOfCancel(service, {
+        groupId: date.group_id,
+        teamId: date.team_id,
+        orgId,
+        teamName: date.team_name,
+        serviceDate: date.service_date,
+        memberLabel: signupDisplayName([person], null),
+        excludeProfileId: actorId,
+      });
+    } catch (err) {
+      console.error("Serving cancel notice failed:", err instanceof Error ? err.message : typeof err);
+    }
+  }
 }
 
-// family_members.claimed_profile_id only clears on delete, which would leave
-// this person listed in the household as someone who never signed up.
-async function deleteHouseholdEntries(
-  service: ServiceClient,
-  orgId: string,
-  personId: string,
-  familyId: string | null,
-  ownEntryIds: string[],
-) {
-  const server = { client: service, orgId };
-
-  for (const id of ownEntryIds) {
-    await deleteImage("avatar", relObjectPath("family-members", id, "avatar"), server);
-  }
-  await deleteExactly(service, "family_members", orgId, ownEntryIds, "delete own household entry");
-
-  if (!familyId) return;
-  const household = await loadHousehold(service, orgId, personId, familyId);
-  if (!household || household.shared) return;
-
-  for (const entry of household.entries) {
-    await deleteImage("avatar", relObjectPath("family-members", entry.id, "avatar"), server);
-  }
-  await deleteImage("family", relObjectPath("families", familyId, "photo"), server);
-  await deleteExactly(service, "family_units", orgId, [familyId], "delete household");
-}
-
+/** `actorId` is who to leave out of the team-lead notices, when someone else is acting. */
 export async function deletePerson(
   orgId: string,
   personId: string,
+  actorId?: string,
 ): Promise<PersonDeletionResult> {
+  let service: ServiceClient;
+  let person: DeletedPerson;
   try {
-    const service = await createServiceClient();
-
-    const target = await loadTarget(service, orgId, personId);
-    if (!target) return "not_found";
-    if (target.role === "admin" && (await isLastChurchAdmin(service, orgId, personId))) {
-      return "last_church_admin";
-    }
-
-    // Before any write, so a service key Auth refuses fails with nothing touched.
-    const { data: login, error: loginError } = await service.auth.admin.getUserById(personId);
-    if (loginError) throw new DeletionStepFailed("read login", loginError.code);
-
-    await settleServingDates(service, orgId, personId);
-    const ownEntryIds = rowsOf<{ id: string }>(
-      await service
-        .from("family_members")
-        .select("id")
-        .eq("org_id", orgId)
-        .eq("claimed_profile_id", personId),
-      "own household entry",
-    ).map((e) => e.id);
-    await deleteSignupRecords(service, orgId, personId, [target.email, login.user.email], ownEntryIds);
-    await deleteHouseholdEntries(service, orgId, personId, target.family_id, ownEntryIds);
-    await deleteImage("avatar", relObjectPath("profiles", personId, "avatar"), {
-      client: service,
-      orgId,
+    service = await createServiceClient();
+    const { data, error } = await service.rpc("delete_person", {
+      _person_id: personId,
+      _org_id: orgId,
     });
-
-    const { error } = await service.auth.admin.deleteUser(personId);
     if (error) {
-      // The database rule is what decides, and it reaches here as Auth's generic
-      // error when another admin was removed since the check above.
-      const refused =
-        target.role === "admin" &&
-        (await isLastChurchAdmin(service, orgId, personId).catch(() => false));
-      if (refused) return "last_church_admin";
-      throw new DeletionStepFailed("delete login", error.code);
+      const refusal = REFUSALS[error.code];
+      if (refusal) return { outcome: refusal };
+      // The code only: a PostgrestError's details echo row content.
+      console.error("Person deletion failed: code=%s", error.code);
+      return { outcome: "failed" };
     }
-
-    const left = rowsOf<{ id: string }>(
-      await service.from("profiles").select("id").eq("id", personId).eq("org_id", orgId),
-      "confirm profile gone",
-    );
-    if (left.length > 0) throw new DeletionStepFailed("confirm profile gone");
-    return "deleted";
+    person = data as unknown as DeletedPerson;
   } catch (err) {
     console.error("Person deletion failed:", err instanceof Error ? err.message : typeof err);
-    return "failed";
+    return { outcome: "failed" };
   }
+
+  const notRemoved = await removeAvatarObjects(orgId, person.photo_keys);
+  await tellLeadersDatesOpened(service, orgId, person, actorId);
+  return { outcome: "deleted", photosNotRemoved: notRemoved.length };
 }
 
 /** The answer both routes give for a result, so the two can't drift. */
 export function deletionResponse(result: PersonDeletionResult): Response {
-  switch (result) {
+  switch (result.outcome) {
     case "deleted":
-      return Response.json({ ok: true });
+      return Response.json({ ok: true, photosNotRemoved: result.photosNotRemoved });
     case "not_found":
       return Response.json({ error: "Not found" }, { status: 404 });
     case "last_church_admin":
-      return Response.json({ error: "last_church_admin" }, { status: 409 });
+    case "platform_operator":
+      return Response.json({ error: result.outcome }, { status: 409 });
     case "failed":
       return Response.json({ error: "Failed to delete" }, { status: 500 });
   }
