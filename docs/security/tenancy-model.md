@@ -367,11 +367,15 @@ no shared group is absent from that household's card. Linking a household
 member by search (`app/api/household/search-members/route.ts`) finds only
 people the viewer may read, and is whole-org again under `'org'`. A fund's
 pickers (`loadFundFormData()` in `lib/giving/server.ts`) don't follow this
-setting: they read `group_members` for the fund's group, and only the people
-the viewer may read within it, under every setting and for a church admin too.
-`giving_fund_recipients_guard()` holds the same line against a direct write. `family_invites` is readable by a church admin and the invite's own
-household only (`20261112000000_children_directory.sql`): its row holds an email
-and a bearer token.
+setting: they read `group_members` for the fund's group and offer the people
+the viewer may read within it who aren't pending or unlisted, under every
+setting and for a church admin too. `giving_fund_recipients_guard()` holds the
+group and not-pending line against a direct write and accepts an unlisted
+member; leaving that person out is the pickers' alone, because Give drops a
+fund whose recipient members can't read. `family_invites` is readable by a
+church admin and the invite's own household only
+(`20261112000000_children_directory.sql`): its row holds an email and a bearer
+token.
 
 **The write path.** `organizations` had Supabase's default table-level
 UPDATE grant and no permissive write policy. The migration revokes that
