@@ -5,7 +5,7 @@ const createServiceClient = vi.fn();
 vi.mock("@/lib/supabase/server", () => ({
   createServiceClient: () => createServiceClient(),
 }));
-vi.spyOn(console, "error").mockImplementation(() => {});
+const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 vi.spyOn(console, "warn").mockImplementation(() => {});
 
 const { deletePerson, deletionResponse, loadDeletionSummary } = await import("./deletion");
@@ -34,6 +34,7 @@ function setup(overrides: Partial<Tables> = {}) {
     serving_signup_attendees: [],
     access_requests: [],
     group_invite_uses: [],
+    family_invites: [],
     family_members: [],
     family_units: [],
     giving_funds: [],
@@ -220,6 +221,85 @@ describe("deletePerson: sign-up records", () => {
   });
 });
 
+describe("deletePerson: sign-up records at other addresses", () => {
+  it("removes only exact matches when the email holds a character PostgREST reads as a wildcard", async () => {
+    const { tables } = setup({
+      profiles: [person("ada", { email: "a*b@example.test" })],
+      access_requests: [
+        { id: "own", org_id: ORG, email: "A*B@example.test" },
+        { id: "other", org_id: ORG, email: "axxb@example.test" },
+      ],
+      group_invite_uses: [
+        { id: "own-use", org_id: ORG, profile_id: null, email: "a*b@example.test" },
+        { id: "other-use", org_id: ORG, profile_id: null, email: "axxb@example.test" },
+      ],
+      family_invites: [
+        { id: "own-invite", org_id: ORG, invite_email: "a*b@example.test", accepted_at: null },
+        { id: "other-invite", org_id: ORG, invite_email: "axxb@example.test", accepted_at: null },
+      ],
+    });
+    expect(await deletePerson(ORG, "ada")).toBe("deleted");
+    expect(tables.access_requests.map((r) => r.id)).toEqual(["other"]);
+    expect(tables.group_invite_uses.map((u) => u.id)).toEqual(["other-use"]);
+    expect(tables.family_invites.map((i) => i.id)).toEqual(["other-invite"]);
+  });
+
+  it("matches the sign-in address when it differs from the profile's", async () => {
+    const { state, tables } = setup({
+      access_requests: [
+        { id: "at-profile", org_id: ORG, email: "ada@example.test" },
+        { id: "at-login", org_id: ORG, email: "ada.login@example.test" },
+      ],
+    });
+    state.authEmail = "ada.login@example.test";
+    expect(await deletePerson(ORG, "ada")).toBe("deleted");
+    expect(tables.access_requests).toEqual([]);
+  });
+
+  it("finds an old address through the group invite they came in by", async () => {
+    const { tables } = setup({
+      access_requests: [
+        { id: "linked", org_id: ORG, email: "old@example.test" },
+        { id: "same-address", org_id: ORG, email: "OLD@example.test" },
+        { id: "someone-else", org_id: ORG, email: "ben@example.test" },
+      ],
+      group_invite_uses: [
+        { id: "u1", org_id: ORG, profile_id: "ada", email: "old@example.test", access_request_id: "linked" },
+      ],
+    });
+    expect(await deletePerson(ORG, "ada")).toBe("deleted");
+    expect(tables.access_requests.map((r) => r.id)).toEqual(["someone-else"]);
+    expect(tables.group_invite_uses).toEqual([]);
+  });
+
+  it("finds an old address through the household invite they accepted", async () => {
+    const { tables } = setup({
+      family_members: [
+        { id: "m1", org_id: ORG, family_id: "f1", first_name: "Ada", claimed_profile_id: "ada" },
+      ],
+      family_invites: [
+        { id: "i1", org_id: ORG, family_member_id: "m1", invite_email: "old@example.test", accepted_at: "2026-01-01" },
+      ],
+      access_requests: [{ id: "r1", org_id: ORG, email: "old@example.test" }],
+    });
+    expect(await deletePerson(ORG, "ada")).toBe("deleted");
+    expect(tables.access_requests).toEqual([]);
+  });
+
+  it("removes an unclaimed household invite to their address, and no one else's", async () => {
+    const { tables } = setup({
+      family_invites: [
+        { id: "theirs", org_id: ORG, invite_email: "Ada@example.test", accepted_at: null },
+        { id: "accepted", org_id: ORG, invite_email: "ada@example.test", accepted_at: "2026-01-01" },
+        { id: "other-address", org_id: ORG, invite_email: "ben@example.test", accepted_at: null },
+        { id: "other-church", org_id: OTHER_ORG, invite_email: "ada@example.test", accepted_at: null },
+      ],
+    });
+    expect(await deletePerson(ORG, "ada")).toBe("deleted");
+    expect(tables.family_invites.map((i) => i.id)).toEqual(["accepted", "other-address", "other-church"]);
+  });
+});
+
 describe("deletePerson: failure at any step", () => {
   const full = () => ({
     profiles: [person("ada", { family_id: "f1" })],
@@ -233,7 +313,11 @@ describe("deletePerson: failure at any step", () => {
       { signup_id: "s1", org_id: ORG, profile_id: "ben" },
     ],
     access_requests: [{ id: "r1", org_id: ORG, email: "ada@example.test" }],
-    group_invite_uses: [{ id: "u1", org_id: ORG, profile_id: "ada", email: null }],
+    group_invite_uses: [{ id: "u1", org_id: ORG, profile_id: "ada", email: null, access_request_id: "r1" }],
+    family_invites: [
+      { id: "i1", org_id: ORG, family_member_id: "m1", invite_email: "ada.old@example.test", accepted_at: "2026-01-01" },
+      { id: "i2", org_id: ORG, family_member_id: "m9", invite_email: "ada@example.test", accepted_at: null },
+    ],
   });
 
   const steps = [
@@ -244,6 +328,8 @@ describe("deletePerson: failure at any step", () => {
     { table: "access_requests", op: "delete" },
     { table: "group_invite_uses", op: "select" },
     { table: "group_invite_uses", op: "delete" },
+    { table: "family_invites", op: "select" },
+    { table: "family_invites", op: "delete" },
     { table: "family_members", op: "select" },
     { table: "family_members", op: "delete" },
     { table: "family_units", op: "select" },
@@ -266,6 +352,18 @@ describe("deletePerson: failure at any step", () => {
     });
   }
 
+  it("touches nothing when the login can't be read, and a retry finishes", async () => {
+    const { log, state } = setup(full());
+    state.getUserError = { code: "bad_jwt" };
+    expect(await deletePerson(ORG, "ada")).toBe("failed");
+    expect(log.writes).toEqual([]);
+    expect(log.removedObjects).toEqual([]);
+    expect(log.deletedUsers).toEqual([]);
+
+    state.getUserError = null;
+    expect(await deletePerson(ORG, "ada")).toBe("deleted");
+  });
+
   it("keeps the login when a photo can't be deleted, and a retry finishes", async () => {
     const { log, state } = setup(full());
     state.storageError = { message: "storage down" };
@@ -285,6 +383,20 @@ describe("deletePerson: failure at any step", () => {
     state.deleteUserError = null;
     expect(await deletePerson(ORG, "ada")).toBe("deleted");
     expect(log.deletedUsers).toEqual(["ada"]);
+  });
+
+  it("logs the login failure when the re-check after it fails too", async () => {
+    const { failures, state } = setup({
+      profiles: [person("ada", { role: "admin" }), person("ben", { role: "admin" })],
+    });
+    state.deleteUserError = { code: "unexpected_failure" };
+    state.onDeleteUser = () => failures.push({ table: "profiles", op: "select" });
+    consoleError.mockClear();
+    expect(await deletePerson(ORG, "ada")).toBe("failed");
+    expect(consoleError).toHaveBeenCalledWith(
+      "Person deletion failed:",
+      "delete login: code=unexpected_failure",
+    );
   });
 
   it("reports failure when a write matched no rows", async () => {

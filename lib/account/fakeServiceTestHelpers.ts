@@ -8,10 +8,16 @@ export interface Failure {
   op: "select" | "update" | "delete";
 }
 
+// What PostgREST does with a pattern: `*` and `%` match any run, `_` one character.
 function ilikeMatches(value: unknown, pattern: string) {
   if (typeof value !== "string") return false;
-  const literal = pattern.replace(/\\([\\%_])/g, "$1");
-  return !/(^|[^\\])[%_]/.test(pattern) && value.toLowerCase() === literal.toLowerCase();
+  const source = pattern.replace(/\\([\\%_])|([%*])|(_)|([.+?^${}()|[\]\\/-])/g, (_m, literal, any, one, special) => {
+    if (literal) return literal.replace(/[\\]/, "\\\\");
+    if (any) return ".*";
+    if (one) return ".";
+    return `\\${special}`;
+  });
+  return new RegExp(`^${source}$`, "i").test(value);
 }
 
 export function fakeService(tables: Tables) {
@@ -23,6 +29,9 @@ export function fakeService(tables: Tables) {
   };
   const state = {
     deleteUserError: null as { code: string } | null,
+    getUserError: null as { code: string } | null,
+    // The sign-in address when it differs from the one on the profile.
+    authEmail: null as string | null,
     storageError: null as { message: string } | null,
     // What the auth cascade does to the profile; off proves the check after it.
     cascade: true,
@@ -72,6 +81,11 @@ export function fakeService(tables: Tables) {
         predicates.push((row) => ilikeMatches(row[column], pattern));
         return builder;
       },
+      not: (column: string) => {
+        filters.push(column);
+        predicates.push((row) => row[column] !== null && row[column] !== undefined);
+        return builder;
+      },
       or: (expression: string) => {
         const id = expression.split("claimed_profile_id.eq.")[1];
         predicates.push((row) => row.claimed_profile_id === null || row.claimed_profile_id === id);
@@ -97,6 +111,11 @@ export function fakeService(tables: Tables) {
     from,
     auth: {
       admin: {
+        getUserById: async (id: string) => {
+          if (state.getUserError) return { data: { user: null }, error: state.getUserError };
+          const profile = tables.profiles.find((p) => p.id === id);
+          return { data: { user: { email: state.authEmail ?? profile?.email } }, error: null };
+        },
         deleteUser: async (id: string) => {
           state.onDeleteUser?.();
           if (state.deleteUserError) return { error: state.deleteUserError };

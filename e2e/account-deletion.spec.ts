@@ -29,6 +29,8 @@ const OUTSIDER = {
   name: "Outsider Spec",
 };
 const FUND = "Spec fund for the leaver";
+const OLD_ADDRESS = "leaver.old@deletion.spec.test";
+const HOUSEHOLD = "Spec household for the leaver";
 const STORAGE_API = "http://127.0.0.1:54321/storage/v1/object/avatars";
 const ANONYMOUS_BODY = "Account deletion check: an anonymous request.";
 
@@ -90,7 +92,8 @@ function removeEverythingCreated() {
   sql(`
     delete from public.giving_funds where name = '${FUND}';
     delete from auth.users where id in (${ids});
-    delete from public.access_requests where email in (${emails});
+    delete from public.access_requests where email in (${emails}, '${OLD_ADDRESS}');
+    delete from public.family_units where family_name = '${HOUSEHOLD}';
     delete from public.organizations where id = '${OTHER_ORG}';`);
 }
 
@@ -110,7 +113,22 @@ test.beforeAll(async () => {
     insert into public.prayer_requests (org_id, group_id, author_id, body, is_anonymous)
     values ('${seedOrg}', '${GROUP_B}', '${LEAVER.id}', '${ANONYMOUS_BODY}', true);
     insert into public.giving_funds (org_id, group_id, name, steward_id)
-    values ('${seedOrg}', '${GROUP_B}', '${FUND}', '${LEAVER.id}');`);
+    values ('${seedOrg}', '${GROUP_B}', '${FUND}', '${LEAVER.id}');
+    insert into public.access_requests (org_id, name, email, status, approved_role, reviewed_at)
+    values ('${seedOrg}', '${LEAVER.name}', '${OLD_ADDRESS}', 'approved', 'member', now());
+    with household as (
+      insert into public.family_units (org_id, family_name) values ('${seedOrg}', '${HOUSEHOLD}') returning id
+    ), own as (
+      insert into public.family_members (org_id, family_id, first_name, relationship, claimed_profile_id)
+      select '${seedOrg}', id, 'Leaver', 'primary', '${LEAVER.id}' from household returning id, family_id
+    ), child as (
+      insert into public.family_members (org_id, family_id, first_name, relationship)
+      select '${seedOrg}', id, 'Child', 'child' from household returning id, family_id
+    )
+    insert into public.family_invites (org_id, family_id, family_member_id, invite_email, accepted_at)
+    select '${seedOrg}'::uuid, family_id, id, '${OLD_ADDRESS}', now() from own
+    union all
+    select '${seedOrg}'::uuid, family_id, id, '${LEAVER.email}', null from child;`);
   await photo("POST", seedOrg);
 });
 test.afterAll(async () => {
@@ -181,7 +199,8 @@ test("a person deletes their own account and can't sign in afterwards", async ({
   expect(countOf("public.profiles", "id", LEAVER.id)).toBe("0");
   expect(photoCount(seedOrg)).toBe("0");
   expect(sql(`select count(*) from public.prayer_requests where body = '${ANONYMOUS_BODY}';`)).toBe("0");
-  expect(sql(`select count(*) from public.access_requests where email = '${LEAVER.email}';`)).toBe("0");
+  expect(sql(`select count(*) from public.access_requests where email in ('${LEAVER.email}', '${OLD_ADDRESS}');`)).toBe("0");
+  expect(sql(`select count(*) from public.family_invites where invite_email in ('${LEAVER.email}', '${OLD_ADDRESS}');`)).toBe("0");
 
   await signIn(page, LEAVER.email);
   await expect(page.getByRole("alert").first()).toBeVisible();
