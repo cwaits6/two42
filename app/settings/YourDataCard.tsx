@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DOWNLOAD_COVERS, DOWNLOAD_LEAVES_OUT } from "@/lib/account/deletionCopy";
 import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
+import { createClient } from "@/lib/supabase/client";
 
 export function YourDataCard() {
   const router = useRouter();
@@ -57,7 +58,10 @@ export function YourDataCard() {
             url="/api/account"
             subject="self"
             label="Delete my account"
-            onDeleted={() => {
+            onDeleted={async () => {
+              // A 401 or 404 never reached the route that signs out, and the middleware
+              // sends anyone still holding a token from /login to the dashboard.
+              await createClient().auth.signOut({ scope: "local" }).catch(() => undefined);
               router.push("/login");
               router.refresh();
             }}
