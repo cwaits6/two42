@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, HandHeart, UserRound } from "lucide-react";
+import { Check, HandHeart, Trash2, UserRound } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,12 +14,14 @@ export function PrayerCard({
   prayPending,
   onPray,
   onToggleAnswered,
+  onDelete,
   timeZone,
 }: {
   row: PrayerWallRow;
   prayPending: boolean;
   onPray: () => void;
   onToggleAnswered: () => void;
+  onDelete: () => void;
   /** The church's zone; older requests show the date there. */
   timeZone: string;
 }) {
@@ -84,6 +86,13 @@ export function PrayerCard({
             <Button variant="outline" onClick={onToggleAnswered} aria-pressed={row.is_answered}>
               <Check aria-hidden="true" />
               {row.is_answered ? "Answered" : "Mark answered"}
+            </Button>
+          )}
+
+          {row.mine && (
+            <Button variant="outline" onClick={onDelete}>
+              <Trash2 aria-hidden="true" />
+              Delete
             </Button>
           )}
         </div>
