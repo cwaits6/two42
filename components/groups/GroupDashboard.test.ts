@@ -251,6 +251,7 @@ describe("GroupDashboard", () => {
     }
     expect(leaderText).toContain("Add event");
     expect(leaderText).toContain("Add announcement");
+    expect(linkHrefs(leader)).toContain("/g/b/announcements/new");
     expect(memberText).not.toContain("Add event");
     expect(memberText).not.toContain("Add announcement");
     expect(failedSections(leader)).toEqual([]);
