@@ -372,6 +372,226 @@ COMMENT ON FUNCTION "public"."family_anniversary_hidden"("_family_id" "uuid") IS
 
 
 
+CREATE OR REPLACE FUNCTION "public"."family_directory_people"("_family_id" "uuid") RETURNS "jsonb"
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id', fm.id,
+    -- The card shows a preferred name, so a child's other first name would be a
+    -- stored detail beyond what's shown.
+    'first_name', case
+      when fm.relationship = 'child' and fm.claimed_profile_id is null
+        then coalesce(nullif(btrim(fm.preferred_name), ''), fm.first_name)
+      else fm.first_name
+    end,
+    'last_name', fm.last_name,
+    'preferred_name', fm.preferred_name,
+    'avatar_url', fm.avatar_url,
+    'relationship', fm.relationship,
+    'is_class_member', fm.is_class_member,
+    'birth_month', fm.birth_month,
+    'birth_day', fm.birth_day,
+    'claimed_profile_id', fm.claimed_profile_id
+  ) order by fm.relationship), '[]'::jsonb)
+  from (
+    select *
+      from public.family_members
+     where family_id = _family_id
+       and org_id = (select public.app_current_org_id())
+    offset 0
+  ) fm
+  where (select public.is_admin())
+    or ((select public.is_member()) and (
+      fm.family_id = (select public.current_family_id())
+      or (select public.org_directory_visible())
+      or (select public.shares_group_with_household(_family_id))
+    ));
+$$;
+
+
+ALTER FUNCTION "public"."family_directory_people"("_family_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."family_directory_people"("_family_id" "uuid") IS 'The people in a household as the directory shows them, for anyone who can see that household. No birth year, for anyone.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."family_invites_refuse_child"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _family_id uuid;
+  _relationship text;
+  _claimed_profile_id uuid;
+begin
+  -- FOR SHARE: of an invite and a relabel the later one waits, so one always sees the other.
+  -- Unfiltered, because a filter on relationship would leave an adult unlocked.
+  select fm.family_id, fm.relationship, fm.claimed_profile_id
+    into _family_id, _relationship, _claimed_profile_id
+    from public.family_members fm
+   where fm.id = new.family_member_id
+     and fm.org_id = new.org_id
+     for share of fm;
+
+  -- The policies and FK check only the invite's family_id, and a claim links its accepter to this person.
+  -- Checked first, so the refusal says nothing about someone in another household.
+  if _family_id <> new.family_id then
+    raise exception 'family_invites: the person named is not in this household'
+      using errcode = 'HP003';
+  end if;
+
+  if _relationship = 'child' and _claimed_profile_id is null then
+    raise exception 'family_invites: a child without an account cannot be invited'
+      using errcode = 'HP002';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."family_invites_refuse_child"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."family_invites_refuse_child"() IS 'Refuses an invite on a child without an account, or naming someone outside the invite''s household, on direct table writes and service-role writes as well as the route.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."family_members_clear_child_year"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  if new.relationship = 'child' and new.claimed_profile_id is null then
+    new.birth_year := null;
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."family_members_clear_child_year"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."family_members_clear_child_year"() IS 'The one rule that keeps a birth year off a child without an account, whichever app version, route or script writes the row.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."family_members_retire_child_details"() RETURNS "jsonb"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _counts jsonb := '{}';
+  _n bigint;
+begin
+  update public.family_members
+     set birth_year = null
+   where relationship = 'child'
+     and claimed_profile_id is null
+     and birth_year is not null;
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('child_birth_year', _n);
+
+  delete from public.access_requests ar
+   using public.family_invites fi, public.family_members fm
+   where fm.id = fi.family_member_id
+     and fm.org_id = fi.org_id
+     and fm.relationship = 'child'
+     and fm.claimed_profile_id is null
+     and fi.accepted_at is null
+     and ar.invite_token = fi.token
+     and ar.org_id = fi.org_id
+     and ar.status = any (array['pending', 'approved']);
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('child_invite_requests', _n);
+
+  -- An accepted invite goes too: the email is the stored detail.
+  delete from public.family_invites fi
+   using public.family_members fm
+   where fm.id = fi.family_member_id
+     and fm.org_id = fi.org_id
+     and fm.relationship = 'child'
+     and fm.claimed_profile_id is null;
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('child_invites', _n);
+
+  delete from public.access_requests ar
+   using public.family_invites fi, public.family_members fm
+   where fm.id = fi.family_member_id
+     and fm.org_id = fi.org_id
+     and fm.family_id <> fi.family_id
+     and fi.accepted_at is null
+     and ar.invite_token = fi.token
+     and ar.org_id = fi.org_id
+     and ar.status = any (array['pending', 'approved']);
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('cross_household_invite_requests', _n);
+
+  delete from public.family_invites fi
+   using public.family_members fm
+   where fm.id = fi.family_member_id
+     and fm.org_id = fi.org_id
+     and fm.family_id <> fi.family_id
+     and fi.accepted_at is null;
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('cross_household_invites', _n);
+
+  -- Counted and left in place: undoing a claim isn't safe to do blind.
+  select count(*) into _n
+    from public.family_invites fi
+    join public.family_members fm
+      on fm.id = fi.family_member_id
+     and fm.org_id = fi.org_id
+   where fm.family_id <> fi.family_id
+     and fi.accepted_at is not null;
+  _counts := _counts || jsonb_build_object('cross_household_invites_accepted', _n);
+
+  return _counts;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."family_members_retire_child_details"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."family_members_retire_child_details"() IS 'Clears a child''s stored birth year, removes invites on a child without an account and open invites naming someone in another household, and counts the accepted ones it leaves. Idempotent.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."family_members_retire_child_invites"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+begin
+  if new.relationship = 'child' and new.claimed_profile_id is null
+     and not (old.relationship = 'child' and old.claimed_profile_id is null) then
+    delete from public.access_requests ar
+     using public.family_invites fi
+     where fi.family_member_id = new.id
+       and fi.org_id = new.org_id
+       and fi.accepted_at is null
+       and ar.invite_token = fi.token
+       and ar.org_id = fi.org_id
+       and ar.status = any (array['pending', 'approved']);
+
+    delete from public.family_invites fi
+     where fi.family_member_id = new.id
+       and fi.org_id = new.org_id;
+  end if;
+  return null;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."family_members_retire_child_invites"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."family_members_retire_child_invites"() IS 'Ends the invites and unused access requests of a person who becomes a child without an account.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."family_units_phone_owner_guard"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     SET "search_path" TO ''
@@ -2643,32 +2863,6 @@ CREATE OR REPLACE VIEW "public"."families_directory" WITH ("security_invoker"='t
 ALTER VIEW "public"."families_directory" OWNER TO "postgres";
 
 
-CREATE TABLE IF NOT EXISTS "public"."family_members" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "family_id" "uuid" NOT NULL,
-    "first_name" "text" NOT NULL,
-    "last_name" "text",
-    "preferred_name" "text",
-    "birth_month" smallint,
-    "birth_day" smallint,
-    "birth_year" smallint,
-    "relationship" "text" NOT NULL,
-    "avatar_url" "text",
-    "is_class_member" boolean DEFAULT false NOT NULL,
-    "claimed_profile_id" "uuid",
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
-    CONSTRAINT "family_members_birth_day_check" CHECK ((("birth_day" >= 1) AND ("birth_day" <= 31))),
-    CONSTRAINT "family_members_birth_month_check" CHECK ((("birth_month" >= 1) AND ("birth_month" <= 12))),
-    CONSTRAINT "family_members_birth_year_check" CHECK ((("birth_year" >= 1900) AND ("birth_year" <= 2100))),
-    CONSTRAINT "family_members_relationship_check" CHECK (("relationship" = ANY (ARRAY['primary'::"text", 'spouse'::"text", 'child'::"text", 'parent'::"text", 'sibling'::"text", 'other'::"text"])))
-);
-
-
-ALTER TABLE "public"."family_members" OWNER TO "postgres";
-
-
 CREATE OR REPLACE VIEW "public"."families_directory_full" WITH ("security_invoker"='true') AS
  SELECT "id",
     "family_name",
@@ -2729,9 +2923,7 @@ CREATE OR REPLACE VIEW "public"."families_directory_full" WITH ("security_invoke
                 END) ORDER BY "p"."relationship") AS "jsonb_agg"
            FROM "public"."profiles" "p"
           WHERE (("p"."family_id" = "f"."id") AND ("p"."org_id" = "f"."org_id") AND ("p"."is_unlisted" = false) AND ("p"."role" = ANY (ARRAY['member'::"text", 'admin'::"text"])))), '[]'::"jsonb") AS "members",
-    COALESCE(( SELECT "jsonb_agg"("jsonb_build_object"('id', "fm"."id", 'first_name', "fm"."first_name", 'last_name', "fm"."last_name", 'preferred_name', "fm"."preferred_name", 'avatar_url', "fm"."avatar_url", 'relationship', "fm"."relationship", 'is_class_member', "fm"."is_class_member", 'birth_month', "fm"."birth_month", 'birth_day', "fm"."birth_day", 'birth_year', "fm"."birth_year", 'claimed_profile_id', "fm"."claimed_profile_id") ORDER BY "fm"."relationship") AS "jsonb_agg"
-           FROM "public"."family_members" "fm"
-          WHERE (("fm"."family_id" = "f"."id") AND ("fm"."org_id" = "f"."org_id"))), '[]'::"jsonb") AS "family_members_list",
+    "public"."family_directory_people"("id") AS "family_members_list",
     "org_id",
         CASE
             WHEN "public"."family_anniversary_hidden"("id") THEN NULL::smallint
@@ -2768,6 +2960,32 @@ CREATE TABLE IF NOT EXISTS "public"."family_invites" (
 
 
 ALTER TABLE "public"."family_invites" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."family_members" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "family_id" "uuid" NOT NULL,
+    "first_name" "text" NOT NULL,
+    "last_name" "text",
+    "preferred_name" "text",
+    "birth_month" smallint,
+    "birth_day" smallint,
+    "birth_year" smallint,
+    "relationship" "text" NOT NULL,
+    "avatar_url" "text",
+    "is_class_member" boolean DEFAULT false NOT NULL,
+    "claimed_profile_id" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    CONSTRAINT "family_members_birth_day_check" CHECK ((("birth_day" >= 1) AND ("birth_day" <= 31))),
+    CONSTRAINT "family_members_birth_month_check" CHECK ((("birth_month" >= 1) AND ("birth_month" <= 12))),
+    CONSTRAINT "family_members_birth_year_check" CHECK ((("birth_year" >= 1900) AND ("birth_year" <= 2100))),
+    CONSTRAINT "family_members_relationship_check" CHECK (("relationship" = ANY (ARRAY['primary'::"text", 'spouse'::"text", 'child'::"text", 'parent'::"text", 'sibling'::"text", 'other'::"text"])))
+);
+
+
+ALTER TABLE "public"."family_members" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."feedback" (
@@ -4197,6 +4415,18 @@ CREATE OR REPLACE VIEW "public"."profiles_directory" WITH ("security_invoker"='t
 
 
 
+CREATE OR REPLACE TRIGGER "family_invites_refuse_child" BEFORE INSERT OR UPDATE OF "family_member_id", "family_id", "org_id" ON "public"."family_invites" FOR EACH ROW EXECUTE FUNCTION "public"."family_invites_refuse_child"();
+
+
+
+CREATE OR REPLACE TRIGGER "family_members_clear_child_year" BEFORE INSERT OR UPDATE ON "public"."family_members" FOR EACH ROW EXECUTE FUNCTION "public"."family_members_clear_child_year"();
+
+
+
+CREATE OR REPLACE TRIGGER "family_members_retire_child_invites" AFTER UPDATE OF "relationship", "claimed_profile_id" ON "public"."family_members" FOR EACH ROW EXECUTE FUNCTION "public"."family_members_retire_child_invites"();
+
+
+
 CREATE OR REPLACE TRIGGER "family_members_touch_updated_at" BEFORE UPDATE ON "public"."family_members" FOR EACH ROW EXECUTE FUNCTION "public"."touch_updated_at"();
 
 
@@ -5344,11 +5574,11 @@ CREATE POLICY "Members can view attendees of visible signups" ON "public"."servi
 
 
 
-CREATE POLICY "Members can view family invites" ON "public"."family_invites" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."is_member"() AS "is_member")));
+CREATE POLICY "Members can view family invites" ON "public"."family_invites" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR (("family_id" = ( SELECT "public"."current_family_id"() AS "current_family_id")) AND ( SELECT "public"."is_member"() AS "is_member")))));
 
 
 
-CREATE POLICY "Members can view family members" ON "public"."family_members" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR (("family_id" = ( SELECT "public"."current_family_id"() AS "current_family_id")) AND ( SELECT "public"."is_member"() AS "is_member")) OR (( SELECT "public"."is_member"() AS "is_member") AND (( SELECT "public"."org_directory_visible"() AS "org_directory_visible") OR "public"."shares_group_with_household"("family_id"))))));
+CREATE POLICY "Members can view family members" ON "public"."family_members" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR (("family_id" = ( SELECT "public"."current_family_id"() AS "current_family_id")) AND ( SELECT "public"."is_member"() AS "is_member")))));
 
 
 
@@ -5793,6 +6023,30 @@ GRANT ALL ON FUNCTION "public"."family_anniversary_hidden"("_family_id" "uuid") 
 
 
 
+REVOKE ALL ON FUNCTION "public"."family_directory_people"("_family_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."family_directory_people"("_family_id" "uuid") TO "authenticated";
+
+
+
+REVOKE ALL ON FUNCTION "public"."family_invites_refuse_child"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."family_invites_refuse_child"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."family_members_clear_child_year"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."family_members_clear_child_year"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."family_members_retire_child_details"() FROM PUBLIC;
+
+
+
+REVOKE ALL ON FUNCTION "public"."family_members_retire_child_invites"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."family_members_retire_child_invites"() TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."family_units_phone_owner_guard"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."family_units_phone_owner_guard"() TO "service_role";
 
@@ -6129,12 +6383,6 @@ GRANT ALL ON TABLE "public"."families_directory" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."family_members" TO "anon";
-GRANT ALL ON TABLE "public"."family_members" TO "authenticated";
-GRANT ALL ON TABLE "public"."family_members" TO "service_role";
-
-
-
 GRANT ALL ON TABLE "public"."families_directory_full" TO "anon";
 GRANT ALL ON TABLE "public"."families_directory_full" TO "authenticated";
 GRANT ALL ON TABLE "public"."families_directory_full" TO "service_role";
@@ -6144,6 +6392,12 @@ GRANT ALL ON TABLE "public"."families_directory_full" TO "service_role";
 GRANT ALL ON TABLE "public"."family_invites" TO "anon";
 GRANT ALL ON TABLE "public"."family_invites" TO "authenticated";
 GRANT ALL ON TABLE "public"."family_invites" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."family_members" TO "anon";
+GRANT ALL ON TABLE "public"."family_members" TO "authenticated";
+GRANT ALL ON TABLE "public"."family_members" TO "service_role";
 
 
 
