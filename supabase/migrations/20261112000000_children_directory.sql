@@ -1,12 +1,5 @@
--- A child appears only by what a parent entered. A family_members row with
--- relationship 'child' and no claimed account is a child without an account: its
--- birth year is not stored, it can't be invited to an account, and other members
--- read a household's people only through what the directory shows.
--- isChildWithoutAccount() in lib/household.ts states the same predicate for the app.
---
--- The triggers come before the sweep. CREATE TRIGGER waits for in-flight writers,
--- so a write committed before it is visible to the sweep and one after it meets
--- the trigger; the other order leaves a gap.
+-- A child without an account: relationship 'child', no claimed account (isChildWithoutAccount() for the app).
+-- Triggers before the sweep: CREATE TRIGGER waits for in-flight writers, so a write meets one or the other.
 
 create function public.family_members_clear_child_year()
   returns trigger
@@ -31,7 +24,7 @@ create trigger family_members_clear_child_year
   for each row execute function public.family_members_clear_child_year();
 
 -- SECURITY DEFINER because the invoker can't be trusted to see the row: a primary
--- naming another household's child would find nothing under their own RLS and
+-- naming another household's person would find nothing under their own RLS and
 -- pass. The org comes from the invite row, whose composite FK ties it to the
 -- member, and a service-role insert has no request org to read instead.
 create function public.family_invites_refuse_child()
@@ -41,20 +34,25 @@ create function public.family_invites_refuse_child()
   set search_path = ''
 as $$
 declare
+  _family_id uuid;
   _relationship text;
   _claimed_profile_id uuid;
 begin
-  -- FOR SHARE conflicts with the lock a relabel takes, so of an invite and a
-  -- relabel the later one waits for the earlier to commit: this read then sees
-  -- the relabel, or the relabel's retiring trigger sees this invite. The row is
-  -- judged after the read because a filter on relationship would leave an adult
-  -- unlocked, and an adult is who a relabel races.
-  select fm.relationship, fm.claimed_profile_id
-    into _relationship, _claimed_profile_id
+  -- FOR SHARE: of an invite and a relabel the later one waits, so one always sees the other.
+  -- Unfiltered, because a filter on relationship would leave an adult unlocked.
+  select fm.family_id, fm.relationship, fm.claimed_profile_id
+    into _family_id, _relationship, _claimed_profile_id
     from public.family_members fm
    where fm.id = new.family_member_id
      and fm.org_id = new.org_id
      for share of fm;
+
+  -- The policies and FK check only the invite's family_id, and a claim links its accepter to this person.
+  -- Checked first, so the refusal says nothing about someone in another household.
+  if _family_id <> new.family_id then
+    raise exception 'family_invites: the person named is not in this household'
+      using errcode = 'HP003';
+  end if;
 
   if _relationship = 'child' and _claimed_profile_id is null then
     raise exception 'family_invites: a child without an account cannot be invited'
@@ -67,10 +65,10 @@ $$;
 revoke execute on function public.family_invites_refuse_child() from public, anon, authenticated;
 
 comment on function public.family_invites_refuse_child() is
-  'Refuses an invite on a child without an account, on direct table writes and service-role writes as well as the route.';
+  'Refuses an invite on a child without an account, or naming someone outside the invite''s household, on direct table writes and service-role writes as well as the route.';
 
 create trigger family_invites_refuse_child
-  before insert or update of family_member_id, org_id on public.family_invites
+  before insert or update of family_member_id, family_id, org_id on public.family_invites
   for each row execute function public.family_invites_refuse_child();
 
 -- An open invite lets its email sign up through handle_new_user(), so becoming a
@@ -156,6 +154,37 @@ begin
   get diagnostics _n = row_count;
   _counts := _counts || jsonb_build_object('child_invites', _n);
 
+  delete from public.access_requests ar
+   using public.family_invites fi, public.family_members fm
+   where fm.id = fi.family_member_id
+     and fm.org_id = fi.org_id
+     and fm.family_id <> fi.family_id
+     and fi.accepted_at is null
+     and ar.invite_token = fi.token
+     and ar.org_id = fi.org_id
+     and ar.status = any (array['pending', 'approved']);
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('cross_household_invite_requests', _n);
+
+  delete from public.family_invites fi
+   using public.family_members fm
+   where fm.id = fi.family_member_id
+     and fm.org_id = fi.org_id
+     and fm.family_id <> fi.family_id
+     and fi.accepted_at is null;
+  get diagnostics _n = row_count;
+  _counts := _counts || jsonb_build_object('cross_household_invites', _n);
+
+  -- Counted and left in place: undoing a claim isn't safe to do blind.
+  select count(*) into _n
+    from public.family_invites fi
+    join public.family_members fm
+      on fm.id = fi.family_member_id
+     and fm.org_id = fi.org_id
+   where fm.family_id <> fi.family_id
+     and fi.accepted_at is not null;
+  _counts := _counts || jsonb_build_object('cross_household_invites_accepted', _n);
+
   return _counts;
 end;
 $$;
@@ -164,16 +193,12 @@ revoke execute on function public.family_members_retire_child_details()
   from public, anon, authenticated, service_role;
 
 comment on function public.family_members_retire_child_details() is
-  'Clears a child''s stored birth year and removes invites on a child without an account. Idempotent.';
+  'Clears a child''s stored birth year, removes invites on a child without an account and open invites naming someone in another household, and counts the accepted ones it leaves. Idempotent.';
 
 select public.family_members_retire_child_details();
 
--- SECURITY DEFINER because the policies below keep other members from reading
--- family_members, and families_directory_full is security_invoker. The WHERE clause
--- gates a direct call the same way the directory is gated. Each subselect in the gate
--- runs once per call however many people are listed. OFFSET 0 and the gate's reference
--- to fm keep the planner from checking it before the scan, so a household listing
--- nobody doesn't pay for it.
+-- SECURITY DEFINER because other members can't read family_members; the WHERE clause is the directory's gate.
+-- OFFSET 0 and fm in the gate keep the planner from checking it before the scan: no people, no gate calls.
 create function public.family_directory_people(_family_id uuid)
   returns jsonb
   language sql
@@ -214,8 +239,8 @@ as $$
     ));
 $$;
 
-revoke execute on function public.family_directory_people(uuid) from public, anon;
-grant execute on function public.family_directory_people(uuid) to authenticated, service_role;
+revoke execute on function public.family_directory_people(uuid) from public, anon, service_role;
+grant execute on function public.family_directory_people(uuid) to authenticated;
 
 comment on function public.family_directory_people(uuid) is
   'The people in a household as the directory shows them, for anyone who can see that household. No birth year, for anyone.';

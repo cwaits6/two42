@@ -558,15 +558,18 @@ Three `SECURITY DEFINER` functions in
   that table. Its org comes from `app_current_org_id()`, never from a parameter, and
   its `WHERE` clause repeats the directory arm, so a direct call for a household the
   caller can't see, for another org or by a pending account returns `[]`. Execute is
-  revoked from `public, anon` and granted to `authenticated, service_role`; with no
-  principal, the service role gets `[]` too.
+  revoked from `public, anon, service_role` and granted to `authenticated` only: with
+  no principal the service role could only read `[]`, which a caller would take for an
+  empty household. No service-role client reads `families_directory_full`, which calls it.
 - `public.family_invites_refuse_child()` is a BEFORE trigger on `family_invites`,
   read-only over `family_members`. It has to see a row the caller can't, or naming
-  another household's child would pass. It reads the member by `(id, org_id)` from
+  another household's person would pass. It reads the member by `(id, org_id)` from
   the invite row, whose composite FK already ties the two together. A service-role
-  insert has no request org to read instead. The read takes `FOR SHARE`, so an invite
-  and a relabel to Child can't both commit: the later one waits for the earlier, then
-  this read sees the relabel or the retiring trigger below sees the invite.
+  insert has no request org to read instead. It raises `HP003` when the member isn't in
+  the invite's `family_id`, which nothing else checks and which `/api/family-invites/claim`
+  relies on, then `HP002` on a child without an account. The read takes `FOR SHARE`, so
+  an invite and a relabel to Child can't both commit: the later one waits for the
+  earlier, then this read sees the relabel or the retiring trigger below sees the invite.
 - `public.family_members_retire_child_invites()` is an AFTER UPDATE trigger on
   `family_members` that deletes that member's `family_invites` and the unused
   `access_requests` naming them. A primary can relabel someone but has no DELETE

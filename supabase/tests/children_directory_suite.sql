@@ -4,7 +4,8 @@
 -- child without an account, and nothing else, by exact row counts. Then the
 -- trigger that keeps the year off, what another member can read directly and
 -- through the directory, what a parent and a church admin keep, and the refusal
--- of an invite on every path that can write one.
+-- of an invite on every path that can write one, and of one naming someone in
+-- another household.
 --
 -- Run locally (rollback-safe, never mutates the shared local stack):
 --
@@ -99,8 +100,8 @@ declare
   linked_pending uuid := gen_random_uuid(); b_primary uuid := gen_random_uuid();
   grp uuid; fam uuid; fam_else uuid; fam_b uuid;
   kid uuid; kid_accepted uuid; kid_else uuid; kid_b uuid; claimed_child uuid;
-  fm_spouse uuid; fm_parent uuid; fm_sibling uuid; fm_other uuid;
-  tok_open uuid; tok_accepted uuid; tok_other uuid; tok_denied uuid;
+  fm_spouse uuid; fm_parent uuid; fm_sibling uuid; fm_other uuid; adult_else uuid; adult_else_claimed uuid;
+  tok_open uuid; tok_accepted uuid; tok_other uuid; tok_denied uuid; tok_cross uuid; tok_cross_accepted uuid;
 begin
   org_a := public.provision_organization('Children Directory Org A', 'owner-a@children-directory.example.test');
   org_b := public.provision_organization('Children Directory Org B', 'owner-b@children-directory.example.test');
@@ -162,6 +163,10 @@ begin
     values (org_a, fam_else, 'Else Kid', 'child', 2014) returning id into kid_else;
   insert into public.family_members (org_id, family_id, first_name, relationship, birth_year)
     values (org_b, fam_b, 'B Kid', 'child', 2013) returning id into kid_b;
+  insert into public.family_members (org_id, family_id, first_name, relationship, birth_year)
+    values (org_a, fam_else, 'Else Adult', 'other', 1980) returning id into adult_else;
+  insert into public.family_members (org_id, family_id, first_name, relationship, birth_year, claimed_profile_id)
+    values (org_a, fam_else, 'Else Claimed', 'other', 1981, elsewhere) returning id into adult_else_claimed;
 
   insert into public.family_invites (org_id, family_id, family_member_id, invite_email)
     values (org_a, fam, kid, 'kid@children-directory.example.test') returning token into tok_open;
@@ -172,10 +177,18 @@ begin
   insert into public.family_invites (org_id, family_id, family_member_id, invite_email)
     values (org_a, fam_else, kid_else, 'denied@children-directory.example.test') returning token into tok_denied;
 
+  insert into public.family_invites (org_id, family_id, family_member_id, invite_email)
+    values (org_a, fam, adult_else, 'cross@children-directory.example.test') returning token into tok_cross;
+  insert into public.family_invites (org_id, family_id, family_member_id, invite_email, accepted_at)
+    values (org_a, fam, adult_else_claimed, 'cross2@children-directory.example.test', now()) returning token into tok_cross_accepted;
+
   insert into public.access_requests (org_id, name, email, status, invite_token) values
     (org_a, 'Kid', 'kid@children-directory.example.test', 'pending', tok_open),
     (org_a, 'Oli', 'oli@children-directory.example.test', 'pending', tok_other),
-    (org_a, 'Denied', 'denied@children-directory.example.test', 'denied', tok_denied);
+    (org_a, 'Denied', 'denied@children-directory.example.test', 'denied', tok_denied),
+    (org_a, 'Cross', 'cross@children-directory.example.test', 'pending', tok_cross),
+    (org_a, 'Cross Denied', 'cross-denied@children-directory.example.test', 'denied', tok_cross),
+    (org_a, 'Cross Accepted', 'cross2@children-directory.example.test', 'approved', tok_cross_accepted);
 
   perform set_config('cd.org_a', org_a::text, true);
   perform set_config('cd.org_b', org_b::text, true);
@@ -202,6 +215,9 @@ begin
   perform set_config('cd.kid_b', kid_b::text, true);
   perform set_config('cd.tok_other', tok_other::text, true);
   perform set_config('cd.tok_denied', tok_denied::text, true);
+  perform set_config('cd.adult_else', adult_else::text, true);
+  perform set_config('cd.tok_cross', tok_cross::text, true);
+  perform set_config('cd.tok_cross_accepted', tok_cross_accepted::text, true);
 end $$;
 
 -- ── The sweep ───────────────────────────────────────────────────────────────
@@ -221,6 +237,12 @@ select is(pg_temp.swept('child_invite_requests'), 1::bigint,
   'the sweep removes the one unused access request on a child''s open invite');
 select is(pg_temp.swept('child_invites'), 3::bigint,
   'the sweep removes open, accepted and denied-request invites on children');
+select is(pg_temp.swept('cross_household_invite_requests'), 1::bigint,
+  'the sweep removes the one unused access request on an open invite naming another household');
+select is(pg_temp.swept('cross_household_invites'), 1::bigint,
+  'the sweep removes the one open invite naming another household');
+select is(pg_temp.swept('cross_household_invites_accepted'), 1::bigint,
+  'the sweep counts the accepted invite naming another household');
 
 select is(pg_temp.fm('kid'), 'Legalname|Pip|child|5|6|-|kid.png',
   'a child loses only the year: names, month, day and photo stay');
@@ -248,12 +270,29 @@ select is(
     where email = 'denied@children-directory.example.test' and status = 'denied' and invite_token is null),
   1::bigint, 'a denied access request stays, as a denial, without its invite');
 
+select is(
+  (select count(*) from public.family_invites where token = pg_temp.id('tok_cross')),
+  0::bigint, 'the open invite naming another household is gone');
+select is(
+  (select count(*) from public.access_requests where email = 'cross@children-directory.example.test'),
+  0::bigint, 'its unused access request is gone');
+select is(
+  (select count(*) from public.access_requests
+    where email = 'cross-denied@children-directory.example.test' and status = 'denied' and invite_token is null),
+  1::bigint, 'its denied access request stays, as a denial, without the invite');
+select is(
+  (select count(*) from public.family_invites where token = pg_temp.id('tok_cross_accepted') and accepted_at is not null),
+  1::bigint, 'the accepted invite naming another household stays');
+select is(
+  (select count(*) from public.access_requests where invite_token = pg_temp.id('tok_cross_accepted')),
+  1::bigint, 'and so does its access request');
+
 do $$ begin
   perform set_config('cd.counts2', public.family_members_retire_child_details()::text, true);
 end $$;
 select is(current_setting('cd.counts2')::jsonb,
-  '{"child_birth_year": 0, "child_invite_requests": 0, "child_invites": 0}'::jsonb,
-  'a second sweep changes nothing');
+  '{"child_birth_year": 0, "child_invite_requests": 0, "child_invites": 0, "cross_household_invite_requests": 0, "cross_household_invites": 0, "cross_household_invites_accepted": 1}'::jsonb,
+  'a second sweep changes nothing, and still counts the accepted invite it leaves');
 
 select is(
   pg_temp.as_role_write('authenticated', 'select public.family_members_retire_child_details()'),
@@ -331,7 +370,7 @@ select is(pg_temp.table_count('parent', 'fam'), 9::bigint, 'the primary reads ev
 select is(pg_temp.table_count('spouse', 'fam'), 9::bigint, 'the spouse reads every row in the household');
 select is(pg_temp.table_count('grown', 'fam'), 9::bigint, 'an adult child with an account reads every row in the household');
 select is(pg_temp.table_count('owner_a', 'fam'), 9::bigint, 'the church admin reads every row in the household');
-select is(pg_temp.table_count('owner_a', 'fam_else'), 1::bigint, 'the church admin reads another household''s rows');
+select is(pg_temp.table_count('owner_a', 'fam_else'), 3::bigint, 'the church admin reads another household''s rows');
 select is(
   pg_temp.as_text(pg_temp.id('parent'), format(
     'select concat_ws(''|'', first_name, birth_month, birth_day) from public.family_members where id = %L', pg_temp.id('kid'))),
@@ -430,6 +469,11 @@ select is(pg_temp.people_len('parent', 'fam'), '8', 'the function answers the ho
 select is(
   pg_temp.as_role_write('anon', format('select public.family_directory_people(%L)', pg_temp.id('fam'))),
   '42501', 'an anonymous call has no execute grant');
+select is(
+  pg_temp.as_role_write('service_role', format('select public.family_directory_people(%L)', pg_temp.id('fam'))),
+  '42501', 'a service-role call has no execute grant, since it could only ever read an empty household');
+select ok(has_function_privilege('authenticated', 'public.family_directory_people(uuid)', 'execute'),
+  'authenticated can call it');
 
 update public.organizations set directory_visibility = 'org' where id = pg_temp.id('org_a');
 select is(pg_temp.people_len('outsider', 'fam'), '8', 'an org-wide directory answers any member');
@@ -483,7 +527,7 @@ select is(
   pg_temp.as_write(pg_temp.id('parent'), format(
     $q$insert into public.family_invites (family_id, family_member_id, invite_email) values (%L, %L, 'x2@children-directory.example.test')$q$,
     pg_temp.id('fam'), pg_temp.id('kid_else'))),
-  'HP002', 'naming another household''s child is refused, though the caller can''t read that row');
+  'HP003', 'naming another household''s child is refused for the household, so it says nothing about that person');
 select is(
   pg_temp.as_write(pg_temp.id('owner_a'), format(
     $q$insert into public.family_invites (family_id, family_member_id, invite_email) values (%L, %L, 'x3@children-directory.example.test')$q$,
@@ -507,6 +551,57 @@ select is(
 select is(
   (select family_member_id from public.family_invites where token = pg_temp.id('tok_other')),
   pg_temp.id('fm_other'), 'the invite stays on its person');
+
+-- ── An invite names someone in its own household ────────────────────────────
+do $$ begin perform set_config('cd.invites_before', pg_temp.invite_total()::text, true); end $$;
+select is(
+  pg_temp.as_write(pg_temp.id('parent'), format(
+    $q$insert into public.family_invites (family_id, family_member_id, invite_email) values (%L, %L, 'y1@children-directory.example.test')$q$,
+    pg_temp.id('fam'), pg_temp.id('adult_else'))),
+  'HP003', 'a primary''s insert naming another household''s adult is refused');
+select is(
+  pg_temp.as_write(pg_temp.id('owner_a'), format(
+    $q$insert into public.family_invites (family_id, family_member_id, invite_email) values (%L, %L, 'y2@children-directory.example.test')$q$,
+    pg_temp.id('fam'), pg_temp.id('adult_else'))),
+  'HP003', 'a church admin''s insert naming another household''s adult is refused');
+select is(
+  pg_temp.as_role_write('service_role', format(
+    $q$insert into public.family_invites (org_id, family_id, family_member_id, invite_email) values (%L, %L, %L, 'y3@children-directory.example.test')$q$,
+    pg_temp.id('org_a'), pg_temp.id('fam'), pg_temp.id('adult_else'))),
+  'HP003', 'a service-role insert naming another household''s adult is refused');
+select is(pg_temp.invite_total()::text, current_setting('cd.invites_before'), 'none of those refusals wrote a row');
+select is(
+  (select count(*) from public.family_invites where invite_email like 'y_@children-directory.example.test'),
+  0::bigint, 'no refused address is stored');
+
+select is(
+  pg_temp.as_write(pg_temp.id('parent'), format(
+    $q$update public.family_invites set family_member_id = %L where token = %L$q$,
+    pg_temp.id('adult_else'), pg_temp.id('tok_other'))),
+  'HP003', 'a primary can''t point an invite at another household''s adult');
+select is(
+  pg_temp.as_write(pg_temp.id('owner_a'), format(
+    $q$update public.family_invites set family_id = %L where token = %L$q$,
+    pg_temp.id('fam_else'), pg_temp.id('tok_other'))),
+  'HP003', 'a church admin can''t move an invite away from its person''s household');
+select is(
+  pg_temp.as_role_write('service_role', format(
+    $q$update public.family_invites set family_id = %L where token = %L$q$,
+    pg_temp.id('fam_else'), pg_temp.id('tok_other'))),
+  'HP003', 'a service-role write can''t move an invite away from its person''s household');
+select is(
+  (select concat_ws('|', family_id, family_member_id) from public.family_invites where token = pg_temp.id('tok_other')),
+  concat_ws('|', pg_temp.id('fam'), pg_temp.id('fm_other')), 'the invite stays where it was');
+
+select is(
+  pg_temp.as_role_write('service_role', format(
+    $q$update public.family_invites set sent_at = now() where token = %L$q$, pg_temp.id('tok_cross_accepted'))),
+  'rows=1', 'a write leaving the household and person alone isn''t judged, so the accepted invite stays writable');
+select is(
+  pg_temp.as_role_write('service_role', format(
+    $q$insert into public.family_invites (org_id, family_id, family_member_id, invite_email) values (%L, %L, %L, 'y4@children-directory.example.test')$q$,
+    pg_temp.id('org_a'), pg_temp.id('fam'), gen_random_uuid())),
+  '23503', 'a person who doesn''t exist is still the foreign key''s refusal');
 
 select is(
   pg_temp.as_write(pg_temp.id('parent'), format(

@@ -762,7 +762,9 @@ sign up through that match: `family_invites_refuse_child()` raises `HP002` on an
 write naming one, including the service role's, and
 `family_members_retire_child_invites()` removes the invite and its unused access
 request from a person who becomes one. The refusal locks the member row `FOR SHARE`,
-so an invite racing a relabel can't commit alongside it.
+so an invite racing a relabel can't commit alongside it. The same trigger raises `HP003`
+on an invite naming someone outside its `family_id`: the composite FK ties org, not
+household, and a claim links its accepter to the person named.
 
 `provision_organization(name, owner_email)` builds a complete org in one
 transaction: the org row — its `branding` jsonb seeded with the full
