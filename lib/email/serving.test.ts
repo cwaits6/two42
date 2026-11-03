@@ -100,3 +100,34 @@ describe("sendServingBroadcastEmail links to the team's schedule", () => {
     expect(html).toMatch(/href="https:\/\/grace\.church\/g\/g1\/serving\/t1"[^>]*>View schedule<\/a>/);
   });
 });
+
+// ── A failed notice's log carries neither the provider's message nor an address ─
+
+describe("sendServingCancelNoticeEmail failing", () => {
+  it("rethrows the failure and logs only the provider's error name", async () => {
+    const providerError = {
+      name: "validation_error",
+      message: "Invalid `to` field: leader@b.org (Pat Leader)",
+    };
+    send.mockResolvedValueOnce({ data: null, error: providerError });
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(
+      sendServingCancelNoticeEmail({
+        to: "leader@b.org",
+        leaderName: "Pat Leader",
+        memberLabel: "Jane",
+        teamName: "Welcome Team",
+        serviceDate: "2026-09-06",
+        servingUrl: "https://x/serving",
+        branding: BRANDING,
+      }),
+    ).rejects.toBe(providerError);
+
+    const logged = JSON.stringify(log.mock.calls);
+    log.mockRestore();
+    expect(logged).toContain("validation_error");
+    expect(logged).not.toContain("leader@b.org");
+    expect(logged).not.toContain("Pat Leader");
+  });
+});

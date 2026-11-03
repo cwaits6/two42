@@ -92,7 +92,8 @@ ${button(opts.servingUrl, "View schedule", b.accent)}`,
   });
 
   if (error) {
-    console.error("Failed to send serving cancel notice:", error);
+    // The name only: a provider's message can echo the address.
+    console.error("Failed to send serving cancel notice: %s", error.name);
     throw error;
   }
 }
