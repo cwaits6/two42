@@ -6,6 +6,7 @@ import { DisplayCard } from "./DisplayCard";
 import { SignInSecurityCard } from "./SignInSecurityCard";
 import { NotificationsCard } from "./NotificationsCard";
 import { FeedbackCard } from "./FeedbackCard";
+import { YourDataCard } from "./YourDataCard";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { isMemberRole } from "@/lib/roles";
 import { pageTitle } from "@/lib/pageTitle";
@@ -42,6 +43,7 @@ export default async function SettingsPage() {
           initialEmailAnnouncements={profile.email_announcements ?? true}
         />
         <FeedbackCard />
+        <YourDataCard />
       </div>
 
       <nav aria-label="Privacy, terms and help" className="mt-8 flex flex-wrap gap-x-6">

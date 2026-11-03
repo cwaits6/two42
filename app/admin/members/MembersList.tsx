@@ -25,6 +25,7 @@ import { displayName } from "@/lib/names";
 import { toUserRole } from "@/lib/roles";
 import { ApprovalQueue } from "@/components/admin/ApprovalQueue";
 import { matchesSearch } from "@/components/admin/adminSearch";
+import { DeletePersonButton } from "@/components/account/DeletePersonButton";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -363,7 +364,7 @@ export function MembersList({
                               </SelectContent>
                             </Select>
                           </div>
-                          <div className="flex gap-3 *:flex-1 sm:*:flex-none">
+                          <div className="flex flex-wrap gap-3 *:flex-1 sm:*:flex-none">
                             <Button
                               variant="outline"
                               nativeButton={false}
@@ -381,6 +382,15 @@ export function MembersList({
                               >
                                 Move to pending
                               </Button>
+                            )}
+                            {member.id !== viewerId && (
+                              <DeletePersonButton
+                                url={`/api/admin/members/${member.id}`}
+                                subject="other"
+                                label="Remove from church"
+                                ariaLabel={`Remove ${displayName(member)} from the church`}
+                                onDeleted={loadData}
+                              />
                             )}
                           </div>
                         </div>
