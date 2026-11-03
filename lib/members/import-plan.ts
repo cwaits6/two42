@@ -275,6 +275,7 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     const fileRow = fileRowOf.get(row)!;
     return isChildWithoutAccount(member) &&
       fileRow.birth_year !== null &&
+      !Number.isNaN(fileRow.birth_year) &&
       !row.hidden_fields.includes("birthday")
       ? personKey(fileRow) === personKey(member)
       : identityKeys(row).has(personKey(member));
@@ -670,6 +671,32 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
       field: month === null ? "birth_month" : "birth_day",
       message: "a birthday needs birth_month and birth_day together",
     });
+  }
+
+  // Two people stored with one name and birthday and no year can't be told apart,
+  // so every later file naming them, and the org's own export, would be refused.
+  const yearlessInserts = new Set<string>();
+  for (const row of rows) {
+    if (row.has_login || row.first_name === null || matchedFamilyMember.has(row)) continue;
+    if (row.hidden_fields.includes("birthday")) continue;
+    if (row.birth_year !== null && !birthYearIgnored(row)) continue;
+    if (resultByRow.get(row)!.errors.length > 0) continue;
+    const resolution = resolutions.get(groupKey(row))!;
+    const household = resolution.familyId ?? resolution.householdName;
+    if (household === null) continue;
+    const stored = (familyMembersByFamily.get(resolution.familyId ?? "") ?? []).some(
+      (member) => member.birth_year === null && yearlessKey(member) === yearlessKey(row)
+    );
+    const key = [norm(household), yearlessKey(row)].join("\u0000");
+    if (stored || yearlessInserts.has(key)) {
+      fail(row, {
+        code: "AMBIGUOUS_MATCH",
+        field: "birth_year",
+        message:
+          "someone else in this household has the same name and birthday, and neither would have a stored birth_year, so no later file could tell them apart; show the birth_year of whichever isn't a child in this file, or add it under Households",
+      });
+    }
+    yearlessInserts.add(key);
   }
 
   // ---- steps 5-8: per-row planning ---------------------------------------

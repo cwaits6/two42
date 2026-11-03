@@ -72,12 +72,17 @@ month, day and year as before. So a row with a year that names another
 relationship, or leaves `relationship` blank, doesn't match a child who shares
 that name and birthday. Nothing stored says whether that row is the child, so it
 adds a separate person, with its year, and a warning. A year the file marks hidden
-keeps the row apart the same way, and isn't stored, though a row hiding its whole
-birthday still matches on name someone with no birthday stored. Clearing its `birth_year` makes
-it match the child, and a row naming a relationship then relabels them. The relabel
-can't write a year, so add it under Households before the next file: a row with a
-year doesn't match someone with none stored, and adds them again with the same
-warning.
+keeps the row apart the same way, but isn't stored, and two people with one name
+and birthday and no stored year can't be told apart by any later file or export. So
+that row is an `AMBIGUOUS_MATCH` error, and so is any new row that would be stored
+beside someone like that, including a `child` row beside a stored adult with no
+year: show the adult's year in the file, or add it under Households. A row hiding its
+whole birthday still matches on name someone with no birthday stored. A hidden year
+that isn't a number says nothing, so the row counts as having no year. Clearing
+`birth_year` makes the row match the child, and a row naming a relationship then
+relabels them. The relabel can't write a year, so add it under Households before
+the next file: a row with a year doesn't match someone with none stored, and adds
+them again with the same warning.
 
 A row with `has_login` and a blank `relationship` matches a family member only on
 name, month, day and year, so its year, hidden or not, decides whether it is a
