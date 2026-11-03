@@ -13,6 +13,8 @@ import {
 } from "@/lib/account/deletionCopy";
 import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
 
+const DELETED_BUT_NOT_REFRESHED = "That went through, but this page didn't update. Refresh to see it.";
+
 function CopyList({ heading, items }: { heading: string; items: string[] }) {
   return (
     <div>
@@ -72,10 +74,16 @@ export function DeletePersonButton({
         toast.error(failureMessage(action, res.status, { 409: LAST_CHURCH_ADMIN_MESSAGE[subject] }));
         return;
       }
-      setCopy(null);
-      await onDeleted();
     } catch {
       toast.error(NETWORK_ERROR);
+      return;
+    }
+
+    setCopy(null);
+    try {
+      await onDeleted();
+    } catch {
+      toast.error(DELETED_BUT_NOT_REFRESHED);
     }
   }
 
