@@ -73,7 +73,9 @@ separate person with a warning; clearing its `birth_year` makes it match the chi
 and relabel them. The relabel can't write a year, so add it under Households
 before the next file: a row with a year doesn't match someone with none stored, and
 adds them again with the same warning. A row that relabels a stored adult with no account as a `child`
-removes their stored birth year, which the row's changes and a warning show.
+removes their stored birth year, which the row's changes and a warning show, and
+deletes any open invite for them, which a warning on every such row says. The plan
+doesn't read invites, so that warning appears whether or not one exists.
 
 ## Integration shape (v1: pull-only)
 

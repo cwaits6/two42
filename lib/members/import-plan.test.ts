@@ -1852,6 +1852,8 @@ describe("a child without an account", () => {
 
   describe("relabelling someone", () => {
     const REMOVED = "this row makes them a child without an account, so their stored birth_year is removed";
+    const INVITE_ENDS =
+      "this row makes them a child without an account, so any open invite for them is deleted and its link stops working";
 
     it("shows and warns that making an adult a child removes their year", () => {
       const plan = planImport(
@@ -1881,6 +1883,31 @@ describe("a child without an account", () => {
       );
       expect(noYear.rows[0].changes).toEqual({ relationship: ["other", "child"] });
       expect(noYear.rows[0].warnings).not.toContain(REMOVED);
+    });
+
+    it("warns that making someone a child deletes any open invite, with or without a year", () => {
+      for (const birth_year of [1970, null]) {
+        const plan = planImport(
+          [childRow({ birth_year })],
+          snapshotWith(child({ relationship: "other", birth_year }))
+        );
+        expect(plan.rows[0].warnings).toContain(INVITE_ENDS);
+      }
+    });
+
+    it("leaves the invite out of it when no one becomes a child without an account", () => {
+      const claimed = planImport(
+        [childRow({ birth_year: 1970 })],
+        snapshotWith(child({ relationship: "other", birth_year: 1970, claimed_profile_id: "p9" }))
+      );
+      const alreadyChild = planImport([childRow()], snapshotWith(child()));
+      const toAdult = planImport(
+        [childRow({ relationship: "other", birth_year: null })],
+        snapshotWith(child())
+      );
+      for (const plan of [claimed, alreadyChild, toAdult]) {
+        expect(plan.rows[0].warnings).not.toContain(INVITE_ENDS);
+      }
     });
 
     it("can still make a stored child an adult from a row with no year", () => {

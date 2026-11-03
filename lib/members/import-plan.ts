@@ -1122,19 +1122,24 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     if (row.relationship !== null && row.relationship !== member.relationship) {
       changes.relationship = [member.relationship, row.relationship];
       values.relationship = row.relationship;
-      // The database clears the year on this write, and a Rock pull won't bring
-      // it back, so the plan has to show it.
+      // The database clears the year and deletes any open invite on this write,
+      // and a Rock pull brings back neither, so the plan has to say so. The
+      // snapshot doesn't read invites, so the warning can't say whether one exists.
       if (
         isChildWithoutAccount({
           relationship: row.relationship,
           claimed_profile_id: member.claimed_profile_id,
-        }) &&
-        member.birth_year !== null
+        })
       ) {
-        changes.birth_year = [member.birth_year, null];
         result.warnings.push(
-          "this row makes them a child without an account, so their stored birth_year is removed"
+          "this row makes them a child without an account, so any open invite for them is deleted and its link stops working"
         );
+        if (member.birth_year !== null) {
+          changes.birth_year = [member.birth_year, null];
+          result.warnings.push(
+            "this row makes them a child without an account, so their stored birth_year is removed"
+          );
+        }
       }
     }
     if (
