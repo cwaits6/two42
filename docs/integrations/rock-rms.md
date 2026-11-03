@@ -60,22 +60,30 @@ corresponding to any of them.
 
 A row with `relationship = child` and no account behind it has no stored birth
 year. The `birth_year` cell of such a row is ignored, whatever it holds, with a
-warning on the row,
-and the member export leaves it blank. The row matches an existing child on name,
-month and day, and so does a row with a blank `relationship` and no `birth_year`.
-Two same-named children with one birthday in a household are an `AMBIGUOUS_MATCH` error, whether
+warning on the row, and the member export leaves it blank. The row matches an
+existing child on name, month and day, and so does a row with a blank
+`relationship` and no `birth_year`, which leaves them a child. Two same-named
+children with one birthday in a household are an `AMBIGUOUS_MATCH` error, whether
 they are stored or both in the file, whatever `household_key` each row carries,
-and never a silent merge. Adults, and a child
-with an account, keep their birth year and match on name, month, day and year as
-before, so an adult's row with a year, or a row with a blank `relationship` and a
-year, doesn't match a child who shares that name and birthday. Nothing stored says whether that row is the child, so it adds a
-separate person with a warning; clearing its `birth_year` makes it match the child
-and relabel them. The relabel can't write a year, so add it under Households
-before the next file: a row with a year doesn't match someone with none stored, and
-adds them again with the same warning. A row that relabels a stored adult with no account as a `child`
-removes their stored birth year, which the row's changes and a warning show, and
-deletes any open invite for them, which a warning on every such row says. The plan
-doesn't read invites, so that warning appears whether or not one exists.
+and never a silent merge.
+
+Adults, and a child with an account, keep their birth year and match on name,
+month, day and year as before. So a row with a year that names another
+relationship, or leaves `relationship` blank, doesn't match a child who shares
+that name and birthday. Nothing stored says whether that row is the child, so it
+adds a separate person, with its year, and a warning. Clearing its `birth_year`
+makes it match the child, and a row naming a relationship then relabels them. The
+relabel can't write a year, so add it under Households before the next file: a row
+with a year doesn't match someone with none stored, and adds them again with the
+same warning.
+
+A row with `has_login` and a blank `relationship` matches a family member only on
+name, month, day and year, so its year decides whether it is a `HAS_LOGIN_CHANGE`.
+
+A row that relabels a stored adult with no account as a `child` removes their
+stored birth year, which the row's changes and a warning show, and deletes any
+open invite for them, which a warning on every such row says. The plan doesn't
+read invites, so that warning appears whether or not one exists.
 
 ## Integration shape (v1: pull-only)
 
