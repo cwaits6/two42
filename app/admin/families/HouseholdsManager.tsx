@@ -40,7 +40,7 @@ import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { AnniversaryFields } from "@/components/profile/AnniversaryFields";
 import { birthdayErrors, birthdayErrorsWithoutYear, type BirthdayErrors } from "@/components/profile/birthday";
 import { ChildListingNotice, DirectoryNotice } from "@/components/profile/DirectoryNotice";
-import { RelabelChildConfirm, relabelToChildLoss } from "@/components/household/RelabelChildConfirm";
+import { useRelabelToChild } from "@/components/household/useRelabelToChild";
 import { isChildWithoutAccount } from "@/lib/household";
 import { matchesSearch } from "@/components/admin/adminSearch";
 import {
@@ -159,7 +159,6 @@ export function HouseholdsManager() {
   const [editingMember, setEditingMember] = useState<FamilyMember | null>(null);
   const [showMemberForm, setShowMemberForm] = useState(false);
   const [savingMember, setSavingMember] = useState(false);
-  const [relabelLoss, setRelabelLoss] = useState<string | null>(null);
 
   // Edit mode only: the photo's path needs the family id.
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -431,6 +430,13 @@ export function HouseholdsManager() {
     relationship: memberForm.relationship,
     claimed_profile_id: editingMember?.claimed_profile_id,
   });
+  const relabel = useRelabelToChild({
+    member: editingMember,
+    relationship: memberForm.relationship,
+    name: titleCaseName(memberForm.first_name) || "",
+    setSaving: setSavingMember,
+    save: saveMember,
+  });
 
   async function handleSaveMember() {
     if (!editing) return;
@@ -453,29 +459,11 @@ export function HouseholdsManager() {
       return;
     }
 
-    if (editingMember) {
-      setSavingMember(true);
-      let loss: string | null;
-      try {
-        loss = await relabelToChildLoss(editingMember, memberForm.relationship, firstName);
-      } catch (err) {
-        console.error(err);
-        toast.error(failureMessage(`save ${firstName}`));
-        setSavingMember(false);
-        return;
-      }
-      setSavingMember(false);
-      if (loss) {
-        setRelabelLoss(loss);
-        return;
-      }
-    }
-
-    await saveMember();
+    await relabel.submit();
   }
 
-  async function saveMember() {
-    if (!editing) return;
+  async function saveMember(): Promise<boolean> {
+    if (!editing) return false;
     const firstName = titleCaseName(memberForm.first_name);
     const birthYear = memberIsChildWithoutAccount ? "" : memberForm.birth_year;
     const payload = {
@@ -498,7 +486,7 @@ export function HouseholdsManager() {
       if (!res?.ok) {
         toast.error(failureMessage(`save ${firstName}`, res ? res.status : "network"));
         setSavingMember(false);
-        return;
+        return false;
       }
       toast.success(`${firstName} saved.`);
     } else {
@@ -510,14 +498,14 @@ export function HouseholdsManager() {
       if (!res?.ok) {
         toast.error(failureMessage(`add ${firstName}`, res ? res.status : "network"));
         setSavingMember(false);
-        return;
+        return false;
       }
       toast.success(`${firstName} added.`);
     }
     setSavingMember(false);
-    setRelabelLoss(null);
     closeMemberForm();
     loadFamilyMembers(editing.id);
+    return true;
   }
 
   async function handleDeleteMember(fm: FamilyMember) {
@@ -1172,12 +1160,7 @@ export function HouseholdsManager() {
               if (removingMember) await handleDeleteMember(removingMember);
             }}
           />
-          <RelabelChildConfirm
-            name={titleCaseName(memberForm.first_name) || ""}
-            loss={relabelLoss}
-            onCancel={() => setRelabelLoss(null)}
-            onConfirm={saveMember}
-          />
+          {relabel.dialog}
         </DialogContent>
       </Dialog>
     </PageContainer>

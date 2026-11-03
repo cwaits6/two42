@@ -26,7 +26,7 @@ import {
   birthdayErrorsWithoutYear,
   type BirthdayErrors,
 } from "@/components/profile/birthday";
-import { RelabelChildConfirm, relabelToChildLoss } from "@/components/household/RelabelChildConfirm";
+import { useRelabelToChild } from "@/components/household/useRelabelToChild";
 import { isChildWithoutAccount } from "@/lib/household";
 import { titleCaseName } from "@/lib/sanitize";
 import { mintSignedUrl, uploadImage } from "@/lib/uploadImage";
@@ -75,7 +75,6 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
   const [avatarUrl, setAvatarUrl] = useState<string | null>(member?.avatar_url ?? null);
 
   const [saving, setSaving] = useState(false);
-  const [relabelLoss, setRelabelLoss] = useState<string | null>(null);
   const [errors, setErrors] = useState<FieldErrors>({});
   // An object, so a second submit with the same first error still refocuses.
   const [focusTarget, setFocusTarget] = useState<{ id: string } | null>(null);
@@ -98,6 +97,13 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
     day: birthDay,
     year: childWithoutAccount ? "" : birthYear,
   };
+  const relabel = useRelabelToChild({
+    member,
+    relationship,
+    name: titleCaseName(firstName) || "",
+    setSaving,
+    save,
+  });
 
   // Focus waits for the render that ties the message to the field.
   useEffect(() => {
@@ -161,28 +167,10 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
       return;
     }
 
-    if (member) {
-      setSaving(true);
-      let loss: string | null;
-      try {
-        loss = await relabelToChildLoss(member, relationship, first || "");
-      } catch (err) {
-        console.error(err);
-        toast.error(failureMessage(`save ${first}`));
-        setSaving(false);
-        return;
-      }
-      setSaving(false);
-      if (loss) {
-        setRelabelLoss(loss);
-        return;
-      }
-    }
-
-    await save();
+    await relabel.submit();
   }
 
-  async function save() {
+  async function save(): Promise<boolean> {
     setSaving(true);
 
     const first = titleCaseName(firstName);
@@ -211,12 +199,12 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
 
     if (!res.ok) {
       toast.error(failureMessage(`save ${first}`, res.status));
-      return;
+      return false;
     }
 
     toast.success(isNew ? `${first} added. Edit them to add a photo.` : `${first} saved.`);
-    setRelabelLoss(null);
     onSaved?.();
+    return true;
   }
 
   return (
@@ -460,12 +448,7 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
           Cancel
         </Button>
       </div>
-      <RelabelChildConfirm
-        name={titleCaseName(firstName) || ""}
-        loss={relabelLoss}
-        onCancel={() => setRelabelLoss(null)}
-        onConfirm={save}
-      />
+      {relabel.dialog}
     </form>
   );
 }

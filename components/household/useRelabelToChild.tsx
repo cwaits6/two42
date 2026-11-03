@@ -1,9 +1,14 @@
 "use client";
 
+import { useState } from "react";
+import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { failureMessage } from "@/lib/errorCopy";
 import { isChildWithoutAccount } from "@/lib/household";
 import { createClient } from "@/lib/supabase/client";
 import type { FamilyMember, FamilyMemberRelationship } from "@/lib/types";
+
+type RelabelledMember = Pick<FamilyMember, "id" | "relationship" | "birth_year" | "claimed_profile_id">;
 
 /**
  * What saving this relationship permanently deletes, in a sentence, or null when
@@ -11,8 +16,8 @@ import type { FamilyMember, FamilyMemberRelationship } from "@/lib/types";
  * becomes a child without an account. Throws when the invite can't be read,
  * because a save that might delete one can't go ahead unconfirmed.
  */
-export async function relabelToChildLoss(
-  member: Pick<FamilyMember, "id" | "relationship" | "birth_year" | "claimed_profile_id">,
+async function relabelToChildLoss(
+  member: RelabelledMember,
   relationship: FamilyMemberRelationship,
   name: string,
 ): Promise<string | null> {
@@ -38,24 +43,56 @@ export async function relabelToChildLoss(
   return `Saving deletes ${name}'s ${lost}.${link} This can't be undone.`;
 }
 
-interface Props {
+interface Options {
+  /** null when adding someone, who has nothing stored to lose. */
+  member: RelabelledMember | null;
+  relationship: FamilyMemberRelationship;
   name: string;
-  /** From relabelToChildLoss; the dialog is open while this is set. */
-  loss: string | null;
-  onCancel: () => void;
-  onConfirm: () => Promise<void>;
+  setSaving: (saving: boolean) => void;
+  /** Resolves false when the save failed, which leaves the dialog open to retry. */
+  save: () => Promise<boolean>;
 }
 
-export function RelabelChildConfirm({ name, loss, onCancel, onConfirm }: Props) {
-  return (
+/** Runs a form's save, asking first when it would delete what relabelling to Child deletes. */
+export function useRelabelToChild({ member, relationship, name, setSaving, save }: Options) {
+  const [loss, setLoss] = useState<string | null>(null);
+
+  async function saveAndClose() {
+    if (await save()) setLoss(null);
+  }
+
+  async function submit() {
+    if (member) {
+      setSaving(true);
+      let found: string | null;
+      try {
+        found = await relabelToChildLoss(member, relationship, name);
+      } catch (err) {
+        console.error(err);
+        toast.error(failureMessage(`save ${name}`));
+        setSaving(false);
+        return;
+      }
+      setSaving(false);
+      if (found) {
+        setLoss(found);
+        return;
+      }
+    }
+    await saveAndClose();
+  }
+
+  const dialog = (
     <ConfirmDialog
       open={loss !== null}
-      onOpenChange={(open) => !open && onCancel()}
+      onOpenChange={(open) => !open && setLoss(null)}
       title={`Change ${name} to Child?`}
       description={loss ?? undefined}
       confirmLabel="Change to Child"
       pendingLabel="Saving…"
-      onConfirm={onConfirm}
+      onConfirm={saveAndClose}
     />
   );
+
+  return { submit, dialog };
 }
