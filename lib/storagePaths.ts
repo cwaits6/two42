@@ -10,14 +10,9 @@
 
 // A new kind in the avatars bucket also goes in the keys delete_person() collects,
 // or a deleted person's photo of that kind stays stored.
-export type StorageKind = "profiles" | "family-members" | "families" | "events";
+export const STORAGE_KINDS = ["profiles", "family-members", "families", "events"] as const;
 
-const STORAGE_KINDS: ReadonlySet<string> = new Set<StorageKind>([
-  "profiles",
-  "family-members",
-  "families",
-  "events",
-]);
+export type StorageKind = (typeof STORAGE_KINDS)[number];
 
 export type StorageBucket = "avatars" | "event-images";
 
@@ -73,7 +68,7 @@ export function orgObjectPath(orgId: string, relPath: string): string {
  */
 export function keyIsInAnotherOrg(key: string, orgId: string): boolean {
   const [first, kind, ...rest] = key.split("/");
-  return rest.length >= 2 && STORAGE_KINDS.has(kind) && first !== orgId;
+  return rest.length >= 2 && STORAGE_KINDS.some((known) => known === kind) && first !== orgId;
 }
 
 // Matches what getPublicUrl() has always returned and what the URL columns
