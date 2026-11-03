@@ -25,9 +25,12 @@ import { PostingTo } from "@/components/groups/PostingTo";
 import { MethodButton, MethodChip } from "@/components/giving/MethodButton";
 import {
   FUND_NAME_FIELD,
+  FUND_RECIPIENT_FIELD,
   METHODS_FIELD,
   fundFieldErrors,
+  fundPaused,
   fundRecipientLine,
+  fundRetired,
   fundStatus,
   fundThroughTag,
   methodAccountField,
@@ -87,12 +90,14 @@ export function FundForm({
 
   const [name, setName] = useState(fund?.name ?? "");
   const [description, setDescription] = useState(fund?.description ?? "");
-  const [stewardId, setStewardId] = useState(fund?.steward_id ?? currentUserId);
+  // A saved fund with no recipient opens empty and requires a choice.
+  const [stewardId, setStewardId] = useState(fund ? (fund.steward_id ?? "") : currentUserId);
   const [coStewardId, setCoStewardId] = useState(fund?.co_steward_id ?? NONE);
   const [stewardRole, setStewardRole] = useState(fund?.steward_role ?? "");
   const [retireOn, setRetireOn] = useState(fund?.retire_on ?? "");
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingFund, setConfirmingFund] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   // An object, so a second save with the same first error still refocuses.
   const [focusTarget, setFocusTarget] = useState<{ id: string } | null>(null);
@@ -155,14 +160,16 @@ export function FundForm({
     clearErrors(METHODS_FIELD, methodAccountField(key));
   }
 
-  async function save() {
-    const found = fundFieldErrors(name, methods);
+  function validate(): boolean {
+    const found = fundFieldErrors(name, stewardId, methods);
     setErrors(found);
     const firstInvalid = Object.keys(found)[0];
-    if (firstInvalid) {
-      setFocusTarget({ id: firstInvalid });
-      return;
-    }
+    if (firstInvalid) setFocusTarget({ id: firstInvalid });
+    return !firstInvalid;
+  }
+
+  async function save({ confirm = false } = {}) {
+    if (!validate()) return;
     setSaving(true);
 
     const payload = {
@@ -240,7 +247,22 @@ export function FundForm({
       else router.replace(groupPath(groupId, `/give/${fundId}/edit`));
       return;
     }
-    toast.success(fund ? "Fund updated." : "Fund added.");
+    // Last, so a fund goes back on Give only with what the leader was shown saved.
+    if (confirm) {
+      const { data, error } = await supabase
+        .from("giving_funds")
+        .update({ needs_review: false, updated_at: new Date().toISOString() })
+        .eq("id", fundId)
+        .eq("group_id", groupId)
+        .select("id");
+      if (error || !data?.length) {
+        setSaving(false);
+        setConfirmingFund(false);
+        toast.error(failureMessage("confirm the fund"));
+        return;
+      }
+    }
+    toast.success(confirm ? "Fund confirmed." : fund ? "Fund updated." : "Fund added.");
     router.push(backHref);
     router.refresh();
   }
@@ -283,12 +305,25 @@ export function FundForm({
   }
 
   const previewTag = fundThroughTag(retireOn || null);
-  const isLive = fund ? fundStatus(fund, today).live : false;
+  const paused = !!fund && fundPaused(fund);
+  const retired = !!fund && fundRetired(fund, today);
 
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_340px] lg:items-start">
       <div className="space-y-6">
         {!fund && <PostingTo groupName={groupName} />}
+        {fund && paused && (
+          <div className="rounded-2xl border border-border bg-brand-warm px-5 py-4">
+            <p className="text-lg font-semibold text-foreground">{fundStatus(fund, today).text}</p>
+            <p className="mt-1 text-base text-foreground">
+              {!isLeader
+                ? "Members can't give to this fund until a leader confirms it. You can correct its payment methods."
+                : fund.steward_id
+                  ? "Members can't give to this fund until a leader confirms it. Its payment methods may still pay the person who left, so check who receives it and each account."
+                  : "Members can't give to this fund until a leader chooses who receives it and confirms it. Its payment methods may still pay the person who left, so check each account."}
+            </p>
+          </div>
+        )}
         <div>
           <Label htmlFor={FUND_NAME_FIELD}>Fund name</Label>
           <Input
@@ -324,21 +359,23 @@ export function FundForm({
           <div>
             {isLeader ? (
               <>
-                <Label htmlFor="fund-recipient">Who receives it?</Label>
+                <Label htmlFor={FUND_RECIPIENT_FIELD}>Who receives it?</Label>
                 <Combobox
                   items={memberIds}
                   itemToStringLabel={memberLabel}
-                  value={stewardId}
+                  value={stewardId || null}
                   onValueChange={(v) => {
                     if (!v) return;
                     setStewardId(v);
+                    clearErrors(FUND_RECIPIENT_FIELD);
                     if (v === coStewardId) setCoStewardId(NONE);
                   }}
                 >
                   <ComboboxInput
-                    id="fund-recipient"
+                    id={FUND_RECIPIENT_FIELD}
                     placeholder="Search members…"
                     className="mt-1.5 h-12"
+                    {...invalidFieldProps(FUND_RECIPIENT_FIELD, errors[FUND_RECIPIENT_FIELD])}
                   />
                   <ComboboxPopup>
                     <ComboboxEmpty />
@@ -351,6 +388,9 @@ export function FundForm({
                     </ComboboxList>
                   </ComboboxPopup>
                 </Combobox>
+                <div className="mt-1.5">
+                  <FieldError fieldId={FUND_RECIPIENT_FIELD} message={errors[FUND_RECIPIENT_FIELD]} />
+                </div>
               </>
             ) : (
               <>
@@ -484,7 +524,21 @@ export function FundForm({
         </fieldset>
 
         <div className="flex flex-wrap gap-3 border-t border-border pt-6">
-          <Button onClick={save} disabled={saving}>
+          {fund && paused && isLeader && (
+            <Button
+              disabled={saving}
+              onClick={() => {
+                if (validate()) setConfirmingFund(true);
+              }}
+            >
+              Confirm fund
+            </Button>
+          )}
+          <Button
+            variant={fund && paused && isLeader ? "outline" : "default"}
+            onClick={() => save()}
+            disabled={saving}
+          >
             {saving ? "Saving…" : fund ? "Save changes" : "Add fund"}
           </Button>
           <Button variant="outline" onClick={() => router.push(backHref)}>
@@ -494,9 +548,12 @@ export function FundForm({
 
         {fund && (
           <div className="flex flex-wrap gap-3">
-            <Button variant="outline" onClick={() => setLive(!isLive)}>
-              {isLive ? "Retire fund" : "Reopen fund"}
-            </Button>
+            {/* Reopening waits for the confirmation, which keeps a retired fund retired. */}
+            {!(paused && retired) && (
+              <Button variant="outline" onClick={() => setLive(retired)}>
+                {retired ? "Reopen fund" : "Retire fund"}
+              </Button>
+            )}
             <Button
               variant="ghost"
               onClick={() => setConfirmingDelete(true)}
@@ -513,6 +570,35 @@ export function FundForm({
               pendingLabel="Deleting…"
               onConfirm={remove}
             />
+            <ConfirmDialog
+              open={confirmingFund}
+              onOpenChange={setConfirmingFund}
+              title={`Confirm ${fund.name}?`}
+              description={
+                retired
+                  ? "It stays retired until a leader reopens it."
+                  : "Members can give to it on the Give page again."
+              }
+              confirmLabel="Confirm fund"
+              pendingLabel="Confirming…"
+              confirmVariant="default"
+              onConfirm={() => save({ confirm: true })}
+            >
+              <dl className="space-y-2 text-base">
+                <div>
+                  <dt className="font-semibold">Goes to</dt>
+                  <dd>{stewardNames}</dd>
+                </div>
+                <div>
+                  <dt className="font-semibold">Payment methods</dt>
+                  {previewMethods.map((m) => (
+                    <dd key={m.method} className="break-words">
+                      {m.meta.name}: {m.handle}
+                    </dd>
+                  ))}
+                </div>
+              </dl>
+            </ConfirmDialog>
           </div>
         )}
       </div>

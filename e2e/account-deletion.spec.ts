@@ -203,9 +203,9 @@ test("a person deletes their own account and can't sign in afterwards", async ({
 
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText("Your prayer requests, including anonymous ones")).toBeVisible();
-  await expect(dialog.getByText(new RegExp(`The ${FUND} fund in .*payment methods`))).toBeVisible();
+  await expect(dialog.getByText(new RegExp(`The ${FUND} fund in .*payment methods, off Give`))).toBeVisible();
   await expect(
-    dialog.getByText(new RegExp(`The ${SECOND_FUND} fund in .*goes to ${SECOND_PERSON.name}, retired`)),
+    dialog.getByText(new RegExp(`The ${SECOND_FUND} fund in .*goes to ${SECOND_PERSON.name}, off Give`)),
   ).toBeVisible();
   await expect(dialog.getByText(/doesn't include your photo/)).toBeVisible();
 
@@ -221,12 +221,14 @@ test("a person deletes their own account and can't sign in afterwards", async ({
   expect(countOf("public.profiles", "id", LEAVER.id)).toBe("0");
   expect(photoCount(seedOrg)).toBe("0");
   expect(sql(`select count(*) from public.prayer_requests where body = '${ANONYMOUS_BODY}';`)).toBe("0");
-  expect(sql(`select count(*) from public.giving_funds where name = '${FUND}';`)).toBe("0");
   expect(
-    sql(`select concat_ws('|', p.email, f.co_steward_id is null, f.steward_role is null, f.is_active)
+    sql(`select concat_ws('|', steward_id is null, needs_review) from public.giving_funds where name = '${FUND}';`),
+  ).toBe("t|t");
+  expect(
+    sql(`select concat_ws('|', p.email, f.co_steward_id is null, f.steward_role is null, f.is_active, f.needs_review)
          from public.giving_funds f join public.profiles p on p.id = f.steward_id
          where f.name = '${SECOND_FUND}';`),
-  ).toBe(`${SECOND_PERSON.email}|t|t|f`);
+  ).toBe(`${SECOND_PERSON.email}|t|t|t|t`);
   expect(sql(`select count(*) from public.access_requests where email = '${LEAVER.email}';`)).toBe("0");
   expect(sql(`select name from public.access_requests where email = '${OLD_ADDRESS}';`)).toBe(SPOUSE_NAME);
   expect(sql(`select count(*) from public.family_invites where invite_email in ('${LEAVER.email}', '${OLD_ADDRESS}');`)).toBe("0");

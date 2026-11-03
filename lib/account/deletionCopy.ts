@@ -9,14 +9,14 @@ interface NamedFund {
 export type DeletionGroupContent =
   | {
       kind: "names";
-      /** Go to the second person, retired. */
-      fundsRetired: (NamedFund & { recipient: string })[];
-      /** No second person in the group, so the foreign key deletes them with the profile. */
-      fundsDeleted: NamedFund[];
+      /** Go to the second person, off Give until a leader confirms them. */
+      fundsPassedOn: (NamedFund & { recipient: string })[];
+      /** No second person in the group, so they stay with nobody to receive them. */
+      fundsNeedingRecipient: NamedFund[];
       /** Groups this person is the only leader of. */
       groupsLosingLeader: string[];
     }
-  | { kind: "counts"; fundsRetired: number; fundsDeleted: number; groupsLosingLeader: number };
+  | { kind: "counts"; fundsPassedOn: number; fundsNeedingRecipient: number; groupsLosingLeader: number };
 
 export interface DeletionSummary {
   name: string;
@@ -88,46 +88,46 @@ function householdGoes(household: NonNullable<DeletionSummary["household"]>): st
     : base;
 }
 
-const RETIRED = "retired until a leader checks its payment methods and reopens it";
+const UNTIL_CONFIRMED = "off Give until a leader confirms it";
+const UNTIL_ASSIGNED = "off Give until a leader chooses who receives it and confirms it";
 
 function counted(count: number, one: string, many: string): string {
   return count === 1 ? `1 ${one}` : `${count} ${many}`;
 }
 
-function fundsAndGroups(content: DeletionGroupContent): { goes: string[]; stays: string[] } {
+function fundsAndGroups(content: DeletionGroupContent): string[] {
   if (content.kind === "names") {
-    return {
-      goes: content.fundsDeleted.map((f) => `The ${f.name} fund in ${f.group}, and its payment methods`),
-      stays: [
-        ...content.fundsRetired.map((f) => `The ${f.name} fund in ${f.group}, which goes to ${f.recipient}, ${RETIRED}`),
-        ...content.groupsLosingLeader.map((g) => `${g}, with no leader until a church admin adds one`),
-      ],
-    };
+    return [
+      ...content.fundsPassedOn.map((f) => `The ${f.name} fund in ${f.group}, which goes to ${f.recipient}, ${UNTIL_CONFIRMED}`),
+      ...content.fundsNeedingRecipient.map((f) => `The ${f.name} fund in ${f.group}, and its payment methods, ${UNTIL_ASSIGNED}`),
+      ...content.groupsLosingLeader.map((g) => `${g}, with no leader until a church admin adds one`),
+    ];
   }
-  return {
-    goes: content.fundsDeleted
-      ? [`${counted(content.fundsDeleted, "fund they receive, and its", "funds they receive, and their")} payment methods`]
-      : [],
-    stays: [
-      ...(content.fundsRetired
-        ? [
-            `${counted(content.fundsRetired, "fund they receive, which goes", "funds they receive, which go")} to the second person, ${
-              content.fundsRetired === 1 ? RETIRED : "retired until a leader checks their payment methods and reopens them"
-            }`,
-          ]
-        : []),
-      ...(content.groupsLosingLeader
-        ? [`${counted(content.groupsLosingLeader, "group", "groups")} with no leader until a church admin adds one`]
-        : []),
-    ],
-  };
+  return [
+    ...(content.fundsPassedOn
+      ? [
+          content.fundsPassedOn === 1
+            ? `1 fund they receive, which goes to the second person, ${UNTIL_CONFIRMED}`
+            : `${content.fundsPassedOn} funds they receive, which go to the second person, off Give until a leader confirms them`,
+        ]
+      : []),
+    ...(content.fundsNeedingRecipient
+      ? [
+          content.fundsNeedingRecipient === 1
+            ? `1 fund they receive, and its payment methods, ${UNTIL_ASSIGNED}`
+            : `${content.fundsNeedingRecipient} funds they receive, and their payment methods, off Give until a leader chooses who receives them and confirms them`,
+        ]
+      : []),
+    ...(content.groupsLosingLeader
+      ? [`${counted(content.groupsLosingLeader, "group", "groups")} with no leader until a church admin adds one`]
+      : []),
+  ];
 }
 
 /** What the confirmation says goes and stays, worded for the person acting. */
 export function deletionCopy(summary: DeletionSummary, subject: DeletionSubject): DeletionCopy {
   const self = subject === "self";
   const { household, groupContent } = summary;
-  const content = fundsAndGroups(groupContent);
 
   const goes = self
     ? [
@@ -140,14 +140,13 @@ export function deletionCopy(summary: DeletionSummary, subject: DeletionSubject)
         "Their group and team memberships, RSVPs and serving turns",
         "Their prayer requests, including anonymous ones",
       ];
-  goes.push(...content.goes);
   if (household && !household.shared) goes.push(householdGoes(household));
 
   const stays = [
     "Announcements, events and lessons, without the author's name",
     "Serving dates shared with someone else, which stay with that person",
     "Feedback already sent, without a name",
-    ...content.stays,
+    ...fundsAndGroups(groupContent),
   ];
   if (household?.shared) {
     stays.unshift(`The ${household.name} household, and everyone else's details in it`);

@@ -11,8 +11,8 @@ import {
 
 const names = {
   kind: "names",
-  fundsRetired: [],
-  fundsDeleted: [],
+  fundsPassedOn: [],
+  fundsNeedingRecipient: [],
   groupsLosingLeader: [],
 } as const;
 
@@ -20,53 +20,57 @@ const base: DeletionSummary = {
   name: "Ada Okafor",
   lastChurchAdmin: false,
   platformOperator: false,
-  groupContent: { ...names, fundsRetired: [], fundsDeleted: [], groupsLosingLeader: [] },
+  groupContent: { ...names, fundsPassedOn: [], fundsNeedingRecipient: [], groupsLosingLeader: [] },
   household: null,
 };
 
 describe("deletionCopy", () => {
-  it("names a fund with no second person as deleted, with its payment methods", () => {
-    const { goes } = deletionCopy(
-      { ...base, groupContent: { ...names, fundsRetired: [], groupsLosingLeader: [], fundsDeleted: [{ name: "Mission trip", group: "Grace" }] } },
+  it("says a fund with no second person stays, with its payment methods, and never that it goes", () => {
+    const { goes, stays } = deletionCopy(
+      { ...base, groupContent: { ...names, fundsPassedOn: [], groupsLosingLeader: [], fundsNeedingRecipient: [{ name: "Mission trip", group: "Grace" }] } },
       "self",
     );
-    expect(goes).toContain("The Mission trip fund in Grace, and its payment methods");
+    expect(stays).toContain(
+      "The Mission trip fund in Grace, and its payment methods, off Give until a leader chooses who receives it and confirms it",
+    );
+    expect(goes.join(" ")).not.toContain("Mission trip");
   });
 
-  it("says a fund goes to the second person, retired until a leader reopens it", () => {
+  it("says a fund goes to the second person, off Give until a leader confirms it", () => {
     const { goes, stays } = deletionCopy(
       {
         ...base,
         groupContent: {
           ...names,
-          fundsDeleted: [],
+          fundsNeedingRecipient: [],
           groupsLosingLeader: [],
-          fundsRetired: [{ name: "Mission trip", group: "Grace", recipient: "Ben Lee" }],
+          fundsPassedOn: [{ name: "Mission trip", group: "Grace", recipient: "Ben Lee" }],
         },
       },
       "self",
     );
-    expect(stays).toContain(
-      "The Mission trip fund in Grace, which goes to Ben Lee, retired until a leader checks its payment methods and reopens it",
-    );
+    expect(stays).toContain("The Mission trip fund in Grace, which goes to Ben Lee, off Give until a leader confirms it");
     expect(goes.join(" ")).not.toContain("Mission trip");
   });
 
   it("counts funds and groups for a church admin", () => {
     const { goes, stays } = deletionCopy(
-      { ...base, groupContent: { kind: "counts", fundsRetired: 2, fundsDeleted: 1, groupsLosingLeader: 3 } },
+      { ...base, groupContent: { kind: "counts", fundsPassedOn: 2, fundsNeedingRecipient: 1, groupsLosingLeader: 3 } },
       "other",
     );
-    expect(goes).toContain("1 fund they receive, and its payment methods");
+    expect(goes.join(" ")).not.toMatch(/\bfunds? they\b/);
     expect(stays).toContain(
-      "2 funds they receive, which go to the second person, retired until a leader checks their payment methods and reopens them",
+      "2 funds they receive, which go to the second person, off Give until a leader confirms them",
+    );
+    expect(stays).toContain(
+      "1 fund they receive, and its payment methods, off Give until a leader chooses who receives it and confirms it",
     );
     expect(stays).toContain("3 groups with no leader until a church admin adds one");
   });
 
   it("mentions no fund or group when a church admin's counts are zero", () => {
     const { goes, stays } = deletionCopy(
-      { ...base, groupContent: { kind: "counts", fundsRetired: 0, fundsDeleted: 0, groupsLosingLeader: 0 } },
+      { ...base, groupContent: { kind: "counts", fundsPassedOn: 0, fundsNeedingRecipient: 0, groupsLosingLeader: 0 } },
       "other",
     );
     expect([...goes, ...stays].join(" ")).not.toMatch(/\bfunds? they\b|\bgroups? with\b/);
@@ -92,7 +96,7 @@ describe("deletionCopy", () => {
 
   it("says a group stays without a leader", () => {
     const { stays } = deletionCopy(
-      { ...base, groupContent: { ...names, fundsRetired: [], fundsDeleted: [], groupsLosingLeader: ["Grace"] } },
+      { ...base, groupContent: { ...names, fundsPassedOn: [], fundsNeedingRecipient: [], groupsLosingLeader: ["Grace"] } },
       "self",
     );
     expect(stays).toContain("Grace, with no leader until a church admin adds one");

@@ -213,7 +213,7 @@ describe("loadDeletionSummary", () => {
     });
     const summary = await loadDeletionSummary(ORG, "ada", "self");
     expect(summary?.groupContent).toMatchObject({
-      fundsRetired: [{ name: "Passes on", recipient: "ben@example.test" }],
+      fundsPassedOn: [{ name: "Passes on", recipient: "ben@example.test" }],
     });
   });
 
@@ -222,8 +222,8 @@ describe("loadDeletionSummary", () => {
     const summary = await loadDeletionSummary(ORG, "ada", "self");
     expect(summary?.groupContent).toMatchObject({
       kind: "names",
-      fundsRetired: [{ name: "Passes on", group: "Grace", recipient: "ben Test" }],
-      fundsDeleted: [
+      fundsPassedOn: [{ name: "Passes on", group: "Grace", recipient: "ben Test" }],
+      fundsNeedingRecipient: [
         { name: "No second", group: "Grace" },
         { name: "Second left", group: "Grace" },
       ],
@@ -242,8 +242,8 @@ describe("loadDeletionSummary", () => {
     const summary = await loadDeletionSummary(ORG, "ada", "church_admin");
     expect(summary?.groupContent).toEqual({
       kind: "counts",
-      fundsRetired: 1,
-      fundsDeleted: 2,
+      fundsPassedOn: 1,
+      fundsNeedingRecipient: 2,
       groupsLosingLeader: 1,
     });
     const text = JSON.stringify(summary);

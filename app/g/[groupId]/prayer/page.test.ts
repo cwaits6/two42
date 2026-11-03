@@ -31,7 +31,7 @@ vi.mock("@/lib/groups/server", () => ({
   requireActiveGroup: async (id: string) => ({ id, name: "Grace", role: "member" }),
 }));
 vi.mock("@/lib/groups/settings", () => ({ getGroupSettings: () => settings }));
-vi.mock("@/lib/giving/server", () => ({ loadFundFormData: async () => ({ members: [] }) }));
+vi.mock("@/lib/giving/server", () => ({ loadDirectoryMemberOptions: async () => ({ members: [] }) }));
 vi.mock("@/lib/storageRead", () => ({
   mintSignedUrl: async () => null,
   mintSignedUrls: async (urls: unknown[]) => urls.map(() => null),

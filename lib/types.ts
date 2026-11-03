@@ -388,8 +388,8 @@ export interface GivingFund {
   group_id: string;
   name: string;
   description: string | null;
-  /** Person who receives the money */
-  steward_id: string;
+  /** Person who receives the money; null once they've left and nobody could take over */
+  steward_id: string | null;
   /** Displayed alongside the steward (couples) */
   co_steward_id: string | null;
   /** Short trust label: "Class treasurers", "Hospitality" */
@@ -397,6 +397,8 @@ export interface GivingFund {
   /** YYYY-MM-DD — fund disappears from the Give page after this date */
   retire_on: string | null;
   is_active: boolean;
+  /** Off Give until a leader of the group confirms the fund */
+  needs_review: boolean;
   display_order: number;
   created_by: string | null;
   created_at: string;

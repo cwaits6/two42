@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { mintSignedUrl, mintSignedUrls } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
 import { displayName, initials } from "@/lib/names";
-import { loadFundFormData } from "@/lib/giving/server";
+import { loadDirectoryMemberOptions } from "@/lib/giving/server";
 import { getGroupSettings } from "@/lib/groups/settings";
 import { PrayerBoard } from "@/components/prayer/PrayerBoard";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -49,7 +49,7 @@ export default async function PrayerPage({
       .order("display_order")
       .order("created_at")
       .then((read) => readList(read, "prayer call times")),
-    loadFundFormData(supabase, profile.org_id),
+    loadDirectoryMemberOptions(supabase, profile.org_id),
     // getGroupSettings logs its own failure; the call card reports it.
     getGroupSettings(supabase, profile.org_id, group.id).catch(() => null),
     getOrgTimeZone(),

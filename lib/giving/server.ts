@@ -59,8 +59,59 @@ export async function signStewardAvatars<T extends StewardAvatarSource>(
   }));
 }
 
-/** Member picker options for the fund form; `failed` tells an empty list from a failed read. */
+type PickerProfile = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  preferred_name: string | null;
+  avatar_url: string | null;
+  role: string;
+};
+
+function byLastThenFirstName(a: PickerProfile, b: PickerProfile): number {
+  return (
+    (a.last_name ?? "").localeCompare(b.last_name ?? "") ||
+    (a.first_name ?? "").localeCompare(b.first_name ?? "")
+  );
+}
+
+/**
+ * Picker options for a fund: the group's current members, whoever is asking, so
+ * a church admin or an open directory doesn't widen them. `failed` tells an empty
+ * list from a failed read. A null embed is a profile RLS hides from the viewer,
+ * and a pending person can't be named on anything.
+ */
 export async function loadFundFormData(
+  supabase: SupabaseClient,
+  orgId: string,
+  groupId: string
+): Promise<{
+  members: MemberOption[];
+  failed: boolean;
+}> {
+  const memberships = readList<{ profiles: PickerProfile | null }>(
+    await supabase
+      .from("group_members")
+      .select("profiles(id, first_name, last_name, preferred_name, avatar_url, role)")
+      .eq("org_id", orgId)
+      .eq("group_id", groupId)
+      .returns<{ profiles: PickerProfile | null }[]>(),
+    "fund form members"
+  );
+  if (memberships === null) return { members: [], failed: true };
+
+  const rows = memberships
+    .flatMap((m) => (m.profiles && m.profiles.role !== "pending" ? [m.profiles] : []))
+    .sort(byLastThenFirstName);
+
+  return { members: await toMemberOptions(rows), failed: false };
+}
+
+/**
+ * Everyone the viewer's directory shows, for the prayer call card. A fund's
+ * pickers use loadFundFormData, which is limited to the fund's group.
+ */
+export async function loadDirectoryMemberOptions(
   supabase: SupabaseClient,
   orgId: string
 ): Promise<{
@@ -74,21 +125,22 @@ export async function loadFundFormData(
       .eq("org_id", orgId)
       .order("last_name")
       .order("first_name"),
-    "fund form members"
+    "directory members"
   );
   if (rows === null) return { members: [], failed: true };
+  return { members: await toMemberOptions(rows), failed: false };
+}
 
-  // Private buckets: exchange stored avatar URLs for signed URLs
-  // before they reach the member-picker renders. Signing goes through
-  // lib/storageRead's own cookie-bound client, never the caller's `supabase`
-  // parameter — a passed-in client is untyped as to privilege (Tier C).
+// Private buckets: exchange stored avatar URLs for signed URLs before they reach
+// the pickers. Signing goes through lib/storageRead's own cookie-bound client,
+// never the caller's `supabase` parameter: a passed-in client is untyped as to
+// privilege (Tier C).
+async function toMemberOptions(rows: Omit<PickerProfile, "role">[]): Promise<MemberOption[]> {
   const signedAvatars = await mintSignedUrls(rows.map((p) => p.avatar_url));
-  const members: MemberOption[] = rows.map((p, i) => ({
+  return rows.map((p, i) => ({
     id: p.id,
     name: displayName(p),
     initials: initials(p),
     avatarUrl: signedAvatars[i],
   }));
-
-  return { members, failed: false };
 }

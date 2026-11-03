@@ -14,7 +14,7 @@ vi.mock("@/lib/storageRead", () => ({
     urls.map((u) => (u ? `signed:${u}` : null)),
 }));
 
-const { givingStewardsCanManage, loadFundFormData, signStewardAvatars } =
+const { givingStewardsCanManage, loadDirectoryMemberOptions, loadFundFormData, signStewardAvatars } =
   await import("@/lib/giving/server");
 
 interface Call {
@@ -33,6 +33,7 @@ function fakeClient(rowsByTable: Record<string, unknown[]> = {}) {
       const chain = {
         select: () => chain,
         order: () => chain,
+        returns: () => chain,
         eq(column: string, value: unknown) {
           call.filters.push(["eq", column, value]);
           return chain;
@@ -76,21 +77,48 @@ describe("givingStewardsCanManage", () => {
   });
 });
 
-describe("loadFundFormData", () => {
-  it("reads the member directory scoped on the org and signs each avatar", async () => {
+describe("loadDirectoryMemberOptions", () => {
+  it("reads the directory scoped on the org", async () => {
     const { client, calls } = fakeClient({
-      profiles_directory: [
-        { id: "p1", first_name: "Ada", last_name: "L", preferred_name: null, avatar_url: "a.jpg" },
-        { id: "p2", first_name: "Bo", last_name: "M", preferred_name: null, avatar_url: null },
-      ],
+      profiles_directory: [{ id: "p1", first_name: "Ada", last_name: "L", preferred_name: null, avatar_url: "a.jpg" }],
     });
-    const { members } = await loadFundFormData(client, ORG);
+    const { members } = await loadDirectoryMemberOptions(client, ORG);
     expect(calls[0].table).toBe("profiles_directory");
     expect(calls[0].filters).toEqual([["eq", "org_id", ORG]]);
+    expect(members.map((m) => [m.id, m.avatarUrl])).toEqual([["p1", "signed:a.jpg"]]);
+  });
+});
+
+describe("loadFundFormData", () => {
+  const profile = (id: string, first: string, last: string, extra: object = {}) => ({
+    profiles: { id, first_name: first, last_name: last, preferred_name: null, avatar_url: null, role: "member", ...extra },
+  });
+
+  it("reads this group's members scoped on the org, sorted, and signs each avatar", async () => {
+    const { client, calls } = fakeClient({
+      group_members: [
+        profile("p2", "Bo", "M"),
+        profile("p1", "Ada", "L", { avatar_url: "a.jpg" }),
+      ],
+    });
+    const { members } = await loadFundFormData(client, ORG, "g1");
+    expect(calls[0].table).toBe("group_members");
+    expect(calls[0].filters).toEqual([
+      ["eq", "org_id", ORG],
+      ["eq", "group_id", "g1"],
+    ]);
     expect(members.map((m) => [m.id, m.avatarUrl])).toEqual([
       ["p1", "signed:a.jpg"],
       ["p2", null],
     ]);
+  });
+
+  it("leaves out a profile RLS hides and a pending person", async () => {
+    const { client } = fakeClient({
+      group_members: [{ profiles: null }, profile("p1", "Ada", "L"), profile("p2", "Bo", "M", { role: "pending" })],
+    });
+    const { members } = await loadFundFormData(client, ORG, "g1");
+    expect(members.map((m) => m.id)).toEqual(["p1"]);
   });
 
   it("reports a failed read, so an empty picker is never taken for no members", async () => {
@@ -101,13 +129,14 @@ describe("loadFundFormData", () => {
           select: () => chain,
           order: () => chain,
           eq: () => chain,
+          returns: () => chain,
           then: (resolve: (value: unknown) => unknown) =>
             Promise.resolve(resolve({ data: null, error: { message: "boom" } })),
         };
         return chain;
       },
     } as unknown as SupabaseClient;
-    expect(await loadFundFormData(failing, ORG)).toEqual({ members: [], failed: true });
+    expect(await loadFundFormData(failing, ORG, "g1")).toEqual({ members: [], failed: true });
     consoleError.mockRestore();
   });
 });

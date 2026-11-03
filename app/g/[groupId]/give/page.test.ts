@@ -92,7 +92,9 @@ describe("GivePage", () => {
     id: "f1",
     name: "Old roof",
     is_active: false,
+    needs_review: false,
     retire_on: null,
+    steward_id: "s1",
     steward: null,
     steward_role: null,
   };
@@ -111,6 +113,7 @@ describe("GivePage", () => {
     id: "f2",
     name: "New roof",
     is_active: true,
+    needs_review: false,
     retire_on: null,
     steward_id: "s1",
     steward: { id: "s1", first_name: "Ann", last_name: "Lee", preferred_name: null, avatar_url: null },
@@ -138,6 +141,42 @@ describe("GivePage", () => {
     const html = await render();
     expect(html).toContain("load hidden funds.");
     expect(html).not.toContain("No funds yet.");
+  });
+
+  const IN_REVIEW = { ...LIVE, id: "f3", name: "In review", needs_review: true };
+  const NO_RECIPIENT = {
+    ...LIVE,
+    id: "f4",
+    name: "No recipient",
+    needs_review: true,
+    steward_id: null,
+    steward: null,
+  };
+
+  it("keeps a paused fund off Give, and gives a leader a way to review it", async () => {
+    state.role = "leader";
+    state.funds = [IN_REVIEW, NO_RECIPIENT];
+    const html = await render();
+    expect(html).not.toContain("Goes to Ann Lee</span>");
+    expect(html).toContain("Hidden from members");
+    expect(html).toContain("Needs review");
+    expect(html).toContain("Needs a recipient");
+    expect(html).toContain('href="/g/g1/give/f3/edit"');
+    expect(html).toContain('href="/g/g1/give/f4/edit"');
+  });
+
+  it("gives a promoted recipient a way to their fund in review, and no other hidden fund", async () => {
+    state.funds = [{ ...IN_REVIEW, steward_id: "me" }, RETIRED, IN_REVIEW];
+    const html = await render();
+    expect(html).toContain("Needs review");
+    expect(html).toContain('href="/g/g1/give/f3/edit"');
+    expect(html).not.toContain("Old roof");
+  });
+
+  it("gives that recipient no way in when only leaders can manage funds", async () => {
+    state.manageMode = "admins";
+    state.funds = [{ ...IN_REVIEW, steward_id: "me" }];
+    expect(await render()).not.toContain("In review");
   });
 
   it("shows a member no hidden funds", async () => {

@@ -49,7 +49,12 @@ let root: Root | null = null;
 
 const RAY = { id: "me", name: "Ray Park", initials: "RP", avatarUrl: null };
 
-function storedFund(fund: { is_active: boolean; retire_on: string | null }) {
+function storedFund(fund: {
+  is_active: boolean;
+  retire_on: string | null;
+  steward_id?: string | null;
+  needs_review?: boolean;
+}) {
   return {
     id: "fund-1",
     name: "Building fund",
@@ -230,6 +235,86 @@ describe("FundForm", () => {
     expect(db.updated).toHaveBeenCalledWith(
       expect.objectContaining({ is_active: true, retire_on: "2027-01-01" })
     );
+  });
+
+  describe("a fund waiting on a leader", () => {
+    const LIVE = { is_active: true, retire_on: null };
+    const BEN = { id: "ben", name: "Ben Lee", initials: "BL", avatarUrl: null };
+    const inReview = storedFund({ ...LIVE, steward_id: "ben", needs_review: true });
+    const noRecipient = storedFund({ ...LIVE, steward_id: null, needs_review: true });
+
+    function field(id: string) {
+      return document.getElementById(id) as HTMLInputElement;
+    }
+
+    it("opens with no recipient chosen, never the person editing, and requires one", async () => {
+      await mount({ fund: noRecipient, members: [RAY, BEN] });
+      expect(document.body.textContent).toContain("Needs a recipient");
+      expect(field("fund-recipient").value).toBe("");
+      await act(async () => button("Save changes").click());
+      expect(field("fund-recipient").getAttribute("aria-invalid")).toBe("true");
+      expect(db.updated).not.toHaveBeenCalled();
+    });
+
+    it("won't confirm with no recipient chosen", async () => {
+      await mount({ fund: noRecipient, members: [RAY, BEN] });
+      await act(async () => button("Confirm fund").click());
+      expect(document.activeElement).toBe(field("fund-recipient"));
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+    });
+
+    it("saving leaves the flag alone", async () => {
+      await mount({ fund: inReview, members: [RAY, BEN] });
+      await act(async () => button("Save changes").click());
+      expect(db.updated).toHaveBeenCalledTimes(1);
+      expect(db.updated.mock.calls[0][0]).not.toHaveProperty("needs_review");
+    });
+
+    it("shows the leader the recipient and accounts, then clears the flag after everything saves", async () => {
+      await mount({ fund: inReview, members: [RAY, BEN] });
+      await act(async () => button("Confirm fund").click());
+      const dialog = document.querySelector('[role="dialog"]')!;
+      expect(dialog.textContent).toContain("Ben Lee");
+      expect(dialog.textContent).toContain("fund@example.test");
+      expect(db.updated).not.toHaveBeenCalled();
+
+      const confirm = Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Confirm fund")!;
+      await act(async () => confirm.click());
+      const patches = db.updated.mock.calls.map(([patch]) => patch);
+      expect(patches[0]).not.toHaveProperty("needs_review");
+      expect(patches.at(-1)).toMatchObject({ needs_review: false });
+      expect(toast.success).toHaveBeenCalledWith("Fund confirmed.");
+    });
+
+    it("offers a promoted recipient who isn't a leader no way to confirm", async () => {
+      await mount({ isLeader: false, fund: storedFund({ ...LIVE, steward_id: "me", needs_review: true }) });
+      expect(document.body.textContent).toContain("Needs review");
+      expect(document.body.textContent).toContain("You can correct its payment methods.");
+      expect(document.body.textContent).not.toContain("Confirm fund");
+    });
+
+    it.each([
+      ["in review", { is_active: false, retire_on: null, steward_id: "ben", needs_review: true }],
+      ["with no recipient", { is_active: false, retire_on: null, steward_id: null, needs_review: true }],
+    ])("doesn't offer Reopen on a retired fund %s", async (_, fund) => {
+      await mount({ fund: storedFund(fund), members: [RAY, BEN] });
+      expect(document.body.textContent).not.toContain("Reopen fund");
+    });
+
+    it("still lets a leader retire an active fund instead of confirming it", async () => {
+      await mount({ fund: inReview, members: [RAY, BEN] });
+      await act(async () => button("Retire fund").click());
+      expect(db.updated).toHaveBeenCalledWith(expect.objectContaining({ is_active: false }));
+    });
+
+    it("tells the leader a retired fund stays retired", async () => {
+      await mount({
+        fund: storedFund({ is_active: false, retire_on: null, steward_id: "ben", needs_review: true }),
+        members: [RAY, BEN],
+      });
+      await act(async () => button("Confirm fund").click());
+      expect(document.querySelector('[role="dialog"]')!.textContent).toContain("It stays retired");
+    });
   });
 
   it("leaves the recipient line out of the preview when the recipient is unlisted", async () => {
