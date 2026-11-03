@@ -171,6 +171,23 @@ describe("MembersList", () => {
     expect(host.textContent).not.toContain("Ada Test");
   });
 
+  it("lists and counts an invitee who shares a member's name, and finds them by email", async () => {
+    state.requests = [
+      { id: "r1", name: "Ben Test", email: "other.ben@example.test", status: "approved", signup_token: "token" },
+    ];
+    await mount();
+    expect(host.textContent).toContain("Members (3)");
+    expect(host.textContent).toContain("Invited, not signed up yet");
+    const search = host.querySelector<HTMLInputElement>("#member-search")!;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      setter.call(search, "other.ben@");
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(host.textContent).toContain("1 of 3 members");
+    expect(host.textContent).toContain("Invited, not signed up yet");
+  });
+
   it("sends Approve once however many times it is pressed", async () => {
     state.requests = [
       {
