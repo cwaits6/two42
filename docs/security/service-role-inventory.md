@@ -467,9 +467,10 @@ assertions in their bodies are the tenant boundary; no lint sees them**.
 policies for the group's leaders and org admins — SELECT, INSERT
 (`created_by` must be the caller, `revoked_at` null) and UPDATE confined by
 column grant to `revoked_at`, whose `WITH CHECK` refuses to clear it again.
-No DELETE policy and no DELETE privilege: links are the audit trail. `anon`
-holds no privilege on either table. `group_invite_uses` has one SELECT
-policy (the same readers) and no client write grant at all; only the
+No DELETE policy and no DELETE privilege, so a link stays as the audit trail
+until the nightly `clean-up-expired-data` job deletes it and its uses, 90 days
+after it is revoked or expires. `anon` holds no privilege on either table.
+`group_invite_uses` has one SELECT policy (the same readers) and no client write grant at all; only the
 functions above and the trigger write it.
 
 The app-side call sites: `app/api/join/[token]/route.ts` calls

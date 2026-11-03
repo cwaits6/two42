@@ -106,8 +106,7 @@ async function liveInviteTokens(
 
 /**
  * Runs every rule for one church. A failed step is recorded and the rest still
- * run, because the rules do not depend on each other's success: a request that
- * failed to delete only holds its invite back until the next night.
+ * run, because the rules do not depend on each other's success.
  */
 export async function cleanUpOrg(
   supabase: CleanupClient,
@@ -165,7 +164,6 @@ export async function cleanUpOrg(
       .not("signup_token", "is", null)
       .lt("token_expires_at", expired));
 
-  // After the access_requests deletes, so rows expiring tonight hold nothing back.
   await attempt("family_invites", async () => {
     const live = await liveInviteTokens(supabase, orgId, now);
     const keepLive = (chain: DeleteChain) =>

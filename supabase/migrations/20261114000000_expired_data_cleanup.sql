@@ -44,6 +44,9 @@ begin
   end if;
 end $$;
 
+comment on table public.group_invites is
+  'A link into one group. token is the plaintext the link carries; the row is read by the service client on /join/<token> and is the org anchor for everything that follows. Dead when revoked_at is set, expires_at has passed, or group_invite_uses holds max_uses rows. The nightly clean-up-expired-data job deletes it 90 days after it is revoked or expires; no client can delete it.';
+
 -- 09:00 UTC is the early hours across the US, clear of the 15:00 UTC reminders.
 select private.schedule_edge_reminder(
   'clean-up-expired-data-nightly',
