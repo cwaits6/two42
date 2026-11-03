@@ -29,6 +29,7 @@ export async function removeAvatarObjects(orgId: string, keys: string[]): Promis
   let removed = new Set<string>();
   try {
     const service = await createServiceClient();
+    // org-anchor: storage.objects has no org_id; the keys were checked against orgId above
     const { data, error } = await service.storage.from("avatars").remove(allowed);
     if (error) throw new Error(error.message);
     removed = new Set((data ?? []).map((object) => object.name));
