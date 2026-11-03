@@ -173,7 +173,7 @@ select public.family_members_retire_child_details();
 -- gates a direct call the same way the directory is gated. Each subselect in the gate
 -- runs once per call however many people are listed. OFFSET 0 and the gate's reference
 -- to fm keep the planner from checking it before the scan, so a household listing
--- nobody, the common case, doesn't pay for it.
+-- nobody doesn't pay for it.
 create function public.family_directory_people(_family_id uuid)
   returns jsonb
   language sql
