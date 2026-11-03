@@ -396,7 +396,7 @@ select is(pg_temp.attempt('member', pg_temp.assign_sql('n_admins', 'member')), '
   'admins mode: only a leader assigns a fund with no recipient');
 select is(pg_temp.state(pg_temp.fx('n_admins')), 'none|none|no role|review|active', 'and it still has no recipient');
 
--- A flag cleared on the way out of the group is still cleared in the group that set it.
+-- Leading the group a fund moves to doesn't count: the flag belongs to the group that set it.
 select pg_temp.set_mode('stewards');
 insert into public.group_members (org_id, group_id, profile_id) values (pg_temp.fx('org'), pg_temp.fx('group'), pg_temp.fx('recipient'));
 insert into fx values ('hop', pg_temp.new_fund('Hop', 'recipient', 'second'));

@@ -167,9 +167,9 @@ begin
     _result.promoted, _result.no_recipient, _result.second_person_removed;
 end $$;
 
--- Every member could read every fund and its handles directly, so the Give page
--- filter alone wouldn't close a paused fund. Its recipient keeps read access so
--- they can correct the payment methods.
+-- A member's direct read has to be closed too: the Give page filter alone would
+-- leave a paused fund's handles readable. Its recipient keeps read access so they
+-- can correct the payment methods.
 drop policy "Group members can view giving funds" on public.giving_funds;
 create policy "Group members can view giving funds"
   on public.giving_funds for select to authenticated
@@ -198,7 +198,7 @@ create policy "Group members can view fund methods"
   );
 
 -- The profile delete at the end of delete_person() applies the fund rules through
--- the foreign keys and the triggers above, so it no longer moves funds itself.
+-- the foreign keys and the triggers above, so this body leaves funds to them.
 create or replace function public.delete_person(_person_id uuid, _org_id uuid)
   returns jsonb
   language plpgsql security definer set search_path = ''

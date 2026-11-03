@@ -241,7 +241,7 @@ trigger functions that write `giving_funds`, and a backfill function. All three
   check, and only a person outside the fund's group matches, so a second run
   changes nothing.
 
-`delete_person()` no longer writes `giving_funds`: its profile delete reaches
+`delete_person()` doesn't write `giving_funds`: its profile delete reaches
 the same rules through the composite foreign keys (`on delete set null
 (steward_id)`) and the membership trigger, in either firing order. Proved in
 `supabase/tests/giving_recipients_suite.sql`.
