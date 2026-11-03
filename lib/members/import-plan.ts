@@ -269,11 +269,12 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     new Set([personKey(row), personKey(fileRowOf.get(row)!)]);
   const yearlessKeys = (row: MemberRow): Set<string> =>
     new Set([yearlessKey(row), yearlessKey(fileRowOf.get(row)!)]);
-  // A row naming another relationship keeps its year in the key, so it stays
-  // apart from a child who shares the name and birthday. Nothing stored says it
-  // isn't that child mislabelled, so the create path warns.
+  // A row naming another relationship, or a blank one with a year, keeps that year
+  // in the key, so it stays apart from a child who shares the name and birthday.
+  // Nothing stored says it isn't that child, so the create path warns.
   const matchesFamilyMember = (row: MemberRow, member: SnapshotFamilyMember): boolean =>
-    isChildWithoutAccount(member) && (row.relationship === null || row.relationship === "child")
+    isChildWithoutAccount(member) &&
+    (row.relationship === "child" || (row.relationship === null && row.birth_year === null))
       ? yearlessKeys(row).has(yearlessKey(member))
       : identityKeys(row).has(personKey(member));
 
@@ -737,7 +738,12 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
       if (resolution.error === null && resolution.familyId !== null) {
         const shadow = (
           familyMembersByFamily.get(resolution.familyId) ?? []
-        ).some((member) => matchesFamilyMember(row, member));
+        ).some((member) =>
+          // A blank relationship can't say this person is that child.
+          row.relationship === null
+            ? identityKeys(row).has(personKey(member))
+            : matchesFamilyMember(row, member)
+        );
         if (shadow) {
           fail(row, {
             code: "HAS_LOGIN_CHANGE",
