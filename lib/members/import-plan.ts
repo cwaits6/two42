@@ -269,8 +269,10 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     new Set([personKey(row), personKey(fileRowOf.get(row)!)]);
   const yearlessKeys = (row: MemberRow): Set<string> =>
     new Set([yearlessKey(row), yearlessKey(fileRowOf.get(row)!)]);
+  // The year is dropped only when the row could be that child: a row naming
+  // another relationship is someone else who shares the name and birthday.
   const matchesFamilyMember = (row: MemberRow, member: SnapshotFamilyMember): boolean =>
-    isChildWithoutAccount(member)
+    isChildWithoutAccount(member) && (row.relationship === null || row.relationship === "child")
       ? yearlessKeys(row).has(yearlessKey(member))
       : identityKeys(row).has(personKey(member));
 
@@ -421,7 +423,6 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
   // ---- step 2: in-file duplicates ---------------------------------------
   const seenEmails = new Set<string>();
   const seenPeople = new Set<string>();
-  const seenChildren = new Set<string>();
   for (const row of rows) {
     if (row.email !== null) {
       const key = norm(row.email);
@@ -447,18 +448,6 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
         });
       }
       seenPeople.add(key);
-      // Rows that differ only in a year name two children no stored field can
-      // tell apart, so neither row can be planned.
-      if (row.relationship === "child") {
-        const childKey = [groupKey(row), yearlessKey(fileRowOf.get(row)!)].join("\u0000");
-        if (seenChildren.has(childKey) && resultByRow.get(row)!.errors.length === 0) {
-          fail(row, {
-            code: "AMBIGUOUS_MATCH",
-            message: "another row in this file has a child in the same household with the same name and birthday",
-          });
-        }
-        seenChildren.add(childKey);
-      }
     }
   }
 
@@ -611,11 +600,31 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     matchedFamilyMember.set(row, member);
   }
 
+  // Rows that differ only in a year name two children no stored field can tell
+  // apart, so neither row can be planned. A child with an account keeps a year,
+  // which does tell them apart.
+  const seenChildren = new Set<string>();
+  for (const row of rows) {
+    if (row.has_login || row.relationship !== "child") continue;
+    if (matchedFamilyMember.get(row)?.claimed_profile_id) continue;
+    const key = [groupKey(row), yearlessKey(fileRowOf.get(row)!)].join("\u0000");
+    if (seenChildren.has(key) && resultByRow.get(row)!.errors.length === 0) {
+      fail(row, {
+        code: "AMBIGUOUS_MATCH",
+        message: "another row in this file has a child in the same household with the same name and birthday",
+      });
+    }
+    seenChildren.add(key);
+  }
+
+  // Judged on what the row leaves stored, since it can relabel the person.
   const birthYearIgnored = (row: MemberRow): boolean => {
+    if (row.has_login) return false;
     const member = matchedFamilyMember.get(row);
-    return member !== undefined
-      ? isChildWithoutAccount(member)
-      : !row.has_login && row.relationship === "child";
+    return isChildWithoutAccount({
+      relationship: row.relationship ?? member?.relationship ?? null,
+      claimed_profile_id: member?.claimed_profile_id,
+    });
   };
 
   // A birthday needs its month and day together. Checked against the match, not
@@ -1093,6 +1102,20 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     if (row.relationship !== null && row.relationship !== member.relationship) {
       changes.relationship = [member.relationship, row.relationship];
       values.relationship = row.relationship;
+      // The database clears the year on this write, and a Rock pull won't bring
+      // it back, so the plan has to show it.
+      if (
+        isChildWithoutAccount({
+          relationship: row.relationship,
+          claimed_profile_id: member.claimed_profile_id,
+        }) &&
+        member.birth_year !== null
+      ) {
+        changes.birth_year = [member.birth_year, null];
+        result.warnings.push(
+          "this row makes them a child without an account, so their stored birth_year is removed"
+        );
+      }
     }
     if (
       row.is_class_member !== null &&
