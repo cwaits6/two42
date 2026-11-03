@@ -69,6 +69,7 @@ export interface SnapshotFamilyMember {
   birth_year: number | null;
   relationship: string;
   is_class_member: boolean;
+  claimed_profile_id: string | null;
 }
 
 export interface SnapshotGroup {
@@ -100,7 +101,7 @@ const PROFILE_COLUMNS =
   "id, email, role, relationship, first_name, last_name, preferred_name, phone_mobile, phone_home, phone_work, birth_month, birth_day, birth_year, address_line1, address_line2, city, state, postal_code, occupation, employer, family_id, is_unlisted, email_announcements, hide_email";
 
 const FAMILY_MEMBER_COLUMNS =
-  "id, family_id, first_name, last_name, preferred_name, birth_month, birth_day, birth_year, relationship, is_class_member";
+  "id, family_id, first_name, last_name, preferred_name, birth_month, birth_day, birth_year, relationship, is_class_member, claimed_profile_id";
 
 /**
  * Load one org's roster. Throws on any query error with a message naming the

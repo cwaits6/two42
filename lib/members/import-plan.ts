@@ -30,6 +30,7 @@
 import type { MemberRow } from "@/lib/members/format";
 import { anniversaryCell, parseAnniversaryCell, withoutHiddenValues } from "@/lib/members/format";
 import { retiredFlagResets } from "@/lib/members/retiredHideFlags";
+import { isChildWithoutAccount } from "@/lib/household";
 import type {
   OrgSnapshot,
   SnapshotFamilyMember,
@@ -242,6 +243,11 @@ function personKey(person: {
   ].join("\u0000");
 }
 
+/** A child without an account has no stored year, so the year can't identify them. */
+function yearlessKey(person: Parameters<typeof personKey>[0]): string {
+  return personKey({ ...person, birth_year: null });
+}
+
 interface HouseholdResolution {
   familyId: string | null;
   /** Set when the household must be created in this run. */
@@ -261,6 +267,12 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
   // add the person a second time.
   const identityKeys = (row: MemberRow): Set<string> =>
     new Set([personKey(row), personKey(fileRowOf.get(row)!)]);
+  const yearlessKeys = (row: MemberRow): Set<string> =>
+    new Set([yearlessKey(row), yearlessKey(fileRowOf.get(row)!)]);
+  const matchesFamilyMember = (row: MemberRow, member: SnapshotFamilyMember): boolean =>
+    isChildWithoutAccount(member)
+      ? yearlessKeys(row).has(yearlessKey(member))
+      : identityKeys(row).has(personKey(member));
 
   // ---- snapshot lookups --------------------------------------------------
   const profilesByEmail = new Map<string, SnapshotProfile[]>();
@@ -287,7 +299,7 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
   // new person there (see the HOUSEHOLD_MOVE check).
   const familyMembersByPerson = new Map<string, SnapshotFamilyMember[]>();
   for (const member of snapshot.familyMembers) {
-    const key = personKey(member);
+    const key = isChildWithoutAccount(member) ? yearlessKey(member) : personKey(member);
     familyMembersByPerson.set(key, [
       ...(familyMembersByPerson.get(key) ?? []),
       member,
@@ -409,6 +421,7 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
   // ---- step 2: in-file duplicates ---------------------------------------
   const seenEmails = new Set<string>();
   const seenPeople = new Set<string>();
+  const seenChildren = new Set<string>();
   for (const row of rows) {
     if (row.email !== null) {
       const key = norm(row.email);
@@ -434,6 +447,18 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
         });
       }
       seenPeople.add(key);
+      // Rows that differ only in a year name two children no stored field can
+      // tell apart, so neither row can be planned.
+      if (row.relationship === "child") {
+        const childKey = [groupKey(row), yearlessKey(fileRowOf.get(row)!)].join("\u0000");
+        if (seenChildren.has(childKey) && resultByRow.get(row)!.errors.length === 0) {
+          fail(row, {
+            code: "AMBIGUOUS_MATCH",
+            message: "another row in this file has a child in the same household with the same name and birthday",
+          });
+        }
+        seenChildren.add(childKey);
+      }
     }
   }
 
@@ -560,10 +585,9 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     if (row.has_login) continue;
     const resolution = resolutions.get(groupKey(row))!;
     if (resolution.error !== null || resolution.familyId === null) continue;
-    const rowKeys = identityKeys(row);
     const candidates = (
       familyMembersByFamily.get(resolution.familyId) ?? []
-    ).filter((member) => rowKeys.has(personKey(member)));
+    ).filter((member) => matchesFamilyMember(row, member));
     if (candidates.length > 1) {
       fail(row, {
         code: "AMBIGUOUS_MATCH",
@@ -587,12 +611,20 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     matchedFamilyMember.set(row, member);
   }
 
+  const birthYearIgnored = (row: MemberRow): boolean => {
+    const member = matchedFamilyMember.get(row);
+    return member !== undefined
+      ? isChildWithoutAccount(member)
+      : !row.has_login && row.relationship === "child";
+  };
+
   // A birthday needs its month and day together. Checked against the match, not
   // just the cells: a blank cell means "not provided", so a year alone is a fine
   // update to a stored month and day, and an org's own export must stay
   // importable when a stored birthday is already incomplete.
   for (const row of rows) {
-    const cells = [row.birth_month, row.birth_day, row.birth_year];
+    const year = birthYearIgnored(row) ? null : row.birth_year;
+    const cells = [row.birth_month, row.birth_day, year];
     if (cells.every((cell) => cell === null) || cells.some(Number.isNaN)) continue;
     const stored = matchedProfile.get(row) ?? matchedFamilyMember.get(row);
     const month = row.birth_month ?? stored?.birth_month ?? null;
@@ -601,7 +633,7 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
       stored !== undefined &&
       month === stored.birth_month &&
       day === stored.birth_day &&
-      (row.birth_year === null || row.birth_year === stored.birth_year);
+      (year === null || year === stored.birth_year);
     if (month !== null && day !== null) continue;
     if (unchanged) continue;
     fail(row, {
@@ -686,9 +718,7 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
       if (resolution.error === null && resolution.familyId !== null) {
         const shadow = (
           familyMembersByFamily.get(resolution.familyId) ?? []
-        ).some(
-          (member) => identityKeys(row).has(personKey(member))
-        );
+        ).some((member) => matchesFamilyMember(row, member));
         if (shadow) {
           fail(row, {
             code: "HAS_LOGIN_CHANGE",
@@ -759,6 +789,10 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
       continue;
     }
 
+    if (row.birth_year !== null && birthYearIgnored(row)) {
+      result.warnings.push("birth_year is not stored for a child without an account");
+    }
+
     const member = matchedFamilyMember.get(row);
     if (member !== undefined) {
       planFamilyMemberUpdate(row, result, member);
@@ -807,9 +841,12 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     // and how it interacts with household_primary — product questions this
     // module should not answer by guessing. Failing names both households so
     // the admin can do it deliberately in the app.
-    const existingElsewhere = [...identityKeys(row)]
+    const existingElsewhere = [...identityKeys(row), ...yearlessKeys(row)]
       .flatMap((key) => familyMembersByPerson.get(key) ?? [])
-      .filter((member) => member.family_id !== resolution.familyId);
+      .filter(
+        (member) =>
+          member.family_id !== resolution.familyId && matchesFamilyMember(row, member)
+      );
     if (existingElsewhere.length > 0) {
       fail(row, {
         code: "HOUSEHOLD_MOVE",
@@ -836,7 +873,7 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     if (row.preferred_name !== null) values.preferred_name = row.preferred_name;
     if (row.birth_month !== null) values.birth_month = row.birth_month;
     if (row.birth_day !== null) values.birth_day = row.birth_day;
-    if (row.birth_year !== null) values.birth_year = row.birth_year;
+    if (row.birth_year !== null && !birthYearIgnored(row)) values.birth_year = row.birth_year;
     if (row.is_class_member !== null) values.is_class_member = row.is_class_member;
     familyMemberWrites.push({
       kind: "insert_family_member",

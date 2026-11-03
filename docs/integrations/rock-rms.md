@@ -38,7 +38,7 @@ existing pure parser:
 | `PhoneNumbers[Mobile]` | `phone_mobile` |
 | `PhoneNumbers[Home]` | `phone_home` |
 | `PhoneNumbers[Work]` | `phone_work` |
-| `Person.BirthMonth` / `BirthDay` / `BirthYear` | `birth_month` / `birth_day` / `birth_year` |
+| `Person.BirthMonth` / `BirthDay` / `BirthYear` | `birth_month` / `birth_day` / `birth_year` — **not stored for a child without an account, see below** |
 | `Group(Family).Name` | `household_name` |
 | `GroupMember.GroupRole` (Adult/Child) | `relationship` — **not a fixed mapping, see Q2** |
 | `Group(Family).GroupLocation` | `address_line1` … `postal_code` |
@@ -55,6 +55,16 @@ row, so group assignments remain entirely admin-managed in two42. In the single
 `hidden_fields` column, `email` sets `hide_email`; every other token means the
 row's value for that field isn't stored at all. Rock has no concept
 corresponding to any of them.
+
+### `birth_year` for a child without an account
+
+A row with `relationship = child` and no account behind it has no stored birth
+year. The `birth_year` cell of such a row is ignored, with a warning on the row,
+and the member export leaves it blank. The row matches an existing child on name,
+month and day. Two same-named children with one birthday in a household are an
+`AMBIGUOUS_MATCH` error, whether they are stored or both in the file, and never a
+silent merge. Adults, and a child with an account, keep their birth year and
+match on name, month, day and year as before.
 
 ## Integration shape (v1: pull-only)
 
