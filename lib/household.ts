@@ -8,7 +8,9 @@ export function canEditSpouseProfiles(profile: Pick<Profile, "relationship">): b
 /**
  * The smallest explicit rule available without collecting a birth date: someone
  * listed as a child with no account of their own. A child with an account is an
- * adult child, which is what "Child (adult)" means when linking a member.
+ * adult child, which is what "Child (adult)" means when linking a member. The
+ * family_members triggers and family_directory_people() enforce the same
+ * predicate in SQL, and nothing binds the two: change them together.
  */
 export function isChildWithoutAccount(person: {
   relationship: string | null;

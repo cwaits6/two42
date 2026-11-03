@@ -263,9 +263,9 @@ caller resolved from `auth.uid()` only, EXECUTE revoked from `public` and
   with any profile in the given household, in the caller's org.
 
 Every `group_members` read in them carries `org_id =
-public.app_current_org_id()`. They are called by the `profiles`,
-`family_units` and `family_members` SELECT policies — see "Directory
-visibility" in [`tenancy-model.md`](tenancy-model.md). None writes.
+public.app_current_org_id()`. They are called by the `profiles` and
+`family_units` SELECT policies and by `family_directory_people()` — see
+"Directory visibility" in [`tenancy-model.md`](tenancy-model.md). None writes.
 
 `handle_new_user()` (the auth signup trigger, `SECURITY DEFINER`) writes
 the new `profiles` row and, for a non-pending profile, `group_members`:

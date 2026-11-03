@@ -2,6 +2,7 @@
 -- relationship 'child' and no claimed account is a child without an account: its
 -- birth year is not stored, it can't be invited to an account, and other members
 -- read a household's people only through what the directory shows.
+-- isChildWithoutAccount() in lib/household.ts states the same predicate for the app.
 --
 -- The triggers come before the sweep. CREATE TRIGGER waits for in-flight writers,
 -- so a write committed before it is visible to the sweep and one after it meets

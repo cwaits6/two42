@@ -11,19 +11,31 @@ const HOUSEHOLD_CARD = `/directory/families?family=${HOUSEHOLD}`;
 const ADDED_CHILD = "Nameonly";
 const NOTICE = "Everything you add here shows in the directory. Leave out anything you don't want shown.";
 const CHILD_NOTICE = /You don't have to list a child\. .*can't be invited to their own account/;
+const AGE_NOTICE = "You must be 13 or older to have an account.";
+const INVITED_ADULT = "Invitedadult";
+const FAMILY_INVITE_TOKEN = "e2e00000-0000-4000-8000-000000000156";
+const SIGNUP_TOKEN = "e2e-children-directory-signup-token";
 
-function removeAddedChild() {
+function runSql(sql: string) {
   execFileSync(
     "docker",
     ["exec", "-i", DB_CONTAINER, "psql", "-U", "postgres", "-d", "postgres",
-      "-v", "ON_ERROR_STOP=1", "-q", "-c",
-      `delete from public.family_members where family_id = '${HOUSEHOLD}' and first_name = '${ADDED_CHILD}';`],
+      "-v", "ON_ERROR_STOP=1", "-q", "-c", sql],
     { stdio: ["ignore", "ignore", "inherit"] },
   );
 }
 
-test.beforeAll(removeAddedChild);
-test.afterAll(removeAddedChild);
+// Deleting the household member takes their invite with it.
+function removeAddedRows() {
+  runSql(`
+    delete from public.access_requests where signup_token = '${SIGNUP_TOKEN}';
+    delete from public.family_members where family_id = '${HOUSEHOLD}'
+      and first_name in ('${ADDED_CHILD}', '${INVITED_ADULT}');
+  `);
+}
+
+test.beforeAll(removeAddedRows);
+test.afterAll(removeAddedRows);
 
 test.describe("a parent adding a child", () => {
   test.use({ persona: "householdPrimary" });
@@ -100,5 +112,37 @@ test("a church admin still lists a household's children with their labels", asyn
     await expect(dialog.getByLabel("Birthday year")).toHaveCount(0);
   } finally {
     await admin.context.close();
+  }
+});
+
+test("every form that creates an account states the 13 or older requirement", async ({ browser, baseURL }) => {
+  runSql(`
+    with household as (
+      select id, org_id from public.family_units where id = '${HOUSEHOLD}'
+    ), adult as (
+      insert into public.family_members (family_id, org_id, first_name, relationship)
+      select id, org_id, '${INVITED_ADULT}', 'other' from household
+      returning id, family_id, org_id
+    )
+    insert into public.family_invites (family_member_id, family_id, org_id, invite_email, token)
+    select id, family_id, org_id, 'invited-adult@example.test', '${FAMILY_INVITE_TOKEN}' from adult;
+    insert into public.access_requests (name, email, status, signup_token, token_expires_at, org_id)
+    select '${INVITED_ADULT}', 'signup-notice@example.test', 'approved', '${SIGNUP_TOKEN}',
+      now() + interval '1 hour', org_id
+    from public.family_units where id = '${HOUSEHOLD}';
+  `);
+
+  const anonymous = await browser.newContext({ baseURL });
+  try {
+    const page = await anonymous.newPage();
+    await page.goto(`/join/family/${FAMILY_INVITE_TOKEN}`);
+    await expect(page.getByRole("heading", { name: "Join your household" })).toBeVisible();
+    await expect(page.getByText(AGE_NOTICE)).toBeVisible();
+
+    await page.goto(`/setup-account?token=${SIGNUP_TOKEN}`);
+    await expect(page.getByRole("button", { name: "Create account" })).toBeVisible();
+    await expect(page.getByText(AGE_NOTICE)).toBeVisible();
+  } finally {
+    await anonymous.close();
   }
 });
