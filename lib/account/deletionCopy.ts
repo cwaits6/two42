@@ -46,6 +46,19 @@ export function refusalMessage(error: unknown, subject: DeletionSubject): string
   return undefined;
 }
 
+/**
+ * For a response that means there's nothing left to delete: someone else got there
+ * first, or a self-delete's session ended with its account. A 401 for a person acting
+ * on someone else is only their own expired session.
+ */
+export function alreadyGoneMessage(status: number, subject: DeletionSubject): string | undefined {
+  if (status === 404) {
+    return subject === "self" ? "Your account is already deleted." : "That account is already deleted.";
+  }
+  if (status === 401 && subject === "self") return "You're signed out.";
+  return undefined;
+}
+
 export function photosNotRemovedMessage(count: number, subject: DeletionSubject): string {
   const photos = count === 1 ? "1 photo is" : `${count} photos are`;
   return subject === "self"

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  alreadyGoneMessage,
   deletionCopy,
   DOWNLOAD_LEAVES_OUT,
   photosNotRemovedMessage,
@@ -129,5 +130,16 @@ describe("photosNotRemovedMessage", () => {
   it("says the account is gone and how many photos aren't", () => {
     expect(photosNotRemovedMessage(1, "self")).toContain("deleted, but 1 photo is still stored");
     expect(photosNotRemovedMessage(2, "other")).toContain("deleted, but 2 photos are still stored");
+  });
+});
+
+describe("alreadyGoneMessage", () => {
+  it("is only for a 404, and a self-delete's 401", () => {
+    expect(alreadyGoneMessage(404, "self")).toBe("Your account is already deleted.");
+    expect(alreadyGoneMessage(404, "other")).toBe("That account is already deleted.");
+    expect(alreadyGoneMessage(401, "self")).toBe("You're signed out.");
+    expect(alreadyGoneMessage(401, "other")).toBeUndefined();
+    expect(alreadyGoneMessage(500, "self")).toBeUndefined();
+    expect(alreadyGoneMessage(200, "self")).toBeUndefined();
   });
 });
