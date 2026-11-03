@@ -1,7 +1,6 @@
 import { deletePerson, deletionResponse, loadDeletionSummary } from "@/lib/account/deletion";
+import { isUuid } from "@/lib/groups/active";
 import { requireOrgAdmin } from "@/lib/members/access";
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -17,7 +16,7 @@ export async function GET(_request: Request, { params }: Params) {
   const gate = await requireOrgAdmin();
   if (!gate.ok) return denied(gate.status);
   const { id } = await params;
-  if (!UUID.test(id)) return notFound();
+  if (!isUuid(id)) return notFound();
   try {
     const summary = await loadDeletionSummary(gate.orgId, id);
     return summary ? Response.json(summary) : notFound();
@@ -31,6 +30,6 @@ export async function DELETE(_request: Request, { params }: Params) {
   const gate = await requireOrgAdmin();
   if (!gate.ok) return denied(gate.status);
   const { id } = await params;
-  if (!UUID.test(id)) return notFound();
+  if (!isUuid(id)) return notFound();
   return deletionResponse(await deletePerson(gate.orgId, id));
 }
