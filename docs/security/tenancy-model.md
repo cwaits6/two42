@@ -381,6 +381,18 @@ are what keep an org admin away from `name`, `status` and
 and `directory_visibility_suite.sql` pins the read matrix, the helper
 truth table, the signup enrolment rule and the admin-only write.
 
+### Old prayer requests
+
+`organizations.prayer_request_retention_months integer check (in (6, 12, 24))`
+(`20261114000000_expired_data_cleanup.sql`) has the same grants as
+`timezone`: `anon` none, `authenticated` column SELECT and UPDATE, with the one
+org-settings UPDATE policy confining writes to the org's own admin. NULL keeps
+prayer requests and the column has no default, so a church is off until its
+admin chooses a period. The `clean-up-expired-data` edge function reads the
+value in its own org-filtered query, not on `listActiveOrgs()`: functions deploy
+before migrations, and a missing column on that shared select would stop the
+reminder jobs for the window. `prayer_retention_suite.sql` pins the matrix.
+
 ### Group creation
 
 Who may start a group is an org setting read by RLS and by a definer
@@ -982,7 +994,8 @@ table's own FK.
   records that `status` is deliberately **not** consulted by either org
   helper, so suspending an org does not cut its members' access;
   `listActiveOrgs()` (`supabase/functions/_shared/orgs.ts`) still skips
-  suspended orgs, so a suspended tenant stops receiving reminder email; and
+  suspended orgs, so a suspended tenant stops receiving reminder email and
+  its expired data waits for the first nightly cleanup after it returns; and
   the `/platform` operator surfaces read the column to display it and write
   it to set it, which is reporting and editing, not enforcement.
   Enforcement of a member-facing access cut belongs to Phase 4's suspend

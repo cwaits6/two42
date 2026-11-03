@@ -438,7 +438,9 @@ assertions in their bodies are the tenant boundary; no lint sees them**.
   already has an account anywhere or an approved request or unclaimed
   family invite in another org (`GI003`, existence checks only — a setup
   link could never work for it), and an address an org admin denied in
-  this org (`GI004`). It then writes the approved `access_requests` row
+  this org (`GI004`). That refusal only lasts as long as the denied row: the
+  nightly cleanup deletes the row 90 days after `reviewed_at`, so a decline
+  blocks group links for 90 days. It then writes the approved `access_requests` row
   (`reviewed_by` = the link's creator, `group_id`, `group_invite_id`, the
   minted `signup_token`) and one `group_invite_uses` row, both carrying the
   invite's `org_id`. A repeat submission by the same lower-cased address
@@ -465,9 +467,10 @@ assertions in their bodies are the tenant boundary; no lint sees them**.
 policies for the group's leaders and org admins — SELECT, INSERT
 (`created_by` must be the caller, `revoked_at` null) and UPDATE confined by
 column grant to `revoked_at`, whose `WITH CHECK` refuses to clear it again.
-No DELETE policy and no DELETE privilege: links are the audit trail. `anon`
-holds no privilege on either table. `group_invite_uses` has one SELECT
-policy (the same readers) and no client write grant at all; only the
+No DELETE policy and no DELETE privilege, so a link stays as the audit trail
+until the nightly `clean-up-expired-data` job deletes it and its uses, 90 days
+after it is revoked or expires. `anon` holds no privilege on either table.
+`group_invite_uses` has one SELECT policy (the same readers) and no client write grant at all; only the
 functions above and the trigger write it.
 
 The app-side call sites: `app/api/join/[token]/route.ts` calls
@@ -667,30 +670,30 @@ whatever the session resolves, and an anonymous request resolves none.
 authenticated session before ever calling `getOrgBranding()` so an anonymous
 request is branded with the platform defaults without a query.
 
-## Edge Functions (2 sites)
+## Edge Functions (3 sites)
 
-Both run with no session context and resolve the service key
+All three run with no session context and resolve the service key
 from configured environment variables: a manual `SUPABASE_SECRET_KEY` override
 (local/self-host only — the hosted platform reserves the prefix), then the
 platform-injected `SUPABASE_SECRET_KEYS` map, then the legacy
 `SUPABASE_SERVICE_ROLE_KEY` (see `resolveServiceKey()` in
-`supabase/functions/_shared/service-key.ts`, shared by both), not
-`createServiceClient()`. Both are cron-triggered.
+`supabase/functions/_shared/service-key.ts`, shared by all three), not
+`createServiceClient()`. All three are cron-triggered.
 
-Tenant iteration is `listActiveOrgs()` + `forEachOrg()`
-(`supabase/functions/_shared/orgs.ts`). `listActiveOrgs()` filters
+Tenant iteration is `listActiveOrgs()` (`supabase/functions/_shared/orgs.ts`),
+with `forEachOrg()` for the reminder functions. `listActiveOrgs()` filters
 `organizations` on `.eq("status", "active")`, so a **suspended org is
 skipped** — a suspended tenant must not email its members. This is currently
 the only place `organizations.status` changes what happens *to a tenant*: it
 gates no access path and no org helper consults it, so suspending an org
-stops its reminder email and nothing else. The platform surfaces in the
+stops its reminder email and its nightly cleanup, and nothing else. The platform surfaces in the
 table above do read and write the column — `app/platform/page.tsx` and
 `app/platform/organizations/**` display it, and the platform org route sets
 it — but that is the operator UI reporting and editing the flag, not the
 flag enforcing anything (see
 [`tenancy-model.md`](tenancy-model.md), Known limits).
 
-Both functions iterate org → group → team. `send-event-reminders` lists the
+Both reminder functions iterate org → group → team. `send-event-reminders` lists the
 org's groups through `listGroups()` (`_shared/groups.ts`), reads each
 group's events on `org_id` + `group_id`, and resolves recipients through
 `resolveEventReminderRecipients()` (`_shared/event-recipients.ts`): RSVPs
@@ -737,6 +740,22 @@ outside its scan set entirely, so these calls are covered by review and by
 |------|--------------------------|-------------------------|------------|
 | `supabase/functions/send-event-reminders/index.ts` | Cron job; reads events/RSVPs and emails attendees with no user session | Reminder fan-out iterates all rows across orgs | **Implemented (Phase 3, #212):** iterates active orgs via `_shared/orgs.ts`, every query filtered on `org_id`, per-org failures isolated so one org cannot suppress another's send. **Group scope:** org → group iteration, events on `group_id`, recipients gated on current group membership, per-group failures in `failedItems[]`. **Branding (CWA-56, #322):** `organizations.branding` rides along on the already-org-anchored `listActiveOrgs()` select — no new service-role call site, no new unscoped query — and is validated by `_shared/branding.ts` (a mirror of `lib/branding.ts` + `lib/email/identity.ts`) before reaching any CSS or RFC 5322 sink. **Link origin:** every link is built on the one canonical host (the `SITE_URL` function secret) — no query. **Time zone:** `organizations.timezone` rides along on the same `listActiveOrgs()` select and formats the reminder's event time |
 | `supabase/functions/send-serving-reminders/index.ts` | Cron job; reads serving signups and emails assignees with no user session | Same as `send-event-reminders` | **Implemented (Phase 3, #212):** same per-org iteration and `org_id` filters; `resolveCanSign` org-scoped; `serving_broadcasts` audit rows stamped with the processed row's org, not a constant. **Branding (CWA-56, #322):** same `listActiveOrgs()` ride-along, validated by `_shared/branding.ts`. **Link origin:** the same canonical `SITE_URL`, threaded into every cancel/signup/team-page link. **Per-team isolation (CWA-50, #316):** a failing team is recorded in the run summary's `failedItems[]` keyed by `team_id` — ids, never org-defined team names, in operator diagnostics. **Group scope:** the link mode is per group (`group_settings` through `_shared/groups.ts`), every `serving_*` query is on `team_id`, and links open `/g/<group_id>/serving/<team_id>` |
+| `supabase/functions/clean-up-expired-data/index.ts` | Cron job; deletes expired requests, invites, feedback and, for a church that opted in, prayer requests, with no user session | A delete missing its filter removes another church's data for good | Refuses any caller but a service key. Iterates active orgs, one org-filtered delete per rule, failures isolated per step and per org. The rules and their boundaries are unit-tested in `tests/retention_test.ts` and `tests/cleanup_test.ts` |
+
+`clean-up-expired-data` deletes data unattended and cannot be undone, so it
+checks its own caller first: `isServiceKeyCaller()`
+(`_shared/caller-auth.ts`) compares the bearer token with every service key in
+the environment and anything else gets a 401. Every key, because the vault's
+`cron_service_role_key` may not be the one `resolveServiceKey()` picks. A 401
+in `net._http_response` means the vault key matches none of them, and nothing
+was deleted. `cleanUpOrg()` (`_shared/cleanup.ts`) runs one delete per rule, each
+with `.eq("org_id", orgId)` bound to an id from `listActiveOrgs()`, and reads
+the church's setting with `.eq("id", orgId)` on the tenant root. It logs and
+returns per-org counts only; a step that fails is reported with a 500, never as
+a zero, and the church's other rules and the other churches still run. The
+counts are rows the deletes matched: `group_invite_uses` and `prayer_responses`
+go with their parent through the foreign key and are not counted. It never
+deletes an `organizations` row.
 
 ## Operator scripts (1 site)
 

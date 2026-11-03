@@ -8,7 +8,9 @@ import { ErrorState } from "@/components/states/ErrorState";
 import { getDirectoryVisibility } from "@/lib/directory/visibility";
 import { givingStewardsCanManage } from "@/lib/giving/server";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { PrayerRetentionSettings } from "@/components/admin/PrayerRetentionSettings";
 import { TimezoneSettings } from "@/components/admin/TimezoneSettings";
+import { getPrayerRetention } from "@/lib/orgPrayerRetention";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { CUSTOM_SENDING_DOMAINS_ENABLED } from "@/lib/email/sendingDomains";
 
@@ -24,9 +26,10 @@ export async function ChurchSettings() {
     .single();
   if (profile?.role !== "admin") redirect("/dashboard");
 
-  const [stewardsCanManage, directoryVisibility] = await Promise.all([
+  const [stewardsCanManage, directoryVisibility, prayerRetention] = await Promise.all([
     givingStewardsCanManage(supabase, profile.org_id),
     getDirectoryVisibility(),
+    getPrayerRetention(),
   ]);
 
   return (
@@ -54,6 +57,12 @@ export async function ChurchSettings() {
       <GivingSettings stewardsCanManage={stewardsCanManage} />
       <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Events</h2>
       <TimezoneSettings orgId={profile.org_id} timezone={await getOrgTimeZone()} />
+      <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Prayer requests</h2>
+      {prayerRetention ? (
+        <PrayerRetentionSettings orgId={profile.org_id} retention={prayerRetention} />
+      ) : (
+        <ErrorState thing="the prayer request setting" />
+      )}
     </>
   );
 }
