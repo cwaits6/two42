@@ -10,16 +10,42 @@ export interface Failure {
   skip?: number;
 }
 
+type LikeToken = { any: true } | { one: true } | { literal: string };
+
+function likeTokens(pattern: string) {
+  const tokens: LikeToken[] = [];
+  for (let i = 0; i < pattern.length; i++) {
+    const char = pattern[i];
+    const next = pattern[i + 1];
+    if (char === "\\" && next !== undefined && "\\%_".includes(next)) {
+      tokens.push({ literal: next });
+      i++;
+    } else if (char === "%" || char === "*") tokens.push({ any: true });
+    else if (char === "_") tokens.push({ one: true });
+    else tokens.push({ literal: char });
+  }
+  return tokens;
+}
+
 // What PostgREST does with a pattern: `*` and `%` match any run, `_` one character.
 function ilikeMatches(value: unknown, pattern: string) {
   if (typeof value !== "string") return false;
-  const source = pattern.replace(/\\([\\%_])|([%*])|(_)|([.+?^${}()|[\]\\/-])/g, (_m, literal, any, one, special) => {
-    if (literal) return literal.replace(/[\\]/, "\\\\");
-    if (any) return ".*";
-    if (one) return ".";
-    return `\\${special}`;
-  });
-  return new RegExp(`^${source}$`, "i").test(value);
+  const text = value.toLowerCase();
+  // Every offset in the text that the tokens read so far can end at.
+  let ends = new Set([0]);
+  for (const token of likeTokens(pattern.toLowerCase())) {
+    const next = new Set<number>();
+    if ("any" in token) {
+      const from = Math.min(...ends);
+      for (let end = from; end <= text.length; end++) next.add(end);
+    } else {
+      for (const end of ends) {
+        if (end < text.length && ("one" in token || text[end] === token.literal)) next.add(end + 1);
+      }
+    }
+    ends = next;
+  }
+  return ends.has(text.length);
 }
 
 export function fakeService(tables: Tables) {
