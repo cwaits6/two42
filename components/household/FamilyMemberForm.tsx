@@ -25,6 +25,7 @@ import {
   birthdayErrors,
   type BirthdayErrors,
 } from "@/components/profile/birthday";
+import { RelabelChildConfirm, relabelToChildLoss } from "@/components/household/RelabelChildConfirm";
 import { isChildWithoutAccount } from "@/lib/household";
 import { titleCaseName } from "@/lib/sanitize";
 import { mintSignedUrl, uploadImage } from "@/lib/uploadImage";
@@ -73,6 +74,7 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
   const [avatarUrl, setAvatarUrl] = useState<string | null>(member?.avatar_url ?? null);
 
   const [saving, setSaving] = useState(false);
+  const [relabelLoss, setRelabelLoss] = useState<string | null>(null);
   const [errors, setErrors] = useState<FieldErrors>({});
   // An object, so a second submit with the same first error still refocuses.
   const [focusTarget, setFocusTarget] = useState<{ id: string } | null>(null);
@@ -158,8 +160,31 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
       return;
     }
 
+    if (member) {
+      setSaving(true);
+      let loss: string | null;
+      try {
+        loss = await relabelToChildLoss(member, relationship, first || "");
+      } catch (err) {
+        console.error(err);
+        toast.error(failureMessage(`save ${first}`));
+        setSaving(false);
+        return;
+      }
+      setSaving(false);
+      if (loss) {
+        setRelabelLoss(loss);
+        return;
+      }
+    }
+
+    await save();
+  }
+
+  async function save() {
     setSaving(true);
 
+    const first = titleCaseName(firstName);
     const last =
       familySurname && !differentLastName ? familySurname : titleCaseName(lastName);
 
@@ -172,7 +197,7 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
       is_class_member: isClassMember,
     };
 
-    const url = isNew ? "/api/household/members" : `/api/household/members/${member.id}`;
+    const url = member ? `/api/household/members/${member.id}` : "/api/household/members";
     const method = isNew ? "POST" : "PATCH";
 
     const res = await fetch(url, {
@@ -189,6 +214,7 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
     }
 
     toast.success(isNew ? `${first} added. Edit them to add a photo.` : `${first} saved.`);
+    setRelabelLoss(null);
     onSaved?.();
   }
 
@@ -300,7 +326,18 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
             <Select
               items={RELATIONSHIPS}
               value={relationship}
-              onValueChange={(v) => setRelationship(v as FamilyMemberRelationship)}
+              onValueChange={(v) => {
+                const next = v as FamilyMemberRelationship;
+                setRelationship(next);
+                if (
+                  isChildWithoutAccount({
+                    relationship: next,
+                    claimed_profile_id: member?.claimed_profile_id,
+                  })
+                ) {
+                  clearError("birth_year");
+                }
+              }}
             >
               <SelectTrigger id="relationship" className="w-full text-base py-5">
                 <SelectValue />
@@ -419,6 +456,12 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
           Cancel
         </Button>
       </div>
+      <RelabelChildConfirm
+        name={titleCaseName(firstName) || ""}
+        loss={relabelLoss}
+        onCancel={() => setRelabelLoss(null)}
+        onConfirm={save}
+      />
     </form>
   );
 }
