@@ -16,7 +16,7 @@ const { spouse } = PERSONAS;
 const HOUSEHOLD_CARD = `/directory/families?family=${HOUSEHOLD}`;
 const CHLOE_CARD = `/directory/families?person=${CHLOE}`;
 const ANNIVERSARIES = "/directory/anniversaries";
-const NOTICE = "Everything you add here shows in the directory, except a birth year. Leave out anything you don't want shown.";
+const NOTICE = "Everything you add here shows in the directory, except a birth year, which can only go into a phone contact someone saves. Leave out anything you don't want shown.";
 const WIDTHS = [390, 1280];
 
 const SEED_SQL = `
