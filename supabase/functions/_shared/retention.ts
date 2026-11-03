@@ -44,10 +44,11 @@ export function feedbackCutoff(now: Date): string {
  */
 export function prayerCutoff(months: unknown, now: Date): string | null {
   if (months === null) return null;
-  if (!PRAYER_RETENTION_MONTHS.some((offered) => offered === months)) {
+  const offered = PRAYER_RETENTION_MONTHS.find((period) => period === months);
+  if (offered === undefined) {
     throw new Error(`unknown prayer request period: ${String(months)}`);
   }
-  return monthsBefore(now, months as number).toISOString();
+  return monthsBefore(now, offered).toISOString();
 }
 
 /**

@@ -1,5 +1,5 @@
-// The periods match the column's CHECK and PRAYER_RETENTION_MONTHS in
-// supabase/functions/_shared/retention.ts; a new one lands on all three.
+// The column's CHECK and the job's PRAYER_RETENTION_MONTHS hold the same periods
+// across build boundaries this table can't reach; the test here keeps them equal.
 export const PRAYER_RETENTION_PERIODS = {
   6: "6 months",
   12: "1 year",
@@ -11,13 +11,21 @@ export type PrayerRetentionMonths = keyof typeof PRAYER_RETENTION_PERIODS;
 /** What the setting holds: the column's null reads as "off". */
 export type PrayerRetention = PrayerRetentionMonths | "off";
 
+const PRAYER_RETENTION_MONTHS = Object.keys(PRAYER_RETENTION_PERIODS).map(Number) as PrayerRetentionMonths[];
+
 export function isPrayerRetentionMonths(value: unknown): value is PrayerRetentionMonths {
-  return value === 6 || value === 12 || value === 24;
+  return PRAYER_RETENTION_MONTHS.some((months) => months === value);
+}
+
+/** Reads a select option's value; anything but an offered period is "off". */
+export function parsePrayerRetention(value: string): PrayerRetention {
+  const months = Number(value);
+  return isPrayerRetentionMonths(months) ? months : "off";
 }
 
 export const PRAYER_RETENTION_OPTIONS: { value: string; label: string }[] = [
   { value: "off", label: "Keep prayer requests" },
-  ...([6, 12, 24] as const).map((months) => ({
+  ...PRAYER_RETENTION_MONTHS.map((months) => ({
     value: String(months),
     label: `Delete after ${PRAYER_RETENTION_PERIODS[months]}`,
   })),

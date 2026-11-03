@@ -12,6 +12,7 @@ import { failureMessage } from "@/lib/errorCopy";
 import {
   PRAYER_RETENTION_OPTIONS,
   PRAYER_RETENTION_PERIODS,
+  parsePrayerRetention,
   prayerRetentionConfirmation,
   type PrayerRetention,
 } from "@/lib/prayerRetention";
@@ -34,13 +35,6 @@ export async function savePrayerRetention(
     .eq("id", orgId)
     .select("prayer_request_retention_months");
   return !error && (data?.length ?? 0) > 0;
-}
-
-function parseRetention(value: string): PrayerRetention {
-  if (value === "6") return 6;
-  if (value === "12") return 12;
-  if (value === "24") return 24;
-  return "off";
 }
 
 interface PrayerRetentionSettingsProps {
@@ -90,7 +84,7 @@ export function PrayerRetentionSettings({ orgId, retention }: PrayerRetentionSet
         <Select
           items={PRAYER_RETENTION_OPTIONS}
           value={String(selected)}
-          onValueChange={(value) => value && setSelected(parseRetention(value))}
+          onValueChange={(value) => value && setSelected(parsePrayerRetention(value))}
         >
           <SelectTrigger id="prayer-retention" className="w-full text-base sm:flex-1">
             <SelectValue>{selectedLabel}</SelectValue>
