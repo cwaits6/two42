@@ -1,6 +1,6 @@
 // Who may call a cron-triggered function. The gateway's JWT check alone can
-// let through any valid project JWT, which is not enough for a job that deletes
-// data or sends email.
+// let through any valid project JWT or API key, which is not enough for a job
+// that deletes data or sends email.
 
 const KEY_VARS = ["SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_ROLE_KEY"];
 
@@ -38,4 +38,21 @@ export function isServiceKeyCaller(req: Request): boolean {
   const match = /^Bearer (.+)$/.exec(req.headers.get("Authorization") ?? "");
   if (!match) return false;
   return serviceKeysFromEnv().some((key) => sameKey(key, match[1]));
+}
+
+/**
+ * Wraps a cron function's handler so it runs only for a service key caller.
+ * Anything else gets a 401 before the handler can read data or send email.
+ */
+export function serviceKeyCallerOnly(
+  handler: (req: Request) => Response | Promise<Response>,
+): (req: Request) => Response | Promise<Response> {
+  return (req) => {
+    if (isServiceKeyCaller(req)) return handler(req);
+    console.error("refused request: the bearer token is not a service key");
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
 }

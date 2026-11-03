@@ -15,6 +15,7 @@
 // package-lock.json resolves for ^2.103.3; bump both together (no Renovate
 // rule covers this URL).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.9";
+import { serviceKeyCallerOnly } from "../_shared/caller-auth.ts";
 import {
   formatFromHeader,
   parseAddress,
@@ -223,7 +224,7 @@ async function runForOrg(
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-Deno.serve(async () => {
+Deno.serve(serviceKeyCallerOnly(async () => {
   try {
     const supabase = createServiceClient();
     // Cast: structurally checking the full SupabaseClient against OrgListClient
@@ -268,4 +269,4 @@ Deno.serve(async () => {
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
-});
+}));

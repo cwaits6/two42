@@ -8,19 +8,12 @@
 // `supabase functions deploy` re-resolves this URL through its own bundler, so
 // the version must live in the specifier.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.9";
-import { isServiceKeyCaller } from "../_shared/caller-auth.ts";
+import { serviceKeyCallerOnly } from "../_shared/caller-auth.ts";
 import { type CleanupClient, cleanUpOrgs, summarizeCleanup } from "../_shared/cleanup.ts";
 import { listActiveOrgs, type OrgListClient } from "../_shared/orgs.ts";
 import { resolveServiceKey } from "../_shared/service-key.ts";
 
-Deno.serve(async (req) => {
-  if (!isServiceKeyCaller(req)) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
+Deno.serve(serviceKeyCallerOnly(async () => {
   try {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, resolveServiceKey());
     // Casts: structurally checking the full SupabaseClient against these narrow
@@ -43,4 +36,4 @@ Deno.serve(async (req) => {
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
-});
+}));

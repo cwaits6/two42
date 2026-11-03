@@ -738,17 +738,23 @@ outside its scan set entirely, so these calls are covered by review and by
 
 | File | Why service-role is used | Historical tenancy risk | Mitigation |
 |------|--------------------------|-------------------------|------------|
-| `supabase/functions/send-event-reminders/index.ts` | Cron job; reads events/RSVPs and emails attendees with no user session | Reminder fan-out iterates all rows across orgs | **Implemented (Phase 3, #212):** iterates active orgs via `_shared/orgs.ts`, every query filtered on `org_id`, per-org failures isolated so one org cannot suppress another's send. **Group scope:** org → group iteration, events on `group_id`, recipients gated on current group membership, per-group failures in `failedItems[]`. **Branding (CWA-56, #322):** `organizations.branding` rides along on the already-org-anchored `listActiveOrgs()` select — no new service-role call site, no new unscoped query — and is validated by `_shared/branding.ts` (a mirror of `lib/branding.ts` + `lib/email/identity.ts`) before reaching any CSS or RFC 5322 sink. **Link origin:** every link is built on the one canonical host (the `SITE_URL` function secret) — no query. **Time zone:** `organizations.timezone` rides along on the same `listActiveOrgs()` select and formats the reminder's event time |
-| `supabase/functions/send-serving-reminders/index.ts` | Cron job; reads serving signups and emails assignees with no user session | Same as `send-event-reminders` | **Implemented (Phase 3, #212):** same per-org iteration and `org_id` filters; `resolveCanSign` org-scoped; `serving_broadcasts` audit rows stamped with the processed row's org, not a constant. **Branding (CWA-56, #322):** same `listActiveOrgs()` ride-along, validated by `_shared/branding.ts`. **Link origin:** the same canonical `SITE_URL`, threaded into every cancel/signup/team-page link. **Per-team isolation (CWA-50, #316):** a failing team is recorded in the run summary's `failedItems[]` keyed by `team_id` — ids, never org-defined team names, in operator diagnostics. **Group scope:** the link mode is per group (`group_settings` through `_shared/groups.ts`), every `serving_*` query is on `team_id`, and links open `/g/<group_id>/serving/<team_id>` |
+| `supabase/functions/send-event-reminders/index.ts` | Cron job; reads events/RSVPs and emails attendees with no user session | Reminder fan-out iterates all rows across orgs | Refuses any caller but a service key. **Implemented (Phase 3, #212):** iterates active orgs via `_shared/orgs.ts`, every query filtered on `org_id`, per-org failures isolated so one org cannot suppress another's send. **Group scope:** org → group iteration, events on `group_id`, recipients gated on current group membership, per-group failures in `failedItems[]`. **Branding (CWA-56, #322):** `organizations.branding` rides along on the already-org-anchored `listActiveOrgs()` select — no new service-role call site, no new unscoped query — and is validated by `_shared/branding.ts` (a mirror of `lib/branding.ts` + `lib/email/identity.ts`) before reaching any CSS or RFC 5322 sink. **Link origin:** every link is built on the one canonical host (the `SITE_URL` function secret) — no query. **Time zone:** `organizations.timezone` rides along on the same `listActiveOrgs()` select and formats the reminder's event time |
+| `supabase/functions/send-serving-reminders/index.ts` | Cron job; reads serving signups and emails assignees with no user session | Same as `send-event-reminders` | Refuses any caller but a service key. **Implemented (Phase 3, #212):** same per-org iteration and `org_id` filters; `resolveCanSign` org-scoped; `serving_broadcasts` audit rows stamped with the processed row's org, not a constant. **Branding (CWA-56, #322):** same `listActiveOrgs()` ride-along, validated by `_shared/branding.ts`. **Link origin:** the same canonical `SITE_URL`, threaded into every cancel/signup/team-page link. **Per-team isolation (CWA-50, #316):** a failing team is recorded in the run summary's `failedItems[]` keyed by `team_id` — ids, never org-defined team names, in operator diagnostics. **Group scope:** the link mode is per group (`group_settings` through `_shared/groups.ts`), every `serving_*` query is on `team_id`, and links open `/g/<group_id>/serving/<team_id>` |
 | `supabase/functions/clean-up-expired-data/index.ts` | Cron job; deletes expired requests, invites, feedback and, for a church that opted in, prayer requests, with no user session | A delete missing its filter removes another church's data for good | Refuses any caller but a service key. Iterates active orgs, one org-filtered delete per rule, failures isolated per step and per org. The rules and their boundaries are unit-tested in `tests/retention_test.ts` and `tests/cleanup_test.ts` |
 
-`clean-up-expired-data` deletes data unattended and cannot be undone, so it
-checks its own caller first: `isServiceKeyCaller()`
-(`_shared/caller-auth.ts`) compares the bearer token with every service key in
-the environment and anything else gets a 401. Every key, because the vault's
-`cron_service_role_key` may not be the one `resolveServiceKey()` picks. A 401
-in `net._http_response` means the vault key matches none of them, and nothing
-was deleted. `cleanUpOrg()` (`_shared/cleanup.ts`) runs one delete per rule, each
+All three check their own caller first, because each acts unattended: the
+reminder jobs send email that cannot be recalled, and the cleanup job deletes
+data that cannot be restored. The gateway's JWT check does not stand in for this,
+since it also passes tokens that are not the scheduler's. Each handler is wrapped in
+`serviceKeyCallerOnly()` (`_shared/caller-auth.ts`), so nothing in it runs until
+`isServiceKeyCaller()` has compared the bearer token with every service key in
+the environment; anything else gets a 401 and a log line that names no token.
+Every key, because the vault's `cron_service_role_key` may not be the one
+`resolveServiceKey()` picks. A 401 in `net._http_response` means the vault key
+matches none of them, and nothing was sent or deleted. pg_cron, through
+`private.schedule_edge_reminder()`, is the only caller of these functions.
+
+`cleanUpOrg()` (`_shared/cleanup.ts`) runs one delete per rule, each
 with `.eq("org_id", orgId)` bound to an id from `listActiveOrgs()`, and reads
 the church's setting with `.eq("id", orgId)` on the tenant root. It logs and
 returns per-org counts only; a step that fails is reported with a 500, never as
