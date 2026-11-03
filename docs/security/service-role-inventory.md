@@ -564,7 +564,9 @@ Three `SECURITY DEFINER` functions in
   read-only over `family_members`. It has to see a row the caller can't, or naming
   another household's child would pass. It reads the member by `(id, org_id)` from
   the invite row, whose composite FK already ties the two together. A service-role
-  insert has no request org to read instead.
+  insert has no request org to read instead. The read takes `FOR SHARE`, so an invite
+  and a relabel to Child can't both commit: the later one waits for the earlier, then
+  this read sees the relabel or the retiring trigger below sees the invite.
 - `public.family_members_retire_child_invites()` is an AFTER UPDATE trigger on
   `family_members` that deletes that member's `family_invites` and the unused
   `access_requests` naming them. A primary can relabel someone but has no DELETE

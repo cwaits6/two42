@@ -1534,6 +1534,64 @@ describe("a child without an account", () => {
     expect(plan.writes).toEqual([]);
   });
 
+  describe.each([
+    ["zero", 0],
+    ["before 1900", 1800],
+    ["a future year", new Date().getFullYear() + 1],
+    ["non-numeric", Number.NaN],
+  ])("a birth_year that is %s", (_label, badYear) => {
+    it("is ignored with a warning on a child without an account", () => {
+      const matched = planImport([childRow({ birth_year: badYear })], snapshotWith(child()));
+      expect(matched.rows[0].errors).toEqual([]);
+      expect(matched.rows[0].action).toBe("no_change");
+      expect(matched.rows[0].warnings).toContain(YEAR_IGNORED);
+      expect(matched.writes).toEqual([]);
+
+      const created = planImport([childRow({ birth_year: badYear })], snapshotWith());
+      expect(created.rows[0].errors).toEqual([]);
+      expect(created.rows[0].warnings).toContain(YEAR_IGNORED);
+      const insert = created.writes.find((w) => w.kind === "insert_family_member");
+      expect(insert).toBeDefined();
+      expect(JSON.stringify(insert)).not.toContain("birth_year");
+    });
+
+    it("is ignored on a blank-relationship row that matches a stored child", () => {
+      const plan = planImport(
+        [childRow({ birth_year: badYear, relationship: null })],
+        snapshotWith(child()),
+      );
+      expect(plan.rows[0].errors).toEqual([]);
+      expect(plan.rows[0].warnings).toContain(YEAR_IGNORED);
+    });
+
+    it("still fails an adult's row", () => {
+      const plan = planImport(
+        [childRow({ birth_year: badYear, relationship: "spouse" })],
+        snapshotWith(),
+      );
+      expect(plan.rows[0].errors.map((e) => [e.code, e.field])).toEqual([
+        ["INVALID_BIRTH_PART", "birth_year"],
+      ]);
+      expect(plan.writes).toEqual([]);
+    });
+
+    it("still fails a blank-relationship row that matches nobody", () => {
+      const plan = planImport(
+        [childRow({ birth_year: badYear, relationship: null })],
+        snapshotWith(),
+      );
+      expect(plan.rows[0].errors.map((e) => e.code)).toEqual(["INVALID_BIRTH_PART"]);
+    });
+
+    it("still fails a child's row with a login", () => {
+      const plan = planImport(
+        [childRow({ birth_year: badYear, has_login: true, email: "lily@example.test" })],
+        snapshotWith(),
+      );
+      expect(plan.rows[0].errors.map((e) => e.code)).toContain("INVALID_BIRTH_PART");
+    });
+  });
+
   it("matches a row with no year", () => {
     const plan = planImport([childRow({ birth_year: null })], snapshotWith(child()));
     expect(plan.rows[0].action).toBe("no_change");

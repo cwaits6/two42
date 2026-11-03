@@ -350,6 +350,22 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
   // the wild, so export writes a blank cell for them — checking them here
   // made an org's own export unimportable, since one bad row 422s the file.
   const currentYear = new Date().getFullYear();
+  const checkBirthPart = (
+    row: MemberRow,
+    field: "birth_month" | "birth_day" | "birth_year",
+    min: number,
+    max: number
+  ) => {
+    const value = row[field];
+    if (value === null) return;
+    if (Number.isNaN(value) || value < min || value > max) {
+      fail(row, {
+        code: "INVALID_BIRTH_PART",
+        field,
+        message: `${field} must be a whole number between ${min} and ${max}`,
+      });
+    }
+  };
   for (const row of rows) {
     if (row.email !== null && !EMAIL.test(row.email)) {
       fail(row, {
@@ -372,24 +388,8 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
         message: `role must be one of: ${[...ROLES].join(", ")}`,
       });
     }
-    const birthPart = (
-      field: "birth_month" | "birth_day" | "birth_year",
-      min: number,
-      max: number
-    ) => {
-      const value = row[field];
-      if (value === null) return;
-      if (Number.isNaN(value) || value < min || value > max) {
-        fail(row, {
-          code: "INVALID_BIRTH_PART",
-          field,
-          message: `${field} must be a whole number between ${min} and ${max}`,
-        });
-      }
-    };
-    birthPart("birth_month", 1, 12);
-    birthPart("birth_day", 1, 31);
-    birthPart("birth_year", 1900, currentYear);
+    checkBirthPart(row, "birth_month", 1, 12);
+    checkBirthPart(row, "birth_day", 1, 31);
     if (row.anniversary !== null && parseAnniversaryCell(row.anniversary) === null) {
       fail(row, {
         code: "INVALID_DATE",
@@ -631,6 +631,11 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
       claimed_profile_id: member?.claimed_profile_id,
     });
   };
+
+  // After matching, because the match decides whether the year is ignored.
+  for (const row of rows) {
+    if (!birthYearIgnored(row)) checkBirthPart(row, "birth_year", 1900, currentYear);
+  }
 
   // A birthday needs its month and day together. Checked against the match, not
   // just the cells: a blank cell means "not provided", so a year alone is a fine

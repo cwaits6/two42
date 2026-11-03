@@ -761,7 +761,8 @@ A child without an account never has a `family_invites` row, so their email can'
 sign up through that match: `family_invites_refuse_child()` raises `HP002` on any
 write naming one, including the service role's, and
 `family_members_retire_child_invites()` removes the invite and its unused access
-request from a person who becomes one.
+request from a person who becomes one. The refusal locks the member row `FOR SHARE`,
+so an invite racing a relabel can't commit alongside it.
 
 `provision_organization(name, owner_email)` builds a complete org in one
 transaction: the org row — its `branding` jsonb seeded with the full

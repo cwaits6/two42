@@ -59,7 +59,8 @@ corresponding to any of them.
 ### `birth_year` for a child without an account
 
 A row with `relationship = child` and no account behind it has no stored birth
-year. The `birth_year` cell of such a row is ignored, with a warning on the row,
+year. The `birth_year` cell of such a row is ignored, whatever it holds, with a
+warning on the row,
 and the member export leaves it blank. The row matches an existing child on name,
 month and day, and so does a row with a blank `relationship`. Two same-named
 children with one birthday in a household are an `AMBIGUOUS_MATCH` error, whether
