@@ -208,7 +208,10 @@ The permissive arms compose on the org floor as:
   is_group_leader(group_id)`, or the existing author rule
   (`prayer_requests`, `prayer_responses`) or steward rule (`giving_funds`,
   `giving_fund_methods` through `giving_can_manage_fund()`, which now reads
-  the fund's group).
+  the fund's group). A fund with no recipient or `needs_review` set is the
+  exception to the member read: its row and its methods are readable only by
+  a leader of the group and its recipient, so a paused fund's handles stay off
+  Give at the database (`20261115000000_fund_recipients_in_group.sql`).
 
 **Org admins are not implicit members.** `is_admin()` appears in no content
 policy: an org admin reads a
@@ -361,10 +364,12 @@ the claim route, which does not enrol.
 **Consequences stated on purpose.** A household visible through a shared
 group lists only the profiles the viewer may read, so a spouse who is in
 no shared group is absent from that household's card. Linking a household
-member by search (`app/api/household/search-members/route.ts`) and the
-giving steward picker (`loadFundFormData()` in `lib/giving/server.ts`)
-find only people the viewer may read; both are whole-org again under
-`'org'`. `family_invites` is readable by a church admin and the invite's own
+member by search (`app/api/household/search-members/route.ts`) finds only
+people the viewer may read, and is whole-org again under `'org'`. A fund's
+pickers (`loadFundFormData()` in `lib/giving/server.ts`) don't follow this
+setting: they read `group_members` for the fund's group, and only the people
+the viewer may read within it, under every setting and for a church admin too.
+`giving_fund_recipients_guard()` holds the same line against a direct write. `family_invites` is readable by a church admin and the invite's own
 household only (`20261112000000_children_directory.sql`): its row holds an email
 and a bearer token.
 
