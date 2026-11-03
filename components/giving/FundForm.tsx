@@ -160,8 +160,8 @@ export function FundForm({
     clearErrors(METHODS_FIELD, methodAccountField(key));
   }
 
-  function validate(): boolean {
-    const found = fundFieldErrors(name, stewardId, methods);
+  function validate(recipientId = stewardId): boolean {
+    const found = fundFieldErrors(name, recipientId, methods);
     setErrors(found);
     const firstInvalid = Object.keys(found)[0];
     if (firstInvalid) setFocusTarget({ id: firstInvalid });
@@ -307,6 +307,9 @@ export function FundForm({
   const previewTag = fundThroughTag(retireOn || null);
   const paused = !!fund && fundPaused(fund);
   const retired = !!fund && fundRetired(fund, today);
+  // Confirming saves the form's retire date first, so its outcome depends on that date.
+  const retiredOnceConfirmed =
+    !!fund && fundRetired({ is_active: fund.is_active, retire_on: retireOn || null }, today);
 
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_340px] lg:items-start">
@@ -318,7 +321,7 @@ export function FundForm({
             <p className="mt-1 text-base text-foreground">
               {!isLeader
                 ? "Members can't give to this fund until a leader confirms it. You can correct its payment methods."
-                : fund.steward_id
+                : members.some((m) => m.id === fund.steward_id)
                   ? "Members can't give to this fund until a leader confirms it. Its payment methods may still pay the person who left, so check who receives it and each account."
                   : "Members can't give to this fund until a leader chooses who receives it and confirms it. Its payment methods may still pay the person who left, so check each account."}
             </p>
@@ -528,7 +531,8 @@ export function FundForm({
             <Button
               disabled={saving}
               onClick={() => {
-                if (validate()) setConfirmingFund(true);
+                // A recipient this leader can't read isn't one they can check.
+                if (validate(steward ? stewardId : "")) setConfirmingFund(true);
               }}
             >
               Confirm fund
@@ -575,7 +579,7 @@ export function FundForm({
               onOpenChange={setConfirmingFund}
               title={`Confirm ${fund.name}?`}
               description={
-                retired
+                retiredOnceConfirmed
                   ? "It stays retired until a leader reopens it."
                   : "Members can give to it on the Give page again."
               }

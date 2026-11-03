@@ -60,7 +60,9 @@ export function HiddenFunds({
                 <p className="mt-1 text-base text-muted-foreground">
                   {fund.steward
                     ? fundRecipientLine(displayName(fund.steward), fund.steward_role)
-                    : "No one named to receive it"}
+                    : fund.steward_id
+                      ? "Goes to someone not listed in the directory"
+                      : "No one named to receive it"}
                 </p>
                 {fund.retire_on && status.live && (
                   <p className="text-base text-muted-foreground">

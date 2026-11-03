@@ -315,6 +315,33 @@ describe("FundForm", () => {
       await act(async () => button("Confirm fund").click());
       expect(document.querySelector('[role="dialog"]')!.textContent).toContain("It stays retired");
     });
+
+    it.each([
+      ["a retire date set in the past", { is_active: true, retire_on: null }, "2026-10-01", "It stays retired"],
+      ["a passed retire date cleared", { is_active: true, retire_on: "2026-10-01" }, "", "Members can give to it"],
+    ])("says what confirming will do after %s", async (_, saved, edited, outcome) => {
+      await mount({ fund: storedFund({ ...saved, steward_id: "ben", needs_review: true }), members: [RAY, BEN] });
+      await act(async () => type("fund-retire", edited));
+      await act(async () => button("Confirm fund").click());
+      expect(document.querySelector('[role="dialog"]')!.textContent).toContain(outcome);
+    });
+
+    it("won't confirm a recipient the leader can't see, and asks them to choose", async () => {
+      await mount({ fund: inReview, members: [RAY] });
+      expect(document.body.textContent).toContain("until a leader chooses who receives it");
+      await act(async () => button("Confirm fund").click());
+      expect(document.activeElement).toBe(field("fund-recipient"));
+      expect(field("fund-recipient").getAttribute("aria-invalid")).toBe("true");
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      expect(db.updated).not.toHaveBeenCalled();
+    });
+
+    it("leaves a recipient the leader can't see in place on a plain save", async () => {
+      await mount({ fund: inReview, members: [RAY] });
+      await act(async () => button("Save changes").click());
+      expect(db.updated.mock.calls[0][0]).toMatchObject({ steward_id: "ben" });
+      expect(db.updated.mock.calls[0][0]).not.toHaveProperty("needs_review");
+    });
   });
 
   it("leaves the recipient line out of the preview when the recipient is unlisted", async () => {
