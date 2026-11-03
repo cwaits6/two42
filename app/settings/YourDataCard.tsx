@@ -27,8 +27,12 @@ export function YourDataCard() {
       const link = document.createElement("a");
       link.href = url;
       link.download = "my-two42-data.json";
+      document.body.appendChild(link);
       link.click();
-      URL.revokeObjectURL(url);
+      link.remove();
+      // Browsers start the download asynchronously; revoking too soon can cancel it
+      // or leave an empty file.
+      setTimeout(() => URL.revokeObjectURL(url), 40_000);
     } catch {
       toast.error(NETWORK_ERROR);
     } finally {
