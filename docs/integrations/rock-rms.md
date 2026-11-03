@@ -63,10 +63,13 @@ year. The `birth_year` cell of such a row is ignored, with a warning on the row,
 and the member export leaves it blank. The row matches an existing child on name,
 month and day, and so does a row with a blank `relationship`. Two same-named
 children with one birthday in a household are an `AMBIGUOUS_MATCH` error, whether
-they are stored or both in the file, and never a silent merge. Adults, and a child
+they are stored or both in the file, whatever `household_key` each row carries,
+and never a silent merge. Adults, and a child
 with an account, keep their birth year and match on name, month, day and year as
 before, so an adult's row with a year doesn't match a child who shares their name
-and birthday. A row that relabels a stored adult with no account as a `child`
+and birthday. Nothing stored says whether that row is the child, so it adds a
+separate person with a warning; clearing its `birth_year` makes it match the child
+and relabel them. A row that relabels a stored adult with no account as a `child`
 removes their stored birth year, which the row's changes and a warning show.
 
 ## Integration shape (v1: pull-only)

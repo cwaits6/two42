@@ -269,8 +269,9 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     new Set([personKey(row), personKey(fileRowOf.get(row)!)]);
   const yearlessKeys = (row: MemberRow): Set<string> =>
     new Set([yearlessKey(row), yearlessKey(fileRowOf.get(row)!)]);
-  // The year is dropped only when the row could be that child: a row naming
-  // another relationship is someone else who shares the name and birthday.
+  // A row naming another relationship keeps its year in the key, so it stays
+  // apart from a child who shares the name and birthday. Nothing stored says it
+  // isn't that child mislabelled, so the create path warns.
   const matchesFamilyMember = (row: MemberRow, member: SnapshotFamilyMember): boolean =>
     isChildWithoutAccount(member) && (row.relationship === null || row.relationship === "child")
       ? yearlessKeys(row).has(yearlessKey(member))
@@ -607,7 +608,11 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
   for (const row of rows) {
     if (row.has_login || row.relationship !== "child") continue;
     if (matchedFamilyMember.get(row)?.claimed_profile_id) continue;
-    const key = [groupKey(row), yearlessKey(fileRowOf.get(row)!)].join("\u0000");
+    // The resolved household, since rows the file groups apart can land in one.
+    const resolution = resolutions.get(groupKey(row))!;
+    const household = resolution.familyId ?? resolution.householdName;
+    if (household === null) continue;
+    const key = [norm(household), yearlessKey(fileRowOf.get(row)!)].join("\u0000");
     if (seenChildren.has(key) && resultByRow.get(row)!.errors.length === 0) {
       fail(row, {
         code: "AMBIGUOUS_MATCH",
@@ -870,6 +875,14 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     if (row.groups.length > 0) {
       result.warnings.push(
         "groups are ignored for family members without a login"
+      );
+    }
+    const sharesStoredChildsIdentity = [...yearlessKeys(row)]
+      .flatMap((key) => familyMembersByPerson.get(key) ?? [])
+      .some((member) => isChildWithoutAccount(member));
+    if (sharesStoredChildsIdentity) {
+      result.warnings.push(
+        "a child without an account has the same name and birthday, and this row adds a separate person; if this row is that child, clear its birth_year or edit them on the members page"
       );
     }
     if (resolution.pendingKey !== null) ensureHouseholdInsert(row, resolution);
