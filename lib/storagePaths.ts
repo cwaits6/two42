@@ -8,7 +8,11 @@
 // orgObjectPath(). Deliberately dependency-free so it runs in vitest's node
 // environment.
 
-export type StorageKind = "profiles" | "family-members" | "families" | "events";
+// A new kind in the avatars bucket also goes in the keys delete_person() collects,
+// or a deleted person's photo of that kind stays stored.
+export const STORAGE_KINDS = ["profiles", "family-members", "families", "events"] as const;
+
+export type StorageKind = (typeof STORAGE_KINDS)[number];
 
 export type StorageBucket = "avatars" | "event-images";
 
@@ -55,6 +59,16 @@ export function relObjectPath(
  */
 export function orgObjectPath(orgId: string, relPath: string): string {
   return `${assertSegment(orgId, "orgId")}/${relPath}`;
+}
+
+/**
+ * True for a key on the `<org>/<kind>/<entity>/<file>` layout under a different
+ * org. The `<kind>` segment is what tells that layout from a legacy
+ * `<profile_id>/avatar.jpg`, whose first segment is also a UUID.
+ */
+export function keyIsInAnotherOrg(key: string, orgId: string): boolean {
+  const [first, kind, ...rest] = key.split("/");
+  return rest.length >= 2 && STORAGE_KINDS.some((known) => known === kind) && first !== orgId;
 }
 
 // Matches what getPublicUrl() has always returned and what the URL columns

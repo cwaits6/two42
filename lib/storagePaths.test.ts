@@ -5,9 +5,11 @@
 import { describe, expect, it } from "vitest";
 import {
   groupPathsByBucket,
+  keyIsInAnotherOrg,
   orgObjectPath,
   parseStoragePublicUrl,
   relObjectPath,
+  STORAGE_KINDS,
   type StorageKind,
 } from "@/lib/storagePaths";
 
@@ -147,5 +149,22 @@ describe("groupPathsByBucket", () => {
 
   it("returns an empty map when nothing parses", () => {
     expect(groupPathsByBucket([null, undefined, "", "https://example.com/x"]).size).toBe(0);
+  });
+});
+
+describe("keyIsInAnotherOrg", () => {
+  const OTHER_ORG = "33333333-3333-3333-3333-333333333333";
+
+  it("refuses every kind's key under another org, and allows it under this one", () => {
+    expect(STORAGE_KINDS.length).toBeGreaterThan(0);
+    for (const kind of STORAGE_KINDS) {
+      const rel = relObjectPath(kind, ENTITY, "file");
+      expect(keyIsInAnotherOrg(orgObjectPath(OTHER_ORG, rel), ORG)).toBe(true);
+      expect(keyIsInAnotherOrg(orgObjectPath(ORG, rel), ORG)).toBe(false);
+    }
+  });
+
+  it("accepts a legacy key whose first segment is a profile id", () => {
+    expect(keyIsInAnotherOrg(`${ENTITY}/avatar.jpg`, ORG)).toBe(false);
   });
 });

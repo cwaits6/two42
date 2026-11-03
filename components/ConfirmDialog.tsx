@@ -16,6 +16,8 @@ interface ConfirmDialogProps {
   onOpenChange: (open: boolean) => void;
   title: string;
   description?: ReactNode;
+  /** Longer content, such as lists, that can't sit inside the description's paragraph. */
+  children?: ReactNode;
   confirmLabel: string;
   pendingLabel?: string;
   cancelLabel?: string;
@@ -31,6 +33,7 @@ export function ConfirmDialog({
   onOpenChange,
   title,
   description,
+  children,
   confirmLabel,
   pendingLabel = confirmLabel,
   cancelLabel = "Cancel",
@@ -55,13 +58,14 @@ export function ConfirmDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description && (
             <DialogDescription className="text-base">{description}</DialogDescription>
           )}
         </DialogHeader>
+        {children}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
             {cancelLabel}

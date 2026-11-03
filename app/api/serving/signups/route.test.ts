@@ -115,7 +115,7 @@ describe("DELETE /api/serving/signups", () => {
       groupId: "group-1",
       teamId: "team-1",
       orgId: "org-1",
-      serviceDate: "2026-11-08",
+      serviceDates: ["2026-11-08"],
       memberLabel: "The Mockingham household",
       excludeProfileId: "user-1",
     });

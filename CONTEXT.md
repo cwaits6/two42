@@ -81,12 +81,12 @@ Put something new into an existing list ("Add event", "Add fund").
 _Avoid_: Create, New, "+ Add"
 
 **Delete**:
-Destroy something permanently.
-_Avoid_: Remove (for things), Archive
+Destroy something permanently, including a person's account.
+_Avoid_: Remove (for things or accounts), Archive
 
 **Remove**:
 Take a person out of a group, team, or household. The person still exists.
-_Avoid_: Delete (for people), Kick
+_Avoid_: Delete (for taking a person out of a group, team, or household), Kick
 
 **Revoke**:
 Make an invite link stop working.

@@ -10,6 +10,7 @@ import { PrayerCard } from "@/components/prayer/PrayerCard";
 import { savePrayerResponse } from "@/components/prayer/savePrayerResponse";
 import { PrayerComposer } from "@/components/prayer/PrayerComposer";
 import { PrayerCallCard, type PrayerCall } from "@/components/prayer/PrayerCallCard";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EmptyState } from "@/components/states/EmptyState";
 import { ErrorState } from "@/components/states/ErrorState";
 import { Segmented } from "@/components/ui/segmented";
@@ -54,6 +55,7 @@ export function PrayerBoard({
   const [status, setStatus] = useState<StatusFilter>("All");
   const [query, setQuery] = useState("");
   const [prayPending, setPrayPending] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState<PrayerWallRow | null>(null);
 
   const handlePost = async (draft: { body: string; is_anonymous: boolean }) => {
     const supabase = createClient();
@@ -138,6 +140,24 @@ export function PrayerBoard({
     }
   };
 
+  // A delete RLS refuses matches zero rows without an error.
+  const handleDelete = async (row: PrayerWallRow) => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("prayer_requests")
+      .delete()
+      .eq("id", row.id)
+      .eq("group_id", group.id)
+      .select("id");
+    if (error || !data?.length) {
+      toast.error(failureMessage("delete your request"));
+      return;
+    }
+    setRequests((prev) => prev.filter((r) => r.id !== row.id));
+    setDeleting(null);
+    toast.success("Request deleted.");
+  };
+
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return requests.filter((r) => {
@@ -191,6 +211,7 @@ export function PrayerBoard({
               prayPending={prayPending.has(r.id)}
               onPray={() => handlePray(r)}
               onToggleAnswered={() => handleToggleAnswered(r)}
+              onDelete={() => setDeleting(r)}
               timeZone={timeZone}
             />
           ))}
@@ -221,6 +242,17 @@ export function PrayerBoard({
           <ErrorState thing="the prayer call" />
         )}
       </div>
+      <ConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(open) => !open && setDeleting(null)}
+        title="Delete this request?"
+        description="It's gone for good, for you and for everyone in the group."
+        confirmLabel="Delete request"
+        pendingLabel="Deleting…"
+        onConfirm={async () => {
+          if (deleting) await handleDelete(deleting);
+        }}
+      />
     </div>
   );
 }

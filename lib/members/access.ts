@@ -19,6 +19,21 @@ export type OrgAdminGate =
   | { ok: true; user: User; supabase: SupabaseClient<Database>; orgId: string }
   | { ok: false; status: 401 | 403 };
 
+/** The verified user, or null. Logs an Auth failure, which callers report as a plain 401. */
+export async function verifiedUser(supabase: SupabaseClient<Database>, gate: string): Promise<User | null> {
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+  if (error) {
+    // Without this, an auth-service outage is indistinguishable from "not
+    // signed in" in the logs — a 401 storm with no recorded cause.
+    console.error("%s: auth lookup failed; denying:", gate, error);
+    return null;
+  }
+  return user;
+}
+
 /**
  * 401 when unauthenticated, 403 when not an org admin. On success returns
  * the RLS-scoped client so callers do not build a second one, plus the
@@ -28,16 +43,7 @@ export type OrgAdminGate =
  */
 export async function requireOrgAdmin(): Promise<OrgAdminGate> {
   const supabase = await createClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-  if (authError) {
-    // Without this, an auth-service outage is indistinguishable from "not
-    // signed in" in the logs — a 401 storm with no recorded cause.
-    console.error("Org admin check: auth lookup failed; denying:", authError);
-    return { ok: false, status: 401 };
-  }
+  const user = await verifiedUser(supabase, "Org admin check");
   if (!user) return { ok: false, status: 401 };
 
   const { data: profile, error } = await supabase

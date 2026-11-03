@@ -5,10 +5,10 @@ import { GROUP_B, PERSONAS, type PersonaKey } from "./fixtures/personas";
 
 // The card masks on is_anonymous by itself, so this guards the rendered result;
 // prayer_anonymity_suite.sql is what proves the column stays out of reach.
-// Nothing in the UI deletes a request, so both hooks remove this spec's row
-// through the stack's own Postgres container. Tests run in order: the author
-// posts, the readers look, and the author marks it answered last so the
-// dashboard still lists it.
+// Both hooks remove this spec's row through the stack's own Postgres container,
+// in case a test stops before the author deletes it. Tests run in order: the
+// author posts, the readers look, and the author marks it answered and deletes
+// it last.
 test.describe.configure({ mode: "serial" });
 
 const DB_CONTAINER = "supabase_db_small-group-hub";
@@ -74,6 +74,7 @@ for (const { persona, who } of READERS) {
       await expect(card(page).getByText("You", { exact: true })).toHaveCount(0);
       await expect(card(page).getByText(AUTHOR)).toHaveCount(0);
       await expect(card(page).getByRole("button", { name: "Mark answered" })).toHaveCount(0);
+      await expect(card(page).getByRole("button", { name: "Delete" })).toHaveCount(0);
 
       await showMyRequests(page);
       await expect(card(page)).toHaveCount(0);
@@ -82,6 +83,13 @@ for (const { persona, who } of READERS) {
     test("still sees the name on a request shared by name", async ({ page }) => {
       await page.goto(PRAYER_PAGE);
       await expect(card(page, BY_NAME_BODY).getByText(BY_NAME_AUTHOR)).toBeVisible();
+    });
+
+    test("sees Delete on a by-name request only as its author", async ({ page }) => {
+      await page.goto(PRAYER_PAGE);
+      await expect(card(page, BY_NAME_BODY).getByRole("button", { name: "Delete" })).toHaveCount(
+        persona === "leadsB" ? 1 : 0,
+      );
     });
   });
 }
@@ -108,5 +116,20 @@ test.describe("the author, afterwards", () => {
     await page.reload();
     await expect(card(page).getByRole("button", { name: "Answered" })).toBeVisible();
     await expect(card(page).getByText("You", { exact: true })).toBeVisible();
+  });
+
+  test("deletes their anonymous request after a confirmation", async ({ page }) => {
+    await page.goto(PRAYER_PAGE);
+    await card(page).getByRole("button", { name: "Delete" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(card(page)).toHaveCount(1);
+
+    await card(page).getByRole("button", { name: "Delete" }).click();
+    await dialog.getByRole("button", { name: "Delete request" }).click();
+    await expect(card(page)).toHaveCount(0);
+
+    await page.reload();
+    await expect(card(page)).toHaveCount(0);
   });
 });

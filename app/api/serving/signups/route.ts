@@ -268,7 +268,7 @@ export async function DELETE(request: Request) {
       teamId: signup.team_id,
       orgId: signup.org_id,
       teamName: team.name,
-      serviceDate: signup.service_date,
+      serviceDates: [signup.service_date],
       memberLabel: await resolveSignupLabel(
         service,
         attendeeProfiles,

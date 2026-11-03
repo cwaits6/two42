@@ -673,7 +673,10 @@ must deny the row, not raise `22P02`). On the app side, every key is built
 by `lib/storagePaths.ts` and every upload/delete goes through
 `lib/uploadImage.ts`, which resolves the org once per call via
 `resolveRequestOrgId()` and prefixes it — call sites pass relative paths and
-structurally cannot omit the org. `supabase/tests/storage_tenancy_suite.sql`
+structurally cannot omit the org. The one server-side delete, with no session to
+resolve an org from, is `removeAvatarObjects()` in `lib/storageDelete.ts`, which
+takes the org from a validated anchor and refuses a key under another org.
+`supabase/tests/storage_tenancy_suite.sql`
 proves the isolation (cross-org read/insert/update/delete all denied, with
 own-org positive controls) and pins the policy shape structurally.
 

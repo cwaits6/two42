@@ -43,6 +43,7 @@ describe("PrayerCard", () => {
         prayPending: false,
         onPray: () => {},
         onToggleAnswered: () => {},
+        onDelete: () => {},
         timeZone: "America/New_York",
       })
     );
@@ -57,5 +58,12 @@ describe("PrayerCard", () => {
     const html = render({ ...row, is_anonymous: true, first_name: null, last_name: null });
     expect(html).toContain("Anonymous");
     expect(html).not.toContain("Ada");
+  });
+
+  it("offers Delete only on the viewer's own request, by name or anonymous", () => {
+    expect(render({ ...row, mine: true })).toContain("Delete");
+    expect(render({ ...row, mine: true, is_anonymous: true })).toContain("Delete");
+    expect(render(row)).not.toContain("Delete");
+    expect(render({ ...row, is_anonymous: true })).not.toContain("Delete");
   });
 });

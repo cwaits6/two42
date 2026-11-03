@@ -22,9 +22,11 @@ import type { AccessRequest, Profile, UserRole } from "@/lib/types";
 import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
 import { requestedOn } from "@/lib/groups/joinQueue";
 import { displayName } from "@/lib/names";
+import { personName } from "@/lib/serving/display";
 import { toUserRole } from "@/lib/roles";
 import { ApprovalQueue } from "@/components/admin/ApprovalQueue";
 import { matchesSearch } from "@/components/admin/adminSearch";
+import { DeletePersonButton } from "@/components/account/DeletePersonButton";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -315,8 +317,8 @@ export function MembersList({
                 return (
                   <Card key={member.id}>
                     <CardContent>
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                        <div className="min-w-0">
+                      <div className="flex flex-col gap-4">
+                        <div>
                           <p className="text-xl font-semibold">{displayName(member)}</p>
                           {member.email && (
                             <p className="break-words text-base text-muted-foreground">{member.email}</p>
@@ -363,7 +365,7 @@ export function MembersList({
                               </SelectContent>
                             </Select>
                           </div>
-                          <div className="flex gap-3 *:flex-1 sm:*:flex-none">
+                          <div className="flex flex-wrap gap-3 *:flex-1 sm:*:flex-none">
                             <Button
                               variant="outline"
                               nativeButton={false}
@@ -381,6 +383,15 @@ export function MembersList({
                               >
                                 Move to pending
                               </Button>
+                            )}
+                            {member.id !== viewerId && (
+                              <DeletePersonButton
+                                url={`/api/admin/members/${member.id}`}
+                                subject="other"
+                                label="Delete account"
+                                ariaLabel={`Delete ${personName(member)}'s account`}
+                                onDeleted={loadData}
+                              />
                             )}
                           </div>
                         </div>
