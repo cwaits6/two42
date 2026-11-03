@@ -18,12 +18,16 @@ import { failureMessage } from "@/lib/errorCopy";
 import { Camera } from "lucide-react";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { CheckRow } from "@/components/profile/CheckRow";
+import { ChildListingNotice, DirectoryNotice } from "@/components/profile/DirectoryNotice";
 import {
   MONTHS,
   birthdayColumns,
   birthdayErrors,
+  birthdayErrorsWithoutYear,
   type BirthdayErrors,
 } from "@/components/profile/birthday";
+import { useRelabelToChild } from "@/components/household/useRelabelToChild";
+import { isChildWithoutAccount } from "@/lib/household";
 import { titleCaseName } from "@/lib/sanitize";
 import { mintSignedUrl, uploadImage } from "@/lib/uploadImage";
 import { relObjectPath } from "@/lib/storagePaths";
@@ -84,7 +88,22 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
   const displayLast = effectiveLastName;
   const initials =
     `${firstName.charAt(0)}${effectiveLastName.charAt(0)}`.toUpperCase() || "?";
-  const birthday = { month: birthMonth, day: birthDay, year: birthYear };
+  const childWithoutAccount = isChildWithoutAccount({
+    relationship,
+    claimed_profile_id: member?.claimed_profile_id,
+  });
+  const birthday = {
+    month: birthMonth,
+    day: birthDay,
+    year: childWithoutAccount ? "" : birthYear,
+  };
+  const relabel = useRelabelToChild({
+    member,
+    relationship,
+    name: titleCaseName(firstName) || "",
+    setSaving,
+    save,
+  });
 
   // Focus waits for the render that ties the message to the field.
   useEffect(() => {
@@ -148,8 +167,13 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
       return;
     }
 
+    await relabel.submit();
+  }
+
+  async function save(): Promise<boolean> {
     setSaving(true);
 
+    const first = titleCaseName(firstName);
     const last =
       familySurname && !differentLastName ? familySurname : titleCaseName(lastName);
 
@@ -162,7 +186,7 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
       is_class_member: isClassMember,
     };
 
-    const url = isNew ? "/api/household/members" : `/api/household/members/${member.id}`;
+    const url = member ? `/api/household/members/${member.id}` : "/api/household/members";
     const method = isNew ? "POST" : "PATCH";
 
     const res = await fetch(url, {
@@ -175,15 +199,19 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
 
     if (!res.ok) {
       toast.error(failureMessage(`save ${first}`, res.status));
-      return;
+      return false;
     }
 
     toast.success(isNew ? `${first} added. Edit them to add a photo.` : `${first} saved.`);
     onSaved?.();
+    return true;
   }
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-6">
+      <DirectoryNotice />
+      {childWithoutAccount && <ChildListingNotice />}
+
       {/* Avatar — only when editing an existing member */}
       {!isNew && (
         <Card>
@@ -287,7 +315,21 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
             <Select
               items={RELATIONSHIPS}
               value={relationship}
-              onValueChange={(v) => setRelationship(v as FamilyMemberRelationship)}
+              onValueChange={(v) => {
+                const next = v as FamilyMemberRelationship;
+                setRelationship(next);
+                if (
+                  isChildWithoutAccount({
+                    relationship: next,
+                    claimed_profile_id: member?.claimed_profile_id,
+                  })
+                ) {
+                  setErrors((prev) => ({
+                    ...prev,
+                    ...birthdayErrorsWithoutYear(prev, { month: birthMonth, day: birthDay }),
+                  }));
+                }
+              }}
             >
               <SelectTrigger id="relationship" className="w-full text-base py-5">
                 <SelectValue />
@@ -310,7 +352,13 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
           <p className="text-base font-semibold">
             Birthday <span className="font-normal text-muted-foreground">(optional)</span>
           </p>
-          <div className="grid grid-cols-[1.6fr_1fr_1fr] gap-3">
+          <div
+            className={
+              childWithoutAccount
+                ? "grid grid-cols-[1.6fr_1fr] gap-3"
+                : "grid grid-cols-[1.6fr_1fr_1fr] gap-3"
+            }
+          >
             <div className="space-y-2">
               <Label htmlFor="birth_month" className="text-base">Month</Label>
               <Select
@@ -353,21 +401,23 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
                 {...invalidFieldProps("birth_day", errors.birth_day)}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="birth_year" className="text-base">Year</Label>
-              <Input
-                id="birth_year"
-                type="number"
-                min="1900"
-                value={birthYear}
-                onChange={(e) => {
-                  setBirthYear(e.target.value);
-                  clearError("birth_year");
-                }}
-                className="text-base py-5"
-                {...invalidFieldProps("birth_year", errors.birth_year)}
-              />
-            </div>
+            {!childWithoutAccount && (
+              <div className="space-y-2">
+                <Label htmlFor="birth_year" className="text-base">Year</Label>
+                <Input
+                  id="birth_year"
+                  type="number"
+                  min="1900"
+                  value={birthYear}
+                  onChange={(e) => {
+                    setBirthYear(e.target.value);
+                    clearError("birth_year");
+                  }}
+                  className="text-base py-5"
+                  {...invalidFieldProps("birth_year", errors.birth_year)}
+                />
+              </div>
+            )}
           </div>
           <FieldError fieldId="birth_month" message={errors.birth_month} />
           <FieldError fieldId="birth_day" message={errors.birth_day} />
@@ -398,6 +448,7 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
           Cancel
         </Button>
       </div>
+      {relabel.dialog}
     </form>
   );
 }

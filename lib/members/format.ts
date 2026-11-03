@@ -17,6 +17,7 @@ import {
   unguardCell,
 } from "@/lib/members/csv";
 import { anniversaryErrors } from "@/components/profile/birthday";
+import { isChildWithoutAccount } from "@/lib/household";
 import type { OrgSnapshot, SnapshotProfile } from "@/lib/members/snapshot";
 
 /** Ordered header contract. Column order in an uploaded file is irrelevant;
@@ -621,7 +622,7 @@ export function memberRowsFromSnapshot(snapshot: OrgSnapshot): MemberRow[] {
         phone_work: null,
         birth_month: m.birth_month,
         birth_day: m.birth_day,
-        birth_year: m.birth_year,
+        birth_year: isChildWithoutAccount(m) ? null : m.birth_year,
         relationship: m.relationship,
         has_login: false,
         role: null,

@@ -38,7 +38,7 @@ existing pure parser:
 | `PhoneNumbers[Mobile]` | `phone_mobile` |
 | `PhoneNumbers[Home]` | `phone_home` |
 | `PhoneNumbers[Work]` | `phone_work` |
-| `Person.BirthMonth` / `BirthDay` / `BirthYear` | `birth_month` / `birth_day` / `birth_year` |
+| `Person.BirthMonth` / `BirthDay` / `BirthYear` | `birth_month` / `birth_day` / `birth_year` — **not stored for a child without an account, see below** |
 | `Group(Family).Name` | `household_name` |
 | `GroupMember.GroupRole` (Adult/Child) | `relationship` — **not a fixed mapping, see Q2** |
 | `Group(Family).GroupLocation` | `address_line1` … `postal_code` |
@@ -55,6 +55,43 @@ row, so group assignments remain entirely admin-managed in two42. In the single
 `hidden_fields` column, `email` sets `hide_email`; every other token means the
 row's value for that field isn't stored at all. Rock has no concept
 corresponding to any of them.
+
+### `birth_year` for a child without an account
+
+A row with `relationship = child` and no account behind it has no stored birth
+year. The `birth_year` cell of such a row is ignored, whatever it holds, with a
+warning on the row, and the member export leaves it blank. The row matches an
+existing child on name, month and day, and so does a row with a blank
+`relationship` and no `birth_year`, which leaves them a child. Two same-named
+children with one birthday in a household are an `AMBIGUOUS_MATCH` error, whether
+they are stored or both in the file, whatever `household_key` each row carries,
+and never a silent merge.
+
+Adults, and a child with an account, keep their birth year and match on name,
+month, day and year as before. So a row with a year that names another
+relationship, or leaves `relationship` blank, doesn't match a child who shares
+that name and birthday. Nothing stored says whether that row is the child, so it
+adds a separate person, with its year, and a warning. A year the file marks hidden
+keeps the row apart the same way, but isn't stored, and two people with one name
+and birthday and no stored year can't be told apart by any later file or export. So
+that row is an `AMBIGUOUS_MATCH` error, and so is any new row that would be stored
+beside someone like that, including a `child` row beside a stored adult with no
+year: show the adult's year in the file, or add it under Households. A row hiding its
+whole birthday still matches on name someone with no birthday stored. A hidden year
+that isn't a number says nothing, so the row counts as having no year. Clearing
+`birth_year` makes the row match the child, and a row naming a relationship then
+relabels them. The relabel can't write a year, so add it under Households before
+the next file: a row with a year doesn't match someone with none stored, and adds
+them again with the same warning.
+
+A row with `has_login` and a blank `relationship` matches a family member only on
+name, month, day and year, so its year, hidden or not, decides whether it is a
+`HAS_LOGIN_CHANGE`.
+
+A row that relabels a stored adult with no account as a `child` removes their
+stored birth year, which the row's changes and a warning show, and deletes any
+open invite for them, which a warning on every such row says. The plan doesn't
+read invites, so that warning appears whether or not one exists.
 
 ## Integration shape (v1: pull-only)
 

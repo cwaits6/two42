@@ -27,7 +27,8 @@ import {
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { CheckRow } from "@/components/profile/CheckRow";
 import { AnniversaryFields, type AnniversaryField } from "@/components/profile/AnniversaryFields";
-import { DirectoryNotice } from "@/components/profile/DirectoryNotice";
+import { ChildListingNotice, DirectoryNotice } from "@/components/profile/DirectoryNotice";
+import { isChildWithoutAccount } from "@/lib/household";
 import { retiredFlagResets } from "@/lib/members/retiredHideFlags";
 import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
 import { MONTHS, anniversaryColumns, birthdayColumns } from "@/components/profile/birthday";
@@ -97,6 +98,7 @@ function BirthdayFields({
   month,
   day,
   year,
+  hideYear = false,
   onChange,
   errors,
 }: {
@@ -104,13 +106,14 @@ function BirthdayFields({
   month: string;
   day: string;
   year: string;
+  hideYear?: boolean;
   onChange: (field: "birth_month" | "birth_day" | "birth_year", value: string) => void;
   errors: StepErrors;
 }) {
   const id = (field: string) => `${idPrefix}${field}`;
   return (
     <>
-      <div className="grid grid-cols-[1.6fr_1fr_1fr] gap-3">
+      <div className={hideYear ? "grid grid-cols-[1.6fr_1fr] gap-3" : "grid grid-cols-[1.6fr_1fr_1fr] gap-3"}>
         <Select
           items={MONTHS}
           value={month}
@@ -144,17 +147,19 @@ function BirthdayFields({
           className="py-5 text-base"
           {...invalidFieldProps(id("birth_day"), errors[id("birth_day")])}
         />
-        <Input
-          id={id("birth_year")}
-          type="number"
-          min="1900"
-          placeholder="Year"
-          aria-label="Year (optional)"
-          value={year}
-          onChange={(e) => onChange("birth_year", e.target.value)}
-          className="py-5 text-base"
-          {...invalidFieldProps(id("birth_year"), errors[id("birth_year")])}
-        />
+        {!hideYear && (
+          <Input
+            id={id("birth_year")}
+            type="number"
+            min="1900"
+            placeholder="Year"
+            aria-label="Year (optional)"
+            value={year}
+            onChange={(e) => onChange("birth_year", e.target.value)}
+            className="py-5 text-base"
+            {...invalidFieldProps(id("birth_year"), errors[id("birth_year")])}
+          />
+        )}
       </div>
       <FieldError fieldId={id("birth_month")} message={errors[id("birth_month")]} />
       <FieldError fieldId={id("birth_day")} message={errors[id("birth_day")]} />
@@ -166,6 +171,7 @@ function BirthdayFields({
 // Module level so a parent re-render never remounts it and drops focus.
 function PersonAddForm({
   label,
+  relationship,
   draft,
   setDraft,
   lastNameFallback,
@@ -174,6 +180,7 @@ function PersonAddForm({
   onCancel,
 }: {
   label: string;
+  relationship: FamilyMemberRelationship;
   draft: PersonDraft;
   setDraft: React.Dispatch<React.SetStateAction<PersonDraft>>;
   lastNameFallback: string;
@@ -181,9 +188,11 @@ function PersonAddForm({
   onAdd: () => void;
   onCancel: () => void;
 }) {
+  const childWithoutAccount = isChildWithoutAccount({ relationship });
   return (
     <div className="space-y-4 rounded-lg border border-border bg-muted/30 p-4">
       <h3 className="text-xl">{label}</h3>
+      {childWithoutAccount && <ChildListingNotice />}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="add_first_name" className="text-base">
@@ -218,6 +227,7 @@ function PersonAddForm({
           month={draft.birth_month}
           day={draft.birth_day}
           year={draft.birth_year}
+          hideYear={childWithoutAccount}
           onChange={(field, value) => setDraft((d) => ({ ...d, [field]: value }))}
           errors={errors}
         />
@@ -904,6 +914,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
                   {adding ? (
                     <PersonAddForm
                       label={ADDABLE.find((a) => a.relationship === adding)?.label ?? "Add person"}
+                      relationship={adding}
                       draft={draft}
                       setDraft={(next) => {
                         setDraft(next);

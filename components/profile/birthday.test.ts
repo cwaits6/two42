@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { anniversaryColumns, anniversaryErrors, birthdayColumns, birthdayErrors } from "./birthday";
+import {
+  anniversaryColumns,
+  anniversaryErrors,
+  birthdayColumns,
+  birthdayErrors,
+  birthdayErrorsWithoutYear,
+} from "./birthday";
 
 const today = new Date(2026, 9, 31);
 const errors = (month: string, day: string, year = "") =>
@@ -35,6 +41,36 @@ describe("birthdayErrors", () => {
     expect(errors("1", "1", "1850").birth_year).toBe("Enter a year from 1900 to 2026, or leave it blank.");
     expect(errors("1", "1", "2027").birth_year).toBe("Enter a year from 1900 to 2026, or leave it blank.");
     expect(errors("1", "1", "2026")).toEqual({});
+  });
+});
+
+describe("birthdayErrorsWithoutYear", () => {
+  const without = (month: string, day: string, year: string) =>
+    birthdayErrorsWithoutYear(errors(month, day, year), { month, day }, today);
+
+  it("clears the year's own error", () => {
+    expect(without("1", "1", "1850").birth_year).toBeUndefined();
+  });
+
+  it("clears a day the year made invalid", () => {
+    expect(without("2", "29", "2023").birth_day).toBeUndefined();
+  });
+
+  it("clears the month and day a lone year asked for", () => {
+    const left = without("", "", "1980");
+    expect(left.birth_month).toBeUndefined();
+    expect(left.birth_day).toBeUndefined();
+  });
+
+  it("keeps an error the year didn't cause, reworded for no year", () => {
+    expect(without("2", "31", "2023").birth_day).toBe("Enter a day from 1 to 29.");
+    expect(without("", "12", "2023").birth_month).toBe("Choose the month of the birthday.");
+  });
+
+  it("raises nothing the form wasn't already showing", () => {
+    const left = birthdayErrorsWithoutYear({}, { month: "", day: "12" }, today);
+    expect(left.birth_month).toBeUndefined();
+    expect(left.birth_day).toBeUndefined();
   });
 });
 

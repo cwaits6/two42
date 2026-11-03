@@ -61,6 +61,7 @@ function familyMember(
     birth_year: null,
     relationship: "child",
     is_class_member: true,
+    claimed_profile_id: null,
     ...overrides,
   };
 }
@@ -1047,8 +1048,8 @@ describe("planImport semantics", () => {
           [samRow({ line: 1 }), samRow({ line: 2, birth_year: 1980 })],
           withFamilies({
             familyMembers: [
-              familyMember({ id: "fm1", family_id: "smith", ...sam }),
-              familyMember({ id: "fm2", family_id: "smith", ...sam, birth_year: 1980 }),
+              familyMember({ id: "fm1", family_id: "smith", relationship: "sibling", ...sam }),
+              familyMember({ id: "fm2", family_id: "smith", relationship: "sibling", ...sam, birth_year: 1980 }),
             ],
           })
         );
@@ -1059,7 +1060,12 @@ describe("planImport semantics", () => {
       it("adds the second person when only the first row matches", () => {
         const plan = planImport(
           [samRow({ line: 1 }), samRow({ line: 2, birth_year: 1980 })],
-          storedSam({ birth_month: sam.birth_month, birth_day: sam.birth_day, birth_year: sam.birth_year })
+          storedSam({
+            relationship: "sibling",
+            birth_month: sam.birth_month,
+            birth_day: sam.birth_day,
+            birth_year: sam.birth_year,
+          })
         );
         expect(plan.rows.flatMap((r) => r.errors)).toEqual([]);
         expect(plan.rows.map((r) => r.action)).toEqual(["no_change", "create_family_member"]);
@@ -1232,7 +1238,6 @@ describe("planImport semantics", () => {
           is_class_member: false,
           birth_month: 5,
           birth_day: 6,
-          birth_year: 2018,
         },
       },
     ]);
@@ -1471,5 +1476,704 @@ describe("planImport — household identity hazards", () => {
     );
 
     expect(plan.rows[0].action).toBe("update_family_member");
+  });
+});
+
+describe("a child without an account", () => {
+  const family = {
+    id: "f1",
+    family_name: "Sampleton",
+    anniversary_month: null,
+    anniversary_day: null,
+    anniversary_year: null,
+  };
+  const child = (overrides: Partial<SnapshotFamilyMember> = {}) =>
+    familyMember({
+      id: "m1",
+      family_id: "f1",
+      first_name: "Lily",
+      last_name: "Sampleton",
+      birth_month: 7,
+      birth_day: 19,
+      birth_year: null,
+      is_class_member: false,
+      ...overrides,
+    });
+  const snapshotWith = (...familyMembers: SnapshotFamilyMember[]): OrgSnapshot => ({
+    ...emptySnapshot,
+    families: [family],
+    familyMembers,
+  });
+  const childRow = (overrides: Partial<MemberRow> = {}) =>
+    makeRow({
+      first_name: "Lily",
+      last_name: "Sampleton",
+      birth_month: 7,
+      birth_day: 19,
+      birth_year: 2016,
+      relationship: "child",
+      household_name: "Sampleton",
+      is_class_member: false,
+      ...overrides,
+    });
+  const YEAR_IGNORED = "birth_year is not stored for a child without an account";
+  const SAME_WITHOUT_YEAR =
+    "someone with no stored birth_year has the same name and birthday, and this row adds a separate person; if this row is them, clear its birth_year or edit them under Households";
+
+  it("matches an old export's year against a stored row with no year", () => {
+    const plan = planImport([childRow()], snapshotWith(child()));
+    expect(plan.rows[0].action).toBe("no_change");
+    expect(plan.rows[0].matchedBy).toBe("household_name_birth");
+    expect(plan.rows[0].warnings).toContain(YEAR_IGNORED);
+    expect(plan.writes).toEqual([]);
+  });
+
+  it("matches a stored row still holding a year while the old schema is live", () => {
+    const plan = planImport([childRow({ birth_year: 2018 })], snapshotWith(child({ birth_year: 2016 })));
+    expect(plan.rows[0].action).toBe("no_change");
+    expect(plan.writes).toEqual([]);
+  });
+
+  describe.each([
+    ["zero", 0],
+    ["before 1900", 1800],
+    ["a future year", new Date().getFullYear() + 1],
+    ["non-numeric", Number.NaN],
+  ])("a birth_year that is %s", (_label, badYear) => {
+    it("is ignored with a warning on a child without an account", () => {
+      const matched = planImport([childRow({ birth_year: badYear })], snapshotWith(child()));
+      expect(matched.rows[0].errors).toEqual([]);
+      expect(matched.rows[0].action).toBe("no_change");
+      expect(matched.rows[0].warnings).toContain(YEAR_IGNORED);
+      expect(matched.writes).toEqual([]);
+
+      const created = planImport([childRow({ birth_year: badYear })], snapshotWith());
+      expect(created.rows[0].errors).toEqual([]);
+      expect(created.rows[0].warnings).toContain(YEAR_IGNORED);
+      const insert = created.writes.find((w) => w.kind === "insert_family_member");
+      expect(insert).toBeDefined();
+      expect(JSON.stringify(insert)).not.toContain("birth_year");
+    });
+
+    it("still fails a blank-relationship row with a stored child of that name and birthday", () => {
+      const plan = planImport(
+        [childRow({ birth_year: badYear, relationship: null })],
+        snapshotWith(child()),
+      );
+      expect(plan.rows[0].errors.map((e) => e.code)).toEqual(["INVALID_BIRTH_PART"]);
+      expect(plan.writes).toEqual([]);
+    });
+
+    it("still fails an adult's row", () => {
+      const plan = planImport(
+        [childRow({ birth_year: badYear, relationship: "spouse" })],
+        snapshotWith(),
+      );
+      expect(plan.rows[0].errors.map((e) => [e.code, e.field])).toEqual([
+        ["INVALID_BIRTH_PART", "birth_year"],
+      ]);
+      expect(plan.writes).toEqual([]);
+    });
+
+    it("still fails a blank-relationship row that matches nobody", () => {
+      const plan = planImport(
+        [childRow({ birth_year: badYear, relationship: null })],
+        snapshotWith(),
+      );
+      expect(plan.rows[0].errors.map((e) => e.code)).toEqual(["INVALID_BIRTH_PART"]);
+    });
+
+    it("still fails a child's row with a login", () => {
+      const plan = planImport(
+        [childRow({ birth_year: badYear, has_login: true, email: "lily@example.test" })],
+        snapshotWith(),
+      );
+      expect(plan.rows[0].errors.map((e) => e.code)).toContain("INVALID_BIRTH_PART");
+    });
+  });
+
+  it("matches a row with no year", () => {
+    const plan = planImport([childRow({ birth_year: null })], snapshotWith(child()));
+    expect(plan.rows[0].action).toBe("no_change");
+    expect(plan.rows[0].warnings).not.toContain(YEAR_IGNORED);
+  });
+
+  it("round-trips its own export with no year in the file", () => {
+    const before = snapshotWith(child({ birth_year: 2016 }));
+    const parsed = parseMembers(serializeMembers(memberRowsFromSnapshot(before)));
+    const plan = planImport(parsed.rows, snapshotWith(child()));
+    expect(plan.summary.noChange).toBe(1);
+    expect(plan.writes).toEqual([]);
+  });
+
+  it("is an ambiguous match when two stored children share a name and birthday", () => {
+    const plan = planImport([childRow()], snapshotWith(child(), child({ id: "m2" })));
+    expect(plan.rows[0].errors[0].code).toBe("AMBIGUOUS_MATCH");
+    expect(plan.writes).toEqual([]);
+  });
+
+  it("is an ambiguous match when two rows differ only in the year", () => {
+    const plan = planImport(
+      [childRow({ line: 1, birth_year: 2016 }), childRow({ line: 2, birth_year: 2018 })],
+      snapshotWith()
+    );
+    expect(plan.rows[1].errors[0].code).toBe("AMBIGUOUS_MATCH");
+    expect(plan.writes).toEqual([]);
+  });
+
+  describe("two rows the file groups apart that land in one household", () => {
+    const expectOneAmbiguous = (first: Partial<MemberRow>, second: Partial<MemberRow>, snapshot: OrgSnapshot) => {
+      const plan = planImport(
+        [childRow({ line: 1, birth_year: 2015, ...first }), childRow({ line: 2, birth_year: 2016, ...second })],
+        snapshot
+      );
+      expect(plan.rows[1].errors.map((e) => e.code)).toEqual(["AMBIGUOUS_MATCH"]);
+      expect(plan.writes).toEqual([]);
+    };
+
+    it("is an ambiguous match with two keys naming a stored household", () => {
+      expectOneAmbiguous({ household_key: "k1" }, { household_key: "k2" }, snapshotWith());
+    });
+
+    it("is an ambiguous match with a key and no key", () => {
+      expectOneAmbiguous({}, { household_key: "k2" }, snapshotWith());
+    });
+
+    it("is an ambiguous match with two keys naming a new household", () => {
+      expectOneAmbiguous(
+        { household_key: "k1", household_name: "Newfamily" },
+        { household_key: "k2", household_name: "newfamily " },
+        emptySnapshot
+      );
+    });
+
+    it("is an ambiguous match with identical rows under two keys", () => {
+      expectOneAmbiguous(
+        { household_key: "k1", birth_year: 2015 },
+        { household_key: "k2", birth_year: 2015 },
+        snapshotWith()
+      );
+    });
+
+    it("stays apart when the keys reach different households", () => {
+      const plan = planImport(
+        [
+          childRow({ line: 1, household_key: "k1", household_name: "Newfamily" }),
+          childRow({ line: 2, household_key: "k2", household_name: "Otherfamily" }),
+        ],
+        emptySnapshot
+      );
+      expect(plan.rows.map((r) => r.errors)).toEqual([[], []]);
+    });
+
+    it("leaves rows with no household to their own error", () => {
+      const plan = planImport(
+        [
+          childRow({ line: 1, household_name: null }),
+          childRow({ line: 2, household_name: null, birth_year: 2017 }),
+        ],
+        emptySnapshot
+      );
+      expect(plan.rows.map((r) => r.errors.map((e) => e.code))).toEqual([
+        ["MISSING_HOUSEHOLD_NAME"],
+        ["MISSING_HOUSEHOLD_NAME"],
+      ]);
+    });
+  });
+
+  it("still reports the same row twice as a duplicate", () => {
+    const plan = planImport([childRow({ line: 1 }), childRow({ line: 2 })], snapshotWith());
+    expect(plan.rows[1].errors.map((e) => e.code)).toEqual(["DUPLICATE_IN_FILE"]);
+  });
+
+  it("creates the child with no year, and says so", () => {
+    const plan = planImport([childRow()], snapshotWith());
+    expect(plan.rows[0].action).toBe("create_family_member");
+    expect(plan.rows[0].warnings).toContain(YEAR_IGNORED);
+    const write = plan.writes.find((w) => w.kind === "insert_family_member");
+    expect(write && "values" in write ? write.values : null).toMatchObject({
+      first_name: "Lily",
+      birth_month: 7,
+      birth_day: 19,
+    });
+    expect(write && "values" in write ? write.values : null).not.toHaveProperty("birth_year");
+  });
+
+  it("accepts a year alone, which it ignores", () => {
+    const plan = planImport(
+      [childRow({ birth_month: null, birth_day: null })],
+      snapshotWith(child({ birth_month: null, birth_day: null }))
+    );
+    expect(plan.rows[0].errors).toEqual([]);
+    expect(plan.rows[0].action).toBe("no_change");
+  });
+
+  it("reports the same child in another household as a move", () => {
+    const plan = planImport(
+      [childRow({ household_name: "Elsewhere" })],
+      snapshotWith(child())
+    );
+    expect(plan.rows[0].errors[0].code).toBe("HOUSEHOLD_MOVE");
+  });
+
+  it("keeps year matching for a child with an account", () => {
+    const stored = child({ birth_year: 2001, claimed_profile_id: "p9" });
+    const same = planImport([childRow({ birth_year: 2001 })], snapshotWith(stored));
+    expect(same.rows[0].action).toBe("no_change");
+    expect(same.rows[0].warnings).not.toContain(YEAR_IGNORED);
+    const other = planImport([childRow({ birth_year: 2002 })], snapshotWith(stored));
+    expect(other.rows[0].action).toBe("create_family_member");
+  });
+
+  it("keeps two claimed children with different years apart in one file", () => {
+    const plan = planImport(
+      [childRow({ line: 1, birth_year: 1990 }), childRow({ line: 2, birth_year: 1992 })],
+      snapshotWith(
+        child({ birth_year: 1990, claimed_profile_id: "p8" }),
+        child({ id: "m2", birth_year: 1992, claimed_profile_id: "p9" })
+      )
+    );
+    expect(plan.rows.map((r) => r.action)).toEqual(["no_change", "no_change"]);
+  });
+
+  describe("a row with a blank relationship", () => {
+    const blankRow = (overrides: Partial<MemberRow> = {}) =>
+      childRow({ relationship: null, birth_year: 1980, ...overrides });
+
+    it("matches with no year, and leaves them a child", () => {
+      const plan = planImport([blankRow({ birth_year: null })], snapshotWith(child()));
+      expect(plan.rows[0].action).toBe("no_change");
+      expect(plan.rows[0].warnings).not.toContain(YEAR_IGNORED);
+      expect(plan.writes).toEqual([]);
+    });
+
+    it("matches with no year while a stored child still holds one on the old schema", () => {
+      const plan = planImport([blankRow({ birth_year: null })], snapshotWith(child({ birth_year: 2016 })));
+      expect(plan.rows[0].action).toBe("no_change");
+      expect(plan.writes).toEqual([]);
+    });
+
+    it("is added, with its year, when it carries one, and leaves the child alone", () => {
+      const plan = planImport([blankRow()], snapshotWith(child()));
+      expect(plan.rows[0].action).toBe("create_family_member");
+      expect(plan.rows[0].warnings).not.toContain(YEAR_IGNORED);
+      expect(plan.rows[0].warnings).toContain(SAME_WITHOUT_YEAR);
+      expect(plan.writes.filter((w) => w.kind === "update_family_member")).toEqual([]);
+      const write = plan.writes.find((w) => w.kind === "insert_family_member");
+      expect(write && "values" in write ? write.values : null).toMatchObject({ birth_year: 1980 });
+    });
+
+    it("is refused when the file marks its year hidden, since it would store no year beside the child", () => {
+      const plan = planImport([blankRow({ hidden_fields: ["birth_year"] })], snapshotWith(child()));
+      expect(plan.rows[0].action).toBe("error");
+      expect(plan.rows[0].errors.map((e) => e.code)).toEqual(["AMBIGUOUS_MATCH"]);
+      expect(plan.writes).toEqual([]);
+    });
+
+    it("is added when the file hides the whole birthday, which leaves no birthday to collide with the child's", () => {
+      const plan = planImport([blankRow({ hidden_fields: ["birthday"] })], snapshotWith(child()));
+      expect(plan.rows[0].action).toBe("create_family_member");
+      expect(plan.writes.filter((w) => w.kind === "update_family_member")).toEqual([]);
+      const write = plan.writes.find((w) => w.kind === "insert_family_member");
+      expect(write && "values" in write ? write.values : null).not.toHaveProperty("birth_year");
+      expect(write && "values" in write ? write.values : null).not.toHaveProperty("birth_month");
+    });
+
+    it("counts as having no year when the hidden year isn't a number", () => {
+      const plan = planImport(
+        [blankRow({ birth_year: Number.NaN, hidden_fields: ["birth_year"] })],
+        snapshotWith(child()),
+      );
+      expect(plan.rows[0].errors).toEqual([]);
+      expect(plan.rows[0].action).toBe("no_change");
+      expect(plan.writes).toEqual([]);
+    });
+
+    it("doesn't add them again from the same file once they're stored with no year", () => {
+      const row = blankRow({ hidden_fields: ["birth_year"] });
+      const plan = planImport(
+        [row],
+        snapshotWith(child(), child({ id: "m2", relationship: "other" })),
+      );
+      expect(plan.rows[0].errors).toEqual([]);
+      expect(plan.rows[0].action).toBe("no_change");
+    });
+
+    it("isn't a household move when the child is elsewhere and the file marks its year hidden", () => {
+      const plan = planImport(
+        [blankRow({ hidden_fields: ["birth_year"], household_name: "Elsewhere" })],
+        snapshotWith(child()),
+      );
+      expect(plan.rows[0].errors).toEqual([]);
+      expect(plan.rows[0].action).toBe("create_family_member");
+    });
+
+    it("isn't a household move when the child is elsewhere and the row carries a year", () => {
+      const plan = planImport([blankRow({ household_name: "Elsewhere" })], snapshotWith(child()));
+      expect(plan.rows[0].errors).toEqual([]);
+      expect(plan.rows[0].action).toBe("create_family_member");
+    });
+
+    it("is a household move when the child is elsewhere and the row has no year", () => {
+      const plan = planImport(
+        [blankRow({ birth_year: null, household_name: "Elsewhere" })],
+        snapshotWith(child()),
+      );
+      expect(plan.rows[0].errors.map((e) => e.code)).toEqual(["HOUSEHOLD_MOVE"]);
+    });
+
+    describe("on a login row", () => {
+      const loginRow = (overrides: Partial<MemberRow> = {}) =>
+        blankRow({ has_login: true, email: "lily@example.com", ...overrides });
+
+      it("isn't a login change when it carries a year", () => {
+        const plan = planImport([loginRow()], snapshotWith(child()));
+        expect(plan.rows[0].errors.map((e) => e.code)).toEqual(["LOGIN_CREATE_UNSUPPORTED"]);
+      });
+
+      it("isn't a login change when the file marks its year hidden", () => {
+        const plan = planImport([loginRow({ hidden_fields: ["birth_year"] })], snapshotWith(child()));
+        expect(plan.rows[0].errors.map((e) => e.code)).toEqual(["LOGIN_CREATE_UNSUPPORTED"]);
+      });
+
+      it("isn't a login change against a stored child still holding another year", () => {
+        const plan = planImport(
+          [loginRow({ birth_year: null })],
+          snapshotWith(child({ birth_year: 2016 })),
+        );
+        expect(plan.rows[0].errors.map((e) => e.code)).toEqual(["LOGIN_CREATE_UNSUPPORTED"]);
+      });
+
+      it("is still a login change when name and birthday match exactly", () => {
+        const plan = planImport([loginRow({ birth_year: null })], snapshotWith(child()));
+        expect(plan.rows[0].errors.map((e) => e.code)).toEqual(["HAS_LOGIN_CHANGE"]);
+      });
+    });
+  });
+
+  it("still reports a login row with a child's relationship as a login change", () => {
+    const plan = planImport(
+      [childRow({ has_login: true, email: "lily@example.com" })],
+      snapshotWith(child())
+    );
+    expect(plan.rows[0].errors[0].code).toBe("HAS_LOGIN_CHANGE");
+  });
+
+  describe("an adult with the same name and birthday as a stored child", () => {
+    const fatherRow = (overrides: Partial<MemberRow> = {}) =>
+      childRow({ relationship: "other", birth_year: 1970, ...overrides });
+
+    it("is refused, and doesn't relabel the child, when the file marks the year hidden", () => {
+      const plan = planImport(
+        [fatherRow({ relationship: "primary", hidden_fields: ["birth_year"] })],
+        snapshotWith(child()),
+      );
+      expect(plan.rows[0].action).toBe("error");
+      expect(plan.rows[0].errors.map((e) => e.code)).toEqual(["AMBIGUOUS_MATCH"]);
+      expect(plan.writes).toEqual([]);
+    });
+
+    it("leaves the file and the export importable once the year is shown", () => {
+      const hiddenFile = [
+        fatherRow({ line: 1, relationship: "primary", hidden_fields: ["birth_year"] }),
+        childRow({ line: 2, birth_year: null }),
+      ];
+      const refused = planImport(hiddenFile, snapshotWith(child()));
+      expect(refused.rows[0].errors.map((e) => e.code)).toEqual(["AMBIGUOUS_MATCH"]);
+      expect(refused.writes).toEqual([]);
+
+      const shown = planImport(
+        [fatherRow({ line: 1, relationship: "primary" }), childRow({ line: 2, birth_year: null })],
+        snapshotWith(child()),
+      );
+      const insert = shown.writes.find((w) => w.kind === "insert_family_member");
+      expect(insert && "values" in insert ? insert.values : null).toMatchObject({ birth_year: 1970 });
+
+      const stored = snapshotWith(child(), child({ id: "m2", relationship: "primary", birth_year: 1970 }));
+      for (const file of [hiddenFile, parseMembers(serializeMembers(memberRowsFromSnapshot(stored))).rows]) {
+        const again = planImport(file, stored);
+        expect(again.rows.map((r) => r.errors)).toEqual([[], []]);
+        expect(again.writes).toEqual([]);
+      }
+    });
+
+    it("names no hidden year in the refusal", () => {
+      const plan = planImport(
+        [fatherRow({ hidden_fields: ["birth_year"] })],
+        snapshotWith(child()),
+      );
+      expect(JSON.stringify(plan.rows[0])).not.toContain("1970");
+    });
+
+    it("is refused beside a new child in the same file, in a household already stored", () => {
+      const plan = planImport(
+        [
+          fatherRow({ line: 1, relationship: "primary", hidden_fields: ["birth_year"] }),
+          childRow({ line: 2, birth_year: null }),
+        ],
+        snapshotWith(),
+      );
+      expect(plan.rows[1].errors.map((e) => e.code)).toEqual(["AMBIGUOUS_MATCH"]);
+      expect(plan.writes).toEqual([]);
+    });
+
+    it("is refused beside a new child in the same file, in a new household", () => {
+      const plan = planImport(
+        [
+          fatherRow({ line: 1, relationship: "primary", hidden_fields: ["birth_year"], household_name: "New" }),
+          childRow({ line: 2, birth_year: null, household_name: "New" }),
+        ],
+        snapshotWith(),
+      );
+      expect(plan.summary.error).toBe(1);
+    });
+
+    it("is refused when the same file's blank-year adult would sit beside a child whose year is ignored", () => {
+      const plan = planImport(
+        [
+          fatherRow({ line: 1, relationship: "primary", birth_year: null }),
+          childRow({ line: 2, birth_year: 2016 }),
+        ],
+        snapshotWith(),
+      );
+      expect(plan.rows[1].errors.map((e) => e.code)).toEqual(["AMBIGUOUS_MATCH"]);
+    });
+
+    it("isn't refused when the adult's year is visible, in the same file or stored", () => {
+      const plan = planImport(
+        [fatherRow({ line: 1, relationship: "primary" }), childRow({ line: 2, birth_year: null })],
+        snapshotWith(),
+      );
+      expect(plan.summary.error).toBe(0);
+      expect(plan.writes.filter((w) => w.kind === "insert_family_member")).toHaveLength(2);
+      const stored = planImport([childRow({ birth_year: null })], snapshotWith(child({ relationship: "other", birth_year: 1970 })));
+      expect(stored.rows[0].action).toBe("create_family_member");
+    });
+
+    it("isn't refused when the hidden year's child is in another household", () => {
+      const plan = planImport(
+        [fatherRow({ hidden_fields: ["birth_year"], household_name: "Elsewhere" })],
+        snapshotWith(child()),
+      );
+      expect(plan.rows[0].action).toBe("create_family_member");
+    });
+
+    it("isn't a login change when the file marks the year hidden", () => {
+      const plan = planImport(
+        [fatherRow({ has_login: true, email: "lily@example.com", hidden_fields: ["birth_year"] })],
+        snapshotWith(child()),
+      );
+      expect(plan.rows[0].errors.map((e) => e.code)).toEqual(["LOGIN_CREATE_UNSUPPORTED"]);
+    });
+
+    it("is added, with their year, and leaves the child alone", () => {
+      const plan = planImport([fatherRow()], snapshotWith(child()));
+      expect(plan.rows[0].action).toBe("create_family_member");
+      expect(plan.rows[0].warnings).not.toContain(YEAR_IGNORED);
+      expect(plan.rows[0].warnings).toContain(SAME_WITHOUT_YEAR);
+      expect(plan.writes.filter((w) => w.kind === "update_family_member")).toEqual([]);
+      const write = plan.writes.find((w) => w.kind === "insert_family_member");
+      expect(write && "values" in write ? write.values : null).toMatchObject({
+        relationship: "other",
+        birth_year: 1970,
+      });
+    });
+
+    it("is a no-op on the next import of the same file", () => {
+      const father = child({ id: "m2", relationship: "other", birth_year: 1970 });
+      const plan = planImport([fatherRow()], snapshotWith(child(), father));
+      expect(plan.rows[0].action).toBe("no_change");
+      expect(plan.rows[0].warnings).not.toContain(SAME_WITHOUT_YEAR);
+      expect(plan.writes).toEqual([]);
+    });
+
+    it("isn't a move when the child is in another household, but is warned", () => {
+      const plan = planImport([fatherRow({ household_name: "Elsewhere" })], snapshotWith(child()));
+      expect(plan.rows[0].errors).toEqual([]);
+      expect(plan.rows[0].action).toBe("create_family_member");
+      expect(plan.rows[0].warnings).toContain(SAME_WITHOUT_YEAR);
+    });
+
+    it("becomes a relabel, or a move, once the warned row's year is cleared", () => {
+      const cleared = fatherRow({ birth_year: null });
+      expect(planImport([cleared], snapshotWith(child())).rows[0].action).toBe("update_family_member");
+      const elsewhere = planImport(
+        [{ ...cleared, household_name: "Elsewhere" }],
+        snapshotWith(child())
+      );
+      expect(elsewhere.rows[0].errors.map((e) => e.code)).toEqual(["HOUSEHOLD_MOVE"]);
+    });
+
+    it("warns about a stored child still holding a year while the old schema is live", () => {
+      const plan = planImport([fatherRow()], snapshotWith(child({ birth_year: 2016 })));
+      expect(plan.rows[0].action).toBe("create_family_member");
+      expect(plan.rows[0].warnings).toContain(SAME_WITHOUT_YEAR);
+    });
+
+    describe("once the warned row has relabelled the child", () => {
+      const relabelled = child({ relationship: "other" });
+
+      it("relabels the child first, with no year to write", () => {
+        const plan = planImport([fatherRow({ birth_year: null })], snapshotWith(child()));
+        expect(plan.rows[0].action).toBe("update_family_member");
+        expect(plan.writes).toEqual([
+          expect.objectContaining({ kind: "update_family_member", values: { relationship: "other" } }),
+        ]);
+      });
+
+      it("warns when the next file carries the year, in any household", () => {
+        for (const row of [fatherRow(), fatherRow({ household_name: "Elsewhere" })]) {
+          const plan = planImport([row], snapshotWith(relabelled));
+          expect(plan.rows[0].action).toBe("create_family_member");
+          expect(plan.rows[0].warnings).toContain(SAME_WITHOUT_YEAR);
+        }
+      });
+
+      it("refuses a child row, whose ignored year would leave two people with no stored year", () => {
+        const plan = planImport([childRow()], snapshotWith(relabelled));
+        expect(plan.rows[0].action).toBe("error");
+        expect(plan.rows[0].errors.map((e) => e.code)).toEqual(["AMBIGUOUS_MATCH"]);
+      });
+
+      it("is a no-op when the next file leaves the year blank", () => {
+        const plan = planImport([fatherRow({ birth_year: null })], snapshotWith(relabelled));
+        expect(plan.rows[0].action).toBe("no_change");
+        expect(plan.writes).toEqual([]);
+      });
+
+      it("is a no-op with no warning once the year is added under Households", () => {
+        const plan = planImport([fatherRow()], snapshotWith(child({ relationship: "other", birth_year: 1970 })));
+        expect(plan.rows[0].action).toBe("no_change");
+        expect(plan.rows[0].warnings).not.toContain(SAME_WITHOUT_YEAR);
+      });
+    });
+
+    it("isn't warned about a stored adult or a child with an account", () => {
+      for (const stored of [
+        child({ relationship: "sibling", birth_year: 1990 }),
+        child({ birth_year: 1990, claimed_profile_id: "p9" }),
+      ]) {
+        const plan = planImport([fatherRow()], snapshotWith(stored));
+        expect(plan.rows[0].action).toBe("create_family_member");
+        expect(plan.rows[0].warnings).not.toContain(SAME_WITHOUT_YEAR);
+      }
+    });
+
+    it("isn't a login change on a login row", () => {
+      const plan = planImport(
+        [fatherRow({ has_login: true, email: "father@example.com", relationship: "primary" })],
+        snapshotWith(child())
+      );
+      expect(plan.rows[0].errors.map((e) => e.code)).toEqual(["LOGIN_CREATE_UNSUPPORTED"]);
+    });
+  });
+
+  describe("relabelling someone", () => {
+    const REMOVED = "this row makes them a child without an account, so their stored birth_year is removed";
+    const INVITE_ENDS =
+      "this row makes them a child without an account, so any open invite for them is deleted and its link stops working";
+
+    it("shows and warns that making an adult a child removes their year", () => {
+      const plan = planImport(
+        [childRow({ birth_year: 1970 })],
+        snapshotWith(child({ relationship: "other", birth_year: 1970 }))
+      );
+      expect(plan.rows[0].action).toBe("update_family_member");
+      expect(plan.rows[0].changes).toEqual({
+        relationship: ["other", "child"],
+        birth_year: [1970, null],
+      });
+      expect(plan.rows[0].warnings).toContain(REMOVED);
+    });
+
+    it("leaves a year out of it when the person has an account or no year", () => {
+      const claimed = planImport(
+        [childRow({ birth_year: 1970 })],
+        snapshotWith(child({ relationship: "other", birth_year: 1970, claimed_profile_id: "p9" }))
+      );
+      expect(claimed.rows[0].changes).toEqual({ relationship: ["other", "child"] });
+      expect(claimed.rows[0].warnings).not.toContain(REMOVED);
+      expect(claimed.rows[0].warnings).not.toContain(YEAR_IGNORED);
+
+      const noYear = planImport(
+        [childRow({ birth_year: null })],
+        snapshotWith(child({ relationship: "other" }))
+      );
+      expect(noYear.rows[0].changes).toEqual({ relationship: ["other", "child"] });
+      expect(noYear.rows[0].warnings).not.toContain(REMOVED);
+    });
+
+    it("warns that making someone a child deletes any open invite, with or without a year", () => {
+      for (const birth_year of [1970, null]) {
+        const plan = planImport(
+          [childRow({ birth_year })],
+          snapshotWith(child({ relationship: "other", birth_year }))
+        );
+        expect(plan.rows[0].warnings).toContain(INVITE_ENDS);
+      }
+    });
+
+    it("leaves the invite out of it when no one becomes a child without an account", () => {
+      const claimed = planImport(
+        [childRow({ birth_year: 1970 })],
+        snapshotWith(child({ relationship: "other", birth_year: 1970, claimed_profile_id: "p9" }))
+      );
+      const alreadyChild = planImport([childRow()], snapshotWith(child()));
+      const toAdult = planImport(
+        [childRow({ relationship: "other", birth_year: null })],
+        snapshotWith(child())
+      );
+      for (const plan of [claimed, alreadyChild, toAdult]) {
+        expect(plan.rows[0].warnings).not.toContain(INVITE_ENDS);
+      }
+    });
+
+    it("can still make a stored child an adult from a row with no year", () => {
+      const plan = planImport(
+        [childRow({ relationship: "other", birth_year: null })],
+        snapshotWith(child())
+      );
+      expect(plan.rows[0].changes).toEqual({ relationship: ["child", "other"] });
+      expect(plan.rows[0].warnings).not.toContain(YEAR_IGNORED);
+    });
+  });
+
+  describe("adults are matched exactly as before", () => {
+    const adult = child({ relationship: "sibling", birth_year: 1990 });
+    const adultRow = (birth_year: number | null) =>
+      childRow({ relationship: "sibling", birth_year });
+
+    it("stays a no-op on the same year", () => {
+      const plan = planImport([adultRow(1990)], snapshotWith(adult));
+      expect(plan.rows[0].action).toBe("no_change");
+      expect(plan.writes).toEqual([]);
+    });
+
+    it("doesn't match on a different year, and stores the year on create", () => {
+      const plan = planImport([adultRow(1991)], snapshotWith(adult));
+      expect(plan.rows[0].action).toBe("create_family_member");
+      const write = plan.writes.find((w) => w.kind === "insert_family_member");
+      expect(write && "values" in write ? write.values : null).toMatchObject({ birth_year: 1991 });
+    });
+
+    it("doesn't reach an adult in another household through a year-less key", () => {
+      const plan = planImport(
+        [childRow({ household_name: "Elsewhere", relationship: "sibling", birth_year: 1991 })],
+        snapshotWith(adult)
+      );
+      expect(plan.rows[0].action).toBe("create_family_member");
+    });
+
+    it("lets two rows differing only in the year through", () => {
+      const plan = planImport(
+        [
+          childRow({ line: 1, relationship: "sibling", birth_year: 1990 }),
+          childRow({ line: 2, relationship: "sibling", birth_year: 1991 }),
+        ],
+        snapshotWith()
+      );
+      expect(plan.summary.error).toBe(0);
+      expect(plan.summary.create).toBe(2);
+    });
   });
 });

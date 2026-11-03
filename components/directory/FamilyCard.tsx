@@ -3,6 +3,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Heart, Home, MapPin } from "lucide-react";
 import { formatPhone } from "@/lib/sanitize";
+import { isChildWithoutAccount } from "@/lib/household";
 import { displayName, initials } from "@/lib/names";
 import { DirRow, PhoneText } from "@/components/directory/DirRow";
 import { formatAnniversary, householdPhoneLabel, relLabel } from "@/components/directory/utils";
@@ -102,7 +103,7 @@ export function FamilyCard({ family, profileMap, onOpenPerson }: FamilyCardProps
             key={fm.id}
             avatar={<MemberAvatar member={fm} />}
             title={displayName(fm)}
-            subtitle={relLabel(fm.relationship)}
+            subtitle={isChildWithoutAccount(fm) ? undefined : relLabel(fm.relationship)}
           />
         ))}
       </div>

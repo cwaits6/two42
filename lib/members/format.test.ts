@@ -15,7 +15,7 @@ import {
   withoutHiddenValues,
 } from "@/lib/members/format";
 import { anniversaryErrors } from "@/components/profile/birthday";
-import type { OrgSnapshot } from "@/lib/members/snapshot";
+import type { OrgSnapshot, SnapshotFamilyMember } from "@/lib/members/snapshot";
 
 describe("filenameSlug", () => {
   it("lower-cases and joins words with single hyphens", () => {
@@ -40,6 +40,15 @@ describe("filenameSlug", () => {
     expect(slug.startsWith("word-word")).toBe(true);
   });
 });
+
+const emptySnapshotForYears: OrgSnapshot = {
+  profiles: [],
+  families: [{ id: "f", family_name: "Zeta", anniversary_month: null, anniversary_day: null, anniversary_year: null }],
+  familyMembers: [],
+  groups: [],
+  profileGroups: [],
+  accessRequestEmails: [],
+};
 
 function makeRow(overrides: Partial<MemberRow>): MemberRow {
   return {
@@ -434,6 +443,7 @@ describe("memberRowsFromSnapshot", () => {
           birth_year: 2015,
           relationship: "child",
           is_class_member: false,
+          claimed_profile_id: null,
         },
       ],
     };
@@ -448,6 +458,7 @@ describe("memberRowsFromSnapshot", () => {
     ]);
     // Lines are sequential so parse(serialize(x)) is stable.
     expect(rows.map((r) => r.line)).toEqual([1, 2, 3, 4]);
+    expect(rows.find((r) => r.first_name === "Kid")?.birth_year).toBeNull();
   });
 
   it("exports hide_email as the one hidden_fields token", () => {
@@ -598,5 +609,36 @@ describe("the household anniversary on export", () => {
       ["b", "10-03"],
       ["c", null],
     ]);
+  });
+});
+
+describe("memberRowsFromSnapshot birth_year", () => {
+  const member = (overrides: Partial<SnapshotFamilyMember>): SnapshotFamilyMember => ({
+    id: "m",
+    family_id: "f",
+    first_name: "Kid",
+    last_name: "Zeta",
+    preferred_name: null,
+    birth_month: 2,
+    birth_day: 2,
+    birth_year: 2001,
+    relationship: "child",
+    is_class_member: false,
+    claimed_profile_id: null,
+    ...overrides,
+  });
+  const yearOf = (m: SnapshotFamilyMember) =>
+    memberRowsFromSnapshot({
+      ...emptySnapshotForYears,
+      familyMembers: [m],
+    })[0].birth_year;
+
+  it("leaves a child's year blank, even if the row still holds one", () => {
+    expect(yearOf(member({}))).toBeNull();
+  });
+
+  it("keeps the year of a child with an account and of an adult", () => {
+    expect(yearOf(member({ claimed_profile_id: "p1" }))).toBe(2001);
+    expect(yearOf(member({ relationship: "sibling" }))).toBe(2001);
   });
 });

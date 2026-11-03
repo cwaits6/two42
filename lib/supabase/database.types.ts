@@ -1574,6 +1574,12 @@ isOneToOne: false
 "family_anniversary_hidden":
 { Args: { "_family_id": string }; Returns: boolean
                            },
+"family_directory_people":
+{ Args: { "_family_id": string }; Returns: Json
+                           },
+"family_members_retire_child_details":
+{ Args: Record<PropertyKey, never>; Returns: Json
+                           },
 "get_own_email":
 { Args: Record<PropertyKey, never>; Returns: string
                            },

@@ -72,7 +72,6 @@ function householdRecord(
     is_class_member: true,
     birth_month: null,
     birth_day: null,
-    birth_year: null,
     claimed_profile_id: null,
     ...overrides,
   };

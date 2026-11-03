@@ -4,6 +4,7 @@ import { resolveEmailBranding } from "@/lib/email/identity";
 import { NextResponse } from "next/server";
 import { siteConfig } from "@/lib/config";
 import { isMemberRole } from "@/lib/roles";
+import { CHILD_INVITE_REFUSED } from "@/lib/household";
 
 /**
  * POST /api/family-invites
@@ -12,10 +13,11 @@ import { isMemberRole } from "@/lib/roles";
  * (lightweight non-auth record) so they can create their own account and
  * be linked to the household.
  *
- * Caller must be:
- *   - An admin, OR
- *   - The household primary member (their profiles.family_id matches
- *     the family_members.family_id)
+ * A child without an account can't be invited: the
+ * family_invites_refuse_child() trigger refuses the insert, which answers 403.
+ *
+ * RLS on family_members is the authorization: the row is visible to a church
+ * admin and the person's own household, and anyone else gets the 404 below.
  *
  * Input:  { family_member_id: string, invite_email: string }
  * Output: { success: true, message: string }
@@ -31,10 +33,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Load the caller's profile to check role + family membership
+  // Load the caller's profile to check their role
   const { data: callerProfile } = await supabase
     .from("profiles")
-    .select("role, family_id, first_name, last_name, preferred_name")
+    .select("role, first_name, last_name, preferred_name")
     .eq("id", user.id)
     .single();
 
@@ -42,10 +44,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Profile not found" }, { status: 404 });
   }
 
-  const isAdmin = callerProfile.role === "admin";
-  const isMember = isMemberRole(callerProfile.role);
-
-  if (!isMember) {
+  if (!isMemberRole(callerProfile.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -62,7 +61,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // Load the family_members record
+  // Load the family_members record, under the caller's RLS
   const { data: familyMember, error: fmError } = await supabase
     .from("family_members")
     .select("id, family_id, first_name, last_name, claimed_profile_id")
@@ -73,17 +72,6 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Family member not found" },
       { status: 404 },
-    );
-  }
-
-  // Authorization: admin can always invite; members can only invite within their own family
-  if (
-    !isAdmin &&
-    callerProfile.family_id !== familyMember.family_id
-  ) {
-    return NextResponse.json(
-      { error: "You can only send invites for members of your own household" },
-      { status: 403 },
     );
   }
 
@@ -127,6 +115,10 @@ export async function POST(request: Request) {
     })
     .select("token, org_id")
     .single();
+
+  if (insertError?.code === "HP002") {
+    return NextResponse.json({ error: CHILD_INVITE_REFUSED }, { status: 403 });
+  }
 
   if (insertError || !invite) {
     console.error("family-invites insert error:", insertError);

@@ -30,6 +30,7 @@
 import type { MemberRow } from "@/lib/members/format";
 import { anniversaryCell, parseAnniversaryCell, withoutHiddenValues } from "@/lib/members/format";
 import { retiredFlagResets } from "@/lib/members/retiredHideFlags";
+import { isChildWithoutAccount } from "@/lib/household";
 import type {
   OrgSnapshot,
   SnapshotFamilyMember,
@@ -242,6 +243,11 @@ function personKey(person: {
   ].join("\u0000");
 }
 
+/** A child without an account has no stored year, so the year can't identify them. */
+function yearlessKey(person: Parameters<typeof personKey>[0]): string {
+  return personKey({ ...person, birth_year: null });
+}
+
 interface HouseholdResolution {
   familyId: string | null;
   /** Set when the household must be created in this run. */
@@ -261,6 +267,26 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
   // add the person a second time.
   const identityKeys = (row: MemberRow): Set<string> =>
     new Set([personKey(row), personKey(fileRowOf.get(row)!)]);
+  const yearlessKeys = (row: MemberRow): Set<string> =>
+    new Set([yearlessKey(row), yearlessKey(fileRowOf.get(row)!)]);
+  // A year the file hides on its own still tells this row from a child stored with
+  // that name and birthday. Hiding the whole birthday leaves nothing to compare.
+  const matchesExactly = (row: MemberRow, member: SnapshotFamilyMember): boolean => {
+    const fileRow = fileRowOf.get(row)!;
+    return isChildWithoutAccount(member) &&
+      fileRow.birth_year !== null &&
+      !Number.isNaN(fileRow.birth_year) &&
+      !row.hidden_fields.includes("birthday")
+      ? personKey(fileRow) === personKey(member)
+      : identityKeys(row).has(personKey(member));
+  };
+  // Nothing stored says a row kept apart isn't that child, so the create path warns.
+  const matchesFamilyMember = (row: MemberRow, member: SnapshotFamilyMember): boolean =>
+    isChildWithoutAccount(member) &&
+    (row.relationship === "child" ||
+      (row.relationship === null && fileRowOf.get(row)!.birth_year === null))
+      ? yearlessKeys(row).has(yearlessKey(member))
+      : matchesExactly(row, member);
 
   // ---- snapshot lookups --------------------------------------------------
   const profilesByEmail = new Map<string, SnapshotProfile[]>();
@@ -287,7 +313,7 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
   // new person there (see the HOUSEHOLD_MOVE check).
   const familyMembersByPerson = new Map<string, SnapshotFamilyMember[]>();
   for (const member of snapshot.familyMembers) {
-    const key = personKey(member);
+    const key = isChildWithoutAccount(member) ? yearlessKey(member) : personKey(member);
     familyMembersByPerson.set(key, [
       ...(familyMembersByPerson.get(key) ?? []),
       member,
@@ -335,6 +361,22 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
   // the wild, so export writes a blank cell for them — checking them here
   // made an org's own export unimportable, since one bad row 422s the file.
   const currentYear = new Date().getFullYear();
+  const checkBirthPart = (
+    row: MemberRow,
+    field: "birth_month" | "birth_day" | "birth_year",
+    min: number,
+    max: number
+  ) => {
+    const value = row[field];
+    if (value === null) return;
+    if (Number.isNaN(value) || value < min || value > max) {
+      fail(row, {
+        code: "INVALID_BIRTH_PART",
+        field,
+        message: `${field} must be a whole number between ${min} and ${max}`,
+      });
+    }
+  };
   for (const row of rows) {
     if (row.email !== null && !EMAIL.test(row.email)) {
       fail(row, {
@@ -357,24 +399,8 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
         message: `role must be one of: ${[...ROLES].join(", ")}`,
       });
     }
-    const birthPart = (
-      field: "birth_month" | "birth_day" | "birth_year",
-      min: number,
-      max: number
-    ) => {
-      const value = row[field];
-      if (value === null) return;
-      if (Number.isNaN(value) || value < min || value > max) {
-        fail(row, {
-          code: "INVALID_BIRTH_PART",
-          field,
-          message: `${field} must be a whole number between ${min} and ${max}`,
-        });
-      }
-    };
-    birthPart("birth_month", 1, 12);
-    birthPart("birth_day", 1, 31);
-    birthPart("birth_year", 1900, currentYear);
+    checkBirthPart(row, "birth_month", 1, 12);
+    checkBirthPart(row, "birth_day", 1, 31);
     if (row.anniversary !== null && parseAnniversaryCell(row.anniversary) === null) {
       fail(row, {
         code: "INVALID_DATE",
@@ -560,10 +586,9 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     if (row.has_login) continue;
     const resolution = resolutions.get(groupKey(row))!;
     if (resolution.error !== null || resolution.familyId === null) continue;
-    const rowKeys = identityKeys(row);
     const candidates = (
       familyMembersByFamily.get(resolution.familyId) ?? []
-    ).filter((member) => rowKeys.has(personKey(member)));
+    ).filter((member) => matchesFamilyMember(row, member));
     if (candidates.length > 1) {
       fail(row, {
         code: "AMBIGUOUS_MATCH",
@@ -587,12 +612,49 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     matchedFamilyMember.set(row, member);
   }
 
+  // Rows that differ only in a year name two children no stored field can tell
+  // apart, so neither row can be planned. A child with an account keeps a year,
+  // which does tell them apart.
+  const seenChildren = new Set<string>();
+  for (const row of rows) {
+    if (row.has_login || row.relationship !== "child") continue;
+    if (matchedFamilyMember.get(row)?.claimed_profile_id) continue;
+    // The resolved household, since rows the file groups apart can land in one.
+    const resolution = resolutions.get(groupKey(row))!;
+    const household = resolution.familyId ?? resolution.householdName;
+    if (household === null) continue;
+    const key = [norm(household), yearlessKey(fileRowOf.get(row)!)].join("\u0000");
+    if (seenChildren.has(key) && resultByRow.get(row)!.errors.length === 0) {
+      fail(row, {
+        code: "AMBIGUOUS_MATCH",
+        message: "another row in this file has a child in the same household with the same name and birthday",
+      });
+    }
+    seenChildren.add(key);
+  }
+
+  // Judged on what the row leaves stored, since it can relabel the person.
+  const birthYearIgnored = (row: MemberRow): boolean => {
+    if (row.has_login) return false;
+    const member = matchedFamilyMember.get(row);
+    return isChildWithoutAccount({
+      relationship: row.relationship ?? member?.relationship ?? null,
+      claimed_profile_id: member?.claimed_profile_id,
+    });
+  };
+
+  // After matching, because the match decides whether the year is ignored.
+  for (const row of rows) {
+    if (!birthYearIgnored(row)) checkBirthPart(row, "birth_year", 1900, currentYear);
+  }
+
   // A birthday needs its month and day together. Checked against the match, not
   // just the cells: a blank cell means "not provided", so a year alone is a fine
   // update to a stored month and day, and an org's own export must stay
   // importable when a stored birthday is already incomplete.
   for (const row of rows) {
-    const cells = [row.birth_month, row.birth_day, row.birth_year];
+    const year = birthYearIgnored(row) ? null : row.birth_year;
+    const cells = [row.birth_month, row.birth_day, year];
     if (cells.every((cell) => cell === null) || cells.some(Number.isNaN)) continue;
     const stored = matchedProfile.get(row) ?? matchedFamilyMember.get(row);
     const month = row.birth_month ?? stored?.birth_month ?? null;
@@ -601,7 +663,7 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
       stored !== undefined &&
       month === stored.birth_month &&
       day === stored.birth_day &&
-      (row.birth_year === null || row.birth_year === stored.birth_year);
+      (year === null || year === stored.birth_year);
     if (month !== null && day !== null) continue;
     if (unchanged) continue;
     fail(row, {
@@ -609,6 +671,32 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
       field: month === null ? "birth_month" : "birth_day",
       message: "a birthday needs birth_month and birth_day together",
     });
+  }
+
+  // Two people stored with one name and birthday and no year can't be told apart,
+  // so every later file naming them, and the org's own export, would be refused.
+  const yearlessInserts = new Set<string>();
+  for (const row of rows) {
+    if (row.has_login || row.first_name === null || matchedFamilyMember.has(row)) continue;
+    if (row.hidden_fields.includes("birthday")) continue;
+    if (row.birth_year !== null && !birthYearIgnored(row)) continue;
+    if (resultByRow.get(row)!.errors.length > 0) continue;
+    const resolution = resolutions.get(groupKey(row))!;
+    const household = resolution.familyId ?? resolution.householdName;
+    if (household === null) continue;
+    const stored = (familyMembersByFamily.get(resolution.familyId ?? "") ?? []).some(
+      (member) => member.birth_year === null && yearlessKey(member) === yearlessKey(row)
+    );
+    const key = [norm(household), yearlessKey(row)].join("\u0000");
+    if (stored || yearlessInserts.has(key)) {
+      fail(row, {
+        code: "AMBIGUOUS_MATCH",
+        field: "birth_year",
+        message:
+          "someone else in this household has the same name and birthday, and neither would have a stored birth_year, so no later file could tell them apart; show the birth_year of whichever isn't a child in this file, or add it under Households",
+      });
+    }
+    yearlessInserts.add(key);
   }
 
   // ---- steps 5-8: per-row planning ---------------------------------------
@@ -686,8 +774,11 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
       if (resolution.error === null && resolution.familyId !== null) {
         const shadow = (
           familyMembersByFamily.get(resolution.familyId) ?? []
-        ).some(
-          (member) => identityKeys(row).has(personKey(member))
+        ).some((member) =>
+          // A blank relationship can't say this person is that child.
+          row.relationship === null
+            ? matchesExactly(row, member)
+            : matchesFamilyMember(row, member)
         );
         if (shadow) {
           fail(row, {
@@ -759,6 +850,10 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
       continue;
     }
 
+    if (row.birth_year !== null && birthYearIgnored(row)) {
+      result.warnings.push("birth_year is not stored for a child without an account");
+    }
+
     const member = matchedFamilyMember.get(row);
     if (member !== undefined) {
       planFamilyMemberUpdate(row, result, member);
@@ -807,9 +902,12 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     // and how it interacts with household_primary — product questions this
     // module should not answer by guessing. Failing names both households so
     // the admin can do it deliberately in the app.
-    const existingElsewhere = [...identityKeys(row)]
+    const existingElsewhere = [...identityKeys(row), ...yearlessKeys(row)]
       .flatMap((key) => familyMembersByPerson.get(key) ?? [])
-      .filter((member) => member.family_id !== resolution.familyId);
+      .filter(
+        (member) =>
+          member.family_id !== resolution.familyId && matchesFamilyMember(row, member)
+      );
     if (existingElsewhere.length > 0) {
       fail(row, {
         code: "HOUSEHOLD_MOVE",
@@ -826,6 +924,16 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
         "groups are ignored for family members without a login"
       );
     }
+    // Under a yearless key the map holds only a child without an account or
+    // someone else with no stored year, and a row's year can match neither.
+    const sharesIdentityWithoutYear = [...yearlessKeys(row)].some((key) =>
+      familyMembersByPerson.has(key)
+    );
+    if (sharesIdentityWithoutYear) {
+      result.warnings.push(
+        "someone with no stored birth_year has the same name and birthday, and this row adds a separate person; if this row is them, clear its birth_year or edit them under Households"
+      );
+    }
     if (resolution.pendingKey !== null) ensureHouseholdInsert(row, resolution);
     result.action = "create_family_member";
     const values: FamilyMemberInsertValues = {
@@ -836,7 +944,7 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     if (row.preferred_name !== null) values.preferred_name = row.preferred_name;
     if (row.birth_month !== null) values.birth_month = row.birth_month;
     if (row.birth_day !== null) values.birth_day = row.birth_day;
-    if (row.birth_year !== null) values.birth_year = row.birth_year;
+    if (row.birth_year !== null && !birthYearIgnored(row)) values.birth_year = row.birth_year;
     if (row.is_class_member !== null) values.is_class_member = row.is_class_member;
     familyMemberWrites.push({
       kind: "insert_family_member",
@@ -1056,6 +1164,25 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     if (row.relationship !== null && row.relationship !== member.relationship) {
       changes.relationship = [member.relationship, row.relationship];
       values.relationship = row.relationship;
+      // The database clears the year and deletes any open invite on this write,
+      // and a Rock pull brings back neither, so the plan has to say so. The
+      // snapshot doesn't read invites, so the warning can't say whether one exists.
+      if (
+        isChildWithoutAccount({
+          relationship: row.relationship,
+          claimed_profile_id: member.claimed_profile_id,
+        })
+      ) {
+        result.warnings.push(
+          "this row makes them a child without an account, so any open invite for them is deleted and its link stops working"
+        );
+        if (member.birth_year !== null) {
+          changes.birth_year = [member.birth_year, null];
+          result.warnings.push(
+            "this row makes them a child without an account, so their stored birth_year is removed"
+          );
+        }
+      }
     }
     if (
       row.is_class_member !== null &&

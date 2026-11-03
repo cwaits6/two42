@@ -198,7 +198,7 @@ begin
   insert into public.family_members (org_id, family_id, first_name, relationship, birth_month, birth_day, birth_year, claimed_profile_id)
     values (org_a, fam_control, 'Claimed Year', 'spouse', 3, 4, 1971, current_setting('nh.claim_year')::uuid) returning id into fm_claimed_year;
   insert into public.family_members (org_id, family_id, first_name, relationship, birth_month, birth_day, birth_year)
-    values (org_a, fam_control, 'Unclaimed', 'child', 5, 6, 2010) returning id into fm_unclaimed;
+    values (org_a, fam_control, 'Unclaimed', 'sibling', 5, 6, 2010) returning id into fm_unclaimed;
   perform set_config('nh.fm_claimed_bday', fm_claimed_bday::text, true);
   perform set_config('nh.fm_claimed_year', fm_claimed_year::text, true);
   perform set_config('nh.fm_unclaimed', fm_unclaimed::text, true);

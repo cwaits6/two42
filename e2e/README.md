@@ -47,7 +47,10 @@ lead, Henry, Chloe and Isaac as members) through the same container in
 `beforeAll`, puts Henry and Chloe's date back before each test, and deletes the
 team in `afterAll`. `directory-no-hide-settings.spec.ts` changes the Mockingham
 household and Chloe's profile through the page and the same container, and puts
-their seeded values back in `afterAll`.
+their seeded values back in `afterAll`. `children-directory.spec.ts` adds a child
+to the Mockingham household through the page, inserts an invited adult and an
+approved access request through the same container, and deletes those rows there
+in `beforeAll` and `afterAll`.
 
 ## Personas
 
@@ -93,6 +96,7 @@ not covered here.
 | `prayer-anonymity.spec.ts`          | A member, the group's leader and a church admin in the group see an anonymous request as "Anonymous", with no author name, no "You" and no "Mark answered", and not under My requests; its author sees it as theirs, under My requests, and can mark it answered; a request shared by name still shows the name; the request is deleted in afterAll |
 | `serving-cancel.spec.ts`            | A spouse listed on a date, who did not tap Sign up, cancels it from the team schedule at 390 and 1280 and the date opens up; the person who tapped Sign up, the team lead and the group leader can each still cancel it; a team member not listed sees no Cancel or Remove button and the API refuses them with the date still taken; the team is deleted in afterAll |
 | `directory-no-hide-settings.spec.ts` | No hide setting but email and the listing on the profile, household and admin forms at 390 and 1280; a yearless anniversary shows month and day with no "Married"; a couple where a spouse hid it is on no Anniversaries filter; the email and listing settings remove the email and the person; the household phone shows a spouse's number under their name, follows them clearing it, and either spouse can clear the choice; the seed is restored in afterAll |
+| `children-directory.spec.ts`         | A child's Year field is gone from the add form, which says entered details are shown and that a child can't be invited; a child with only a name shows only that name to a member in the same group, with no "Child" label and no birthday; a seeded child's birthday shows without a year; the household's primary and the church admin still list and manage the children; the household invite and account setup forms state the 13 or older requirement; the added rows are deleted in afterAll |
 
 ## Adding a spec
 
