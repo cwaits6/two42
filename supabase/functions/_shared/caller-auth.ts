@@ -7,7 +7,7 @@ const KEY_VARS = ["SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_ROLE_KEY"];
 /**
  * Every service key in the environment, not only the one resolveServiceKey()
  * picks: the vault's cron key may be a different one, and checking against one
- * could refuse the cron every night.
+ * could refuse the scheduler on every run.
  */
 function serviceKeysFromEnv(): string[] {
   const keys = KEY_VARS.map((name) => Deno.env.get(name) ?? "");
