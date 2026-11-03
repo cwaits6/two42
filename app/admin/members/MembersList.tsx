@@ -21,6 +21,7 @@ import { Clock, Pencil, Search, UserPlus } from "lucide-react";
 import type { AccessRequest, Profile, UserRole } from "@/lib/types";
 import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
 import { requestedOn } from "@/lib/groups/joinQueue";
+import { invitedNotSignedUp } from "@/lib/members/invited";
 import { displayName } from "@/lib/names";
 import { personName } from "@/lib/serving/display";
 import { toUserRole } from "@/lib/roles";
@@ -225,11 +226,7 @@ export function MembersList({
   }
 
   const pendingRequests = requests.filter((r) => r.status === "pending");
-  const invited = requests.filter(
-    (r) =>
-      r.status === "approved" &&
-      !members.some((m) => displayName(m) === r.name)
-  );
+  const invited = invitedNotSignedUp(requests, members);
   const shownInvited = invited.filter((r) => matchesSearch(query, [r.name, r.email]));
   const shownMembers = members.filter((m) =>
     matchesSearch(query, [displayName(m), m.first_name, m.last_name, m.email]),
