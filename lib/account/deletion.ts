@@ -288,20 +288,26 @@ async function rowsAtAddresses<T extends { id: string }>(
   return found;
 }
 
+function lowercased(emails: (string | null | undefined)[]) {
+  return emails.flatMap((email) => (email ? [email.toLowerCase()] : []));
+}
+
 // No foreign key to the profile clears these, and an approved request or an
 // unclaimed household invite left behind would let handle_new_user() sign that
 // address back into the church. An address this person has changed away from is
-// only found through an invite they came in by; a request a church admin approved
-// directly has no link to them, so it stays under that address. Requests go before
-// the invite uses, and all of this before the household entry, because a retry
-// needs those links to find the old address.
+// only found through an invite they came in by, and may be shared: an unclaimed
+// invite or an invite's request there belongs to whoever it invites, so those stay.
+// A request a church admin approved directly has no link to them, so it stays too.
+// Deleting a request clears its link on their invite uses, and the household entry
+// holds their accepted invites, so a retry only finds the old address if the
+// requests go after everything else found through it, and all of this before the entry.
 async function deleteSignupRecords(
   service: ServiceClient,
   orgId: string,
   personId: string,
   currentEmails: (string | null | undefined)[],
 ) {
-  const uses = rowsOf<{ id: string; access_request_id: string | null }>(
+  const ownUses = rowsOf<{ id: string; access_request_id: string | null }>(
     await service
       .from("group_invite_uses")
       .select("id, access_request_id")
@@ -309,7 +315,7 @@ async function deleteSignupRecords(
       .eq("profile_id", personId),
     "invite uses",
   );
-  const linkedIds = uses.flatMap((u) => u.access_request_id ?? []);
+  const linkedIds = ownUses.flatMap((u) => u.access_request_id ?? []);
   const linkedRequests =
     linkedIds.length === 0
       ? []
@@ -333,48 +339,25 @@ async function deleteSignupRecords(
   const acceptedInvites =
     ownEntries.length === 0
       ? []
-      : rowsOf<{ invite_email: string }>(
+      : rowsOf<{ invite_email: string; token: string }>(
           await service
             .from("family_invites")
-            .select("invite_email")
+            .select("invite_email, token")
             .eq("org_id", orgId)
             .in("family_member_id", ownEntries.map((e) => e.id))
             .not("accepted_at", "is", null),
           "accepted household invites",
         );
 
-  const addresses = new Set(
-    [
-      ...currentEmails,
-      ...linkedRequests.map((r) => r.email),
-      ...acceptedInvites.map((i) => i.invite_email),
-    ].flatMap((email) => (email ? [email.toLowerCase()] : [])),
-  );
-
-  const requests = await rowsAtAddresses(
-    service, "access_requests", "email", orgId, addresses, "access requests",
-  );
-  await deleteExactly(
-    service,
-    "access_requests",
-    orgId,
-    [...new Set([...requests, ...linkedRequests].map((r) => r.id))],
-    "delete access requests",
-  );
-
-  const usesAtAddress = await rowsAtAddresses(
-    service, "group_invite_uses", "email", orgId, addresses, "invite uses by email",
-  );
-  await deleteExactly(
-    service,
-    "group_invite_uses",
-    orgId,
-    [...new Set([...uses, ...usesAtAddress].map((u) => u.id))],
-    "delete invite uses",
-  );
+  const current = new Set(lowercased(currentEmails));
+  const addresses = new Set([
+    ...current,
+    ...lowercased(linkedRequests.map((r) => r.email)),
+    ...lowercased(acceptedInvites.map((i) => i.invite_email)),
+  ]);
 
   const invites = await rowsAtAddresses<{ id: string; accepted_at: string | null }>(
-    service, "family_invites", "invite_email", orgId, addresses, "household invites", ", accepted_at",
+    service, "family_invites", "invite_email", orgId, current, "household invites", ", accepted_at",
   );
   await deleteExactly(
     service,
@@ -383,6 +366,35 @@ async function deleteSignupRecords(
     invites.filter((i) => i.accepted_at === null).map((i) => i.id),
     "delete household invites",
   );
+
+  const usesAtAddress = await rowsAtAddresses<{ id: string; profile_id: string | null }>(
+    service, "group_invite_uses", "email", orgId, addresses, "invite uses by email", ", profile_id",
+  );
+  await deleteExactly(
+    service,
+    "group_invite_uses",
+    orgId,
+    usesAtAddress.filter((u) => u.profile_id === null).map((u) => u.id),
+    "delete invite uses by email",
+  );
+
+  const ownTokens = new Set(acceptedInvites.map((i) => i.token));
+  const requests = await rowsAtAddresses<{ id: string; email: string; invite_token: string | null }>(
+    service, "access_requests", "email", orgId, addresses, "access requests", ", invite_token",
+  );
+  const theirs = requests.filter(
+    (r) =>
+      current.has(r.email.toLowerCase()) || !r.invite_token || ownTokens.has(r.invite_token),
+  );
+  await deleteExactly(
+    service,
+    "access_requests",
+    orgId,
+    [...new Set([...theirs, ...linkedRequests].map((r) => r.id))],
+    "delete access requests",
+  );
+
+  await deleteExactly(service, "group_invite_uses", orgId, ownUses.map((u) => u.id), "delete invite uses");
 }
 
 // family_members.claimed_profile_id only clears on delete, which would leave

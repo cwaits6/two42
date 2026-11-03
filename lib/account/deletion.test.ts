@@ -286,6 +286,60 @@ describe("deletePerson: sign-up records at other addresses", () => {
     expect(tables.access_requests).toEqual([]);
   });
 
+  it("leaves what belongs to someone else at an old address they shared", async () => {
+    const { tables } = setup({
+      family_members: [
+        { id: "m1", org_id: ORG, family_id: "f1", first_name: "Ada", claimed_profile_id: "ada" },
+        { id: "m2", org_id: ORG, family_id: "f1", first_name: "Ben", claimed_profile_id: null },
+      ],
+      family_invites: [
+        { id: "accepted", org_id: ORG, family_member_id: "m1", invite_email: "family@example.test", token: "t1", accepted_at: "2026-01-01" },
+        { id: "spouse", org_id: ORG, family_member_id: "m2", invite_email: "family@example.test", token: "t2", accepted_at: null },
+      ],
+      access_requests: [
+        { id: "own-request", org_id: ORG, email: "family@example.test", invite_token: "t1" },
+        { id: "unlinked-request", org_id: ORG, email: "family@example.test", invite_token: null },
+        { id: "spouse-request", org_id: ORG, email: "family@example.test", invite_token: "t2" },
+      ],
+      group_invite_uses: [
+        { id: "spouse-use", org_id: ORG, profile_id: "ben", email: "family@example.test" },
+      ],
+    });
+    expect(await deletePerson(ORG, "ada")).toBe("deleted");
+    expect(tables.family_invites.map((i) => i.id)).toContain("spouse");
+    expect(tables.access_requests.map((r) => r.id)).toEqual(["spouse-request"]);
+    expect(tables.group_invite_uses.map((u) => u.id)).toEqual(["spouse-use"]);
+  });
+
+  const oldAddressSteps = [
+    { name: "the uses found by address", failure: { table: "group_invite_uses", op: "delete" } },
+    { name: "the requests", failure: { table: "access_requests", op: "delete" } },
+    { name: "their own uses", failure: { table: "group_invite_uses", op: "delete", skip: 1 } },
+  ] as const;
+
+  for (const { name, failure } of oldAddressSteps) {
+    it(`still clears an old address on retry after deleting ${name} fails`, async () => {
+      const { failures, log, tables } = setup({
+        access_requests: [
+          { id: "linked", org_id: ORG, email: "old@example.test" },
+          { id: "same-address", org_id: ORG, email: "old@example.test" },
+        ],
+        group_invite_uses: [
+          { id: "own", org_id: ORG, profile_id: "ada", email: "old@example.test", access_request_id: "linked" },
+          { id: "at-address", org_id: ORG, profile_id: null, email: "old@example.test", access_request_id: null },
+        ],
+      });
+      failures.push({ ...failure });
+      expect(await deletePerson(ORG, "ada")).toBe("failed");
+      expect(log.deletedUsers).toEqual([]);
+
+      failures.length = 0;
+      expect(await deletePerson(ORG, "ada")).toBe("deleted");
+      expect(tables.access_requests).toEqual([]);
+      expect(tables.group_invite_uses).toEqual([]);
+    });
+  }
+
   it("removes an unclaimed household invite to their address, and no one else's", async () => {
     const { tables } = setup({
       family_invites: [
@@ -315,7 +369,7 @@ describe("deletePerson: failure at any step", () => {
     access_requests: [{ id: "r1", org_id: ORG, email: "ada@example.test" }],
     group_invite_uses: [{ id: "u1", org_id: ORG, profile_id: "ada", email: null, access_request_id: "r1" }],
     family_invites: [
-      { id: "i1", org_id: ORG, family_member_id: "m1", invite_email: "ada.old@example.test", accepted_at: "2026-01-01" },
+      { id: "i1", org_id: ORG, family_member_id: "m1", invite_email: "ada.old@example.test", token: "t1", accepted_at: "2026-01-01" },
       { id: "i2", org_id: ORG, family_member_id: "m9", invite_email: "ada@example.test", accepted_at: null },
     ],
   });

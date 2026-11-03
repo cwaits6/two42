@@ -6,6 +6,8 @@ export type Tables = Record<string, Row[]>;
 export interface Failure {
   table: string;
   op: "select" | "update" | "delete";
+  // Let this many matching calls through first, to fail a later one in the same run.
+  skip?: number;
 }
 
 // What PostgREST does with a pattern: `*` and `%` match any run, `_` one character.
@@ -92,15 +94,23 @@ export function fakeService(tables: Tables) {
         return builder;
       },
       then(resolve: (value: { data: Row[] | null; error: { code: string } | null }) => void) {
-        if (failures.some((f) => f.table === table && f.op === op)) {
+        const failure = failures.find((f) => f.table === table && f.op === op);
+        if (failure && !failure.skip) {
           resolve({ data: null, error: { code: "XX000" } });
           return;
         }
+        if (failure?.skip) failure.skip -= 1;
         const rows = tables[table] ?? [];
         const matched = rows.filter((row) => predicates.every((p) => p(row))).slice(0, limit);
         if (op !== "select") log.writes.push({ table, op, filters });
         if (op === "update") matched.forEach((row) => Object.assign(row, patch));
         if (op === "delete") tables[table] = rows.filter((row) => !matched.includes(row));
+        // group_invite_uses_access_request_id_fkey is ON DELETE SET NULL.
+        if (op === "delete" && table === "access_requests") {
+          for (const use of tables.group_invite_uses ?? []) {
+            if (matched.some((row) => row.id === use.access_request_id)) use.access_request_id = null;
+          }
+        }
         resolve({ data: matched.map((row) => ({ ...row })), error: null });
       },
     };
