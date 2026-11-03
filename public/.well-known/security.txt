@@ -1,0 +1,4 @@
+Contact: mailto:security@two42.io
+Expires: 2027-11-01T00:00:00Z
+Canonical: https://two42.io/.well-known/security.txt
+Policy: https://github.com/cwaits6/two42/blob/main/SECURITY.md
