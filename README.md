@@ -14,14 +14,14 @@ person who will.
 
 ## What a group gets
 
-- **Calendar.** Events, including repeating ones, with RSVPs, a link to join
-  online, reminder emails, and a feed that subscribes into Apple or Google
-  Calendar.
+- **Calendar.** Events, including repeating ones, with RSVPs, address
+  suggestions and a map for the location, a link to join online, reminder
+  emails, and a feed that subscribes into Apple or Google Calendar.
 - **Serving.** Teams and their coming dates. Members take the dates they can,
   leaders see what is still uncovered, and reminder emails go out before each
   one.
-- **Directory.** Members and households, birthdays and anniversaries, with each
-  member choosing what to hide.
+- **Directory.** Members and households, birthdays and anniversaries, showing
+  what each person chooses to add to their profile.
 - **Announcements**, **prayer requests** shared by name or anonymously,
   **lessons** grouped into series, and **funds** for giving to a person or
   cause in the group.
@@ -72,7 +72,8 @@ cp .env.example .env.local
 
 Leave the rest as it is. The app runs without Resend or Google Maps: without a
 Resend key, invite emails fail with "We couldn't send the email", and with the
-Maps key empty event maps are left out.
+Maps key empty the event location is a plain text field and event maps are left
+out.
 
 ```bash
 npm run dev
@@ -135,7 +136,7 @@ described in [`scripts/README.md`](./scripts/README.md).
 | `SERVING_LINK_SECRET` | yes | HMAC key for the serving links that act straight from an email. Use the same value in the edge function secrets |
 | `RESEND_API_KEY` | in production | Sends invite, setup, approval and serving emails. The app starts without it; every send fails |
 | `NEXT_PUBLIC_EMAIL_FROM` | in production | The `From:` address, `Name <address>`. Defaults to two42.io's, which Resend will refuse for any other account; use an address on a domain you have verified in Resend |
-| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | no | Event maps and place lookup. Empty or unset leaves them out; any other value loads Google Maps with it |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | no | Address suggestions and event maps ([setup](#event-locations)). Empty or unset leaves them out; any other value loads Google Maps with it |
 | `SERVING_LINK_MODE` | no | `signed` (default) lets serving email links act without signing in; `login` sends people through sign-in. A group's own setting overrides it |
 | `NEXT_PUBLIC_TIME_ZONE` | no | Zone used when a church's own time zone cannot be read. Default `America/New_York` |
 | `NEXT_PUBLIC_APP_NAME`, `NEXT_PUBLIC_APP_DESCRIPTION`, `NEXT_PUBLIC_COLOR_PRIMARY`, `NEXT_PUBLIC_COLOR_PRIMARY_LIGHT`, `NEXT_PUBLIC_COLOR_ACCENT`, `NEXT_PUBLIC_COLOR_WARM`, `NEXT_PUBLIC_COLOR_BG_LIGHT`, `NEXT_PUBLIC_COLOR_BG_MUTED` | no | Fallbacks used when a church's branding row is empty. A church's name, logo and accent color are set per church by an operator |
@@ -262,6 +263,25 @@ security contact in [`SECURITY.md`](./SECURITY.md) and
 `public/.well-known/security.txt`, the GitHub and contact links in
 `components/landing/sections.ts`, and the `/privacy` and `/terms` pages, which
 are placeholders.
+
+## Event locations
+
+Optional. Without a key, people type a location as plain text, and the calendar's
+list view still links it to Google Maps. With one, the location field suggests
+addresses, and the event page draws a map when Google can find the location.
+
+1. In the [Google Cloud Console](https://console.cloud.google.com/), create or
+   choose a project and attach a billing account, which Google Maps Platform
+   requires.
+2. Enable the **Maps JavaScript API**, **Places API (New)** and **Geocoding
+   API**. Suggestions use Places, and the event map uses the other two.
+3. Create an API key under **Credentials**, and set it as
+   `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`.
+4. Restrict the key, because it is sent to every browser that loads the app.
+   Limit it to those three APIs, and under **Application restrictions** to your
+   domain, plus `http://localhost:*/*` if you use the same key locally.
+
+A person can always keep what they typed instead of picking a suggestion.
 
 ## Where things live
 
