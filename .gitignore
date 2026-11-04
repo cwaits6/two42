@@ -48,6 +48,5 @@ next-env.d.ts
 supabase/.temp
 supabase/.branches
 
-# local artifacts and design tool state, kept out of git
 /local/
 /.impeccable/
