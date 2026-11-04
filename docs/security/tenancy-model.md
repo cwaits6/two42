@@ -402,6 +402,22 @@ value in its own org-filtered query, not on `listActiveOrgs()`: functions deploy
 before migrations, and a missing column on that shared select would stop the
 reminder jobs for the window. `prayer_retention_suite.sql` pins the matrix.
 
+### Serving reminder record
+
+`serving_reminder_passes` and `serving_reminder_sends`
+(`20261116000000_serving_blocks_couples_reminder_time.sql`) record which team
+had its reminder pass on which local day and which person's reminder was
+claimed and sent. Both carry `org_id` with the fail-closed default, the
+restrictive isolation floor, composite foreign keys (to `teams`, to the pass,
+and to `profiles`, which cascades when the person is deleted) and **no
+permissive policy or client grant**: only the service key reads or writes
+them, through `serving_reminder_claim()` and the hourly job's settle updates,
+every chain carrying the church's id. The nightly `clean-up-expired-data` job
+deletes a church's passes with a `send_date` older than 35 days, 500 at a
+time, and the sends go with them. Nothing else holds a person's reminder
+history. `serving_reminder_record_suite.sql` pins the grants, the claim and
+the cascade.
+
 ### Group creation
 
 Who may start a group is an org setting read by RLS and by a definer
@@ -924,6 +940,14 @@ table's own FK.
   client sessions only. Database-level access by the operator can still link a
   request to its author; whether that changes is decided with the prayer
   encryption work.
+- A team's dates (a rolling window or a set block, decided by
+  `teamServiceDates()` in `lib/serving/dates.ts`) are enforced by the two
+  signup routes and the signed-link page, not by the `serving_signups`
+  INSERT policy or `serving_signup_apply()`: a team member writing to
+  PostgREST directly could still insert a row for a date outside them, as
+  they could already for a date that is not a Sunday. The policy keeps the
+  row inside the member's own org and team; the date rule is review-enforced
+  at the routes, where every app path goes through.
 - The edge functions' `group_id` / `team_id` bindings are review-enforced:
   `check-service-role-org-scope.mjs` proves each chain names the predicate,
   not that it binds the right variable. `_shared/event-recipients.ts` and

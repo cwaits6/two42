@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { setGroupMembership } from "@/lib/memberGroups";
-import { personInitials, personName } from "@/lib/serving/display";
+import { personInitials, personName, spouseFirstName } from "@/lib/serving/display";
 
 export interface TeamRosterPerson {
   id: string;
@@ -231,7 +231,7 @@ export function TeamRoster({ teamId, teamName, groupName, members, candidates }:
                 Add both
               </Button>
               <Button size="lg" variant="outline" onClick={() => add(asking.person)}>
-                Just {personName(asking.person)}
+                Just {spouseFirstName(asking.person)}
               </Button>
             </div>
           )}

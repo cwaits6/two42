@@ -15,7 +15,7 @@ import { Segmented } from "@/components/ui/segmented";
 import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
 import { CheckCircle2, X } from "lucide-react";
-import { bookingMessage, type BookingOutcome } from "@/lib/serving/booking";
+import { bookingMessage, type BookingOutcome } from "@/lib/serving/bookingOutcome";
 import { formatMonth, formatMonthDay, formatServingDate, openDatesAfter } from "@/lib/serving/dates";
 import { SignupChoices, signupTitle, type SignupChoice } from "./SignupChoices";
 
@@ -197,7 +197,7 @@ export function ServingSchedule({
                 const label = formatServingDate(date, today);
                 return (
                   <div key={date} className="flex min-h-16 items-center gap-4 px-4 py-2">
-                    <p className="flex-1 text-lg font-semibold">{label}</p>
+                    <p className="flex-1 shrink-0 text-lg font-semibold">{label}</p>
 
                     {!entry && canSignUp && (
                       <Button
@@ -241,7 +241,7 @@ export function ServingSchedule({
 
                     {entry && !mine && (
                       <>
-                        <p className="text-base text-muted-foreground text-right">{entry.label}</p>
+                        <p className="min-w-0 text-right text-base text-muted-foreground">{entry.label}</p>
                         {canManage && (
                           <Button
                             variant="ghost"

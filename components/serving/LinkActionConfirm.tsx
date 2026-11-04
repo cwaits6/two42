@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { failureMessage } from "@/lib/errorCopy";
-import { bookingMessage, type BookingOutcome } from "@/lib/serving/booking";
+import { bookingMessage, type BookingOutcome } from "@/lib/serving/bookingOutcome";
 import { formatMonthDay, formatServingDate } from "@/lib/serving/dates";
 import { ServingNotice, ServingPageLink } from "./ServingNotice";
 import { SignupChoices, signupTitle, type SignupChoice } from "./SignupChoices";

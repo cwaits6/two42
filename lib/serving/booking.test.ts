@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { bookDates, bookingMessage, type BookingOutcome } from "./booking";
+import { bookDates } from "./booking";
+import { bookingMessage, type BookingOutcome } from "./bookingOutcome";
 import { formatMonthDay } from "./dates";
 
 const short = (d: string) => formatMonthDay(d, "2026-11-04");

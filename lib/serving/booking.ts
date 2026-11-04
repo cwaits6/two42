@@ -6,22 +6,13 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { displayName } from "@/lib/names";
+import type { BookedDate, BookingOutcome } from "@/lib/serving/bookingOutcome";
 import { sendSignupConfirmation, type NamedProfile } from "@/lib/serving/server";
 
-export interface BookedDate {
-  date: string;
-  signupId: string;
-  created: boolean;
-}
+export type { BookedDate, BookingOutcome } from "@/lib/serving/bookingOutcome";
 
 /** Books one date: the row and whether it was new, or the RPC's error code. */
 export type BookDate = (date: string) => Promise<{ signupId: string; created: boolean } | { code: string }>;
-
-export interface BookingOutcome {
-  booked: BookedDate[];
-  /** The first following date that could not be booked, and why. */
-  stopped: { date: string; reason: "taken" | "failed" } | null;
-}
 
 export async function bookDates(
   dates: string[],
@@ -79,16 +70,4 @@ export async function sendBookingConfirmations(
       }
     }
   }
-}
-
-/** What the sign-up screens tell the person once the booking is done. */
-export function bookingMessage(outcome: BookingOutcome, format: (date: string) => string): string {
-  const dates = outcome.booked.map((b) => format(b.date));
-  const list = dates.length <= 1 ? dates.join("") : `${dates.slice(0, -1).join(", ")} and ${dates.at(-1)}`;
-  const first = `You're signed up for ${list}.`;
-  if (!outcome.stopped) return first;
-  const when = format(outcome.stopped.date);
-  return outcome.stopped.reason === "taken"
-    ? `${first} ${when} was just taken.`
-    : `${first} ${when} couldn't be booked.`;
 }

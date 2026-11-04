@@ -154,7 +154,7 @@ describe("TeamRoster add-people search", () => {
     await mount([marcus, dana]);
     await click("Add person");
     await click("Add Marcus Bell to Greeters");
-    await click("Just Marcus Bell");
+    await click("Just Marcus");
     expect(toast.success).toHaveBeenCalledWith("Added Marcus Bell to Greeters.");
   });
 
