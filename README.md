@@ -1,288 +1,292 @@
 # two42
 
-[![Next.js](https://img.shields.io/badge/Next.js-16.1-black?style=flat-square&logo=nextdotjs)](https://nextjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4-06B6D4?style=flat-square&logo=tailwindcss)](https://tailwindcss.com/)
-[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=flat-square&logo=supabase)](https://supabase.com/)
+[![Test](https://github.com/cwaits6/two42/actions/workflows/test.yml/badge.svg)](https://github.com/cwaits6/two42/actions/workflows/test.yml)
+[![Release](https://img.shields.io/github/v/release/cwaits6/two42?style=flat-square)](https://github.com/cwaits6/two42/releases)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](./LICENSE)
-[![Deploy with Vercel](https://img.shields.io/badge/Deploy%20with-Vercel-black?style=flat-square&logo=vercel)](https://vercel.com/new/clone?repository-url=https://github.com/cwaits6/two42)
-[![Open Source](https://img.shields.io/badge/Open-Source-orange?style=flat-square&logo=opensourceinitiative)](https://github.com/cwaits6/two42)
 
-**A purpose-built web app for church connection groups — replacing Facebook groups with a warm, simple community platform.**
+Software for the people in a church's groups: who's in them, what's coming up,
+who's serving, and what to pray for. A church runs one two42 space and puts its
+groups in it; each member signs in once and sees the groups they belong to.
 
-> **two42** — read "two forty-two," for **Acts 2:42**: the early church devoted to teaching, fellowship, breaking bread, and prayer.
+The hosted service is at [two42.io](https://two42.io). This repository is its
+source, under AGPL-3.0, so a church can run its own copy. This page is for the
+person who will.
 
-two42 was originally built for the **Incouragers** Sunday small group class at **First Redeemer Church** — a group of ~150 members who needed a better home than Facebook. Designed for all ages and comfortable on any device, it gives your group a dedicated space for events, announcements, lectures, and community — without the noise of social media.
+## What a group gets
 
-It's open source and fully configurable, so any small group or church class can fork it, set their name and colors in the database, and have it running in under an hour.
+- **Calendar.** Events, including repeating ones, with RSVPs, a link to join
+  online, reminder emails, and a feed that subscribes into Apple or Google
+  Calendar.
+- **Serving.** Teams and their coming dates. Members take the dates they can,
+  leaders see what is still uncovered, and reminder emails go out before each
+  one.
+- **Directory.** Members and households, birthdays and anniversaries, with each
+  member choosing what to hide.
+- **Announcements**, **prayer requests** shared by name or anonymously,
+  **lessons** grouped into series, and **funds** for giving to a person or
+  cause in the group.
+- **Joining.** A leader shares an invite link and the person sets up their own
+  account from it. Church admins approve people, and manage the church's
+  members, households and groups.
 
----
+## How it is built
 
-## Origin Story
+Next.js 16 (App Router) with TypeScript and Tailwind CSS 4, on Supabase:
+Postgres with row-level security, Auth, Storage, and three Edge Functions that
+`pg_cron` runs on a schedule. Email goes out through Resend. The hosted service
+runs on Vercel; any host that runs a Next.js server will do.
 
-The Incouragers class at First Redeemer Church needed a simple, welcoming space to replace their Facebook group. Members ranged widely in age and tech comfort — so everything had to be large, readable, and dead-simple to use. No cluttered feeds. No distracting algorithms. Just the group, their events, and their faith.
+## Run it locally
 
-two42 was built to solve exactly that. It has since been open-sourced so other groups can benefit from the same foundation.
+You need [Node.js](https://nodejs.org/) 26, npm, git, and
+[Docker](https://docs.docker.com/get-started/get-docker/), which the Supabase
+CLI uses to run the database locally. The CLI itself is a dev dependency, so
+`npx supabase` runs the pinned version and there is nothing else to install.
 
----
+```bash
+git clone https://github.com/cwaits6/two42.git
+cd two42
+npm install
+npx supabase start
+```
 
-## Why two42?
+The first start pulls the container images, then applies every migration and
+`supabase/seed.sql` and prints the stack's URLs and keys. Put four values in
+`.env.local`:
 
-- **Simplicity** — Easy to navigate for all ages, no distracting social media noise
-- **Warmth** — Large fonts, readable text, and an inviting design that welcomes everyone
-- **Affordability** — Runs for ~$10–15/year (domain name only — everything else is free)
-- **Privacy** — Your community's data stays yours, not a tech company's
-- **Customizable** — Fork it and brand it as your own; name, colors, and email identity are per-org rows, not a redeploy
+```bash
+cp .env.example .env.local
+```
 
----
-
-## Features
-
-### For Members
-
-- **Front Door** — Public page at `/` explaining what two42 is, with Sign in and a way to get in touch
-- **Events Calendar** — Browse upcoming gatherings and RSVP (Going / Maybe / Can't Go)
-- **Lecture Library** — Watch past teachings with embedded YouTube videos
-- **Magic Link Sign-In** — No passwords to remember; sign in with just your email
-- **Member Dashboard** — See what's coming up and manage your RSVPs in one place
-- **Announcements Feed** — Members-only updates and community news
-
-### For Admins
-
-- **Join Request Workflow** — Review and approve new members before they get access
-- **Member Management** — Assign roles (member / admin) and manage the roster
-- **Event Administration** — Create, edit, and manage events with public or members-only visibility
-- **Announcement Posting** — Share updates with the whole community instantly
-- **Lecture Management** — Add YouTube video links to build a searchable lesson library
-- **Site Settings** — Update donation URL, directory link, and other settings — no code changes needed
-- **Email Notifications** — Automatic welcome emails on approval and event reminders via scheduled edge functions
-
-### Accessibility First
-
-- Large, readable fonts (18px base) designed for all ages
-- Mobile-first layout — works great on phones, tablets, and desktops
-- High contrast, clear hierarchy, and minimal navigation (3–4 items max)
-- Warm, welcoming color palette — not cold or corporate
-
----
-
-## Tech Stack
-
-| Layer | Choice |
+| Set | To |
 |---|---|
-| Framework | Next.js 16 (App Router) + TypeScript |
-| Styling | Tailwind CSS v4 + shadcn/ui v4 |
-| Auth + Database | Supabase (PostgreSQL, RLS, Edge Functions) |
-| Hosting | Vercel (free tier) |
-| Email | Resend (free tier: 3,000 emails/month) |
-| Scheduling | Supabase pg_cron — schedule defined in `supabase/migrations/` (event + serving reminders) |
+| `NEXT_PUBLIC_SUPABASE_URL` | the printed Project URL, `http://127.0.0.1:54321` |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | the printed Publishable key |
+| `SUPABASE_SECRET_KEY` | the printed Secret key |
+| `SERVING_LINK_SECRET` | any random string, for example `openssl rand -hex 32` |
 
----
+Leave the rest as it is. The app runs without Resend or Google Maps: without a
+Resend key, invite emails fail with "We couldn't send the email", and without a
+Maps key event maps are left out.
 
-## Getting Started
+```bash
+npm run dev
+```
 
-### Prerequisites
+Open [http://localhost:3000](http://localhost:3000) and sign in as
+`admin@local.dev` with the password `password123`. That is the seed's church
+admin, who leads one of the three sample groups; `platform@local.dev` (same
+password) is the seed's operator account, and the other sample members are
+listed at the top of `supabase/seed.sql`. Everything the local stack mails,
+such as a password reset, lands in Mailpit at
+[http://127.0.0.1:54324](http://127.0.0.1:54324); nothing leaves the machine.
 
-- Node.js 18+
-- A [Supabase](https://supabase.com) account (free)
-- A [Resend](https://resend.com) account (free)
+`npx supabase status` prints the URLs and keys again. `npx supabase stop`
+stops the stack and keeps its data. The checks CI runs, and how to run each
+one locally, are in [`CLAUDE.md`](./CLAUDE.md).
 
-### Installation
+## Sign-in
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/cwaits6/two42.git
-   cd two42
-   npm install
-   ```
+Members sign in with an email address and a password. There are no magic
+links and no third-party sign-in.
 
-2. **Set up Supabase**
-   - Create a new project at [supabase.com/dashboard](https://supabase.com/dashboard)
-   - Open the **SQL Editor** and run the migrations in order:
-     1. `supabase/migrations/001_schema.sql`
-     2. `supabase/migrations/002_rls.sql`
-   - Find your keys at **Settings → API**
+Accounts come from invites, never from an open sign-up form:
 
-3. **Configure authentication redirect URLs**
-   - In Supabase: **Authentication → URL Configuration**
-   - Set **Site URL** to `http://localhost:3000`
-   - Add to **Redirect URLs**:
-     - `http://localhost:3000/api/auth/callback`
-     - `https://yourdomain.com/api/auth/callback` (add when deploying)
+- A leader creates an invite link under the group's settings. Someone who
+  opens it enters their name and email, gets an email with a link to
+  `/setup-account` that is good for seven days, and chooses a password there.
+  The account is created and placed in that group straight away.
+- A household invite (`/join/family/<token>`) sends a request to the church's
+  admins instead. When they approve it, the person gets the same setup email.
+- The database refuses anything else. A trigger on new Auth users rejects an
+  email that has no approved access request and no open household invite, so
+  calling Supabase Auth directly cannot create an account.
+- "Forgot your password?" sends Supabase Auth's recovery email, whose link
+  comes back through `/api/auth/callback` to `/update-password`. A signed-in
+  member changes their password under Settings.
 
-4. **Set up Google Maps API** (for event location autocomplete)
-   - Go to [Google Cloud Console](https://console.cloud.google.com/)
-   - Create a new project or select an existing one
-   - Enable the **Maps JavaScript API**, **Places API (New)**, and **Geocoding API**
-   - Create an API key at **Credentials → Create Credentials → API Key**
-   - (Optional) Restrict it to your domain(s) under **Application restrictions**, including `http://localhost:*/*` for local dev
+Two senders are involved. Invite and setup emails come from the app through
+Resend; password-reset emails come from Supabase Auth through whatever SMTP
+the project is configured with.
 
-5. **Set up environment variables**
-   ```bash
-   cp .env.example .env.local
-   ```
-   Fill in `.env.local`:
-   ```env
-   NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-   SUPABASE_SECRET_KEY=sb_secret_...
-   RESEND_API_KEY=re_...
-   NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your-api-key-from-google-cloud
-   NEXT_PUBLIC_SITE_URL=http://localhost:3000
-   ```
+## Environment variables and secrets
 
-   People join through group invite links: a group leader creates one under
-   Group settings › Invite links and shares it; the `/join/<token>` page it
-   opens resolves the organization from the link itself, so no environment
-   variable names a tenant.
+Configuration lives in three places. Never commit a value; `.env.local` is
+ignored by git, and `.env.example` holds placeholders only.
 
-   `NEXT_PUBLIC_SITE_URL` is also the app's one canonical host: a request
-   whose `Host` is anything else (other than `localhost`, `127.0.0.1` or a
-   `*.vercel.app` preview) gets a 404. See
-   [`docs/security/domains.md`](docs/security/domains.md).
+### The app
 
-6. **Start the dev server**
-   ```bash
-   npm run dev
-   ```
-   Open [http://localhost:3000](http://localhost:3000).
+Set in `.env.local` locally and in the host's environment in production.
+Every variable the app, `proxy.ts` and the scripts read is listed here; the
+operator scripts under `scripts/` take their own on the command line and are
+described in [`scripts/README.md`](./scripts/README.md).
 
-### Bootstrap Your First Admin
+| Variable | Required | What it is |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | yes | The Supabase project's API URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | yes | The publishable (anon) key |
+| `SUPABASE_SECRET_KEY` | yes | The secret (service role) key. Server only; it bypasses row-level security |
+| `NEXT_PUBLIC_SITE_URL` | yes | The one origin the app serves. Requests for any other host get a 404, except `localhost`, `127.0.0.1` and `*.vercel.app`; emailed links are built on it too ([`docs/security/domains.md`](./docs/security/domains.md)) |
+| `SERVING_LINK_SECRET` | yes | HMAC key for the serving links that act straight from an email. Use the same value in the edge function secrets |
+| `RESEND_API_KEY` | in production | Sends invite, setup, approval and serving emails. The app starts without it; every send fails |
+| `NEXT_PUBLIC_EMAIL_FROM` | in production | The `From:` address, `Name <address>`. Defaults to two42.io's, which Resend will refuse for any other account; use an address on a domain you have verified in Resend |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | no | Event maps and place lookup. Unset leaves them out |
+| `SERVING_LINK_MODE` | no | `signed` (default) lets serving email links act without signing in; `login` sends people through sign-in. A group's own setting overrides it |
+| `NEXT_PUBLIC_TIME_ZONE` | no | Zone used when a church's own time zone cannot be read. Default `America/New_York` |
+| `NEXT_PUBLIC_APP_NAME`, `NEXT_PUBLIC_APP_DESCRIPTION`, `NEXT_PUBLIC_COLOR_PRIMARY`, `NEXT_PUBLIC_COLOR_PRIMARY_LIGHT`, `NEXT_PUBLIC_COLOR_ACCENT`, `NEXT_PUBLIC_COLOR_WARM`, `NEXT_PUBLIC_COLOR_BG_LIGHT`, `NEXT_PUBLIC_COLOR_BG_MUTED` | no | Fallbacks used when a church's branding row is empty. A church's name, logo and accent color are set per church by an operator |
+| `ORG_EMAIL_DOMAIN_CAP` | no | Platform-wide cap on claimed custom sending domains. Default 8 |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_SERVICE_NAME` | no | OpenTelemetry tracing to any OTLP/HTTP receiver. Unset turns tracing off |
 
-Signups are fail-closed: a new user is only created if their email already has an
-approved access request or an open family invite. So approve yourself first, then
-invite yourself, then promote yourself.
+### Edge function secrets
 
-1. In **Supabase → SQL Editor**, approve your own email:
+Set once per Supabase project with `npx supabase secrets set NAME=value`, or
+under Edge Functions → Secrets in the dashboard. The three functions read
+these:
 
-   ```sql
-   insert into public.access_requests (org_id, name, email, status, reviewed_at)
-   values (
-     (select id from public.organizations),
-     'Your Name', 'you@example.com', 'approved', now()
-   );
-   ```
+| Secret | Required | What it is |
+|---|---|---|
+| `RESEND_API_KEY` | yes | Sends the reminder emails |
+| `SITE_URL` | yes | The origin for every link in a reminder. Defaults to `https://two42.io` |
+| `SERVING_LINK_SECRET` | yes | The same value as the app's. Without it, serving emails carry links that require sign-in instead |
+| `EMAIL_FROM` | in production | The `From:` address, same rule as the app's |
+| `SERVING_LINK_MODE` | no | Same meaning as the app's |
+| `APP_NAME`, `BRAND_COLOR` | no | Fallbacks for the email branding when a church's row is empty |
 
-   A fresh project has exactly one organization, so the subquery resolves to it.
-   If you have provisioned more, the statement stops with "more than one row
-   returned by a subquery" instead of guessing: replace the subquery with the
-   `id` of the organization you want from **Table Editor → organizations**.
+`SUPABASE_URL` and the service key (`SUPABASE_SECRET_KEYS` on hosted
+projects, `SUPABASE_SERVICE_ROLE_KEY` on the local stack) are injected by
+Supabase; do not set them.
 
-2. Go to **Supabase → Authentication → Users → Invite user** and invite that same email
-3. Click the magic link in the email to sign in
-4. In **Table Editor → profiles**, find your row and change `role` to `admin`
-5. Refresh — you'll now have access to the Admin Panel at `/admin`
+### Vault secrets
 
-> Skipping step 1 makes the invite fail with `TN001 — signup rejected: no approved
-> access request or invite`.
+The scheduled jobs are `pg_cron` entries that call the edge functions over
+`pg_net`. They read the project URL and a service key from Supabase Vault by
+name, because neither can be committed. **Both are required.** Until they
+exist, every job still runs on schedule and fails, and nothing in the app
+shows it. Create them once, in the SQL editor:
 
----
+```sql
+select vault.create_secret('https://<project-ref>.supabase.co', 'cron_project_url');
+select vault.create_secret('<the secret key>', 'cron_service_role_key');
+```
 
-## Customizing for Your Group
+To check them, and to check that the jobs are running:
 
-Branding lives in the database, in the `organizations.branding` jsonb column
-(`display_name`, `logo_url`, `accent`, `reply_to`). The app shell theme, the tab
-title, and outbound email all read it per-org at runtime — onboarding a second
-organization is a database insert, not a redeploy.
+```sql
+select name from vault.decrypted_secrets
+ where name in ('cron_project_url', 'cron_service_role_key');   -- expect both rows
 
-Only two environment variables are demoted by this: `NEXT_PUBLIC_APP_NAME` and
-`NEXT_PUBLIC_COLOR_PRIMARY` (see `.env.example`) survive as last-resort fallback
-defaults, used when an org's branding row is empty or unreadable.
-`NEXT_PUBLIC_EMAIL_FROM` is the platform-wide sending address: every org's
-email leaves from it, with the org's name as the display name and the org's
-`reply_to` for replies, since SPF/DKIM are configured for that domain. The
-schema and send path still support a per-org **verified** sending domain
-(`org_email_domains`, sending from `noreply@<their-domain>`); a domain can be
-claimed only for an org whose `custom_email_domain_enabled` a platform operator
-has set under `/platform` → organization detail, and claims are capped
-platform-wide by Resend's account-level domain limit (`ORG_EMAIL_DOMAIN_CAP` in
-`.env.example`). The
-admin surface for claiming one is hidden behind `CUSTOM_SENDING_DOMAINS_ENABLED`
-in `lib/email/sendingDomains.ts` until there is a paid tier, so no org can set
-one up today and the operator toggle has no reachable effect until that flag
-is on. Branding otherwise varies only the display name and
-Reply-To. The remaining `NEXT_PUBLIC_COLOR_*` vars and `APP_DESCRIPTION` are
-likewise still platform-wide. Everything
-else — events, announcements, donation links — is managed through the admin
-panel at runtime.
+select jobname, status, return_message, start_time
+  from cron.job_run_details order by start_time desc limit 10;   -- did each job run?
 
----
+select status_code, created
+  from net._http_response order by created desc limit 10;       -- expect 200s
+```
+
+A `401` means the vault key is not one of the function's service keys. The
+same check, as one query, is `scripts/check-scheduled-jobs.sql`; this
+repository's CI runs it against the hosted project after each firing.
+
+| Job | When (UTC) | Function |
+|---|---|---|
+| `send-event-reminders-daily` | 15:00 daily | `send-event-reminders` |
+| `send-serving-reminders-daily` | 15:00 daily | `send-serving-reminders` |
+| `send-serving-monthly-broadcast` | 15:00 on the 1st | `send-serving-reminders` |
+| `clean-up-expired-data-nightly` | 09:00 daily | `clean-up-expired-data` |
 
 ## Deploying to Production
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/cwaits6/two42)
+You need a [Supabase](https://supabase.com/dashboard) project, a
+[Resend](https://resend.com) account with a verified sending domain, a host
+for the Next.js app, and a domain.
 
-1. Push your code to GitHub
-2. Connect the repo at [vercel.com/new](https://vercel.com/new)
-3. Add all 5 environment variables (same as `.env.local`, with your production domain for `NEXT_PUBLIC_SITE_URL`)
-4. Click **Deploy**
+**Database and functions.** From a checkout, link the project, apply the
+migrations, deploy the functions and set their secrets:
 
-Then update your Supabase redirect URLs to include your production domain.
-
-### Cost Breakdown
-
-| Service | Cost |
-|---|---|
-| Domain name | ~$10–15/yr |
-| Vercel Hobby | Free |
-| Supabase Free | Free |
-| Resend Free | Free |
-| **Total** | **~$1/month** |
-
----
-
-## Project Structure
-
-```
-├── app/
-│   ├── page.tsx                  # Public home page
-│   ├── events/                   # Events calendar
-│   ├── lectures/                 # Lecture library
-│   ├── join/                     # Join request form
-│   ├── login/                    # Magic link sign-in
-│   ├── dashboard/                # Member dashboard
-│   ├── announcements/            # Announcements feed
-│   └── admin/                    # Admin panel
-├── components/
-│   ├── layout/                   # Header, Footer
-│   ├── events/                   # EventCard, RsvpButton
-│   └── announcements/            # AnnouncementCard
-├── lib/
-│   ├── branding.ts               # ← Reads organizations.branding (the real source of truth)
-│   ├── config.ts                 # Last-resort env fallbacks only
-│   ├── email/identity.ts         # Per-org From: display name and Reply-To
-│   ├── types.ts
-│   └── supabase/                 # Auth clients
-├── supabase/
-│   ├── migrations/               # Run these in Supabase SQL Editor
-│   └── functions/                # Edge Function for email reminders
-└── .env.example
+```bash
+npx supabase login
+npx supabase link --project-ref <project-ref>
+npx supabase db push
+npx supabase functions deploy send-event-reminders send-serving-reminders clean-up-expired-data
+npx supabase secrets set RESEND_API_KEY=<key> SITE_URL=https://your.domain \
+  SERVING_LINK_SECRET=<secret> EMAIL_FROM='Your Church <noreply@your.domain>'
 ```
 
----
+Then create the two Vault secrets above. Repeat `db push` and
+`functions deploy` after every update. This repository's own CI does both on
+every push to `main` ([`.github/workflows/supabase.yml`](./.github/workflows/supabase.yml))
+with the repository secrets `SUPABASE_PROJECT_REF`, `SUPABASE_ACCESS_TOKEN` and
+`SUPABASE_DB_PASSWORD`, plus a GitHub App (`APP_CLIENT_ID`, `APP_PRIVATE_KEY`)
+that commits the schema dump; a fork can set the same secrets.
+
+**Auth settings.** Under Authentication in the dashboard: set the Site URL to
+your origin, add `https://your.domain/api/auth/callback` to the redirect
+URLs, turn off "Confirm email" (the setup link has already verified the
+address, and the form signs the person in as soon as the account exists), and
+configure a [custom SMTP sender](https://supabase.com/docs/guides/auth/auth-smtp)
+for password-reset emails; Supabase's built-in sender is rate-limited and
+meant for testing.
+
+**The app.** Import the repository at [vercel.com/new](https://vercel.com/new),
+or any Next.js host, set the app variables from the table above with
+`NEXT_PUBLIC_SITE_URL` as your production origin, deploy, and attach your
+domain.
+
+**The first church admin.** The migrations create one church with one group.
+Approve your own email in the SQL editor, as a church admin:
+
+```sql
+insert into public.access_requests (org_id, name, email, status, reviewed_at, approved_role)
+values ((select id from public.organizations), 'Your Name', 'you@example.com', 'approved', now(), 'admin');
+```
+
+Then, under Authentication → Users, add a user with that email and a password,
+with auto-confirm on. The sign-up trigger creates your profile as a church
+admin, and you can sign in at `/login`. Without the approved request first,
+the user creation fails with `signup rejected: no approved access request or
+invite`. To rename the church, set its logo and accent color, or add more
+churches, make your account an operator and open `/platform`:
+
+```sql
+insert into public.platform_admins (profile_id) values ('<your auth user id>');
+```
+
+**Make it yours.** Before offering your install to others, replace the two42
+name and the files in `public/brand/` ([`TRADEMARK.md`](./TRADEMARK.md)), the
+security contact in [`SECURITY.md`](./SECURITY.md) and
+`public/.well-known/security.txt`, the GitHub and contact links in
+`components/landing/sections.ts`, and the `/privacy` and `/terms` pages, which
+are placeholders.
+
+## Where things live
+
+- `app/` — the routes. `app/g/[groupId]/` is a group's screens, `app/admin/` the church admin's, `app/platform/` the operator's
+- `app/(auth)/` and `app/api/auth/` — sign-in, account setup and password reset
+- `components/` — UI. `components/ui/` is the shadcn and Base UI set, `components/landing/` the public page
+- `lib/` — shared logic. `lib/supabase/` holds the clients and generated types, `lib/email/` the Resend senders
+- `supabase/migrations/` — schema, policies, functions and the cron schedules. `supabase/schema.sql` is the dump CI commits after each push
+- `supabase/functions/` — the three scheduled edge functions; `_shared/` is the unit-tested part
+- `supabase/tests/` — pgTAP suites for tenancy and policies
+- `supabase/seed.sql` — local sample data and logins
+- `e2e/` — Playwright specs for what a signed-in member can see
+- `scripts/` — the tenancy guard, the scheduled-jobs check and the storage re-key, described in `scripts/README.md`
+- `docs/security/` — the tenancy model, the service-role inventory, hosts, and roles
+- `docs/design/DESIGN.md` — the design system; `CONTEXT.md` — the product's vocabulary
+- `CLAUDE.md` and `AGENTS.md` — the working rules for contributors and coding agents
 
 ## Contributing
 
-Found a bug or have a feature idea? Contributions are welcome!
-
-1. Fork the repo
-2. Create a branch: `git checkout -b feature/your-feature`
-3. Commit your changes and open a Pull Request
-
-For significant changes, please open an issue first to discuss.
-
----
+Open an issue first for anything beyond a small fix. How to write issues and
+pull requests, and which labels and templates to use, is in
+[`docs/contributing/issues-and-prs.md`](./docs/contributing/issues-and-prs.md);
+the rest is in [`CONTRIBUTING.md`](./CONTRIBUTING.md). Security problems go
+to the address in [`SECURITY.md`](./SECURITY.md), not to a public issue.
 
 ## License
 
 Copyright (C) 2026 Cody Waits.
 
-Licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0). You are free to
-use, study, modify, and self-host this software. If users remotely interact with a modified
-version over a network, AGPL section 13 requires that those users be prominently offered a
-free opportunity to receive the Corresponding Source of that version. See [LICENSE](./LICENSE)
-for the full terms.
-
----
-
-*Originally built with love for the Incouragers class at First Redeemer Church. May it serve many communities well.*
+Licensed under the GNU Affero General Public License v3.0 ([`LICENSE`](./LICENSE)).
+You may use, study, modify and self-host it. If people use a modified version
+over a network, section 13 requires that they be offered the source of that
+version. The two42 name and brand files are not covered by the license; see
+[`TRADEMARK.md`](./TRADEMARK.md).
