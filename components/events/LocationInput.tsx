@@ -104,6 +104,7 @@ export function LocationInput({ value, onChange, id, name }: LocationInputProps)
 
   const handleType = (next: string) => {
     onChange(next);
+    setActiveIndex(-1);
     latestEdit.current += 1;
     if (debounce.current) clearTimeout(debounce.current);
     const request = ++latestRequest.current;

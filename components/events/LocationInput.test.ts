@@ -228,6 +228,17 @@ describe("LocationInput", () => {
     expect(input.value).toBe("123 Main");
   });
 
+  it("does not let Enter pick a highlighted suggestion once the text has changed", async () => {
+    const input = mount();
+    type(input, "123 Main");
+    await settle();
+    press(input, "ArrowDown");
+    type(input, "123 Main S");
+    expect(input.getAttribute("aria-activedescendant")).toBeNull();
+    expect(press(input, "Enter").defaultPrevented).toBe(false);
+    expect(input.value).toBe("123 Main S");
+  });
+
   it("closes the list on Escape and keeps the typed text", async () => {
     const input = mount();
     type(input, "123 Main");
