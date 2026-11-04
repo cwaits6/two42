@@ -37,6 +37,8 @@ interface FakeOptions {
   claims?: Record<string, ClaimRow[]>;
   failSettings?: boolean;
   failSettle?: boolean;
+  /** The church's daily email cap refuses every reservation. */
+  capReached?: boolean;
 }
 
 function fakeClient(options: FakeOptions = {}) {
@@ -79,6 +81,7 @@ function fakeClient(options: FakeOptions = {}) {
     from,
     rpc(fn: string, args: { _org_id: string }) {
       queries.push({ rpc: fn, args, filters: [] });
+      if (fn === "email_quota_consume") return Promise.resolve({ data: !options.capReached, error: null });
       return Promise.resolve({ data: options.claims?.[args._org_id] ?? [], error: null });
     },
   } as unknown as HourlyClient;
@@ -86,14 +89,17 @@ function fakeClient(options: FakeOptions = {}) {
   return { client, queries };
 }
 
-const team = (
-  team_id: string,
-  send_hour: number | null,
-  passes: DueRow["teams"] extends infer T ? (T extends { serving_reminder_passes: infer P } ? P : never) : never = [],
-): DueRow => ({
+type Passes = NonNullable<DueRow["teams"]>["serving_reminder_passes"];
+type Block = Pick<DueRow, "schedule" | "window_weeks" | "date_from" | "date_to">;
+
+const ROLLING: Block = { schedule: "rolling", window_weeks: 8, date_from: null, date_to: null };
+const block = (date_from: string, date_to: string): Block => ({ schedule: "set", window_weeks: 8, date_from, date_to });
+
+const team = (team_id: string, send_hour: number | null, passes: Passes = [], dates: Block = ROLLING): DueRow => ({
   team_id,
   reminder_days: [4],
   send_hour,
+  ...dates,
   teams: { name: `Team ${team_id}`, group_id: "g1", serving_reminder_passes: passes },
 });
 
@@ -154,6 +160,36 @@ Deno.test("a church with nothing due costs one query", async () => {
   assertEquals(summary.due, 0);
 });
 
+Deno.test("a set block that has ended, or not begun, costs the one read and no claim", async () => {
+  const { client, queries } = fakeClient({
+    rows: {
+      ny: [
+        team("ended", 9, [], block("2026-09-06", "2026-11-01")),
+        team("ahead", 9, [], block("2026-11-15", "2027-05-02")),
+        team("endsSunday", 9, [], block("2026-09-06", "2026-11-08")),
+      ],
+    },
+    claims: { ny: [claim("endsSunday", "ann")] },
+  });
+  const { deps: d, sent } = deps();
+  const summary = await runHourly(client, [church("ny", "America/New_York")], d);
+  assertEquals(summary.due, 1);
+  assertEquals(queries.find((q) => q.rpc === "serving_reminder_claim")?.args, {
+    _org_id: "ny",
+    _send_date: "2026-11-05",
+    _service_date: "2026-11-08",
+    _team_ids: ["endsSunday"],
+  });
+  assertEquals(sent.map((r) => r.teamId), ["endsSunday"]);
+});
+
+Deno.test("a set block with nothing due costs one query and no log-worthy work", async () => {
+  const { client, queries } = fakeClient({ rows: { ny: [team("ended", 9, [], block("2026-09-06", "2026-11-01"))] } });
+  const summary = await runHourly(client, [church("ny", "America/New_York")], deps().deps);
+  assertEquals(queries.length, 1);
+  assertEquals(summary.due, 0);
+});
+
 Deno.test("a team whose pass finished today costs no further work", async () => {
   const finished = [{ send_date: "2026-11-05", serving_reminder_sends: [{ sent_at: "2026-11-05T13:00:00Z" }] }];
   const { client, queries } = fakeClient({ rows: { ny: [team("t1", 9, finished)] } });
@@ -186,7 +222,7 @@ Deno.test("a due team is claimed once per church, mailed, and settled per team",
     ["t2", "cat@example.test", "2026-11-05", "2026-11-08"],
   ]);
 
-  const [settings, rpc, settleT1, settleT2] = queries;
+  const [settings, rpc, quota, settleT1, settleT2] = queries;
   assertEquals(settings.table, "serving_team_settings");
   assertEquals(rpc.rpc, "serving_reminder_claim");
   assertEquals(rpc.args, {
@@ -195,7 +231,10 @@ Deno.test("a due team is claimed once per church, mailed, and settled per team",
     _service_date: "2026-11-08",
     _team_ids: ["t1", "t2"],
   });
-  assertEquals(queries.length, 4);
+  // The cap is reserved once per church, for the claimed rows only.
+  assertEquals(quota.rpc, "email_quota_consume");
+  assertEquals(quota.args, { _org_id: "ny", _n: 3 });
+  assertEquals(queries.length, 5);
   assertEquals(settleT1.table, "serving_reminder_sends");
   assertEquals(settleT1.values, { sent_at: NOW.toISOString() });
   assertEquals(settleT1.filters, ["org_id=ny", "team_id=t1", "send_date=2026-11-05", 'profile_id in ["ann","bob"]']);
@@ -211,7 +250,63 @@ Deno.test("a pass left unfinished by an earlier firing is picked up", async () =
   const summary = await runHourly(client, [church("ny", "America/New_York")], deps().deps);
   assertEquals(summary.due, 1);
   assertEquals(summary.emailsSent, 1);
-  assertEquals(queries.map((q) => q.table ?? q.rpc), ["serving_team_settings", "serving_reminder_claim", "serving_reminder_sends"]);
+  assertEquals(queries.map((q) => q.table ?? q.rpc), [
+    "serving_team_settings",
+    "serving_reminder_claim",
+    "email_quota_consume",
+    "serving_reminder_sends",
+  ]);
+  assertEquals(queries[2].args, { _org_id: "ny", _n: 1 });
+});
+
+Deno.test("a church at its daily email cap releases every claim, mails nothing, and is not a failure", async () => {
+  const { client, queries } = fakeClient({
+    rows: { ny: [team("t1", 9), team("t2", 9)] },
+    claims: { ny: [claim("t1", "ann"), claim("t2", "bob")] },
+    capReached: true,
+  });
+  const { deps: d, sent } = deps();
+  const summary = await runHourly(client, [church("ny", "America/New_York")], d);
+  assertEquals(sent, []);
+  assertEquals(summary.capped, 2);
+  assertEquals(summary.emailsSent, 0);
+  assertEquals(summary.emailsFailed, 0);
+  assertEquals(summary.failed, []);
+  assertEquals(summary.failedItems, []);
+  const settles = queries.filter((q) => q.table === "serving_reminder_sends");
+  assertEquals(settles.map((q) => [q.values, q.filters.at(-1)]), [
+    [{ claimed_at: null }, 'profile_id in ["ann"]'],
+    [{ claimed_at: null }, 'profile_id in ["bob"]'],
+  ]);
+});
+
+Deno.test("a church with nothing claimed reserves nothing against its cap", async () => {
+  const { client, queries } = fakeClient({ rows: { ny: [team("t1", 9)] }, claims: { ny: [] } });
+  await runHourly(client, [church("ny", "America/New_York")], deps().deps);
+  assertEquals(queries.map((q) => q.table ?? q.rpc), ["serving_team_settings", "serving_reminder_claim"]);
+});
+
+Deno.test("a sender that throws fails that one reminder, and the rest of the church still goes out and settles", async () => {
+  const { client, queries } = fakeClient({
+    rows: { ny: [team("t1", 9), team("t2", 9)] },
+    claims: { ny: [claim("t1", "ann"), claim("t1", "bob"), claim("t2", "cat")] },
+  });
+  const { deps: d, sent } = deps((r) => {
+    if (r.email === "ann@example.test") throw new Error("group_settings query failed");
+    return "sent";
+  });
+  const summary = await runHourly(client, [church("ny", "America/New_York")], d);
+  assertEquals(sent.length, 3);
+  assertEquals(summary.emailsSent, 2);
+  assertEquals(summary.emailsFailed, 1);
+  assertEquals(summary.failed, []);
+  assertEquals(summary.failedItems.map((f) => f.item), ["t1"]);
+  const settles = queries.filter((q) => q.table === "serving_reminder_sends");
+  assertEquals(settles.map((q) => [q.values, q.filters.at(-1)]), [
+    [{ sent_at: NOW.toISOString() }, 'profile_id in ["bob"]'],
+    [{ sent_at: NOW.toISOString() }, 'profile_id in ["cat"]'],
+    [{ claimed_at: null }, 'profile_id in ["ann"]'],
+  ]);
 });
 
 Deno.test("a send Resend refuses releases its claim and counts as a failed email", async () => {

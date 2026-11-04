@@ -10,8 +10,9 @@
 // listActiveOrgs() read resolved. Deliberately free of any supabase-js
 // import so it can be unit tested offline against the structural types.
 
-import { upcomingServiceDates } from "./serving-dates.ts";
+import { teamServiceDates, upcomingServiceDates } from "./serving-dates.ts";
 import { localClock, orgCanBeDue, teamIsDue } from "./serving-due.ts";
+import { reserveEmailQuota } from "./quota.ts";
 import {
   forEachOrg,
   OrgRunError,
@@ -28,6 +29,10 @@ export interface DueRow {
   team_id: string;
   reminder_days: number[];
   send_hour: number | null;
+  schedule: "rolling" | "set";
+  window_weeks: number;
+  date_from: string | null;
+  date_to: string | null;
   teams: {
     name: string;
     group_id: string;
@@ -65,6 +70,10 @@ export interface HourlyClient {
     fn: "serving_reminder_claim",
     args: { _org_id: string; _send_date: string; _service_date: string; _team_ids: string[] },
   ): PromiseLike<{ data: ClaimRow[] | null; error: QueryError }>;
+  rpc(
+    fn: "email_quota_consume",
+    args: { _org_id: string; _n: number },
+  ): PromiseLike<{ data: boolean | null; error: QueryError }>;
 }
 
 export interface Recipient {
@@ -104,10 +113,12 @@ export interface HourlySummary extends ReturnType<typeof summarize> {
   due: number;
   budgetExhausted: boolean;
   rateLimited: boolean;
+  /** Reminders left for a later firing because the church's daily email cap refused them. */
+  capped: number;
 }
 
 const DUE_SELECT =
-  "team_id, reminder_days, send_hour, teams!inner(name, group_id, serving_reminder_passes(send_date, serving_reminder_sends(sent_at)))";
+  "team_id, reminder_days, send_hour, schedule, window_weeks, date_from, date_to, teams!inner(name, group_id, serving_reminder_passes(send_date, serving_reminder_sends(sent_at)))";
 
 function passFinished(row: DueRow, sendDate: string): boolean {
   const pass = row.teams?.serving_reminder_passes.find((p) => p.send_date === sendDate);
@@ -122,6 +133,7 @@ export async function runHourly(
   let due = 0;
   let budgetExhausted = false;
   let rateLimited = false;
+  let capped = 0;
   const outOfTime = () => deps.elapsed() >= deps.budgetMs;
 
   const results = await forEachOrg(orgs, async (org): Promise<OrgRunCounts> => {
@@ -142,8 +154,16 @@ export async function runHourly(
       .eq("teams.serving_reminder_passes.send_date", clock.date);
     if (error) throw new OrgRunError(`serving_team_settings query failed: ${error.message}`, none);
 
+    // The service date is the next one on the schedule, and a team is due
+    // for it only when it is one of the team's own dates: a set block that
+    // has ended, or not begun, costs nothing beyond this read.
+    const serviceDate = upcomingServiceDates(1, clock.date)[0];
     const pending = (rows ?? []).filter(
-      (row) => row.teams && teamIsDue(row, clock) && !passFinished(row, clock.date),
+      (row) =>
+        row.teams &&
+        teamIsDue(row, clock) &&
+        teamServiceDates(row, clock.date)[0] === serviceDate &&
+        !passFinished(row, clock.date),
     );
     if (pending.length === 0) return none;
     due += pending.length;
@@ -153,7 +173,6 @@ export async function runHourly(
       return none;
     }
 
-    const serviceDate = upcomingServiceDates(1, clock.date)[0];
     const { data: claimed, error: claimError } = await supabase.rpc("serving_reminder_claim", {
       _org_id: org.id,
       _send_date: clock.date,
@@ -163,15 +182,29 @@ export async function runHourly(
     if (claimError) throw new OrgRunError(`serving_reminder_claim failed: ${claimError.message}`, none);
 
     const teams = new Map(pending.map((row) => [row.team_id, row.teams!]));
-    const send = deps.sender(org);
     const sentIds = new Map<string, string[]>();
     const releasedIds = new Map<string, string[]>();
     const record = (map: Map<string, string[]>, row: ClaimRow) =>
       map.set(row.team_id, [...(map.get(row.team_id) ?? []), row.profile_id]);
+    const itemFailures: ItemFailure[] = [];
+    const failedTeams = new Set<string>();
 
     let sent = 0;
     let sendFailures = 0;
     const queue = [...(claimed ?? [])];
+
+    // The cap is reserved for the claimed rows only, the people still
+    // unsent, so a retry never pays for what already went out. A refusal is
+    // a deliberate skip, never a failure: the claims go back and a later
+    // firing may send them if the cap allows.
+    if (queue.length > 0 && !(await reserveEmailQuota(supabase, org.id, queue.length))) {
+      console.warn("[org %s] daily email cap reached, leaving %d reminder(s) for a later firing", org.id, queue.length);
+      capped += queue.length;
+      for (const row of queue) record(releasedIds, row);
+      queue.length = 0;
+    }
+
+    const send = deps.sender(org);
     while (queue.length > 0) {
       const row = queue.shift()!;
       if (budgetExhausted || rateLimited) {
@@ -184,18 +217,32 @@ export async function runHourly(
         continue;
       }
       const team = teams.get(row.team_id)!;
-      const outcome = await send({
-        orgId: org.id,
-        teamId: row.team_id,
-        teamName: team.name,
-        groupId: team.group_id,
-        profileId: row.profile_id,
-        email: row.email,
-        firstName: row.first_name,
-        preferredName: row.preferred_name,
-        sendDate: clock.date,
-        serviceDate,
-      });
+      let outcome: SendOutcome;
+      try {
+        outcome = await send({
+          orgId: org.id,
+          teamId: row.team_id,
+          teamName: team.name,
+          groupId: team.group_id,
+          profileId: row.profile_id,
+          email: row.email,
+          firstName: row.first_name,
+          preferredName: row.preferred_name,
+          sendDate: clock.date,
+          serviceDate,
+        });
+      } catch (err) {
+        // A sender that throws (a link-mode read, say) fails this one
+        // reminder: it is released, the team is recorded, the rest go on.
+        outcome = "retry";
+        if (!failedTeams.has(row.team_id)) {
+          failedTeams.add(row.team_id);
+          itemFailures.push({
+            item: row.team_id,
+            error: `send failed: ${err instanceof Error ? err.message : String(err)}`,
+          });
+        }
+      }
       if (outcome === "sent") {
         sent++;
         record(sentIds, row);
@@ -209,7 +256,6 @@ export async function runHourly(
     // A settle that fails leaves the row claimed; the next firing claims it
     // again once it is stale, and the idempotency key keeps Resend from
     // sending it twice.
-    const itemFailures: ItemFailure[] = [];
     const settle = async (teamId: string, values: Record<string, unknown>, ids: string[]) => {
       const { error: settleError } = await supabase
         .from("serving_reminder_sends")
@@ -228,5 +274,5 @@ export async function runHourly(
     return { sent, sendFailures, itemFailures };
   });
 
-  return { ...summarize(results), due, budgetExhausted, rateLimited };
+  return { ...summarize(results), due, budgetExhausted, rateLimited, capped };
 }

@@ -46,6 +46,7 @@ import {
   type Recipient,
   type SendOutcome,
 } from "../_shared/serving-hourly.ts";
+import { sendThroughResend, servingReminderIdempotencyKey } from "../_shared/resend.ts";
 import { resolveServiceKey } from "../_shared/service-key.ts";
 import { reserveEmailQuota } from "../_shared/quota.ts";
 import { isOpenDatesRecipient, isServingReminderRecipient } from "../_shared/serving-recipients.ts";
@@ -165,12 +166,6 @@ async function pace(): Promise<void> {
   lastSendAt = Date.now();
 }
 
-// With an idempotency key, Resend processes a request once for 24 hours: a
-// retry with the same key and body answers with the first send's id, and
-// one with a different body is a 409 "invalid_idempotent_request", which
-// still means the first send went out. A 409 "concurrent_idempotent_requests"
-// means the first is still in flight. Any other refusal, and a request that
-// never left, is retried by a later firing.
 async function sendEmail(
   opts: {
     to: string;
@@ -182,36 +177,20 @@ async function sendEmail(
   },
 ): Promise<SendOutcome> {
   await pace();
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-        ...(opts.idempotencyKey ? { "Idempotency-Key": opts.idempotencyKey } : {}),
-      },
-      // Raw REST call, so the Reply-To field is snake_case `reply_to` — not
-      // the camelCase `replyTo` the SDK uses in lib/email/resend.ts.
-      body: JSON.stringify({
-        from: formatFromHeader(opts.branding.orgName, opts.branding.fromAddress),
-        to: opts.to,
-        subject: opts.subject,
-        html: opts.html,
-        ...(opts.branding.replyTo ? { reply_to: opts.branding.replyTo } : {}),
-      }),
-    });
-    if (res.ok) return "sent";
-    // Log the profile id, not the email address (PII) — the Resend error
-    // body is what's actionable here.
-    const body = await res.text();
-    console.error("Resend error for profile", opts.refId, res.status, body);
-    if (res.status === 429) return "rate_limited";
-    if (res.status === 409 && body.includes("invalid_idempotent_request")) return "sent";
-    return "retry";
-  } catch (err) {
-    console.error("Resend request failed for profile", opts.refId, err);
-    return "retry";
-  }
+  return await sendThroughResend({
+    apiKey: RESEND_API_KEY,
+    refId: opts.refId,
+    idempotencyKey: opts.idempotencyKey,
+    // Raw REST call, so the Reply-To field is snake_case `reply_to` — not
+    // the camelCase `replyTo` the SDK uses in lib/email/resend.ts.
+    payload: {
+      from: formatFromHeader(opts.branding.orgName, opts.branding.fromAddress),
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+      ...(opts.branding.replyTo ? { reply_to: opts.branding.replyTo } : {}),
+    },
+  });
 }
 
 // ── Shared: resolve link mode ─────────────────────────────────────────────────
@@ -627,7 +606,7 @@ async function runHourlyMode(supabase: ServiceClient, orgs: Org[]) {
           to: r.email,
           refId: r.profileId,
           branding,
-          idempotencyKey: `serving-reminder/${r.teamId}/${r.sendDate}/${r.profileId}`,
+          idempotencyKey: servingReminderIdempotencyKey(r),
           ...servingReminderEmail({
             orgName: branding.orgName,
             accent: branding.accent,
@@ -675,10 +654,11 @@ Deno.serve(serviceKeyCallerOnly(async (req) => {
       // One line at most, and none for a firing that did nothing.
       if (hourly.due > 0 || hourly.failed.length > 0 || hourly.failedItems.length > 0) {
         console.log(
-          "hourly run: %d team(s) due, %d sent, %d rejected, %d org(s) failed, %d team(s) failed%s%s",
+          "hourly run: %d team(s) due, %d sent, %d rejected, %d capped, %d org(s) failed, %d team(s) failed%s%s",
           hourly.due,
           hourly.emailsSent,
           hourly.emailsFailed,
+          hourly.capped,
           hourly.failed.length,
           hourly.failedItems.length,
           hourly.budgetExhausted ? ", stopped at the time budget" : "",
