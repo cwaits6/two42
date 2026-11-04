@@ -1,0 +1,46 @@
+name: Check scheduled jobs
+
+# Fails, which emails the maintainer, when the latest cron firing didn't run or
+# didn't get a 200 back. Runs within pg_net's 6-hour response retention.
+# Read-only against the hosted database; see scripts/README.md.
+
+on:
+  schedule:
+    - cron: '30 9 * * *'  # after clean-up-expired-data at 09:00 UTC
+    - cron: '30 15 * * *' # after the reminder jobs at 15:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check the latest firing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Link to Supabase project
+        run: npx supabase link --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      - name: Read the latest firing
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          output="$(npx supabase db query --linked -f scripts/check-scheduled-jobs.sql --output-format json)"
+          result="$(printf '%s' "$output" | jq -c '.rows[0].result')"
+          printf '%s\n' "$result" | jq .
+          # An empty or reshaped result must fail too, so this requires the array.
+          printf '%s' "$result" | jq -e '.problems | type == "array" and length == 0' > /dev/null

@@ -1,5 +1,19 @@
 # scripts/
 
+## `check-scheduled-jobs.sql` — did the latest cron firing work?
+
+Run by `.github/workflows/scheduled-jobs-check.yml` at 09:30 and 15:30 UTC,
+half an hour after the cron firings. The workflow fails, and GitHub emails the
+maintainer, if a job didn't run, a response wasn't a 200, or responses are
+missing. A 401 means the vault's `cron_service_role_key` matches none of the
+function's keys.
+
+It only reads, and prints statuses and counts, never response bodies, because
+the logs are public. `pg_net` keeps responses for 6 hours, so a manual run more
+than 6 hours after a firing fails with a message saying so. The job names and
+hours are copied from the cron schedules, so a schedule change needs a matching
+change here.
+
 ## `rekey-storage-objects.mjs` — one-time legacy storage re-key (CWA-57)
 
 Moves pre-CWA-57 storage objects onto the org-partitioned key layout
