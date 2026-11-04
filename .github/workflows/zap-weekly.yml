@@ -12,50 +12,61 @@ jobs:
     permissions:
       contents: read
       issues: write
-      deployments: write
 
     steps:
+      # First because every later step opens outgoing connections, and the
+      # kernel may pick their source ports from the block the stack binds.
+      - name: Reserve the Supabase ports
+        run: |
+          existing=$(sysctl -n net.ipv4.ip_local_reserved_ports)
+          echo "Already reserved: ${existing:-none}"
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports="${existing:+$existing,}54320-54329"
+          sudo ss -tanp '( sport >= :54320 and sport <= :54329 )'
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Get current date
         id: date
         run: echo "date=$(date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
 
-      - name: Install Vercel CLI
-        run: npm install -g vercel@latest
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
 
-      - name: Deploy ephemeral preview
-        id: deployment
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_TEAM_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      - run: npm ci
+
+      # Active probes submit every form they find, so the scan must never reach
+      # a deployment wired to real data. Vercel previews share Production's
+      # Supabase and Resend credentials.
+      - name: Start the local Supabase stack
+        run: scripts/start-supabase-stack.sh -x studio,imgproxy,mailpit,postgres-meta,edge-runtime,logflare,vector
+
+      - name: Point the build at the local stack
         run: |
-          DEPLOY_URL=$(vercel deploy --token="$VERCEL_TOKEN" --yes 2>/dev/null)
-          echo "target=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
-          DEPLOY_ID=$(curl -sf \
-            "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&url=${DEPLOY_URL#https://}&limit=1" \
-            -H "Authorization: Bearer $VERCEL_TOKEN" | jq -r '.deployments[0].uid // ""')
-          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
+          npx supabase status -o env | sed -n \
+            -e 's/^API_URL="\(.*\)"$/NEXT_PUBLIC_SUPABASE_URL=\1/p' \
+            -e 's/^ANON_KEY="\(.*\)"$/NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=\1/p' \
+            | tee -a "$GITHUB_ENV"
+          npx supabase status -o env | sed -n \
+            -e 's/^SERVICE_ROLE_KEY="\(.*\)"$/SUPABASE_SECRET_KEY=\1/p' >> "$GITHUB_ENV"
+          test "$(grep -c '^NEXT_PUBLIC_SUPABASE_' "$GITHUB_ENV")" -eq 2
+          test "$(grep -c '^SUPABASE_SECRET_KEY=' "$GITHUB_ENV")" -eq 1
+
+      - name: Build and start the app
+        run: |
+          npx next build
+          nohup npx next start -p 3142 > /dev/null 2>&1 &
+          curl --silent --fail --retry 30 --retry-delay 2 --retry-connrefused -o /dev/null http://localhost:3142/
 
       - name: ZAP Full Scan
         uses: zaproxy/action-full-scan@3c58388149901b9a03b7718852c5ba889646c27c # v0.13.0
-        env:
-          ZAP_AUTH_HEADER: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET != '' && 'x-vercel-protection-bypass' || '' }}
-          ZAP_AUTH_HEADER_VALUE: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          target: ${{ steps.deployment.outputs.target }}
+          target: http://localhost:3142
           rules_file_name: .zap/rules.tsv
           allow_issue_writing: true
           fail_action: false
           issue_title: "ZAP Full Scan (${{ steps.date.outputs.date }})"
-
-      - name: Delete ephemeral preview
-        if: always() && steps.deployment.outputs.deploy_id != ''
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          DEPLOY_ID: ${{ steps.deployment.outputs.deploy_id }}
-        run: |
-          curl -sf -X DELETE "https://api.vercel.com/v13/deployments/$DEPLOY_ID" \
-            -H "Authorization: Bearer $VERCEL_TOKEN"
