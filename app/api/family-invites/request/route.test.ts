@@ -113,6 +113,54 @@ describe("POST /api/family-invites/request", () => {
     expect((await post({ token: TOKEN, name: "Sam" })).status).toBe(404);
   });
 
+  it("accepts a name of exactly 120 characters", async () => {
+    const insertSpy = vi.fn();
+    createServiceClient.mockResolvedValue(makeClient({ invite: INVITE, insertSpy }));
+    const name = "n".repeat(120);
+
+    const res = await post({ token: TOKEN, name });
+
+    expect(res.status).toBe(200);
+    expect(insertSpy).toHaveBeenCalledWith(expect.objectContaining({ name }));
+  });
+
+  it("answers 400 and files nothing for a name of 121 characters", async () => {
+    const insertSpy = vi.fn();
+    createServiceClient.mockResolvedValue(makeClient({ invite: INVITE, insertSpy }));
+
+    const res = await post({ token: TOKEN, name: "n".repeat(121) });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/120 characters or fewer/);
+    expect(insertSpy).not.toHaveBeenCalled();
+    expect(createServiceClient).not.toHaveBeenCalled();
+  });
+
+  it("measures the trimmed name, so surrounding spaces do not count", async () => {
+    const insertSpy = vi.fn();
+    createServiceClient.mockResolvedValue(makeClient({ invite: INVITE, insertSpy }));
+
+    const res = await post({ token: TOKEN, name: `  ${"n".repeat(120)}  ` });
+
+    expect(res.status).toBe(200);
+    expect(insertSpy).toHaveBeenCalledWith(expect.objectContaining({ name: "n".repeat(120) }));
+  });
+
+  it("answers the same 400 for a long name whether or not the token exists", async () => {
+    createServiceClient.mockResolvedValue(makeClient({ invite: null }));
+    const name = "n".repeat(121);
+
+    const [known, unknown] = await Promise.all([
+      post({ token: TOKEN, name }),
+      post({ token: "33333333-3333-4333-8333-333333333333", name }),
+    ]);
+
+    expect(known.status).toBe(400);
+    expect(unknown.status).toBe(400);
+    expect(await known.json()).toEqual(await unknown.json());
+    expect(createServiceClient).not.toHaveBeenCalled();
+  });
+
   it("rejects a malformed token or a blank name before touching the database", async () => {
     createServiceClient.mockResolvedValue(makeClient({ invite: INVITE }));
 

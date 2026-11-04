@@ -53,7 +53,8 @@ export function FamilyRequestForm({ token, email }: FamilyRequestFormProps) {
         return;
       }
       if (res.status === 400) {
-        setNameError(NAME_REQUIRED);
+        const data = (await res.json().catch(() => null)) as { error?: unknown } | null;
+        setNameError(typeof data?.error === "string" ? data.error : NAME_REQUIRED);
         focusField("family-name");
         return;
       }
@@ -100,6 +101,7 @@ export function FamilyRequestForm({ token, email }: FamilyRequestFormProps) {
             setNameError(undefined);
           }}
           placeholder="Your name"
+          maxLength={120}
           className="h-12 text-lg"
           {...invalidFieldProps("family-name", nameError)}
         />

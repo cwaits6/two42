@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isUuid } from "@/lib/groups/active";
 import { createServiceClient } from "@/lib/supabase/server";
 
+const MAX_NAME_LENGTH = 120;
 const MAX_MESSAGE_LENGTH = 2000;
 
 /**
@@ -22,6 +23,12 @@ export async function POST(request: Request) {
   const message = typeof body.message === "string" ? body.message.trim() : "";
   if (!isUuid(token) || !name || message.length > MAX_MESSAGE_LENGTH) {
     return NextResponse.json({ error: "Enter your name." }, { status: 400 });
+  }
+  if (name.length > MAX_NAME_LENGTH) {
+    return NextResponse.json(
+      { error: `Use ${MAX_NAME_LENGTH} characters or fewer.` },
+      { status: 400 },
+    );
   }
 
   const service = await createServiceClient();
