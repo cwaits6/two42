@@ -218,7 +218,8 @@ npx supabase secrets set RESEND_API_KEY=<key> SITE_URL=https://your.domain \
 
 Then create the two Vault secrets above. Repeat `db push` and
 `functions deploy` after every update. This repository's own CI does both on
-every push to `main` ([`.github/workflows/supabase.yml`](./.github/workflows/supabase.yml))
+each push to `main` that touches `supabase/` or the database types
+([`.github/workflows/supabase.yml`](./.github/workflows/supabase.yml))
 with the repository secrets `SUPABASE_PROJECT_REF`, `SUPABASE_ACCESS_TOKEN` and
 `SUPABASE_DB_PASSWORD`, plus a GitHub App (`APP_CLIENT_ID`, `APP_PRIVATE_KEY`)
 that commits the schema dump; a fork can set the same secrets.
