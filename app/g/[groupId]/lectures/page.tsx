@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { SegmentedLinks } from "@/components/ui/segmented";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
+import { LessonThumbnail } from "@/components/lessons/LessonThumbnail";
 import { formatLessonDate, lessonThumbnail, needsSummary, partNumbers } from "@/lib/lessons";
 import { groupPageTitle } from "@/lib/pageTitle";
 import { readList } from "@/lib/supabase/readList";
@@ -324,12 +325,10 @@ function LatestLesson({
         aria-hidden="true"
         className="group relative block aspect-video overflow-hidden rounded-xl bg-brand-warm"
       >
-        {thumbnail ? (
-          // eslint-disable-next-line @next/next/no-img-element -- Lesson thumbnails can be arbitrary stored URLs.
-          <img src={thumbnail} alt="" className="h-full w-full object-cover" />
-        ) : (
-          <BookOpen className="absolute inset-0 m-auto size-12 text-brand-primary-text" />
-        )}
+        <LessonThumbnail
+          src={thumbnail}
+          fallback={<BookOpen className="absolute inset-0 m-auto size-12 text-brand-primary-text" />}
+        />
         <span className="absolute inset-0 m-auto flex size-16 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform group-hover:scale-105">
           <Play className="size-7 fill-current" />
         </span>

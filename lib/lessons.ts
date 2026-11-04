@@ -85,12 +85,35 @@ export function safeHttpUrl(value: string | null): string | null {
   }
 }
 
-function youTubeId(url: string): string | null {
-  const match = url.match(
-    /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([^&?\s]+)/
-  );
-  return match ? match[1] : null;
+// Hosts YouTube serves watch, embed, Shorts and live pages from. Matching the
+// parsed hostname, not the text, keeps a look-alike host or a YouTube link
+// carried in another site's query string from producing a thumbnail.
+const YOUTUBE_HOSTS = new Set([
+  "youtube.com",
+  "www.youtube.com",
+  "m.youtube.com",
+  "music.youtube.com",
+  "www.youtube-nocookie.com",
+]);
+
+const YOUTUBE_PATH_KINDS = new Set(["embed", "v", "shorts", "live"]);
+
+const VIDEO_ID = /^[\w-]+$/;
+
+/** The video id in a YouTube link of any shape, else null. */
+export function youTubeId(url: URL): string | null {
+  const host = url.hostname.toLowerCase();
+  const [first, second] = url.pathname.split("/").filter(Boolean);
+  let id: string | null | undefined = null;
+  if (host === "youtu.be") id = first;
+  else if (YOUTUBE_HOSTS.has(host)) {
+    if (first === "watch") id = url.searchParams.get("v");
+    else if (first && YOUTUBE_PATH_KINDS.has(first)) id = second;
+  }
+  return id && VIDEO_ID.test(id) ? id : null;
 }
+
+const YOUTUBE_THUMBNAIL = "https://img.youtube.com/vi/";
 
 /** The lesson's own thumbnail, else YouTube's for a YouTube recording. */
 export function lessonThumbnail(lesson: {
@@ -100,6 +123,22 @@ export function lessonThumbnail(lesson: {
   const own = safeHttpUrl(lesson.thumbnail_url);
   if (own) return own;
   const video = safeHttpUrl(lesson.video_url);
-  const id = video ? youTubeId(video) : null;
-  return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : null;
+  const id = video ? youTubeId(new URL(video)) : null;
+  return id ? `${YOUTUBE_THUMBNAIL}${id}/hqdefault.jpg` : null;
+}
+
+/**
+ * Whether a loaded thumbnail should give way to the no-thumbnail look: the
+ * browser could not load it, or YouTube answered with the 120×90 grey card
+ * it serves in place of a removed video's picture.
+ */
+export function thumbnailFailed(img: {
+  src: string;
+  naturalWidth: number;
+  naturalHeight: number;
+}): boolean {
+  if (img.naturalWidth === 0) return true;
+  return (
+    img.src.startsWith(YOUTUBE_THUMBNAIL) && img.naturalWidth === 120 && img.naturalHeight === 90
+  );
 }

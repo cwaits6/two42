@@ -330,6 +330,21 @@ describe("content security policy", () => {
     expect(connectSrc).toContain(" ws://127.0.0.1:54321");
   });
 
+  it("lets YouTube's thumbnail host through img-src and nothing wider", async () => {
+    const req = new NextRequest("https://two42.io/g/x/lectures", {
+      headers: { host: "two42.io" },
+    });
+    const res = await updateSession(req);
+    const imgSrc = res.headers
+      .get("Content-Security-Policy")
+      ?.split(";")
+      .map((d) => d.trim())
+      .find((d) => d.startsWith("img-src "));
+    expect(imgSrc).toBe(
+      "img-src 'self' data: blob: https://maps.gstatic.com https://maps.googleapis.com https://img.youtube.com http://127.0.0.1:54321"
+    );
+  });
+
   it("allows the calendar's inline font and nothing wider", async () => {
     const req = new NextRequest("https://two42.io/calendar", {
       headers: { host: "two42.io" },

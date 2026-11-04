@@ -8,6 +8,7 @@ import { ErrorState } from "@/components/states/ErrorState";
 import { Button } from "@/components/ui/button";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
+import { LessonThumbnail } from "@/components/lessons/LessonThumbnail";
 import { formatLessonDate, lessonThumbnail, partNumbers, safeHttpUrl } from "@/lib/lessons";
 import { pageTitle } from "@/lib/pageTitle";
 import { readList } from "@/lib/supabase/readList";
@@ -156,12 +157,10 @@ export default async function LessonPage({
             aria-hidden="true"
             className="group relative block aspect-video overflow-hidden rounded-xl bg-brand-warm"
           >
-            {thumbnail ? (
-              // eslint-disable-next-line @next/next/no-img-element -- Lesson thumbnails can be arbitrary stored URLs.
-              <img src={thumbnail} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <BookOpen className="absolute inset-0 m-auto size-12 text-brand-primary-text" />
-            )}
+            <LessonThumbnail
+              src={thumbnail}
+              fallback={<BookOpen className="absolute inset-0 m-auto size-12 text-brand-primary-text" />}
+            />
             <span className="absolute inset-0 m-auto flex size-20 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform group-hover:scale-105">
               <Play className="size-8 fill-current" />
             </span>

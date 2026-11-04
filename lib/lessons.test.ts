@@ -7,6 +7,8 @@ import {
   partNumbers,
   safeHttpUrl,
   seriesDateRange,
+  thumbnailFailed,
+  youTubeId,
 } from "./lessons";
 
 describe("formatLessonDate", () => {
@@ -97,6 +99,56 @@ describe("safeHttpUrl", () => {
   });
 });
 
+describe("youTubeId", () => {
+  it.each([
+    ["https://www.youtube.com/watch?v=jNQXAC9IVRw", "jNQXAC9IVRw"],
+    ["https://youtube.com/watch?v=jNQXAC9IVRw&t=30s", "jNQXAC9IVRw"],
+    ["https://m.youtube.com/watch?feature=share&v=jNQXAC9IVRw", "jNQXAC9IVRw"],
+    ["https://www.youtube.com/watch?v=jNQXAC9IVRw#t=30", "jNQXAC9IVRw"],
+    ["https://youtu.be/jNQXAC9IVRw", "jNQXAC9IVRw"],
+    ["https://youtu.be/jNQXAC9IVRw?si=AbC_dEf-123", "jNQXAC9IVRw"],
+    ["https://www.youtube.com/embed/jNQXAC9IVRw?rel=0", "jNQXAC9IVRw"],
+    ["https://www.youtube-nocookie.com/embed/jNQXAC9IVRw", "jNQXAC9IVRw"],
+    ["https://www.youtube.com/v/jNQXAC9IVRw", "jNQXAC9IVRw"],
+    ["https://www.youtube.com/shorts/jNQXAC9IVRw", "jNQXAC9IVRw"],
+    ["https://youtube.com/shorts/jNQXAC9IVRw?feature=share", "jNQXAC9IVRw"],
+    ["https://www.youtube.com/live/jNQXAC9IVRw?si=AbC_dEf-123", "jNQXAC9IVRw"],
+    ["https://www.youtube.com/live/jNQXAC9IVRw/", "jNQXAC9IVRw"],
+    ["HTTPS://WWW.YOUTUBE.COM/watch?v=jNQXAC9IVRw", "jNQXAC9IVRw"],
+  ])("reads the id from %s", (link, id) => {
+    expect(youTubeId(new URL(link))).toBe(id);
+  });
+
+  it.each([
+    "https://notyoutube.com/watch?v=jNQXAC9IVRw",
+    "https://youtube.com.example.test/watch?v=jNQXAC9IVRw",
+    "https://example.test/go?to=https://youtu.be/jNQXAC9IVRw",
+    "https://example.test/?v=jNQXAC9IVRw",
+    "https://www.youtube.com/",
+    "https://www.youtube.com/watch",
+    "https://www.youtube.com/channel/jNQXAC9IVRw",
+    "https://www.youtube.com/shorts/",
+    "https://youtu.be/",
+    "https://zoom.us/rec/jNQXAC9IVRw",
+  ])("has none for %s", (link) => {
+    expect(youTubeId(new URL(link))).toBeNull();
+  });
+});
+
+describe("thumbnailFailed", () => {
+  it("treats a picture the browser could not load as failed", () => {
+    expect(thumbnailFailed({ src: "https://example.test/t.jpg", naturalWidth: 0, naturalHeight: 0 })).toBe(true);
+    expect(thumbnailFailed({ src: "https://example.test/t.jpg", naturalWidth: 640, naturalHeight: 360 })).toBe(false);
+  });
+
+  it("treats YouTube's grey card for a removed video as failed, but not a small picture elsewhere", () => {
+    const youtube = "https://img.youtube.com/vi/jNQXAC9IVRw/hqdefault.jpg";
+    expect(thumbnailFailed({ src: youtube, naturalWidth: 120, naturalHeight: 90 })).toBe(true);
+    expect(thumbnailFailed({ src: youtube, naturalWidth: 480, naturalHeight: 360 })).toBe(false);
+    expect(thumbnailFailed({ src: "https://example.test/t.jpg", naturalWidth: 120, naturalHeight: 90 })).toBe(false);
+  });
+});
+
 describe("lessonThumbnail", () => {
   it("prefers the lesson's own thumbnail", () => {
     expect(
@@ -110,6 +162,9 @@ describe("lessonThumbnail", () => {
   it("falls back to YouTube's for a YouTube recording", () => {
     expect(
       lessonThumbnail({ video_url: "https://www.youtube.com/watch?v=abc123", thumbnail_url: null }),
+    ).toBe("https://img.youtube.com/vi/abc123/hqdefault.jpg");
+    expect(
+      lessonThumbnail({ video_url: "https://youtube.com/shorts/abc123?feature=share", thumbnail_url: null }),
     ).toBe("https://img.youtube.com/vi/abc123/hqdefault.jpg");
   });
 

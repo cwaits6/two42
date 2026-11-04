@@ -16,6 +16,7 @@ import {
   UserPlus,
   type LucideIcon,
 } from "lucide-react";
+import { LessonThumbnail } from "@/components/lessons/LessonThumbnail";
 import { createClient } from "@/lib/supabase/server";
 import { groupPath, type ActiveGroup } from "@/lib/groups/active";
 import { greetingName } from "@/lib/groups/greeting";
@@ -438,12 +439,10 @@ function Tile({ tile, timeZone, now }: { tile: NewTile; timeZone: string; now: D
       return (
         <Link href={tile.href} className={cn(shell, "flex items-center gap-4")}>
           <span className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-brand-warm">
-            {tile.thumbnail ? (
-              // eslint-disable-next-line @next/next/no-img-element -- Lesson thumbnails can be arbitrary stored URLs.
-              <img src={tile.thumbnail} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <Play className="h-7 w-7 text-brand-primary-text" aria-hidden="true" />
-            )}
+            <LessonThumbnail
+              src={tile.thumbnail}
+              fallback={<Play className="h-7 w-7 text-brand-primary-text" aria-hidden="true" />}
+            />
           </span>
           <span className="min-w-0">
             <span className={cn(EYEBROW, "block")}>Lesson</span>
