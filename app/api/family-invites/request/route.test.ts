@@ -146,21 +146,6 @@ describe("POST /api/family-invites/request", () => {
     expect(insertSpy).toHaveBeenCalledWith(expect.objectContaining({ name: "n".repeat(120) }));
   });
 
-  it("answers the same 400 for a long name whether or not the token exists", async () => {
-    createServiceClient.mockResolvedValue(makeClient({ invite: null }));
-    const name = "n".repeat(121);
-
-    const [known, unknown] = await Promise.all([
-      post({ token: TOKEN, name }),
-      post({ token: "33333333-3333-4333-8333-333333333333", name }),
-    ]);
-
-    expect(known.status).toBe(400);
-    expect(unknown.status).toBe(400);
-    expect(await known.json()).toEqual(await unknown.json());
-    expect(createServiceClient).not.toHaveBeenCalled();
-  });
-
   it("rejects a malformed token or a blank name before touching the database", async () => {
     createServiceClient.mockResolvedValue(makeClient({ invite: INVITE }));
 

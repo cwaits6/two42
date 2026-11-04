@@ -101,7 +101,6 @@ export function FamilyRequestForm({ token, email }: FamilyRequestFormProps) {
             setNameError(undefined);
           }}
           placeholder="Your name"
-          maxLength={120}
           className="h-12 text-lg"
           {...invalidFieldProps("family-name", nameError)}
         />
