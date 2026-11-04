@@ -521,7 +521,7 @@ function todoRows(
       key: "announcement",
       title: `${drafts.length} announcement${drafts.length === 1 ? "" : "s"} to publish`,
       detail: drafts[0].title,
-      href: groupPath(groupId, "/settings/announcements"),
+      href: groupPath(groupId, "/announcements"),
     });
   }
   return rows;
