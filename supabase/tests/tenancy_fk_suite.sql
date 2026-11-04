@@ -174,12 +174,15 @@ select throws_ok(
   '23503', null,
   'prayer_call_sessions in org A cannot bind to an org B event');
 
+-- The recipients guard fires first and would hide a weakened foreign key.
+alter table public.giving_funds disable trigger giving_funds_keep_recipients_in_group;
 select throws_ok(
   $$ insert into public.giving_funds (org_id, group_id, name, steward_id, co_steward_id)
      values (current_setting('fk.org_a')::uuid, current_setting('fk.grp_a')::uuid, 'strayed fund',
              current_setting('fk.owner_a')::uuid, current_setting('fk.owner_b')::uuid) $$,
-  '23514', null,
+  '23503', null,
   'giving_funds in org A cannot grant co-stewardship to an org B profile');
+alter table public.giving_funds enable trigger giving_funds_keep_recipients_in_group;
 
 -- ── 2. ON DELETE SET NULL (col): the FK column nulls, org_id survives ──────
 -- The 7 capability/entity relations only — see the coverage boundary in the

@@ -421,11 +421,18 @@ begin
   get diagnostics n = row_count;
   perform set_config('gs.ok_prayer_update', n::text, true);
 
+  -- The recipients guard fires first and would hide a missing WITH CHECK.
+  reset role;
+  alter table public.giving_funds disable trigger giving_funds_keep_recipients_in_group;
+  set local role authenticated;
   err := 'none';
   begin
     update public.giving_funds set group_id = grp_b where id = fund;
   exception when others then err := sqlstate; end;
   perform set_config('gs.mv_fund', err, true);
+  reset role;
+  alter table public.giving_funds enable trigger giving_funds_keep_recipients_in_group;
+  set local role authenticated;
   update public.giving_funds set name = 'edited' where id = fund;
   get diagnostics n = row_count;
   perform set_config('gs.ok_fund_update', n::text, true);
@@ -436,7 +443,7 @@ select is(current_setting('gs.mv_prayer'), '42501',
   'a poster cannot move their own prayer request into a group they are not in');
 select is(current_setting('gs.ok_prayer_update'), '1',
   'non-vacuity: the poster can still edit the request inside their group');
-select is(current_setting('gs.mv_fund'), '23514',
+select is(current_setting('gs.mv_fund'), '42501',
   'a steward cannot move their fund into a group they are not in');
 select is(current_setting('gs.ok_fund_update'), '1',
   'non-vacuity: the steward can still edit the fund inside their group');
