@@ -14,6 +14,15 @@ jobs:
       issues: write
 
     steps:
+      # First because every later step opens outgoing connections, and the
+      # kernel may pick their source ports from the block the stack binds.
+      - name: Reserve the Supabase ports
+        run: |
+          existing=$(sysctl -n net.ipv4.ip_local_reserved_ports)
+          echo "Already reserved: ${existing:-none}"
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports="${existing:+$existing,}54320-54329"
+          sudo ss -tanp '( sport >= :54320 and sport <= :54329 )'
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -33,7 +42,7 @@ jobs:
       # a deployment wired to real data. Vercel previews share Production's
       # Supabase and Resend credentials.
       - name: Start the local Supabase stack
-        run: npx supabase start -x studio,imgproxy,mailpit,postgres-meta,edge-runtime,logflare,vector
+        run: scripts/start-supabase-stack.sh -x studio,imgproxy,mailpit,postgres-meta,edge-runtime,logflare,vector
 
       - name: Point the build at the local stack
         run: |

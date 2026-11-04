@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Starts the e2e job's ephemeral Supabase stack, retrying once if a host port
+# Starts a CI job's ephemeral Supabase stack, retrying once if a host port
 # is taken. Arguments pass through to `supabase start`. CI only: the stop below
 # would take down the shared local stack.
 set -euo pipefail
