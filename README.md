@@ -51,8 +51,8 @@ npx supabase start
 ```
 
 The first start pulls the container images, then applies every migration and
-`supabase/seed.sql` and prints the stack's URLs and keys. Put four values in
-`.env.local`:
+`supabase/seed.sql` and prints the stack's URLs and keys. Copy the example
+file, set four values and clear two:
 
 ```bash
 cp .env.example .env.local
@@ -65,9 +65,14 @@ cp .env.example .env.local
 | `SUPABASE_SECRET_KEY` | the printed Secret key |
 | `SERVING_LINK_SECRET` | any random string, for example `openssl rand -hex 32` |
 
+| Clear | Why |
+|---|---|
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | the example sets a placeholder, and any non-empty value loads Google Maps with it, so event maps show an error instead of staying out |
+| `RESEND_API_KEY` | the example sets a placeholder; the app does not need Resend locally |
+
 Leave the rest as it is. The app runs without Resend or Google Maps: without a
-Resend key, invite emails fail with "We couldn't send the email", and without a
-Maps key event maps are left out.
+Resend key, invite emails fail with "We couldn't send the email", and with the
+Maps key empty event maps are left out.
 
 ```bash
 npm run dev
@@ -130,7 +135,7 @@ described in [`scripts/README.md`](./scripts/README.md).
 | `SERVING_LINK_SECRET` | yes | HMAC key for the serving links that act straight from an email. Use the same value in the edge function secrets |
 | `RESEND_API_KEY` | in production | Sends invite, setup, approval and serving emails. The app starts without it; every send fails |
 | `NEXT_PUBLIC_EMAIL_FROM` | in production | The `From:` address, `Name <address>`. Defaults to two42.io's, which Resend will refuse for any other account; use an address on a domain you have verified in Resend |
-| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | no | Event maps and place lookup. Unset leaves them out |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | no | Event maps and place lookup. Empty or unset leaves them out; any other value loads Google Maps with it |
 | `SERVING_LINK_MODE` | no | `signed` (default) lets serving email links act without signing in; `login` sends people through sign-in. A group's own setting overrides it |
 | `NEXT_PUBLIC_TIME_ZONE` | no | Zone used when a church's own time zone cannot be read. Default `America/New_York` |
 | `NEXT_PUBLIC_APP_NAME`, `NEXT_PUBLIC_APP_DESCRIPTION`, `NEXT_PUBLIC_COLOR_PRIMARY`, `NEXT_PUBLIC_COLOR_PRIMARY_LIGHT`, `NEXT_PUBLIC_COLOR_ACCENT`, `NEXT_PUBLIC_COLOR_WARM`, `NEXT_PUBLIC_COLOR_BG_LIGHT`, `NEXT_PUBLIC_COLOR_BG_MUTED` | no | Fallbacks used when a church's branding row is empty. A church's name, logo and accent color are set per church by an operator |
