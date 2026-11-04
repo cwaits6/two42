@@ -21,6 +21,8 @@ interface ConfirmDialogProps {
   confirmLabel: string;
   pendingLabel?: string;
   cancelLabel?: string;
+  /** For a confirmation that destroys nothing. */
+  confirmVariant?: "destructive" | "default";
   onConfirm: () => Promise<void>;
 }
 
@@ -37,6 +39,7 @@ export function ConfirmDialog({
   confirmLabel,
   pendingLabel = confirmLabel,
   cancelLabel = "Cancel",
+  confirmVariant = "destructive",
   onConfirm,
 }: ConfirmDialogProps) {
   const [pending, setPending] = useState(false);
@@ -70,7 +73,7 @@ export function ConfirmDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
             {cancelLabel}
           </Button>
-          <Button variant="destructive" onClick={handleConfirm} disabled={pending}>
+          <Button variant={confirmVariant} onClick={handleConfirm} disabled={pending}>
             {pending ? pendingLabel : confirmLabel}
           </Button>
         </DialogFooter>

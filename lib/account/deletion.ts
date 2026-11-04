@@ -27,7 +27,8 @@ interface FundRow {
   groups: { name: string } | null;
 }
 
-// The rule delete_person() applies, read ahead of time for the confirmation.
+// The rule the giving_funds triggers apply when delete_person() removes the
+// profile, read ahead of time for the confirmation.
 async function loadFunds(service: ServiceClient, orgId: string, personId: string) {
   const funds = rowsOf<FundRow>(
     await service
@@ -41,7 +42,7 @@ async function loadFunds(service: ServiceClient, orgId: string, personId: string
   const seconds = [
     ...new Set(funds.flatMap((f) => (f.co_steward_id && f.co_steward_id !== personId ? f.co_steward_id : []))),
   ];
-  if (seconds.length === 0) return { retired: [], deleted: funds.map(namedFund) };
+  if (seconds.length === 0) return { passedOn: [], needingRecipient: funds.map(namedFund) };
 
   const memberships = rowsOf<{ group_id: string; profile_id: string }>(
     await service
@@ -53,6 +54,7 @@ async function loadFunds(service: ServiceClient, orgId: string, personId: string
   );
   const people = rowsOf<{
     id: string;
+    role: string;
     first_name: string | null;
     last_name: string | null;
     preferred_name: string | null;
@@ -60,21 +62,23 @@ async function loadFunds(service: ServiceClient, orgId: string, personId: string
   }>(
     await service
       .from("profiles")
-      .select("id, first_name, last_name, preferred_name, email")
+      .select("id, role, first_name, last_name, preferred_name, email")
       .eq("org_id", orgId)
       .in("id", seconds),
     "second people",
   );
   const inGroup = new Set(memberships.map((m) => `${m.group_id}:${m.profile_id}`));
   const names = new Map(people.map((p) => [p.id, personName(p)]));
+  const pending = new Set(people.filter((p) => p.role === "pending").map((p) => p.id));
 
-  const passesOn = (f: FundRow) => !!f.co_steward_id && inGroup.has(`${f.group_id}:${f.co_steward_id}`);
+  const passesOn = (f: FundRow) =>
+    !!f.co_steward_id && !pending.has(f.co_steward_id) && inGroup.has(`${f.group_id}:${f.co_steward_id}`);
   return {
-    retired: funds.filter(passesOn).map((f) => ({
+    passedOn: funds.filter(passesOn).map((f) => ({
       ...namedFund(f),
       recipient: names.get(f.co_steward_id ?? "") ?? "",
     })),
-    deleted: funds.filter((f) => !passesOn(f)).map(namedFund),
+    needingRecipient: funds.filter((f) => !passesOn(f)).map(namedFund),
   };
 }
 
@@ -165,11 +169,11 @@ export async function loadDeletionSummary(
     platformOperator: operators.length > 0,
     groupContent:
       viewer === "self"
-        ? { kind: "names", fundsRetired: funds.retired, fundsDeleted: funds.deleted, groupsLosingLeader }
+        ? { kind: "names", fundsPassedOn: funds.passedOn, fundsNeedingRecipient: funds.needingRecipient, groupsLosingLeader }
         : {
             kind: "counts",
-            fundsRetired: funds.retired.length,
-            fundsDeleted: funds.deleted.length,
+            fundsPassedOn: funds.passedOn.length,
+            fundsNeedingRecipient: funds.needingRecipient.length,
             groupsLosingLeader: groupsLosingLeader.length,
           },
     household: target.family_id

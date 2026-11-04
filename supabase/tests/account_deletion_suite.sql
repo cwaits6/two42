@@ -167,8 +167,6 @@ insert into fx values
   ('other_namesake', pg_temp.new_person(pg_temp.fx('other_org'), 'namesake@deletion.test')),
   ('solo_family', gen_random_uuid());
 insert into public.platform_admins (profile_id) values (pg_temp.fx('operator'));
--- handle_new_user() enrols a signup in a church's only group.
-delete from public.group_members where profile_id = pg_temp.fx('outside_second');
 insert into public.family_units (id, org_id, family_name)
   values (pg_temp.fx('solo_family'), pg_temp.fx('org'), 'Only Solo');
 update public.profiles set family_id = pg_temp.fx('solo_family') where id = pg_temp.fx('solo');
@@ -205,6 +203,7 @@ insert into public.giving_funds (id, org_id, group_id, name, steward_id, co_stew
   (pg_temp.f(4), pg_temp.fx('org'), pg_temp.fx('group'), 'They are second', pg_temp.fx('spouse_b'), pg_temp.fx('spouse_a'), 'Treasurer', pg_temp.fx('spouse_a'));
 insert into public.giving_fund_methods (fund_id, org_id, group_id, method, custom_handle)
 select pg_temp.f(n), pg_temp.fx('org'), pg_temp.fx('group'), 'venmo', '@handle' from generate_series(1, 4) n;
+delete from public.group_members where profile_id = pg_temp.fx('outside_second');
 
 insert into public.family_members (id, org_id, family_id, first_name, relationship, claimed_profile_id) values
   (pg_temp.e(1), pg_temp.fx('org'), pg_temp.fx('family'), 'Spouse A', 'spouse', pg_temp.fx('spouse_a')),
@@ -300,7 +299,7 @@ create function pg_temp.fingerprint() returns text language sql stable as $$
     (select count(*) from public.family_invites), (select count(*) from public.family_members),
     (select count(*) from public.family_units), (select count(*) from public.prayer_requests),
     (select string_agg(created_by::text, ',' order by id) from public.serving_signups where org_id = pg_temp.fx('org')),
-    (select string_agg(concat(steward_id, co_steward_id, steward_role, is_active), ',' order by id)
+    (select string_agg(concat(steward_id, co_steward_id, steward_role, is_active, needs_review), ',' order by id)
        from public.giving_funds where org_id = pg_temp.fx('org')));
 $$;
 
@@ -348,7 +347,7 @@ select is((select created_by from public.serving_signups where id = pg_temp.d(1)
   'the serving date didn''t move');
 select is((select steward_id from public.giving_funds where id = pg_temp.f(1)), pg_temp.fx('spouse_a'),
   'the fund didn''t pass on');
-select is((select is_active from public.giving_funds where id = pg_temp.f(1)), true, 'or retire');
+select is((select needs_review from public.giving_funds where id = pg_temp.f(1)), false, 'or need review');
 select is((select count(*) from public.family_members where id = pg_temp.e(1)), 1::bigint,
   'the household entry is still there');
 select is((select count(*) from public.access_requests where email = 'a.spouse@deletion.test' and org_id = pg_temp.fx('org')), 1::bigint,
@@ -421,16 +420,16 @@ select is((select steward_id from public.giving_funds where id = pg_temp.f(1)), 
   'a fund with a second person in the group goes to them');
 select is((select co_steward_id from public.giving_funds where id = pg_temp.f(1)), null::uuid, 'the second slot empties');
 select is((select steward_role from public.giving_funds where id = pg_temp.f(1)), null::text, 'the role clears');
-select is((select is_active from public.giving_funds where id = pg_temp.f(1)), false, 'and the fund is retired');
+select is((select needs_review from public.giving_funds where id = pg_temp.f(1)), true, 'the fund needs review');
+select is((select is_active from public.giving_funds where id = pg_temp.f(1)), true, 'and isn''t retired, so confirming puts it back');
 select is((select custom_handle from public.giving_fund_methods where fund_id = pg_temp.f(1)), '@handle',
   'its payment methods stay for a leader to check');
-select is((select count(*) from public.giving_funds where id = pg_temp.f(2)), 0::bigint, 'a fund with no second person is deleted');
-select is((select count(*) from public.giving_fund_methods where fund_id = pg_temp.f(2)), 0::bigint, 'with its payment methods');
-select is((select count(*) from public.giving_funds where id = pg_temp.f(3)), 0::bigint,
-  'a fund whose second person isn''t in the group is deleted too');
+select is((select count(*) from public.giving_funds where id in (pg_temp.f(2), pg_temp.f(3)) and steward_id is null and co_steward_id is null and needs_review),
+  2::bigint, 'a fund with no second person in the group stays, with no recipient');
+select is((select count(*) from public.giving_fund_methods where fund_id in (pg_temp.f(2), pg_temp.f(3))), 2::bigint, 'with its payment methods');
 select is((select co_steward_id from public.giving_funds where id = pg_temp.f(4)), null::uuid,
   'a fund they are second on stays, with the slot empty');
-select is((select is_active from public.giving_funds where id = pg_temp.f(4)), true, 'and stays live');
+select is((select is_active and not needs_review from public.giving_funds where id = pg_temp.f(4)), true, 'and stays live');
 select is((select steward_role from public.giving_funds where id = pg_temp.f(4)), 'Treasurer', 'with its recipient''s role');
 
 select is((select count(*) from public.access_requests where id in

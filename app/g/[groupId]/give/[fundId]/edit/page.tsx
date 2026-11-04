@@ -66,7 +66,7 @@ export default async function EditFundPage({
   if (fund && !canManage) redirect(giveHref);
 
   const { members, failed: membersFailed } = fund
-    ? await loadFundFormData(supabase, profile.org_id)
+    ? await loadFundFormData(supabase, profile.org_id, group.id)
     : { members: [], failed: false };
 
   return (

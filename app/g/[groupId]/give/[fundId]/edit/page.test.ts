@@ -5,7 +5,7 @@ import type { ReactElement } from "react";
 const state = vi.hoisted(() => ({
   groupRole: "member" as "member" | "leader",
   profile: { role: "member", org_id: "o1" } as { role: string; org_id: string },
-  fund: { id: "f1", steward_id: "someone-else" } as { id: string; steward_id: string } | null,
+  fund: { id: "f1", steward_id: "someone-else" } as { id: string; steward_id: string | null } | null,
   fundError: null as { code: string; message: string } | null,
   manageMode: "stewards",
   methods: [] as unknown[] | null,
@@ -14,9 +14,10 @@ const state = vi.hoisted(() => ({
 
 function query(table: string) {
   const list =
-    table === "giving_fund_methods" ? state.methods : table === "profiles_directory" ? state.directory : [];
+    table === "giving_fund_methods" ? state.methods : table === "group_members" ? state.directory : [];
   const chain = {
     select: () => chain,
+    returns: () => chain,
     eq: () => chain,
     order: () => chain,
     single: () => Promise.resolve({ data: state.profile, error: null }),
@@ -82,6 +83,17 @@ beforeEach(() => {
 describe("EditFundPage role checks", () => {
   it("sends a member back to Give when the fund goes to someone else", async () => {
     await expect(render()).rejects.toThrow("redirect:/g/g1/give");
+  });
+
+  it("sends a member back to Give when the fund has no recipient, so a null can't admit them", async () => {
+    state.fund = { id: "f1", steward_id: null };
+    await expect(render()).rejects.toThrow("redirect:/g/g1/give");
+  });
+
+  it("opens a fund with no recipient for a leader", async () => {
+    state.groupRole = "leader";
+    state.fund = { id: "f1", steward_id: null };
+    expect(await render()).toContain("fund form, back to /g/g1/give");
   });
 
   it("sends the fund's recipient back to Give when members can't manage funds", async () => {

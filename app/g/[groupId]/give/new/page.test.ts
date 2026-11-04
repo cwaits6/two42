@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
 function query() {
   const chain = {
     select: () => chain,
+    returns: () => chain,
     eq: () => chain,
     order: () => chain,
     single: () => Promise.resolve({ data: { role: "member", org_id: "o1" }, error: null }),

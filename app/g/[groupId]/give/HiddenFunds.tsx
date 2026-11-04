@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatFundDate, fundRecipientLine, fundStatus } from "@/lib/giving/funds";
+import { formatFundDate, fundPaused, fundRecipientLine, fundStatus } from "@/lib/giving/funds";
 import { METHOD_ORDER, PAYMENT_METHODS } from "@/lib/giving/methods";
 import { groupPath } from "@/lib/groups/active";
 import { displayName } from "@/lib/names";
@@ -15,7 +15,7 @@ export type HiddenFundRow = GivingFund & {
   } | null;
 };
 
-/** The funds a leader can edit that members do not see on the Give page. */
+/** The funds this person can edit that members do not see on the Give page. */
 export function HiddenFunds({
   groupId,
   funds,
@@ -60,7 +60,9 @@ export function HiddenFunds({
                 <p className="mt-1 text-base text-muted-foreground">
                   {fund.steward
                     ? fundRecipientLine(displayName(fund.steward), fund.steward_role)
-                    : "No one named to receive it"}
+                    : fund.steward_id
+                      ? "Goes to someone not listed in the directory"
+                      : "No one named to receive it"}
                 </p>
                 {fund.retire_on && status.live && (
                   <p className="text-base text-muted-foreground">
@@ -77,10 +79,10 @@ export function HiddenFunds({
                 variant="outline"
                 nativeButton={false}
                 render={<Link href={groupPath(groupId, `/give/${fund.id}/edit`)} />}
-                aria-label={`Edit ${fund.name}`}
+                aria-label={`${fundPaused(fund) ? "Review" : "Edit"} ${fund.name}`}
               >
                 <Pencil aria-hidden="true" />
-                Edit
+                {fundPaused(fund) ? "Review" : "Edit"}
               </Button>
             </div>
           );

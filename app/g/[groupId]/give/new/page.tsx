@@ -41,7 +41,7 @@ export default async function NewFundPage({
   if (!isLeader && !stewardsCanManage) redirect(giveHref);
 
   const [{ members, failed }, timeZone] = await Promise.all([
-    loadFundFormData(supabase, profile.org_id),
+    loadFundFormData(supabase, profile.org_id, group.id),
     getOrgTimeZone(),
   ]);
 

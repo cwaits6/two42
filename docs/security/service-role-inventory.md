@@ -184,8 +184,9 @@ grant matrix and the org checks are pinned by
 `delete_person(_person_id, _org_id)`
 (`20261113000000_delete_person.sql`) runs every database step of deleting a
 person in one transaction: refusing a platform operator and the last church
-admin, serving dates, funds, sign-up records, household entries, and the
-`auth.users` row, which cascades to the profile. EXECUTE: `service_role` only,
+admin, serving dates, sign-up records, household entries, and the
+`auth.users` row, which cascades to the profile and through it to the fund
+rules below (`20261115000000_fund_recipients_in_group.sql`). EXECUTE: `service_role` only,
 reached from `deletePerson()` in `lib/account/deletion.ts`.
 
 Their `group_invite_uses` rows stay, because `max_uses` counts them and deleting
@@ -210,6 +211,42 @@ stops the deploy if the role running it lacks the privilege.
 
 The grant matrix, each refusal, the row counts and a rollback forced at the last
 step are pinned by `supabase/tests/account_deletion_suite.sql`.
+
+## Fund recipient triggers — definer-function bypass surfaces
+
+`20261115000000_fund_recipients_in_group.sql` adds two `SECURITY DEFINER`
+trigger functions that write `giving_funds`, and a backfill function. All three
+`set search_path = ''`, schema-qualify everything and revoke EXECUTE from
+`public`, `anon` and `authenticated`; none takes a parameter.
+
+- `giving_fund_recipients_guard()` — `BEFORE INSERT OR UPDATE OF steward_id,
+  co_steward_id, group_id, org_id, needs_review` on `giving_funds`. Reads the
+  row's own `group_id` and `org_id`, and refuses a named person who has no
+  `group_members` row with both, which also refuses another church's person, or
+  who is pending. It takes `FOR KEY SHARE` on the membership row it reads, so a
+  removal running alongside the write can't miss the fund. Every loss of a
+  recipient reaches it as `steward_id` going null, whichever path caused it:
+  promotes a second person still in the group and not pending, empties the
+  second slot and `steward_role`, and sets `needs_review`. Refuses clearing
+  `needs_review` unless `is_group_leader(old.group_id)`, which reads
+  `auth.uid()`; there is no exemption for a null `auth.uid()`, so the service
+  role can't confirm a fund either. A check constraint,
+  `giving_funds_no_recipient_needs_review`, keeps a fund with no recipient
+  flagged.
+- `group_member_removed_leaves_funds()` — `AFTER DELETE OR UPDATE OF group_id,
+  profile_id, org_id` on `group_members`. Org and group come from the `OLD`
+  membership row, and both updates filter on them. Returns without writing when
+  the membership still exists.
+- `giving_funds_apply_recipient_rules()` — the deploy's backfill, kept so pgTAP
+  can prove it. `SECURITY INVOKER`, also revoked from `service_role`, so only
+  the migration role runs it. Each row's own `org_id` scopes its membership
+  check, and only a person outside the fund's group matches, so a second run
+  changes nothing.
+
+`delete_person()` doesn't write `giving_funds`: its profile delete reaches
+the same rules through the composite foreign keys (`on delete set null
+(steward_id)`) and the membership trigger, in either firing order. Proved in
+`supabase/tests/giving_recipients_suite.sql`.
 
 ## Group membership helpers — SECURITY DEFINER (`is_group_member`, `is_group_leader`, `is_team_lead`)
 

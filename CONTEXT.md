@@ -95,6 +95,18 @@ Make an invite link stop working.
 Stop a fund from taking gifts while keeping its history.
 _Avoid_: Archive, Close
 
+**Needs a recipient**:
+A fund whose recipient left the group with nobody to take over. It stays saved with its payment methods and takes no gifts until a leader chooses who receives it and confirms it.
+_Avoid_: Orphaned, Unassigned
+
+**Needs review**:
+A fund that has a recipient but takes no gifts until a leader confirms it, because its payment methods may still pay the person who left.
+_Avoid_: Pending (a person's state), Paused (in copy)
+
+**Confirm**:
+What a leader does to put a fund in "Needs a recipient" or "Needs review" back: check its recipient and payment methods. A fund that was retired stays retired.
+_Avoid_: Approve (a person's or request's state)
+
 **Decline**:
 Turn down a request to join.
 _Avoid_: Deny, Reject

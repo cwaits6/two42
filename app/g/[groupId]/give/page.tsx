@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/states/EmptyState";
 import { ErrorState } from "@/components/states/ErrorState";
 import { displayName, initials } from "@/lib/names";
-import { fundThroughTag } from "@/lib/giving/funds";
+import { fundPaused, fundThroughTag } from "@/lib/giving/funds";
 import { resolveFundMethods } from "@/lib/giving/methods";
 import { givingStewardsCanManage, signStewardAvatars } from "@/lib/giving/server";
 import { GiveList, type FundView } from "@/components/giving/GiveList";
@@ -101,7 +101,7 @@ export default async function GivePage({
       : [];
 
   const views: FundView[] = funds.flatMap((fund) => {
-    if (!fund.steward) return [];
+    if (!fund.steward || fundPaused(fund)) return [];
     const canManage =
       isLeader || (stewardsCanManage && fund.steward_id === user.id);
     const resolved = resolveFundMethods(
@@ -136,10 +136,10 @@ export default async function GivePage({
     ];
   });
 
-  // Retired funds and those naming no one to receive them never reach the list
-  // above, and this is the one way a leader can get back to them.
+  // Retired and paused funds never reach the list above, and this is the one way
+  // a leader can get back to them, or a recipient to a fund waiting on review.
   const shownIds = new Set(views.map((v) => v.id));
-  const [allFunds, allMethods] = isLeader
+  const [allFunds, allMethods] = isLeader || stewardsCanManage
     ? await Promise.all([
         supabase
           .from("giving_funds")
@@ -159,7 +159,9 @@ export default async function GivePage({
           ),
       ])
     : [[], []];
-  const hiddenFunds = allFunds?.filter((f) => !shownIds.has(f.id));
+  const hiddenFunds = allFunds?.filter(
+    (f) => !shownIds.has(f.id) && (isLeader || (f.steward_id === user.id && fundPaused(f)))
+  );
 
   const addFund = canCreate && (
     <Button nativeButton={false} render={<Link href={newFundHref} />}>

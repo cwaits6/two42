@@ -77,6 +77,7 @@ begin
   perform set_config('fk.series_b', v::text, true);
   insert into public.family_units (org_id, family_name) values (org_b, 'B family') returning id into v;
   perform set_config('fk.family_b', v::text, true);
+  insert into public.group_members (org_id, group_id, profile_id) values (org_b, grp_b, owner_b);
   insert into public.giving_funds (org_id, group_id, name, steward_id) values (org_b, grp_b, 'B fund', owner_b) returning id into v;
   perform set_config('fk.fund_b', v::text, true);
   insert into public.prayer_requests (org_id, group_id, author_id, body)
@@ -173,12 +174,15 @@ select throws_ok(
   '23503', null,
   'prayer_call_sessions in org A cannot bind to an org B event');
 
+-- The recipients guard fires first and would hide a weakened foreign key.
+alter table public.giving_funds disable trigger giving_funds_keep_recipients_in_group;
 select throws_ok(
   $$ insert into public.giving_funds (org_id, group_id, name, steward_id, co_steward_id)
      values (current_setting('fk.org_a')::uuid, current_setting('fk.grp_a')::uuid, 'strayed fund',
              current_setting('fk.owner_a')::uuid, current_setting('fk.owner_b')::uuid) $$,
   '23503', null,
   'giving_funds in org A cannot grant co-stewardship to an org B profile');
+alter table public.giving_funds enable trigger giving_funds_keep_recipients_in_group;
 
 -- ── 2. ON DELETE SET NULL (col): the FK column nulls, org_id survives ──────
 -- The 7 capability/entity relations only — see the coverage boundary in the
@@ -249,6 +253,8 @@ begin
     from public.serving_signups where id = _signup), true);
 
   -- 7. giving_funds.co_steward_id ← profiles.id
+  insert into public.group_members (org_id, group_id, profile_id)
+    values (org_a, _grp, owner_a), (org_a, _grp, costeward_a) on conflict (group_id, profile_id) do nothing;
   insert into public.giving_funds (org_id, group_id, name, steward_id, co_steward_id)
     values (org_a, _grp, 'shared fund', owner_a, costeward_a) returning id into _fund;
   delete from public.profiles where id = costeward_a;

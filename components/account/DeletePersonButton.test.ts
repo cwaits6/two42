@@ -13,7 +13,7 @@ const SUMMARY = {
   name: "Ada Okafor",
   lastChurchAdmin: false,
   platformOperator: false,
-  groupContent: { kind: "counts", fundsRetired: 0, fundsDeleted: 0, groupsLosingLeader: 0 },
+  groupContent: { kind: "counts", fundsPassedOn: 0, fundsNeedingRecipient: 0, groupsLosingLeader: 0 },
   household: null,
 };
 

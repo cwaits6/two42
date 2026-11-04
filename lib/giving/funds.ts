@@ -21,17 +21,32 @@ export function fundRecipientLine(names: string, role: string | null): string {
   return `Goes to ${names}${role ? ` · ${role}` : ""}`;
 }
 
+interface FundState {
+  steward_id: string | null;
+  needs_review: boolean;
+  is_active: boolean;
+  retire_on: string | null;
+}
+
+/** Waiting on a leader: separate from retired, which a leader chose and Reopen undoes. */
+export function fundPaused(fund: Pick<FundState, "steward_id" | "needs_review">): boolean {
+  return !fund.steward_id || fund.needs_review;
+}
+
 /**
  * A fund past its last day stays active in the database and stops being
  * offered, so both cases read as retired. `today` is in the church's zone.
  */
-export function fundStatus(
-  fund: { is_active: boolean; retire_on: string | null },
-  today: string
-): { text: string; live: boolean } {
+export function fundRetired(fund: Pick<FundState, "is_active" | "retire_on">, today: string): boolean {
+  return !fund.is_active || (!!fund.retire_on && fund.retire_on < today);
+}
+
+export function fundStatus(fund: FundState, today: string): { text: string; live: boolean } {
+  if (!fund.steward_id) return { text: "Needs a recipient", live: false };
+  if (fund.needs_review) return { text: "Needs review", live: false };
   if (!fund.is_active) return { text: "Retired", live: false };
-  if (fund.retire_on && fund.retire_on < today) {
-    return { text: `Retired ${formatFundDate(fund.retire_on)}`, live: false };
+  if (fundRetired(fund, today)) {
+    return { text: `Retired ${formatFundDate(fund.retire_on ?? today)}`, live: false };
   }
   return { text: "Live", live: true };
 }
@@ -41,11 +56,13 @@ export function reopenedFund(
   retireOn: string | null,
   today: string
 ): { is_active: true; retire_on: string | null } {
-  const keepsDate = fundStatus({ is_active: true, retire_on: retireOn }, today).live;
+  const keepsDate = !fundRetired({ is_active: true, retire_on: retireOn }, today);
   return { is_active: true, retire_on: keepsDate ? retireOn : null };
 }
 
 export const FUND_NAME_FIELD = "fund-name";
+
+export const FUND_RECIPIENT_FIELD = "fund-recipient";
 
 export function methodAccountField(key: PaymentMethodKey): string {
   return `fund-method-${key}`;
@@ -61,9 +78,14 @@ export const METHODS_FIELD = methodToggleField(METHOD_ORDER[0]);
 export type FundMethodInput = Record<PaymentMethodKey, { enabled: boolean; custom: string }>;
 
 /** Messages keyed by the id of the control they belong to, in page order. */
-export function fundFieldErrors(name: string, methods: FundMethodInput): Record<string, string> {
+export function fundFieldErrors(
+  name: string,
+  recipientId: string,
+  methods: FundMethodInput
+): Record<string, string> {
   const errors: Record<string, string> = {};
   if (!name.trim()) errors[FUND_NAME_FIELD] = "Enter a fund name.";
+  if (!recipientId) errors[FUND_RECIPIENT_FIELD] = "Choose who receives it.";
   const enabled = METHOD_ORDER.filter((key) => methods[key].enabled);
   if (enabled.length === 0) {
     errors[METHODS_FIELD] = "Turn on at least one payment method.";

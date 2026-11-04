@@ -382,26 +382,8 @@ export type PaymentMethodKey =
   | "zelle"
   | "wallet";
 
-/** One giving collection, held by a named steward (optionally a couple) */
-export interface GivingFund {
-  id: string;
-  group_id: string;
-  name: string;
-  description: string | null;
-  /** Person who receives the money */
-  steward_id: string;
-  /** Displayed alongside the steward (couples) */
-  co_steward_id: string | null;
-  /** Short trust label: "Class treasurers", "Hospitality" */
-  steward_role: string | null;
-  /** YYYY-MM-DD — fund disappears from the Give page after this date */
-  retire_on: string | null;
-  is_active: boolean;
-  display_order: number;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-}
+/** One giving collection, held by a named recipient and optionally a second person */
+export type GivingFund = Tables<"giving_funds">;
 
 /** A payment method a fund accepts */
 export interface GivingFundMethod {

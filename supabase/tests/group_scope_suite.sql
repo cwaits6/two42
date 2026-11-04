@@ -283,7 +283,7 @@ declare
     format('insert into public.events (org_id, group_id, calendar_id, title, start_time, created_by) values (%L, %L, %L, ''x'', now(), $1)', org, grp_a, cal_a),
     format('insert into public.lectures (org_id, group_id, title, video_url) values (%L, %L, ''x'', ''https://example.test/x'')', org, grp_a),
     format('insert into public.lecture_series (org_id, group_id, name) values (%L, %L, ''x'')', org, grp_a),
-    format('insert into public.giving_funds (org_id, group_id, name, steward_id, created_by) values (%L, %L, ''x'', $1, $1)', org, grp_a),
+    format('insert into public.giving_funds (org_id, group_id, name, steward_id, created_by) values (%L, %L, ''x'', %L, $1)', org, grp_a, current_setting('gs.member_a')),
     format('insert into public.prayer_call_sessions (org_id, group_id, weekday, start_time) values (%L, %L, 1, ''07:00'')', org, grp_a),
     format('insert into public.class_teachers (org_id, group_id, profile_id) values (%L, %L, $1)', org, grp_a),
     format('insert into public.group_settings (org_id, group_id, zoom_meeting_time) values (%L, %L, ''x'') on conflict (group_id) do update set zoom_meeting_time = ''x''', org, grp_a)];
@@ -421,11 +421,18 @@ begin
   get diagnostics n = row_count;
   perform set_config('gs.ok_prayer_update', n::text, true);
 
+  -- The recipients guard fires first and would hide a missing WITH CHECK.
+  reset role;
+  alter table public.giving_funds disable trigger giving_funds_keep_recipients_in_group;
+  set local role authenticated;
   err := 'none';
   begin
     update public.giving_funds set group_id = grp_b where id = fund;
   exception when others then err := sqlstate; end;
   perform set_config('gs.mv_fund', err, true);
+  reset role;
+  alter table public.giving_funds enable trigger giving_funds_keep_recipients_in_group;
+  set local role authenticated;
   update public.giving_funds set name = 'edited' where id = fund;
   get diagnostics n = row_count;
   perform set_config('gs.ok_fund_update', n::text, true);
