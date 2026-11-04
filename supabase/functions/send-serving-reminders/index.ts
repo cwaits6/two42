@@ -19,6 +19,7 @@
 // package-lock.json resolves for ^2.103.3; bump both together (no Renovate
 // rule covers this URL).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.9";
+import { serviceKeyCallerOnly } from "../_shared/caller-auth.ts";
 import {
   formatFromHeader,
   parseAddress,
@@ -536,7 +537,7 @@ async function runMonthly(
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-Deno.serve(async (req) => {
+Deno.serve(serviceKeyCallerOnly(async (req) => {
   let mode = "daily";
   // An absent body is normal (the daily cron posts nothing); a present but
   // unparseable body is an alarm — it means the monthly job's {"mode":
@@ -610,4 +611,4 @@ Deno.serve(async (req) => {
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
-});
+}));
