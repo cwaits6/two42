@@ -113,9 +113,9 @@ two42 was built to solve exactly that. It has since been open-sourced so other g
 4. **Set up Google Maps API** (for event location autocomplete)
    - Go to [Google Cloud Console](https://console.cloud.google.com/)
    - Create a new project or select an existing one
-   - Enable the **Places API**
+   - Enable the **Maps JavaScript API**, **Places API (New)**, and **Geocoding API**
    - Create an API key at **Credentials → Create Credentials → API Key**
-   - (Optional) Restrict it to your domain(s) under **Application restrictions**
+   - (Optional) Restrict it to your domain(s) under **Application restrictions**, including `http://localhost:*/*` for local dev
 
 5. **Set up environment variables**
    ```bash
