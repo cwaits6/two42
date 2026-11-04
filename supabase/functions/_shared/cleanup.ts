@@ -12,7 +12,11 @@ import {
   feedbackCutoff,
   isLiveSignupToken,
   prayerCutoff,
+  reminderCutoff,
 } from "./retention.ts";
+
+/** Rows one batched delete removes at most. */
+export const DELETE_BATCH = 500;
 
 type QueryError = { message: string } | null;
 
@@ -24,7 +28,10 @@ interface FilterBuilder<Self> {
 }
 
 export interface DeleteChain
-  extends FilterBuilder<DeleteChain>, PromiseLike<{ count: number | null; error: QueryError }> {}
+  extends FilterBuilder<DeleteChain>, PromiseLike<{ count: number | null; error: QueryError }> {
+  order(column: string): DeleteChain;
+  limit(count: number): DeleteChain;
+}
 
 export interface ReadChain<Row = Record<string, unknown>>
   extends
@@ -47,6 +54,7 @@ export interface RemovedCounts {
   groupInvites: number;
   feedback: number;
   prayerRequests: number;
+  reminderPasses: number;
 }
 
 export interface OrgCleanupResult {
@@ -119,6 +127,7 @@ export async function cleanUpOrg(
     groupInvites: 0,
     feedback: 0,
     prayerRequests: 0,
+    reminderPasses: 0,
   };
   const failures: OrgCleanupResult["failures"] = [];
 
@@ -138,6 +147,20 @@ export async function cleanUpOrg(
       if (error) throw new Error(error.message);
       if (count === null) throw new Error("the delete returned no count");
       removed[key] += count;
+    });
+  }
+
+  // A table that grows every day is cleared a batch at a time, so one night
+  // after a gap never holds a lock over everything at once.
+  function removeInBatches(key: keyof RemovedCounts, step: string, chain: () => DeleteChain) {
+    return attempt(step, async () => {
+      for (;;) {
+        const { count, error } = await chain().limit(DELETE_BATCH);
+        if (error) throw new Error(error.message);
+        if (count === null) throw new Error("the delete returned no count");
+        removed[key] += count;
+        if (count < DELETE_BATCH) return;
+      }
     });
   }
 
@@ -233,6 +256,15 @@ export async function cleanUpOrg(
         .eq("org_id", orgId)
         .lt("created_at", cutoff));
   });
+
+  // serving_reminder_sends goes with its pass through the foreign key.
+  await removeInBatches("reminderPasses", "serving_reminder_passes", () =>
+    supabase
+      .from("serving_reminder_passes")
+      .delete({ count: "exact" })
+      .eq("org_id", orgId)
+      .lt("send_date", reminderCutoff(now))
+      .order("send_date"));
 
   return { orgId, removed, failures };
 }

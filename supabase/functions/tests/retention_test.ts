@@ -7,12 +7,17 @@ import {
   isLiveSignupToken,
   monthsBefore,
   prayerCutoff,
+  reminderCutoff,
 } from "../_shared/retention.ts";
 
 const NOW = new Date("2026-11-03T09:00:00.000Z");
 
 Deno.test("the expired cutoff is exactly 90 days back, across a DST change", () => {
   assertEquals(expiredCutoff(NOW), "2026-08-05T09:00:00.000Z");
+});
+
+Deno.test("the reminder cutoff is the send date 35 days back", () => {
+  assertEquals(reminderCutoff(new Date("2026-11-03T09:00:00Z")), "2026-09-29");
 });
 
 Deno.test("the feedback cutoff is 12 calendar months back", () => {

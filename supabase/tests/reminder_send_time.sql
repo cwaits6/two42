@@ -1,5 +1,6 @@
--- Pins the default send time: a job left on an earlier hour would remind
--- churches in the west on the wrong day.
+-- Pins the send times: the event reminders stay at 15:00 UTC, which falls on
+-- the same calendar date in every US time zone, and the serving reminders
+-- fire every hour so each team's chosen hour in its church's zone is met.
 --
 -- Run locally through the shared stack's container (never `supabase test db`):
 --
@@ -7,7 +8,7 @@
 --     psql -U postgres -d postgres -f - < supabase/tests/reminder_send_time.sql
 begin;
 
-select plan(4);
+select plan(5);
 
 select is(
   (select schedule from cron.job where jobname = 'send-event-reminders-daily'),
@@ -16,9 +17,9 @@ select is(
 );
 
 select is(
-  (select schedule from cron.job where jobname = 'send-serving-reminders-daily'),
-  '0 15 * * *',
-  'serving reminders send at 15:00 UTC'
+  (select schedule from cron.job where jobname = 'send-serving-reminders-hourly'),
+  '0 * * * *',
+  'serving reminders fire every hour'
 );
 
 select is(
@@ -28,10 +29,16 @@ select is(
 );
 
 select is(
+  (select count(*)::int from cron.job where jobname = 'send-serving-reminders-daily'),
+  0,
+  'the daily serving job no longer fires beside the hourly one'
+);
+
+select is(
   (select count(*)::int from cron.job
     where jobname in (
       'send-event-reminders-daily',
-      'send-serving-reminders-daily',
+      'send-serving-reminders-hourly',
       'send-serving-monthly-broadcast'
     )),
   3,

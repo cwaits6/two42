@@ -36,6 +36,33 @@ export function upcomingServiceDates(weeks: number, today: string): string[] {
   );
 }
 
+/** The columns that decide a team's dates. Rolling has no block; set has one. */
+export interface TeamDatesSettings {
+  schedule: "rolling" | "set";
+  window_weeks: number;
+  date_from: string | null;
+  date_to: string | null;
+}
+
+/** Every schedule date from `from` to `to`, both inclusive. */
+export function serviceDatesBetween(from: string, to: string): string[] {
+  const first = toMs(upcomingServiceDates(1, from)[0]);
+  const last = toMs(to);
+  const dates: string[] = [];
+  for (let ms = first; ms <= last; ms += WEEK_DAYS * DAY_MS) {
+    dates.push(new Date(ms).toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
+/** The team's dates from `today` on: the rolling window, or what is left of the set block. */
+export function teamServiceDates(settings: TeamDatesSettings, today: string): string[] {
+  if (settings.schedule === "set" && settings.date_from && settings.date_to) {
+    return serviceDatesBetween(settings.date_from > today ? settings.date_from : today, settings.date_to);
+  }
+  return upcomingServiceDates(settings.window_weeks, today);
+}
+
 /**
  * The date a reminder run acts on, in the church's time zone. The jobs fire at
  * an hour that falls on a single date in each zone, so every run advances one

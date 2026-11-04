@@ -1,13 +1,20 @@
 // Supabase Edge Function: send-serving-reminders
 //
-// Two modes, two pg_cron entries — schedule defined in
-// supabase/migrations/20261108000000_reminders_default_send_time.sql (not here,
-// so it survives a point-in-time restore or self-host from this repo):
+// Three modes. The pg_cron entries are defined in migrations (not here, so
+// they survive a point-in-time restore or self-host from this repo):
 //
-//   - "send-serving-reminders-daily": remind attendees of covered service
-//     dates (per-team reminder_days, matched against reminderRun() in
-//     _shared/serving-dates.ts — see serving_team_settings)
-//   - "send-serving-monthly-broadcast": broadcast open service dates on the 1st
+//   - "send-serving-reminders-hourly" ({"mode":"hourly"}): remind the people
+//     on the next service date, for each team whose reminder day and hour
+//     have come in its church's time zone, recorded in
+//     serving_reminder_passes / serving_reminder_sends so a rerun never
+//     sends twice — see _shared/serving-hourly.ts
+//   - "send-serving-monthly-broadcast" ({"mode":"monthly"}): broadcast open
+//     service dates on the 1st
+//   - daily (no body, or any other body): the mode the retired
+//     "send-serving-reminders-daily" job used, with no sent record. Kept so
+//     a function deployed ahead of the migration that retires that job
+//     behaves as before; remove it, with private.serving_reminder_cutover(),
+//     once a release has run on the hourly job.
 //
 // Runs with the service key (BYPASSRLS), so tenant isolation lives in the
 // query text: iterates every active organization and filters each query on
@@ -31,8 +38,14 @@ import { openDatesEmail, servingReminderEmail } from "../_shared/email-html.ts";
 import {
   formatServiceDateWithYear,
   reminderRun,
-  upcomingServiceDates,
+  teamServiceDates,
 } from "../_shared/serving-dates.ts";
+import {
+  runHourly,
+  type HourlyClient,
+  type Recipient,
+  type SendOutcome,
+} from "../_shared/serving-hourly.ts";
 import { resolveServiceKey } from "../_shared/service-key.ts";
 import { reserveEmailQuota } from "../_shared/quota.ts";
 import { isOpenDatesRecipient, isServingReminderRecipient } from "../_shared/serving-recipients.ts";
@@ -58,6 +71,17 @@ const APP_NAME = Deno.env.get("APP_NAME") || "two42";
 const BRAND_COLOR = Deno.env.get("BRAND_COLOR") || "#B85C38";
 const SERVING_LINK_SECRET = Deno.env.get("SERVING_LINK_SECRET");
 const SERVING_LINK_MODE = Deno.env.get("SERVING_LINK_MODE") || "signed";
+
+// The hourly firing stops starting work here, inside the edge runtime's
+// 150 s request limit and the 120 s pg_net timeout the job's migration sets,
+// so the caller records the response. What is left waits for the next firing.
+const HOURLY_BUDGET_MS = 90_000;
+// Resend allows 10 requests a second per team.
+const SEND_SPACING_MS = 110;
+// The monthly email names this many open dates and links to the rest.
+const MONTHLY_OPEN_DATES = 8;
+// A signed link in a reminder works this long after its send date.
+const LINK_TTL_DAYS = 60;
 
 // The one place the service client is constructed. ReturnType of this
 // CONCRETE zero-arg factory binds createClient's generics at the real call —
@@ -123,28 +147,48 @@ async function hmacSign(message: string, secret: string): Promise<string> {
 async function createToken(
   payload: Omit<ServingLinkPayload, "v" | "exp">,
   secret: string,
-  ttlDays = 60
+  exp: number = Math.floor(Date.now() / 1000) + LINK_TTL_DAYS * 86400
 ): Promise<string> {
-  const full: ServingLinkPayload = {
-    v: 1,
-    ...payload,
-    exp: Math.floor(Date.now() / 1000) + ttlDays * 86400,
-  };
+  const full: ServingLinkPayload = { v: 1, ...payload, exp };
   const payloadB64 = b64urlStr(JSON.stringify(full));
   return `${payloadB64}.${await hmacSign(payloadB64, secret)}`;
 }
 
 // ── Email ─────────────────────────────────────────────────────────────────────
 
+let lastSendAt = 0;
+
+/** Keeps the send pace under Resend's limit across every loop in a firing. */
+async function pace(): Promise<void> {
+  const wait = lastSendAt + SEND_SPACING_MS - Date.now();
+  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+  lastSendAt = Date.now();
+}
+
+// With an idempotency key, Resend processes a request once for 24 hours: a
+// retry with the same key and body answers with the first send's id, and
+// one with a different body is a 409 "invalid_idempotent_request", which
+// still means the first send went out. A 409 "concurrent_idempotent_requests"
+// means the first is still in flight. Any other refusal, and a request that
+// never left, is retried by a later firing.
 async function sendEmail(
-  opts: { to: string; subject: string; html: string; refId: string; branding: EmailBranding },
-): Promise<boolean> {
+  opts: {
+    to: string;
+    subject: string;
+    html: string;
+    refId: string;
+    branding: EmailBranding;
+    idempotencyKey?: string;
+  },
+): Promise<SendOutcome> {
+  await pace();
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${RESEND_API_KEY}`,
         "Content-Type": "application/json",
+        ...(opts.idempotencyKey ? { "Idempotency-Key": opts.idempotencyKey } : {}),
       },
       // Raw REST call, so the Reply-To field is snake_case `reply_to` — not
       // the camelCase `replyTo` the SDK uses in lib/email/resend.ts.
@@ -156,16 +200,17 @@ async function sendEmail(
         ...(opts.branding.replyTo ? { reply_to: opts.branding.replyTo } : {}),
       }),
     });
-    if (!res.ok) {
-      // Log the profile id, not the email address (PII) — the Resend error
-      // body is what's actionable here.
-      console.error("Resend error for profile", opts.refId, await res.text());
-      return false;
-    }
-    return true;
+    if (res.ok) return "sent";
+    // Log the profile id, not the email address (PII) — the Resend error
+    // body is what's actionable here.
+    const body = await res.text();
+    console.error("Resend error for profile", opts.refId, res.status, body);
+    if (res.status === 429) return "rate_limited";
+    if (res.status === 409 && body.includes("invalid_idempotent_request")) return "sent";
+    return "retry";
   } catch (err) {
     console.error("Resend request failed for profile", opts.refId, err);
-    return false;
+    return "retry";
   }
 }
 
@@ -306,7 +351,7 @@ async function runDaily(
           )}`;
         }
 
-        if (await sendEmail({
+        const outcome = await sendEmail({
           to: p.email,
           refId: p.id,
           branding,
@@ -318,7 +363,8 @@ async function runDaily(
             dateLabel: formatServiceDateWithYear(serviceDate),
             cancelUrl,
           }),
-        })) sent++;
+        });
+        if (outcome === "sent") sent++;
         else sendFailures++;
       }
     } catch (err) {
@@ -359,7 +405,7 @@ async function runMonthly(
 
   const { data: teamSettings, error: teamSettingsError } = await supabase
     .from("serving_team_settings")
-    .select("team_id, window_weeks")
+    .select("team_id, window_weeks, schedule, date_from, date_to")
     .eq("org_id", orgId)
     .eq("enabled", true);
 
@@ -376,7 +422,8 @@ async function runMonthly(
   // OrgRunError) so the catch records them per-team instead of aborting the
   // org; `sent` / `sendFailures` are function-scoped, so partial counts
   // survive a caught team.
-  for (const { team_id, window_weeks } of teamSettings) {
+  for (const settings of teamSettings) {
+    const team_id = settings.team_id as string;
     try {
       let teamSent = 0;
       const { data: group, error: groupError } = await supabase
@@ -395,7 +442,16 @@ async function runMonthly(
       const group_id = group.group_id as string;
       const canSign = await canSignForGroup(supabase, orgId, group_id, linkModes);
 
-      const serviceDates = upcomingServiceDates(window_weeks ?? 8, today);
+      const serviceDates = teamServiceDates(
+        {
+          schedule: settings.schedule === "set" ? "set" : "rolling",
+          window_weeks: settings.window_weeks ?? 8,
+          date_from: settings.date_from ?? null,
+          date_to: settings.date_to ?? null,
+        },
+        today,
+      );
+      if (serviceDates.length === 0) continue; // a block that has ended
 
       // Find which dates are already covered
       const { data: signups, error: signupsError } = await supabase
@@ -412,6 +468,8 @@ async function runMonthly(
       const openDates = serviceDates.filter((d) => !covered.has(d));
 
       if (!openDates.length) continue; // all covered — nothing to broadcast
+      // The email names the first few and links to the schedule for the rest.
+      const listedDates = openDates.slice(0, MONTHLY_OPEN_DATES);
 
       // Get all team members. The profiles embed is org-safe by FK traversal
       // from the org-filtered team_members parent — see _shared/orgs.ts.
@@ -459,7 +517,7 @@ async function runMonthly(
       for (const m of sendList) {
         const scheduleUrl = `${baseUrl}/g/${group_id}/serving/${team_id}`;
         const dates = await Promise.all(
-          openDates.map(async (date) => ({
+          listedDates.map(async (date) => ({
             dateLabel: formatServiceDateWithYear(date),
             url: canSign
               ? `${baseUrl}/serving/go?token=${await createToken(
@@ -470,7 +528,7 @@ async function runMonthly(
           }))
         );
 
-        if (await sendEmail({
+        const outcome = await sendEmail({
           to: m.email,
           refId: m.id,
           branding,
@@ -482,7 +540,8 @@ async function runMonthly(
             dates,
             scheduleUrl,
           }),
-        })) { sent++; teamSent++; }
+        });
+        if (outcome === "sent") { sent++; teamSent++; }
         else sendFailures++;
       }
 
@@ -535,20 +594,69 @@ async function runMonthly(
   return { sent, sendFailures, itemFailures };
 }
 
+// ── Hourly mode: one reminder per person per team per local day ──────────────
+
+async function runHourlyMode(supabase: ServiceClient, orgs: Org[]) {
+  const startedAt = Date.now();
+  return await runHourly(supabase as unknown as HourlyClient, orgs, {
+    now: new Date(startedAt),
+    elapsed: () => Date.now() - startedAt,
+    budgetMs: HOURLY_BUDGET_MS,
+    sender: (org) => {
+      const linkModes = new Map<string, boolean>();
+      const branding = resolveEmailBranding(
+        org.branding,
+        BRANDING_DEFAULTS,
+        org.id,
+        org.org_email_domains[0] ?? null,
+      );
+      return async (r: Recipient) => {
+        let cancelUrl = `${SITE_URL}/g/${r.groupId}/serving/${r.teamId}`;
+        if (await canSignForGroup(supabase, org.id, r.groupId, linkModes)) {
+          // The link expires a fixed time after the send date, not after
+          // the attempt, so a retry builds the same body and Resend treats
+          // it as the same request.
+          const exp = Math.floor(Date.parse(`${r.sendDate}T00:00:00Z`) / 1000) + LINK_TTL_DAYS * 86400;
+          cancelUrl = `${SITE_URL}/serving/go?token=${await createToken(
+            { a: "cancel", g: r.teamId, d: r.serviceDate, p: r.profileId },
+            SERVING_LINK_SECRET!,
+            exp,
+          )}`;
+        }
+        return await sendEmail({
+          to: r.email,
+          refId: r.profileId,
+          branding,
+          idempotencyKey: `serving-reminder/${r.teamId}/${r.sendDate}/${r.profileId}`,
+          ...servingReminderEmail({
+            orgName: branding.orgName,
+            accent: branding.accent,
+            name: r.preferredName || r.firstName || "Friend",
+            teamName: r.teamName,
+            dateLabel: formatServiceDateWithYear(r.serviceDate),
+            cancelUrl,
+          }),
+        });
+      };
+    },
+  });
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 Deno.serve(serviceKeyCallerOnly(async (req) => {
   let mode = "daily";
-  // An absent body is normal (the daily cron posts nothing); a present but
-  // unparseable body is an alarm — it means the monthly job's {"mode":
-  // "monthly"} did not arrive, and the month's open-dates broadcast silently
-  // runs as a daily instead. Detection latency for that is ~30 days, so the
-  // two conditions are distinguished rather than both swallowed.
+  // A present but unparseable body is an alarm — it means the hourly job's
+  // {"mode":"hourly"} or the monthly job's {"mode":"monthly"} did not
+  // arrive, and the run silently falls back to the retired daily mode, which
+  // keeps no sent record. The two conditions are distinguished rather than
+  // both swallowed.
   const rawBody = await req.text().catch(() => "");
   if (rawBody.trim()) {
     try {
       const body = JSON.parse(rawBody);
       if (body?.mode === "monthly") mode = "monthly";
+      if (body?.mode === "hourly") mode = "hourly";
     } catch (err) {
       console.error("request body present but unparseable, defaulting to daily:", err);
     }
@@ -561,6 +669,30 @@ Deno.serve(serviceKeyCallerOnly(async (req) => {
     // Re-verified at the pinned 2.110.9: a direct structural
     // assignment still trips TS2589, so the pin does not remove this cast.
     const orgs = await listActiveOrgs(supabase as unknown as OrgListClient);
+
+    if (mode === "hourly") {
+      const hourly = await runHourlyMode(supabase, orgs);
+      // One line at most, and none for a firing that did nothing.
+      if (hourly.due > 0 || hourly.failed.length > 0 || hourly.failedItems.length > 0) {
+        console.log(
+          "hourly run: %d team(s) due, %d sent, %d rejected, %d org(s) failed, %d team(s) failed%s%s",
+          hourly.due,
+          hourly.emailsSent,
+          hourly.emailsFailed,
+          hourly.failed.length,
+          hourly.failedItems.length,
+          hourly.budgetExhausted ? ", stopped at the time budget" : "",
+          hourly.rateLimited ? ", stopped at Resend's rate limit" : "",
+        );
+      }
+      // Running out of time or being rate limited is not a failure: the next
+      // firing picks up what is left through the sent record.
+      return new Response(JSON.stringify({ mode, ...hourly }), {
+        status: hourly.failed.length > 0 || hourly.failedItems.length > 0 ? 500 : 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     const summary = summarize(
       await forEachOrg(orgs, async (org) => {
         // Per-group link modes, resolved lazily inside the team loop and
