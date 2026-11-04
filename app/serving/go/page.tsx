@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getServingLinkMode } from "@/lib/serving/config";
 import { verifyServingToken } from "@/lib/serving/links";
 import {
+  SIGNUP_SETTINGS_SELECT,
   formatServingDate,
   isUpcomingServiceDate,
   openDatesAfter,
@@ -109,7 +110,7 @@ export default async function ServingLinkPage({
       .maybeSingle(),
     service
       .from("serving_team_settings")
-      .select("enabled, schedule, window_weeks, date_from, date_to, extra_weeks")
+      .select(SIGNUP_SETTINGS_SELECT)
       .eq("team_id", payload.g)
       .eq("org_id", group.org_id)
       .maybeSingle(),
@@ -207,7 +208,7 @@ export default async function ServingLinkPage({
     // Offer the spouse option when the member has one on file. findSpouse is
     // non-fatal: a failed read degrades to not offering the option rather
     // than blocking the signup.
-    const spouse = await findSpouse(service, profile, group.org_id);
+    const spouse = await findSpouse(service, profile, group.org_id, payload.g);
 
     // The following weeks the team asks about, when they are open. A failed
     // read offers none rather than offering a date that may be taken.

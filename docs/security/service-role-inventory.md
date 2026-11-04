@@ -164,7 +164,11 @@ wedge that Sunday behind `unique (group_id, service_date)`:
 
 - `serving_signup_apply(_group_id, _service_date, _actor_id, _attendee_ids)`
   — the atomic core. EXECUTE: `service_role` only (the signed-link route
-  passes its HMAC-validated profile id as the actor).
+  passes its HMAC-validated profile id as the actor). Every attendee other
+  than the actor must hold a `team_members` row for the team in the team's
+  org (`SV004`): the household rule decides who may add whom, being on the
+  team decides who can be on a date
+  (`20261116000000_serving_blocks_couples_reminder_time.sql`).
 - `serving_signup_create(_group_id, _service_date, _attendee_ids)` — the
   authenticated entry point; actor from `auth.uid()`, group org pinned
   against `app_request_org_id()`, RLS INSERT-policy arms re-checked.
@@ -192,9 +196,10 @@ permission.** The actor comes from `auth.uid()` only; the org from the signup
 row, pinned against `app_request_org_id()` and fail-closed on NULL; the actor
 must have tapped Sign up or be listed on the date (`SV005` otherwise); and
 every new attendee must be the actor, or the actor's spouse when the actor is
-the primary or spouse of a household, in the same org (`SV002` otherwise). A
-group leader or team lead who is not on the date is refused: they cancel it
-instead. The grants, each refusal and the attendee row counts are pinned by
+the primary or spouse of a household, in the same org (`SV002` otherwise),
+and on the signup's team (`SV004` otherwise, from an org-filtered
+`team_members` read). A group leader or team lead who is not on the date is
+refused: they cancel it instead. The grants, each refusal and the attendee row counts are pinned by
 `supabase/tests/serving_signup_change_suite.sql`.
 
 ## Serving reminder claim — service-key only, SECURITY INVOKER

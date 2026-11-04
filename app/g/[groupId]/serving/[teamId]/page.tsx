@@ -246,7 +246,7 @@ export default async function ServingSchedulePage({
   // The spouse option for "Me & Ben", on the service client so a spouse who
   // never signed in (a pending profile) is still found. org_id comes from
   // the caller's own RLS-scoped profile read above.
-  const spouseRow = await findSpouse(await createServiceClient(), profile, profile.org_id);
+  const spouseRow = await findSpouse(await createServiceClient(), profile, profile.org_id, teamId);
   const spouse = spouseRow ? { id: spouseRow.id, name: spouseFirstName(spouseRow) } : null;
 
   const teamSettings = canManageRoster && (

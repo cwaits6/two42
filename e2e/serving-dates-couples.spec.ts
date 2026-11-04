@@ -45,6 +45,16 @@ const ENDING_SQL = `
    where team_id = '${TEAM_ID}';
 `;
 
+// Chloe leaves the team, and the team stops asking for more weeks, so a
+// sign-up has nothing left to ask.
+const SPOUSE_OFF_TEAM_SQL = `
+  ${CLEAR_SIGNUPS_SQL}
+  delete from public.team_members
+   where team_id = '${TEAM_ID}'
+     and profile_id = (select id from public.profiles where email = '${spouse.email}');
+  update public.serving_team_settings set extra_weeks = 0 where team_id = '${TEAM_ID}';
+`;
+
 function runSql(sql: string) {
   execFileSync(
     "docker",
@@ -179,5 +189,19 @@ test.describe("a team lead whose block is ending", () => {
     await member.goto(`/g/${GROUP_B}/dashboard`);
     await expect(member.getByText("Greeters needs more dates")).toHaveCount(0);
     await context.close();
+  });
+});
+
+test.describe("a member whose spouse has left the team", () => {
+  test.use({ persona: "householdPrimary" });
+
+  test("is not asked who is serving and signs up alone in one tap", async ({ page }) => {
+    runSql(SPOUSE_OFF_TEAM_SQL);
+    await page.goto(TEAM_PATH);
+    await signUpButtons(page).first().click();
+    await expect(page.getByText(/^You're signed up for [^.]*\.$/)).toBeVisible();
+    await expect(page.getByText("Who's serving")).toHaveCount(0);
+    await expect(page.getByText("You", { exact: true })).toBeVisible();
+    await expect(page.getByText(`You & ${spouse.name.split(" ")[0]}`)).toHaveCount(0);
   });
 });

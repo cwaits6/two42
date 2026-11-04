@@ -3,7 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getServingLinkMode } from "@/lib/serving/config";
 import { verifyServingToken } from "@/lib/serving/links";
 import { bookDates, sendBookingConfirmations } from "@/lib/serving/booking";
-import { isUpcomingServiceDate, teamServiceDates, todayIn } from "@/lib/serving/dates";
+import { SIGNUP_SETTINGS_SELECT, isUpcomingServiceDate, teamServiceDates, todayIn } from "@/lib/serving/dates";
 import { signupDisplayName } from "@/lib/serving/display";
 import { orgTimeZoneById } from "@/lib/time/orgZone";
 import {
@@ -90,7 +90,7 @@ export async function POST(request: Request) {
       .maybeSingle(),
     service
       .from("serving_team_settings")
-      .select("enabled, schedule, window_weeks, date_from, date_to, extra_weeks")
+      .select(SIGNUP_SETTINGS_SELECT)
       .eq("team_id", payload.g)
       .eq("org_id", group.org_id)
       .maybeSingle(),
@@ -186,7 +186,7 @@ export async function POST(request: Request) {
     if (includeSpouse) {
       // findSpouse is non-fatal: a failed read degrades to signing up the
       // member alone rather than failing the whole action.
-      const spouse = await findSpouse(service, profile, group.org_id);
+      const spouse = await findSpouse(service, profile, group.org_id, payload.g);
       if (spouse) attendees.push(spouse);
     }
 

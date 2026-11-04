@@ -159,5 +159,13 @@ select is(pg_temp.change('chg.owner_b', array['chg.owner_b']), 'SV002',
   'another church''s owner does not resolve the signup''s org and is refused');
 select is(pg_temp.attendees(), 'henry', 'no refusal changed the attendees');
 
+-- ── Being on the team stays the one rule ────────────────────────────────────
+delete from public.team_members
+  where profile_id = current_setting('chg.chloe')::uuid;
+select is(pg_temp.change('chg.henry', array['chg.henry', 'chg.chloe']), 'SV004',
+  'Henry cannot add Chloe once she is off the team, spouse or not');
+select is(pg_temp.attendees(), 'henry', 'the refusal left the date as it was');
+select is(pg_temp.family(), '<null>', 'and its household label');
+
 select * from finish();
 rollback;

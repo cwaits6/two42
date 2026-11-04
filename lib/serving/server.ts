@@ -39,32 +39,37 @@ export function isCoupleMember(p: { family_id: string | null; relationship: stri
 }
 
 /**
- * The viewer's spouse: the other primary or spouse in their household, and
- * only when the viewer is one of those two themself. Non-fatal by contract:
+ * The viewer's spouse as someone who can serve with them: the other primary
+ * or spouse in their household, only when the viewer is one of those two
+ * themself, and only while the spouse is on the team — being on the team is
+ * the one rule for who can be put on a date. Non-fatal by contract:
  * everywhere the spouse appears it is an opt-in extra, so a failed read logs
  * and degrades to null rather than throwing.
  */
 export async function findSpouse(
   supabase: SupabaseClient,
   viewer: { id: string; family_id: string | null; relationship: string | null },
-  orgId: string
+  orgId: string,
+  teamId: string
 ): Promise<SpouseProfile | null> {
   if (!isCoupleMember(viewer)) return null;
   // org_id filter is required: on a service-role client a key-only read
-  // matches rows from every org the moment a second org exists.
-  const { data: spouse, error } = await supabase
-    .from("profiles")
-    .select("id, first_name, last_name, preferred_name, email")
-    .eq("family_id", viewer.family_id)
+  // matches rows from every org the moment a second org exists. The profile
+  // embed is org-safe by the composite FK from the org-filtered roster row.
+  const { data: member, error } = await supabase
+    .from("team_members")
+    .select("profiles!inner(id, first_name, last_name, preferred_name, email)")
+    .eq("team_id", teamId)
     .eq("org_id", orgId)
-    .in("relationship", [...COUPLE_RELATIONSHIPS])
-    .neq("id", viewer.id)
+    .eq("profiles.family_id", viewer.family_id)
+    .in("profiles.relationship", [...COUPLE_RELATIONSHIPS])
+    .neq("profiles.id", viewer.id)
     .limit(1)
     .maybeSingle();
   if (error) {
     console.error("Serving spouse lookup failed for family %s:", viewer.family_id, error);
   }
-  return spouse ?? null;
+  return (member?.profiles as SpouseProfile | null | undefined) ?? null;
 }
 
 export async function sendSignupConfirmation(

@@ -176,12 +176,160 @@ grant execute on function public.serving_reminder_claim(uuid, date, date, uuid[]
 comment on function public.serving_reminder_claim(uuid, date, date, uuid[]) is
   'Starts the day''s reminder pass for each team that has none, fixing its recipients, then claims every unsent reminder in those passes and returns the people to mail. Tenant anchor: each team''s own org_id, compared with _org_id; a mismatch raises SR001. service_role only.';
 
+-- ── Who can be on a date ────────────────────────────────────────────────────
+-- Being on the team stays the one rule for who can sign up. The household
+-- rule alone let a spouse who is in the group but not on the team be put on
+-- a date; serving_signup_apply now also requires every attendee other than
+-- the actor (whose own standing the caller checks) to hold a team_members
+-- row for the team. Same body as before otherwise.
+create or replace function public.serving_signup_apply(
+  _group_id     uuid,
+  _service_date date,
+  _actor_id     uuid,
+  _attendee_ids uuid[]
+) returns table (signup_id uuid, signup_org_id uuid, created boolean)
+  language plpgsql security definer set search_path = ''
+as $$
+declare
+  _org uuid;
+  _actor_org uuid;
+  _family_id uuid;
+  _attendee_total bigint;
+  _attendee_valid bigint;
+  _off_team bigint;
+  _enabled boolean;
+  _signup_id uuid;
+  _existing_by uuid;
+  _created boolean;
+begin
+  -- The org comes from the team row, never from the caller. A cross-org
+  -- _group_id resolves to a real org here, and the actor's own profile then
+  -- fails the equality check below — there is no caller-supplied org to
+  -- subvert.
+  select t.org_id into _org
+  from public.teams t
+  where t.id = _group_id;
+
+  if _org is null then
+    raise exception 'serving signup rejected: unknown group %', _group_id
+      using errcode = 'SV002';
+  end if;
+
+  select p.org_id, p.family_id into _actor_org, _family_id
+  from public.profiles p
+  where p.id = _actor_id;
+
+  if _actor_org is distinct from _org then
+    raise exception 'serving signup rejected: actor % does not carry group org', _actor_id
+      using errcode = 'SV002';
+  end if;
+
+  if _attendee_ids is null
+     or coalesce(array_length(_attendee_ids, 1), 0) = 0
+     or not (_actor_id = any (_attendee_ids)) then
+    raise exception 'serving signup rejected: attendees must be non-empty and include actor %', _actor_id
+      using errcode = 'SV002';
+  end if;
+
+  -- Household rule, enforced here as well as in the routes: every attendee
+  -- is the actor, or shares the actor's non-null household with relationship
+  -- primary/spouse — and carries the team's org_id. count(*) over the
+  -- DISTINCT subquery (not count(distinct ...)) so a NULL element still
+  -- counts on the total side and fails the comparison.
+  select count(*) into _attendee_total
+  from (select distinct att.pid from unnest(_attendee_ids) as att(pid)) ids;
+
+  select count(*) into _attendee_valid
+  from (select distinct att.pid from unnest(_attendee_ids) as att(pid)) ids
+  join public.profiles p on p.id = ids.pid
+  where p.org_id = _org
+    and (
+      p.id = _actor_id
+      or (
+        _family_id is not null
+        and p.family_id = _family_id
+        and p.relationship in ('primary', 'spouse')
+      )
+    );
+
+  if _attendee_valid <> _attendee_total then
+    raise exception 'serving signup rejected: attendee outside actor %''s org or household', _actor_id
+      using errcode = 'SV002';
+  end if;
+
+  -- Being on the team is the one rule for who can serve: the caller has
+  -- already checked the actor's own standing, and everyone else on the
+  -- date (the spouse) has to hold a team_members row for this team.
+  select count(*) into _off_team
+  from (select distinct att.pid from unnest(_attendee_ids) as att(pid)) ids
+  where ids.pid is distinct from _actor_id
+    and not exists (
+      select 1 from public.team_members tm
+      where tm.team_id = _group_id and tm.org_id = _org and tm.profile_id = ids.pid
+    );
+
+  if _off_team > 0 then
+    raise exception 'serving signup rejected: an attendee is not on team %', _group_id
+      using errcode = 'SV004';
+  end if;
+
+  select sts.enabled into _enabled
+  from public.serving_team_settings sts
+  where sts.team_id = _group_id
+    and sts.org_id = _org;
+
+  if not coalesce(_enabled, false) then
+    raise exception 'serving signups not enabled for group %', _group_id
+      using errcode = 'SV003';
+  end if;
+
+  -- unique (team_id, service_date) is the race guard. DO NOTHING (not
+  -- DO UPDATE) so "who already holds this Sunday" is an explicit branch:
+  -- the same member re-signing is an idempotent no-op (created = false), a
+  -- different member gets SV001. FOR UPDATE serialises two concurrent
+  -- re-signups on the existing row.
+  insert into public.serving_signups (org_id, team_id, service_date, family_id, created_by)
+  values (_org, _group_id, _service_date, _family_id, _actor_id)
+  on conflict (team_id, service_date) do nothing
+  returning id into _signup_id;
+
+  if _signup_id is null then
+    select s.id, s.created_by into _signup_id, _existing_by
+    from public.serving_signups s
+    where s.team_id = _group_id
+      and s.service_date = _service_date
+      and s.org_id = _org
+    for update;
+
+    if _existing_by is distinct from _actor_id then
+      raise exception 'serving slot already taken for group % on %', _group_id, _service_date
+        using errcode = 'SV001';
+    end if;
+    _created := false;
+  else
+    _created := true;
+  end if;
+
+  -- Additive on re-signup; the (signup_id, profile_id) PK plus DO NOTHING
+  -- makes "no duplicate attendee row" structural rather than a race the app
+  -- has to avoid. The conflict target is named by constraint: a column list
+  -- here would be ambiguous against the signup_id OUT parameter.
+  insert into public.serving_signup_attendees (org_id, signup_id, profile_id)
+  select _org, _signup_id, ids.pid
+  from (select distinct att.pid from unnest(_attendee_ids) as att(pid)) ids
+  on conflict on constraint serving_signup_attendees_pkey do nothing;
+
+  return query select _signup_id, _org, _created;
+end;
+$$;
+
 -- ── Changing who is serving ─────────────────────────────────────────────────
 -- Either spouse on a date, or whoever tapped Sign up, can switch it between
 -- both of them, one, or the other. SECURITY DEFINER, so the checks in the
 -- body replace the attendee policies: the org comes from the signup row and
 -- is pinned to the request org, the actor from auth.uid() only, and every
--- new attendee must be the actor or the actor's spouse in the same org.
+-- new attendee must be the actor or the actor's spouse in the same org, on
+-- the team.
 create function public.serving_signup_change(_signup_id uuid, _attendee_ids uuid[])
   returns table (added integer, removed integer)
   language plpgsql security definer set search_path = ''
@@ -189,6 +337,7 @@ as $$
 declare
   _actor uuid;
   _org uuid;
+  _team uuid;
   _family uuid;
   _actor_family uuid;
   _actor_relationship text;
@@ -196,6 +345,7 @@ declare
   _involved boolean;
   _total bigint;
   _valid bigint;
+  _off_team bigint;
   _added integer;
   _removed integer;
 begin
@@ -204,7 +354,7 @@ begin
     raise exception 'serving change rejected: no authenticated principal' using errcode = 'SV002';
   end if;
 
-  select s.org_id, s.family_id, s.created_by into _org, _family, _created_by
+  select s.org_id, s.team_id, s.family_id, s.created_by into _org, _team, _family, _created_by
   from public.serving_signups s
   where s.id = _signup_id;
 
@@ -230,9 +380,8 @@ begin
     raise exception 'serving change rejected: attendees must be non-empty' using errcode = 'SV002';
   end if;
 
-  -- The same household rule as serving_signup_apply, from the actor's side:
-  -- the actor, or the actor's spouse when the actor is the primary or spouse
-  -- of a household. count(*) over the DISTINCT subquery so a NULL element
+  -- The household rule from the actor's side: the actor, or the actor's
+  -- spouse when the actor is the primary or spouse of a household. count(*) over the DISTINCT subquery so a NULL element
   -- still counts on the total side and fails the comparison.
   select count(*) into _total
   from (select distinct att.pid from unnest(_attendee_ids) as att(pid)) ids;
@@ -254,6 +403,22 @@ begin
   if _valid <> _total then
     raise exception 'serving change rejected: attendee outside actor %''s household', _actor
       using errcode = 'SV002';
+  end if;
+
+  -- Being on the team is the one rule for who can serve: the actor's own
+  -- standing was checked when the date was taken, and anyone else put on
+  -- it has to hold a team_members row for the signup's team.
+  select count(*) into _off_team
+  from (select distinct att.pid from unnest(_attendee_ids) as att(pid)) ids
+  where ids.pid is distinct from _actor
+    and not exists (
+      select 1 from public.team_members tm
+      where tm.team_id = _team and tm.org_id = _org and tm.profile_id = ids.pid
+    );
+
+  if _off_team > 0 then
+    raise exception 'serving change rejected: an attendee is not on team %', _team
+      using errcode = 'SV004';
   end if;
 
   with gone as (
@@ -287,7 +452,7 @@ revoke execute on function public.serving_signup_change(uuid, uuid[]) from publi
 grant execute on function public.serving_signup_change(uuid, uuid[]) to authenticated, service_role;
 
 comment on function public.serving_signup_change(uuid, uuid[]) is
-  'Replaces who is serving on one date. Actor from auth.uid(); tenant anchor: the signup row''s org pinned against app_request_org_id(), fail-closed on NULL. The actor must have tapped Sign up or be listed on the date, and every new attendee must be the actor or the actor''s spouse. Raises SV002 or SV005.';
+  'Replaces who is serving on one date. Actor from auth.uid(); tenant anchor: the signup row''s org pinned against app_request_org_id(), fail-closed on NULL. The actor must have tapped Sign up or be listed on the date, and every new attendee must be the actor or the actor''s spouse, on the team. Raises SV002, SV004 or SV005.';
 
 -- ── The hourly job ──────────────────────────────────────────────────────────
 -- The hourly run can send for many teams, so pg_net's 5 second default would

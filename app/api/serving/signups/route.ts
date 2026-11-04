@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { bookDates, sendBookingConfirmations } from "@/lib/serving/booking";
-import { isUpcomingServiceDate, teamServiceDates, todayIn } from "@/lib/serving/dates";
+import { SIGNUP_SETTINGS_SELECT, isUpcomingServiceDate, teamServiceDates, todayIn } from "@/lib/serving/dates";
 import { signupDisplayName } from "@/lib/serving/display";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 import {
@@ -9,8 +9,6 @@ import {
   notifyLeadersOfCancel,
   type NamedProfile,
 } from "@/lib/serving/server";
-
-const SETTINGS_SELECT = "enabled, schedule, window_weeks, date_from, date_to, extra_weeks";
 
 const FAILED = NextResponse.json({ error: "Something went wrong — please try again" }, { status: 500 });
 
@@ -58,7 +56,7 @@ export async function POST(request: Request) {
       .single(),
     supabase
       .from("serving_team_settings")
-      .select(SETTINGS_SELECT)
+      .select(SIGNUP_SETTINGS_SELECT)
       .eq("team_id", groupId)
       .maybeSingle(),
     supabase
@@ -245,6 +243,8 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ error: "You're not on this date" }, { status: 403 });
       case "SV002":
         return NextResponse.json({ error: "Attendees must be you or your spouse" }, { status: 400 });
+      case "SV004":
+        return NextResponse.json({ error: "Your spouse is not on this team" }, { status: 403 });
     }
     return NextResponse.json({ error: "Failed to change who's serving" }, { status: 500 });
   }
