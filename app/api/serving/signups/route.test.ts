@@ -14,7 +14,6 @@ const notifyLeadersOfCancel = vi.fn();
 vi.mock("@/lib/serving/server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/serving/server")>()),
   notifyLeadersOfCancel: (...args: unknown[]) => notifyLeadersOfCancel(...args),
-  resolveSignupLabel: async () => "The Mockingham household",
 }));
 
 const { DELETE, POST } = await import("@/app/api/serving/signups/route");
@@ -116,7 +115,7 @@ describe("DELETE /api/serving/signups", () => {
       teamId: "team-1",
       orgId: "org-1",
       serviceDates: ["2026-11-08"],
-      memberLabel: "The Mockingham household",
+      memberLabel: "Someone",
       excludeProfileId: "user-1",
     });
   });

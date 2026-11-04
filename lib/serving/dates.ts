@@ -185,6 +185,16 @@ export function formatMonthDay(date: string, today?: string): string {
   });
 }
 
+/** "November", with the year added when it differs from `today`'s: the heading of a month's card. */
+export function formatMonth(date: string, today?: string): string {
+  const withYear = today !== undefined && date.slice(0, 4) !== today.slice(0, 4);
+  return new Date(toMs(date)).toLocaleDateString("en-US", {
+    month: "long",
+    ...(withYear ? { year: "numeric" } : {}),
+    timeZone: "UTC",
+  });
+}
+
 /** "Nov 22", "Nov 22 and Nov 29", "Nov 22, Nov 29 and Dec 6". */
 export function listDates(dates: string[], format: (date: string) => string): string {
   const labels = dates.map(format);

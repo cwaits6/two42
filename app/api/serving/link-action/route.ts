@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { displayName } from "@/lib/names";
 import { getServingLinkMode } from "@/lib/serving/config";
 import { verifyServingToken } from "@/lib/serving/links";
-import { isUpcomingServiceDate, todayIn } from "@/lib/serving/dates";
+import { bookDates, sendBookingConfirmations } from "@/lib/serving/booking";
+import { isUpcomingServiceDate, teamServiceDates, todayIn } from "@/lib/serving/dates";
+import { signupDisplayName } from "@/lib/serving/display";
 import { orgTimeZoneById } from "@/lib/time/orgZone";
 import {
   findSpouse,
   notifyLeadersOfCancel,
-  resolveSignupLabel,
-  sendSignupConfirmation,
   type NamedProfile,
 } from "@/lib/serving/server";
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? [...new Set(value.filter((v): v is string => typeof v === "string"))] : [];
+}
 
 /**
  * Executes a signed serving-email action (signup or cancel) without a login
@@ -22,6 +25,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const token: string | undefined = body?.token;
   const includeSpouse: boolean = body?.includeSpouse === true;
+  const extraDates = stringList(body?.extraDates);
 
   if (!token) {
     return NextResponse.json({ error: "Missing token" }, { status: 400 });
@@ -81,12 +85,12 @@ export async function POST(request: Request) {
     // org-anchor: profile org read unscoped so the cross-org pairing check can reject it explicitly
     service
       .from("profiles")
-      .select("id, org_id, first_name, last_name, preferred_name, family_id, email, role")
+      .select("id, org_id, first_name, last_name, preferred_name, family_id, relationship, email, role")
       .eq("id", payload.p)
       .maybeSingle(),
     service
       .from("serving_team_settings")
-      .select("enabled")
+      .select("enabled, schedule, window_weeks, date_from, date_to, extra_weeks")
       .eq("team_id", payload.g)
       .eq("org_id", group.org_id)
       .maybeSingle(),
@@ -138,6 +142,18 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    // The team's dates bound the chosen date and the following weeks alike.
+    const teamDates = new Set(teamServiceDates(settings, today));
+    if (
+      !teamDates.has(payload.d) ||
+      !extraDates.every((d) => isUpcomingServiceDate(d, today) && teamDates.has(d) && d > payload.d) ||
+      extraDates.length > settings.extra_weeks
+    ) {
+      return NextResponse.json(
+        { error: "That date is not one of the team's dates" },
+        { status: 400 }
+      );
+    }
 
     // The link acts for a specific member — they must be on the team
     const { data: membership, error: membershipError } = await service
@@ -166,20 +182,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const attendees: NamedProfile[] = [profile];
-    if (includeSpouse && profile.family_id) {
+    const attendees: Array<NamedProfile & { email: string | null }> = [profile];
+    if (includeSpouse) {
       // findSpouse is non-fatal: a failed read degrades to signing up the
       // member alone rather than failing the whole action.
-      const spouse = await findSpouse(
-        service,
-        profile.family_id,
-        profile.id,
-        group.org_id
-      );
+      const spouse = await findSpouse(service, profile, group.org_id);
       if (spouse) attendees.push(spouse);
     }
 
-    // One RPC, one transaction: the compensating delete this
+    // One RPC per date, one transaction each: the compensating delete this
     // replaces could itself fail, wedging the Sunday behind
     // unique (team_id, service_date). The service-role entry point takes
     // the actor explicitly — there is no session here — and re-derives
@@ -188,32 +199,40 @@ export async function POST(request: Request) {
     // surfaces through PostgREST as an array; the explicit row type is
     // needed because the server clients are created without a <Database>
     // generic, so `.single()` would otherwise infer `unknown`.
-    // org-anchor: org_id is re-derived and enforced by the RPC itself from the
-    // already-validated teams row fetched above
-    const { data: rpc, error: rpcError } = await service
-      .rpc("serving_signup_apply", {
-        _group_id: payload.g,
-        _service_date: payload.d,
-        _actor_id: profile.id,
-        _attendee_ids: attendees.map((a) => a.id),
-      })
-      .single<{ signup_id: string; signup_org_id: string; created: boolean }>();
-
-    if (rpcError || !rpc) {
-      // SV001 is an ordinary race. Everything else is an anomaly the member
-      // cannot act on, and it matters more here than on the authenticated
-      // route: SV002 and SV003 collapse into one deliberately deniable message
-      // below, so the log is the only place that distinction survives.
-      if (rpcError?.code !== "SV001") {
-        console.error(
-          "Signed-link signup rpc failed for group %s (profile %s, data=%s):",
-          payload.g,
-          payload.p,
-          rpc === null ? "null" : "present",
-          rpcError
-        );
+    const outcome = await bookDates([payload.d, ...extraDates], async (date) => {
+      // org-anchor: org_id is re-derived and enforced by the RPC itself from the
+      // already-validated teams row fetched above
+      const { data: rpc, error: rpcError } = await service
+        .rpc("serving_signup_apply", {
+          _group_id: payload.g,
+          _service_date: date,
+          _actor_id: profile.id,
+          _attendee_ids: attendees.map((a) => a.id),
+        })
+        .single<{ signup_id: string; signup_org_id: string; created: boolean }>();
+      if (rpcError || !rpc) {
+        // SV001 is an ordinary race. Everything else is an anomaly the member
+        // cannot act on, and it matters more here than on the authenticated
+        // route: SV002 and SV003 collapse into one deliberately deniable
+        // message below, so the log is the only place that distinction
+        // survives.
+        if (rpcError?.code !== "SV001") {
+          console.error(
+            "Signed-link signup rpc failed for group %s on %s (profile %s, data=%s):",
+            payload.g,
+            date,
+            payload.p,
+            rpc === null ? "null" : "present",
+            rpcError
+          );
+        }
+        return { code: rpcError?.code ?? "failed" };
       }
-      switch (rpcError?.code) {
+      return { signupId: rpc.signup_id, created: rpc.created };
+    });
+
+    if ("code" in outcome) {
+      switch (outcome.code) {
         case "SV001":
           return NextResponse.json(
             { error: "Someone just signed up for that date — thank you anyway!" },
@@ -236,32 +255,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Failed to sign up" }, { status: 500 });
     }
 
-    // Same created guard as the authenticated route. This is the surface where
-    // a double tap is most likely — /serving/go is a one-button page reached
-    // from an email, and LinkActionConfirm has no in-flight guard.
-    if (rpc.created && profile.email) {
-      try {
-        await sendSignupConfirmation(service, {
-          signupId: rpc.signup_id,
-          orgId: group.org_id,
-          groupId: group.group_id,
-          teamId: payload.g,
-          teamName: group.name,
-          serviceDate: payload.d,
-          attendees,
-          familyId: profile.family_id,
-          recipient: {
-            id: profile.id,
-            email: profile.email,
-            name: displayName(profile),
-          },
-        });
-      } catch (err) {
-        console.error("Serving confirmation email failed:", err);
-      }
-    }
+    await sendBookingConfirmations(service, {
+      orgId: group.org_id,
+      groupId: group.group_id,
+      teamId: payload.g,
+      teamName: group.name,
+      booked: outcome.booked,
+      attendees,
+    });
 
-    return NextResponse.json({ success: true, action: "signup" });
+    return NextResponse.json({ success: true, action: "signup", outcome });
   }
 
   // Cancel: the member must be the signup's creator or one of its attendees
@@ -328,12 +331,7 @@ export async function POST(request: Request) {
       orgId: group.org_id,
       teamName: group.name,
       serviceDates: [payload.d],
-      memberLabel: await resolveSignupLabel(
-        service,
-        attendeeProfiles,
-        signup.family_id,
-        group.org_id
-      ),
+      memberLabel: signupDisplayName(attendeeProfiles),
       excludeProfileId: profile.id,
     });
   } catch (err) {

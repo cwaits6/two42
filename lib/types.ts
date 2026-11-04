@@ -266,8 +266,16 @@ export interface ServingTeamSettings {
   /** Days of week to send reminders (0=Sunday .. 6=Saturday) */
   reminder_days: number[];
   reminder_method: "email";
-  /** How many upcoming Sundays to show / email about */
+  /** Rolling: the next window_weeks Sundays. Set: the Sundays from date_from to date_to. */
+  schedule: "rolling" | "set";
+  /** How many upcoming Sundays to show / email about, on a rolling schedule */
   window_weeks: number;
+  date_from: string | null;
+  date_to: string | null;
+  /** How many following weeks a sign-up offers in one go, 0 to 3 */
+  extra_weeks: number;
+  /** Whole hour in the church's time zone the reminder goes out, or null for the default */
+  send_hour: number | null;
   updated_by: string | null;
   updated_at: string;
 }

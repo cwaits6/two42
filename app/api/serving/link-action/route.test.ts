@@ -29,7 +29,10 @@ function serviceClient(timezone: string) {
   const tables: Record<string, { data: unknown; error: unknown }> = {
     teams: { data: { id: "team-1", name: "Greeters", org_id: "org-1", group_id: "grp-1" }, error: null },
     profiles: { data: { id: "user-1", org_id: "org-1", role: "member", family_id: null }, error: null },
-    serving_team_settings: { data: { enabled: true }, error: null },
+    serving_team_settings: {
+      data: { enabled: true, schedule: "rolling", window_weeks: 8, date_from: null, date_to: null, extra_weeks: 0 },
+      error: null,
+    },
     // No membership: a request that clears the date check stops at the 403.
     team_members: { data: null, error: null },
     organizations: { data: { timezone }, error: null },

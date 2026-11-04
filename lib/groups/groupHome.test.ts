@@ -5,6 +5,7 @@ import {
   dateNotices,
   joinedNames,
   namesLine,
+  needsMoreDates,
   newTiles,
   servingCards,
   teamCoverage,
@@ -103,6 +104,7 @@ function reads(over: Partial<GroupHomeReads> = {}): GroupHomeReads {
     roster: [],
     servingTeams: [],
     myTeamIds: [],
+    myLeadTeamIds: [],
     signups: [],
     pendingJoinCount: 0,
     drafts: [],
@@ -129,8 +131,18 @@ const person = (over: Partial<DirectoryProfile> & { id: string }) =>
 
 const team = (id: string, weeks = 4): ServingTeamRow => ({
   team_id: id,
+  schedule: "rolling",
   window_weeks: weeks,
+  date_from: null,
+  date_to: null,
   teams: { name: id },
+});
+
+const block = (id: string, date_to: string): ServingTeamRow => ({
+  ...team(id),
+  schedule: "set",
+  date_from: "2026-10-11",
+  date_to,
 });
 const signup = (teamId: string, date: string, attendees: string[] = ["someone"]): ServingSignupRow => ({
   team_id: teamId,
@@ -536,6 +548,13 @@ describe("the serving card", () => {
   const coverage = (teams: ServingTeamRow[], signups: ServingSignupRow[]) =>
     teamCoverage(teams, signups, USER, TODAY);
 
+  it("counts a set block's remaining Sundays, not a rolling window", () => {
+    const [greeters] = coverage([block("Greeters", "2027-05-02")], [signup("Greeters", "2026-11-08")]);
+    expect(greeters.openCount).toBe(25);
+    expect(greeters.nextOpen).toBe("2026-11-15");
+    expect(coverage([block("Greeters", "2026-11-01")], [])).toEqual([]);
+  });
+
   it("asks with the count and the next open date", () => {
     const [card] = servingCards(coverage([team("Greeters")], []), ["Greeters"], GROUP, TODAY);
     expect(card).toEqual({
@@ -635,6 +654,33 @@ describe("To do", () => {
 
   it("is empty for a member whatever is waiting", () => {
     expect(buildGroupHome(reads({ pendingJoinCount: 3 }), ctx()).todo).toEqual([]);
+  });
+
+  it("tells a leader a set block needs more dates from two weeks before its last date", () => {
+    const leader = ctx({ isLeader: true });
+    const twoWeeksOut = block("Greeters", "2026-11-17");
+    const home = buildGroupHome(reads({ servingTeams: [twoWeeksOut], signups: [] }), leader);
+    expect(home.todo?.[0]).toMatchObject({
+      kind: "serving",
+      title: "Greeters needs more dates",
+      detail: "Last date is Nov 17",
+      href: `/g/${GROUP}/serving/Greeters`,
+    });
+    expect(needsMoreDates([block("Greeters", "2026-11-18")], TODAY)).toEqual([]);
+    expect(needsMoreDates([block("Greeters", "2026-11-03")], TODAY)).toHaveLength(1);
+    expect(needsMoreDates([block("Greeters", "2026-11-02")], TODAY)).toEqual([]);
+  });
+
+  it("never asks for more dates on a rolling team", () => {
+    expect(needsMoreDates([team("Greeters")], TODAY)).toEqual([]);
+  });
+
+  it("gives a team lead who does not lead the group the more-dates row for their team only", () => {
+    const teams = [block("Greeters", "2026-11-17"), block("Ushers", "2026-11-17")];
+    const home = buildGroupHome(reads({ servingTeams: teams, myLeadTeamIds: ["Ushers"], pendingJoinCount: 3 }), ctx());
+    expect(home.todo?.map((r) => r.title)).toEqual(["Ushers needs more dates"]);
+    expect(buildGroupHome(reads({ servingTeams: teams, myLeadTeamIds: [] }), ctx()).todo).toEqual([]);
+    expect(buildGroupHome(reads({ servingTeams: teams, myLeadTeamIds: null }), ctx()).todo).toBeNull();
   });
 
   it("reports a failed read instead of an empty list", () => {

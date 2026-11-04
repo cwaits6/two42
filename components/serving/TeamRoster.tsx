@@ -8,6 +8,12 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DirRow } from "@/components/directory/DirRow";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { setGroupMembership } from "@/lib/memberGroups";
 import { personInitials, personName } from "@/lib/serving/display";
@@ -19,6 +25,20 @@ export interface TeamRosterPerson {
   last_name: string | null;
   preferred_name: string | null;
   avatar_url: string | null;
+  family_id: string | null;
+  relationship: string | null;
+}
+
+const COUPLE = ["primary", "spouse"];
+
+/** The candidate's spouse among the people who could be added, if any. */
+export function spouseAmong(person: TeamRosterPerson, candidates: TeamRosterPerson[]): TeamRosterPerson | null {
+  if (!person.family_id || !COUPLE.includes(person.relationship ?? "")) return null;
+  return (
+    candidates.find(
+      (c) => c.id !== person.id && c.family_id === person.family_id && COUPLE.includes(c.relationship ?? ""),
+    ) ?? null
+  );
 }
 
 export interface TeamRosterMember extends TeamRosterPerson {
@@ -46,6 +66,7 @@ export function TeamRoster({ teamId, teamName, groupName, members, candidates }:
   const [query, setQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [removing, setRemoving] = useState<TeamRosterMember | null>(null);
+  const [asking, setAsking] = useState<{ person: TeamRosterPerson; spouse: TeamRosterPerson } | null>(null);
   const [refreshing, startRefresh] = useTransition();
 
   const visibleCandidates = useMemo(() => {
@@ -61,17 +82,29 @@ export function TeamRoster({ teamId, teamName, groupName, members, candidates }:
     setQuery("");
   }
 
-  async function add(person: TeamRosterPerson) {
-    setBusyId(person.id);
-    const name = personName(person);
-    const error = await setGroupMembership({ id: person.id, name }, { id: teamId, name: teamName }, true);
-    setBusyId(null);
-    if (error) {
-      toast.error(error);
-      return;
+  async function add(...people: TeamRosterPerson[]) {
+    setAsking(null);
+    setBusyId(people[0].id);
+    const added: string[] = [];
+    for (const person of people) {
+      const name = personName(person);
+      const error = await setGroupMembership({ id: person.id, name }, { id: teamId, name: teamName }, true);
+      if (error) {
+        toast.error(error);
+        break;
+      }
+      added.push(name);
     }
-    toast.success(`Added ${name} to ${teamName}.`);
+    setBusyId(null);
+    if (added.length > 0) toast.success(`Added ${added.join(" and ")} to ${teamName}.`);
     startRefresh(() => router.refresh());
+  }
+
+  /** Someone whose spouse is in the group and not on the team is asked about both. */
+  function offer(person: TeamRosterPerson) {
+    const spouse = spouseAmong(person, candidates);
+    if (spouse) setAsking({ person, spouse });
+    else void add(person);
   }
 
   async function remove() {
@@ -171,7 +204,7 @@ export function TeamRoster({ teamId, teamName, groupName, members, candidates }:
                     <Button
                       variant="outline"
                       disabled={busyId === p.id || refreshing}
-                      onClick={() => add(p)}
+                      onClick={() => offer(p)}
                       aria-label={`Add ${personName(p)} to ${teamName}`}
                     >
                       <Plus aria-hidden="true" />
@@ -184,6 +217,26 @@ export function TeamRoster({ teamId, teamName, groupName, members, candidates }:
           )}
         </>
       )}
+
+      <Dialog open={asking !== null} onOpenChange={(open) => !open && setAsking(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-xl">
+              {asking ? `Also add ${personName(asking.spouse)}?` : ""}
+            </DialogTitle>
+          </DialogHeader>
+          {asking && (
+            <div className="flex flex-col gap-3">
+              <Button size="lg" onClick={() => add(asking.person, asking.spouse)}>
+                Add both
+              </Button>
+              <Button size="lg" variant="outline" onClick={() => add(asking.person)}>
+                Just {personName(asking.person)}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={removing !== null}

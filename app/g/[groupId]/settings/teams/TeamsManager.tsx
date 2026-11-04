@@ -62,7 +62,10 @@ function fromTeam(t: MemberGroup): TeamFormState {
   };
 }
 
-type TeamSettings = Pick<ServingTeamSettings, "team_id" | "enabled" | "reminder_days" | "window_weeks">;
+type TeamSettings = Pick<
+  ServingTeamSettings,
+  "team_id" | "enabled" | "reminder_days" | "schedule" | "window_weeks" | "date_from" | "date_to" | "extra_weeks" | "send_hour"
+>;
 
 function memberCountText(n: number): string {
   return `${n} member${n === 1 ? "" : "s"}`;
@@ -125,7 +128,7 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
         ),
         supabase
           .from("serving_team_settings")
-          .select("team_id, enabled, reminder_days, window_weeks")
+          .select("team_id, enabled, reminder_days, schedule, window_weeks, date_from, date_to, extra_weeks, send_hour")
           .in("team_id", teamIds),
       ]);
     // Keep the previous counts rather than showing every team as empty, which

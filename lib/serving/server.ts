@@ -24,56 +24,45 @@ export interface NamedProfile {
   preferred_name: string | null;
 }
 
-export async function resolveSignupLabel(
-  supabase: SupabaseClient,
-  attendees: NamedProfile[],
-  familyId: string | null,
-  orgId: string
-): Promise<string> {
-  let familyName: string | null = null;
-  if (attendees.length > 1 && familyId) {
-    // org_id filter is required: on a service-role client a key-only read
-    // matches rows from every org the moment a second org exists.
-    const { data: family, error } = await supabase
-      .from("family_units")
-      .select("family_name")
-      .eq("id", familyId)
-      .eq("org_id", orgId)
-      .single();
-    // Non-fatal: the household name only enriches the label, so a failed
-    // read degrades to the attendee names.
-    if (error) {
-      console.error("Serving family lookup failed for %s:", familyId, error);
-    }
-    familyName = family?.family_name ?? null;
-  }
-  return signupDisplayName(attendees, familyName);
+export interface SpouseProfile extends NamedProfile {
+  email: string | null;
+}
+
+/** The two household roles that make a couple; nobody else is offered a spouse choice. */
+export const COUPLE_RELATIONSHIPS = ["primary", "spouse"] as const;
+
+export function isCoupleMember(p: { family_id: string | null; relationship: string | null }): p is {
+  family_id: string;
+  relationship: "primary" | "spouse";
+} {
+  return p.family_id !== null && (COUPLE_RELATIONSHIPS as readonly string[]).includes(p.relationship ?? "");
 }
 
 /**
- * The member's spouse (their household's other primary/spouse profile), if
- * any. Non-fatal by contract: everywhere the spouse appears it is an opt-in
- * extra, so a failed read logs and degrades to null rather than throwing.
+ * The viewer's spouse: the other primary or spouse in their household, and
+ * only when the viewer is one of those two themself. Non-fatal by contract:
+ * everywhere the spouse appears it is an opt-in extra, so a failed read logs
+ * and degrades to null rather than throwing.
  */
 export async function findSpouse(
   supabase: SupabaseClient,
-  familyId: string,
-  excludeProfileId: string,
+  viewer: { id: string; family_id: string | null; relationship: string | null },
   orgId: string
-): Promise<NamedProfile | null> {
+): Promise<SpouseProfile | null> {
+  if (!isCoupleMember(viewer)) return null;
   // org_id filter is required: on a service-role client a key-only read
   // matches rows from every org the moment a second org exists.
   const { data: spouse, error } = await supabase
     .from("profiles")
-    .select("id, first_name, last_name, preferred_name")
-    .eq("family_id", familyId)
+    .select("id, first_name, last_name, preferred_name, email")
+    .eq("family_id", viewer.family_id)
     .eq("org_id", orgId)
-    .in("relationship", ["primary", "spouse"])
-    .neq("id", excludeProfileId)
+    .in("relationship", [...COUPLE_RELATIONSHIPS])
+    .neq("id", viewer.id)
     .limit(1)
     .maybeSingle();
   if (error) {
-    console.error("Serving spouse lookup failed for family %s:", familyId, error);
+    console.error("Serving spouse lookup failed for family %s:", viewer.family_id, error);
   }
   return spouse ?? null;
 }
@@ -89,16 +78,10 @@ export async function sendSignupConfirmation(
     teamName: string;
     serviceDate: string;
     attendees: NamedProfile[];
-    familyId: string | null;
     recipient: { id: string; email: string; name: string };
   }
 ) {
-  const attendeesLabel = await resolveSignupLabel(
-    supabase,
-    opts.attendees,
-    opts.familyId,
-    opts.orgId
-  );
+  const attendeesLabel = signupDisplayName(opts.attendees);
 
   // resolveEmailBranding never throws — it degrades to platform defaults —
   // so this needs no guard of its own.
