@@ -180,20 +180,6 @@ begin
     end if;
   end loop;
 
-  -- A fund's payment handles are free text and may still pay the person leaving,
-  -- so the second person gets it retired, for a leader to check and reopen. A fund
-  -- with nobody to take it goes through the steward_id cascade.
-  update public.giving_funds f
-     set steward_id = f.co_steward_id,
-         co_steward_id = null,
-         steward_role = null,
-         is_active = false
-   where f.org_id = _org
-     and f.steward_id = _person_id
-     and f.co_steward_id <> _person_id
-     and exists (select 1 from public.group_members m
-                  where m.group_id = f.group_id and m.org_id = _org and m.profile_id = f.co_steward_id);
-
   select coalesce(array_agg(distinct a), '{}') into _addresses
   from unnest(array[pg_catalog.lower(_profile_email), pg_catalog.lower(_login_email)]) as a
   where a is not null;
@@ -953,6 +939,103 @@ $$;
 ALTER FUNCTION "public"."giving_can_manage_fund"("_fund_id" "uuid") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."giving_fund_recipients_guard"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  -- OLD reads as all nulls on INSERT, so a new fund checks both people.
+  _moved boolean := new.group_id is distinct from old.group_id or new.org_id is distinct from old.org_id;
+begin
+  if tg_op = 'UPDATE' then
+    if old.steward_id is not null and new.steward_id is null then
+      new.needs_review := true;
+      new.steward_role := null;
+      if new.co_steward_id is distinct from old.steward_id and exists (
+        select 1 from public.group_members gm
+        join public.profiles p on p.id = gm.profile_id and p.org_id = gm.org_id
+        where gm.group_id = new.group_id
+          and gm.org_id = new.org_id
+          and gm.profile_id = new.co_steward_id
+          and p.role <> 'pending'
+        for key share of gm
+      ) then
+        new.steward_id := new.co_steward_id;
+      end if;
+      new.co_steward_id := null;
+    end if;
+
+    -- The group the fund was flagged in, or leading any other group and moving
+    -- the fund there in the same write would clear it.
+    if old.needs_review and not new.needs_review
+       and not public.is_group_leader(old.group_id) then
+      raise exception 'giving_funds: only a leader of the group can confirm fund %', old.id
+        using errcode = 'insufficient_privilege';
+    end if;
+  end if;
+
+  -- Only a person this write names: someone moved back out of the group between
+  -- writes is the triggers' to handle, not a reason to refuse an unrelated edit.
+  if exists (
+    select 1
+    from unnest(array[
+      case when _moved or new.steward_id is distinct from old.steward_id then new.steward_id end,
+      case when _moved or new.co_steward_id is distinct from old.co_steward_id then new.co_steward_id end
+    ]) as named (person)
+    where named.person is not null
+      and not exists (
+        select 1 from public.group_members gm
+        join public.profiles p on p.id = gm.profile_id and p.org_id = gm.org_id
+        where gm.group_id = new.group_id
+          and gm.org_id = new.org_id
+          and gm.profile_id = named.person
+          and p.role <> 'pending'
+        for key share of gm)
+  ) then
+    raise exception 'giving_funds: a fund''s people must be members of its group'
+      using errcode = 'check_violation';
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."giving_fund_recipients_guard"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."giving_funds_apply_recipient_rules"(OUT "promoted" bigint, OUT "no_recipient" bigint, OUT "second_person_removed" bigint) RETURNS "record"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  with lost as (
+    update public.giving_funds f
+       set steward_id = null
+     where f.steward_id is not null
+       and not exists (
+         select 1 from public.group_members gm
+         where gm.group_id = f.group_id and gm.org_id = f.org_id and gm.profile_id = f.steward_id)
+    returning f.steward_id
+  )
+  select count(*) filter (where steward_id is not null), count(*) filter (where steward_id is null)
+    into promoted, no_recipient
+  from lost;
+
+  update public.giving_funds f
+     set co_steward_id = null
+   where f.co_steward_id is not null
+     and not exists (
+       select 1 from public.group_members gm
+       where gm.group_id = f.group_id and gm.org_id = f.org_id and gm.profile_id = f.co_steward_id);
+  get diagnostics second_person_removed = row_count;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."giving_funds_apply_recipient_rules"(OUT "promoted" bigint, OUT "no_recipient" bigint, OUT "second_person_removed" bigint) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."giving_stewards_can_manage"() RETURNS boolean
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO ''
@@ -1460,6 +1543,40 @@ ALTER FUNCTION "public"."group_invite_redeem"("_token" "uuid", "_name" "text", "
 
 COMMENT ON FUNCTION "public"."group_invite_redeem"("_token" "uuid", "_name" "text", "_email" "text", "_signup_token" "text", "_token_expires_at" timestamp with time zone) IS 'New-person redemption of a group invite. Tenant anchor: the group_invites row the token selects (locked for update), never a parameter; the approved access_requests row and the use row carry its org_id. A repeat submission by the same address re-mints the setup token without a new use. service_role only. GI001 dead link, GI002 bad input, GI003 address cannot sign up, GI004 denied by an admin, GI006 signed-in caller.';
 
+
+
+CREATE OR REPLACE FUNCTION "public"."group_member_removed_leaves_funds"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+begin
+  if exists (
+    select 1 from public.group_members gm
+    where gm.group_id = old.group_id
+      and gm.org_id = old.org_id
+      and gm.profile_id = old.profile_id
+  ) then
+    return null;
+  end if;
+
+  update public.giving_funds f
+     set steward_id = null
+   where f.group_id = old.group_id
+     and f.org_id = old.org_id
+     and f.steward_id = old.profile_id;
+
+  update public.giving_funds f
+     set co_steward_id = null
+   where f.group_id = old.group_id
+     and f.org_id = old.org_id
+     and f.co_steward_id = old.profile_id;
+
+  return null;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."group_member_removed_leaves_funds"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."group_member_removed_leaves_teams"() RETURNS "trigger"
@@ -3232,7 +3349,7 @@ CREATE TABLE IF NOT EXISTS "public"."giving_funds" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "name" "text" NOT NULL,
     "description" "text",
-    "steward_id" "uuid" NOT NULL,
+    "steward_id" "uuid",
     "co_steward_id" "uuid",
     "steward_role" "text",
     "retire_on" "date",
@@ -3243,12 +3360,18 @@ CREATE TABLE IF NOT EXISTS "public"."giving_funds" (
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
     "group_id" "uuid" NOT NULL,
+    "needs_review" boolean DEFAULT false NOT NULL,
     CONSTRAINT "giving_funds_name_check" CHECK ((("char_length"("name") >= 1) AND ("char_length"("name") <= 80))),
+    CONSTRAINT "giving_funds_no_recipient_needs_review" CHECK ((("steward_id" IS NOT NULL) OR "needs_review")),
     CONSTRAINT "giving_funds_steward_role_check" CHECK ((("steward_role" IS NULL) OR ("char_length"("steward_role") <= 60)))
 );
 
 
 ALTER TABLE "public"."giving_funds" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."giving_funds"."needs_review" IS 'Set when the fund loses its recipient. Off Give until a leader of the group clears it. Only ever cleared by that leader; see giving_fund_recipients_guard().';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."group_invite_uses" (
@@ -4659,6 +4782,14 @@ CREATE OR REPLACE TRIGGER "family_units_touch_updated_at" BEFORE UPDATE ON "publ
 
 
 
+CREATE OR REPLACE TRIGGER "giving_funds_keep_recipients_in_group" BEFORE INSERT OR UPDATE OF "steward_id", "co_steward_id", "group_id", "org_id", "needs_review" ON "public"."giving_funds" FOR EACH ROW EXECUTE FUNCTION "public"."giving_fund_recipients_guard"();
+
+
+
+CREATE OR REPLACE TRIGGER "group_members_leave_funds" AFTER DELETE OR UPDATE OF "group_id", "profile_id", "org_id" ON "public"."group_members" FOR EACH ROW EXECUTE FUNCTION "public"."group_member_removed_leaves_funds"();
+
+
+
 CREATE OR REPLACE TRIGGER "group_members_leave_teams" AFTER DELETE OR UPDATE OF "group_id", "profile_id", "org_id" ON "public"."group_members" FOR EACH ROW EXECUTE FUNCTION "public"."group_member_removed_leaves_teams"();
 
 
@@ -4926,7 +5057,7 @@ ALTER TABLE ONLY "public"."giving_funds"
 
 
 ALTER TABLE ONLY "public"."giving_funds"
-    ADD CONSTRAINT "giving_funds_steward_id_fkey" FOREIGN KEY ("steward_id", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE CASCADE;
+    ADD CONSTRAINT "giving_funds_steward_id_fkey" FOREIGN KEY ("steward_id", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE SET NULL ("steward_id");
 
 
 
@@ -5600,11 +5731,13 @@ CREATE POLICY "Group members can view events" ON "public"."events" FOR SELECT TO
 
 
 
-CREATE POLICY "Group members can view fund methods" ON "public"."giving_fund_methods" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id")));
+CREATE POLICY "Group members can view fund methods" ON "public"."giving_fund_methods" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id") AND (EXISTS ( SELECT 1
+   FROM "public"."giving_funds" "f"
+  WHERE (("f"."id" = "giving_fund_methods"."fund_id") AND ("f"."org_id" = "giving_fund_methods"."org_id"))))));
 
 
 
-CREATE POLICY "Group members can view giving funds" ON "public"."giving_funds" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id")));
+CREATE POLICY "Group members can view giving funds" ON "public"."giving_funds" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id") AND ((("steward_id" IS NOT NULL) AND (NOT "needs_review")) OR "public"."is_group_leader"("group_id") OR ("steward_id" = ( SELECT "auth"."uid"() AS "uid")))));
 
 
 
@@ -6308,6 +6441,15 @@ GRANT ALL ON FUNCTION "public"."giving_can_manage_fund"("_fund_id" "uuid") TO "s
 
 
 
+REVOKE ALL ON FUNCTION "public"."giving_fund_recipients_guard"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."giving_fund_recipients_guard"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."giving_funds_apply_recipient_rules"(OUT "promoted" bigint, OUT "no_recipient" bigint, OUT "second_person_removed" bigint) FROM PUBLIC;
+
+
+
 GRANT ALL ON FUNCTION "public"."giving_stewards_can_manage"() TO "anon";
 GRANT ALL ON FUNCTION "public"."giving_stewards_can_manage"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."giving_stewards_can_manage"() TO "service_role";
@@ -6335,6 +6477,11 @@ GRANT ALL ON FUNCTION "public"."group_invite_join"("_token" "uuid") TO "authenti
 
 REVOKE ALL ON FUNCTION "public"."group_invite_redeem"("_token" "uuid", "_name" "text", "_email" "text", "_signup_token" "text", "_token_expires_at" timestamp with time zone) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."group_invite_redeem"("_token" "uuid", "_name" "text", "_email" "text", "_signup_token" "text", "_token_expires_at" timestamp with time zone) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."group_member_removed_leaves_funds"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."group_member_removed_leaves_funds"() TO "service_role";
 
 
 
