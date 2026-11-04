@@ -1237,6 +1237,70 @@ isOneToOne: false
       referencedColumns: ["id","org_id"]
     }
                   ]
+                },"serving_reminder_passes": {
+                  Row: {
+                    "org_id": string,"send_date": string,"started_at": string,"team_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "org_id"?: string,"send_date": string,"started_at"?: string,"team_id": string
+                  }
+                  Update: {
+                    "org_id"?: string,"send_date"?: string,"started_at"?: string,"team_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "serving_reminder_passes_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "serving_reminder_passes_team_id_fkey"
+      columns: ["team_id","org_id"]
+isOneToOne: false
+      referencedRelation: "teams"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
+                },"serving_reminder_sends": {
+                  Row: {
+                    "claimed_at": string | null,"org_id": string,"profile_id": string,"send_date": string,"sent_at": string | null,"team_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "claimed_at"?: string | null,"org_id"?: string,"profile_id": string,"send_date": string,"sent_at"?: string | null,"team_id": string
+                  }
+                  Update: {
+                    "claimed_at"?: string | null,"org_id"?: string,"profile_id"?: string,"send_date"?: string,"sent_at"?: string | null,"team_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "serving_reminder_sends_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "serving_reminder_sends_pass_fkey"
+      columns: ["team_id","send_date","org_id"]
+isOneToOne: false
+      referencedRelation: "serving_reminder_passes"
+      referencedColumns: ["team_id","send_date","org_id"]
+    },{
+      foreignKeyName: "serving_reminder_sends_profile_id_fkey"
+      columns: ["profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "serving_reminder_sends_profile_id_fkey"
+      columns: ["profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
                 },"serving_signup_attendees": {
                   Row: {
                     "org_id": string,"profile_id": string,"signup_id": string
@@ -1333,14 +1397,14 @@ isOneToOne: false
                   ]
                 },"serving_team_settings": {
                   Row: {
-                    "enabled": boolean,"org_id": string,"reminder_days": (number)[],"reminder_method": string,"team_id": string,"updated_at": string,"updated_by": string | null,"window_weeks": number
+                    "date_from": string | null,"date_to": string | null,"enabled": boolean,"extra_weeks": number,"org_id": string,"reminder_days": (number)[],"reminder_method": string,"schedule": string,"send_hour": number | null,"team_id": string,"updated_at": string,"updated_by": string | null,"window_weeks": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "enabled"?: boolean,"org_id"?: string,"reminder_days"?: (number)[],"reminder_method"?: string,"team_id": string,"updated_at"?: string,"updated_by"?: string | null,"window_weeks"?: number
+                    "date_from"?: string | null,"date_to"?: string | null,"enabled"?: boolean,"extra_weeks"?: number,"org_id"?: string,"reminder_days"?: (number)[],"reminder_method"?: string,"schedule"?: string,"send_hour"?: number | null,"team_id": string,"updated_at"?: string,"updated_by"?: string | null,"window_weeks"?: number
                   }
                   Update: {
-                    "enabled"?: boolean,"org_id"?: string,"reminder_days"?: (number)[],"reminder_method"?: string,"team_id"?: string,"updated_at"?: string,"updated_by"?: string | null,"window_weeks"?: number
+                    "date_from"?: string | null,"date_to"?: string | null,"enabled"?: boolean,"extra_weeks"?: number,"org_id"?: string,"reminder_days"?: (number)[],"reminder_method"?: string,"schedule"?: string,"send_hour"?: number | null,"team_id"?: string,"updated_at"?: string,"updated_by"?: string | null,"window_weeks"?: number
                   }
                   Relationships: [
                     {
@@ -1696,9 +1760,19 @@ isOneToOne: false
 "review_group_join_request":
 { Args: { "_approve": boolean,"_request_id": string }; Returns: string
                            },
+"serving_reminder_claim":
+{ Args: { "_org_id": string,"_send_date": string,"_service_date": string,"_team_ids": (string)[] }; Returns: {
+              "email": string,"first_name": string,"preferred_name": string,"profile_id": string,"team_id": string
+            }[]
+                           },
 "serving_signup_apply":
 { Args: { "_actor_id": string,"_attendee_ids": (string)[],"_group_id": string,"_service_date": string }; Returns: {
               "created": boolean,"signup_id": string,"signup_org_id": string
+            }[]
+                           },
+"serving_signup_change":
+{ Args: { "_attendee_ids": (string)[],"_signup_id": string }; Returns: {
+              "added": number,"removed": number
             }[]
                            },
 "serving_signup_create":
