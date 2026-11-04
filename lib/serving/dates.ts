@@ -28,7 +28,7 @@ export const MAX_WINDOW_WEEKS = 26;
 /** How many following weeks a sign-up can offer in one go. */
 export const MAX_EXTRA_WEEKS = 3;
 /** The longest set block, From to To. */
-const MAX_BLOCK_YEARS = 1;
+export const MAX_BLOCK_YEARS = 1;
 
 /** The columns that decide a team's dates. Rolling has no block; set has one. */
 export interface TeamDatesSettings {
@@ -37,6 +37,13 @@ export interface TeamDatesSettings {
   date_from: string | null;
   date_to: string | null;
 }
+
+/**
+ * What a sign-up path reads from serving_team_settings: the date columns
+ * above plus whether signups are on and how many more weeks to offer. One
+ * string, so a column the date rule needs cannot be dropped from one reader.
+ */
+export const SIGNUP_SETTINGS_SELECT = "enabled, schedule, window_weeks, date_from, date_to, extra_weeks";
 
 /** What a team without a settings row shows: the next 8 Sundays. */
 export const DEFAULT_TEAM_DATES: TeamDatesSettings = {
