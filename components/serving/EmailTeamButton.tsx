@@ -100,7 +100,7 @@ export function EmailTeamButton({
             <p className="text-base text-muted-foreground">
               Everyone on the team ({memberCount} member{memberCount !== 1 ? "s" : ""})
               will get an email listing the open dates below, each with a
-              one-tap signup button.
+              button to sign up.
             </p>
           )}
 

@@ -174,7 +174,7 @@ export default async function ServingPage({
             isLeader ? (
               <div className="flex flex-col items-center gap-4">
                 <p className="text-base text-muted-foreground">
-                  On Teams, edit a team and turn on Serving role, then turn on signups in its Team settings.
+                  On Teams, edit a team and turn on Serving role, then let people sign up in its Team settings.
                 </p>
                 <Button nativeButton={false} render={<Link href={teamsHref} />}>
                   Go to Teams

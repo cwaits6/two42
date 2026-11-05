@@ -100,7 +100,7 @@ export function ForgotPasswordForm() {
         <div className="space-y-1.5">
           <Label
             htmlFor="email"
-            className="font-sans text-lg font-semibold tracking-[0.08em] uppercase text-foreground"
+            className="font-sans text-lg font-semibold text-foreground"
           >
             Email
           </Label>

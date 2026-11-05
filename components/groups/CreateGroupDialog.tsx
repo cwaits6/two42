@@ -201,7 +201,7 @@ export function CreateGroupDialog({
         <form onSubmit={submit} className="contents">
           <DialogHeader>
             <DialogTitle className="text-2xl">
-              {creating ? "Create a group" : "Request a group"}
+              {creating ? "Add a group" : "Request a group"}
             </DialogTitle>
             <DialogDescription>
               {creating
@@ -285,7 +285,7 @@ export function CreateGroupDialog({
               size="lg"
               disabled={saving}
             >
-              {saving ? "Saving…" : creating ? "Create group" : "Send request"}
+              {saving ? "Saving…" : creating ? "Add group" : "Send request"}
             </Button>
           </DialogFooter>
         </form>

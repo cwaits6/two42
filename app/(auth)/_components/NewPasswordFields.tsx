@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { MIN_PASSWORD_LENGTH, type PasswordFieldErrors } from "./passwordRules";
 
-const LABEL = "font-sans text-lg font-semibold tracking-[0.08em] uppercase text-foreground";
+const LABEL = "font-sans text-lg font-semibold text-foreground";
 
 /** The password and confirmation pair on the choose-a-password forms. */
 export function NewPasswordFields({

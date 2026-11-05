@@ -17,7 +17,7 @@ interface FamilyRequestFormProps {
   email: string;
 }
 
-const LABEL = "font-sans text-lg font-semibold tracking-[0.08em] uppercase text-foreground";
+const LABEL = "font-sans text-lg font-semibold text-foreground";
 const NAME_REQUIRED = "Enter your name.";
 const MESSAGES: Record<number, string> = {
   404: HOUSEHOLD_INVITE_INVALID_TEXT,

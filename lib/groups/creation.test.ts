@@ -33,7 +33,7 @@ describe("creationActionFor", () => {
   });
 
   it("labels the two actions for the button", () => {
-    expect(creationActionFor("open", false)?.label).toBe("Create a group");
+    expect(creationActionFor("open", false)?.label).toBe("Add a group");
     expect(creationActionFor("approval", false)?.label).toBe("Request a group");
   });
 });

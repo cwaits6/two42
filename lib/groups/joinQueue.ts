@@ -22,7 +22,7 @@ export interface JoinQueueSection {
   requests: PendingJoinRequest[];
 }
 
-export const NO_PENDING_JOIN_REQUESTS_TEXT = "No pending join requests.";
+export const NO_PENDING_JOIN_REQUESTS_TEXT = "No requests waiting.";
 
 /** One row of pending_group_join_requests(), as the function returns it. */
 export interface PendingJoinRequestRow {

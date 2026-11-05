@@ -14,7 +14,7 @@ interface InviteSignupFormProps {
   groupName: string;
 }
 
-const LABEL = "font-sans text-lg font-semibold tracking-[0.08em] uppercase text-foreground";
+const LABEL = "font-sans text-lg font-semibold text-foreground";
 const NAME_REQUIRED = "Enter your name.";
 const MESSAGES: Record<number, string> = {
   400: "Enter your name and a valid email address.",

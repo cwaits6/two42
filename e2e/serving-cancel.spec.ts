@@ -60,7 +60,7 @@ const openDates = (page: Page) => page.getByRole("button", { name: /^Sign up for
 // Henry and Chloe are each other's spouse on the team, so their own date
 // offers Change, and cancelling is inside it.
 const changeButton = (page: Page) => page.getByRole("button", { name: /^Change / });
-const cancelButton = (page: Page) => page.getByRole("button", { name: /^Cancel signup for / });
+const cancelButton = (page: Page) => page.getByRole("button", { name: /^Cancel serving for / });
 const removeButton = (page: Page) => page.getByRole("button", { name: /^Remove .* from .*\d/ });
 
 async function startCancel(page: Page) {
@@ -70,7 +70,7 @@ async function startCancel(page: Page) {
 
 async function expectDateOpensAfter(page: Page, confirmLabel: string) {
   await page.getByRole("dialog").getByRole("button", { name: confirmLabel }).click();
-  await expect(page.getByText("Signup cancelled.")).toBeVisible();
+  await expect(page.getByText("Serving cancelled.")).toBeVisible();
   await expect(openDates(page)).toHaveCount(WINDOW_WEEKS);
 
   await page.reload();
@@ -88,7 +88,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 800 
       await page.goto(TEAM_PATH);
       await expect(openDates(page)).toHaveCount(WINDOW_WEEKS - 1);
       await startCancel(page);
-      await expectDateOpensAfter(page, "Cancel signup");
+      await expectDateOpensAfter(page, "Cancel serving");
     });
   });
 }
@@ -99,7 +99,7 @@ test.describe("the person who tapped Sign up", () => {
   test("can still cancel the date", async ({ page }) => {
     await page.goto(TEAM_PATH);
     await startCancel(page);
-    await expectDateOpensAfter(page, "Cancel signup");
+    await expectDateOpensAfter(page, "Cancel serving");
   });
 });
 
@@ -110,7 +110,7 @@ for (const [who, persona] of [["team lead", "twoGroups"], ["group leader", "lead
     test("can still remove the date", async ({ page }) => {
       await page.goto(TEAM_PATH);
       await removeButton(page).click();
-      await expectDateOpensAfter(page, "Remove signup");
+      await expectDateOpensAfter(page, "Remove from date");
     });
   });
 }

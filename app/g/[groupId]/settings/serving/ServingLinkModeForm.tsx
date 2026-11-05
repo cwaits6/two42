@@ -55,7 +55,7 @@ export function ServingLinkModeForm({
             Let people respond from the email without signing in
           </Label>
           <p id="serving-link-mode-help" className="text-base text-muted-foreground">
-            The sign-up and cancel buttons in serving emails work straight
+            The buttons in serving emails work straight
             away. Turn this off to ask people to sign in first.
           </p>
         </div>

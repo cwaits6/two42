@@ -177,7 +177,7 @@ export function ServingStats({
         <div>
           <h2 className="text-2xl font-bold text-brand-primary-text">Who has served</h2>
           <p className="text-base text-muted-foreground mt-1">
-            How often each member has served on each team with signups on.
+            How often each member has served on each team people can sign up for.
           </p>
         </div>
 
@@ -196,7 +196,7 @@ export function ServingStats({
       ) : teams.length === 0 ? (
         <EmptyState
           icon={HandHelping}
-          message="No teams have signups on yet."
+          message="No teams let people sign up yet."
           action={
             <Button nativeButton={false} render={<Link href={teamsHref} />}>
               Go to Teams

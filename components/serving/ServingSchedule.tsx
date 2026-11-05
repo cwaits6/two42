@@ -158,12 +158,12 @@ export function ServingSchedule({
       if (res.ok) {
         setCancelling(null);
         setChanging(null);
-        toast.success("Signup cancelled.");
+        toast.success("Serving cancelled.");
       } else {
-        toast.error(failureMessage("cancel your signup", res.status));
+        toast.error(failureMessage("cancel this serving", res.status));
       }
     } catch {
-      toast.error(failureMessage("cancel your signup", "network"));
+      toast.error(failureMessage("cancel this serving", "network"));
     } finally {
       setBusy(false);
     }
@@ -231,7 +231,7 @@ export function ServingSchedule({
                             variant="outline"
                             disabled={busy}
                             onClick={() => setCancelling(entry)}
-                            aria-label={`Cancel signup for ${label}`}
+                            aria-label={`Cancel serving for ${label}`}
                           >
                             Cancel
                           </Button>
@@ -325,13 +325,13 @@ export function ServingSchedule({
           cancelling === null
             ? ""
             : cancellingMine
-              ? `Cancel your signup for ${formatServingDate(cancelling.date, today)}?`
+              ? `Cancel your serving for ${formatServingDate(cancelling.date, today)}?`
               : `Remove ${cancelling.label} from ${formatServingDate(cancelling.date, today)}?`
         }
         description={cancellingMine ? "That date will open back up for someone else." : undefined}
-        confirmLabel={cancellingMine ? "Cancel signup" : "Remove signup"}
+        confirmLabel={cancellingMine ? "Cancel serving" : "Remove from date"}
         pendingLabel="Cancelling…"
-        cancelLabel="Keep signup"
+        cancelLabel="Keep serving"
         onConfirm={cancel}
       />
     </div>

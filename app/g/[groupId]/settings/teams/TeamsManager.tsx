@@ -287,7 +287,7 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
   if (loading) {
     return (
       <PageContainer>
-        <p className="text-xl text-muted-foreground">Loading...</p>
+        <p className="text-xl text-muted-foreground">Loading…</p>
       </PageContainer>
     );
   }
@@ -303,7 +303,7 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
             onClick={openCreate}
           >
             <Plus className="mr-2 h-5 w-5" />
-            New team
+            Add team
           </Button>
         }
       />
@@ -422,7 +422,7 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {editing ? "Edit team" : "New team"}
+              {editing ? "Edit team" : "Add team"}
             </DialogTitle>
           </DialogHeader>
 
@@ -487,7 +487,7 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
                 <Label htmlFor="t_serving">Serving role</Label>
                 <p className="text-base text-muted-foreground">
                   Lists this team on the Serving page with a roster everyone
-                  can see. Turn on signups from its Team settings once saved.
+                  can see. Let people sign up from its Team settings once saved.
                 </p>
               </div>
               <Switch
@@ -515,7 +515,7 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
                 onClick={handleSave}
                 disabled={saving}
               >
-                {saving ? "Saving..." : editing ? "Save changes" : "Create"}
+                {saving ? "Saving…" : editing ? "Save changes" : "Add team"}
               </Button>
             </div>
           </DialogFooter>

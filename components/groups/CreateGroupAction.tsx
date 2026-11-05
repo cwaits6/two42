@@ -16,7 +16,7 @@ import { creationActionFor } from "@/lib/groups/creation";
 import { cn } from "@/lib/utils";
 
 /**
- * The member-facing "Create a group" / "Request a group" button with its
+ * The member-facing "Add a group" / "Request a group" button with its
  * dialog. Renders nothing when the org leaves creation to its admins. In
  * request mode the viewer's own pending requests are listed under it.
  */

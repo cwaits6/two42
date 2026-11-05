@@ -130,7 +130,7 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
             <Input
               type="search"
               autoFocus
-              placeholder="Search all icons..."
+              placeholder="Search all icons…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="pl-10"
