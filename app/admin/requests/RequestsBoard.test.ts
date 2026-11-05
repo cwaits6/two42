@@ -21,13 +21,19 @@ type Rows = { id: string }[] | null;
 let root: Root;
 let host: HTMLDivElement;
 
-async function mount(access: Rows, group: Rows, join: Rows) {
+const listed = (...kinds: Rows[]) => kinds.reduce((sum, rows) => sum + (rows?.length ?? 0), 0);
+
+const render = (access: Rows, group: Rows, join: Rows, waiting: number | null) =>
+  act(async () => {
+    root.render(h(RequestsBoard, { access, group, join, waiting, timeZone: "America/Chicago" } as never));
+  });
+
+/** `waiting` is the server's count; it agrees with the lists unless a test says otherwise. */
+async function mount(access: Rows, group: Rows, join: Rows, waiting: number | null = listed(access, group, join)) {
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
-  await act(async () => {
-    root.render(h(RequestsBoard, { access, group, join, timeZone: "America/Chicago" } as never));
-  });
+  await render(access, group, join, waiting);
 }
 
 const headings = () => [...host.querySelectorAll("h2")].map((heading) => heading.textContent);
@@ -67,6 +73,37 @@ describe("RequestsBoard", () => {
     expect(host.querySelector('[role="alert"]')?.textContent).toContain("Couldn't load the join requests.");
     expect(host.textContent).toContain("Decide a1");
     expect(status()).toBeUndefined();
+    expect(host.textContent).not.toContain("requests waiting.");
+  });
+
+  it("shows the server's count, the number the menu shows, not a sum of its own", async () => {
+    await mount([{ id: "a1" }], [], [{ id: "j1" }], 5);
+
+    expect(status()).toBe("5 requests waiting.");
+  });
+
+  it("shows no number when the count couldn't be read", async () => {
+    await mount([{ id: "a1" }], [], [], null);
+
+    expect(headings()).toEqual(["Access requests"]);
+    expect(status()).toBeUndefined();
+  });
+
+  it("takes a decided request off the count once, before and after the page re-reads", async () => {
+    await mount([{ id: "a1" }, { id: "a2" }], [], [{ id: "j1" }], 3);
+
+    await decide("a1");
+    expect(status()).toBe("2 requests waiting.");
+
+    await render([{ id: "a2" }], [], [{ id: "j1" }], 2);
+    expect(status()).toBe("2 requests waiting.");
+  });
+
+  it("claims nothing about the rest when no kind could be read", async () => {
+    await mount(null, null, null, null);
+
+    expect(headings()).toEqual(["Access requests", "Group requests", "Join requests"]);
+    expect(host.querySelectorAll('[role="alert"]')).toHaveLength(3);
     expect(host.textContent).not.toContain("requests waiting.");
   });
 

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ApprovalQueue } from "@/components/admin/ApprovalQueue";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { requestsWaiting } from "@/lib/admin/requestsWaiting";
 import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
 import { requestedOn } from "@/lib/groups/joinQueue";
 import { createClient } from "@/lib/supabase/client";
@@ -105,7 +106,7 @@ export function PendingAccessRequests({
         }}
         onDecline={(id) => setDeclining(byId(id) ?? null)}
         busyId={busyId}
-        emptyText="No requests waiting."
+        emptyText={requestsWaiting(0)}
       />
       <ConfirmDialog
         open={declining !== null}

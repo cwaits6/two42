@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { LoadingState } from "@/components/states/LoadingState";
+import { getWaitingRequestCount } from "@/lib/admin/requestCounts";
 import { getPendingJoinRequests } from "@/lib/groups/pendingJoinRequests";
 import { PENDING_GROUP_REQUEST_SELECT, toPendingGroupRequest } from "@/lib/groups/requests";
 import { pageTitle } from "@/lib/pageTitle";
@@ -16,7 +17,7 @@ export const generateMetadata = () => pageTitle("Requests");
 // admin arm of each SELECT policy returns the whole church's requests.
 async function Requests() {
   const supabase = await createClient();
-  const [accessRead, groupRead, groupsRead, timeZone] = await Promise.all([
+  const [accessRead, groupRead, groupsRead, waiting, timeZone] = await Promise.all([
     supabase
       .from("access_requests")
       .select("id, name, email, message, created_at")
@@ -28,6 +29,7 @@ async function Requests() {
       .eq("status", "pending")
       .order("created_at", { ascending: true }),
     supabase.from("groups").select("id, name").order("name", { ascending: true }),
+    getWaitingRequestCount(),
     getOrgTimeZone(),
   ]);
   // Without the groups there is nothing to read, and an empty queue would misreport the failure.
@@ -38,6 +40,7 @@ async function Requests() {
       access={readList(accessRead, "access requests")}
       group={readList(groupRead, "group requests")?.map(toPendingGroupRequest) ?? null}
       join={groups ? await getPendingJoinRequests(groups) : null}
+      waiting={waiting}
       timeZone={timeZone}
     />
   );

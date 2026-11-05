@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ApprovalQueue } from "@/components/admin/ApprovalQueue";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { requestsWaiting } from "@/lib/admin/requestsWaiting";
 import { createClient } from "@/lib/supabase/client";
 import {
   groupPendingJoinRequests,
@@ -95,7 +96,7 @@ export function PendingJoinRequests({
               }}
               onDecline={(id) => setDeclining(byId(id) ?? null)}
               busyId={busyId}
-              emptyText="No requests waiting."
+              emptyText={requestsWaiting(0)}
             />
           </section>
         ))}

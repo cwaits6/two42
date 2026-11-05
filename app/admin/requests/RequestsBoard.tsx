@@ -16,21 +16,23 @@ interface RequestsBoardProps {
   access: PendingAccessRequest[] | null;
   group: PendingGroupRequest[] | null;
   join: PendingJoinRequest[] | null;
+  /** The church's count of requests waiting, as the menu reads it; null when it could not be counted. */
+  waiting: number | null;
   timeZone: string;
 }
 
 /** Every request waiting on a church admin. A kind shows only while it has something waiting. */
-export function RequestsBoard({ access, group, join, timeZone }: RequestsBoardProps) {
+export function RequestsBoard({ access, group, join, waiting, timeZone }: RequestsBoardProps) {
   // What was decided here since the server read. Kept apart from the lists so
   // a re-read after "Try again" still reaches the page.
   const [decided, setDecided] = useState<ReadonlySet<string>>(new Set());
   const remove = (id: string) => setDecided((ids) => new Set(ids).add(id));
-  const waiting = <T extends { id: string }>(rows: T[] | null) =>
+  const undecided = <T extends { id: string }>(rows: T[] | null) =>
     rows && rows.filter((row) => !decided.has(row.id));
 
-  const accessRows = waiting(access);
-  const groupRows = waiting(group);
-  const joinRows = waiting(join);
+  const accessRows = undecided(access);
+  const groupRows = undecided(group);
+  const joinRows = undecided(join);
 
   const kinds: { key: string; title: string; about: string; thing: string; count: number | null; queue: ReactNode }[] = [
     {
@@ -59,17 +61,26 @@ export function RequestsBoard({ access, group, join, timeZone }: RequestsBoardPr
     },
   ];
 
-  const total = totalWaiting({
+  const listed = totalWaiting({
     access: kinds[0].count,
     group: kinds[1].count,
     join: kinds[2].count,
   });
-  if (total === 0) return <EmptyState icon={Inbox} message={requestsWaiting(0)} />;
+  if (listed === 0) return <EmptyState icon={Inbox} message={requestsWaiting(0)} />;
+
+  // A decided row leaves the count only while the lists still hold it: once the
+  // page re-reads, the count has dropped it too.
+  const read = totalWaiting({
+    access: access?.length ?? null,
+    group: group?.length ?? null,
+    join: join?.length ?? null,
+  });
+  const total = read === null || listed === null || waiting === null ? null : waiting - (read - listed);
 
   const shown = kinds.filter((kind) => kind.count !== 0);
   return (
     <div className="space-y-10">
-      {total !== null && (
+      {total !== null && total > 0 && (
         <p role="status" className="text-lg text-muted-foreground">
           {requestsWaiting(total)}
         </p>
@@ -83,7 +94,7 @@ export function RequestsBoard({ access, group, join, timeZone }: RequestsBoardPr
           {kind.count === null ? <ErrorState thing={kind.thing} /> : kind.queue}
         </section>
       ))}
-      {shown.every((kind) => kind.count === null) && (
+      {shown.length < kinds.length && shown.every((kind) => kind.count === null) && (
         <p className="text-lg text-muted-foreground">No other requests waiting.</p>
       )}
     </div>

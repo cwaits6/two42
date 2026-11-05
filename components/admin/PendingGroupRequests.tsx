@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ApprovalQueue } from "@/components/admin/ApprovalQueue";
+import { requestsWaiting } from "@/lib/admin/requestsWaiting";
 import { createClient } from "@/lib/supabase/client";
 import { failureMessage } from "@/lib/errorCopy";
 import { groupCreationErrorMessage } from "@/lib/groups/creation";
@@ -97,7 +98,7 @@ export function PendingGroupRequests({
       onApprove={approve}
       onDecline={decline}
       busyId={busyId}
-      emptyText="No requests waiting."
+      emptyText={requestsWaiting(0)}
     />
   );
 }

@@ -10,12 +10,12 @@ const reads = vi.hoisted(() => ({
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     from: (table: string) => ({
-      select: () => ({
+      // PostgREST returns a count only when the select asks for one.
+      select: (_columns: string, options?: { count?: string }) => ({
         eq: async (column: string, value: unknown) => {
           reads.filters.push([table, column, value]);
-          return table === reads.failing
-            ? { count: null, error: { code: "XX000", message: "row content" } }
-            : { count: reads.counts[table] ?? 0, error: null };
+          if (table === reads.failing) return { count: null, error: { code: "XX000", message: "row content" } };
+          return { count: options?.count === "exact" ? (reads.counts[table] ?? 0) : null, error: null };
         },
       }),
     }),
