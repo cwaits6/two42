@@ -259,7 +259,7 @@ async function tellLeadersDatesOpened(
         excludeProfileId: actorId,
       });
     } catch (err) {
-      // The error's name only: a provider's message can echo a name or an address.
+      // A provider's message can echo a name or an address.
       logError("Serving cancel notices failed for team", err, { ids: { team: teamId } });
     }
   }

@@ -199,7 +199,7 @@ export async function notifyLeadersOfCancel(
           branding,
         });
       } catch (err) {
-        // The error's name only: a provider's message can echo the address.
+        // A provider's message can echo the address.
         logError("Failed to send serving cancel notice to leader", err, { ids: { leader: leader.id } });
       }
     }

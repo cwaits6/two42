@@ -53,7 +53,6 @@ export async function requireOrgAdmin(): Promise<OrgAdminGate> {
     .eq("id", user.id)
     .single();
   if (error) {
-    // code/message only: a PostgrestError's details/hint echo row content.
     logError("Org admin check failed; denying", error);
     return { ok: false, status: 403 };
   }
