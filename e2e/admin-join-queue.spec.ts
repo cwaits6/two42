@@ -17,7 +17,7 @@ const DB_CONTAINER = "supabase_db_small-group-hub";
 const ISAAC = PERSONAS.oneGroup;
 const SWITCHER = "Switch group. Current group: Group B";
 const ONE_WAITING = "1 join request waiting.";
-const NONE_WAITING = "No pending join requests.";
+const NONE_WAITING = "No requests waiting.";
 const REVIEW_ACTION = "Review join requests";
 
 // Scoped to Isaac's rows on Group C only: the stack is shared, and another

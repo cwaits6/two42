@@ -6,13 +6,13 @@
 export const GROUP_CREATION_POLICIES = ["open", "approval", "admins"] as const;
 export type GroupCreationPolicy = (typeof GROUP_CREATION_POLICIES)[number];
 
-/** Anything unrecognised reads as approval: "Request a group", never "Create a group". */
+/** Anything unrecognised reads as approval: "Request a group", never "Add a group". */
 export function parseGroupCreationPolicy(raw: unknown): GroupCreationPolicy {
   return GROUP_CREATION_POLICIES.find((policy) => policy === raw) ?? "approval";
 }
 
 export type CreationAction =
-  | { kind: "create"; label: "Create a group" }
+  | { kind: "create"; label: "Add a group" }
   | { kind: "request"; label: "Request a group" };
 
 /** The button a viewer sees, or null when the org leaves creation to its admins. */
@@ -20,7 +20,7 @@ export function creationActionFor(
   policy: GroupCreationPolicy,
   isOrgAdmin: boolean
 ): CreationAction | null {
-  if (isOrgAdmin || policy === "open") return { kind: "create", label: "Create a group" };
+  if (isOrgAdmin || policy === "open") return { kind: "create", label: "Add a group" };
   if (policy === "approval") return { kind: "request", label: "Request a group" };
   return null;
 }

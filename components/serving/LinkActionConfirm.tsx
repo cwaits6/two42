@@ -35,7 +35,7 @@ export function LinkActionConfirm({
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const verb = action === "signup" ? "sign you up" : "cancel your signup";
+  const verb = action === "signup" ? "sign you up" : "cancel your serving";
   const dateLabel = formatServingDate(date, today);
 
   async function submit(choice: SignupChoice) {
@@ -78,7 +78,7 @@ export function LinkActionConfirm({
         body={`${done} A confirmation email with a calendar invitation is on its way.`}
       />
     ) : (
-      <ServingNotice title="Signup cancelled for" em={dateLabel} body={done} />
+      <ServingNotice title="Serving cancelled for" em={dateLabel} body={done} />
     );
   }
 
@@ -91,7 +91,7 @@ export function LinkActionConfirm({
           ? asks
             ? signupTitle(date, today, spouseName, extraDates)
             : `Serve with ${teamName} on`
-          : "Cancel your signup for"
+          : "Cancel your serving for"
       }
       em={action === "signup" && asks ? "" : dateLabel}
       body=""
@@ -119,7 +119,7 @@ export function LinkActionConfirm({
             disabled={busy}
             onClick={() => submit({ includeSpouse: false, extraDates: [] })}
           >
-            Cancel signup
+            Cancel serving
           </Button>
         )}
 

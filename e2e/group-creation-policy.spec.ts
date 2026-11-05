@@ -7,7 +7,7 @@ import { expect, openAs, test } from "./fixtures/auth";
 // request: that would leave rows on the shared local stack.
 test.describe.configure({ mode: "serial" });
 
-const CREATE = "Create a group";
+const CREATE = "Add a group";
 const REQUEST = "Request a group";
 
 type PolicyLabel = "Open" | "Approval required" | "Church admins only";
@@ -21,7 +21,7 @@ const SAVED_TOAST: Record<PolicyLabel, string> = {
 let admin: { context: BrowserContext; page: Page };
 
 function policySelect(page: Page) {
-  return page.getByRole("combobox", { name: "Who can create groups" });
+  return page.getByRole("combobox", { name: "Who can add groups" });
 }
 
 async function setPolicy(page: Page, label: PolicyLabel) {

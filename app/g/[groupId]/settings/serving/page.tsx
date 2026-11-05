@@ -59,9 +59,9 @@ export default async function GroupServingSettingsPage({
 
       <section className="rounded-2xl border border-border bg-card p-6 mb-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
-          <h2 className="text-lg font-medium text-foreground">Teams, rosters and signups</h2>
+          <h2 className="text-lg font-medium text-foreground">Teams, rosters and signing up</h2>
           <p className="text-base text-muted-foreground">
-            Choose which teams serve, who is on them and when signups are on.
+            Choose which teams serve, who is on them and when people can sign up.
           </p>
         </div>
         <Button variant="outline" nativeButton={false} render={<Link href={teamsHref} />}>

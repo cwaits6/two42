@@ -247,7 +247,7 @@ export function TeamRosterDialog({
             <Input
               type="search"
               placeholder={
-                mode === "roster" ? "Search members..." : "Search people to add..."
+                mode === "roster" ? "Search members…" : "Search people to add…"
               }
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -274,7 +274,7 @@ export function TeamRosterDialog({
         <div className="overflow-y-auto flex-1 -mx-1 px-1">
           {loading ? (
             <p className="text-base text-muted-foreground py-4 text-center">
-              Loading members...
+              Loading members…
             </p>
           ) : visible.length === 0 ? (
             <p className="text-base text-muted-foreground py-6 text-center">

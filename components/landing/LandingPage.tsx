@@ -89,7 +89,7 @@ const FEATURES = [
     text: "People and households, birthdays and anniversaries, with each member choosing what to hide.",
     src: "/landing/directory.png",
     phoneSrc: "/landing/directory-phone.png",
-    alt: "The Directory: members, families, birthdays and anniversaries, with search",
+    alt: "The Directory: members, households, birthdays and anniversaries, with search",
     imageFirst: true,
   },
   {

@@ -287,7 +287,7 @@ export default async function ServingSchedulePage({
       {!settings?.enabled && canManageRoster && (
         <div className="mb-8 flex flex-col gap-4 rounded-2xl border border-border bg-card p-5 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-base text-foreground">
-            Signups are off for this team. Turn them on in Team settings.
+            Signing up is off for this team. Turn it on in Team settings.
           </p>
           {teamSettings}
         </div>

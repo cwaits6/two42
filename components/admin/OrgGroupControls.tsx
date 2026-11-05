@@ -78,7 +78,7 @@ export function OrgGroupControls({ orgId, policy }: OrgGroupControlsProps) {
     <div className="rounded-2xl border border-border bg-card px-5 py-4">
       <div className="space-y-2">
         <Label htmlFor="group-creation-policy" className="text-base">
-          Who can create groups
+          Who can add groups
         </Label>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <Select
