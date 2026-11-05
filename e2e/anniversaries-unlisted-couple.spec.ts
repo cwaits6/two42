@@ -93,11 +93,13 @@ test.describe("what a member sees under Anniversaries", () => {
     }
   });
 
-  test("a listed primary whose claimed spouse is unlisted has no row", async ({ page }) => {
+  test("a listed primary whose claimed spouse is unlisted keeps a row that names only the primary", async ({ page }) => {
     runSql(`update public.profiles set is_unlisted = true where id = '${CHLOE}';`);
     for (const filter of FILTERS) {
       await openEveryone(page, filter);
-      await expect(mockingham(page)).toHaveCount(0);
+      await expect(mockingham(page)).toHaveCount(1);
+      await expect(mockingham(page)).toContainText("Henry Mockingham");
+      await expect(mockingham(page)).not.toContainText("Chloe");
     }
   });
 
