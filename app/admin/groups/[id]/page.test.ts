@@ -53,9 +53,13 @@ describe("AdminGroupPage", () => {
     await expect(AdminGroupPage({ params: Promise.resolve({ id: GROUP_ID }) })).rejects.toThrow();
   });
 
-  it("fails rather than telling a church admin they aren't in the group when memberships can't be read", async () => {
+  it("shows the failed read rather than telling a church admin they aren't in the group when memberships can't be read", async () => {
     getGroupMemberships.mockRejectedValue(new Error("down"));
-    await expect(AdminGroupPage({ params: Promise.resolve({ id: GROUP_ID }) })).rejects.toThrow("down");
+
+    const element = await AdminGroupPage({ params: Promise.resolve({ id: GROUP_ID }) });
+
+    const children = (element.props as { children: { type?: unknown }[] }).children;
+    expect(children.map((child) => child.type)).toContain(ErrorState);
   });
 
   it("renders for a church admin outside the group", async () => {

@@ -67,8 +67,9 @@ describe("PlatformOverviewPage", () => {
     organizations.mockResolvedValue({ data: null, error: { code: "57014" } });
     vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const types = elementsIn(await PlatformOverviewPage()).map((element) => element.type);
+    const elements = elementsIn(await PlatformOverviewPage());
 
-    expect(types).toContain(ErrorState);
+    expect(elements.map((element) => element.type)).toContain(ErrorState);
+    expect(elements.map((element) => element.props?.href)).toContain("/settings");
   });
 });

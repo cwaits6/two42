@@ -30,10 +30,11 @@ export default async function AdminGroupPage({ params }: { params: Promise<{ id:
       .select("id, name, description, group_members(role, profile_id, profiles(first_name, last_name, preferred_name))")
       .eq("id", id)
       .maybeSingle(),
-    getGroupMemberships(),
+    // Null, never an empty list: a failed read must not say "not in this group".
+    getGroupMemberships().catch(() => null),
   ]);
-  if (error) {
-    console.error("Failed to load group:", error.code);
+  if (error || !memberships) {
+    if (error) console.error("Failed to load group:", error.code);
     return (
       <PageContainer size="reading">
         <PageHeader title="Group" backHref="/admin/groups" backLabel="Back to Groups" />

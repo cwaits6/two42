@@ -24,6 +24,19 @@ export default async function PlatformOverviewPage() {
   // predicate here. See docs/security/service-role-inventory.md.
   const { data: orgs, error } = await service.from("organizations").select("id, status");
 
+  const shortcuts = (
+    <nav aria-label="Platform shortcuts" className="mt-8 flex flex-wrap gap-x-6">
+      <Link href="/platform/organizations" className={linkClass}>
+        Manage organizations
+      </Link>
+      {/* The only way to the password form for an operator who belongs to
+          no church: the account menu links to Settings for members only. */}
+      <Link href="/settings" className={linkClass}>
+        Change password or email
+      </Link>
+    </nav>
+  );
+
   // A failed read would otherwise render a confident "0 active, 0 suspended"
   // — wrong lifecycle data is worse here than an explicit failure.
   if (error) {
@@ -32,6 +45,7 @@ export default async function PlatformOverviewPage() {
       <PageContainer>
         <PageHeader title="Overview" />
         <ErrorState thing="organization counts" />
+        {shortcuts}
       </PageContainer>
     );
   }
@@ -58,16 +72,7 @@ export default async function PlatformOverviewPage() {
         </Card>
       </div>
 
-      <nav aria-label="Platform shortcuts" className="mt-8 flex flex-wrap gap-x-6">
-        <Link href="/platform/organizations" className={linkClass}>
-          Manage organizations
-        </Link>
-        {/* The only way to the password form for an operator who belongs to
-            no church: the account menu links to Settings for members only. */}
-        <Link href="/settings" className={linkClass}>
-          Change password or email
-        </Link>
-      </nav>
+      {shortcuts}
     </PageContainer>
   );
 }

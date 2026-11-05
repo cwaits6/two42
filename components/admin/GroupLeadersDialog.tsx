@@ -293,11 +293,12 @@ export function GroupLeadersDialog({
    * Re-read the roster, after a committed write or to retry a failed read.
    * A failed read drops the stale list rather than keep showing it: acting
    * on it would hit rows the write already changed. Resolves false when the
-   * read failed or the dialog has since moved on.
+   * read failed or the dialog has since moved on. Only a write changes what
+   * the page behind the dialog shows, so a retry leaves that page alone.
    */
-  async function refresh(id: string, seq: number): Promise<boolean> {
+  async function refresh(id: string, seq: number, wrote: boolean): Promise<boolean> {
     const loaded = await loadLeaderRoster(supabase, id);
-    onChanged();
+    if (wrote) onChanged();
     if (writeSeq.current !== seq) return false;
     setRoster(loaded);
     setLoadFailed(loaded === null);
@@ -325,7 +326,7 @@ export function GroupLeadersDialog({
       if (replacing) {
         const removeError = await removeLeader(supabase, group.id, replacing.id);
         if (removeError) {
-          const reloaded = await refresh(group.id, seq);
+          const reloaded = await refresh(group.id, seq, true);
           if (writeSeq.current !== seq) return;
           setMode({ kind: "leaders" });
           setQuery("");
@@ -336,7 +337,7 @@ export function GroupLeadersDialog({
           return;
         }
       }
-      await refresh(group.id, seq);
+      await refresh(group.id, seq, true);
       if (writeSeq.current !== seq) return;
       changeMode({ kind: "leaders" });
     } finally {
@@ -355,7 +356,7 @@ export function GroupLeadersDialog({
         if (writeSeq.current === seq) setError(removeError);
         return;
       }
-      await refresh(group.id, seq);
+      await refresh(group.id, seq, true);
     } finally {
       if (writeSeq.current === seq) setBusy(false);
     }
@@ -377,7 +378,7 @@ export function GroupLeadersDialog({
             onQueryChange={setQuery}
             onAdd={handleAdd}
             onRemove={handleRemove}
-            onRetryLoad={() => refresh(group.id, writeSeq.current)}
+            onRetryLoad={() => refresh(group.id, writeSeq.current, false)}
           />
         )}
       </DialogContent>

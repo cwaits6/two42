@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -57,8 +57,12 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
   const [form, setForm] = useState({ name: "", ownerEmail: "" });
   const [errors, setErrors] = useState<FieldErrors>({});
   const focusField = useFieldFocus();
+  // Bumped each time the dialog opens. An answer can arrive after the dialog
+  // was closed and opened again; it must not mark or close the new one.
+  const opening = useRef(0);
 
   function openDialog(open: boolean) {
+    if (open) opening.current += 1;
     setDialogOpen(open);
     setErrors({});
   }
@@ -80,6 +84,7 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
     }
 
     setCreating(true);
+    const sentFrom = opening.current;
     try {
       const res = await fetch("/api/platform/organizations", {
         method: "POST",
@@ -90,7 +95,7 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
         const data = await res.json().catch(() => null);
         const message = operatorMessage(res.status, data, "Couldn't add the organization. Try again.");
         // The route answers 409 only about the first admin's email.
-        if (res.status === 409) {
+        if (res.status === 409 && opening.current === sentFrom) {
           setErrors({ "org-owner-email": message });
           focusField("org-owner-email");
         }
@@ -99,8 +104,10 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
         return;
       }
       toast.success(`${name} added.`);
-      setDialogOpen(false);
-      setForm({ name: "", ownerEmail: "" });
+      if (opening.current === sentFrom) {
+        setDialogOpen(false);
+        setForm({ name: "", ownerEmail: "" });
+      }
       router.refresh();
     } catch (err) {
       console.error(err);

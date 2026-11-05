@@ -137,6 +137,40 @@ describe("Add organization dialog", () => {
     expect(toast.success).not.toHaveBeenCalled();
   });
 
+  it("leaves a reopened dialog alone when the answer to an earlier submit arrives", async () => {
+    let respond!: (response: Response) => void;
+    fetchSpy.mockReturnValue(new Promise<Response>((resolve) => (respond = resolve)));
+    await type("org-name", "Grace Chapel");
+    await type("org-owner-email", "admin@gracechapel.org");
+    await submit();
+    await click("Cancel");
+
+    await click("Add organization");
+    await type("org-name", "Hope Fellowship");
+    await act(async () => respond(Response.json({ id: "o" }, { status: 201 })));
+
+    expect(toast.success).toHaveBeenCalledWith("Grace Chapel added.");
+    expect(refresh).toHaveBeenCalled();
+    expect(field("org-name").value).toBe("Hope Fellowship");
+  });
+
+  it("does not mark a reopened dialog's email with an earlier submit's refusal", async () => {
+    const refusal = "That owner email already belongs to another organization.";
+    let respond!: (response: Response) => void;
+    fetchSpy.mockReturnValue(new Promise<Response>((resolve) => (respond = resolve)));
+    await type("org-name", "Grace Chapel");
+    await type("org-owner-email", "admin@gracechapel.org");
+    await submit();
+    await click("Cancel");
+
+    await click("Add organization");
+    await act(async () => respond(Response.json({ error: refusal }, { status: 409 })));
+
+    expect(toast.error).toHaveBeenCalledWith(refusal);
+    expect(document.getElementById("org-owner-email-error")).toBeNull();
+    expect(field("org-owner-email").hasAttribute("aria-invalid")).toBe(false);
+  });
+
   it("returns focus to the first invalid field on a second failed submit", async () => {
     await submit();
     field("org-name").blur();

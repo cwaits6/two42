@@ -87,13 +87,13 @@ async function click(label: string) {
   await act(async () => button.click());
 }
 
-function render(group = { id: "g", name: "Tuesday Group" }) {
+function render(group = { id: "g", name: "Tuesday Group" }, onChanged: () => void = () => {}) {
   return act(async () =>
     root.render(
       createElement(GroupLeadersDialog, {
         group,
         onClose: () => {},
-        onChanged: () => {},
+        onChanged,
       }),
     ),
   );
@@ -131,6 +131,18 @@ describe("GroupLeadersDialog after a saved write", () => {
 
     expect(container.textContent).toContain("Ada Lovelace");
     expect(container.textContent).not.toContain("Couldn't load");
+  });
+
+  it("does not report a change when Try again only repeats the read", async () => {
+    client = stubClient([failed, failed, { data: [{ profile_id: "a", role: "leader" }], error: null }]);
+    const onChanged = vi.fn();
+    await render(undefined, onChanged);
+
+    await tryAgain();
+    await tryAgain();
+
+    expect(container.textContent).toContain("Ada Lovelace");
+    expect(onChanged).not.toHaveBeenCalled();
   });
 
   it("keeps the other group's leaders when a retried read finishes after it moves on", async () => {
