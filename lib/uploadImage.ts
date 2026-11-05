@@ -179,9 +179,8 @@ export async function mintSignedUrl(
   if (!url) return null;
   const parsed = parseStoragePublicUrl(url);
   if (!parsed) {
-    // Strip the query/fragment before logging: an accidentally re-signed
-    // *signed* URL is rejected here, and its query string carries a bearer
-    // token that must never reach logs.
+    // A signed URL's query string carries a bearer token, so the address is
+    // not logged.
     logWarn("mintSignedUrl: unparseable storage URL");
     return null;
   }

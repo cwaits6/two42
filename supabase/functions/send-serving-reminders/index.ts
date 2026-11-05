@@ -542,9 +542,6 @@ async function runMonthly(
         recipient_count: teamSent,
       });
       if (broadcastError) {
-        // Full error object, not .message — serving_broadcasts has composite
-        // (team_id, org_id) FKs, whose violations put the offending key values
-        // in `details`/`hint` while `message` stays generic.
         logError("serving_broadcasts insert failed for team", broadcastError, {
           route: "send-serving-reminders",
           ids: { org: orgId, team: team_id },
