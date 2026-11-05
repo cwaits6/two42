@@ -2,7 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Profile } from "@/lib/types";
+import type { FamilyUnit, Profile } from "@/lib/types";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -74,7 +74,7 @@ afterEach(async () => {
 
 async function mount(
   overrides: Partial<Profile> = {},
-  props: { isAdmin?: boolean; editingOther?: boolean; onSaved?: () => void } = {},
+  props: { isAdmin?: boolean; editingOther?: boolean; family?: FamilyUnit; onSaved?: () => void } = {},
 ) {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -301,5 +301,37 @@ describe("ProfileForm inline errors", () => {
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({ birth_month: null, birth_day: null, birth_year: null }),
     );
+  });
+});
+
+describe("ProfileForm copy about the person", () => {
+  const household = { family_name: "Lovelace family", address_line1: "1 Main St" } as FamilyUnit;
+  const own = [
+    "My last name is different from my household's (Lovelace)",
+    "My address is different from my household's",
+    "Sharing what you do helps people in your groups find help from someone they know.",
+  ];
+
+  it("speaks to a person on their own profile", async () => {
+    await mount({}, { family: household });
+    for (const copy of own) expect(document.body.textContent).toContain(copy);
+  });
+
+  it("speaks about the person to a household member editing them", async () => {
+    await mount({}, { family: household, editingOther: true });
+    for (const copy of own) expect(document.body.textContent).not.toContain(copy);
+    expect(document.body.textContent).toContain("Last name is different from the household's (Lovelace)");
+    expect(document.body.textContent).toContain("Address is different from the household's");
+    expect(document.body.textContent).toContain(
+      "Sharing what they do helps people in their groups find help from someone they know.",
+    );
+  });
+
+  it("speaks about the person to a church admin", async () => {
+    await mount({}, { isAdmin: true });
+    expect(document.body.textContent).toContain(
+      "Sharing what they do helps people in their groups find help from someone they know.",
+    );
+    expect(document.body.textContent).not.toMatch(/\b(you|your|my)\b/i);
   });
 });
