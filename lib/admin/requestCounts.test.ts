@@ -3,7 +3,9 @@ import { requestsWaiting, totalWaiting } from "./requestsWaiting";
 
 const reads = vi.hoisted(() => ({
   counts: {} as Record<string, number>,
-  failing: null as string | null,
+  // What a failed HEAD count resolves to: with no body there is no code, and
+  // a 404 has no error either.
+  failing: null as { table: string; error: { message: string } | null; status: number } | null,
   filters: [] as [string, string, unknown][],
 }));
 
@@ -14,8 +16,10 @@ vi.mock("@/lib/supabase/server", () => ({
       select: (_columns: string, options?: { count?: string }) => ({
         eq: async (column: string, value: unknown) => {
           reads.filters.push([table, column, value]);
-          if (table === reads.failing) return { count: null, error: { code: "XX000", message: "row content" } };
-          return { count: options?.count === "exact" ? (reads.counts[table] ?? 0) : null, error: null };
+          if (table === reads.failing?.table) {
+            return { count: null, error: reads.failing.error, status: reads.failing.status };
+          }
+          return { count: options?.count === "exact" ? (reads.counts[table] ?? 0) : null, error: null, status: 200 };
         },
       }),
     }),
@@ -47,13 +51,21 @@ describe("getWaitingRequestCount", () => {
     expect(await getWaitingRequestCount()).toBe(0);
   });
 
-  it("gives no number, rather than a short one, when a kind can't be counted", async () => {
+  it.each([
+    ["the API is down", { message: "" }, 503],
+    ["the response carries no error and no count", null, 404],
+  ])("gives no number, rather than a short one, when %s for one kind", async (_case, error, status) => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     reads.counts = { access_requests: 2, group_requests: 1 };
-    reads.failing = "group_join_requests";
+    reads.failing = { table: "group_join_requests", error, status };
 
     expect(await getWaitingRequestCount()).toBeNull();
-    expect(logged).toHaveBeenCalledWith("Failed to count %s requests: code=%s", "join", "XX000");
+    expect(logged).toHaveBeenCalledExactlyOnceWith(
+      "Failed to count %s requests: code=%s status=%s",
+      "join",
+      undefined,
+      status,
+    );
   });
 });
 

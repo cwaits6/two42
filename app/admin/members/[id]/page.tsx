@@ -50,7 +50,10 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
   if (addressError) throw new Error(`Failed to load the member's email (${addressError.code})`);
   const profile = { ...row, email: address?.email ?? null };
   // An unknown count reads as one, the stricter of the two reasons the viewer's own role is locked.
-  if (admins.error) console.error("Failed to count church admins: code=%s", admins.error.code);
+  // A HEAD response has no body, so a failed count may carry no error and never a code.
+  if (admins.error || admins.count === null) {
+    console.error("Failed to count church admins: code=%s status=%s", admins.error?.code, admins.status);
+  }
   const adminCount = admins.count ?? 1;
 
   return (

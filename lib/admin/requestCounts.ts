@@ -16,15 +16,17 @@ const REQUEST_TABLES = {
 export async function getWaitingRequestCount(): Promise<number | null> {
   const supabase = await createClient();
   const count = async (kind: keyof typeof REQUEST_TABLES): Promise<number | null> => {
-    const { count, error } = await supabase
+    const { count, error, status } = await supabase
       .from(REQUEST_TABLES[kind])
       .select("id", { count: "exact", head: true })
       .eq("status", "pending");
-    if (error) {
-      console.error("Failed to count %s requests: code=%s", kind, error.code);
+    // A HEAD response has no body, so a failure carries no code and some carry
+    // no error at all: the missing count is the only sure sign of one.
+    if (error || count === null) {
+      console.error("Failed to count %s requests: code=%s status=%s", kind, error?.code, status);
       return null;
     }
-    return count ?? 0;
+    return count;
   };
   const [access, group, join] = await Promise.all([count("access"), count("group"), count("join")]);
   return totalWaiting({ access, group, join });
