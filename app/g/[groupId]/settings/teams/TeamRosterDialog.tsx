@@ -318,8 +318,8 @@ export function TeamRosterDialog({
                         }
                         className={
                           leaders.has(p.id)
-                            ? "text-brand-accent hover:text-muted-foreground"
-                            : "text-muted-foreground hover:text-brand-accent"
+                            ? "text-brand-accent-text hover:text-muted-foreground"
+                            : "text-muted-foreground hover:text-brand-accent-text"
                         }
                       >
                         <Star

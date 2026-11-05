@@ -34,6 +34,7 @@ const THEME = [
   "[--fc-page-bg-color:var(--card)]",
   "[--fc-neutral-bg-color:var(--muted)]",
   "[--fc-today-bg-color:color-mix(in_srgb,var(--color-brand-bg-light)_60%,transparent)]",
+  "[--fc-highlight-color:color-mix(in_srgb,var(--color-brand-accent)_30%,transparent)]",
   "[&_.fc]:font-sans",
   "[&_.fc-col-header-cell]:py-2",
   "[&_.fc-col-header-cell-cushion]:text-base [&_.fc-col-header-cell-cushion]:font-semibold [&_.fc-col-header-cell-cushion]:text-muted-foreground",
@@ -41,6 +42,9 @@ const THEME = [
   "[&_.fc-day-today_.fc-daygrid-day-number]:font-bold [&_.fc-day-today_.fc-daygrid-day-number]:text-brand-primary-text",
   "[&_.fc-day-other_.fc-daygrid-day-top]:opacity-100! [&_.fc-day-other_.fc-daygrid-day-number]:text-muted-foreground",
   "[&_.fc-daygrid-event]:cursor-pointer [&_.fc-daygrid-event]:rounded-md",
+  "[&_.fc-daygrid-event]:flex! [&_.fc-daygrid-event]:min-h-11 [&_.fc-daygrid-event]:items-center",
+  // Without a shrinkable main, the flex chip stops wrapping its text in a narrow cell.
+  "[&_.fc-daygrid-event_.fc-event-main]:min-w-0 [&_.fc-daygrid-event_.fc-event-main]:flex-1",
 ].join(" ");
 
 export default function EventCalendarView({

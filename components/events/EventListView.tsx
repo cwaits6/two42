@@ -105,7 +105,7 @@ export function EventListView({
                       <div className="flex flex-wrap items-center gap-2">
                         <Link
                           href={viewHref}
-                          className="font-display text-xl font-bold leading-tight text-foreground hover:text-brand-primary-text"
+                          className="inline-flex min-h-11 items-center font-display text-xl font-bold leading-tight text-foreground hover:text-brand-primary-text"
                         >
                           {event.title}
                         </Link>
@@ -132,7 +132,7 @@ export function EventListView({
                             href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex min-w-0 items-center gap-2 hover:text-brand-primary-text"
+                            className="flex min-h-11 min-w-0 items-center gap-2 hover:text-brand-primary-text"
                           >
                             <MapPin className="h-4 w-4 shrink-0 text-brand-primary-light" />
                             <span className="truncate">{event.location}</span>

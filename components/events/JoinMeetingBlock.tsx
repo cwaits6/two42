@@ -56,7 +56,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
         type="button"
         onClick={handleCopy}
         aria-label={`Copy ${label.toLowerCase()}`}
-        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-white/20"
+        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-primary-foreground/20"
         style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.22)" }}
       >
         {copied ? (
@@ -99,7 +99,7 @@ export function JoinMeetingBlock({
   );
 
   const outlineButtonClass =
-    "flex w-full items-center justify-center gap-2 mt-3 rounded-xl py-3 font-sans text-base font-semibold text-white transition-colors hover:bg-white/20";
+    "flex w-full items-center justify-center gap-2 mt-3 rounded-xl py-3 font-sans text-base font-semibold text-white transition-colors hover:bg-primary-foreground/20";
   const outlineButtonStyle = {
     background: "rgba(255,255,255,0.10)",
     border: "1px solid rgba(255,255,255,0.4)",
@@ -116,7 +116,7 @@ export function JoinMeetingBlock({
         style={{ background: "rgba(255,255,255,0.09)", border: "1px solid rgba(255,255,255,0.22)" }}
       >
         <div className={statusRowClass}>
-          <span aria-hidden="true" className="h-2 w-2 rounded-full bg-white/80" />
+          <span aria-hidden="true" className="h-2 w-2 rounded-full bg-primary-foreground/80" />
           <span className="text-white/90">This event has ended</span>
         </div>
         {recordingsHref && (
@@ -179,14 +179,14 @@ export function JoinMeetingBlock({
   return (
     <div
       className="rounded-[14px] p-4"
-      style={{ background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.22)" }}
+      style={{ background: "var(--primary-hover)", border: "1px solid rgba(255,255,255,0.22)" }}
     >
       <div className={statusRowClass}>
         <span
           className="inline-block h-[9px] w-[9px] rounded-full"
           style={{ background: "var(--color-brand-accent)" }}
         />
-        <span style={{ color: "var(--color-brand-accent)" }}>Live now</span>
+        <span style={{ color: "var(--primary-foreground)" }}>Live now</span>
       </div>
       {meetingUrl ? (
         <a
