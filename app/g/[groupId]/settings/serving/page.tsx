@@ -69,7 +69,7 @@ export default async function GroupServingSettingsPage({
         </Button>
       </section>
 
-      <ServingStats groupId={group.id} today={todayIn(zone)} teamsHref={teamsHref} />
+      <ServingStats groupId={group.id} today={todayIn(zone)} />
     </PageContainer>
   );
 }

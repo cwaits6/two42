@@ -88,6 +88,16 @@ describe("GivePage", () => {
     expect(await render()).not.toContain("Add fund");
   });
 
+  const ADD_FUND = 'href="/g/g1/give/new"';
+  const count = (html: string, needle: string) => html.split(needle).length - 1;
+
+  it("offers Add fund once, in the empty state, when there are no funds", async () => {
+    state.role = "leader";
+    const html = await render();
+    expect(count(html, ADD_FUND)).toBe(1);
+    expect(html.indexOf(ADD_FUND)).toBeGreaterThan(html.indexOf("No funds yet."));
+  });
+
   const RETIRED = {
     id: "f1",
     name: "Old roof",
@@ -107,6 +117,7 @@ describe("GivePage", () => {
     expect(html).toContain("Old roof");
     expect(html).toContain('href="/g/g1/give/f1/edit"');
     expect(html).not.toContain("No funds yet.");
+    expect(count(html, ADD_FUND)).toBe(1);
   });
 
   const LIVE = {
@@ -129,7 +140,7 @@ describe("GivePage", () => {
       state.failedRead = failedRead;
       const html = await render();
       expect(html).toContain("New roof");
-      expect(html).toContain("Add fund");
+      expect(count(html, ADD_FUND)).toBe(1);
       expect(html).toContain("load hidden funds.");
       expect(html).not.toContain("No funds yet.");
     }
@@ -141,6 +152,7 @@ describe("GivePage", () => {
     const html = await render();
     expect(html).toContain("load hidden funds.");
     expect(html).not.toContain("No funds yet.");
+    expect(count(html, ADD_FUND)).toBe(1);
   });
 
   const IN_REVIEW = { ...LIVE, id: "f3", name: "In review", needs_review: true };

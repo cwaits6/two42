@@ -34,6 +34,7 @@ vi.mock("@/lib/supabase/server", () => ({
 const { default: LessonsPage } = await import("./page");
 
 const BASE = "/g/g1/lectures";
+const count = (html: string, needle: string) => html.split(needle).length - 1;
 const lesson = (id: string, seriesId: string | null, summary: string | null) => ({
   id,
   title: `Lesson ${id}`,
@@ -60,10 +61,10 @@ beforeEach(() => {
 });
 
 describe("LessonsPage for a leader", () => {
-  it("offers Add lesson and Manage series in the header", async () => {
+  it("offers Add lesson and Manage series once each, in the header", async () => {
     const html = await render();
-    expect(html).toContain(`href="${BASE}/new"`);
-    expect(html).toContain(`href="${BASE}/series"`);
+    expect(count(html, `href="${BASE}/new"`)).toBe(1);
+    expect(count(html, `href="${BASE}/series"`)).toBe(1);
   });
 
   it("offers Edit on each lesson and series", async () => {
@@ -73,12 +74,12 @@ describe("LessonsPage for a leader", () => {
     expect(html).toContain(`href="${BASE}/series/s1/edit"`);
   });
 
-  it("offers Add lesson and Manage series when there are no lessons", async () => {
+  it("offers Add lesson once, in the empty state, when there are no lessons", async () => {
     state.lessons = [];
     const html = await render();
-    expect(html).toContain("No lessons yet.");
-    expect(html).toContain(`href="${BASE}/new"`);
-    expect(html).toContain(`href="${BASE}/series"`);
+    expect(count(html, `href="${BASE}/new"`)).toBe(1);
+    expect(html.indexOf(`href="${BASE}/new"`)).toBeGreaterThan(html.indexOf("No lessons yet."));
+    expect(count(html, `href="${BASE}/series"`)).toBe(1);
   });
 
   it("filters to the lessons that need a summary, counted in the tab", async () => {
