@@ -341,7 +341,7 @@ export function GroupLeadersDialog({
           setQuery("");
           setError(
             `${displayName(person)} is a leader now, but ${displayName(replacing)} is still one. ` +
-              (reloaded ? "Remove them below." : "Close this and open it again to remove them."),
+              (reloaded ? "Remove them below." : "Remove them from the list once it loads."),
           );
           return;
         }

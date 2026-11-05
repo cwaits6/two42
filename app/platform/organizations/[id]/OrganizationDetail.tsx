@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
+import { useFieldFocus } from "@/app/(auth)/_components/useFieldFocus";
 import { ErrorState } from "@/components/states/ErrorState";
 import {
   ACCENT_CONTRAST_MIN,
@@ -106,6 +107,7 @@ export function OrganizationDetail({
   emailDomain,
 }: OrganizationDetailProps) {
   const router = useRouter();
+  const focusField = useFieldFocus();
   const [branding, setBranding] = useState(org.branding);
   const [brandingError, setBrandingError] = useState<string | null>(null);
   const [capInput, setCapInput] = useState(
@@ -185,7 +187,7 @@ export function OrganizationDetail({
     const parsed = Number(capInput);
     if (capInput.trim() === "" || !Number.isInteger(parsed) || parsed < 0) {
       setCapError("Enter a whole number of emails per day (0 or more).");
-      document.getElementById("email-daily-cap")?.focus();
+      focusField("email-daily-cap");
       return;
     }
     setBusy("emailCap");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/states/EmptyState";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
+import { useFieldFocus } from "@/app/(auth)/_components/useFieldFocus";
 import {
   Dialog,
   DialogContent,
@@ -60,14 +61,7 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: "", ownerEmail: "" });
   const [errors, setErrors] = useState<FieldErrors>({});
-  // An object, so a second submit with the same first error still refocuses.
-  const [focusTarget, setFocusTarget] = useState<{ id: Field } | null>(null);
-
-  // Focus waits for the render that ties the message to the field, so a
-  // screen reader reads the message when focus lands.
-  useEffect(() => {
-    if (focusTarget) document.getElementById(focusTarget.id)?.focus();
-  }, [focusTarget]);
+  const focusField = useFieldFocus();
 
   function openDialog(open: boolean) {
     setDialogOpen(open);
@@ -86,7 +80,7 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
     setErrors(found);
     const first = (Object.keys(found) as Field[])[0];
     if (first) {
-      setFocusTarget({ id: first });
+      focusField(first);
       return;
     }
 
@@ -99,7 +93,14 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        toast.error(operatorMessage(res.status, data, "Couldn't add the organization. Try again."));
+        const message = operatorMessage(res.status, data, "Couldn't add the organization. Try again.");
+        // The route answers 409 only about the first admin's email.
+        if (res.status === 409) {
+          setErrors({ "org-owner-email": message });
+          focusField("org-owner-email");
+        } else {
+          toast.error(message);
+        }
         return;
       }
       toast.success(`${name} added.`);

@@ -19,7 +19,7 @@ const saved: Result = { data: [{ id: "row" }], error: null };
  * Membership reads and writes are each answered in order; profile reads
  * always succeed, and so does a write with no queued answer.
  */
-function stubClient(memberReads: Result[], writes: (Result | Promise<Result>)[] = []) {
+function stubClient(memberReads: (Result | Promise<Result>)[], writes: (Result | Promise<Result>)[] = []) {
   const from = (table: string) => {
     let writing = false;
     const chain = {
@@ -75,6 +75,12 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
+async function tryAgain() {
+  const retry = [...container.querySelectorAll("button")].find((b) => b.textContent === "Try again");
+  if (!retry) throw new Error('No "Try again" button');
+  await act(async () => retry.click());
+}
+
 async function click(label: string) {
   const button = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
   if (!button) throw new Error(`No button labelled "${label}"`);
@@ -121,11 +127,26 @@ describe("GroupLeadersDialog after a saved write", () => {
     await render();
     expect(container.textContent).toContain("Couldn't load this group's leaders.");
 
-    const retry = [...container.querySelectorAll("button")].find((b) => b.textContent === "Try again");
-    await act(async () => retry?.click());
+    await tryAgain();
 
     expect(container.textContent).toContain("Ada Lovelace");
     expect(container.textContent).not.toContain("Couldn't load");
+  });
+
+  it("keeps the other group's leaders when a retried read finishes after it moves on", async () => {
+    let finishRetry: (result: Result) => void = () => {};
+    const retried = new Promise<Result>((resolve) => {
+      finishRetry = resolve;
+    });
+    client = stubClient([failed, retried, { data: [{ profile_id: "b", role: "leader" }], error: null }]);
+    await render();
+
+    await tryAgain();
+    await render({ id: "h", name: "Thursday Group" });
+    await act(async () => finishRetry({ data: [{ profile_id: "a", role: "leader" }], error: null }));
+
+    expect(container.textContent).toContain("Ben Okafor");
+    expect(container.textContent).not.toContain("Ada Lovelace");
   });
 
   it("shows the new leaders when the reload succeeds", async () => {
@@ -177,18 +198,29 @@ describe("GroupLeadersDialog when a replace saves the new leader but not the rem
     expect(container.querySelector('button[aria-label="Remove Ben Okafor as leader"]')).not.toBeNull();
   });
 
-  it("says both are leaders and asks to reopen when the reload fails", async () => {
-    client = stubClient([before, failed], [saved, removalFailed]);
+  it("says both are leaders in words that stay true once a failed reload is retried", async () => {
+    const after: Result = {
+      data: [
+        { profile_id: "a", role: "leader" },
+        { profile_id: "b", role: "leader" },
+      ],
+      error: null,
+    };
+    const message =
+      "Ben Okafor is a leader now, but Ada Lovelace is still one. Remove them from the list once it loads.";
+    client = stubClient([before, failed, after], [saved, removalFailed]);
     await render();
 
     await replaceAdaWithBen();
 
-    expect(container.textContent).toContain(
-      "Ben Okafor is a leader now, but Ada Lovelace is still one. " +
-        "Close this and open it again to remove them.",
-    );
+    expect(container.textContent).toContain(message);
     expect(container.querySelector('button[aria-label="Remove Ada Lovelace as leader"]')).toBeNull();
     expect(container.textContent).not.toContain("Remove them below.");
+
+    await tryAgain();
+
+    expect(container.textContent).toContain(message);
+    expect(container.querySelector('button[aria-label="Remove Ada Lovelace as leader"]')).not.toBeNull();
   });
 });
 
