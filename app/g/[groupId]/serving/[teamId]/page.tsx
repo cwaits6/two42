@@ -251,7 +251,11 @@ export default async function ServingSchedulePage({
   // never signed in (a pending profile) is still found. org_id comes from
   // the caller's own RLS-scoped profile read above.
   const spouseRow = await findSpouse(await createServiceClient(), profile, profile.org_id, teamId);
-  const spouse = spouseRow ? { id: spouseRow.id, name: spouseFirstName(spouseRow) } : null;
+  // Without the address: a spouse with no name on file must not show as
+  // their email, which they may hide.
+  const spouse = spouseRow
+    ? { id: spouseRow.id, name: spouseFirstName({ ...spouseRow, email: null }) }
+    : null;
 
   const teamSettings = canManageRoster && (
     <ServingSettingsDialog
