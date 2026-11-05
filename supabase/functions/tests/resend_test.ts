@@ -24,6 +24,12 @@ Deno.test("an accepted send is sent", async () => {
   assertEquals(calls[0].init.body, JSON.stringify(SEND.payload));
 });
 
+Deno.test("a send can time out", async () => {
+  const { fetchFn, calls } = answering(200);
+  await sendThroughResend(SEND, fetchFn);
+  assertEquals(calls[0].init.signal instanceof AbortSignal, true);
+});
+
 Deno.test("no key means no header", async () => {
   const { fetchFn, calls } = answering(200);
   await sendThroughResend(SEND, fetchFn);

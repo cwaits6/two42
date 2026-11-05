@@ -4,7 +4,7 @@
 // different body is a 409 "invalid_idempotent_request", which still means
 // the first send went out. A 409 "concurrent_idempotent_requests" means the
 // first is still in flight. Any other refusal, and a request that never
-// left, is retried by a later firing.
+// left or timed out, is retried by a later firing.
 //
 // Deliberately free of any supabase-js import, and given its fetch, so it
 // can be unit tested offline without a network.
@@ -12,6 +12,9 @@
 import type { SendOutcome } from "./serving-hourly.ts";
 
 const RESEND_SEND_URL = "https://api.resend.com/emails";
+// Well under the hourly firing's budget, which is only checked between sends,
+// so one stalled request can't outlast the firing and leave its rows claimed.
+const RESEND_TIMEOUT_MS = 15_000;
 
 export interface ResendSend {
   apiKey: string;
@@ -42,6 +45,7 @@ export async function sendThroughResend(
   try {
     const res = await fetchFn(RESEND_SEND_URL, {
       method: "POST",
+      signal: AbortSignal.timeout(RESEND_TIMEOUT_MS),
       headers: {
         Authorization: `Bearer ${send.apiKey}`,
         "Content-Type": "application/json",
