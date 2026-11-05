@@ -86,6 +86,8 @@ describe("getGroupSettings", () => {
         calendar_meeting_details: false,
         calendar_event_notes: false,
         calendar_event_location: true,
+        event_reminders_enabled: false,
+        event_reminder_default_days: 7,
       },
       error: null,
     });
@@ -99,6 +101,8 @@ describe("getGroupSettings", () => {
       calendar_meeting_details: false,
       calendar_event_notes: false,
       calendar_event_location: true,
+      event_reminders_enabled: false,
+      event_reminder_default_days: 7,
     });
   });
 

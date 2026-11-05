@@ -34,6 +34,8 @@ export interface Profile {
   hide_email: boolean;
   relationship: FamilyMemberRelationship;
   email_announcements: boolean;
+  /** Event reminder emails; only the person changes it. */
+  email_event_reminders: boolean;
   setup_completed: boolean;
   approved_at: string | null;
   approved_by: string | null;
@@ -157,6 +159,8 @@ export interface Event {
   calendar_meeting_details: boolean | null;
   calendar_event_notes: boolean | null;
   calendar_event_location: boolean | null;
+  /** Days before the start that the reminder goes out; 0 sends none. A moved date follows its series. */
+  reminder_days_before: number;
   series_occurrence_date: string | null; // the original occurrence ISO date this row replaces
   is_cancelled: boolean;                 // an exception row that removes its date instead of replacing it
   // Meeting / video call (set on the series anchor; exceptions inherit)
@@ -477,6 +481,10 @@ export interface GroupSettings {
   calendar_event_notes: boolean;
   /** Calendar subscriptions carry event locations; off, they link to the event page. */
   calendar_event_location: boolean;
+  /** Off sends no event reminders for the group; each event keeps its choice. */
+  event_reminders_enabled: boolean;
+  /** What Add event starts on: 1, 2 or 7 days before. */
+  event_reminder_default_days: number;
   updated_by: string | null;
   updated_at: string;
 }

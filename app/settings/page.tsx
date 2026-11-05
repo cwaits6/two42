@@ -23,7 +23,7 @@ export default async function SettingsPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, email_announcements")
+    .select("role, email_announcements, email_event_reminders")
     .eq("id", user.id)
     .single();
 
@@ -40,7 +40,10 @@ export default async function SettingsPage() {
         <SignInSecurityCard currentEmail={user.email ?? ""} />
         <NotificationsCard
           userId={user.id}
-          initialEmailAnnouncements={profile.email_announcements ?? true}
+          initial={{
+            email_announcements: profile.email_announcements ?? true,
+            email_event_reminders: profile.email_event_reminders ?? true,
+          }}
         />
         <FeedbackCard />
         <YourDataCard />

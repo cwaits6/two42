@@ -142,5 +142,54 @@ select is(
   ),
   'a firing missed after the first run is still reported');
 
+-- The event job fires at 15:00, 16:00 and 17:00. The two later hours were
+-- added to a job that already ran, so each is expected only from the first
+-- time the job ran at that hour.
+do $$
+begin
+  perform pg_temp.ran('send-event-reminders-daily', '2025-03-04T15:00:00Z');
+  perform pg_temp.answered('2025-03-04T15:00:00Z', 200);
+end $$;
+
+select is(pg_temp.problems('2025-03-04T17:30:00Z'), '[]',
+  'an hour a job has never run at is not reported as missing');
+select is(
+  private.scheduled_jobs_check('2025-03-04T17:30:00Z') -> 'jobs',
+  '{"15:00 send-event-reminders-daily": "succeeded"}'::jsonb,
+  'only the hour it has run at is checked');
+
+do $$
+declare h int;
+begin
+  for h in 12..17 loop
+    perform pg_temp.ran('send-serving-reminders-hourly', make_timestamptz(2025, 3, 6, h, 0, 0, 'UTC'));
+    perform pg_temp.answered(make_timestamptz(2025, 3, 6, h, 0, 0, 'UTC'), 200);
+    perform pg_temp.ran('send-serving-reminders-hourly', make_timestamptz(2025, 3, 7, h, 0, 0, 'UTC'));
+    perform pg_temp.answered(make_timestamptz(2025, 3, 7, h, 0, 0, 'UTC'), 200);
+  end loop;
+  for h in 15..17 loop
+    perform pg_temp.ran('send-event-reminders-daily', make_timestamptz(2025, 3, 6, h, 0, 0, 'UTC'));
+    perform pg_temp.answered(make_timestamptz(2025, 3, 6, h, 0, 0, 'UTC'), 200);
+  end loop;
+  -- The next day its 16:00 firing never ran.
+  perform pg_temp.ran('send-event-reminders-daily', '2025-03-07T15:00:00Z');
+  perform pg_temp.answered('2025-03-07T15:00:00Z', 200);
+  perform pg_temp.ran('send-event-reminders-daily', '2025-03-07T17:00:00Z');
+  perform pg_temp.answered('2025-03-07T17:00:00Z', 200);
+end $$;
+
+select is(pg_temp.problems('2025-03-06T17:30:00Z'), '[]',
+  'the event job''s three firings, each answered 200, report no problem');
+select is(
+  private.scheduled_jobs_check('2025-03-06T17:30:00Z') -> 'responses' -> '16:00',
+  '{"200": 2}'::jsonb, 'the 16:00 firing expects the event job''s response beside the hourly one');
+select is(
+  (select jsonb_agg(p order by p) from jsonb_array_elements_text(private.scheduled_jobs_check('2025-03-07T17:30:00Z') -> 'problems') p),
+  jsonb_build_array(
+    'expected 2 response(s) at 16:00, found 1',
+    'send-event-reminders-daily at 16:00: job run is missing'
+  ),
+  'a 16:00 firing missed after the job first ran at that hour is reported');
+
 select * from finish();
 rollback;

@@ -24,7 +24,8 @@ turns this document's rules into assertions:
   `// org-anchor: <why>` comment. Every anchor chain in the tables below
   carries that marker in-file; the script has no allowlist.
 - The email fan-out chains (feedback admins, serving broadcast, leader cancel
-  notices) are Tier A: they must be scoped and may **not** use the marker —
+  notices, and the event reminder job's read of `events` in
+  `supabase/functions/_shared/event-reminders.ts`) are Tier A: they must be scoped and may **not** use the marker —
   an `// org-anchor:` on a fan-out is itself a failure. These surfaces push
   one org's data to third parties and email cannot be recalled.
 - Exported `lib/` helpers taking a `SupabaseClient` parameter must scope the
@@ -237,6 +238,40 @@ reason as the claim; every row it reads and deletes is filtered on
 `_org_id`, which the job takes from `listActiveOrgs()`. The same suite pins
 the grant, the bound and that another church's passes stay.
 
+## Event reminder claim — service-key only, SECURITY INVOKER
+
+`event_reminder_claim(_org_id, _event_id, _occurrence_date, _reply_event_id)`
+(`20261117000000_event_reminder_choices.sql`) is what the
+`send-event-reminders` job calls, once per date due, before it mails anyone.
+It starts the pass for that date when it has none, fixing who the reminder
+goes to, then claims every unsent reminder in the pass atomically and returns
+the people to mail. **It is the recipient query of an email fan-out**, and it
+lives in SQL, where the Tier A guard cannot see it (the guard pins the job's
+`events` read instead), so its body is the boundary: the event's own
+`events.org_id` is compared with `_org_id` and a mismatch raises `ER001`
+before any write; `_reply_event_id`, the row of a date edited on its own,
+must be a date of that event in the same org or the call raises `ER001`; and
+every table it joins (`profiles`, `rsvps`, `group_members`) is filtered on
+`_org_id`. Recipients: an answer of Yes or Maybe on the event, overridden per
+person by their answer on the edited date's own row; a current member of the
+event's group; not pending; with an email; and `profiles.email_event_reminders`
+on. EXECUTE: `service_role` only. `SECURITY INVOKER`, for the same reason as
+the serving claim. The tables it writes, `event_reminder_passes` and
+`event_reminder_sends`, carry the restrictive isolation floor and no
+permissive policy or client grant. All of it is pinned by
+`supabase/tests/event_reminder_suite.sql`, with a second church's event and
+people in the fixture.
+
+`event_reminder_passes_prune(_org_id, _before, _limit)` (same migration) is
+the nightly job's bounded delete for those passes, a copy of
+`serving_reminder_passes_prune()` on `occurrence_date`, with the same grant
+and the same `_org_id` filter on every row it reads and deletes.
+
+`private.event_reminder_cutover(_at)` (same migration) runs once, in the
+migration, as its owner: it writes an empty pass for every event row the last
+firing without a sent record had already mailed, each stamped with the row's
+own `org_id`. No client or job can call it.
+
 ## Person deletion RPC — a definer-function bypass surface
 
 `delete_person(_person_id, _org_id)`
@@ -244,7 +279,7 @@ the grant, the bound and that another church's passes stay.
 person in one transaction: refusing a platform operator and the last church
 admin, serving dates, sign-up records, household entries, and the
 `auth.users` row, which cascades to the profile, through it to the person's
-`serving_reminder_sends` rows, and to the fund
+`serving_reminder_sends` and `event_reminder_sends` rows, and to the fund
 rules below (`20261115000000_fund_recipients_in_group.sql`). EXECUTE: `service_role` only,
 reached from `deletePerson()` in `lib/account/deletion.ts`.
 
@@ -789,15 +824,37 @@ it — but that is the operator UI reporting and editing the flag, not the
 flag enforcing anything (see
 [`tenancy-model.md`](tenancy-model.md), Known limits).
 
-Both reminder functions iterate org → group → team. `send-event-reminders` lists the
-org's groups through `listGroups()` (`_shared/groups.ts`), reads each
-group's events on `org_id` + `group_id`, and resolves recipients through
+`send-event-reminders` runs in the mode its cron body names
+(`{"mode":"dates"}`, `_shared/event-reminders.ts`). Per church from
+`listActiveOrgs()`, it makes three reads of `events` (repeating events,
+rows starting within a week, and dates edited or deleted on their own), a
+fourth by `id` for the series of a date it read whose series row starts
+later than that week, and one of `group_settings` (the groups that turned reminders off), each on
+`org_id`, bound to `org.id` from the `forEachOrg()` callback; works out the
+dates due in pure code (`_shared/event-reminder-due.ts`,
+`_shared/event-dates.ts`); and calls `event_reminder_claim()` once per date
+with `_org_id` bound to the same `org.id`. Every send is claimed in that
+call before Resend is called, reserves one place against the church's daily
+email cap just before it is mailed, carries an `Idempotency-Key` built from
+the record's key, and is settled on `event_reminder_sends` with `org_id`
+(again `org.id`), `event_id`, `occurrence_date` and `profile_id`. A firing
+stops starting sends at a time budget and releases what it claimed; the
+16:00 and 17:00 firings finish it. `tests/event-reminders_test.ts` asserts
+the org on every chain and call against a recording fake, and
+`tests/event-reminder-due_test.ts` the due rules on both sides of each
+bound and across both clock changes.
+
+With no body, or a body that names no mode, the function runs as it did
+before the sent record: it
+lists the org's groups through `listGroups()` (`_shared/groups.ts`), reads
+each group's events on `org_id` + `group_id`, and resolves recipients through
 `resolveEventReminderRecipients()` (`_shared/event-recipients.ts`): RSVPs
 ∩ current `group_members` of the event's group → non-pending profiles with
-an email, so an RSVP from someone who has since left the group, or who was
-moved back to pending, is dropped. A failing
-group is recorded in `failedItems[]` keyed by `group_id` and the org's
-other groups still run. `send-serving-reminders` keeps its team loop,
+an email. That mode exists only for a function deployed ahead of the
+migration that schedules the dates mode, and goes once a release has run on
+it. A body that names any other mode, or does not parse, is refused
+with 400 and nothing is read or sent (`reminderMode()`). A failing group is recorded in `failedItems[]` keyed by `group_id` and
+the org's other groups still run. `send-serving-reminders` keeps its team loop,
 reads `teams.group_id` with the team name, and resolves the serving link
 mode per group through `resolveGroupLinkMode()` (`group_settings`, on
 `org_id` + `group_id`, memoised per org run); every `serving_*` query is on
@@ -852,9 +909,9 @@ outside its scan set entirely, so these calls are covered by review and by
 
 | File | Why service-role is used | Historical tenancy risk | Mitigation |
 |------|--------------------------|-------------------------|------------|
-| `supabase/functions/send-event-reminders/index.ts` | Cron job; reads events/RSVPs and emails attendees with no user session | Reminder fan-out iterates all rows across orgs | Refuses any caller but a service key. **Implemented (Phase 3, #212):** iterates active orgs via `_shared/orgs.ts`, every query filtered on `org_id`, per-org failures isolated so one org cannot suppress another's send. **Group scope:** org → group iteration, events on `group_id`, recipients gated on current group membership, per-group failures in `failedItems[]`. **Branding (CWA-56, #322):** `organizations.branding` rides along on the already-org-anchored `listActiveOrgs()` select — no new service-role call site, no new unscoped query — and is validated by `_shared/branding.ts` (a mirror of `lib/branding.ts` + `lib/email/identity.ts`) before reaching any CSS or RFC 5322 sink. **Link origin:** every link is built on the one canonical host (the `SITE_URL` function secret) — no query. **Time zone:** `organizations.timezone` rides along on the same `listActiveOrgs()` select and formats the reminder's event time |
+| `supabase/functions/send-event-reminders/index.ts` | Cron job; reads events and sends reminders with no user session | Reminder fan-out iterates all rows across orgs | Refuses any caller but a service key. **Implemented (Phase 3, #212):** iterates active orgs via `_shared/orgs.ts`, every query filtered on `org_id`, per-org failures isolated so one org cannot suppress another's send. **Dates mode:** events read on `org_id`, the dates due worked out in pure code, and each date's recipients chosen and claimed in `event_reminder_claim()` with `_org_id` from the same iteration; per-event failures in `failedItems[]`. **Deploy-window mode** (a body with no mode): org → group iteration, events on `group_id`, recipients gated on current group membership, per-group failures in `failedItems[]`. **Branding (CWA-56, #322):** `organizations.branding` rides along on the already-org-anchored `listActiveOrgs()` select — no new service-role call site, no new unscoped query — and is validated by `_shared/branding.ts` (a mirror of `lib/branding.ts` + `lib/email/identity.ts`) before reaching any CSS or RFC 5322 sink. **Link origin:** every link is built on the one canonical host (the `SITE_URL` function secret) — no query. **Time zone:** `organizations.timezone` rides along on the same `listActiveOrgs()` select and formats the reminder's event time |
 | `supabase/functions/send-serving-reminders/index.ts` | Cron job; reads serving signups and emails assignees with no user session | Same as `send-event-reminders` | Refuses any caller but a service key. **Implemented (Phase 3, #212):** same per-org iteration and `org_id` filters; `resolveCanSign` org-scoped; `serving_broadcasts` audit rows stamped with the processed row's org, not a constant. **Branding (CWA-56, #322):** same `listActiveOrgs()` ride-along, validated by `_shared/branding.ts`. **Link origin:** the same canonical `SITE_URL`, threaded into every cancel/signup/team-page link. **Per-team isolation (CWA-50, #316):** a failing team is recorded in the run summary's `failedItems[]` keyed by `team_id` — ids, never org-defined team names, in operator diagnostics. **Group scope:** the link mode is per group (`group_settings` through `_shared/groups.ts`), every `serving_*` query is on `team_id`, and links open `/g/<group_id>/serving/<team_id>` |
-| `supabase/functions/clean-up-expired-data/index.ts` | Cron job; deletes expired requests, invites, feedback, serving reminder passes older than 35 days (through `serving_reminder_passes_prune()`, at most 500 per call, their sends through the foreign key) and, for a church that opted in, prayer requests, with no user session | A delete missing its filter removes another church's data for good | Refuses any caller but a service key. Iterates active orgs, one org-filtered delete per rule, failures isolated per step and per org. The rules and their boundaries are unit-tested in `tests/retention_test.ts` and `tests/cleanup_test.ts` |
+| `supabase/functions/clean-up-expired-data/index.ts` | Cron job; deletes expired requests, invites, feedback, serving and event reminder passes older than 35 days (through `serving_reminder_passes_prune()` and `event_reminder_passes_prune()`, at most 500 per call, their sends through the foreign key) and, for a church that opted in, prayer requests, with no user session | A delete missing its filter removes another church's data for good | Refuses any caller but a service key. Iterates active orgs, one org-filtered delete per rule, failures isolated per step and per org. The rules and their boundaries are unit-tested in `tests/retention_test.ts` and `tests/cleanup_test.ts` |
 
 All three check their own caller first, because each acts unattended: the
 reminder jobs send email that cannot be recalled, and the cleanup job deletes

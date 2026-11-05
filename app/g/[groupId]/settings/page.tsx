@@ -17,7 +17,7 @@ const TILES: { href: string; label: string; description: string }[] = [
   {
     href: "/settings/details",
     label: "Group details",
-    description: "Name, description, color, weekly calls and calendar details.",
+    description: "Name, description, color, weekly calls, calendar details and event reminders.",
   },
   {
     href: PRIVACY_HREF,

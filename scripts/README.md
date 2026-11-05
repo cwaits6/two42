@@ -5,9 +5,9 @@
 Run by `.github/workflows/scheduled-jobs-check.yml` every six hours, at 03:30,
 09:30, 15:30 and 21:30 UTC. Each run covers every firing in the six hours
 before it: the hourly `send-serving-reminders-hourly` job, the nightly
-`clean-up-expired-data-nightly` job at 09:00 UTC, the 15:00 UTC
-`send-event-reminders-daily` job and, on the 1st, the monthly serving
-broadcast. The workflow fails, and GitHub emails the maintainer, if a job
+`clean-up-expired-data-nightly` job at 09:00 UTC, the
+`send-event-reminders-daily` job at 15:00, 16:00 and 17:00 UTC and, on the
+1st, the monthly serving broadcast. The workflow fails, and GitHub emails the maintainer, if a job
 didn't run, a response wasn't a 200, or a firing's responses are missing. A 401
 means the vault's `cron_service_role_key` matches none of the function's keys.
 
@@ -88,7 +88,7 @@ binding in some files and an authenticated one in others.
 
 | Tier | Applies to | Escape hatch |
 |------|------------|--------------|
-| A | The email fan-out chains (feedback admins, serving broadcast, leader cancel notices), pinned by file + table in `FANOUTS` | **None** — see below |
+| A | The email fan-out chains (feedback admins, serving broadcast, leader cancel notices, the event reminder job's event read), pinned by file + table in `FANOUTS` | **None** — see below |
 | B | Every other chain rooted at a `createServiceClient()` binding | `// org-anchor: <reason>` |
 | C | Chains rooted at a `SupabaseClient`-typed parameter of an exported `lib/` function | None for `.from()` chains; an `.rpc()` call that *is* the org resolver may carry `// org-anchor: <reason>` |
 | edge | Every chain in `supabase/functions/` (entry points and `_shared/`), whatever its root | `// org-anchor: <reason>`; the `organizations` tenant root is exempt |

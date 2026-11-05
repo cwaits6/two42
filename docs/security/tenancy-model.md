@@ -419,6 +419,24 @@ with them. Nothing else holds a person's reminder
 history. `serving_reminder_record_suite.sql` pins the grants, the claim and
 the cascade.
 
+### Event reminder record
+
+`event_reminder_passes` and `event_reminder_sends`
+(`20261117000000_event_reminder_choices.sql`) record which date of which
+event had its reminder handled and which person's reminder was claimed and
+sent. They are built like the serving pair above: `org_id` with the
+fail-closed default, the restrictive isolation floor, composite foreign keys
+(to `events`, to the pass, and to `profiles`, both cascading) and **no
+permissive policy or client grant**. Only the service key reads or writes
+them, through `event_reminder_claim()` and the job's settle updates, every
+chain carrying the church's id. A pass is keyed by the event (the series, for
+any date of a repeating event) and the date's calendar day in the church's
+zone. The nightly `clean-up-expired-data` job deletes a church's passes with
+an `occurrence_date` older than 35 days through
+`event_reminder_passes_prune()`, at most 500 per call, and the sends go with
+them. `event_reminder_suite.sql` pins the grants, the claim, the cascades and
+the cut-over.
+
 ### Group creation
 
 Who may start a group is an org setting read by RLS and by a definer

@@ -18,6 +18,17 @@ vi.mock("@/components/GoogleMapsScript", () => ({ GoogleMapsScript: () => null }
 vi.mock("@/components/events/LocationInput", () => ({
   LocationInput: ({ id, name }: { id: string; name: string }) => createElement("input", { id, name }),
 }));
+// The real field is a listbox jsdom cannot open; this stands in for a choice.
+vi.mock("@/components/events/ReminderField", () => ({
+  ReminderField: ({ value, onChange, groupOff }: { value: number; onChange: (days: number) => void; groupOff: boolean }) =>
+    createElement("button", {
+      type: "button",
+      id: "reminder",
+      "data-value": value,
+      "data-group-off": groupOff,
+      onClick: () => onChange(0),
+    }),
+}));
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
     auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) },
@@ -43,7 +54,7 @@ afterEach(() => {
   }
 });
 
-async function mount() {
+async function mount(groupReminders = { enabled: true, defaultDays: 1 }) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -57,6 +68,7 @@ async function mount() {
         calendarId: "c1",
         timeZone: "America/Chicago",
         groupSharing: null,
+        groupReminders,
       })
     )
   );
@@ -70,7 +82,8 @@ async function mount() {
     act(async () =>
       container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
     );
-  return { input, type, submit };
+  const reminder = container.querySelector<HTMLButtonElement>("#reminder")!;
+  return { input, type, submit, reminder };
 }
 
 describe("NewEventForm", () => {
@@ -81,6 +94,24 @@ describe("NewEventForm", () => {
     await submit();
     expect(insert).toHaveBeenCalledOnce();
     expect(push).toHaveBeenCalledWith("/g/g1/calendar/e1");
+  });
+
+  it("saves the group's default reminder when it is not changed", async () => {
+    insert.mockResolvedValue({ data: { id: "e1" }, error: null });
+    const { type, submit, reminder } = await mount({ enabled: false, defaultDays: 7 });
+    expect(reminder.dataset.groupOff).toBe("true");
+    await type("title", "Supper");
+    await submit();
+    expect(insert.mock.calls[0][0]).toMatchObject({ reminder_days_before: 7 });
+  });
+
+  it("saves the reminder the leader chose", async () => {
+    insert.mockResolvedValue({ data: { id: "e1" }, error: null });
+    const { type, submit, reminder } = await mount();
+    await act(async () => reminder.click());
+    await type("title", "Supper");
+    await submit();
+    expect(insert.mock.calls[0][0]).toMatchObject({ reminder_days_before: 0 });
   });
 
   it("stays on the form and says so when the insert fails", async () => {

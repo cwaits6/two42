@@ -83,6 +83,10 @@ function fastForwardIndex(
  *
  * Pass `now` to fast-forward past already-elapsed occurrences so the
  * maxCount budget applies to visible/upcoming instances, not past ones.
+ *
+ * The reminder job steps dates with its own copy of these rules,
+ * supabase/functions/_shared/event-dates.ts; a change here needs the same
+ * change there, and recurrence.test.ts fails when they disagree.
  */
 export function expandOccurrences(
   event: Event & { calendar?: EventCalendar | null },

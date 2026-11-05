@@ -215,16 +215,80 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
-                },"events": {
+                },"event_reminder_passes": {
                   Row: {
-                    "calendar_event_location": boolean | null,"calendar_event_notes": boolean | null,"calendar_id": string | null,"calendar_meeting_details": boolean | null,"created_at": string,"created_by": string | null,"description": string | null,"end_time": string | null,"group_id": string,"id": string,"is_cancelled": boolean,"is_rsvp_enabled": boolean,"location": string | null,"meeting_id": string | null,"meeting_lead_minutes": number,"meeting_passcode": string | null,"meeting_show_on_dashboard": boolean,"meeting_url": string | null,"org_id": string,"recurrence_count": number | null,"recurrence_end_mode": string | null,"recurrence_frequency": string | null,"recurrence_interval": number,"recurrence_until": string | null,"series_id": string | null,"series_occurrence_date": string | null,"start_time": string,"title": string
+                    "event_id": string,"occurrence_date": string,"org_id": string,"started_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "calendar_event_location"?: boolean | null,"calendar_event_notes"?: boolean | null,"calendar_id"?: string | null,"calendar_meeting_details"?: boolean | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"end_time"?: string | null,"group_id": string,"id"?: string,"is_cancelled"?: boolean,"is_rsvp_enabled"?: boolean,"location"?: string | null,"meeting_id"?: string | null,"meeting_lead_minutes"?: number,"meeting_passcode"?: string | null,"meeting_show_on_dashboard"?: boolean,"meeting_url"?: string | null,"org_id"?: string,"recurrence_count"?: number | null,"recurrence_end_mode"?: string | null,"recurrence_frequency"?: string | null,"recurrence_interval"?: number,"recurrence_until"?: string | null,"series_id"?: string | null,"series_occurrence_date"?: string | null,"start_time": string,"title": string
+                    "event_id": string,"occurrence_date": string,"org_id"?: string,"started_at"?: string
                   }
                   Update: {
-                    "calendar_event_location"?: boolean | null,"calendar_event_notes"?: boolean | null,"calendar_id"?: string | null,"calendar_meeting_details"?: boolean | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"end_time"?: string | null,"group_id"?: string,"id"?: string,"is_cancelled"?: boolean,"is_rsvp_enabled"?: boolean,"location"?: string | null,"meeting_id"?: string | null,"meeting_lead_minutes"?: number,"meeting_passcode"?: string | null,"meeting_show_on_dashboard"?: boolean,"meeting_url"?: string | null,"org_id"?: string,"recurrence_count"?: number | null,"recurrence_end_mode"?: string | null,"recurrence_frequency"?: string | null,"recurrence_interval"?: number,"recurrence_until"?: string | null,"series_id"?: string | null,"series_occurrence_date"?: string | null,"start_time"?: string,"title"?: string
+                    "event_id"?: string,"occurrence_date"?: string,"org_id"?: string,"started_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "event_reminder_passes_event_id_fkey"
+      columns: ["event_id","org_id"]
+isOneToOne: false
+      referencedRelation: "events"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "event_reminder_passes_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"event_reminder_sends": {
+                  Row: {
+                    "claimed_at": string | null,"event_id": string,"occurrence_date": string,"org_id": string,"profile_id": string,"sent_at": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "claimed_at"?: string | null,"event_id": string,"occurrence_date": string,"org_id"?: string,"profile_id": string,"sent_at"?: string | null
+                  }
+                  Update: {
+                    "claimed_at"?: string | null,"event_id"?: string,"occurrence_date"?: string,"org_id"?: string,"profile_id"?: string,"sent_at"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "event_reminder_sends_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "event_reminder_sends_pass_fkey"
+      columns: ["event_id","occurrence_date","org_id"]
+isOneToOne: false
+      referencedRelation: "event_reminder_passes"
+      referencedColumns: ["event_id","occurrence_date","org_id"]
+    },{
+      foreignKeyName: "event_reminder_sends_profile_id_fkey"
+      columns: ["profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "event_reminder_sends_profile_id_fkey"
+      columns: ["profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
+                },"events": {
+                  Row: {
+                    "calendar_event_location": boolean | null,"calendar_event_notes": boolean | null,"calendar_id": string | null,"calendar_meeting_details": boolean | null,"created_at": string,"created_by": string | null,"description": string | null,"end_time": string | null,"group_id": string,"id": string,"is_cancelled": boolean,"is_rsvp_enabled": boolean,"location": string | null,"meeting_id": string | null,"meeting_lead_minutes": number,"meeting_passcode": string | null,"meeting_show_on_dashboard": boolean,"meeting_url": string | null,"org_id": string,"recurrence_count": number | null,"recurrence_end_mode": string | null,"recurrence_frequency": string | null,"recurrence_interval": number,"recurrence_until": string | null,"reminder_days_before": number,"series_id": string | null,"series_occurrence_date": string | null,"start_time": string,"title": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "calendar_event_location"?: boolean | null,"calendar_event_notes"?: boolean | null,"calendar_id"?: string | null,"calendar_meeting_details"?: boolean | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"end_time"?: string | null,"group_id": string,"id"?: string,"is_cancelled"?: boolean,"is_rsvp_enabled"?: boolean,"location"?: string | null,"meeting_id"?: string | null,"meeting_lead_minutes"?: number,"meeting_passcode"?: string | null,"meeting_show_on_dashboard"?: boolean,"meeting_url"?: string | null,"org_id"?: string,"recurrence_count"?: number | null,"recurrence_end_mode"?: string | null,"recurrence_frequency"?: string | null,"recurrence_interval"?: number,"recurrence_until"?: string | null,"reminder_days_before"?: number,"series_id"?: string | null,"series_occurrence_date"?: string | null,"start_time": string,"title": string
+                  }
+                  Update: {
+                    "calendar_event_location"?: boolean | null,"calendar_event_notes"?: boolean | null,"calendar_id"?: string | null,"calendar_meeting_details"?: boolean | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"end_time"?: string | null,"group_id"?: string,"id"?: string,"is_cancelled"?: boolean,"is_rsvp_enabled"?: boolean,"location"?: string | null,"meeting_id"?: string | null,"meeting_lead_minutes"?: number,"meeting_passcode"?: string | null,"meeting_show_on_dashboard"?: boolean,"meeting_url"?: string | null,"org_id"?: string,"recurrence_count"?: number | null,"recurrence_end_mode"?: string | null,"recurrence_frequency"?: string | null,"recurrence_interval"?: number,"recurrence_until"?: string | null,"reminder_days_before"?: number,"series_id"?: string | null,"series_occurrence_date"?: string | null,"start_time"?: string,"title"?: string
                   }
                   Relationships: [
                     {
@@ -749,14 +813,14 @@ isOneToOne: false
                   ]
                 },"group_settings": {
                   Row: {
-                    "calendar_event_location": boolean,"calendar_event_notes": boolean,"calendar_meeting_details": boolean,"group_id": string,"org_id": string,"serving_link_mode": string | null,"updated_at": string,"updated_by": string | null,"weekly_prayer_call_time": string | null,"weekly_prayer_call_url": string | null,"weekly_zoom_url": string | null,"zoom_meeting_time": string | null
+                    "calendar_event_location": boolean,"calendar_event_notes": boolean,"calendar_meeting_details": boolean,"event_reminder_default_days": number,"event_reminders_enabled": boolean,"group_id": string,"org_id": string,"serving_link_mode": string | null,"updated_at": string,"updated_by": string | null,"weekly_prayer_call_time": string | null,"weekly_prayer_call_url": string | null,"weekly_zoom_url": string | null,"zoom_meeting_time": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "calendar_event_location"?: boolean,"calendar_event_notes"?: boolean,"calendar_meeting_details"?: boolean,"group_id": string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null,"weekly_prayer_call_time"?: string | null,"weekly_prayer_call_url"?: string | null,"weekly_zoom_url"?: string | null,"zoom_meeting_time"?: string | null
+                    "calendar_event_location"?: boolean,"calendar_event_notes"?: boolean,"calendar_meeting_details"?: boolean,"event_reminder_default_days"?: number,"event_reminders_enabled"?: boolean,"group_id": string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null,"weekly_prayer_call_time"?: string | null,"weekly_prayer_call_url"?: string | null,"weekly_zoom_url"?: string | null,"zoom_meeting_time"?: string | null
                   }
                   Update: {
-                    "calendar_event_location"?: boolean,"calendar_event_notes"?: boolean,"calendar_meeting_details"?: boolean,"group_id"?: string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null,"weekly_prayer_call_time"?: string | null,"weekly_prayer_call_url"?: string | null,"weekly_zoom_url"?: string | null,"zoom_meeting_time"?: string | null
+                    "calendar_event_location"?: boolean,"calendar_event_notes"?: boolean,"calendar_meeting_details"?: boolean,"event_reminder_default_days"?: number,"event_reminders_enabled"?: boolean,"group_id"?: string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null,"weekly_prayer_call_time"?: string | null,"weekly_prayer_call_url"?: string | null,"weekly_zoom_url"?: string | null,"zoom_meeting_time"?: string | null
                   }
                   Relationships: [
                     {
@@ -1125,14 +1189,14 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"approved_at": string | null,"approved_by": string | null,"avatar_url": string | null,"bio": string | null,"birth_day": number | null,"birth_month": number | null,"birth_year": number | null,"city": string | null,"created_at": string,"email": string | null,"email_announcements": boolean,"employer": string | null,"family_id": string | null,"first_name": string | null,"hide_address": boolean,"hide_anniversary": boolean,"hide_birth_year": boolean,"hide_birthday": boolean,"hide_email": boolean,"hide_occupation": boolean,"hide_phone_home": boolean,"hide_phone_mobile": boolean,"hide_phone_work": boolean,"id": string,"is_unlisted": boolean,"last_name": string | null,"occupation": string | null,"org_id": string,"phone": string | null,"phone_home": string | null,"phone_mobile": string | null,"phone_work": string | null,"postal_code": string | null,"preferred_name": string | null,"relationship": string,"role": string,"setup_completed": boolean,"state": string | null,"updated_at": string
+                    "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"approved_at": string | null,"approved_by": string | null,"avatar_url": string | null,"bio": string | null,"birth_day": number | null,"birth_month": number | null,"birth_year": number | null,"city": string | null,"created_at": string,"email": string | null,"email_announcements": boolean,"email_event_reminders": boolean,"employer": string | null,"family_id": string | null,"first_name": string | null,"hide_address": boolean,"hide_anniversary": boolean,"hide_birth_year": boolean,"hide_birthday": boolean,"hide_email": boolean,"hide_occupation": boolean,"hide_phone_home": boolean,"hide_phone_mobile": boolean,"hide_phone_work": boolean,"id": string,"is_unlisted": boolean,"last_name": string | null,"occupation": string | null,"org_id": string,"phone": string | null,"phone_home": string | null,"phone_mobile": string | null,"phone_work": string | null,"postal_code": string | null,"preferred_name": string | null,"relationship": string,"role": string,"setup_completed": boolean,"state": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "address_line1"?: string | null,"address_line2"?: string | null,"anniversary"?: string | null,"approved_at"?: string | null,"approved_by"?: string | null,"avatar_url"?: string | null,"bio"?: string | null,"birth_day"?: number | null,"birth_month"?: number | null,"birth_year"?: number | null,"city"?: string | null,"created_at"?: string,"email"?: string | null,"email_announcements"?: boolean,"employer"?: string | null,"family_id"?: string | null,"first_name"?: string | null,"hide_address"?: boolean,"hide_anniversary"?: boolean,"hide_birth_year"?: boolean,"hide_birthday"?: boolean,"hide_email"?: boolean,"hide_occupation"?: boolean,"hide_phone_home"?: boolean,"hide_phone_mobile"?: boolean,"hide_phone_work"?: boolean,"id": string,"is_unlisted"?: boolean,"last_name"?: string | null,"occupation"?: string | null,"org_id"?: string,"phone"?: string | null,"phone_home"?: string | null,"phone_mobile"?: string | null,"phone_work"?: string | null,"postal_code"?: string | null,"preferred_name"?: string | null,"relationship"?: string,"role"?: string,"setup_completed"?: boolean,"state"?: string | null,"updated_at"?: string
+                    "address_line1"?: string | null,"address_line2"?: string | null,"anniversary"?: string | null,"approved_at"?: string | null,"approved_by"?: string | null,"avatar_url"?: string | null,"bio"?: string | null,"birth_day"?: number | null,"birth_month"?: number | null,"birth_year"?: number | null,"city"?: string | null,"created_at"?: string,"email"?: string | null,"email_announcements"?: boolean,"email_event_reminders"?: boolean,"employer"?: string | null,"family_id"?: string | null,"first_name"?: string | null,"hide_address"?: boolean,"hide_anniversary"?: boolean,"hide_birth_year"?: boolean,"hide_birthday"?: boolean,"hide_email"?: boolean,"hide_occupation"?: boolean,"hide_phone_home"?: boolean,"hide_phone_mobile"?: boolean,"hide_phone_work"?: boolean,"id": string,"is_unlisted"?: boolean,"last_name"?: string | null,"occupation"?: string | null,"org_id"?: string,"phone"?: string | null,"phone_home"?: string | null,"phone_mobile"?: string | null,"phone_work"?: string | null,"postal_code"?: string | null,"preferred_name"?: string | null,"relationship"?: string,"role"?: string,"setup_completed"?: boolean,"state"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "address_line1"?: string | null,"address_line2"?: string | null,"anniversary"?: string | null,"approved_at"?: string | null,"approved_by"?: string | null,"avatar_url"?: string | null,"bio"?: string | null,"birth_day"?: number | null,"birth_month"?: number | null,"birth_year"?: number | null,"city"?: string | null,"created_at"?: string,"email"?: string | null,"email_announcements"?: boolean,"employer"?: string | null,"family_id"?: string | null,"first_name"?: string | null,"hide_address"?: boolean,"hide_anniversary"?: boolean,"hide_birth_year"?: boolean,"hide_birthday"?: boolean,"hide_email"?: boolean,"hide_occupation"?: boolean,"hide_phone_home"?: boolean,"hide_phone_mobile"?: boolean,"hide_phone_work"?: boolean,"id"?: string,"is_unlisted"?: boolean,"last_name"?: string | null,"occupation"?: string | null,"org_id"?: string,"phone"?: string | null,"phone_home"?: string | null,"phone_mobile"?: string | null,"phone_work"?: string | null,"postal_code"?: string | null,"preferred_name"?: string | null,"relationship"?: string,"role"?: string,"setup_completed"?: boolean,"state"?: string | null,"updated_at"?: string
+                    "address_line1"?: string | null,"address_line2"?: string | null,"anniversary"?: string | null,"approved_at"?: string | null,"approved_by"?: string | null,"avatar_url"?: string | null,"bio"?: string | null,"birth_day"?: number | null,"birth_month"?: number | null,"birth_year"?: number | null,"city"?: string | null,"created_at"?: string,"email"?: string | null,"email_announcements"?: boolean,"email_event_reminders"?: boolean,"employer"?: string | null,"family_id"?: string | null,"first_name"?: string | null,"hide_address"?: boolean,"hide_anniversary"?: boolean,"hide_birth_year"?: boolean,"hide_birthday"?: boolean,"hide_email"?: boolean,"hide_occupation"?: boolean,"hide_phone_home"?: boolean,"hide_phone_mobile"?: boolean,"hide_phone_work"?: boolean,"id"?: string,"is_unlisted"?: boolean,"last_name"?: string | null,"occupation"?: string | null,"org_id"?: string,"phone"?: string | null,"phone_home"?: string | null,"phone_mobile"?: string | null,"phone_work"?: string | null,"postal_code"?: string | null,"preferred_name"?: string | null,"relationship"?: string,"role"?: string,"setup_completed"?: boolean,"state"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -1637,6 +1701,14 @@ isOneToOne: false
                            },
 "email_quota_consume":
 { Args: { "_n": number,"_org_id": string }; Returns: boolean
+                           },
+"event_reminder_claim":
+{ Args: { "_event_id": string,"_occurrence_date": string,"_org_id": string,"_reply_event_id": string }; Returns: {
+              "email": string,"first_name": string,"preferred_name": string,"profile_id": string
+            }[]
+                           },
+"event_reminder_passes_prune":
+{ Args: { "_before": string,"_limit": number,"_org_id": string }; Returns: number
                            },
 "family_anniversary_hidden":
 { Args: { "_family_id": string }; Returns: boolean

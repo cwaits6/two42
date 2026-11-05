@@ -2,7 +2,12 @@
 // header that lets a stranded reminder be retried without a second email.
 
 import { assertEquals } from "jsr:@std/assert@1";
-import { resendOutcome, sendThroughResend, servingReminderIdempotencyKey } from "../_shared/resend.ts";
+import {
+  eventReminderIdempotencyKey,
+  resendOutcome,
+  sendThroughResend,
+  servingReminderIdempotencyKey,
+} from "../_shared/resend.ts";
 
 const SEND = { apiKey: "re_test", payload: { to: "ann@example.test" }, refId: "ann" };
 
@@ -70,4 +75,11 @@ Deno.test("the idempotency key is the record's key, the same on every attempt", 
   assertEquals(first, "serving-reminder/t1/2026-11-05/ann");
   // A different local send date is a different reminder on purpose.
   assertEquals(servingReminderIdempotencyKey({ teamId: "t1", sendDate: "2026-11-07", profileId: "ann" }) === first, false);
+});
+
+Deno.test("an event reminder's key names the event, the date and the person", () => {
+  const key = { eventId: "e1", occurrenceDate: "2026-11-05", profileId: "ann" };
+  assertEquals(eventReminderIdempotencyKey(key), "event-reminder/e1/2026-11-05/ann");
+  // The next date of the same series is a different reminder.
+  assertEquals(eventReminderIdempotencyKey({ ...key, occurrenceDate: "2026-11-12" }) === eventReminderIdempotencyKey(key), false);
 });

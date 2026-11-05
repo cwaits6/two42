@@ -23,6 +23,7 @@ import { EventTimeFields } from "@/components/events/EventTimeFields";
 import { LocationInput } from "@/components/events/LocationInput";
 import { MeetingFieldsSection, meetingFieldErrors, type MeetingFieldErrors } from "@/components/events/MeetingFieldsSection";
 import { CalendarSharingFields } from "@/components/events/CalendarSharingFields";
+import { ReminderField } from "@/components/events/ReminderField";
 import {
   eventSharing,
   hasOwnSharing,
@@ -70,6 +71,7 @@ export function EditEventForm({
   event,
   timeZone,
   groupSharing,
+  groupRemindersOff,
 }: {
   groupId: string;
   event: Event;
@@ -77,6 +79,8 @@ export function EditEventForm({
   timeZone: string;
   /** What the group's calendar subscriptions share; null when it couldn't be loaded. */
   groupSharing: CalendarSharing | null;
+  /** The group's leader turned event reminders off; false when the settings couldn't be loaded. */
+  groupRemindersOff: boolean;
 }) {
   const eventId = event.id;
   const router = useRouter();
@@ -107,6 +111,7 @@ export function EditEventForm({
   // column the event left to the group, and saving those would pin values
   // the event never chose.
   const [sharingTouched, setSharingTouched] = useState(false);
+  const [reminderDays, setReminderDays] = useState(event.reminder_days_before);
   const [loading, setLoading] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [editScope, setEditScope] = useState<EditScope>("all");
@@ -223,6 +228,7 @@ export function EditEventForm({
         meeting_lead_minutes: Number(meetingLeadMinutes),
         // A moved date follows its series, so it never carries a choice of its own.
         ...(event.series_id || !sharingTouched ? {} : sharingColumns(ownSharing)),
+        ...(event.series_id ? {} : { reminder_days_before: reminderDays }),
       })
       .eq("id", eventId)
       .eq("group_id", groupId)
@@ -379,18 +385,25 @@ export function EditEventForm({
               />
             )}
 
-            {/* Like the meeting, this lives on the series: not shown when saving
+            {/* Like the meeting, these live on the series: not shown when saving
                 one date of it, or on a moved date, which follow the series. */}
             {!(showScopeChoice && editScope === "this") && !event.series_id && (
-              <CalendarSharingFields
-                groupSharing={groupSharing}
-                own={ownSharing}
-                onChange={(next) => {
-                  setOwnSharing(next);
-                  setSharingTouched(true);
-                }}
-                isRecurring={isRecurringSeries}
-              />
+              <>
+                <ReminderField
+                  value={reminderDays}
+                  onChange={setReminderDays}
+                  groupOff={groupRemindersOff}
+                />
+                <CalendarSharingFields
+                  groupSharing={groupSharing}
+                  own={ownSharing}
+                  onChange={(next) => {
+                    setOwnSharing(next);
+                    setSharingTouched(true);
+                  }}
+                  isRecurring={isRecurringSeries}
+                />
+              </>
             )}
 
             <div className="flex flex-col gap-3 border-t border-border pt-5 sm:flex-row">

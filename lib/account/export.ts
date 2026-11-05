@@ -16,7 +16,7 @@ const PROFILE_COLUMNS =
   "first_name, last_name, preferred_name, email, phone, phone_mobile, phone_home, phone_work, " +
   "address_line1, address_line2, city, state, postal_code, birth_month, birth_day, birth_year, " +
   "anniversary, occupation, employer, bio, relationship, role, is_unlisted, hide_email, " +
-  "email_announcements, created_at";
+  "email_announcements, email_event_reminders, created_at";
 
 const HOUSEHOLD_COLUMNS =
   "family_name, address_line1, address_line2, city, state, postal_code, phone_home, " +

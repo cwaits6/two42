@@ -50,6 +50,7 @@ const profile: Profile = {
   hide_email: false,
   relationship: "primary",
   email_announcements: true,
+  email_event_reminders: true,
   setup_completed: true,
   approved_at: null,
   approved_by: null,

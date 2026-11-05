@@ -50,6 +50,10 @@ _Avoid_: platform admin, superuser (in copy)
 Anything on a group's calendar, including the group's own regular meetings. The calendar is where events appear, never the thing itself.
 _Avoid_: meeting, gathering, calendar item, session, occurrence (in copy)
 
+**Event reminder**:
+The email sent before a date of an event to the members who answered Yes or Maybe. An answer to a repeating event covers every date of it. The event chooses how far ahead it goes, the group sets the default or turns them off, and each person can stop getting them.
+_Avoid_: notification, alert, event email
+
 **Team**:
 A set of members within a group who take turns serving at its events.
 _Avoid_: ministry, serving role, group

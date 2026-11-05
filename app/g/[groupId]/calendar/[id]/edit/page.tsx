@@ -46,10 +46,7 @@ export default async function EditEventPage({
 
   // The event row came through RLS, so its org_id is the caller's own. The
   // form still works without the group's settings: it follows them unnamed.
-  const sharing = await getGroupSettings(supabase, event.org_id, group.id).then(
-    groupSharing,
-    () => null
-  );
+  const settings = await getGroupSettings(supabase, event.org_id, group.id).catch(() => null);
 
   // The form reads the occurrence date from the URL.
   return (
@@ -65,7 +62,8 @@ export default async function EditEventPage({
         groupId={group.id}
         event={event as Event}
         timeZone={timeZone}
-        groupSharing={sharing}
+        groupSharing={settings && groupSharing(settings)}
+        groupRemindersOff={settings ? !settings.event_reminders_enabled : false}
       />
     </Suspense>
   );
