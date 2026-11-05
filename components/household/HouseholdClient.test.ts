@@ -59,6 +59,11 @@ async function type(id: string, value: string) {
     field(id).dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
+async function chooseNoDate() {
+  await act(async () => field("anniversary_month").click());
+  const noDate = [...document.querySelectorAll('[role="option"]')].find((o) => o.textContent === "No date");
+  await act(async () => (noDate as HTMLElement).click());
+}
 const save = () => act(async () => document.querySelector("form")!.requestSubmit());
 const savedBody = () =>
   JSON.parse((fetchMock.mock.calls as unknown as [string, RequestInit][])[0][1].body as string);
@@ -159,11 +164,30 @@ describe("saving household details", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("takes a date's message away with the date for No date", async () => {
+    await mount();
+    await type("anniversary_day", "");
+    await save();
+    expect(field("anniversary_day").getAttribute("aria-invalid")).toBe("true");
+
+    await chooseNoDate();
+    expect(field("anniversary_day").hasAttribute("aria-invalid")).toBe(false);
+    expect(document.body.textContent).not.toContain("Enter the day of the anniversary.");
+  });
+
+  it("moves focus back to the first invalid field when a second save finds the same one", async () => {
+    await mount();
+    await type("state", "ZZ");
+    await save();
+    await act(async () => field("postal_code").focus());
+    await save();
+
+    expect(document.activeElement).toBe(field("state"));
+  });
+
   it("clears the anniversary for No date", async () => {
     await mount();
-    await act(async () => field("anniversary_month").click());
-    const noDate = [...document.querySelectorAll('[role="option"]')].find((o) => o.textContent === "No date");
-    await act(async () => (noDate as HTMLElement).click());
+    await chooseNoDate();
     await save();
 
     expect(savedBody()).toMatchObject({ anniversary_month: "", anniversary_day: "", anniversary_year: "" });
