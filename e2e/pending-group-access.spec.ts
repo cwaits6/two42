@@ -30,7 +30,7 @@ test.afterAll(() => setIsaacRole("member"));
 test.describe("a member of Group B moved back to pending", () => {
   test.use({ persona: "oneGroup" });
 
-  test("loses the group while pending and has it back once approved", async ({ page }) => {
+  test("loses the group and their own pages while pending and has them back once approved", async ({ page }) => {
     await page.goto(`/g/${GROUP_B}/announcements`);
     await expect(page.getByText(ANNOUNCEMENT)).toBeVisible();
 
@@ -43,10 +43,17 @@ test.describe("a member of Group B moved back to pending", () => {
     }
     await page.goto("/dashboard");
     await expect(page.getByRole("heading", { name: "Waiting for approval" })).toBeVisible();
+    await page.getByRole("button", { name: `Account menu. Signed in as ${ISAAC.name}` }).click();
+    await expect(page.getByRole("menuitem")).toHaveText(["Help", "Privacy", "Terms", "Sign out"]);
+    await page.keyboard.press("Escape");
 
     setIsaacRole("member");
 
     expect((await page.goto(`/g/${GROUP_B}/announcements`))?.status()).toBe(200);
     await expect(page.getByText(ANNOUNCEMENT)).toBeVisible();
+    await page.getByRole("button", { name: `Account menu. Signed in as ${ISAAC.name}` }).click();
+    await expect(page.getByRole("menuitem")).toHaveText([
+      "My profile", "Settings", "Help", "Privacy", "Terms", "Sign out",
+    ]);
   });
 });
