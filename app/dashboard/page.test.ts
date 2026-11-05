@@ -31,6 +31,11 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
+const getPlatformAdmin = vi.fn();
+vi.mock("@/lib/platform-access", () => ({
+  getPlatformAdmin: () => getPlatformAdmin(),
+}));
+
 const getGroupMemberships = vi.fn();
 vi.mock("@/lib/groups/server", () => ({
   getGroupMemberships: () => getGroupMemberships(),
@@ -71,6 +76,8 @@ beforeEach(() => {
   profileResult.mockResolvedValue({
     data: { role: "member", org_id: "org-1", preferred_name: null, first_name: "Ann" },
   });
+  getPlatformAdmin.mockReset();
+  getPlatformAdmin.mockResolvedValue(null);
   getGroupMemberships.mockReset();
   getDiscoveryOn.mockReset();
   getDiscoveryOn.mockResolvedValue(false);
@@ -112,6 +119,21 @@ describe("DashboardPage", () => {
     const element = await DashboardPage();
 
     expect(childTypes(element)).toContain(SignOutButton);
+  });
+
+  it("sends an operator with no profile to Platform", async () => {
+    profileResult.mockResolvedValue({ data: null, error: { code: "PGRST116", message: "no rows" } });
+    getPlatformAdmin.mockResolvedValue({ id: "user-1" });
+
+    await expect(DashboardPage()).rejects.toMatchObject({ target: "/platform" });
+  });
+
+  it("does not ask the operator gate about a person who has a profile", async () => {
+    getGroupMemberships.mockResolvedValue([A]);
+
+    await DashboardPage();
+
+    expect(getPlatformAdmin).not.toHaveBeenCalled();
   });
 
   it("renders the no-group card with discovery forwarded", async () => {

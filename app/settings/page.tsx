@@ -8,6 +8,8 @@ import { NotificationsCard } from "./NotificationsCard";
 import { FeedbackCard } from "./FeedbackCard";
 import { YourDataCard } from "./YourDataCard";
 import { getOptionalUser } from "@/lib/supabase/current-user";
+import { landingFor, NO_ROW } from "@/lib/landing";
+import { getPlatformAdmin } from "@/lib/platform-access";
 import { isMemberRole } from "@/lib/roles";
 import { pageTitle } from "@/lib/pageTitle";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -21,32 +23,46 @@ export default async function SettingsPage() {
   const user = await getOptionalUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
+  const { data: profile, error } = await supabase
     .from("profiles")
     .select("role, email_announcements, email_event_reminders")
     .eq("id", user.id)
     .single();
 
-  if (!profile || !isMemberRole(profile.role)) {
-    redirect("/dashboard");
+  const member = profile && isMemberRole(profile.role) ? profile : null;
+  if (!member) {
+    // An operator who belongs to no church has no profile, and still needs
+    // the sign-in card. A failed read is not a missing row, so it never
+    // counts as one; Home reports it.
+    const noRow = !profile && (!error || error.code === NO_ROW);
+    const isOperator = noRow && (await getPlatformAdmin()) !== null;
+    if (landingFor(profile, isOperator) !== "platform") redirect("/dashboard");
   }
 
   return (
     <PageContainer>
-      <PageHeader title="Settings" />
+      {member ? (
+        <PageHeader title="Settings" />
+      ) : (
+        <PageHeader title="Settings" backHref="/platform" backLabel="Back to Platform" />
+      )}
 
       <div className="space-y-6">
         <DisplayCard />
         <SignInSecurityCard currentEmail={user.email ?? ""} />
-        <NotificationsCard
-          userId={user.id}
-          initial={{
-            email_announcements: profile.email_announcements ?? true,
-            email_event_reminders: profile.email_event_reminders ?? true,
-          }}
-        />
-        <FeedbackCard />
-        <YourDataCard />
+        {member && (
+          <>
+            <NotificationsCard
+              userId={user.id}
+              initial={{
+                email_announcements: member.email_announcements ?? true,
+                email_event_reminders: member.email_event_reminders ?? true,
+              }}
+            />
+            <FeedbackCard />
+            <YourDataCard />
+          </>
+        )}
       </div>
 
       <nav aria-label="Privacy, terms and help" className="mt-8 flex flex-wrap gap-x-6">

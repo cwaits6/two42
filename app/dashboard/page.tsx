@@ -10,13 +10,12 @@ import { getGroupMemberships } from "@/lib/groups/server";
 import { GroupDashboard } from "@/components/groups/GroupDashboard";
 import { HomeLauncher } from "@/components/groups/HomeLauncher";
 import { NoGroupCard } from "@/components/groups/NoGroupCard";
+import { landingFor, NO_ROW } from "@/lib/landing";
 import { pageTitle } from "@/lib/pageTitle";
+import { getPlatformAdmin } from "@/lib/platform-access";
 import { SignOutButton } from "@/app/join/[token]/SignOutButton";
 
 export const generateMetadata = () => pageTitle("Home");
-
-// PostgREST's "no row" from .single(): the profile is missing, not unreadable.
-const NO_ROW = "PGRST116";
 
 // Home. A member of exactly one group is always inside it, so Home is that
 // group's dashboard; two or more groups get the launcher; none get the
@@ -42,7 +41,14 @@ export default async function DashboardPage() {
     );
   }
 
-  if (!profile || profile.role === "pending") {
+  // Only a person with no row can be an operator without a church, so the
+  // gate is asked for no one else. It fails closed: an unanswered check
+  // leaves them on the waiting screen.
+  const isOperator = !profile && (await getPlatformAdmin()) !== null;
+  const landing = landingFor(profile, isOperator);
+  if (landing === "platform") redirect("/platform");
+
+  if (!profile || landing === "waiting") {
     return (
       <PageContainer size="reading">
         <PageHeader
