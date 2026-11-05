@@ -27,7 +27,9 @@ afterEach(async () => {
 
 const LOADED = { dailyCap: 200, hasOverride: false, usedToday: 3 };
 
-async function render(emailCap: typeof LOADED | null) {
+type Domain = Parameters<typeof OrganizationDetail>[0]["emailDomain"];
+
+async function render(emailCap: typeof LOADED | null, emailDomain: Domain = { loaded: true, row: null }) {
   await act(async () =>
     root.render(
       createElement(OrganizationDetail, {
@@ -40,7 +42,7 @@ async function render(emailCap: typeof LOADED | null) {
         },
         owner: null,
         emailCap,
-        emailDomain: { loaded: true, row: null },
+        emailDomain,
       }),
     ),
   );
@@ -103,5 +105,14 @@ describe("OrganizationDetail daily email limit", () => {
 
     expect(field("branding-display-name").value).toBe("Unsaved name");
     expect(field("email-daily-cap").value).toBe("350");
+  });
+});
+
+describe("OrganizationDetail sending domain", () => {
+  it("shows a failed read of the domain, not an organization with no domain", async () => {
+    await render(LOADED, { loaded: false });
+
+    expect(container.textContent).toContain("Couldn't load the sending domain.");
+    expect(container.textContent).not.toContain("No domain claimed.");
   });
 });

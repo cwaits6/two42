@@ -28,19 +28,37 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
+const { ErrorState } = await import("@/components/states/ErrorState");
 const { OrganizationDetail } = await import("./OrganizationDetail");
 const { default: PlatformOrganizationPage } = await import("./page");
 
-type Element = { type?: unknown; props: { children?: unknown; emailCap?: unknown } };
+type Element = {
+  type?: unknown;
+  props: { children?: unknown; emailCap?: unknown; emailDomain?: unknown; thing?: string };
+};
+
+async function renderedChildren(): Promise<Element[]> {
+  const page = (await PlatformOrganizationPage({ params: Promise.resolve({ id: "o" }) })) as Element;
+  return page.props.children as Element[];
+}
 
 async function renderedDetail(): Promise<Element> {
-  const page = (await PlatformOrganizationPage({ params: Promise.resolve({ id: "o" }) })) as Element;
-  const detail = (page.props.children as Element[]).find((child) => child.type === OrganizationDetail);
+  const detail = (await renderedChildren()).find((child) => child.type === OrganizationDetail);
   if (!detail) throw new Error("The page did not render the organization's cards");
   return detail;
 }
 
+/** What the page shows in place of the organization's cards when a read fails. */
+async function failedThing(): Promise<string | undefined> {
+  const children = await renderedChildren();
+  expect(children.map((child) => child.type)).not.toContain(OrganizationDetail);
+  return children.find((child) => child.type === ErrorState)?.props.thing;
+}
+
+const FAILED: Result = { data: null, error: { code: "57014" } };
+
 beforeEach(() => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
   results = {
     organizations: {
       data: {
@@ -62,8 +80,7 @@ beforeEach(() => {
 
 describe("PlatformOrganizationPage", () => {
   it("passes no daily email limit when its read fails, and the limit as read when it loads", async () => {
-    results.org_email_limits = { data: null, error: { code: "57014" } };
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    results.org_email_limits = FAILED;
     const failed = await renderedDetail();
     expect(failed.props.emailCap).toBeNull();
 
@@ -71,5 +88,29 @@ describe("PlatformOrganizationPage", () => {
     const loaded = await renderedDetail();
 
     expect(loaded.props.emailCap).toEqual({ dailyCap: 200, hasOverride: true, usedToday: 3 });
+  });
+
+  it("shows a failed read of the organization, not the list as if it were missing", async () => {
+    results.organizations = FAILED;
+
+    expect(await failedThing()).toBe("this organization");
+  });
+
+  it("shows a failed read of the first admin, not an organization with none", async () => {
+    results.access_requests = FAILED;
+
+    expect(await failedThing()).toBe("the first admin");
+  });
+
+  it("passes no daily email limit when today's count can't be read", async () => {
+    results.org_email_usage = FAILED;
+
+    expect((await renderedDetail()).props.emailCap).toBeNull();
+  });
+
+  it("passes a failed read of the sending domain, not an organization with no domain", async () => {
+    results.org_email_domains = FAILED;
+
+    expect((await renderedDetail()).props.emailDomain).toEqual({ loaded: false });
   });
 });
