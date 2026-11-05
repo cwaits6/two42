@@ -49,6 +49,19 @@ const eslintConfig = defineConfig([
             "CallExpression[callee.name=/^log(Error|Warn|Info)$/] > :nth-child(1):not(Literal):not(TemplateLiteral[expressions.length=0])",
           message: "Say what failed in a fixed string. Row ids go in ids.",
         },
+        {
+          selector:
+            "CallExpression[callee.name=/^log(Error|Warn|Info)$/] Property[key.name='route'] > :not(Literal).value",
+          message: "Write the route pattern as a fixed string, never an address read from the request.",
+        },
+      ],
+      // Only components/analytics/PageMeasurement.tsx reports page views; these entries send the real address or row ids.
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [{ name: "@vercel/analytics/next", message: "Use PageMeasurement, which sends the route pattern only." }],
+          patterns: [{ group: ["@vercel/speed-insights", "@vercel/speed-insights/*"], message: "Its timings carry element ids that hold row ids, and cannot be filtered." }],
+        },
       ],
     },
   },

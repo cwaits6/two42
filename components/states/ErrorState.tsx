@@ -7,8 +7,6 @@ interface ErrorStateProps {
   /** Repeats a read made in the browser, which a server refresh would not re-run */
   onRetry?: () => void;
   className?: string;
-  /** The reference logged with the failure. A server page's own log lines supply it when omitted. */
-  reference?: string;
 }
 
 /**
@@ -16,6 +14,6 @@ interface ErrorStateProps {
  * Not a client component itself, so that in a server page it can read the reference the
  * request logged; under a client parent there is none to read and none is shown.
  */
-export function ErrorState({ reference, ...props }: ErrorStateProps) {
-  return <ErrorStateView {...props} reference={reference ?? requestReference()} />;
+export function ErrorState(props: ErrorStateProps) {
+  return <ErrorStateView {...props} reference={requestReference()} />;
 }

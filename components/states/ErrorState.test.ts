@@ -39,14 +39,6 @@ describe("ErrorState", () => {
     await act(async () => root.unmount());
   });
 
-  it("shows the reference it is given, for the person to quote", () => {
-    const html = renderToStaticMarkup(
-      createElement(ErrorState, { thing: "announcements", reference: "K7M29QXD" }),
-    );
-    expect(html).toContain("Reference: ");
-    expect(html).toContain("K7M29QXD");
-  });
-
   it("shows no reference when no server log line carries one", () => {
     expect(render()).not.toContain("Reference");
   });

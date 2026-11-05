@@ -91,12 +91,22 @@ describe("log line", () => {
     expect(JSON.parse(line).ids).toEqual({ event: UUID, sent: 3 });
   });
 
-  it("drops a route that is a real address, and keeps a pattern or a function name", () => {
+  it("drops a route with a query or a host, and keeps a pattern or a function name", () => {
     const route = (value: string) => JSON.parse(formatLine("error", "x", undefined, { route: value }, "REF")).route;
     expect(route("/g/[groupId]/calendar/[id]")).toBe("/g/[groupId]/calendar/[id]");
     expect(route("send-event-reminders")).toBe("send-event-reminders");
     expect(route("/login?next=/x&email=a@b.co")).toBeUndefined();
     expect(route("https://two42.io/join/abc")).toBeUndefined();
+  });
+
+  // Shape cannot tell these from a pattern or an id, so call sites must not pass them;
+  // lint requires a fixed string for `route`.
+  it("cannot tell a bare path or a UUID token from what it accepts", () => {
+    const line = JSON.parse(
+      formatLine("error", "x", undefined, { route: "/join/Zk3-secret-invite-token", ids: { token: UUID } }, "REF"),
+    );
+    expect(line.route).toBe("/join/Zk3-secret-invite-token");
+    expect(line.ids).toEqual({ token: UUID });
   });
 
   it("drops a step that is not a fixed label", () => {
