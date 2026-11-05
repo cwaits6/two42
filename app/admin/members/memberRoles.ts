@@ -6,11 +6,14 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   admin: "Church admin",
 };
 
+/** A role a person holds once approved. */
+export type AssignedRole = Exclude<UserRole, "pending">;
+
 /**
  * What the role control offers. Pending is not a role to pick: moving someone
  * back to pending takes their group access away, so it is its own action.
  */
-export const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
+export const ROLE_OPTIONS: { value: AssignedRole; label: string }[] = [
   { value: "member", label: ROLE_LABELS.member },
   { value: "admin", label: ROLE_LABELS.admin },
 ];

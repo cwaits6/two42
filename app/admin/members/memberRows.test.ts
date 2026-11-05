@@ -86,6 +86,13 @@ describe("memberActions", () => {
     expect(memberActions(row("Cy Park"), "p1")).toEqual(["edit", "delete"]);
   });
 
+  it("offers Edit only on every row when the viewer is unknown, since any row could be theirs", () => {
+    expect(memberActions(row("Zoe Able"), null)).toEqual(["edit"]);
+    expect(memberActions(row("Ben Young"), null)).toEqual(["edit"]);
+    expect(memberActions(row("Cy Park"), null)).toEqual(["edit"]);
+    expect(memberActions(row("Dee Marsh"), null)).toEqual([]);
+  });
+
   it("offers nothing on an invite, which has no account", () => {
     expect(memberActions(row("Dee Marsh"), "p1")).toEqual([]);
   });

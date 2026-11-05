@@ -188,6 +188,18 @@ describe("MembersList", () => {
     expect(push).toHaveBeenCalledExactlyOnceWith("/admin/members/you");
   });
 
+  it("opens Edit member from anywhere on the row, and nothing from an invite's row", async () => {
+    state.requests = [INVITE];
+    await mount();
+    const cellOf = (email: string) => [...host.querySelectorAll("td")].find((cell) => cell.textContent === email)!;
+
+    await act(async () => cellOf("other.ben@example.test").click());
+    expect(push).not.toHaveBeenCalled();
+
+    await act(async () => cellOf("ben@example.test").click());
+    expect(push).toHaveBeenCalledExactlyOnceWith("/admin/members/you");
+  });
+
   it("says why when the database refuses to demote the last church admin", async () => {
     state.updateResult = { data: null, error: { code: "CA001" } };
     await mount();

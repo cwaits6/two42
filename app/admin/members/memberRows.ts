@@ -1,9 +1,11 @@
 import { matchesSearch } from "@/components/admin/adminSearch";
 import { displayName } from "@/lib/names";
 import type { AccessRequest, Profile } from "@/lib/types";
+import type { AssignedRole } from "./memberRoles";
 
-export type MemberStatus = "invited" | "pending";
-export type RoleFilter = "all" | "member" | "admin";
+export const STATUS_LABELS = { invited: "Invited", pending: "Pending" } as const;
+export type MemberStatus = keyof typeof STATUS_LABELS;
+export type RoleFilter = "all" | AssignedRole;
 export type StatusFilter = "all" | MemberStatus;
 
 export interface MemberRow {
@@ -13,7 +15,7 @@ export interface MemberRow {
   name: string;
   email: string | null;
   /** Null until the person has signed up and been approved. */
-  role: "member" | "admin" | null;
+  role: AssignedRole | null;
   status: MemberStatus | null;
   search: (string | null)[];
 }
@@ -76,10 +78,11 @@ export type MemberAction = "edit" | "pending" | "delete";
 
 /**
  * What a row's menu offers. Nobody moves themselves to pending or deletes
- * their own account from here, and an invite has no account to act on.
+ * their own account from here, and an invite has no account to act on. With
+ * the viewer unknown any row could be their own, so every row offers Edit only.
  */
 export function memberActions(row: MemberRow, viewerId: string | null): MemberAction[] {
   if (row.profileId === null) return [];
-  if (row.profileId === viewerId) return ["edit"];
+  if (viewerId === null || row.profileId === viewerId) return ["edit"];
   return row.status === "pending" ? ["edit", "delete"] : ["edit", "pending", "delete"];
 }

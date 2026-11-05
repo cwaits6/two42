@@ -36,8 +36,9 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/states/EmptyState";
 import { ErrorState } from "@/components/states/ErrorState";
 import { LoadingState } from "@/components/states/LoadingState";
-import { ROLE_LABELS } from "./memberRoles";
+import { ROLE_LABELS, ROLE_OPTIONS } from "./memberRoles";
 import {
+  STATUS_LABELS,
   filterMemberRows,
   memberActions,
   statusCounts,
@@ -51,17 +52,13 @@ import { RoleChangeDialog, type RoleChange } from "./RoleChangeDialog";
 
 const ROLE_FILTERS: { value: RoleFilter; label: string }[] = [
   { value: "all", label: "All roles" },
-  { value: "member", label: ROLE_LABELS.member },
-  { value: "admin", label: ROLE_LABELS.admin },
+  ...ROLE_OPTIONS,
 ];
 
 const STATUS_TABS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "invited", label: "Invited" },
-  { value: "pending", label: "Pending" },
+  ...(Object.keys(STATUS_LABELS) as MemberStatus[]).map((value) => ({ value, label: STATUS_LABELS[value] })),
 ];
-
-const STATUS_LABELS: Record<MemberStatus, string> = { invited: "Invited", pending: "Pending" };
 
 export function MembersList() {
   const [requests, setRequests] = useState<AccessRequest[]>([]);

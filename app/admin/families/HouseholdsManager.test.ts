@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, createElement, type ReactNode } from "react";
+import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -11,6 +11,8 @@ vi.mock("sonner", () => ({ toast }));
 const state = vi.hoisted(() => ({
   loadError: null as { code: string } | null,
   members: [] as Record<string, unknown>[],
+  families: [] as Record<string, unknown>[],
+  profiles: [] as Record<string, unknown>[],
   invites: [] as { id: string }[],
 }));
 
@@ -22,8 +24,11 @@ const FAMILY = {
   anniversary_month: 10,
   anniversary_day: 3,
   anniversary_year: 2009,
+  address_line1: "12 Elm St",
+  city: "Austin",
 };
 const householdUpdate = vi.hoisted(() => vi.fn());
+const TABLES = { family_units: "families", family_members: "members", profiles: "profiles" } as const;
 
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
@@ -42,7 +47,7 @@ vi.mock("@/lib/supabase/client", () => ({
         limit: async () => ({ data: state.invites, error: null }),
         then: (resolve: (value: unknown) => void) =>
           resolve({
-            data: table === "family_units" ? [FAMILY] : table === "family_members" ? state.members : [],
+            data: table in TABLES ? state[TABLES[table as keyof typeof TABLES]] : [],
             error: state.loadError,
           }),
       };
@@ -53,30 +58,7 @@ vi.mock("@/lib/supabase/client", () => ({
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }));
 
-// Each option a plain button: the Base UI popup isn't what these tests are about.
-vi.mock("@/components/ui/select", async () => {
-  const { createElement: h, Fragment } = await import("react");
-  return {
-    Select: ({
-      items,
-      onValueChange,
-    }: {
-      items: { value: string; label: string }[];
-      onValueChange: (value: string) => void;
-    }) =>
-      h(
-        Fragment,
-        null,
-        items.map((item) =>
-          h("button", { key: item.value, type: "button", onClick: () => onValueChange(item.value) }, item.label),
-        ),
-      ),
-    SelectContent: ({ children }: { children: ReactNode }) => children,
-    SelectItem: ({ children }: { children: ReactNode }) => children,
-    SelectTrigger: ({ children }: { children: ReactNode }) => children,
-    SelectValue: () => null,
-  };
-});
+vi.mock("@/components/ui/select", () => import("@/components/ui/select.mock"));
 
 const { HouseholdsManager } = await import("./HouseholdsManager");
 
@@ -118,6 +100,8 @@ const savedBody = () => JSON.parse((fetchMock.mock.calls as unknown as [string, 
 beforeEach(() => {
   state.loadError = null;
   state.members = [];
+  state.families = [FAMILY];
+  state.profiles = [];
   state.invites = [];
   fetchMock.mockClear();
   householdUpdate.mockClear();
@@ -133,6 +117,30 @@ afterEach(async () => {
 });
 
 describe("HouseholdsManager", () => {
+  it("lists each household once with its address and the people in it, and finds one by a member's name", async () => {
+    state.families = [FAMILY, { id: "f2", family_name: "Park", photo_url: null, org_id: "o1" }];
+    state.profiles = [{ id: "p1", first_name: "Nia", last_name: "Brook", preferred_name: null, family_id: "f1" }];
+    await mount();
+
+    const rows = () => [...host.querySelectorAll("tbody tr")];
+    expect(rows()).toHaveLength(2);
+    const [park, test] = rows().sort((a, b) => a.textContent!.localeCompare(b.textContent!));
+    expect(test.textContent).toContain("12 Elm St, Austin");
+    expect(test.querySelector('a[href="/admin/members/p1"]')?.textContent).toBe("Nia Brook");
+    expect(park.textContent).toContain("No members");
+
+    const field = host.querySelector<HTMLInputElement>("#household-search")!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      setValue.call(field, "nia");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    expect(host.textContent).toContain("1 of 2 households");
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0].textContent).toContain("Test");
+  });
+
   it("says so when the list can't be re-read after a delete", async () => {
     await mount();
     await click("Edit Test");
