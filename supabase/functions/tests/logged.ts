@@ -1,4 +1,6 @@
-export type LoggedLine = { level: string; what: string; step?: string; code?: string };
+import type { LogLine } from "../_shared/log.ts";
+
+export type LoggedLine = LogLine;
 
 /** Runs `run`, absorbing a rejection, and returns the log lines it wrote, parsed. */
 export async function logged(run: () => Promise<unknown>): Promise<LoggedLine[]> {

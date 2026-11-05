@@ -14,6 +14,17 @@ export type LogContext = {
   ids?: Record<string, unknown>;
 };
 
+/** The log line as written. Readers parse lines into this type, so a field changes in one place. */
+export type LogLine = {
+  level: LogLevel;
+  what: string;
+  route?: string;
+  step?: string;
+  code?: string;
+  ref: string;
+  ids?: Record<string, string | number>;
+};
+
 const REFERENCE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const REFERENCE_LENGTH = 8;
 
@@ -22,6 +33,7 @@ const ERROR_NAME = /^[A-Za-z][A-Za-z0-9_]{0,39}$/;
 const ROUTE_PATTERN = /^\/[A-Za-z0-9_\-/[\].]{0,119}$/;
 const FUNCTION_NAME = /^[a-z][a-z0-9-]{0,39}$/;
 const STEP = /^[a-z]+(_[a-z0-9]+)*$/;
+const DIGEST = /^[A-Za-z0-9_-]{1,40}$/;
 const ID_KEY = /^[A-Za-z][A-Za-z0-9_]{0,39}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_WHAT = 200;
@@ -36,7 +48,16 @@ export function newReference(): string {
   return reference;
 }
 
-/** A caller's fixed label, such as "group requests", in the shape the log line's `step` accepts. */
+/**
+ * The framework's digest for a thrown error, when it is a plain token. The log
+ * line and the error page both go through this, so they show the same value or none.
+ */
+export function digestReference(error: unknown): string | undefined {
+  const digest = (error as { digest?: unknown } | null)?.digest;
+  return typeof digest === "string" && DIGEST.test(digest) ? digest : undefined;
+}
+
+/** A caller's fixed label, such as "group requests", lowercased with its words joined by underscores. */
 export function stepOf(label: string): string {
   return label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
@@ -93,7 +114,7 @@ export function formatLine(
 ): string {
   const route = context?.route;
   const step = context?.step;
-  return JSON.stringify({
+  const line: LogLine = {
     level,
     what: what.slice(0, MAX_WHAT),
     route: route && (ROUTE_PATTERN.test(route) || FUNCTION_NAME.test(route)) ? route : undefined,
@@ -101,7 +122,8 @@ export function formatLine(
     code: errorCode(error),
     ref: reference,
     ids: safeIds(context?.ids),
-  });
+  };
+  return JSON.stringify(line);
 }
 
 /** Writes the line to standard output, whatever the level, and returns its reference. */

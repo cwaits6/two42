@@ -1,12 +1,6 @@
-export type LoggedLine = {
-  level: "error" | "warn" | "info";
-  what: string;
-  route?: string;
-  step?: string;
-  code?: string;
-  ref: string;
-  ids?: Record<string, string | number>;
-};
+import type { LogLine } from "./core";
+
+export type LoggedLine = LogLine;
 
 /** The lines a test's `vi.spyOn(console, "log")` captured, parsed. */
 export function loggedLines(spy: { mock: { calls: unknown[][] } }): LoggedLine[] {
