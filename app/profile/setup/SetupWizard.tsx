@@ -26,7 +26,7 @@ import { retiredFlagResets } from "@/lib/members/retiredHideFlags";
 import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
 import { anniversaryColumns, birthdayColumns } from "@/components/profile/birthday";
 import { MonthSelect } from "@/components/profile/MonthSelect";
-import { clearClaimedBirthday, removesBirthday } from "@/components/profile/claimedBirthday";
+import { CLAIMED_BIRTHDAY_KEPT, clearClaimedBirthday, removesBirthday } from "@/components/profile/claimedBirthday";
 import { relLabel } from "@/components/directory/utils";
 import { toast } from "sonner";
 import { Camera, Check, Plus } from "lucide-react";
@@ -456,16 +456,14 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
         occupation: occupation.trim() || null,
         employer: employer.trim() || null,
       };
+      const claimed = removesBirthday(profile, updates) ? await clearClaimedBirthday(profile.id) : null;
+      if (claimed?.error) throw claimed.error;
+
       const { error: profileError } = await supabase
         .from("profiles")
         .update({ ...updates, ...retiredFlagResets(profile, updates) })
         .eq("id", profile.id);
       if (profileError) throw profileError;
-
-      if (removesBirthday(profile, updates)) {
-        const claimedError = await clearClaimedBirthday(profile.id);
-        if (claimedError) throw claimedError;
-      }
 
       if (householdId && hasSpouse && anniversary.month) {
         const { error } = await supabase
@@ -498,7 +496,8 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
         .eq("id", profile.id);
       if (setupError) throw setupError;
 
-      toast.success("Profile set up.");
+      if (claimed?.kept) toast.info(`Profile set up. ${CLAIMED_BIRTHDAY_KEPT}`);
+      else toast.success("Profile set up.");
       router.push("/directory");
     } catch (err) {
       console.error(err);

@@ -12,6 +12,9 @@ const written = {
   rows: [{ id: "p1" }] as { id: string }[] | null,
   error: null as { code: string } | null,
   claimedError: null as { code: string } | null,
+  // What the household record still holds after the clear: a policy can filter the write out.
+  claimedKept: [] as { id: string }[],
+  claimedReadError: null as { code: string } | null,
 };
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
@@ -24,6 +27,16 @@ vi.mock("@/lib/supabase/client", () => ({
                 return { error: written.claimedError };
               },
             }),
+            select: () => ({
+              eq: () => ({
+                not: () => ({
+                  limit: async () =>
+                    written.claimedReadError
+                      ? { data: null, error: written.claimedReadError }
+                      : { data: written.claimedKept, error: null },
+                }),
+              }),
+            }),
           }
         : {
             update: (values: unknown) => {
@@ -34,7 +47,7 @@ vi.mock("@/lib/supabase/client", () => ({
   }),
 }));
 vi.mock("@/lib/uploadImage", () => ({ mintSignedUrl: vi.fn(), uploadImage: vi.fn() }));
-const toast = { success: vi.fn(), error: vi.fn() };
+const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
 vi.mock("sonner", () => ({ toast }));
 
 const { ProfileForm } = await import("./ProfileForm");
@@ -82,6 +95,8 @@ beforeEach(() => {
   written.rows = [{ id: "p1" }];
   written.error = null;
   written.claimedError = null;
+  written.claimedKept = [];
+  written.claimedReadError = null;
 });
 
 afterEach(async () => {
@@ -317,7 +332,6 @@ describe("ProfileForm inline errors", () => {
     expect(toast.error).toHaveBeenCalledWith("Couldn't save the profile. Try again.");
     expect(toast.success).not.toHaveBeenCalled();
     expect(onSaved).not.toHaveBeenCalled();
-    expect(claimedUpdate).not.toHaveBeenCalled();
   });
 
   it("leaves the claimed household record alone when the profile had no birthday to clear", async () => {
@@ -336,7 +350,7 @@ describe("ProfileForm inline errors", () => {
     expect(claimedUpdate).not.toHaveBeenCalled();
   });
 
-  it("says the save failed when the claimed household record's birthday can't be cleared", async () => {
+  it("keeps the profile's birthday when the claimed household record's can't be cleared, so a later save retries", async () => {
     written.claimedError = { code: "XX000" };
     const onSaved = vi.fn();
     const form = await mount({ birth_month: 12, birth_day: 10 }, { onSaved });
@@ -346,6 +360,32 @@ describe("ProfileForm inline errors", () => {
     expect(toast.error).toHaveBeenCalledWith("Couldn't save the profile. Try again.");
     expect(toast.success).not.toHaveBeenCalled();
     expect(onSaved).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("says the save failed when the claimed household record can't be read back", async () => {
+    written.claimedReadError = { code: "XX000" };
+    const form = await mount({ birth_month: 12, birth_day: 10 });
+    await form.choose("birth_month", "No date");
+    await form.submit();
+
+    expect(toast.error).toHaveBeenCalledWith("Couldn't save the profile. Try again.");
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("saves the profile and says the household still lists the birthday when the record's clear wrote nothing", async () => {
+    written.claimedKept = [{ id: "fm1" }];
+    const onSaved = vi.fn();
+    const form = await mount({ birth_month: 12, birth_day: 10 }, { onSaved });
+    await form.choose("birth_month", "No date");
+    await form.submit();
+
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ birth_month: null }));
+    expect(toast.info).toHaveBeenCalledWith(
+      "Profile saved. The household still lists this birthday. A church admin can remove it.",
+    );
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(onSaved).toHaveBeenCalledOnce();
   });
 
   it("clears the whole birthday for No date, on the profile and the household record it claimed", async () => {
@@ -360,6 +400,7 @@ describe("ProfileForm inline errors", () => {
     const cleared = { birth_month: null, birth_day: null, birth_year: null };
     expect(update).toHaveBeenCalledWith(expect.objectContaining(cleared));
     expect(claimedUpdate).toHaveBeenCalledWith(cleared, "claimed_profile_id", "p1");
+    expect(claimedUpdate.mock.invocationCallOrder[0]).toBeLessThan(update.mock.invocationCallOrder[0]);
     expect(toast.success).toHaveBeenCalledWith("Profile saved.");
   });
 });

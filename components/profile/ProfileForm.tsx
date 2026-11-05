@@ -39,7 +39,7 @@ import { CheckRow } from "@/components/profile/CheckRow";
 import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
 import { birthdayColumns, birthdayErrors } from "@/components/profile/birthday";
 import { MonthSelect } from "@/components/profile/MonthSelect";
-import { clearClaimedBirthday, removesBirthday } from "@/components/profile/claimedBirthday";
+import { CLAIMED_BIRTHDAY_KEPT, clearClaimedBirthday, removesBirthday } from "@/components/profile/claimedBirthday";
 import { DirectoryNotice } from "@/components/profile/DirectoryNotice";
 import { retiredFlagResets } from "@/lib/members/retiredHideFlags";
 import {
@@ -348,6 +348,14 @@ export function ProfileForm({
       is_unlisted: state.is_unlisted,
     };
 
+    const claimed = removesBirthday(profile, updates) ? await clearClaimedBirthday(profile.id) : null;
+    if (claimed?.error) {
+      setSaving(false);
+      console.error("clearing the claimed birthday failed", claimed.error.code);
+      toast.error(failureMessage("save the profile"));
+      return;
+    }
+
     // A write a policy filters out answers with no error and no row.
     const { data: saved, error } = await supabase
       .from("profiles")
@@ -355,21 +363,17 @@ export function ProfileForm({
       .eq("id", profile.id)
       .select("id");
 
-    const profileSaved = !error && saved.length > 0;
-    const claimedError =
-      profileSaved && removesBirthday(profile, updates) ? await clearClaimedBirthday(profile.id) : null;
-
     setSaving(false);
 
-    if (!profileSaved || claimedError) {
+    if (error || saved.length === 0) {
       if (error) console.error(error);
-      if (claimedError) console.error("clearing the claimed birthday failed", claimedError.code);
       toast.error(failureMessage("save the profile"));
       return;
     }
 
     if (isAdmin) setSavedFamilyId(state.family_id || null);
-    toast.success("Profile saved.");
+    if (claimed?.kept) toast.info(`Profile saved. ${CLAIMED_BIRTHDAY_KEPT}`);
+    else toast.success("Profile saved.");
     onSaved?.();
   };
 

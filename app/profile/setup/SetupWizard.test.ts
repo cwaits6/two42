@@ -8,6 +8,8 @@ import type { Profile } from "@/lib/types";
 
 const writes: { table: string; values: Record<string, unknown>; column: string; id: string }[] = [];
 const failing: { table?: string } = {};
+// What the claimed household record still holds after the clear.
+const claimed: { kept: { id: string }[] } = { kept: [] };
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
     from: (table: string) => ({
@@ -17,13 +19,14 @@ vi.mock("@/lib/supabase/client", () => ({
           return { error: table === failing.table ? { code: "XX000" } : null };
         },
       }),
+      select: () => ({ eq: () => ({ not: () => ({ limit: async () => ({ data: claimed.kept, error: null }) }) }) }),
       insert: async () => ({ error: null }),
     }),
   }),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {} }) }));
 vi.mock("@/lib/uploadImage", () => ({ mintSignedUrl: vi.fn(), uploadImage: vi.fn() }));
-const toast = { success: vi.fn(), error: vi.fn() };
+const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
 vi.mock("sonner", () => ({ toast }));
 
 const { SetupWizard } = await import("./SetupWizard");
@@ -78,6 +81,7 @@ async function type(id: string, value: string) {
 beforeEach(() => {
   writes.length = 0;
   failing.table = undefined;
+  claimed.kept = [];
   vi.clearAllMocks();
   vi.stubGlobal("scrollTo", () => {});
 });
@@ -102,8 +106,8 @@ describe("choosing No date in the setup wizard", () => {
     await click("Finish setup");
 
     const cleared = { birth_month: null, birth_day: null, birth_year: null };
-    expect(writes[0]).toMatchObject({ table: "profiles", values: cleared, id: "p1" });
-    expect(writes[1]).toEqual({ table: "family_members", values: cleared, column: "claimed_profile_id", id: "p1" });
+    expect(writes[0]).toEqual({ table: "family_members", values: cleared, column: "claimed_profile_id", id: "p1" });
+    expect(writes[1]).toMatchObject({ table: "profiles", values: cleared, id: "p1" });
     expect(toast.success).toHaveBeenCalledWith("Profile set up.");
   });
 
@@ -118,7 +122,7 @@ describe("choosing No date in the setup wizard", () => {
     expect(toast.success).toHaveBeenCalledWith("Profile set up.");
   });
 
-  it("doesn't finish setup when the claimed household record's birthday can't be cleared", async () => {
+  it("doesn't write the profile when the claimed household record's birthday can't be cleared", async () => {
     failing.table = "family_members";
     await mount();
     await choose("birth_month", "No date");
@@ -129,7 +133,23 @@ describe("choosing No date in the setup wizard", () => {
 
     expect(toast.error).toHaveBeenCalled();
     expect(toast.success).not.toHaveBeenCalled();
-    expect(writes.some((w) => "setup_completed" in w.values)).toBe(false);
+    expect(writes.map((w) => w.table)).toEqual(["family_members"]);
+  });
+
+  it("finishes setup and says the household still lists the birthday when the record's clear wrote nothing", async () => {
+    claimed.kept = [{ id: "fm1" }];
+    await mount();
+    await choose("birth_month", "No date");
+    await click("Continue");
+    await click("Continue");
+    await click("Continue");
+    await click("Finish setup");
+
+    expect(toast.info).toHaveBeenCalledWith(
+      "Profile set up. The household still lists this birthday. A church admin can remove it.",
+    );
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(writes.some((w) => "setup_completed" in w.values)).toBe(true);
   });
 
   it("leaves the claimed household record alone when the birthday is kept", async () => {
