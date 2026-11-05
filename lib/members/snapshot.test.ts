@@ -9,6 +9,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadOrgSnapshot } from "@/lib/members/snapshot";
 import type { Database } from "@/lib/supabase/database.types";
+import { loggedLines } from "@/lib/log/testing";
+
+const ORG = "3f0c9a52-7b1e-4c7d-9a41-0d2f6e8b1c33";
 
 const TABLES = [
   "profiles",
@@ -98,6 +101,17 @@ describe("loadOrgSnapshot", () => {
   it.each(TABLES)("throws naming %s — and only the table — on its error", async (table) => {
     const { client } = fakeClient({ errors: { [table]: { message: "boom" } } });
     await expect(loadOrgSnapshot(client, "org-7", NO_EMAILS)).rejects.toThrow(table);
+  });
+
+  // The thrown text names only the table, so this line is the one record of the cause.
+  it.each(TABLES)("logs the database's code for %s before throwing", async (table) => {
+    const logged = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { client } = fakeClient({ errors: { [table]: { code: "57014", message: "ada@example.com" } } });
+    await expect(loadOrgSnapshot(client, ORG)).rejects.toThrow(table);
+    expect(loggedLines(logged)).toEqual([
+      { level: "error", what: "Member snapshot read failed", step: table, code: "57014", ref: expect.any(String), ids: { org: ORG } },
+    ]);
+    logged.mockRestore();
   });
 
   it("never puts row content in the thrown message", async () => {

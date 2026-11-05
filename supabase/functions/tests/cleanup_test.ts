@@ -3,6 +3,7 @@
 // reported, at the boundary and across churches.
 
 import { assertEquals } from "jsr:@std/assert@1";
+import { logged } from "./logged.ts";
 import {
   cleanUpOrg,
   cleanUpOrgs,
@@ -579,6 +580,30 @@ Deno.test("one church failing does not stop the next, and the summary carries th
     console.error = originalError;
   }
 });
+
+// Each of these reaches the summary as text, so its code is logged where the database answered.
+for (
+  const [label, options, step, code] of [
+    ["live invite read", { failRead: ["access_requests"] }, "access_requests_pending", "42501"],
+    ["prayer setting read", { failRead: ["organizations"] }, "organizations", "42501"],
+    ["reminder pass prune", { failDelete: ["serving_reminder_passes"] }, "serving_reminder_passes", "57014"],
+  ] as const
+) {
+  Deno.test(`a failed ${label} logs the database's code under its step`, async () => {
+    const { client } = fakeClient({
+      organizations: [org(6)],
+      access_requests: [],
+      serving_reminder_passes: [{ id: "old", org_id: ORG, send_date: JUST_PAST_REMINDERS }],
+    }, options);
+
+    const lines = await logged(() => cleanUpOrg(client, ORG, NOW));
+
+    assertEquals(
+      lines.filter((line) => line.code === code).map(({ what, step }) => ({ what, step })),
+      [{ what: step === "serving_reminder_passes" ? "cleanup delete failed" : "cleanup read failed", step }],
+    );
+  });
+}
 
 Deno.test("a clean run summarizes with no failures", () => {
   const removed = { accessRequests: 1, familyInvites: 2, groupInvites: 3, feedback: 4, prayerRequests: 5, reminderPasses: 6, eventReminderPasses: 7 };

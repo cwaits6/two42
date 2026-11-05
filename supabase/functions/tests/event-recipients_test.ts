@@ -4,6 +4,7 @@
 // by data, not by the fake's shape.
 
 import { assertEquals, assertRejects } from "jsr:@std/assert@1";
+import { logged } from "./logged.ts";
 import {
   resolveEventReminderRecipients,
   type EventRecipientClient,
@@ -29,7 +30,7 @@ function makeFakeClient(
   const chains: RecordedChain[] = [];
   const resolve = (chain: RecordedChain) => {
     if (errors[chain.from]) {
-      return Promise.resolve({ data: null, error: { message: errors[chain.from] } });
+      return Promise.resolve({ data: null, error: { message: errors[chain.from], code: "42501" } });
     }
     const [col, values] = chain.in!;
     const data = (tables[chain.from] ?? []).filter((row) => values.includes(row[col]));
@@ -185,5 +186,13 @@ for (const table of ["rsvps", "group_members", "profiles"]) {
       Error,
       `${table} query failed: boom`,
     );
+  });
+
+  Deno.test(`a ${table} query error logs the database's code before it is rethrown as text`, async () => {
+    const { client } = makeFakeClient(TABLES, { [table]: "boom" });
+    const lines = await logged(() => resolveEventReminderRecipients(client, ORG, GROUP, EVENT));
+    assertEquals(lines.map(({ what, code }) => ({ what, code })), [
+      { what: `${table} query failed`, code: "42501" },
+    ]);
   });
 }
