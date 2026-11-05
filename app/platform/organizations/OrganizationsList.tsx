@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { EMAIL, EMAIL_MAX_LENGTH } from "@/lib/emailAddress";
 import { NETWORK_ERROR, operatorMessage } from "@/lib/errorCopy";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -34,12 +35,6 @@ interface OrganizationsListProps {
   initialOrgs: PlatformOrg[];
 }
 
-// Mirrors EMAIL in lib/branding.ts. Copied rather than imported: that module
-// pulls in the server Supabase client, and this is a client component. The
-// route handler re-validates with the shared constant — this is only to save
-// the operator a round trip.
-const EMAIL = /^[^\s@<>,;:"\\]+@[^\s@<>,;:"\\]+\.[^\s@<>,;:"\\]+$/;
-
 type Field = "org-name" | "org-owner-email";
 type FieldErrors = Partial<Record<Field, string>>;
 
@@ -49,7 +44,7 @@ export function addOrganizationErrors(name: string, ownerEmail: string): FieldEr
   if (!name) found["org-name"] = "Enter the organization's name.";
   if (!ownerEmail) {
     found["org-owner-email"] = "Enter the first admin's email.";
-  } else if (ownerEmail.length > 254 || !EMAIL.test(ownerEmail)) {
+  } else if (ownerEmail.length > EMAIL_MAX_LENGTH || !EMAIL.test(ownerEmail)) {
     found["org-owner-email"] = "Enter an email address like name@example.com.";
   }
   return found;
