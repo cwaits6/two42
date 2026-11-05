@@ -168,12 +168,20 @@ wedge that Sunday behind `unique (group_id, service_date)`:
   than the actor must hold a `team_members` row for the team in the team's
   org (`SV004`): the household rule decides who may add whom, being on the
   team decides who can be on a date
-  (`20261116000000_serving_blocks_couples_reminder_time.sql`).
+  (`20261116000000_serving_blocks_couples_reminder_time.sql`). The date must
+  be one of the team's dates (`SV006`): a Sunday, not before the church's
+  local date, inside the set block or the rolling window, read from the
+  team's own `serving_team_settings` row and the org's time zone.
 - `serving_signup_create(_group_id, _service_date, _attendee_ids)` — the
   authenticated entry point; actor from `auth.uid()`, group org pinned
-  against `app_request_org_id()`, RLS INSERT-policy arms re-checked.
-  EXECUTE: `authenticated` + `service_role`. No `anon` grant on either —
-  the signed-link routes run server-side on the service-role client.
+  against `app_request_org_id()`, the caller's standing on the team
+  checked in the body. EXECUTE: `authenticated` + `service_role`. No `anon`
+  grant on either — the signed-link routes run server-side on the
+  service-role client.
+
+`serving_signups` has no INSERT policy, so these two functions are the only
+way a client takes a date and their rules cannot be skipped with a direct
+insert.
 
 `SECURITY DEFINER` bypasses RLS, so **the org resolution and equality checks
 in the function bodies are the tenant boundary; no lint sees them.**
@@ -218,6 +226,16 @@ tables it writes, `serving_reminder_passes` and `serving_reminder_sends`, carry
 the restrictive isolation floor and no permissive policy or client grant at
 all: only the service key reads or writes the sent record. Both are pinned by
 `supabase/tests/serving_reminder_record_suite.sql`.
+
+`serving_reminder_passes_prune(_org_id, _before, _limit)` (same migration) is
+what the nightly `clean-up-expired-data` job calls, in a loop per church,
+to delete that church's passes with a `send_date` before the retention
+cutoff: at most `_limit` per call, oldest first, the sends going with each
+pass through the foreign key. It exists because PostgREST cannot limit a
+delete. EXECUTE: `service_role` only, `SECURITY INVOKER` for the same
+reason as the claim; every row it reads and deletes is filtered on
+`_org_id`, which the job takes from `listActiveOrgs()`. The same suite pins
+the grant, the bound and that another church's passes stay.
 
 ## Person deletion RPC — a definer-function bypass surface
 
@@ -795,7 +813,9 @@ church outside 6 AM to 10 PM costs no query; a church inside it costs one
 traversals from the org-filtered parent); and only teams due with a reminder
 still unsent reach `serving_reminder_claim()`, one call per church with the
 church's id from `listActiveOrgs()`. Every send is claimed in that call before
-Resend is called, carries an `Idempotency-Key` built from the record's key,
+Resend is called, reserves one place against the church's daily email cap
+just before it is mailed (so a claim released unmailed costs nothing),
+carries an `Idempotency-Key` built from the record's key,
 and is settled on `serving_reminder_sends` with `org_id`, `team_id`,
 `send_date` and `profile_id`. The run stops starting new teams at a time
 budget and leaves the rest to the next firing; the record keeps that safe.
@@ -834,7 +854,7 @@ outside its scan set entirely, so these calls are covered by review and by
 |------|--------------------------|-------------------------|------------|
 | `supabase/functions/send-event-reminders/index.ts` | Cron job; reads events/RSVPs and emails attendees with no user session | Reminder fan-out iterates all rows across orgs | Refuses any caller but a service key. **Implemented (Phase 3, #212):** iterates active orgs via `_shared/orgs.ts`, every query filtered on `org_id`, per-org failures isolated so one org cannot suppress another's send. **Group scope:** org → group iteration, events on `group_id`, recipients gated on current group membership, per-group failures in `failedItems[]`. **Branding (CWA-56, #322):** `organizations.branding` rides along on the already-org-anchored `listActiveOrgs()` select — no new service-role call site, no new unscoped query — and is validated by `_shared/branding.ts` (a mirror of `lib/branding.ts` + `lib/email/identity.ts`) before reaching any CSS or RFC 5322 sink. **Link origin:** every link is built on the one canonical host (the `SITE_URL` function secret) — no query. **Time zone:** `organizations.timezone` rides along on the same `listActiveOrgs()` select and formats the reminder's event time |
 | `supabase/functions/send-serving-reminders/index.ts` | Cron job; reads serving signups and emails assignees with no user session | Same as `send-event-reminders` | Refuses any caller but a service key. **Implemented (Phase 3, #212):** same per-org iteration and `org_id` filters; `resolveCanSign` org-scoped; `serving_broadcasts` audit rows stamped with the processed row's org, not a constant. **Branding (CWA-56, #322):** same `listActiveOrgs()` ride-along, validated by `_shared/branding.ts`. **Link origin:** the same canonical `SITE_URL`, threaded into every cancel/signup/team-page link. **Per-team isolation (CWA-50, #316):** a failing team is recorded in the run summary's `failedItems[]` keyed by `team_id` — ids, never org-defined team names, in operator diagnostics. **Group scope:** the link mode is per group (`group_settings` through `_shared/groups.ts`), every `serving_*` query is on `team_id`, and links open `/g/<group_id>/serving/<team_id>` |
-| `supabase/functions/clean-up-expired-data/index.ts` | Cron job; deletes expired requests, invites, feedback, serving reminder passes older than 35 days (in batches of 500, their sends through the foreign key) and, for a church that opted in, prayer requests, with no user session | A delete missing its filter removes another church's data for good | Refuses any caller but a service key. Iterates active orgs, one org-filtered delete per rule, failures isolated per step and per org. The rules and their boundaries are unit-tested in `tests/retention_test.ts` and `tests/cleanup_test.ts` |
+| `supabase/functions/clean-up-expired-data/index.ts` | Cron job; deletes expired requests, invites, feedback, serving reminder passes older than 35 days (through `serving_reminder_passes_prune()`, at most 500 per call, their sends through the foreign key) and, for a church that opted in, prayer requests, with no user session | A delete missing its filter removes another church's data for good | Refuses any caller but a service key. Iterates active orgs, one org-filtered delete per rule, failures isolated per step and per org. The rules and their boundaries are unit-tested in `tests/retention_test.ts` and `tests/cleanup_test.ts` |
 
 All three check their own caller first, because each acts unattended: the
 reminder jobs send email that cannot be recalled, and the cleanup job deletes

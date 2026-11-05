@@ -1,6 +1,7 @@
 -- The serving reminder sent record: the two tables no client can reach, the
 -- claim the hourly job makes before it mails anyone, the pass that fixes a
--- day's recipients, the cut-over from the daily job, and the cron entries.
+-- day's recipients, the nightly cleanup's bounded delete, the cut-over from
+-- the daily job, and the cron entries.
 --
 -- Run locally through the shared stack's container (never `supabase test db`):
 --
@@ -205,21 +206,69 @@ select is(pg_temp.claim('rr.org_b', array['rr.team', 'rr.team_b']), 'SR001',
 delete from auth.users where id = current_setting('rr.chloe')::uuid;
 select is(pg_temp.sends('rr.team'), 'henry:sent', 'deleting Chloe removes her send and leaves Henry''s');
 
--- ── Cut-over from the daily job ─────────────────────────────────────────────
+-- ── The nightly cleanup's bounded delete ────────────────────────────────────
+select isnt_definer('public', 'serving_reminder_passes_prune', array['uuid', 'date', 'integer'],
+  'serving_reminder_passes_prune is SECURITY INVOKER, like the claim');
+select ok(
+  not has_function_privilege('anon', 'public.serving_reminder_passes_prune(uuid,date,integer)', 'execute')
+  and not has_function_privilege('authenticated', 'public.serving_reminder_passes_prune(uuid,date,integer)', 'execute')
+  and has_function_privilege('service_role', 'public.serving_reminder_passes_prune(uuid,date,integer)', 'execute'),
+  'only service_role may execute serving_reminder_passes_prune');
+
 delete from public.serving_reminder_passes where org_id in (current_setting('rr.org_a')::uuid, current_setting('rr.org_b')::uuid);
-select is(private.serving_reminder_cutover('2026-11-05T14:59:00Z'), 0,
-  'before the daily job''s 15:00 UTC firing, no pass is written and the hourly job sends the day itself');
-select is(
-  (select count(*)::int from public.serving_reminder_passes
-    where org_id in (current_setting('rr.org_a')::uuid, current_setting('rr.org_b')::uuid)),
-  0, 'no pass for either church');
-select ok(private.serving_reminder_cutover('2026-11-05T15:01:00Z') >= 3,
-  'after the firing, every enabled team gets a pass for the local date it sent on');
+insert into public.serving_reminder_passes (org_id, team_id, send_date)
+  select current_setting('rr.org_a')::uuid, current_setting('rr.team')::uuid, d::date
+  from generate_series(date '2026-01-01', date '2026-01-05', interval '1 day') d;
+insert into public.serving_reminder_passes (org_id, team_id, send_date)
+  values (current_setting('rr.org_b')::uuid, current_setting('rr.team_b')::uuid, '2026-01-01');
+insert into public.serving_reminder_sends (org_id, team_id, send_date, profile_id)
+  values (current_setting('rr.org_a')::uuid, current_setting('rr.team')::uuid, '2026-01-01', current_setting('rr.henry')::uuid);
+
+create function pg_temp.prune(_org text, _before date, _limit integer) returns integer language plpgsql as $$
+declare n integer;
+begin
+  set local role service_role;
+  n := public.serving_reminder_passes_prune(current_setting(_org)::uuid, _before, _limit);
+  set local role none;
+  return n;
+end $$;
+
+select is(pg_temp.prune('rr.org_a', '2026-01-05', 3), 3, 'one call deletes no more than its limit');
 select is(
   (select string_agg(send_date::text, ',' order by send_date) from public.serving_reminder_passes
-    where team_id in (current_setting('rr.team')::uuid, current_setting('rr.team_b')::uuid)),
-  '2026-11-05,2026-11-06',
-  'Chicago''s date was November 5 and Auckland''s already November 6 at that firing');
+    where org_id = current_setting('rr.org_a')::uuid),
+  '2026-01-04,2026-01-05', 'the oldest passes went first');
+select is(
+  (select count(*)::int from public.serving_reminder_sends where org_id = current_setting('rr.org_a')::uuid),
+  0, 'a pass takes its sends with it');
+select is(pg_temp.prune('rr.org_a', '2026-01-05', 3), 1, 'the next call takes what is left before the date');
+select is(pg_temp.prune('rr.org_a', '2026-01-05', 3), 0, 'a pass on the date itself stays');
+select is(
+  (select count(*)::int from public.serving_reminder_passes where org_id = current_setting('rr.org_b')::uuid),
+  1, 'another church''s pass, older than the date, is untouched');
+
+-- ── Cut-over from the daily job ─────────────────────────────────────────────
+-- The pass goes on the local date the most recent 15:00 UTC firing mailed.
+create function pg_temp.cutover_dates(_at timestamptz) returns text language plpgsql as $$
+declare out text;
+begin
+  delete from public.serving_reminder_passes
+    where org_id in (current_setting('rr.org_a')::uuid, current_setting('rr.org_b')::uuid);
+  perform private.serving_reminder_cutover(_at);
+  select string_agg(send_date::text, ',' order by send_date) into out
+  from public.serving_reminder_passes
+  where team_id in (current_setting('rr.team')::uuid, current_setting('rr.team_b')::uuid);
+  return out;
+end $$;
+
+select is(pg_temp.cutover_dates('2026-11-05T15:01:00Z'), '2026-11-05,2026-11-06',
+  'just after a firing: Chicago''s date was November 5 and Auckland''s already November 6');
+select is(pg_temp.cutover_dates('2026-11-06T01:00:00Z'), '2026-11-05,2026-11-06',
+  'that evening in Chicago, past midnight UTC, the same firing still counts: nobody is mailed twice');
+select is(pg_temp.cutover_dates('2026-11-05T14:59:00Z'), '2026-11-04,2026-11-05',
+  'just before a firing, the passes are for the day before''s: Chicago''s November 5 is left to the hourly job');
+select ok(private.serving_reminder_cutover('2026-11-05T15:01:00Z') >= 3,
+  'every enabled team gets a pass');
 select is(private.serving_reminder_cutover('2026-11-05T15:01:00Z'), 0,
   'running it again writes nothing more');
 

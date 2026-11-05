@@ -561,7 +561,7 @@ $$;
 update public.profiles set role = 'pending'
   where id in (current_setting('gr.leader_a1')::uuid, current_setting('gr.member_a1')::uuid,
                current_setting('gr.member_a3')::uuid);
-select pg_temp.probe_group_access('pend', date '2030-01-06');
+select pg_temp.probe_group_access('pend', current_date + (7 - extract(dow from current_date)::int));
 
 select is(current_setting('gr.pend_is_member'), 'false',
   'a pending person with a group row is not a group member');
@@ -593,7 +593,8 @@ select is(current_setting('gr.pend_settings_updated')::int, 0,
 update public.profiles set role = 'member'
   where id in (current_setting('gr.leader_a1')::uuid, current_setting('gr.member_a1')::uuid,
                current_setting('gr.member_a3')::uuid);
-select pg_temp.probe_group_access('back', date '2030-02-03');
+-- A later Sunday, still inside the team's rolling window.
+select pg_temp.probe_group_access('back', current_date + (7 - extract(dow from current_date)::int) + 14);
 
 select is(
   ((select count(*) from public.group_members where group_id = current_setting('gr.grp_a1')::uuid)
@@ -614,8 +615,8 @@ select is(current_setting('gr.back_serving')::int, 1,
   'approved again, the person reads their team''s serving settings');
 select is(current_setting('gr.back_rpc_err'), 'none',
   'approved again, the team member signs up to serve through the RPC');
-select is(current_setting('gr.back_direct_err'), 'none',
-  'approved again, the team member inserts a serving signup directly');
+select is(current_setting('gr.back_direct_err'), '42501',
+  'approved again, a direct insert is still refused: the RPC is the only way to take a date');
 select is(current_setting('gr.back_is_leader'), 'true',
   'approved again, the person is a group leader with no re-adding');
 select is(current_setting('gr.back_group_updated')::int, 1,

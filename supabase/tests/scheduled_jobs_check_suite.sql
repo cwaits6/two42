@@ -118,5 +118,29 @@ select is(
   ),
   'on the 1st, three responses are expected at 15:00, and every hour with nothing is named');
 
+-- A job scheduled partway through a window: the hours before its first run
+-- are not expected, on a day earlier than any other run.
+do $$
+begin
+  perform pg_temp.ran('send-serving-reminders-hourly', '2025-03-05T12:00:00Z');
+  perform pg_temp.answered('2025-03-05T12:00:00Z', 200);
+end $$;
+
+select is(pg_temp.problems('2025-03-05T12:30:00Z'), '[]',
+  'the hours before a job first ran are not reported as missing');
+select is(
+  private.scheduled_jobs_check('2025-03-05T12:30:00Z') -> 'jobs',
+  '{"12:00 send-serving-reminders-hourly": "succeeded"}'::jsonb,
+  'only the firing since the job''s first run is checked');
+select is(
+  (select jsonb_agg(p order by p) from jsonb_array_elements_text(private.scheduled_jobs_check('2025-03-05T14:30:00Z') -> 'problems') p),
+  jsonb_build_array(
+    'expected 1 response(s) at 13:00, found 0',
+    'expected 1 response(s) at 14:00, found 0',
+    'send-serving-reminders-hourly at 13:00: job run is missing',
+    'send-serving-reminders-hourly at 14:00: job run is missing'
+  ),
+  'a firing missed after the first run is still reported');
+
 select * from finish();
 rollback;

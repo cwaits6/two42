@@ -176,12 +176,49 @@ grant execute on function public.serving_reminder_claim(uuid, date, date, uuid[]
 comment on function public.serving_reminder_claim(uuid, date, date, uuid[]) is
   'Starts the day''s reminder pass for each team that has none, fixing its recipients, then claims every unsent reminder in those passes and returns the people to mail. Tenant anchor: each team''s own org_id, compared with _org_id; a mismatch raises SR001. service_role only.';
 
--- ── Who can be on a date ────────────────────────────────────────────────────
+-- The nightly cleanup deletes a church's passes past their retention through
+-- this, a bounded set per call: the database API cannot limit a delete, and
+-- a table that grows every day should never be cleared in one statement
+-- after a gap. serving_reminder_sends goes with each pass through its
+-- foreign key. SECURITY INVOKER on the service key, like the claim.
+create function public.serving_reminder_passes_prune(_org_id uuid, _before date, _limit integer)
+  returns integer
+  language sql security invoker set search_path = ''
+as $$
+  with doomed as (
+    select p.team_id, p.send_date
+    from public.serving_reminder_passes p
+    where p.org_id = _org_id and p.send_date < _before
+    order by p.send_date
+    limit _limit
+  ),
+  gone as (
+    delete from public.serving_reminder_passes p
+    using doomed d
+    where p.org_id = _org_id and p.team_id = d.team_id and p.send_date = d.send_date
+    returning 1
+  )
+  select count(*)::integer from gone;
+$$;
+
+revoke execute on function public.serving_reminder_passes_prune(uuid, date, integer) from public, anon, authenticated;
+grant execute on function public.serving_reminder_passes_prune(uuid, date, integer) to service_role;
+
+comment on function public.serving_reminder_passes_prune(uuid, date, integer) is
+  'Deletes at most _limit of one church''s reminder passes with a send_date before _before, oldest first, and returns how many went. Tenant anchor: the _org_id predicate on every row it reads and deletes. service_role only.';
+
+-- ── Who can be on a date, and which dates ───────────────────────────────────
 -- Being on the team stays the one rule for who can sign up. The household
 -- rule alone let a spouse who is in the group but not on the team be put on
--- a date; serving_signup_apply now also requires every attendee other than
--- the actor (whose own standing the caller checks) to hold a team_members
--- row for the team. Same body as before otherwise.
+-- a date; serving_signup_apply also requires every attendee other than the
+-- actor (whose own standing the caller checks) to hold a team_members row
+-- for the team.
+--
+-- The team's dates are a rule of the function too, so a request that skips
+-- the app's routes cannot book a date the schedule never shows: a Sunday,
+-- not before the church's local date, inside the set block or the rolling
+-- window. lib/serving/dates.ts teamServiceDates() is the same rule for the
+-- screens; serving_team_dates_suite.sql holds both sides of each bound.
 create or replace function public.serving_signup_apply(
   _group_id     uuid,
   _service_date date,
@@ -198,6 +235,13 @@ declare
   _attendee_valid bigint;
   _off_team bigint;
   _enabled boolean;
+  _schedule text;
+  _window_weeks integer;
+  _date_from date;
+  _date_to date;
+  _zone text;
+  _today date;
+  _first date;
   _signup_id uuid;
   _existing_by uuid;
   _created boolean;
@@ -273,14 +317,30 @@ begin
       using errcode = 'SV004';
   end if;
 
-  select sts.enabled into _enabled
+  select sts.enabled, sts.schedule, sts.window_weeks, sts.date_from, sts.date_to, o.timezone
+    into _enabled, _schedule, _window_weeks, _date_from, _date_to, _zone
   from public.serving_team_settings sts
+  join public.organizations o on o.id = sts.org_id
   where sts.team_id = _group_id
     and sts.org_id = _org;
 
   if not coalesce(_enabled, false) then
     raise exception 'serving signups not enabled for group %', _group_id
       using errcode = 'SV003';
+  end if;
+
+  -- The first Sunday on or after the church's local date opens the rolling
+  -- window; a set block is bounded by its own From and To instead.
+  _today := (pg_catalog.now() at time zone _zone)::date;
+  _first := _today + (7 - extract(dow from _today)::integer) % 7;
+
+  if _service_date is null
+     or extract(dow from _service_date) <> 0
+     or _service_date < _today
+     or (_schedule = 'set' and (_service_date < _date_from or _service_date > _date_to))
+     or (_schedule <> 'set' and _service_date >= _first + _window_weeks * 7) then
+    raise exception 'serving signup rejected: % is not one of the dates of group %', _service_date, _group_id
+      using errcode = 'SV006';
   end if;
 
   -- unique (team_id, service_date) is the race guard. DO NOTHING (not
@@ -322,6 +382,12 @@ begin
   return query select _signup_id, _org, _created;
 end;
 $$;
+
+-- A direct insert checked the member's standing and nothing else: any date,
+-- and no attendee, since attendee rows are written by the function alone.
+-- No screen or route inserts here, so the function is the one way to take a
+-- date and its rules cannot be skipped.
+drop policy "Team members and group leaders can create serving signups" on public.serving_signups;
 
 -- ── Changing who is serving ─────────────────────────────────────────────────
 -- Either spouse on a date, or whoever tapped Sign up, can switch it between
@@ -518,15 +584,16 @@ select private.schedule_edge_reminder(
   120000
 );
 
--- Cut-over. The daily job sent at 15:00 UTC, with no record. If this
--- migration lands after that firing, the hourly job would find no pass for
--- today, see the team's hour has passed, and send everyone again. So when
--- the daily firing is already behind us, every enabled team gets a pass for
--- the church's local date that firing acted on, and nothing is sent twice;
--- before it, no pass is written and the hourly job sends today's reminders
--- itself. Kept as a function so the test can run it on both sides of 15:00
--- UTC; drop it together with the daily mode of send-serving-reminders once
--- a release has run on the hourly job.
+-- Cut-over. The daily job sent at 15:00 UTC, with no record. Whenever this
+-- migration lands, the hourly job would find no pass for the church's local
+-- date that the last daily firing mailed and, with the team's hour passed,
+-- send everyone again. So every enabled team gets a pass for the local date
+-- of the most recent daily firing: the same UTC day's when the migration
+-- lands at or after 15:00 UTC, the day before's when it lands earlier. A
+-- pass for a local date that has ended is inert, and the hourly job sends
+-- every later date itself. Kept as a function so the test can run it on
+-- both sides of 15:00 UTC; drop it together with the daily mode of
+-- send-serving-reminders once a release has run on the hourly job.
 create function private.serving_reminder_cutover(_at timestamptz) returns integer
   language plpgsql
   set search_path = ''
@@ -536,7 +603,7 @@ declare
   _n integer;
 begin
   if _at < _daily_firing then
-    return 0;
+    _daily_firing := _daily_firing - interval '1 day';
   end if;
 
   insert into public.serving_reminder_passes (org_id, team_id, send_date)
@@ -588,6 +655,15 @@ as $$
     ) as j(jobname, hour, first_of_month_only)
     where (j.hour is null or j.hour = extract(hour from f.at at time zone 'UTC'))
       and (not j.first_of_month_only or extract(day from f.at at time zone 'UTC') = 1)
+      -- A job is not expected before the hour it first ran, or the check
+      -- after the migration that schedules one reports it missing for the
+      -- hours before it existed. A job with no run at all is still expected.
+      and f.at >= coalesce((
+        select date_trunc('hour', min(d.start_time))
+        from cron.job cj
+        join cron.job_run_details d using (jobid)
+        where cj.jobname = j.jobname
+      ), f.at)
   ),
   runs as (
     select e.at, e.jobname, (

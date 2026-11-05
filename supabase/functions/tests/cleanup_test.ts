@@ -46,7 +46,6 @@ function fakeClient(tables: Record<string, Row[]>, options: FakeOptions = {}) {
   function chain(table: string, op: "delete" | "select") {
     const predicates: Predicate[] = [];
     const filters: string[] = [];
-    let limitTo: number | null = null;
     const add = (label: string, predicate: Predicate) => {
       filters.push(label);
       predicates.push(predicate);
@@ -62,7 +61,7 @@ function fakeClient(tables: Record<string, Row[]>, options: FakeOptions = {}) {
         if (options.failDelete?.includes(table) && failsHere) {
           return { count: null, error: { message: `${table} delete refused` } };
         }
-        const doomed = matching().slice(0, limitTo ?? undefined);
+        const doomed = matching();
         tables[table] = (tables[table] ?? []).filter((row) => !doomed.includes(row));
         return { count: options.nullCount?.includes(table) ? null : doomed.length, error: null };
       }
@@ -93,11 +92,6 @@ function fakeClient(tables: Record<string, Row[]>, options: FakeOptions = {}) {
         const excluded = String(value).slice(1, -1).split(",");
         return add(`not ${column} in ${value}`, (row) => !excluded.includes(String(row[column])));
       },
-      order: () => builder,
-      limit: (count: number) => {
-        limitTo = count;
-        return builder;
-      },
       maybeSingle: () => {
         const settled = settle() as { data?: Row[] | null; error: unknown };
         return Promise.resolve({ data: settled.data?.[0] ?? null, error: settled.error });
@@ -110,11 +104,28 @@ function fakeClient(tables: Record<string, Row[]>, options: FakeOptions = {}) {
     return builder;
   }
 
+  // serving_reminder_passes_prune() as the migration defines it: one church's
+  // passes before the date, oldest first, at most the limit.
+  function prune(args: { _org_id: string; _before: string; _limit: number }) {
+    const table = "serving_reminder_passes";
+    queries.push({ table, op: "rpc", filters: [`eq org_id=${args._org_id}`, `lt send_date=${args._before}`] });
+    if (options.failDelete?.includes(table)) {
+      return { data: null, error: { message: `${table} delete refused` } };
+    }
+    const doomed = (tables[table] ?? [])
+      .filter((row) => row.org_id === args._org_id && (row.send_date as string) < args._before)
+      .sort((a, b) => (a.send_date as string).localeCompare(b.send_date as string))
+      .slice(0, args._limit);
+    tables[table] = (tables[table] ?? []).filter((row) => !doomed.includes(row));
+    return { data: options.nullCount?.includes(table) ? null : doomed.length, error: null };
+  }
+
   const client = {
     from: (table: string) => ({
       delete: () => chain(table, "delete"),
       select: () => chain(table, "select"),
     }),
+    rpc: (_fn: string, args: Parameters<typeof prune>[0]) => Promise.resolve(prune(args)),
   } as unknown as CleanupClient;
   return { client, tables, queries };
 }
@@ -382,7 +393,7 @@ Deno.test("serving_reminder_passes: a pass older than 35 days goes, one on the c
   assertEquals(ids(tables.serving_reminder_passes), ["on-cutoff", "recent"]);
 });
 
-Deno.test("serving_reminder_passes: a backlog is deleted a batch at a time and counted whole", async () => {
+Deno.test("serving_reminder_passes: a backlog is asked for a batch at a time until one comes back short", async () => {
   const backlog = Array.from({ length: DELETE_BATCH * 2 + 1 }, (_, i) => ({
     id: `p${i}`,
     org_id: ORG,
@@ -396,6 +407,23 @@ Deno.test("serving_reminder_passes: a backlog is deleted a batch at a time and c
   assertEquals(removed.reminderPasses, DELETE_BATCH * 2 + 1);
   assertEquals(ids(tables.serving_reminder_passes), []);
   assertEquals(queries.filter((q) => q.table === "serving_reminder_passes").length, 3);
+});
+
+Deno.test("serving_reminder_passes: a refused or uncounted delete is a failure, never a quiet zero", async () => {
+  for (const [option, expected] of [
+    [{ failDelete: ["serving_reminder_passes"] }, "serving_reminder_passes delete refused"],
+    [{ nullCount: ["serving_reminder_passes"] }, "the delete returned no count"],
+  ] as const) {
+    const { client } = fakeClient(
+      { organizations: [org()], serving_reminder_passes: [{ id: "old", org_id: ORG, send_date: JUST_PAST_REMINDERS }] },
+      option,
+    );
+
+    const { removed, failures } = await cleanUpOrg(client, ORG, NOW);
+
+    assertEquals(removed.reminderPasses, 0);
+    assertEquals(failures, [{ step: "serving_reminder_passes", error: expected }]);
+  }
 });
 
 Deno.test("every query is bound to the org being cleaned, and another church's rows stay", async () => {

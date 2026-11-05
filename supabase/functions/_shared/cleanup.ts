@@ -15,7 +15,7 @@ import {
   reminderCutoff,
 } from "./retention.ts";
 
-/** Rows one batched delete removes at most. */
+/** Passes one serving_reminder_passes_prune() call deletes at most. */
 export const DELETE_BATCH = 500;
 
 type QueryError = { message: string } | null;
@@ -28,10 +28,7 @@ interface FilterBuilder<Self> {
 }
 
 export interface DeleteChain
-  extends FilterBuilder<DeleteChain>, PromiseLike<{ count: number | null; error: QueryError }> {
-  order(column: string): DeleteChain;
-  limit(count: number): DeleteChain;
-}
+  extends FilterBuilder<DeleteChain>, PromiseLike<{ count: number | null; error: QueryError }> {}
 
 export interface ReadChain<Row = Record<string, unknown>>
   extends
@@ -46,6 +43,10 @@ export interface CleanupClient {
     delete(options: { count: "exact" }): DeleteChain;
     select(columns: string, options?: { count: "exact" }): ReadChain;
   };
+  rpc(
+    fn: "serving_reminder_passes_prune",
+    args: { _org_id: string; _before: string; _limit: number },
+  ): PromiseLike<{ data: number | null; error: QueryError }>;
 }
 
 export interface RemovedCounts {
@@ -150,20 +151,6 @@ export async function cleanUpOrg(
     });
   }
 
-  // A table that grows every day is cleared a batch at a time, so one night
-  // after a gap never holds a lock over everything at once.
-  function removeInBatches(key: keyof RemovedCounts, step: string, chain: () => DeleteChain) {
-    return attempt(step, async () => {
-      for (;;) {
-        const { count, error } = await chain().limit(DELETE_BATCH);
-        if (error) throw new Error(error.message);
-        if (count === null) throw new Error("the delete returned no count");
-        removed[key] += count;
-        if (count < DELETE_BATCH) return;
-      }
-    });
-  }
-
   const expired = expiredCutoff(now);
 
   await remove("accessRequests", "access_requests declined", () =>
@@ -257,14 +244,22 @@ export async function cleanUpOrg(
         .lt("created_at", cutoff));
   });
 
-  // serving_reminder_sends goes with its pass through the foreign key.
-  await removeInBatches("reminderPasses", "serving_reminder_passes", () =>
-    supabase
-      .from("serving_reminder_passes")
-      .delete({ count: "exact" })
-      .eq("org_id", orgId)
-      .lt("send_date", reminderCutoff(now))
-      .order("send_date"));
+  // A table that grows every day is cleared a bounded set at a time, so one
+  // night after a gap never deletes everything in one statement. The
+  // database API cannot limit a delete, so the bound lives in the function.
+  await attempt("serving_reminder_passes", async () => {
+    for (;;) {
+      const { data, error } = await supabase.rpc("serving_reminder_passes_prune", {
+        _org_id: orgId,
+        _before: reminderCutoff(now),
+        _limit: DELETE_BATCH,
+      });
+      if (error) throw new Error(error.message);
+      if (data === null) throw new Error("the delete returned no count");
+      removed.reminderPasses += data;
+      if (data < DELETE_BATCH) return;
+    }
+  });
 
   return { orgId, removed, failures };
 }

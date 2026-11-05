@@ -1765,6 +1765,9 @@ isOneToOne: false
               "email": string,"first_name": string,"preferred_name": string,"profile_id": string,"team_id": string
             }[]
                            },
+"serving_reminder_passes_prune":
+{ Args: { "_before": string,"_limit": number,"_org_id": string }; Returns: number
+                           },
 "serving_signup_apply":
 { Args: { "_actor_id": string,"_attendee_ids": (string)[],"_group_id": string,"_service_date": string }; Returns: {
               "created": boolean,"signup_id": string,"signup_org_id": string
