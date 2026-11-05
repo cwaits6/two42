@@ -8,15 +8,31 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("sonner", () => ({ toast }));
 
-const declined = vi.hoisted(() => ({ rows: [{ id: "r1" }] as { id: string }[] }));
+const declined = vi.hoisted(() => ({
+  rows: [{ id: "r1" }] as { id: string }[] | null,
+  error: null as { code: string } | null,
+  table: "",
+  filters: [] as [string, unknown][],
+  update: vi.fn(),
+}));
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
     auth: { getUser: async () => ({ data: { user: { id: "me" } } }) },
-    from: () => ({
-      update: () => ({
-        eq: () => ({ eq: () => ({ select: async () => ({ data: declined.rows, error: null }) }) }),
-      }),
-    }),
+    from: (table: string) => {
+      declined.table = table;
+      const chain = {
+        update: (values: unknown) => {
+          declined.update(values);
+          return chain;
+        },
+        eq: (column: string, value: unknown) => {
+          declined.filters.push([column, value]);
+          return chain;
+        },
+        select: async () => ({ data: declined.rows, error: declined.error }),
+      };
+      return chain;
+    },
   }),
 }));
 
@@ -55,6 +71,10 @@ const click = (name: string) => act(async () => button(name).click());
 
 beforeEach(() => {
   declined.rows = [{ id: "r1" }];
+  declined.error = null;
+  declined.table = "";
+  declined.filters = [];
+  declined.update.mockClear();
   onRemove.mockClear();
   toast.success.mockClear();
   toast.error.mockClear();
@@ -95,6 +115,53 @@ describe("PendingAccessRequests", () => {
     await click("Approve");
     expect(toast.error).toHaveBeenCalledOnce();
     expect(onRemove).not.toHaveBeenCalled();
+  });
+
+  it("takes a request someone else already reviewed off the list, once, when Approve finds it gone", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 404 })));
+
+    await mount();
+    await click("Approve");
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith("This request was already reviewed.");
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(onRemove).toHaveBeenCalledExactlyOnceWith("r1");
+  });
+
+  it("declines only a request still pending, as denied, under the reviewer's name", async () => {
+    await mount();
+    await click("Decline");
+    expect(declined.update).not.toHaveBeenCalled();
+
+    await click("Decline request");
+    expect(declined.table).toBe("access_requests");
+    expect(declined.update).toHaveBeenCalledExactlyOnceWith({
+      status: "denied",
+      reviewed_by: "me",
+      reviewed_at: expect.any(String),
+    });
+    expect(declined.filters).toEqual([
+      ["id", "r1"],
+      ["status", "pending"],
+    ]);
+    expect(toast.success).toHaveBeenCalledExactlyOnceWith("Request declined.");
+    expect(onRemove).toHaveBeenCalledExactlyOnceWith("r1");
+    expect(document.body.textContent).not.toContain("Decline Cy Park's request?");
+  });
+
+  it("keeps the request, and the question, when the decline fails", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    declined.rows = null;
+    declined.error = { code: "XX000" };
+
+    await mount();
+    await click("Decline");
+    await click("Decline request");
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith("Couldn't decline the request. Try again.");
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(onRemove).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain("Decline Cy Park's request?");
+    expect(logged).toHaveBeenCalledExactlyOnceWith("Failed to decline an access request: code=%s", "XX000");
+    logged.mockRestore();
   });
 
   it("asks before declining, and does not report a decline that matched no row", async () => {
