@@ -447,11 +447,7 @@ export function ProfileForm({
             {familySurname && (
               <CheckRow
                 id="different_last_name"
-                label={
-                  someoneElse
-                    ? `Last name is different from the household's (${familySurname})`
-                    : `My last name is different from my household's (${familySurname})`
-                }
+                label={`My last name is different from my household's (${familySurname})`}
                 checked={differentLastName}
                 onChange={setDifferentLastName}
               />
@@ -634,11 +630,7 @@ export function ProfileForm({
           {familyHasAddress && (
             <CheckRow
               id="different_address"
-              label={
-                someoneElse
-                  ? "Address is different from the household's"
-                  : "My address is different from my household's"
-              }
+              label="My address is different from my household's"
               checked={differentAddress}
               onChange={setDifferentAddress}
             />

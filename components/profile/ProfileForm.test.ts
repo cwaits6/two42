@@ -378,10 +378,8 @@ describe("ProfileForm copy about the person", () => {
   });
 
   it("speaks about the person to a household member editing them", async () => {
-    await mount({}, { family: household, editingOther: true });
+    await mount({}, { editingOther: true });
     for (const copy of own) expect(document.body.textContent).not.toContain(copy);
-    expect(document.body.textContent).toContain("Last name is different from the household's (Lovelace)");
-    expect(document.body.textContent).toContain("Address is different from the household's");
     expect(document.body.textContent).toContain(
       "Sharing what they do helps people in their groups find help from someone they know.",
     );

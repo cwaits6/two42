@@ -256,11 +256,9 @@ export function HouseholdClient({
 
     if (!res?.ok) {
       toast.error(
-        res
-          ? failureMessage("save the household", res.status, {
-              403: "Only that spouse can choose their own number. Choose a shared home phone, or ask them to.",
-            })
-          : NETWORK_ERROR,
+        failureMessage("save the household", res?.status ?? "network", {
+          403: "Only that spouse can choose their own number. Choose a shared home phone, or ask them to.",
+        }),
       );
       return;
     }

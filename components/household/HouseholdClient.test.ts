@@ -179,7 +179,7 @@ describe("saving household details", () => {
     fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
     await save();
     expect(toast.error).toHaveBeenLastCalledWith(
-      "Couldn't reach the server. Check your connection and try again.",
+      "Couldn't save the household. Check your connection and try again.",
     );
     expect(refresh).not.toHaveBeenCalled();
   });
