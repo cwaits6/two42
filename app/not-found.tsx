@@ -8,7 +8,7 @@ export const generateMetadata = () => pageTitle("Page not found");
 
 export default function NotFound() {
   return (
-    <PageContainer size="reading">
+    <PageContainer size="reading" centered>
       <PageHeader
         title="Page not found"
         subtitle="This page doesn't exist, or it isn't open to you."

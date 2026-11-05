@@ -4,6 +4,8 @@ type PageContainerSize = "reading" | "default" | "wide";
 
 interface PageContainerProps {
   size?: PageContainerSize;
+  /** For a page with no sidebar beside it, which sits in the middle of the screen. */
+  centered?: boolean;
   className?: string;
   children: React.ReactNode;
 }
@@ -19,18 +21,21 @@ const sizeClasses: Record<PageContainerSize, string> = {
 
 /**
  * Canonical page wrapper: three named widths sharing one gutter and one
- * vertical rhythm, so sibling pages start at the same left edge.
+ * vertical rhythm. Every width starts at the left of its frame, so sibling
+ * pages beside a sidebar share a left edge whatever their maximum.
  */
 export function PageContainer({
   size = "default",
+  centered = false,
   className,
   children,
 }: PageContainerProps) {
   return (
     <div
       className={cn(
-        "mx-auto w-full px-4 py-12 sm:px-6 lg:px-8",
+        "w-full px-4 py-12 sm:px-6 lg:px-8",
         sizeClasses[size],
+        centered && "mx-auto",
         className,
       )}
     >
