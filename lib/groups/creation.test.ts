@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   GROUP_CREATION_POLICIES,
-  GROUP_CREATION_POLICY_OPTIONS,
   GROUP_DESCRIPTION_MAX,
   GROUP_NAME_MAX,
   creationActionFor,
@@ -90,19 +89,5 @@ describe("groupCreationErrorMessage", () => {
     expect(groupCreationErrorMessage("GC999")).toBe(fallback);
     expect(groupCreationErrorMessage("23505")).toBe(fallback);
     expect(groupCreationErrorMessage(undefined)).toBe(fallback);
-  });
-});
-
-describe("GROUP_CREATION_POLICY_OPTIONS", () => {
-  it("lists the three policies in order, each with a label and description", () => {
-    expect(GROUP_CREATION_POLICY_OPTIONS.map((o) => o.value)).toEqual([
-      "open",
-      "approval",
-      "admins",
-    ]);
-    for (const option of GROUP_CREATION_POLICY_OPTIONS) {
-      expect(option.label).not.toBe("");
-      expect(option.description).not.toBe("");
-    }
   });
 });

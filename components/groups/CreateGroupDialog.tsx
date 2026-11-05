@@ -159,7 +159,7 @@ export function CreateGroupDialog({
           data: { user },
         } = await supabase.auth.getUser();
         if (!user) {
-          toast.error("Session expired. Please log in again.");
+          toast.error("Session expired. Please sign in again.");
           return;
         }
         const { data, error } = await supabase
@@ -171,7 +171,7 @@ export function CreateGroupDialog({
           })
           .select("id, name");
         if (error?.code === "42501") {
-          toast.error("Your organization no longer takes group requests.");
+          toast.error("Your church no longer takes group requests.");
           router.refresh();
           close();
           return;
@@ -184,7 +184,7 @@ export function CreateGroupDialog({
           toast.error("Couldn't send the request. Please try again.");
           return;
         }
-        toast.success("Request sent. An org admin will review it.");
+        toast.success("Request sent. A church admin will review it.");
         onRequested(data[0]);
       }
       close();
@@ -206,7 +206,7 @@ export function CreateGroupDialog({
             <DialogDescription>
               {creating
                 ? "The group starts with its leader and an empty roster."
-                : "An org admin reviews the request. The group opens once it is approved."}
+                : "A church admin reviews the request. The group opens once it is approved."}
             </DialogDescription>
           </DialogHeader>
 

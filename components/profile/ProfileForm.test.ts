@@ -214,6 +214,22 @@ describe("ProfileForm inline errors", () => {
     expect(document.body.textContent).not.toContain("Everything you add here shows in the directory, except a birth year, which can only go into a phone contact someone saves.");
   });
 
+  it("words the email setting for whoever the profile belongs to", async () => {
+    await mount();
+    expect(document.body.textContent).toContain("Hide my email from the directory");
+    await act(async () => root.unmount());
+    document.body.innerHTML = "";
+
+    await mount({}, { isAdmin: true });
+    expect(document.body.textContent).toContain("Hide email from the directory");
+    expect(document.body.textContent).not.toContain("Hide my email");
+  });
+
+  it("shows initials from the preferred name, like the directory", async () => {
+    await mount({ first_name: "Augusta", preferred_name: "Gussie", last_name: "Lovelace" });
+    expect(document.querySelector('[data-slot="avatar-fallback"]')?.textContent).toBe("GL");
+  });
+
   it("makes an admin enter an email", async () => {
     const form = await mount({ email: "" }, { isAdmin: true });
     await form.submit();
