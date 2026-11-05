@@ -1,11 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { useSettingSave } from "@/components/admin/useSettingSave";
 
 interface GroupDiscoverySettingsProps {
   /** The caller's own org, as RLS returned it; never an id the browser typed. */
@@ -13,38 +12,24 @@ interface GroupDiscoverySettingsProps {
   discoveryOn: boolean;
 }
 
-/** Org admin control for whether members can find and request to join groups. */
+/** Church admin control for whether members can find and request to join groups. */
 export function GroupDiscoverySettings({ orgId, discoveryOn }: GroupDiscoverySettingsProps) {
-  const [on, setOn] = useState(discoveryOn);
-  const [saving, setSaving] = useState(false);
-  const latest = useRef(0);
-  const router = useRouter();
-  const supabase = createClient();
-
-  async function toggle(next: boolean) {
-    const previous = on;
-    const request = ++latest.current;
-    setOn(next);
-    setSaving(true);
-    const { data, error } = await supabase
-      .from("organizations")
-      .update({ group_discovery: next })
-      .eq("id", orgId)
-      .select("group_discovery");
-    if (request !== latest.current) return;
-    setSaving(false);
-    if (error || !data?.length) {
-      setOn(previous);
-      toast.error("Failed to update the setting.");
-      return;
-    }
-    toast.success(
+  const supabase = useMemo(() => createClient(), []);
+  const { value: on, saving, save } = useSettingSave(discoveryOn, {
+    write: async (next) => {
+      const { data, error } = await supabase
+        .from("organizations")
+        .update({ group_discovery: next })
+        .eq("id", orgId)
+        .select("group_discovery");
+      return !error && (data?.length ?? 0) > 0;
+    },
+    saved: (next) =>
       next
         ? "Members can now find and request to join groups."
-        : "Members now see only the groups they belong to."
-    );
-    router.refresh();
-  }
+        : "Members now see only the groups they belong to.",
+    action: "update the setting",
+  });
 
   return (
     <div className="rounded-2xl border border-border bg-card px-5">
@@ -58,7 +43,7 @@ export function GroupDiscoverySettings({ orgId, discoveryOn }: GroupDiscoverySet
             directly. Each group can be more private than this setting, never less.
           </p>
         </div>
-        <Switch id="group-discovery" className="mt-0.5 shrink-0" checked={on} disabled={saving} onCheckedChange={toggle} />
+        <Switch id="group-discovery" className="mt-0.5 shrink-0" checked={on} disabled={saving} onCheckedChange={save} />
       </div>
     </div>
   );

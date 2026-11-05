@@ -52,6 +52,11 @@ vi.mock("@/components/admin/PrayerRetentionSettings", () => ({
   PrayerRetentionSettings: () => null,
 }));
 
+vi.mock("@/lib/groups/creationPolicy", () => ({ getGroupCreationPolicy: async () => "approval" }));
+vi.mock("@/lib/groups/discovery", () => ({ getDiscoveryOn: async () => false }));
+vi.mock("@/components/groups/GroupDiscoverySettings", () => ({ GroupDiscoverySettings: () => null }));
+vi.mock("@/components/admin/OrgGroupControls", () => ({ OrgGroupControls: () => null }));
+
 const prayerRetention = vi.hoisted(() => ({ current: "off" as "off" | null }));
 const sendingDomains = vi.hoisted(() => ({
   CUSTOM_SENDING_DOMAINS_ENABLED: false,
@@ -116,6 +121,15 @@ describe("ChurchSettings", () => {
 
     expect(hrefs).toContain("/admin/settings/email");
     expect(texts).toContain("Email sending domain");
+  });
+
+  it("groups every church-wide rule under a plain heading, with Email last when it is on", async () => {
+    sendingDomains.CUSTOM_SENDING_DOMAINS_ENABLED = true;
+
+    const { texts } = await render();
+    const headings = ["Directory", "Groups", "Giving", "Events", "Prayer requests", "Email"];
+
+    expect(texts.filter((text) => headings.includes(text))).toEqual(headings);
   });
 
   it("shows an error, not an off switch, when the prayer request setting can't be read", async () => {

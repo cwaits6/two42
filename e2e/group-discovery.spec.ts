@@ -34,7 +34,7 @@ async function setSwitch(page: Page, url: string, name: string, on: boolean, toa
 function setDiscovery(on: boolean) {
   return setSwitch(
     admin.page,
-    "/admin/groups",
+    "/admin/settings",
     DISCOVERY_SWITCH,
     on,
     on ? DISCOVERY_ON_TOAST : DISCOVERY_OFF_TOAST,

@@ -1,12 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { DateTime } from "luxon";
-import { toast } from "sonner";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -18,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Database } from "@/lib/supabase/database.types";
-import { failureMessage } from "@/lib/errorCopy";
+import { useSettingSave } from "@/components/admin/useSettingSave";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { isValidTimeZone } from "@/lib/time/zone";
 
@@ -90,34 +87,25 @@ interface TimezoneSettingsProps {
 
 /** Church admin control for the one zone every event time is entered and shown in. */
 export function TimezoneSettings({ orgId, timezone }: TimezoneSettingsProps) {
-  const [saved, setSaved] = useState(timezone);
-  const [selected, setSelected] = useState(timezone);
-  const [saving, setSaving] = useState(false);
   const [invalid, setInvalid] = useState<string | undefined>();
-  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
-  const options = useMemo(() => timeZoneOptions(saved), [saved]);
+  const { value: selected, saving, save } = useSettingSave(timezone, {
+    write: (next) => saveTimeZone(supabase, orgId, next),
+    saved: () => "Time zone saved.",
+    action: "save the time zone",
+  });
+  const options = useMemo(() => timeZoneOptions(timezone), [timezone]);
   const usOptions = options.filter((o) => US_TIME_ZONES.includes(o.value));
   const otherOptions = options.filter((o) => !US_TIME_ZONES.includes(o.value));
   const selectedLabel = options.find((o) => o.value === selected)?.label ?? selected;
 
-  async function save() {
-    if (!isValidTimeZone(selected)) {
+  function choose(next: string) {
+    if (!isValidTimeZone(next)) {
       setInvalid("Choose a time zone from the list.");
       return;
     }
     setInvalid(undefined);
-    setSaving(true);
-    const ok = await saveTimeZone(supabase, orgId, selected);
-    setSaving(false);
-    if (!ok) {
-      setSelected(saved);
-      toast.error(failureMessage("save the time zone"));
-      return;
-    }
-    setSaved(selected);
-    toast.success("Time zone saved.");
-    router.refresh();
+    save(next);
   }
 
   return (
@@ -128,43 +116,38 @@ export function TimezoneSettings({ orgId, timezone }: TimezoneSettingsProps) {
       <p className="mt-0.5 text-base text-muted-foreground">
         Every event time is entered and shown in this zone.
       </p>
-      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <Select items={options} value={selected} onValueChange={(value) => value && setSelected(value)}>
-          <SelectTrigger
-            id="org-timezone"
-            className="w-full text-base sm:flex-1"
-            {...invalidFieldProps("org-timezone", invalid)}
-          >
-            <SelectValue>{selectedLabel}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectLabel>United States</SelectLabel>
-              {usOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value} className="text-base">
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-            <SelectGroup>
-              <SelectLabel>Other time zones</SelectLabel>
-              {otherOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value} className="text-base">
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-        <Button
-          size="lg"
-          className="text-base"
-          onClick={save}
-          disabled={saving || selected === saved}
+      <Select
+        items={options}
+        value={selected}
+        disabled={saving}
+        onValueChange={(value) => value && choose(value)}
+      >
+        <SelectTrigger
+          id="org-timezone"
+          className="mt-3 w-full text-base sm:max-w-sm"
+          {...invalidFieldProps("org-timezone", invalid)}
         >
-          {saving ? "Saving…" : "Save time zone"}
-        </Button>
-      </div>
+          <SelectValue>{selectedLabel}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            <SelectLabel>United States</SelectLabel>
+            {usOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value} className="text-base">
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+          <SelectGroup>
+            <SelectLabel>Other time zones</SelectLabel>
+            {otherOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value} className="text-base">
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
       <FieldError fieldId="org-timezone" message={invalid} />
     </div>
   );

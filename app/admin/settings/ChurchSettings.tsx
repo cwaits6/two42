@@ -13,6 +13,10 @@ import { TimezoneSettings } from "@/components/admin/TimezoneSettings";
 import { getPrayerRetention } from "@/lib/orgPrayerRetention";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { CUSTOM_SENDING_DOMAINS_ENABLED } from "@/lib/email/sendingDomains";
+import { OrgGroupControls } from "@/components/admin/OrgGroupControls";
+import { GroupDiscoverySettings } from "@/components/groups/GroupDiscoverySettings";
+import { getGroupCreationPolicy } from "@/lib/groups/creationPolicy";
+import { getDiscoveryOn } from "@/lib/groups/discovery";
 
 export async function ChurchSettings() {
   const supabase = await createClient();
@@ -26,42 +30,52 @@ export async function ChurchSettings() {
     .single();
   if (profile?.role !== "admin") redirect("/dashboard");
 
-  const [stewardsCanManage, directoryVisibility, prayerRetention] = await Promise.all([
-    givingStewardsCanManage(supabase, profile.org_id),
-    getDirectoryVisibility(),
-    getPrayerRetention(),
-  ]);
+  const [stewardsCanManage, directoryVisibility, prayerRetention, creationPolicy, discoveryOn, timeZone] =
+    await Promise.all([
+      givingStewardsCanManage(supabase, profile.org_id),
+      getDirectoryVisibility(),
+      getPrayerRetention(),
+      getGroupCreationPolicy(),
+      getDiscoveryOn(),
+      getOrgTimeZone(),
+    ]);
 
   return (
     <>
-      {CUSTOM_SENDING_DOMAINS_ENABLED && (
-        <div className="mb-8 flex flex-col gap-3 sm:flex-row">
-          <Button
-            size="lg"
-            variant="outline"
-            className="text-lg"
-            nativeButton={false}
-            render={<Link href="/admin/settings/email" />}
-          >
-            Email sending domain
-          </Button>
-        </div>
-      )}
       <h2 className="mb-3 text-xl font-bold text-foreground">Directory</h2>
       {directoryVisibility ? (
         <DirectoryVisibilitySettings orgId={profile.org_id} visibility={directoryVisibility} />
       ) : (
         <ErrorState thing="the directory setting" />
       )}
+      <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Groups</h2>
+      <div className="space-y-4">
+        <GroupDiscoverySettings orgId={profile.org_id} discoveryOn={discoveryOn} />
+        <OrgGroupControls orgId={profile.org_id} policy={creationPolicy} />
+      </div>
       <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Giving</h2>
       <GivingSettings stewardsCanManage={stewardsCanManage} />
       <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Events</h2>
-      <TimezoneSettings orgId={profile.org_id} timezone={await getOrgTimeZone()} />
+      <TimezoneSettings orgId={profile.org_id} timezone={timeZone} />
       <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Prayer requests</h2>
       {prayerRetention ? (
         <PrayerRetentionSettings orgId={profile.org_id} retention={prayerRetention} />
       ) : (
         <ErrorState thing="the prayer request setting" />
+      )}
+      {CUSTOM_SENDING_DOMAINS_ENABLED && (
+        <>
+          <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Email</h2>
+          <Button
+            size="lg"
+            variant="outline"
+            className="w-full text-lg sm:w-auto"
+            nativeButton={false}
+            render={<Link href="/admin/settings/email" />}
+          >
+            Email sending domain
+          </Button>
+        </>
       )}
     </>
   );

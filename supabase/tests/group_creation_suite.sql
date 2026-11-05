@@ -665,8 +665,11 @@ do $$
 declare
   org_a uuid := current_setting('gc.org_a')::uuid;
   member_a1 uuid := current_setting('gc.member_a1')::uuid;
+  pending_a uuid := current_setting('gc.pending_a')::uuid;
   owner_a uuid := current_setting('gc.owner_a')::uuid;
-  admin_set bigint; member_set bigint; name_err text := 'none';
+  owner_b uuid := current_setting('gc.owner_b')::uuid;
+  admin_set bigint; member_set bigint; pending_set bigint; foreign_set bigint;
+  name_err text := 'none';
 begin
   set local role authenticated;
   perform set_config('request.headers', '{}', true);
@@ -684,9 +687,19 @@ begin
   update public.organizations set group_creation_policy = 'open' where id = org_a;
   get diagnostics member_set = row_count;
 
+  perform set_config('request.jwt.claims', json_build_object('sub', pending_a)::text, true);
+  update public.organizations set group_creation_policy = 'open' where id = org_a;
+  get diagnostics pending_set = row_count;
+
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_b)::text, true);
+  update public.organizations set group_creation_policy = 'open' where id = org_a;
+  get diagnostics foreign_set = row_count;
+
   reset role;
   perform set_config('gc.s7_admin_set', admin_set::text, true);
   perform set_config('gc.s7_member_set', member_set::text, true);
+  perform set_config('gc.s7_pending_set', pending_set::text, true);
+  perform set_config('gc.s7_foreign_set', foreign_set::text, true);
   perform set_config('gc.s7_name_err', name_err, true);
 end $$;
 
@@ -694,6 +707,10 @@ select is(current_setting('gc.s7_admin_set')::int, 1,
   'the org admin''s setting change matches one row');
 select is(current_setting('gc.s7_member_set')::int, 0,
   'a member''s setting change matches zero rows');
+select is(current_setting('gc.s7_pending_set')::int, 0,
+  'a pending account''s setting change matches zero rows');
+select is(current_setting('gc.s7_foreign_set')::int, 0,
+  'another org''s admin''s setting change matches zero rows');
 select is(
   (select group_creation_policy from public.organizations where id = current_setting('gc.org_a')::uuid),
   'approval', 'and the setting is what the admin set');

@@ -13,9 +13,9 @@ const REQUEST = "Request a group";
 type PolicyLabel = "Open" | "Approval required" | "Church admins only";
 
 const SAVED_TOAST: Record<PolicyLabel, string> = {
-  Open: "Members can now create groups.",
+  Open: "Members can now add groups.",
   "Approval required": "Members now request a group and a church admin approves it.",
-  "Church admins only": "Only church admins can create groups now.",
+  "Church admins only": "Only church admins can add groups now.",
 };
 
 let admin: { context: BrowserContext; page: Page };
@@ -25,13 +25,12 @@ function policySelect(page: Page) {
 }
 
 async function setPolicy(page: Page, label: PolicyLabel) {
-  await page.goto("/admin/groups");
+  await page.goto("/admin/settings");
   const control = policySelect(page);
   await expect(control).toBeVisible();
   if ((await control.innerText()).trim() === label) return;
   await control.click();
   await page.getByRole("option", { name: label }).click();
-  await page.getByRole("button", { name: "Save rule" }).click();
   await expect(page.getByText(SAVED_TOAST[label])).toBeVisible();
   await expect(control).toContainText(label);
 }
