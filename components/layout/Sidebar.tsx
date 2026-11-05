@@ -1,32 +1,47 @@
 "use client";
 
-import type { Profile } from "@/lib/types";
-import { SidebarNav } from "./SidebarNav";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import type { Account } from "./account";
+import { AccountBlock } from "./AccountBlock";
+import { FrameNav } from "./FrameNav";
 import { useSidebar } from "./SidebarContext";
-import { useSidebarModel } from "./useSidebarModel";
+import { Wordmark } from "./Wordmark";
 
-interface SidebarProps {
-  profile: Profile;
-  hasServingAccess: boolean;
-  orgName: string;
-}
-
-export function Sidebar({ profile, hasServingAccess, orgName }: SidebarProps) {
-  const { collapsed } = useSidebar();
-  const model = useSidebarModel({ profile, hasServingAccess, orgName, collapsed, phone: false });
+/** The frame at desktop widths: the wordmark, the page list, then the account. */
+export function Sidebar({ account }: { account: Account }) {
+  const { collapsed, setCollapsed } = useSidebar();
+  const CollapseIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
+  const collapseLabel = collapsed ? "Expand menu" : "Collapse menu";
 
   return (
     <aside
-      className={`hidden md:flex flex-col border-r border-border bg-card shrink-0 transition-all duration-200 ${
+      className={`sticky top-0 hidden h-dvh shrink-0 flex-col self-start border-r border-border bg-card transition-all duration-200 md:flex ${
         collapsed ? "w-[72px]" : "w-60"
       }`}
     >
-      <nav
-        aria-label="Main navigation"
-        className="flex flex-1 flex-col overflow-hidden py-4 px-2"
+      <div
+        className={`flex items-center gap-1 pt-3 pb-2 ${
+          collapsed ? "flex-col px-2" : "justify-between pl-5 pr-2"
+        }`}
       >
-        <SidebarNav model={model} />
-      </nav>
+        <Wordmark href={account.homeHref} mark={collapsed} />
+        <button
+          type="button"
+          onClick={() => setCollapsed(!collapsed)}
+          aria-label={collapseLabel}
+          aria-expanded={!collapsed}
+          title={collapseLabel}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-brand-warm/50 hover:text-brand-primary-text"
+        >
+          <CollapseIcon className="h-5 w-5" aria-hidden="true" />
+        </button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+        <FrameNav account={account} collapsed={collapsed} />
+      </div>
+      <div className="border-t border-border p-2">
+        <AccountBlock account={account} collapsed={collapsed} />
+      </div>
     </aside>
   );
 }

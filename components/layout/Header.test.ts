@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Profile } from "@/lib/types";
+import { buildAccount, type Account } from "./account";
 
 let pathname = "/";
 vi.mock("next/navigation", () => ({
@@ -9,34 +9,22 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({ auth: {} }) }));
-vi.mock("@/components/layout/useSidebarModel", () => ({
-  useSidebarModel: () => ({ items: [], showCollapseControl: false, collapsed: false }),
-}));
-vi.mock("@/components/layout/SidebarNav", () => ({ SidebarNav: () => null }));
+
+let account: Account | null = null;
+vi.mock("./SidebarContext", () => ({ useSidebar: () => ({ account }) }));
 
 const { Header } = await import("./Header");
-const { AccountMenuPanel } = await import("./AccountMenu");
 
-const member = { id: "user-1", role: "member" } as Profile;
-const admin = { id: "user-2", role: "admin" } as Profile;
+const name = { first_name: "Isaac", last_name: "Seedly", preferred_name: null };
+const base = { email: "isaac@example.test", isOperator: false, photoUrl: null };
+const member = buildAccount({ ...base, profile: { ...name, role: "member" } });
+const admin = buildAccount({ ...base, profile: { ...name, role: "admin" } });
+const pending = buildAccount({ ...base, profile: { ...name, role: "pending" } });
+const operator = buildAccount({ ...base, profile: null, isOperator: true });
 
-function render(profile: Profile | null, signedIn = profile !== null) {
-  return renderToStaticMarkup(
-    createElement(Header, { signedIn, profile, hasServingAccess: false, orgName: "Org" }),
-  );
-}
-
-function panel(profile: Profile | null, isPlatformAdmin = false) {
-  return renderToStaticMarkup(
-    createElement(AccountMenuPanel, {
-      profile,
-      hasServingAccess: false,
-      isPlatformAdmin,
-      orgName: "Org",
-      onNavigate: () => {},
-      onSignOut: () => {},
-    }),
-  );
+function render(who: Account | null) {
+  account = who;
+  return renderToStaticMarkup(createElement(Header));
 }
 
 const menuButton = /<button[^>]*>.*?Menu<\/button>/;
@@ -52,6 +40,7 @@ describe("Header signed out", () => {
     expect(html).toContain('href="/login"');
     expect(html).not.toContain('href="#');
     expect(html).not.toMatch(menuButton);
+    expect(html).not.toContain("md:hidden");
   });
 
   it("keeps sign-in on every other route", () => {
@@ -72,55 +61,27 @@ describe("Header signed in", () => {
   it.each([
     ["a member in a group", member, `/g/c0000000-0000-0000-0000-00000000000b/dashboard`],
     ["a member at Home", member, "/dashboard"],
-    ["a church admin in the admin area", admin, "/admin/members"],
-    ["a platform admin with no church profile", null, "/platform"],
+    ["a church admin on a church admin page", admin, "/admin/members"],
+    ["an operator with no church", operator, "/platform"],
+    ["a pending person", pending, "/dashboard"],
     ["anyone on a public page", member, "/privacy"],
-  ])("gives %s the wordmark and the menu, and no sign-in", (_who, profile, path) => {
+  ])("gives %s the wordmark and one Menu button, and no sign-in", (_who, who, path) => {
     pathname = path;
-    const html = render(profile, true);
+    const html = render(who);
     expect(html).toContain("two42-wordmark.svg");
+    expect(html.match(/<button/g)).toHaveLength(1);
     expect(html).toMatch(menuButton);
     expect(html).not.toContain('href="/login"');
     expect(html).not.toContain("Sign out");
     expect(html).not.toContain("Switch group");
   });
-});
 
-describe("AccountMenuPanel", () => {
-  it("ends with Privacy, Terms, Help and one Sign out for a member", () => {
-    pathname = "/dashboard";
-    const html = panel(member);
-    expect(html).toContain('aria-label="Main navigation"');
-    expect(html).toContain('href="/privacy"');
-    expect(html).toContain('href="/terms"');
-    expect(html).toContain('href="mailto:hello@two42.io"');
-    expect(html.match(/Sign out/g)).toHaveLength(1);
-    expect(html).not.toContain("Sign Out");
-    expect(html).not.toContain('href="/platform"');
+  it("is the phone frame only: the sidebar takes over from md up", () => {
+    expect(render(member)).toMatch(/<header[^>]*md:hidden/);
   });
 
-  it("swaps the member nav for the admin nav in the admin area", () => {
-    pathname = "/admin/members";
-    const html = panel(admin);
-    expect(html).toContain('aria-label="Admin navigation"');
-    expect(html).not.toContain('aria-label="Main navigation"');
-    expect(html).toContain('href="/admin/families"');
-    expect(html).toContain("Back to Home");
-  });
-
-  it("gives a platform admin with no church profile the platform nav and Sign out", () => {
-    pathname = "/platform";
-    const html = panel(null, true);
-    expect(html).toContain('aria-label="Platform navigation"');
-    expect(html).toContain('href="/platform/organizations"');
-    expect(html).toContain("Sign out");
-  });
-
-  it("gives a signed-in person with no church profile Sign out on any page", () => {
-    pathname = "/privacy";
-    const html = panel(null, true);
-    expect(html).not.toContain('aria-label="Main navigation"');
-    expect(html).toContain('href="/platform"');
-    expect(html).toContain("Sign out");
+  it("sends the wordmark to Home for a member and to the front door for anyone else", () => {
+    expect(render(member)).toMatch(/<a[^>]*href="\/dashboard"[^>]*><img[^>]*two42-wordmark/);
+    expect(render(pending)).toMatch(/<a[^>]*href="\/"[^>]*><img[^>]*two42-wordmark/);
   });
 });

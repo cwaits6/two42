@@ -7,6 +7,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { AppShell } from "@/components/layout/AppShell";
 import { SidebarProvider } from "@/components/layout/SidebarContext";
+import { buildAccount } from "@/components/layout/account";
 import { GroupProvider } from "@/components/groups/GroupProvider";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
@@ -17,6 +18,7 @@ import { getDiscoveryOn } from "@/lib/groups/discovery";
 import { getGroupCreationPolicy } from "@/lib/groups/creationPolicy";
 import { getGroupMemberships } from "@/lib/groups/server";
 import { PROFILE_COLUMNS, type ProfileColumns } from "@/lib/profileColumns";
+import { mintSignedUrl } from "@/lib/storageRead";
 import type { ActiveGroup } from "@/lib/groups/active";
 import type { GroupCreationPolicy } from "@/lib/groups/creation";
 import "./globals.css";
@@ -74,6 +76,7 @@ export default async function RootLayout({
   let memberships: ActiveGroup[] = [];
   let discoveryOn = false;
   let creationPolicy: GroupCreationPolicy = "approval";
+  let photoUrl: string | null = null;
   if (user) {
     const supabase = await createClient();
     const [{ data, error }, { data: groupData, error: groupError }, { data: platformAdmin }] = await Promise.all([
@@ -90,7 +93,7 @@ export default async function RootLayout({
     // access. No row is not an error: a platform admin has no profile.
     if (error) console.error("Layout: failed to load profile:", error);
     if (groupError) console.error("Layout: failed to load team memberships:", groupError);
-    profile = data && { ...data, email: null };
+    profile = data;
 
     const loadServingAccess = async () => {
       if (!groupData?.length) return false;
@@ -108,11 +111,13 @@ export default async function RootLayout({
         console.error("Layout: failed to load group memberships:", e);
         return [];
       });
-    [hasServingAccess, memberships, discoveryOn, creationPolicy] = await Promise.all([
+    [hasServingAccess, memberships, discoveryOn, creationPolicy, photoUrl] = await Promise.all([
       loadServingAccess(),
       loadNavMemberships(),
       getDiscoveryOn(),
       getGroupCreationPolicy(),
+      // Fail-soft: null renders the person's initials.
+      mintSignedUrl(profile?.avatar_url),
     ]);
   }
 
@@ -121,6 +126,10 @@ export default async function RootLayout({
   // so this renders the platform default unless the request is
   // authenticated (lib/branding.ts).
   const b = await getRequestBranding();
+
+  const account = user
+    ? buildAccount({ profile, email: user.email ?? null, isOperator: isPlatformAdmin, photoUrl })
+    : null;
 
   return (
     // suppressHydrationWarning: the head script sets data-textsize on <html>
@@ -161,20 +170,12 @@ export default async function RootLayout({
           discoveryOn={discoveryOn}
           creation={{ policy: creationPolicy, isOrgAdmin: profile?.role === "admin" }}
         >
-          <SidebarProvider>
-            <Header
-              signedIn={!!user}
-              profile={profile}
-              hasServingAccess={hasServingAccess}
-              isPlatformAdmin={isPlatformAdmin}
-              orgName={b.display_name}
-            />
-            <AppShell profile={profile} hasServingAccess={hasServingAccess} orgName={b.display_name}>
-              {children}
-            </AppShell>
+          <SidebarProvider account={account} hasServingAccess={hasServingAccess} orgName={b.display_name}>
+            <Header />
+            <AppShell>{children}</AppShell>
           </SidebarProvider>
         </GroupProvider>
-        {/* Signed in, Privacy, Terms and Help live in the account menu. */}
+        {/* Signed in, Help, Privacy and Terms live in the account menu. */}
         {!user && <Footer />}
         <Toaster />
         <Analytics />

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, ChevronsUpDown } from "lucide-react";
+import { ChevronDown, ChevronsUpDown, LayoutGrid } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -15,7 +15,19 @@ import type { SidebarItem } from "@/lib/groups/nav";
 
 type GroupBlock = Extract<SidebarItem, { kind: "groupBlock" }>;
 
+const ALL_GROUPS = "All groups";
+
 function InitialsCircle({ block }: { block: GroupBlock }) {
+  if (!block.group) {
+    return (
+      <span
+        aria-hidden="true"
+        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border text-foreground"
+      >
+        <LayoutGrid className="h-5 w-5" />
+      </span>
+    );
+  }
   return (
     <span
       aria-hidden="true"
@@ -27,21 +39,26 @@ function InitialsCircle({ block }: { block: GroupBlock }) {
   );
 }
 
+function ColorDot({ color }: { color: string }) {
+  return <span aria-hidden="true" className="h-3 w-3 shrink-0 rounded-full" style={{ background: color }} />;
+}
+
 function BlockText({ block }: { block: GroupBlock }) {
   return (
     <span className="min-w-0 flex-1 text-left">
       <span className="block truncate text-sm text-muted-foreground">{block.orgName}</span>
       <span className="block truncate font-serif text-xl font-semibold leading-tight text-foreground">
-        {block.group.name}
+        {block.group?.name ?? ALL_GROUPS}
       </span>
     </span>
   );
 }
 
 /**
- * The group block at the top of the frame: a static label for a one-group
- * member, a menu for a member of two or more. The group is always named in
- * text beside its color; the collapsed rail shows the initials circle.
+ * The group block above the pages: a static label for a one-group member, a
+ * menu for a member of two or more, whose first row is the page listing all
+ * of their groups. The group is always named in text beside its color; the
+ * collapsed sidebar shows the initials circle.
  */
 export function GroupSwitcher({
   block,
@@ -54,6 +71,8 @@ export function GroupSwitcher({
 }) {
   const pathname = usePathname();
 
+  const name = block.group?.name ?? ALL_GROUPS;
+
   if (block.mode === "static") {
     return collapsed ? (
       <div className="flex justify-center py-2" title={block.group.name}>
@@ -62,11 +81,7 @@ export function GroupSwitcher({
       </div>
     ) : (
       <div className="flex items-center gap-3 rounded-lg px-3 py-2">
-        <span
-          aria-hidden="true"
-          className="h-3 w-3 shrink-0 rounded-full"
-          style={{ background: block.group.color }}
-        />
+        <ColorDot color={block.group.color} />
         <BlockText block={block} />
       </div>
     );
@@ -76,8 +91,8 @@ export function GroupSwitcher({
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-haspopup="menu"
-        aria-label={`Switch group. Current group: ${block.group.name}`}
-        title={collapsed ? block.group.name : undefined}
+        aria-label={block.group ? `Switch group. Current group: ${name}` : "Switch group. Showing all groups"}
+        title={collapsed ? name : undefined}
         render={
           <button
             type="button"
@@ -98,11 +113,7 @@ export function GroupSwitcher({
           </>
         ) : (
           <>
-            <span
-              aria-hidden="true"
-              className="h-3 w-3 shrink-0 rounded-full"
-              style={{ background: block.group.color }}
-            />
+            {block.group && <ColorDot color={block.group.color} />}
             <BlockText block={block} />
             <ChevronDown className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
           </>
@@ -112,8 +123,16 @@ export function GroupSwitcher({
         side={collapsed ? "right" : "bottom"}
         align="start"
         sideOffset={collapsed ? 12 : 4}
-        className="w-64 max-h-60 overflow-y-auto rounded-xl p-1.5"
+        className="w-64 max-h-80 overflow-y-auto rounded-xl p-1.5"
       >
+        <DropdownMenuItem
+          className="rounded-lg px-2.5"
+          aria-current={block.group ? undefined : "true"}
+          render={<Link href={block.allGroupsHref} onClick={onNavigate} />}
+        >
+          {ALL_GROUPS}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         {block.rows.map((row) => (
           <DropdownMenuItem
             key={row.group.id}
@@ -121,11 +140,7 @@ export function GroupSwitcher({
             aria-current={row.current ? "true" : undefined}
             render={<Link href={row.href(pathname)} onClick={onNavigate} />}
           >
-            <span
-              aria-hidden="true"
-              className="h-3 w-3 shrink-0 rounded-full"
-              style={{ background: row.group.color }}
-            />
+            <ColorDot color={row.group.color} />
             <span className="min-w-0 flex-1 truncate" title={row.group.name}>
               {row.group.name}
             </span>
