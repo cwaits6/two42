@@ -41,6 +41,18 @@ describe("PageMeasurement", () => {
     expect(script?.dataset.disableAutoTrack).toBe("1");
   });
 
+  it("counts two addresses that share a pattern as two views", async () => {
+    const root = createRoot(document.createElement("div"));
+    for (const group of ["a", "b"]) {
+      pathname = `/g/${group}/calendar`;
+      await act(async () => root.render(createElement(PageMeasurement)));
+    }
+    const views = ((window as Measured).vaq ?? []).filter(([kind]) => kind === "pageview");
+    await act(async () => root.unmount());
+
+    expect(views).toHaveLength(2);
+  });
+
   it("reports nothing for an address that is no page, with the script's own tracking still off", async () => {
     const { script, views } = await measure(`/nope/${SECRET}`);
 
