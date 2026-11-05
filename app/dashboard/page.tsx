@@ -43,13 +43,8 @@ export default async function DashboardPage() {
     return failedRead;
   }
 
-  // Only a person with no row can be an operator without a church, so the
-  // gate is asked for no one else. An unanswered check grants nothing, but
-  // it is not a "no" either: the waiting screen would tell an operator that
-  // a church admin reviews their account. A 401 is no "no" either, since
-  // this person's claims verified above: the session was revoked or the auth
-  // server didn't answer. Sending them to sign in would loop:
-  // the sign-in page returns a person with valid claims here.
+  // Only a plain 403 is a "no". The waiting screen would misinform an operator
+  // on an unanswered check, and sign-in would return a person with valid claims here.
   const gate = profile ? null : await requirePlatformAdmin();
   if (gate && !gate.ok && (gate.status === 401 || gate.unavailable)) return failedRead;
   const landing = landingFor(profile, gate?.ok === true);

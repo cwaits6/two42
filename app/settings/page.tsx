@@ -8,7 +8,7 @@ import { NotificationsCard } from "./NotificationsCard";
 import { FeedbackCard } from "./FeedbackCard";
 import { YourDataCard } from "./YourDataCard";
 import { getOptionalUser } from "@/lib/supabase/current-user";
-import { landingFor, NO_ROW } from "@/lib/landing";
+import { NO_ROW } from "@/lib/landing";
 import { getPlatformAdmin } from "@/lib/platform-access";
 import { isMemberRole } from "@/lib/roles";
 import { pageTitle } from "@/lib/pageTitle";
@@ -32,11 +32,9 @@ export default async function SettingsPage() {
   const member = profile && isMemberRole(profile.role) ? profile : null;
   if (!member) {
     // An operator who belongs to no church has no profile, and still needs
-    // the sign-in card. A failed read is not a missing row, so it never
-    // counts as one; Home reports it.
-    const noRow = !profile && (!error || error.code === NO_ROW);
-    const isOperator = noRow && (await getPlatformAdmin()) !== null;
-    if (landingFor(profile, isOperator) !== "platform") redirect("/dashboard");
+    // the sign-in card. A failed read is not a missing row; Home reports it.
+    const isOperator = error?.code === NO_ROW && (await getPlatformAdmin()) !== null;
+    if (!isOperator) redirect("/dashboard");
   }
 
   return (

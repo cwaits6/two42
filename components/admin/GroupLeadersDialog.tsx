@@ -290,10 +290,10 @@ export function GroupLeadersDialog({
   }, [supabase, groupId]);
 
   /**
-   * Re-read the roster after a committed write. A failed read drops the
-   * stale list rather than keep showing it: acting on it would hit rows the
-   * write already changed. Resolves false when the read failed or the
-   * dialog has since moved on.
+   * Re-read the roster, after a committed write or to retry a failed read.
+   * A failed read drops the stale list rather than keep showing it: acting
+   * on it would hit rows the write already changed. Resolves false when the
+   * read failed or the dialog has since moved on.
    */
   async function refresh(id: string, seq: number): Promise<boolean> {
     const loaded = await loadLeaderRoster(supabase, id);
@@ -302,16 +302,6 @@ export function GroupLeadersDialog({
     setRoster(loaded);
     setLoadFailed(loaded === null);
     return loaded !== null;
-  }
-
-  /** Repeats a failed read, dropping the result if the dialog has since moved on. */
-  async function retryLoad() {
-    if (!groupId) return;
-    const seq = writeSeq.current;
-    const loaded = await loadLeaderRoster(supabase, groupId);
-    if (writeSeq.current !== seq) return;
-    setRoster(loaded);
-    setLoadFailed(loaded === null);
   }
 
   function changeMode(next: LeadersMode) {
@@ -387,7 +377,7 @@ export function GroupLeadersDialog({
             onQueryChange={setQuery}
             onAdd={handleAdd}
             onRemove={handleRemove}
-            onRetryLoad={retryLoad}
+            onRetryLoad={() => refresh(group.id, writeSeq.current)}
           />
         )}
       </DialogContent>
