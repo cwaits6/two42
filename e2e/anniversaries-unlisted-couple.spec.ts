@@ -10,11 +10,12 @@ import { ORG_NAME } from "./fixtures/personas";
 test.describe.configure({ mode: "serial" });
 
 const DB_CONTAINER = "supabase_db_small-group-hub";
-const ORG = "00000000-0000-0000-0000-000000000001";
 const HOUSEHOLD = "f0000000-0000-0000-0000-000000000005";
 const HENRY = "a0000000-0000-0000-0000-000000000111";
 const CHLOE = "a0000000-0000-0000-0000-000000000112";
 const CLAIMED_RECORD = "d0000000-0000-0000-0000-0000000e2e03";
+
+const ORG_OF_HOUSEHOLD = `(select org_id from public.family_units where id = '${HOUSEHOLD}')`;
 
 const ANNIVERSARIES = "/directory/anniversaries";
 const FILTERS = ["", "?when=week", "?when=month"];
@@ -22,7 +23,7 @@ const FILTERS = ["", "?when=week", "?when=month"];
 const SEED_SQL = `
   delete from public.family_members where id = '${CLAIMED_RECORD}';
   update public.profiles set is_unlisted = false where id in ('${HENRY}', '${CHLOE}');
-  update public.organizations set directory_visibility = 'shared_groups' where id = '${ORG}';
+  update public.organizations set directory_visibility = 'shared_groups' where id = ${ORG_OF_HOUSEHOLD};
   update public.family_units
      set anniversary_month = 10, anniversary_day = 3, anniversary_year = 2009
    where id = '${HOUSEHOLD}';
@@ -33,8 +34,8 @@ const SETUP_SQL = `
   insert into public.family_members
     (id, org_id, family_id, first_name, last_name, relationship, claimed_profile_id)
   values
-    ('${CLAIMED_RECORD}', '${ORG}', '${HOUSEHOLD}', 'Chloe', 'Mockingham', 'spouse', '${CHLOE}');
-  update public.organizations set directory_visibility = 'org' where id = '${ORG}';
+    ('${CLAIMED_RECORD}', ${ORG_OF_HOUSEHOLD}, '${HOUSEHOLD}', 'Chloe', 'Mockingham', 'spouse', '${CHLOE}');
+  update public.organizations set directory_visibility = 'org' where id = ${ORG_OF_HOUSEHOLD};
   update public.family_units
      set anniversary_month = extract(month from current_date + 2)::int,
          anniversary_day = extract(day from current_date + 2)::int
