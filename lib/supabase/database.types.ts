@@ -1679,7 +1679,12 @@ isOneToOne: false
                 }
           }
           Functions: {
-            "app_current_org_id":
+            "admin_member_emails":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "email": string,"profile_id": string
+            }[]
+                           },
+"app_current_org_id":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
 "app_request_org_id":
@@ -1826,6 +1831,9 @@ isOneToOne: false
 "prayer_request_visible_author":
 { Args: { "_request_id": string }; Returns: string
                            },
+"profile_directory_email":
+{ Args: { "_profile_id": string }; Returns: string
+                           },
 "provision_organization":
 { Args: { "_name": string,"_owner_email": string }; Returns: string
                            },
@@ -1854,6 +1862,9 @@ isOneToOne: false
 { Args: { "_attendee_ids": (string)[],"_group_id": string,"_service_date": string }; Returns: {
               "created": boolean,"signup_id": string,"signup_org_id": string
             }[]
+                           },
+"serving_team_email_count":
+{ Args: { "_team_id": string }; Returns: number
                            },
 "shares_group_with":
 { Args: { "_profile_id": string }; Returns: boolean
