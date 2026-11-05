@@ -160,10 +160,10 @@ export function ServingSchedule({
         setChanging(null);
         toast.success("Serving cancelled.");
       } else {
-        toast.error(failureMessage("cancel your serving", res.status));
+        toast.error(failureMessage("cancel this serving", res.status));
       }
     } catch {
-      toast.error(failureMessage("cancel your serving", "network"));
+      toast.error(failureMessage("cancel this serving", "network"));
     } finally {
       setBusy(false);
     }
