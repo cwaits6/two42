@@ -46,6 +46,8 @@ Canonical assets are outlined SVGs in [`public/brand/`](../../public/brand) — 
 
 Fraunces and Inter load via `next/font/google`.
 
+**Case** — copy is written in sentence case, and the screen shows it that way. Capitals set in CSS are allowed in one place: a short label that names a section of a page, a few words above its content, such as "About this event" on the event page or a list heading on Serving. Form labels, buttons, headings and anything a person reads as a sentence stay in sentence case: the sign-in form's label reads "Email", not "EMAIL".
+
 ---
 
 ## Color
@@ -176,5 +178,6 @@ Every email, from the app or from an edge function, renders through one layout: 
 - Body text ≥ 16px; never below 14px for meaningful content.
 - Text contrast ≥ 4.5:1 (≥ 3:1 for large text). On light grounds, Clay text is `text-brand-primary-text` and Marigold text is `text-brand-accent-text`, headings included; Clay and Marigold themselves are fills, and the large-text allowance is not used for brand colors.
 - Touch targets ≥ 44×44px, with generous spacing.
+  - A link inside a sentence is exempt, as the Web Content Accessibility Guidelines allow for a target in a sentence or block of text: making it 44px tall would break the line. "Already have an account? Sign in" keeps the link at the height of its line. Every other target keeps the floor, a link that stands on its own line among them, such as the back link in `PageHeader`.
 - Never encode meaning in color alone; pair it with a label or icon.
 - Assignment/roster UIs show current members by default with an explicit "add" mode — never full toggle lists.
