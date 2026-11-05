@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/client";
 import { groupPath } from "@/lib/groups/active";
 import { creationActionFor } from "@/lib/groups/creation";
 import { cn } from "@/lib/utils";
+import { logError } from "@/lib/log";
 
 /**
  * The member-facing "Add a group" / "Request a group" button with its
@@ -42,7 +43,7 @@ export function CreateGroupAction({ className }: { className?: string }) {
       .then(({ data, error }) => {
         if (cancelled) return;
         if (error) {
-          console.error("Failed to load the viewer's group requests:", error);
+          logError("Failed to load the viewer's group requests", error);
           return;
         }
         setPending(data ?? []);

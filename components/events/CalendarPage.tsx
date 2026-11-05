@@ -8,6 +8,7 @@ import { ErrorState } from "@/components/states/ErrorState";
 import type { Event, Rsvp } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
+import { logError } from "@/lib/log";
 
 /**
  * The calendar at both levels. With `pinnedGroupId` it is that group's
@@ -58,7 +59,7 @@ export async function CalendarPage({ pinnedGroupId }: { pinnedGroupId?: string }
   ]);
   // A failed read must not pass for an empty calendar or for no replies.
   if (allEventsError || rsvpsError) {
-    console.error("Failed to load the calendar:", allEventsError ?? rsvpsError);
+    logError("Failed to load the calendar", allEventsError ?? rsvpsError);
     return (
       <PageContainer size="wide">
         <PageHeader title="Calendar" />

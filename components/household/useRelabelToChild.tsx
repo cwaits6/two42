@@ -7,6 +7,7 @@ import { failureMessage } from "@/lib/errorCopy";
 import { isChildWithoutAccount } from "@/lib/household";
 import { createClient } from "@/lib/supabase/client";
 import type { FamilyMember, FamilyMemberRelationship } from "@/lib/types";
+import { logError } from "@/lib/log";
 
 type RelabelledMember = Pick<FamilyMember, "id" | "relationship" | "birth_year" | "claimed_profile_id">;
 
@@ -68,7 +69,7 @@ export function useRelabelToChild({ member, relationship, name, setSaving, save 
       try {
         found = await relabelToChildLoss(member, relationship, name);
       } catch (err) {
-        console.error(err);
+        logError("Failed to save the household member", err);
         toast.error(failureMessage(`save ${name}`));
         setSaving(false);
         return;

@@ -32,6 +32,7 @@ import { titleCaseName } from "@/lib/sanitize";
 import { mintSignedUrl, uploadImage } from "@/lib/uploadImage";
 import { relObjectPath } from "@/lib/storagePaths";
 import type { FamilyMember, FamilyMemberRelationship, FamilyUnit } from "@/lib/types";
+import { logError } from "@/lib/log";
 
 const RELATIONSHIPS: { value: FamilyMemberRelationship; label: string }[] = [
   { value: "child", label: "Child" },
@@ -143,7 +144,7 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
       toast.success("Photo updated.");
       onChanged?.();
     } catch (err) {
-      console.error(err);
+      logError("Failed to upload the photo", err);
       setAvatarUrl(previousAvatarUrl);
       toast.error(failureMessage("upload the photo"));
     } finally {

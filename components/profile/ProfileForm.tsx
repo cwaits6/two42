@@ -48,6 +48,7 @@ import {
   type AvatarEligibilityCaller,
 } from "@/lib/members/avatar-eligibility";
 import type { Profile, FamilyUnit } from "@/lib/types";
+import { logError } from "@/lib/log";
 
 interface ProfileFormProps {
   profile: Profile;
@@ -242,7 +243,7 @@ export function ProfileForm({
       // The frame shows the signed-in person's own photo and name.
       router.refresh();
     } catch (err) {
-      console.error(err);
+      logError("Failed to upload the photo", err);
       toast.error(failureMessage("upload the photo"));
     } finally {
       setUploadingAvatar(false);
@@ -355,7 +356,7 @@ export function ProfileForm({
     const claimed = removesBirthday(profile, updates) ? await clearClaimedBirthday(profile.id) : null;
     if (claimed?.error) {
       setSaving(false);
-      console.error("clearing the claimed birthday failed", claimed.error.code);
+      logError("Failed to clear the claimed birthday", claimed.error);
       toast.error(failureMessage("save the profile"));
       return;
     }
@@ -370,7 +371,7 @@ export function ProfileForm({
     setSaving(false);
 
     if (error || saved.length === 0) {
-      if (error) console.error(error);
+      if (error) logError("Failed to save the profile", error);
       toast.error(failureMessage("save the profile"));
       return;
     }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { RsvpStatus } from "@/lib/types";
+import { logError } from "@/lib/log";
 
 export const RSVP_SAVE_FAILED = "Couldn't save your reply. Try again.";
 
@@ -42,7 +43,7 @@ export function useRsvp({ eventId, userId, initialStatus }: UseRsvpArgs) {
             )
             .select("user_id");
     if (error) {
-      console.error("RSVP write failed", { eventId, userId, status: next, error });
+      logError("RSVP write failed", error, { ids: { event: eventId, member: userId } });
       return false;
     }
     return (data?.length ?? 0) > 0;

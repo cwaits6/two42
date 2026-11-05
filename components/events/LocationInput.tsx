@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { logError } from "@/lib/log";
 
 declare global {
   interface Window {
@@ -97,7 +98,7 @@ export function LocationInput({ value, onChange, id, name }: LocationInputProps)
       );
       setActiveIndex(-1);
     } catch (error) {
-      console.error("Location suggestions unavailable", error);
+      logError("Location suggestions unavailable", error);
       if (request === latestRequest.current) close();
     }
   };
@@ -127,7 +128,7 @@ export function LocationInput({ value, onChange, id, name }: LocationInputProps)
       if (address && edit === latestEdit.current) onChange(address);
     } catch (error) {
       // The suggestion's own text is already in the field, and it is a usable address.
-      console.error("Location details unavailable", error);
+      logError("Location details unavailable", error);
     }
   };
 

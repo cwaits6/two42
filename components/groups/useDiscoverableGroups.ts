@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { toDiscoverableGroup, type DiscoverableGroup } from "@/lib/groups/joining";
+import { logError } from "@/lib/log";
 
 /**
  * The viewer's discovery rows from discoverable_groups(). Seeded with the
@@ -28,7 +29,7 @@ export function useDiscoverableGroups(initialRows?: DiscoverableGroup[]) {
     supabase.rpc("discoverable_groups").then(({ data, error: rpcError }) => {
       if (cancelled) return;
       if (rpcError) {
-        console.error("Failed to load discoverable groups:", rpcError);
+        logError("Failed to load discoverable groups", rpcError);
         setError(true);
         setLoading(false);
         return;

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { mintSignedUrls } from "@/lib/uploadImage";
 import type { GroupRosters } from "@/components/directory/scope";
 import type { DirectoryProfile, FamilyDirectoryFull } from "@/lib/types";
+import { logError } from "@/lib/log";
 
 /**
  * Private buckets: exchange every stored avatar/photo URL in the
@@ -97,13 +98,7 @@ export function useDirectoryData(membershipGroupIds: readonly string[]) {
         ).find(([, err]) => err);
         if (failed) {
           const [source, err] = failed;
-          console.error("directory load error:", {
-            source,
-            message: err?.message,
-            details: err?.details,
-            hint: err?.hint,
-            code: err?.code,
-          });
+          logError("directory load error", err, { step: source });
           if (!cancelled) {
             setError(true);
             setLoading(false);
@@ -122,7 +117,7 @@ export function useDirectoryData(membershipGroupIds: readonly string[]) {
         setError(false);
         setLoading(false);
       } catch (err) {
-        console.error("directory load failed:", err);
+        logError("directory load failed", err);
         if (!cancelled) {
           setError(true);
           setLoading(false);

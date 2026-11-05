@@ -3,6 +3,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { fetchAll } from "@/lib/supabase/fetchAll";
 import { displayName } from "@/lib/names";
 import { STORED_MEMBER_ROLES } from "@/lib/roles";
+import { logError } from "@/lib/log";
 
 type Client = SupabaseClient<Database>;
 
@@ -87,7 +88,7 @@ export async function loadLeaderRoster(client: Client, groupId: string): Promise
     ),
   ]);
   if (members.error || people.error) {
-    console.error("Failed to load group leaders:", members.error ?? people.error);
+    logError("Failed to load group leaders", members.error ?? people.error);
     return null;
   }
   const roles = new Map<string, "leader" | "member">(
