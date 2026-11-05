@@ -19,8 +19,7 @@ import {
   groupPathsByBucket,
   parseStoragePublicUrl,
 } from "@/lib/storagePaths";
-import { logWarn } from "@/lib/log";
-import { stepOf } from "@/lib/log/step";
+import { logWarn, stepOf } from "@/lib/log";
 
 /**
  * Exchanges one stored public-URL string for a signed URL. Fail-soft: a

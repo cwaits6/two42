@@ -14,7 +14,7 @@ import {
   prayerCutoff,
   reminderCutoff,
 } from "./retention.ts";
-import { logError, logInfo } from "./log.ts";
+import { logError, logInfo, stepOf } from "./log.ts";
 
 /** Passes one call to a reminder prune function deletes at most. */
 export const DELETE_BATCH = 500;
@@ -150,7 +150,7 @@ export async function cleanUpOrg(
   function remove(key: keyof RemovedCounts, step: string, chain: () => DeleteChain) {
     return attempt(step, async () => {
       const { count, error } = await chain();
-      if (error) logError("cleanup delete failed", error, { step: step.replaceAll(" ", "_"), ids: { org: orgId } });
+      if (error) logError("cleanup delete failed", error, { step: stepOf(step), ids: { org: orgId } });
       if (error) throw new Error(error.message);
       if (count === null) throw new Error("the delete returned no count");
       removed[key] += count;
@@ -291,7 +291,7 @@ export async function cleanUpOrgs(
     const result = await cleanUpOrg(supabase, orgId, now);
     logInfo("expired data removed", { ids: { org: orgId, ...result.removed } });
     for (const { step, error } of result.failures) {
-      logError("cleanup failed", error, { step: step.replaceAll(" ", "_"), ids: { org: orgId } });
+      logError("cleanup failed", error, { step: stepOf(step), ids: { org: orgId } });
     }
     results.push(result);
   }

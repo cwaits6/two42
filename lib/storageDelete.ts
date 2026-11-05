@@ -9,8 +9,7 @@
 
 import { createServiceClient } from "@/lib/supabase/server";
 import { keyIsInAnotherOrg, STORAGE_KINDS } from "@/lib/storagePaths";
-import { logError, type LogContext } from "@/lib/log";
-import { stepOf } from "@/lib/log/step";
+import { logError, type LogContext, stepOf } from "@/lib/log";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

@@ -6,8 +6,7 @@ import { STORED_MEMBER_ROLES } from "@/lib/roles";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { parseAboutChanges, type LeaderChanges, type LeaderEdit, type LeaderEntry } from "../edit/aboutChanges";
-import { logError } from "@/lib/log";
-import { stepOf } from "@/lib/log/step";
+import { logError, stepOf } from "@/lib/log";
 
 type RequestClient = Awaited<ReturnType<typeof createClient>>;
 

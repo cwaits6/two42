@@ -4,8 +4,7 @@
 // @/lib/supabase/server here — statically or via await import() — would pull
 // next/headers into the client graph and break `npm run build`.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { logError } from "@/lib/log";
-import { stepOf } from "@/lib/log/step";
+import { logError, stepOf } from "@/lib/log";
 
 /**
  * The single normalization point for a request host. Lowercases, strips a

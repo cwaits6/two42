@@ -1,5 +1,4 @@
-import { logError } from "@/lib/log";
-import { stepOf } from "@/lib/log/step";
+import { logError, stepOf } from "@/lib/log";
 
 interface ListRead<T> {
   data: T[] | null;

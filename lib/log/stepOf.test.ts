@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatLine } from "./core";
-import { stepOf } from "./step";
+import { formatLine, stepOf } from "./core";
 
 describe("stepOf", () => {
   it.each([

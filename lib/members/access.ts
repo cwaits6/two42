@@ -14,8 +14,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { User, SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import { logError } from "@/lib/log";
-import { stepOf } from "@/lib/log/step";
+import { logError, stepOf } from "@/lib/log";
 
 export type OrgAdminGate =
   | { ok: true; user: User; supabase: SupabaseClient<Database>; orgId: string }

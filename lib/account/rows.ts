@@ -1,5 +1,4 @@
-import { logError } from "@/lib/log";
-import { stepOf } from "@/lib/log/step";
+import { logError, stepOf } from "@/lib/log";
 
 export function rowsOf<T>(read: { data: unknown; error: { code?: string } | null }, step: string): T[] {
   // The step and code only: a PostgrestError's details echo row content.

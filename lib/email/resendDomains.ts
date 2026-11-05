@@ -1,6 +1,5 @@
 import { Resend } from "resend";
-import { logError, logWarn } from "@/lib/log";
-import { stepOf } from "@/lib/log/step";
+import { logError, logWarn, stepOf } from "@/lib/log";
 
 /**
  * Remove a domain from Resend, shared by the org admin's claim/remove route

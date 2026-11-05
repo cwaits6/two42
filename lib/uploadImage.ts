@@ -8,8 +8,7 @@ import {
   orgObjectPath,
   parseStoragePublicUrl,
 } from "@/lib/storagePaths";
-import { logError, logWarn } from "@/lib/log";
-import { stepOf } from "@/lib/log/step";
+import { logError, logWarn, stepOf } from "@/lib/log";
 
 export type ImageUploadType = "avatar" | "event" | "family";
 

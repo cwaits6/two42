@@ -14,8 +14,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { resolveEmailBranding } from "@/lib/email/identity";
 import { sendMemberInviteEmail } from "@/lib/email/resend";
 import { siteConfig } from "@/lib/config";
-import { logError } from "@/lib/log";
-import { stepOf } from "@/lib/log/step";
+import { logError, stepOf } from "@/lib/log";
 
 const TOKEN_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
