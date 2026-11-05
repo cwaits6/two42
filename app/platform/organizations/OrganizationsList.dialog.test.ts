@@ -15,7 +15,9 @@ vi.mock("@/components/ui/dialog", () => {
       return createElement(tag, null, children);
     };
   return {
-    Dialog: passthrough("div"),
+    // Honours `open`, as the real dialog does: a closed dialog has no fields.
+    Dialog: ({ open, children }: { open: boolean; children?: ReactNode }) =>
+      open ? createElement("div", null, children) : null,
     DialogContent: passthrough("div"),
     DialogHeader: passthrough("div"),
     DialogTitle: passthrough("h2"),
@@ -38,6 +40,7 @@ beforeEach(async () => {
   document.body.appendChild(container);
   root = createRoot(container);
   await act(async () => root.render(createElement(OrganizationsList, { initialOrgs: [] })));
+  await click("Add organization");
 });
 
 afterEach(async () => {
@@ -56,11 +59,13 @@ async function type(id: string, value: string) {
   });
 }
 
-/** The dialog's own button: the last of the two labelled "Add organization". */
-async function submit() {
-  const buttons = [...container.querySelectorAll("button")].filter((b) => b.textContent === "Add organization");
+/** The last button with this label: the dialog's own, where the page has one too. */
+async function click(label: string) {
+  const buttons = [...container.querySelectorAll("button")].filter((b) => b.textContent === label);
   await act(async () => buttons[buttons.length - 1].click());
 }
+
+const submit = () => click("Add organization");
 
 /** What the field's aria-describedby pointed at when focus landed on it. */
 function describedByAtFocus(id: string): () => string | null {
@@ -114,7 +119,32 @@ describe("Add organization dialog", () => {
     expect(field("org-name").hasAttribute("aria-invalid")).toBe(false);
     expect(document.activeElement).toBe(field("org-owner-email"));
     expect(emailDescribedBy()).toBe("org-owner-email-error");
-    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("still reports a refused email when the dialog closed before the answer", async () => {
+    const refusal = "That owner email already belongs to another organization.";
+    let respond!: (response: Response) => void;
+    fetchSpy.mockReturnValue(new Promise<Response>((resolve) => (respond = resolve)));
+    await type("org-name", "Grace Chapel");
+    await type("org-owner-email", "admin@gracechapel.org");
+    await submit();
+
+    await click("Cancel");
+    expect(container.querySelector("#org-owner-email")).toBeNull();
+    await act(async () => respond(Response.json({ error: refusal }, { status: 409 })));
+
+    expect(toast.error).toHaveBeenCalledWith(refusal);
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("returns focus to the first invalid field on a second failed submit", async () => {
+    await submit();
+    field("org-name").blur();
+    expect(document.activeElement).not.toBe(field("org-name"));
+
+    await submit();
+
+    expect(document.activeElement).toBe(field("org-name"));
   });
 
   it("reports a failure that is not about a field in a toast", async () => {

@@ -181,10 +181,7 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
         backHref="/platform/organizations"
         backLabel="Back to organizations"
       />
-      {/* The form seeds its limit field once, so it remounts when a retried
-          read brings the limit a failed one left out. */}
       <OrganizationDetail
-        key={emailCap ? "limit-loaded" : "limit-failed"}
         org={detail}
         owner={owner}
         emailCap={emailCap}

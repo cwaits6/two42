@@ -110,9 +110,10 @@ export function OrganizationDetail({
   const focusField = useFieldFocus();
   const [branding, setBranding] = useState(org.branding);
   const [brandingError, setBrandingError] = useState<string | null>(null);
-  const [capInput, setCapInput] = useState(
-    emailCap ? String(emailCap.dailyCap) : ""
-  );
+  // Null until the operator types, so the field follows the limit as read:
+  // a read that fails and then succeeds on retry fills it.
+  const [capDraft, setCapDraft] = useState<string | null>(null);
+  const capInput = capDraft ?? (emailCap ? String(emailCap.dailyCap) : "");
   const [capError, setCapError] = useState<string | undefined>();
   const [confirmSuspend, setConfirmSuspend] = useState(false);
   const [busy, setBusy] = useState<
@@ -396,7 +397,7 @@ export function OrganizationDetail({
                   min={0}
                   value={capInput}
                   onChange={(e) => {
-                    setCapInput(e.target.value);
+                    setCapDraft(e.target.value);
                     setCapError(undefined);
                   }}
                   {...invalidFieldProps("email-daily-cap", capError)}

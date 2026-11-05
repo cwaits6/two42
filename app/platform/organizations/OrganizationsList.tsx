@@ -98,9 +98,9 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
         if (res.status === 409) {
           setErrors({ "org-owner-email": message });
           focusField("org-owner-email");
-        } else {
-          toast.error(message);
         }
+        // Always: the dialog can close before the answer, leaving no field to mark.
+        toast.error(message);
         return;
       }
       toast.success(`${name} added.`);
