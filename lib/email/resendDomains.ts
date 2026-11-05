@@ -1,4 +1,6 @@
 import { Resend } from "resend";
+import { logError, logWarn } from "@/lib/log";
+import { stepOf } from "@/lib/log/step";
 
 /**
  * Remove a domain from Resend, shared by the org admin's claim/remove route
@@ -24,30 +26,22 @@ export async function removeResendDomain(
     );
     if (!error) return true;
     if (error.name === "not_found") {
-      console.warn(
-        "email-domain %s: Resend domain already gone, treating as cleaned up (org=%s, resend_domain_id=%s)",
-        log.context,
-        log.orgId,
-        resendDomainId,
-      );
+      logWarn("email-domain: Resend domain already gone, treating as cleaned up", undefined, {
+        step: stepOf(log.context),
+        ids: { org: log.orgId, resend_domain: resendDomainId },
+      });
       return true;
     }
-    console.error(
-      "email-domain %s: Resend cleanup failed (org=%s, resend_domain_id=%s):",
-      log.context,
-      log.orgId,
-      resendDomainId,
-      error,
-    );
+    logError("email-domain: Resend cleanup failed", error, {
+      step: stepOf(log.context),
+      ids: { org: log.orgId, resend_domain: resendDomainId },
+    });
     return false;
   } catch (err) {
-    console.error(
-      "email-domain %s: Resend cleanup threw (org=%s, resend_domain_id=%s):",
-      log.context,
-      log.orgId,
-      resendDomainId,
-      err,
-    );
+    logError("email-domain: Resend cleanup threw", err, {
+      step: stepOf(log.context),
+      ids: { org: log.orgId, resend_domain: resendDomainId },
+    });
     return false;
   }
 }

@@ -17,6 +17,7 @@ import {
   type ServingTeamRow,
 } from "@/lib/groups/groupHome";
 import type { DirectoryProfile, Event, FamilyDirectoryFull, Rsvp } from "@/lib/types";
+import { logError } from "@/lib/log";
 
 const PRAYER_WALL_COLUMNS =
   "id, group_id, body, is_anonymous, is_answered, created_at, mine, first_name, last_name, preferred_name, avatar_url, praying_count, i_am_praying";
@@ -188,7 +189,7 @@ export async function loadGroupHomeReads(
           .eq("group_id", groupId)
           .eq("status", "pending")
           .then(({ count, error }) => {
-            if (error) console.error("Failed to count join requests: code=%s", error.code);
+            if (error) logError("Failed to count join requests", error);
             return error ? null : (count ?? 0);
           })
       : Promise.resolve(0),

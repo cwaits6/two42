@@ -52,7 +52,7 @@ describe("getServingLinkMode", () => {
   });
 
   it("fails closed to login when the read errors", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
     const { client } = makeClient({ data: null, error: { message: "boom" } });
     expect(await getServingLinkMode(client, "org-1", "grp-1")).toBe("login");
   });

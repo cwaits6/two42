@@ -4,6 +4,7 @@
 // rather than re-deriving it from either caller's route tests.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { loggedLines } from "@/lib/log/testing";
 
 const domainsRemove = vi.fn();
 vi.mock("resend", () => ({
@@ -16,8 +17,7 @@ const { removeResendDomain } = await import("@/lib/email/resendDomains");
 
 beforeEach(() => {
   domainsRemove.mockReset();
-  vi.spyOn(console, "error").mockImplementation(() => {});
-  vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 describe("removeResendDomain", () => {
@@ -36,8 +36,7 @@ describe("removeResendDomain", () => {
     await expect(
       removeResendDomain("rd-1", { orgId: "org-1", context: "test" }),
     ).resolves.toBe(true);
-    expect(console.warn).toHaveBeenCalled();
-    expect(console.error).not.toHaveBeenCalled();
+    expect(loggedLines(vi.mocked(console.log)).map((l) => l.level)).toEqual(["warn"]);
   });
 
   it("returns false for any other error, and cannot be spoofed by message text alone", async () => {
@@ -47,7 +46,7 @@ describe("removeResendDomain", () => {
     await expect(
       removeResendDomain("rd-1", { orgId: "org-1", context: "test" }),
     ).resolves.toBe(false);
-    expect(console.error).toHaveBeenCalled();
+    expect(loggedLines(vi.mocked(console.log)).map((l) => l.level)).toEqual(["error"]);
   });
 
   it("returns false (never throws) when the SDK call itself throws", async () => {
@@ -55,6 +54,6 @@ describe("removeResendDomain", () => {
     await expect(
       removeResendDomain("rd-1", { orgId: "org-1", context: "test" }),
     ).resolves.toBe(false);
-    expect(console.error).toHaveBeenCalled();
+    expect(loggedLines(vi.mocked(console.log)).map((l) => l.level)).toEqual(["error"]);
   });
 });

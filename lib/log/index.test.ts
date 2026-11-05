@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { loggedLines } from "./testing";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -6,8 +7,8 @@ afterEach(() => {
   vi.doUnmock("react");
 });
 
-function refs(spy: ReturnType<typeof vi.spyOn>) {
-  return spy.mock.calls.map(([line]) => JSON.parse(line as string).ref as string);
+function refs(spy: { mock: { calls: unknown[][] } }) {
+  return loggedLines(spy).map((line) => line.ref);
 }
 
 describe("request reference", () => {

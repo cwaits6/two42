@@ -56,7 +56,7 @@ function stubStorage(handlers: {
 
 beforeEach(() => {
   createClient.mockReset();
-  vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 describe("mintSignedUrl", () => {

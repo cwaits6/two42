@@ -3,6 +3,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { HEX } from "@/lib/contrast";
 import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
 import type { ActiveGroup, GroupRole } from "@/lib/groups/active";
+import { logError } from "@/lib/log";
 
 type MembershipRow = {
   group_id: string;
@@ -44,7 +45,7 @@ export async function loadGroupMemberships(
     .order("group_id");
 
   if (error) {
-    console.error("Failed to load group memberships:", error);
+    logError("Failed to load group memberships", error);
     throw new Error(`Failed to load group memberships: ${error.message}`);
   }
 
@@ -63,7 +64,7 @@ export async function loadGroupMemberships(
     .order("id");
 
   if (calendarError) {
-    console.error("Failed to load group calendars:", calendarError);
+    logError("Failed to load group calendars", calendarError);
     throw new Error(`Failed to load group calendars: ${calendarError.message}`);
   }
 

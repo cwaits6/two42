@@ -9,6 +9,7 @@
 
 import { createServiceClient } from "@/lib/supabase/server";
 import { keyIsInAnotherOrg } from "@/lib/storagePaths";
+import { logError } from "@/lib/log";
 
 /**
  * Removes objects from the avatars bucket. `orgId` must come from a validated
@@ -22,7 +23,7 @@ export async function removeAvatarObjects(orgId: string, keys: string[]): Promis
   const allowed = keys.filter((key) => !keyIsInAnotherOrg(key, orgId));
   const refused = keys.filter((key) => keyIsInAnotherOrg(key, orgId));
   if (refused.length > 0) {
-    console.error("removeAvatarObjects: refused a key outside org %s: %s", orgId, refused.join(", "));
+    logError("removeAvatarObjects: refused a key outside org", undefined, { ids: { org: orgId, keys: refused.length } });
   }
   if (allowed.length === 0) return refused;
 
@@ -34,12 +35,12 @@ export async function removeAvatarObjects(orgId: string, keys: string[]): Promis
     if (error) throw new Error(error.message);
     removed = new Set((data ?? []).map((object) => object.name));
   } catch (err) {
-    console.error("removeAvatarObjects:", err instanceof Error ? err.message : typeof err);
+    logError("removeAvatarObjects", err);
   }
 
   const left = allowed.filter((key) => !removed.has(key));
   if (left.length > 0) {
-    console.error("removeAvatarObjects: still stored in org %s: %s", orgId, left.join(", "));
+    logError("removeAvatarObjects: still stored in org", undefined, { ids: { org: orgId, keys: left.length } });
   }
   return [...refused, ...left];
 }

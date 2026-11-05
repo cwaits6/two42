@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { logError, logWarn } from "@/lib/log";
 
 export type DirectoryVisibility = "shared_groups" | "org";
 
@@ -16,11 +17,11 @@ export async function getDirectoryVisibility(): Promise<DirectoryVisibility | nu
     .select("directory_visibility")
     .maybeSingle();
   if (error) {
-    console.error("Failed to load directory visibility:", error);
+    logError("Failed to load directory visibility", error);
     return null;
   }
   if (!data) {
-    console.warn("No organization row visible for this request; directory visibility unknown");
+    logWarn("No organization row visible for this request; directory visibility unknown");
     return null;
   }
   return data.directory_visibility === "org" ? "org" : "shared_groups";

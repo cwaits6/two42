@@ -110,7 +110,7 @@ describe("sendServingCancelNoticeEmail failing", () => {
       message: "Invalid `to` field: leader@b.org (Pat Leader)",
     };
     send.mockResolvedValueOnce({ data: null, error: providerError });
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
 
     await expect(
       sendServingCancelNoticeEmail({

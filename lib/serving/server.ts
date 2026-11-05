@@ -16,6 +16,7 @@ import {
 import { resolveEmailBranding } from "@/lib/email/identity";
 import { reserveEmailQuota } from "@/lib/email/quota";
 import { siteConfig } from "@/lib/config";
+import { logError, logWarn } from "@/lib/log";
 
 export interface NamedProfile {
   id: string;
@@ -67,7 +68,7 @@ export async function findSpouse(
     .limit(1)
     .maybeSingle();
   if (error) {
-    console.error("Serving spouse lookup failed for family %s:", viewer.family_id, error);
+    logError("Serving spouse lookup failed for family", error, { ids: { family: viewer.family_id } });
   }
   return (member?.profiles as SpouseProfile | null | undefined) ?? null;
 }
@@ -152,12 +153,7 @@ export async function notifyLeadersOfCancel(
   // slot opened, with no other signal that it happened. Log it.
   if (error) {
     // The code only: a PostgrestError's details echo row content.
-    console.error(
-      "Serving leaders lookup failed for team %s (org=%s): code=%s",
-      opts.teamId,
-      opts.orgId,
-      error.code
-    );
+    logError("Serving leaders lookup failed for team", error, { ids: { team: opts.teamId, org: opts.orgId } });
   }
 
   // Filter to the final sendable set first, then reserve once for its size
@@ -186,10 +182,7 @@ export async function notifyLeadersOfCancel(
 
   const allowed = await reserveEmailQuota(opts.orgId, recipients.length * opts.serviceDates.length);
   if (!allowed) {
-    console.warn(
-      "Serving cancel notice skipped — org %s hit its daily email cap",
-      opts.orgId,
-    );
+    logWarn("Serving cancel notice skipped — org hit its daily email cap", undefined, { ids: { org: opts.orgId } });
     return;
   }
 
@@ -207,11 +200,7 @@ export async function notifyLeadersOfCancel(
         });
       } catch (err) {
         // The error's name only: a provider's message can echo the address.
-        console.error(
-          "Failed to send serving cancel notice to leader %s: %s",
-          leader.id,
-          err instanceof Error ? err.name : typeof err
-        );
+        logError("Failed to send serving cancel notice to leader", err, { ids: { leader: leader.id } });
       }
     }
   }

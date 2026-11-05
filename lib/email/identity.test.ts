@@ -5,6 +5,7 @@
 // Supabase clients — no network, no database, no request context.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { loggedLines } from "@/lib/log/testing";
 
 const createClient = vi.fn();
 const createServiceClient = vi.fn();
@@ -163,9 +164,7 @@ function stubRequestClient(opts: {
 beforeEach(() => {
   createClient.mockReset();
   createServiceClient.mockReset();
-  vi.spyOn(console, "debug").mockImplementation(() => {});
-  vi.spyOn(console, "warn").mockImplementation(() => {});
-  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 describe("resolveEmailBranding", () => {
@@ -216,10 +215,9 @@ describe("resolveEmailBranding", () => {
         PLATFORM_ADDRESS,
       );
     }
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("failed SENDING_DOMAIN"),
-      expect.anything(),
-    );
+    const lines = loggedLines(vi.mocked(console.log));
+    expect(lines.map((l) => l.what)).toContainEqual(expect.stringContaining("failed SENDING_DOMAIN"));
+    expect(JSON.stringify(lines)).not.toContain("example");
   });
 
   it("falls back to the platform address for every non-verified status", async () => {
@@ -251,10 +249,11 @@ describe("resolveEmailBranding", () => {
     expect(b.fromAddress).toBe(PLATFORM_ADDRESS);
     // The branding read succeeded — only the From: address degrades.
     expect(b.orgName).toBe("Grace Fellowship");
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("Failed to load sending domain"),
-      ORG_ID,
-      { message: "boom" },
+    expect(loggedLines(vi.mocked(console.log))).toContainEqual(
+      expect.objectContaining({
+        level: "error",
+        what: expect.stringContaining("Failed to load sending domain"),
+      }),
     );
   });
 
@@ -310,10 +309,11 @@ describe("resolveRequestEmailBranding", () => {
     expect(b.fromAddress).toBe(PLATFORM_ADDRESS);
     // The branding read already succeeded — only the From: address degrades.
     expect(b.orgName).toBe("Request Org");
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("Failed to load sending domain"),
-      ORG_ID,
-      { message: "boom" },
+    expect(loggedLines(vi.mocked(console.log))).toContainEqual(
+      expect.objectContaining({
+        level: "error",
+        what: expect.stringContaining("Failed to load sending domain"),
+      }),
     );
   });
 

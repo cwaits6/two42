@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { logError } from "@/lib/log";
 
 export const GROUP_DEFAULT_COLOR = "#B85C38";
 
@@ -29,7 +30,7 @@ export async function getGroupCalendar(
     .limit(1)
     .maybeSingle();
   if (error) {
-    console.error("Failed to load the group calendar for group %s:", groupId, error);
+    logError("Failed to load the group calendar for group", error, { ids: { group: groupId } });
     throw new Error(`Failed to load the group calendar: ${error.message}`);
   }
   return data as GroupCalendar | null;
@@ -60,7 +61,7 @@ export async function ensureGroupCalendar(
     .select("id")
     .single();
   if (error || !data) {
-    console.error("Failed to create the calendar for group %s:", groupId, error);
+    logError("Failed to create the calendar for group", error, { ids: { group: groupId } });
     return null;
   }
   return data.id as string;

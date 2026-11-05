@@ -8,7 +8,7 @@ const from = vi.fn((bucket: string) => {
 vi.mock("@/lib/supabase/server", () => ({
   createServiceClient: async () => ({ storage: { from } }),
 }));
-vi.spyOn(console, "error").mockImplementation(() => {});
+vi.spyOn(console, "log").mockImplementation(() => {});
 
 const { removeAvatarObjects } = await import("./storageDelete");
 

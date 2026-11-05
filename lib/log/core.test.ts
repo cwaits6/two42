@@ -119,6 +119,7 @@ describe("errorCode", () => {
   it.each([
     [{ code: "PGRST116", message: EMAIL }, "PGRST116"],
     [{ code: "ECONNRESET" }, "ECONNRESET"],
+    [{ code: "", message: "TypeError: fetch failed", details: EMAIL, hint: "" }, "empty"],
     [{ code: `oops ${EMAIL}`, status: 422 }, "422"],
     [{ statusCode: 429, name: "rate_limit_exceeded", message: EMAIL }, "429"],
     [{ name: "validation_error", message: `Invalid to: ${EMAIL}` }, "validation_error"],

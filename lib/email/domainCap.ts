@@ -1,3 +1,5 @@
+import { logError } from "@/lib/log";
+
 /**
  * Global backstop cap on total claimed org_email_domains rows across every
  * org. Resend's account tier limits total domains regardless of tenant (10
@@ -16,11 +18,9 @@ export function getOrgEmailDomainCap(): number {
   if (!raw) return DEFAULT_ORG_EMAIL_DOMAIN_CAP;
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed < 0) {
-    console.error(
-      "ORG_EMAIL_DOMAIN_CAP=%s is not a non-negative integer; using default %d",
-      raw,
-      DEFAULT_ORG_EMAIL_DOMAIN_CAP,
-    );
+    logError("ORG_EMAIL_DOMAIN_CAP is not a non-negative integer; using default", undefined, {
+      ids: { default: DEFAULT_ORG_EMAIL_DOMAIN_CAP },
+    });
     return DEFAULT_ORG_EMAIL_DOMAIN_CAP;
   }
   return parsed;

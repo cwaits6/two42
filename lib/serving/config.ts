@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { logError } from "@/lib/log";
 
 /**
  * 'signed' — serving email links act without logging in (HMAC-verified).
@@ -32,11 +33,7 @@ export async function getServingLinkMode(
     // token-only actions at a group that configured 'login'. A read failure and
     // an unconfigured setting are different conditions: only the latter falls
     // through to the env default below.
-    console.error(
-      "Failed to load serving_link_mode for group %s — failing closed to 'login':",
-      groupId,
-      error
-    );
+    logError("Failed to load serving_link_mode for group — failing closed to 'login'", error, { ids: { group: groupId } });
     return "login";
   }
 

@@ -1,5 +1,6 @@
 import { verifiedUser } from "@/lib/members/access";
 import { createClient } from "@/lib/supabase/server";
+import { logError } from "@/lib/log";
 
 export type CurrentPerson =
   | { ok: true; id: string; orgId: string; signOut: () => Promise<void> }
@@ -22,7 +23,7 @@ export async function currentPerson(): Promise<CurrentPerson> {
     .eq("id", user.id)
     .maybeSingle();
   if (error) {
-    console.error("Current person lookup failed: code=%s", error.code);
+    logError("Current person lookup failed", error);
     return { ok: false, status: 403 };
   }
   if (!profile) return { ok: false, status: 403 };

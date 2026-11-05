@@ -13,6 +13,7 @@ import { removeAvatarObjects } from "@/lib/storageDelete";
 import { createServiceClient } from "@/lib/supabase/server";
 import type { DeletionSummary, DeletionViewer } from "./deletionCopy";
 import { rowsOf } from "./rows";
+import { logError } from "@/lib/log";
 
 type ServiceClient = Awaited<ReturnType<typeof createServiceClient>>;
 
@@ -259,11 +260,7 @@ async function tellLeadersDatesOpened(
       });
     } catch (err) {
       // The error's name only: a provider's message can echo a name or an address.
-      console.error(
-        "Serving cancel notices failed for team %s: %s",
-        teamId,
-        err instanceof Error ? err.name : typeof err,
-      );
+      logError("Serving cancel notices failed for team", err, { ids: { team: teamId } });
     }
   }
 }
@@ -285,13 +282,12 @@ export async function deletePerson(
     if (error) {
       const refusal = REFUSALS[error.code];
       if (refusal) return { outcome: refusal };
-      // The code only: a PostgrestError's details echo row content.
-      console.error("Person deletion failed: code=%s", error.code);
+      logError("Person deletion failed", error);
       return { outcome: "failed" };
     }
     person = data as unknown as DeletedPerson;
   } catch (err) {
-    console.error("Person deletion failed:", err instanceof Error ? err.message : typeof err);
+    logError("Person deletion failed", err);
     return { outcome: "failed" };
   }
 

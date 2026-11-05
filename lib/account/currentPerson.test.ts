@@ -4,7 +4,7 @@ const createClient = vi.fn();
 vi.mock("@/lib/supabase/server", () => ({
   createClient: () => createClient(),
 }));
-const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+const consoleError = vi.spyOn(console, "log").mockImplementation(() => {});
 
 const { currentPerson } = await import("./currentPerson");
 

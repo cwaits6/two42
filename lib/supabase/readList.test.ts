@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readList } from "./readList";
+import { loggedLines } from "@/lib/log/testing";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -15,17 +16,14 @@ describe("readList", () => {
     expect(readList({ data: null, error: null }, "events")).toEqual([]);
   });
 
-  it("returns null when the read failed, and logs only the code and message", () => {
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
-    const error = { code: "42501", message: "permission denied", details: "row: a@b.c" };
+  it("returns null when the read failed, and logs only the code", () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const error = { code: "42501", message: "permission denied for a@b.c", details: "row: a@b.c" };
 
     expect(readList({ data: null, error }, "events")).toBeNull();
-    expect(log).toHaveBeenCalledWith(
-      "Failed to load %s: code=%s message=%s",
-      "events",
-      "42501",
-      "permission denied",
-    );
+    expect(loggedLines(log)).toEqual([
+      expect.objectContaining({ what: "Failed to load", step: "events", code: "42501" }),
+    ]);
     expect(JSON.stringify(log.mock.calls)).not.toContain("a@b.c");
   });
 });

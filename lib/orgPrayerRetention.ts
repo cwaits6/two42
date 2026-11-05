@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { isPrayerRetentionMonths, type PrayerRetention } from "@/lib/prayerRetention";
+import { logError, logWarn } from "@/lib/log";
 
 /**
  * The caller's org's prayer request setting, read through the cookie-bound
@@ -14,16 +15,16 @@ export async function getPrayerRetention(): Promise<PrayerRetention | null> {
     .select("prayer_request_retention_months")
     .maybeSingle();
   if (error) {
-    console.error("Failed to load the prayer request setting:", error);
+    logError("Failed to load the prayer request setting", error);
     return null;
   }
   if (!data) {
-    console.warn("No organization row visible for this request; prayer request setting unknown");
+    logWarn("No organization row visible for this request; prayer request setting unknown");
     return null;
   }
   const months = data.prayer_request_retention_months;
   if (months === null) return "off";
   if (isPrayerRetentionMonths(months)) return months;
-  console.error("Unknown prayer request period: %s", months);
+  logError("Unknown prayer request period", undefined, { ids: { months } });
   return null;
 }

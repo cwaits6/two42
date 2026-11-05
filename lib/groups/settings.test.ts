@@ -54,7 +54,7 @@ function makeClient(result: { data: unknown; error: unknown }) {
 }
 
 beforeEach(() => {
-  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 describe("getGroupSettings", () => {
@@ -127,6 +127,6 @@ describe("getGroupSettings", () => {
     await expect(getGroupSettings(client, "org-1", "grp-1")).rejects.toThrow(
       /Failed to load group settings/
     );
-    expect(console.error).toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalled();
   });
 });

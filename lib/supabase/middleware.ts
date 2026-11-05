@@ -12,6 +12,7 @@ import {
 import { loadGroupMemberships } from "@/lib/groups/memberships";
 import { isExpectedHost, normalizeHost } from "@/lib/org";
 import { siteConfig } from "@/lib/config";
+import { logError } from "@/lib/log";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -189,7 +190,7 @@ export async function updateSession(request: NextRequest) {
           });
         } catch (e) {
           // No group can be chosen for the redirect; Home reports the failure.
-          console.error("Middleware: failed to load group memberships:", e);
+          logError("Middleware: failed to load group memberships", e);
         }
       }
       url.pathname = group ? target.pathFor(group.id) : "/dashboard";

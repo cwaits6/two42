@@ -50,6 +50,8 @@ export function errorCode(error: unknown): string | undefined {
 
   const code = field(error, "code");
   if (typeof code === "string" && CODE.test(code)) return code;
+  // The database client reports a request that got no response with an empty code.
+  if (code === "") return "empty";
   if (typeof code === "number" && Number.isInteger(code)) return String(code);
 
   for (const key of ["status", "statusCode"]) {

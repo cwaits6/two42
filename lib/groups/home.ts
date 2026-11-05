@@ -4,6 +4,7 @@ import type { ActiveGroup } from "@/lib/groups/active";
 import { expandUpcomingEvents } from "@/lib/recurrence";
 import { ENDED_GRACE_MS, meetingEndMs } from "@/lib/meetings";
 import type { Event } from "@/lib/types";
+import { logError } from "@/lib/log";
 
 export type HomeEvent = Pick<Event, "id" | "title" | "start_time" | "location">;
 
@@ -78,7 +79,7 @@ export async function loadHomeCards(
     ["prayer_wall", prayers.error],
   ].filter(([, error]) => error);
   if (failures.length > 0) {
-    for (const [table, error] of failures) console.error("Home %s read failed:", table, error);
+    for (const [table, error] of failures) logError("Home read failed", error, { step: String(table) });
     return null;
   }
 

@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { toDiscoverableGroup, type DiscoverableGroup } from "@/lib/groups/joining";
+import { logError, logWarn } from "@/lib/log";
 
 /**
  * Whether members of this org can find and request to join groups: the
@@ -19,11 +20,11 @@ export const getDiscoveryOn = cache(async (): Promise<boolean> => {
     .select("group_discovery")
     .maybeSingle();
   if (error) {
-    console.error("Failed to load the group discovery setting:", error);
+    logError("Failed to load the group discovery setting", error);
     return false;
   }
   if (!data) {
-    console.warn("No organization row visible for this request; group discovery unknown");
+    logWarn("No organization row visible for this request; group discovery unknown");
     return false;
   }
   return data.group_discovery === true;
@@ -38,7 +39,7 @@ export async function getDiscoverableGroups(): Promise<DiscoverableGroup[] | nul
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("discoverable_groups");
   if (error) {
-    console.error("Failed to load discoverable groups:", error);
+    logError("Failed to load discoverable groups", error);
     return null;
   }
   return (data ?? []).map(toDiscoverableGroup);

@@ -27,11 +27,12 @@
  * the caller's own RLS-scoped profile row. Never off a request body.
  *
  * PII: response bodies may carry member data (the admin uploaded the file);
- * console.* must not. Log lines, kinds, counts, and the constraint identity.
+ * log lines must not. They carry line numbers, kinds, counts, and the error code.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import type { PlannedWrite } from "@/lib/members/import-plan";
+import { logError } from "@/lib/log";
 
 export type ApplyResult =
   | { ok: true; applied: number; appliedLines: number[] }
@@ -47,42 +48,6 @@ export type ApplyResult =
        *  safely delete from the file before re-uploading. */
       appliedLines: number[];
     };
-
-/**
- * Reduce a write failure to the parts that are safe to log.
- *
- * The distinction that matters is who produced the error. A SQLSTATE means
- * Postgres, whose `details`/`hint` echo the offending row on a constraint
- * violation — `Key (email, org_id)=(ada@example.com, …) already exists` is
- * member PII, so those fields are dropped. No SQLSTATE means the error came
- * from postgrest-js or PostgREST, neither of which has ever seen a row
- * value: a client-side network failure is synthesized with `code: ''`,
- * `hint: ''`, and the entire diagnostic (DNS, ECONNRESET, the cause chain)
- * in `details`, and PGRST* schema-cache errors put the fix in `hint`. On the
- * failure mode most likely to hit production — a transient network blip
- * mid-apply — dropping those leaves nothing to debug with.
- *
- * Caveat on `message`: Postgres input-conversion errors (22P02, 22023) echo
- * the offending literal. Narrow in practice, because the planner validates
- * enums, dates and birth parts before any write, so the residue is a type
- * token rather than a member value.
- */
-export function redactFailure(failure: unknown): string {
-  if (failure && typeof failure === "object" && "code" in failure) {
-    const e = failure as {
-      code?: unknown;
-      message?: unknown;
-      details?: unknown;
-      hint?: unknown;
-    };
-    const code = String(e.code ?? "");
-    const base = `code=${code || "unknown"} message=${String(e.message ?? "")}`;
-    const fromPostgres = code !== "" && !code.startsWith("PGRST");
-    if (fromPostgres) return base;
-    return `${base} details=${String(e.details ?? "")} hint=${String(e.hint ?? "")}`;
-  }
-  return failure instanceof Error ? failure.message : "unknown error";
-}
 
 /**
  * Turn a matched-no-rows UPDATE/DELETE into a failure.
@@ -259,16 +224,10 @@ export async function applyWrites(
     }
 
     if (failure) {
-      // Counts, positions, kinds, and the constraint identity only — a failed
-      // write's payload (and the driver's echo of it) is member PII.
-      console.error(
-        "members import: apply failed at write %d/%d (line %d, %s): %s",
-        i + 1,
-        writes.length,
-        write.line,
-        write.kind,
-        redactFailure(failure)
-      );
+      logError("members import: apply failed at write", failure, {
+        step: write.kind,
+        ids: { write: i + 1, writes: writes.length, line: write.line },
+      });
       return {
         ok: false,
         applied,

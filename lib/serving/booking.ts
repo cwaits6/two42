@@ -8,6 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { displayName } from "@/lib/names";
 import type { BookedDate, BookingOutcome } from "@/lib/serving/bookingOutcome";
 import { sendSignupConfirmation, type NamedProfile } from "@/lib/serving/server";
+import { logError } from "@/lib/log";
 
 export type { BookedDate, BookingOutcome } from "@/lib/serving/bookingOutcome";
 
@@ -69,7 +70,7 @@ export async function sendBookingConfirmations(
           recipient: { id: attendee.id, email: attendee.email, name: displayName(attendee) },
         });
       } catch (err) {
-        console.error("Serving confirmation email failed for %s:", attendee.id, err);
+        logError("Serving confirmation email failed", err, { ids: { attendee: attendee.id } });
       }
     }
   }

@@ -11,6 +11,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { resolveRequestOrgId } from "@/lib/org";
 import { BRANDING_DEFAULTS, getOrgBranding, resolveBranding } from "@/lib/branding";
 import type { OrgBranding } from "@/lib/branding";
+import { logError, logInfo, logWarn } from "@/lib/log";
 
 export type EmailBranding = {
   // Named orgName, not fromName: sendServingBroadcastEmail's own opts carry a
@@ -94,9 +95,8 @@ function resolveFromAddress(
 ): string {
   if (status !== "verified" || !domain) return PLATFORM_ADDRESS;
   if (!SENDING_DOMAIN.test(domain)) {
-    console.error(
-      "resolveEmailBranding: verified sending domain failed SENDING_DOMAIN, falling back to platform address:",
-      domain,
+    logError(
+      "resolveEmailBranding: verified sending domain failed SENDING_DOMAIN, falling back to platform address",
     );
     return PLATFORM_ADDRESS;
   }
@@ -121,20 +121,16 @@ async function resolveOrgFromAddress(
       .eq("org_id", orgId)
       .maybeSingle();
     if (domainError) {
-      console.error(
-        "Failed to load sending domain for org %s, using platform address:",
-        orgId,
-        domainError,
-      );
+      logError("Failed to load sending domain for org, using platform address", domainError, {
+        ids: { org: orgId },
+      });
       return PLATFORM_ADDRESS;
     }
     return resolveFromAddress(domainRow?.domain, domainRow?.status);
   } catch (err) {
-    console.error(
-      "Failed to resolve sending domain for org %s, using platform address:",
-      orgId,
-      err,
-    );
+    logError("Failed to resolve sending domain for org, using platform address", err, {
+      ids: { org: orgId },
+    });
     return PLATFORM_ADDRESS;
   }
 }
@@ -179,7 +175,7 @@ export async function resolveEmailBranding(orgId: string): Promise<EmailBranding
       .eq("id", orgId)
       .maybeSingle();
     if (error) {
-      console.error("Failed to load email branding for org %s, using defaults:", orgId, error);
+      logError("Failed to load email branding for org, using defaults", error, { ids: { org: orgId } });
       return toEmailBranding(BRANDING_DEFAULTS, PLATFORM_ADDRESS);
     }
     if (!data) {
@@ -187,7 +183,7 @@ export async function resolveEmailBranding(orgId: string): Promise<EmailBranding
       // reaches the branch above. A service-role read that finds no row means
       // the orgId itself is stale or wrong-tenant — worth a signal, since the
       // defaults are indistinguishable from org #1's real branding.
-      console.warn("No organizations row for org %s; using email branding defaults", orgId);
+      logWarn("No organizations row for org; using email branding defaults", undefined, { ids: { org: orgId } });
       return toEmailBranding(BRANDING_DEFAULTS, PLATFORM_ADDRESS);
     }
     return toEmailBranding(
@@ -195,7 +191,7 @@ export async function resolveEmailBranding(orgId: string): Promise<EmailBranding
       await resolveOrgFromAddress(service, orgId),
     );
   } catch (err) {
-    console.error("Failed to load email branding, using defaults:", err);
+    logError("Failed to load email branding, using defaults", err);
     return toEmailBranding(BRANDING_DEFAULTS, PLATFORM_ADDRESS);
   }
 }
@@ -213,7 +209,7 @@ export async function resolveEmailBranding(orgId: string): Promise<EmailBranding
  *
  * Every production send site currently passes an explicit, orgId-resolved
  * branding, so this has no live caller — it exists as the correct answer for
- * a future caller that genuinely has no org id, and the console.debug below
+ * a future caller that genuinely has no org id, and the info line logged below
  * is the diagnostic to grep for if one appears.
  *
  * Fail-soft by the same contract as resolveEmailBranding(): any failure
@@ -221,7 +217,7 @@ export async function resolveEmailBranding(orgId: string): Promise<EmailBranding
  */
 export async function resolveRequestEmailBranding(): Promise<EmailBranding> {
   try {
-    console.debug("resolveRequestEmailBranding: resolving branding from the request org");
+    logInfo("resolveRequestEmailBranding: resolving branding from the request org");
     const branding = await getOrgBranding();
     const requestClient = await createClient();
     const resolvedOrgId = await resolveRequestOrgId(requestClient, {
@@ -239,7 +235,7 @@ export async function resolveRequestEmailBranding(): Promise<EmailBranding> {
       await resolveOrgFromAddress(service, resolvedOrgId),
     );
   } catch (err) {
-    console.error("Failed to load email branding, using defaults:", err);
+    logError("Failed to load email branding, using defaults", err);
     return toEmailBranding(BRANDING_DEFAULTS, PLATFORM_ADDRESS);
   }
 }

@@ -33,7 +33,7 @@ function makeClient(
 }
 
 beforeEach(() => {
-  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 describe("getGroupCalendar", () => {
@@ -60,7 +60,7 @@ describe("getGroupCalendar", () => {
     await expect(getGroupCalendar(client, "org-1", "grp-1")).rejects.toThrow(
       /Failed to load the group calendar/
     );
-    expect(console.error).toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalled();
   });
 });
 
@@ -89,7 +89,7 @@ describe("ensureGroupCalendar", () => {
 
     expect(await ensureGroupCalendar(client, "org-1", "grp-1", "Group A")).toBeNull();
     expect(inserts).toEqual([]);
-    expect(console.error).toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalled();
   });
 
   it("returns null when the insert fails", async () => {

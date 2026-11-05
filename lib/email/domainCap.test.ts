@@ -24,9 +24,9 @@ describe("getOrgEmailDomainCap", () => {
 
   it("defaults (without logging) for an empty string", () => {
     process.env.ORG_EMAIL_DOMAIN_CAP = "";
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
     expect(getOrgEmailDomainCap()).toBe(DEFAULT_ORG_EMAIL_DOMAIN_CAP);
-    expect(console.error).not.toHaveBeenCalled();
+    expect(console.log).not.toHaveBeenCalled();
   });
 
   it("returns a valid override", () => {
@@ -38,16 +38,16 @@ describe("getOrgEmailDomainCap", () => {
     "falls back to the default and logs for %s",
     (raw) => {
       process.env.ORG_EMAIL_DOMAIN_CAP = raw;
-      vi.spyOn(console, "error").mockImplementation(() => {});
+      vi.spyOn(console, "log").mockImplementation(() => {});
       expect(getOrgEmailDomainCap()).toBe(DEFAULT_ORG_EMAIL_DOMAIN_CAP);
-      expect(console.error).toHaveBeenCalled();
+      expect(console.log).toHaveBeenCalled();
     },
   );
 
   it("accepts 0 as an explicit kill switch, not as unset", () => {
     process.env.ORG_EMAIL_DOMAIN_CAP = "0";
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
     expect(getOrgEmailDomainCap()).toBe(0);
-    expect(console.error).not.toHaveBeenCalled();
+    expect(console.log).not.toHaveBeenCalled();
   });
 });

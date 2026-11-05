@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { siteConfig } from "@/lib/config";
 import { isValidTimeZone } from "@/lib/time/zone";
+import { logError, logWarn } from "@/lib/log";
 
 /**
  * The caller's own org's time zone, memoized per request with cache() like
@@ -20,20 +21,20 @@ export const getOrgTimeZone = cache(async (): Promise<string> => {
     const supabase = await createClient();
     const { data, error } = await supabase.from("organizations").select("timezone").maybeSingle();
     if (error) {
-      console.error("Failed to load the org time zone, using the default:", error);
+      logError("Failed to load the org time zone, using the default", error);
       return siteConfig.timeZone;
     }
     if (!data) {
-      console.warn("No organization row visible for this request; using the default time zone");
+      logWarn("No organization row visible for this request; using the default time zone");
       return siteConfig.timeZone;
     }
     if (!isValidTimeZone(data.timezone)) {
-      console.error("Unknown org time zone %s; using the default", data.timezone);
+      logError("Unknown org time zone; using the default");
       return siteConfig.timeZone;
     }
     return data.timezone;
   } catch (err) {
-    console.error("Failed to load the org time zone, using the default:", err);
+    logError("Failed to load the org time zone, using the default", err);
     return siteConfig.timeZone;
   }
 });
@@ -50,7 +51,7 @@ export async function orgTimeZoneById(supabase: SupabaseClient, orgId: string): 
     .eq("id", orgId)
     .maybeSingle();
   if (error || !data || !isValidTimeZone(data.timezone)) {
-    console.error("Failed to load the time zone for org %s; using the default:", orgId, error);
+    logError("Failed to load the time zone for org; using the default", error, { ids: { org: orgId } });
     return siteConfig.timeZone;
   }
   return data.timezone;

@@ -15,6 +15,7 @@ import {
   smallPrint,
   strong,
 } from "@/supabase/functions/_shared/email-html";
+import { logError } from "@/lib/log";
 
 function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
@@ -43,7 +44,7 @@ ${primaryAction(safeMagicLink, "Set up account", b.accent)}`,
   });
 
   if (error) {
-    console.error("Failed to send invite email:", error);
+    logError("Failed to send invite email", error);
     throw error;
   }
 }
@@ -76,7 +77,7 @@ ${primaryAction(safeSetupLink, "Set up account", b.accent)}`,
   });
 
   if (error) {
-    console.error("Failed to send member invite email:", error);
+    logError("Failed to send member invite email", error);
     throw error;
   }
 }
@@ -129,7 +130,7 @@ ${primaryAction(safeJoinLink, "Create account", b.accent)}`,
   });
 
   if (error) {
-    console.error("Failed to send family invite email:", error);
+    logError("Failed to send family invite email", error);
     throw error;
   }
 }
@@ -165,7 +166,7 @@ ${primaryAction(safeSetupLink, "Set up account", b.accent)}`,
   });
 
   if (error) {
-    console.error("Failed to send group invite email:", error);
+    logError("Failed to send group invite email", error);
     throw error;
   }
 }
@@ -204,7 +205,7 @@ ${smallPrint(
   });
 
   if (error) {
-    console.error("Failed to send feedback email:", error);
+    logError("Failed to send feedback email", error);
     throw error;
   }
 }
