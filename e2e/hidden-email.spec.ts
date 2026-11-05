@@ -42,7 +42,7 @@ test.describe("another member", () => {
 test.describe("the household primary", () => {
   test.use({ persona: "householdPrimary" });
 
-  test("can change the setting for their spouse but is not shown the email", async ({ page }) => {
+  test("is shown their spouse's setting and no Email field", async ({ page }) => {
     await page.goto("/profile?tab=household");
     await page.getByRole("button", { name: `Edit ${spouse.name}` }).click();
 
@@ -69,5 +69,10 @@ test.describe("a church admin", () => {
     await page.goto("/admin/members");
     await expect(page.getByText(spouse.email)).toBeVisible();
     await expect(page.getByText(householdPrimary.email)).toBeVisible();
+  });
+
+  test("opens the person's edit page with the hidden email in its Email field", async ({ page }) => {
+    await page.goto(`/admin/members/${CHLOE}`);
+    await expect(page.getByLabel("Email", { exact: true })).toHaveValue(spouse.email);
   });
 });
