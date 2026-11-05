@@ -7,18 +7,20 @@ import type { Profile } from "@/lib/types";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const update = vi.fn();
+const written = { rows: [{ id: "p1" }] };
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
     from: () => ({
       update: (values: unknown) => {
         update(values);
-        return { eq: async () => ({ error: null }) };
+        return { eq: () => ({ select: async () => ({ data: written.rows, error: null }) }) };
       },
     }),
   }),
 }));
 vi.mock("@/lib/uploadImage", () => ({ mintSignedUrl: vi.fn(), uploadImage: vi.fn() }));
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+const toast = { success: vi.fn(), error: vi.fn() };
+vi.mock("sonner", () => ({ toast }));
 
 const { ProfileForm } = await import("./ProfileForm");
 
@@ -60,14 +62,20 @@ const profile: Profile = {
 
 let root: Root;
 
-beforeEach(() => update.mockClear());
+beforeEach(() => {
+  vi.clearAllMocks();
+  written.rows = [{ id: "p1" }];
+});
 
 afterEach(async () => {
   await act(async () => root.unmount());
   document.body.innerHTML = "";
 });
 
-async function mount(overrides: Partial<Profile> = {}, props: { isAdmin?: boolean; editingOther?: boolean } = {}) {
+async function mount(
+  overrides: Partial<Profile> = {},
+  props: { isAdmin?: boolean; editingOther?: boolean; onSaved?: () => void } = {},
+) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -87,6 +95,12 @@ async function mount(overrides: Partial<Profile> = {}, props: { isAdmin?: boolea
     },
     async submit() {
       await act(async () => container.querySelector("form")!.requestSubmit());
+    },
+    async choose(id: string, option: string) {
+      await act(async () => field(id).click());
+      const found = [...document.querySelectorAll('[role="option"]')].find((o) => o.textContent === option);
+      if (!found) throw new Error(`No option ${option}`);
+      await act(async () => (found as HTMLElement).click());
     },
     async type(id: string, value: string) {
       const input = field(id) as HTMLInputElement;
@@ -262,5 +276,30 @@ describe("ProfileForm inline errors", () => {
 
     expect(document.querySelector('[aria-invalid="true"]')).toBeNull();
     expect(update).toHaveBeenCalledOnce();
+  });
+
+  it("says the save failed when no row was written", async () => {
+    written.rows = [];
+    const onSaved = vi.fn();
+    const form = await mount({}, { onSaved });
+    await form.submit();
+
+    expect(toast.error).toHaveBeenCalledWith("Couldn't save the profile. Try again.");
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it("clears the whole birthday for No date, and saves it blank", async () => {
+    const form = await mount({ birth_month: 12, birth_day: 10, birth_year: 1990 });
+    await form.choose("birth_month", "No date");
+
+    expect((form.field("birth_day") as HTMLInputElement).value).toBe("");
+    expect((form.field("birth_year") as HTMLInputElement).value).toBe("");
+    expect(form.field("birth_month").querySelector('[data-slot="select-value"]')?.textContent).toBe("Month");
+
+    await form.submit();
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ birth_month: null, birth_day: null, birth_year: null }),
+    );
   });
 });

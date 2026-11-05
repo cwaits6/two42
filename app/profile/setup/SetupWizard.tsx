@@ -17,13 +17,6 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { CheckRow } from "@/components/profile/CheckRow";
 import { AnniversaryFields, type AnniversaryField } from "@/components/profile/AnniversaryFields";
@@ -31,7 +24,8 @@ import { ChildListingNotice, DirectoryNotice } from "@/components/profile/Direct
 import { isChildWithoutAccount } from "@/lib/household";
 import { retiredFlagResets } from "@/lib/members/retiredHideFlags";
 import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
-import { MONTHS, anniversaryColumns, birthdayColumns } from "@/components/profile/birthday";
+import { anniversaryColumns, birthdayColumns } from "@/components/profile/birthday";
+import { MonthSelect } from "@/components/profile/MonthSelect";
 import { relLabel } from "@/components/directory/utils";
 import { toast } from "sonner";
 import { Camera, Check, Plus } from "lucide-react";
@@ -114,27 +108,19 @@ function BirthdayFields({
   return (
     <>
       <div className={hideYear ? "grid grid-cols-[1.6fr_1fr] gap-3" : "grid grid-cols-[1.6fr_1fr_1fr] gap-3"}>
-        <Select
-          items={MONTHS}
+        <MonthSelect
+          id={id("birth_month")}
+          aria-label="Month"
           value={month}
-          onValueChange={(v) => onChange("birth_month", v ?? "")}
-        >
-          <SelectTrigger
-            id={id("birth_month")}
-            aria-label="Month"
-            className="w-full py-5 text-base"
-            {...invalidFieldProps(id("birth_month"), errors[id("birth_month")])}
-          >
-            <SelectValue placeholder="Month" />
-          </SelectTrigger>
-          <SelectContent>
-            {MONTHS.map((m) => (
-              <SelectItem key={m.value} value={m.value}>
-                {m.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          onChange={(value) => {
+            onChange("birth_month", value);
+            if (!value) {
+              onChange("birth_day", "");
+              onChange("birth_year", "");
+            }
+          }}
+          error={errors[id("birth_month")]}
+        />
         <Input
           id={id("birth_day")}
           type="number"
@@ -902,9 +888,11 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
                         month={anniversary.month}
                         day={anniversary.day}
                         year={anniversary.year}
-                        onChange={(field, value) => {
-                          setAnniversary((a) => ({ ...a, [ANNIVERSARY_PART[field]]: value }));
-                          clearError(field);
+                        onChange={(changes) => {
+                          for (const [field, value] of Object.entries(changes) as [AnniversaryField, string][]) {
+                            setAnniversary((a) => ({ ...a, [ANNIVERSARY_PART[field]]: value }));
+                            clearError(field);
+                          }
                         }}
                         errors={errors}
                       />

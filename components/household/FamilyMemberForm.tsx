@@ -19,8 +19,8 @@ import { Camera } from "lucide-react";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { CheckRow } from "@/components/profile/CheckRow";
 import { ChildListingNotice, DirectoryNotice } from "@/components/profile/DirectoryNotice";
+import { MonthSelect } from "@/components/profile/MonthSelect";
 import {
-  MONTHS,
   birthdayColumns,
   birthdayErrors,
   birthdayErrorsWithoutYear,
@@ -361,29 +361,21 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
           >
             <div className="space-y-2">
               <Label htmlFor="birth_month" className="text-base">Month</Label>
-              <Select
-                items={MONTHS}
+              <MonthSelect
+                id="birth_month"
                 value={birthMonth}
-                onValueChange={(v) => {
-                  setBirthMonth(v ?? "");
+                onChange={(month) => {
+                  setBirthMonth(month);
                   clearError("birth_month");
+                  if (!month) {
+                    setBirthDay("");
+                    setBirthYear("");
+                    clearError("birth_day");
+                    clearError("birth_year");
+                  }
                 }}
-              >
-                <SelectTrigger
-                  id="birth_month"
-                  className="w-full text-base py-5"
-                  {...invalidFieldProps("birth_month", errors.birth_month)}
-                >
-                  <SelectValue placeholder="Month" />
-                </SelectTrigger>
-                <SelectContent>
-                  {MONTHS.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>
-                      {m.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                error={errors.birth_month}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="birth_day" className="text-base">Day</Label>

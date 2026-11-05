@@ -37,7 +37,8 @@ import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { Camera, Check } from "lucide-react";
 import { CheckRow } from "@/components/profile/CheckRow";
 import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
-import { MONTHS, birthdayColumns, birthdayErrors } from "@/components/profile/birthday";
+import { birthdayColumns, birthdayErrors } from "@/components/profile/birthday";
+import { MonthSelect } from "@/components/profile/MonthSelect";
 import { DirectoryNotice } from "@/components/profile/DirectoryNotice";
 import { retiredFlagResets } from "@/lib/members/retiredHideFlags";
 import {
@@ -346,15 +347,17 @@ export function ProfileForm({
       is_unlisted: state.is_unlisted,
     };
 
-    const { error } = await supabase
+    // A write a policy filters out answers with no error and no row.
+    const { data: saved, error } = await supabase
       .from("profiles")
       .update({ ...updates, ...retiredFlagResets(profile, updates) })
-      .eq("id", profile.id);
+      .eq("id", profile.id)
+      .select("id");
 
     setSaving(false);
 
-    if (error) {
-      console.error(error);
+    if (error || saved.length === 0) {
+      if (error) console.error(error);
       toast.error(failureMessage("save the profile"));
       return;
     }
@@ -569,27 +572,19 @@ export function ProfileForm({
               Birthday <Optional />
             </Label>
             <div className="grid grid-cols-[1.6fr_1fr_1fr] gap-3">
-              <Select
-                items={MONTHS}
+              <MonthSelect
+                id="birth_month"
+                aria-label="Month"
                 value={state.birth_month}
-                onValueChange={(v) => update("birth_month", v ?? "")}
-              >
-                <SelectTrigger
-                  id="birth_month"
-                  aria-label="Month"
-                  className="w-full py-5 text-base"
-                  {...invalidFieldProps("birth_month", errors.birth_month)}
-                >
-                  <SelectValue placeholder="Month" />
-                </SelectTrigger>
-                <SelectContent>
-                  {MONTHS.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>
-                      {m.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(month) => {
+                  update("birth_month", month);
+                  if (!month) {
+                    update("birth_day", "");
+                    update("birth_year", "");
+                  }
+                }}
+                error={errors.birth_month}
+              />
               <Input
                 id="birth_day"
                 type="number"

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { householdUpdates } from "./householdUpdates";
+import { householdFieldErrors, householdUpdates } from "./householdUpdates";
 
 const me = "me-id";
 const updatesFrom = (body: Record<string, unknown>) => {
@@ -68,6 +68,59 @@ describe("householdUpdates", () => {
   });
 
   it("refuses a number that isn't one", () => {
-    expect(householdUpdates({ phone_home: "12" }, me)).toEqual({ error: "Invalid home phone", status: 400 });
+    expect(householdUpdates({ phone_home: "12" }, me)).toEqual({
+      error: "Enter a valid phone number.",
+      status: 400,
+    });
+  });
+
+  it("refuses with the first message the form would show", () => {
+    const body = { family_name: " ", state: "ZZ", postal_code: "12" };
+    expect(householdUpdates(body, me)).toEqual({
+      error: Object.values(householdFieldErrors(body))[0],
+      status: 400,
+    });
+  });
+});
+
+describe("householdFieldErrors", () => {
+  it("names each invalid field, in the form's order", () => {
+    expect(
+      householdFieldErrors({
+        anniversary_month: "10",
+        phone_home: "12",
+        postal_code: "12",
+        state: "ZZ",
+        family_name: " ",
+      }),
+    ).toEqual({
+      family_name: "Enter a household name.",
+      state: "Enter a 2-letter state, like TX.",
+      postal_code: "Enter a 5-digit ZIP code, or ZIP+4.",
+      phone_home: "Enter a valid phone number.",
+      anniversary_day: "Enter the day of the anniversary.",
+    });
+    expect(
+      Object.keys(householdFieldErrors({ anniversary_month: "10", postal_code: "12", family_name: "" })),
+    ).toEqual(["family_name", "postal_code", "anniversary_day"]);
+  });
+
+  it("accepts blanks, and a body that leaves fields out", () => {
+    expect(
+      householdFieldErrors({
+        family_name: "Okafor",
+        state: "",
+        postal_code: "",
+        phone_home: "",
+        anniversary_month: "",
+        anniversary_day: "",
+        anniversary_year: "",
+      }),
+    ).toEqual({});
+    expect(householdFieldErrors({ city: "Austin" })).toEqual({});
+  });
+
+  it("does not judge a typed number a spouse's own number replaces", () => {
+    expect(householdFieldErrors({ phone_home: "12", phone_profile_id: "me-id" })).toEqual({});
   });
 });

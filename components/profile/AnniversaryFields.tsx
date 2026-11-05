@@ -1,19 +1,16 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
-import { MONTHS, type AnniversaryErrors } from "@/components/profile/birthday";
+import { MonthSelect } from "@/components/profile/MonthSelect";
+import type { AnniversaryErrors } from "@/components/profile/birthday";
 
 export type AnniversaryField = keyof AnniversaryErrors;
 
-/** Month, day and optional year. Each field's id is `idPrefix` plus its column name. */
+/**
+ * Month, day and optional year. Each field's id is `idPrefix` plus its column
+ * name. `onChange` gets every field a change touches: "No date" blanks all three.
+ */
 export function AnniversaryFields({
   idPrefix = "",
   month,
@@ -26,34 +23,26 @@ export function AnniversaryFields({
   month: string;
   day: string;
   year: string;
-  onChange: (field: AnniversaryField, value: string) => void;
+  onChange: (changes: Partial<Record<AnniversaryField, string>>) => void;
   errors: AnniversaryErrors;
 }) {
   const id = (field: AnniversaryField) => `${idPrefix}${field}`;
   return (
     <>
       <div className="grid grid-cols-[1.6fr_1fr_1fr] gap-3">
-        <Select
-          items={MONTHS}
+        <MonthSelect
+          id={id("anniversary_month")}
+          aria-label="Anniversary month"
           value={month}
-          onValueChange={(v) => onChange("anniversary_month", v ?? "")}
-        >
-          <SelectTrigger
-            id={id("anniversary_month")}
-            aria-label="Anniversary month"
-            className="w-full py-5 text-base"
-            {...invalidFieldProps(id("anniversary_month"), errors.anniversary_month)}
-          >
-            <SelectValue placeholder="Month" />
-          </SelectTrigger>
-          <SelectContent>
-            {MONTHS.map((m) => (
-              <SelectItem key={m.value} value={m.value}>
-                {m.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          onChange={(value) =>
+            onChange(
+              value
+                ? { anniversary_month: value }
+                : { anniversary_month: "", anniversary_day: "", anniversary_year: "" },
+            )
+          }
+          error={errors.anniversary_month}
+        />
         <Input
           id={id("anniversary_day")}
           type="number"
@@ -62,7 +51,7 @@ export function AnniversaryFields({
           placeholder="Day"
           aria-label="Anniversary day"
           value={day}
-          onChange={(e) => onChange("anniversary_day", e.target.value)}
+          onChange={(e) => onChange({ anniversary_day: e.target.value })}
           className="py-5 text-base"
           {...invalidFieldProps(id("anniversary_day"), errors.anniversary_day)}
         />
@@ -73,7 +62,7 @@ export function AnniversaryFields({
           placeholder="Year"
           aria-label="Anniversary year (optional)"
           value={year}
-          onChange={(e) => onChange("anniversary_year", e.target.value)}
+          onChange={(e) => onChange({ anniversary_year: e.target.value })}
           className="py-5 text-base"
           {...invalidFieldProps(id("anniversary_year"), errors.anniversary_year)}
         />
