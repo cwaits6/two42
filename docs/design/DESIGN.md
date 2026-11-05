@@ -97,7 +97,37 @@ A tenant may not change layout, typography, structural or semantic colors, or th
 
 Every page is built from the same frame, so moving between sibling pages never makes the layout jump.
 
-**Header** (`components/layout/Header.tsx`) is the same for everyone signed in, at every width: the wordmark on the left, one **Menu** button on the right. The menu (`AccountMenu`) holds the page navigation on phone — the member nav with its group switcher, or the admin or platform nav in those areas — then Privacy, Terms and Help, and the one **Sign out**. Desktop keeps the navigation in the sidebar. Signed in, there is no footer; Settings repeats Privacy, Terms and Help. Signed out, the header offers **Sign in** and the page ends with the footer.
+**The frame** is one sidebar and one account menu, the same for a member, a leader, a church admin and an operator.
+
+- **From `md` up** there is no top bar. The sidebar (`components/layout/Sidebar.tsx`) holds, top to bottom: the wordmark and the collapse control; the page list for where the person is; the account block. Collapsed, the wordmark becomes the 42 mark, the pages become their icons, and the account block becomes the photo or initials.
+- **On a phone** a top bar (`components/layout/Header.tsx`) holds the wordmark on the left and one **Menu** button on the right, and stays visible whether the drawer is open or closed. The drawer holds the same page list with the same account block at the bottom.
+- **The account block** (`components/layout/AccountBlock.tsx`) shows the person's photo, or their initials, and their name; an operator, who has no profile in any church, is shown by their sign-in address. Its menu lists, in this order: **My profile**, **Settings**, **Church admin** (church admins only), **Platform** (operators only), then **Help**, **Privacy**, **Terms**, then **Sign out**, set apart as the last item. A row is listed only when it opens for that person, so a pending person and an operator outside a church get Help, Privacy, Terms and Sign out. The menu opens on click, tap, Enter or Space and closes with Escape. It never opens on hover.
+- **Sign out** appears once in the frame, in that menu. Signed in, there is no footer; Settings repeats Help, Privacy and Terms.
+- **Church admin and Platform pages** use the same frame with their own page list, led by the way back to Home.
+- **The wordmark** takes a member to the page that lists all of their groups. Its link is at least 44px tall in the sidebar, as the 42 mark, and in the phone bar.
+- **Signed out**, the header offers **Sign in** at every width and the page ends with the footer.
+
+Who sees which row is decided on the server, from the signed-in person's own row (`components/layout/account.ts`, built in `app/layout.tsx`).
+
+**Page order** (`lib/groups/nav.ts`). Inside a group the pages are three clusters separated by spacing, with no section labels:
+
+1. Home, Calendar, Announcements
+2. Prayer, Lessons, Serving (Serving only for people on a serving team)
+3. Directory, Give, About
+
+Then, below a rule, **Group settings** for leaders only.
+
+- **One Home at a time.** Inside a group, Home is that group's Home. No list ever shows two items with the same label.
+- **The group block** sits above the pages and always names the group in text beside its color. For a member of one group it is a label. For a member of two or more it is the group switcher: its first row, **All groups**, opens the page that lists all of their groups, where the list is Home, Calendar and Directory.
+- **Find a group** is the last row of the group switcher for a member of two or more groups. For everyone else it is a quiet last row below the group's pages, because their group block does not open. It shows only when the church lets members find groups.
+
+Why this order:
+
+- What's happening comes first, because finding out what's on and when is the main reason people open the app.
+- Taking part comes next. Serving is last in its cluster, so the list differs by one row for people who aren't on a team.
+- Pages people look things up in come last, most-used first.
+- Managing the group sits apart from member pages.
+- People scan a new menu from the top and later rely on remembered positions, so the order should not change again without usage counts that justify it. Directory's place is the one to recheck once the pilot has counts.
 
 **Tab titles** come from `pageTitle()` (`lib/pageTitle.ts`) on every page: `{Page} · {Group} · {Church}` inside a group, `{Page} · {Church}` elsewhere signed in, `{Page} · two42` signed out.
 

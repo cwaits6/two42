@@ -47,7 +47,7 @@ export function AccountBlock({
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={`Account menu. Signed in as ${account.name}`}
-        title={collapsed ? account.name : undefined}
+        title={account.name}
         render={
           <button
             type="button"
