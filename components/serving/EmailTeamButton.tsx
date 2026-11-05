@@ -26,11 +26,14 @@ interface EmailTeamButtonProps {
   emailReach: number | null;
 }
 
-/** The dialog's wording for a reach; it names a number only when it has one. */
-export function emailReachCopy(emailReach: number | null): { everyone: string; send: string } {
-  if (emailReach === null) return { everyone: "Everyone on the team", send: "Send" };
+/**
+ * The dialog's wording for a reach; it names a number only when it has one.
+ * `nobody` is a counted zero, never a count that could not be read.
+ */
+export function emailReachCopy(emailReach: number | null): { everyone: string; send: string; nobody: boolean } {
+  if (emailReach === null) return { everyone: "Everyone on the team", send: "Send", nobody: false };
   const members = `${emailReach} member${emailReach !== 1 ? "s" : ""}`;
-  return { everyone: `Everyone on the team (${members})`, send: `Send to ${members}` };
+  return { everyone: `Everyone on the team (${members})`, send: `Send to ${members}`, nobody: emailReach === 0 };
 }
 
 /**
@@ -100,7 +103,7 @@ export function EmailTeamButton({
             <DialogTitle>Email {teamName}</DialogTitle>
           </DialogHeader>
 
-          {emailReach === 0 ? (
+          {copy.nobody ? (
             <p className="text-base text-foreground bg-muted border border-border rounded-md px-3 py-2">
               No one on this team can get email yet. Add people under Team
               members on this page first.
@@ -141,7 +144,7 @@ export function EmailTeamButton({
               Cancel
             </Button>
             <Button
-              disabled={sending || emailReach === 0}
+              disabled={sending || copy.nobody}
               onClick={send}
             >
               {sending ? "Sending…" : copy.send}
