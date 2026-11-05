@@ -256,7 +256,7 @@ export default async function ServingLinkPage({
       <ServingNotice
         title="Nothing"
         em="to cancel"
-        body={`You're not signed up for ${dateLabel}. It may have been cancelled already.`}
+        body={`You're not signed up for ${dateLabel}. Your turn may have been cancelled already.`}
       />
     );
   }
