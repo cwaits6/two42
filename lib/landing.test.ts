@@ -20,6 +20,10 @@ describe("landingFor", () => {
     expect(landingFor({ role: "pending" }, true)).toBe("waiting");
   });
 
+  it("keeps a person whose stored role is not recognized on the waiting screen", () => {
+    expect(landingFor({ role: "owner" }, false)).toBe("waiting");
+  });
+
   it("sends a member to Home", () => {
     expect(landingFor({ role: "member" }, false)).toBe("home");
   });

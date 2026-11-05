@@ -3,7 +3,9 @@ import type { User } from "@supabase/supabase-js";
 
 export type PlatformAdminGate =
   | { ok: true; user: User }
-  | { ok: false; status: 401 | 403 };
+  | { ok: false; status: 401 }
+  // unavailable: the check itself failed, so the answer is unknown, not "no".
+  | { ok: false; status: 403; unavailable?: true };
 
 /**
  * The platform-operator gate. Resolved through the COOKIE-BOUND request
@@ -27,7 +29,7 @@ export async function requirePlatformAdmin(): Promise<PlatformAdminGate> {
   const { data, error } = await supabase.rpc("is_platform_admin");
   if (error) {
     console.error("Platform admin check failed; denying:", error);
-    return { ok: false, status: 403 };
+    return { ok: false, status: 403, unavailable: true };
   }
   return data === true ? { ok: true, user } : { ok: false, status: 403 };
 }

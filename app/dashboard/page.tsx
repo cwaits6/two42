@@ -12,7 +12,7 @@ import { HomeLauncher } from "@/components/groups/HomeLauncher";
 import { NoGroupCard } from "@/components/groups/NoGroupCard";
 import { landingFor, NO_ROW } from "@/lib/landing";
 import { pageTitle } from "@/lib/pageTitle";
-import { getPlatformAdmin } from "@/lib/platform-access";
+import { requirePlatformAdmin } from "@/lib/platform-access";
 import { SignOutButton } from "@/app/join/[token]/SignOutButton";
 
 export const generateMetadata = () => pageTitle("Home");
@@ -31,21 +31,25 @@ export default async function DashboardPage() {
     .eq("id", user.id)
     .single();
 
+  const failedRead = (
+    <PageContainer>
+      <PageHeader title="Home" />
+      <ErrorState thing="Home" />
+    </PageContainer>
+  );
+
   if (error && error.code !== NO_ROW) {
     console.error("Failed to load the viewer's profile: code=%s message=%s", error.code, error.message);
-    return (
-      <PageContainer>
-        <PageHeader title="Home" />
-        <ErrorState thing="Home" />
-      </PageContainer>
-    );
+    return failedRead;
   }
 
   // Only a person with no row can be an operator without a church, so the
-  // gate is asked for no one else. It fails closed: an unanswered check
-  // leaves them on the waiting screen.
-  const isOperator = !profile && (await getPlatformAdmin()) !== null;
-  const landing = landingFor(profile, isOperator);
+  // gate is asked for no one else. An unanswered check grants nothing, but
+  // it is not a "no" either: the waiting screen would tell an operator that
+  // a church admin reviews their account.
+  const gate = profile ? null : await requirePlatformAdmin();
+  if (gate && !gate.ok && gate.status === 403 && gate.unavailable) return failedRead;
+  const landing = landingFor(profile, gate?.ok === true);
   if (landing === "platform") redirect("/platform");
 
   if (!profile || landing === "waiting") {

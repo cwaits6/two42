@@ -1,3 +1,5 @@
+import { isMemberRole } from "@/lib/roles";
+
 /** A PostgREST `.single()` that found no row: the row is missing, not unreadable. */
 export const NO_ROW = "PGRST116";
 
@@ -12,5 +14,5 @@ export type Landing = "platform" | "waiting" | "home";
  */
 export function landingFor(profile: { role: string } | null, isOperator: boolean): Landing {
   if (!profile) return isOperator ? "platform" : "waiting";
-  return profile.role === "pending" ? "waiting" : "home";
+  return isMemberRole(profile.role) ? "home" : "waiting";
 }

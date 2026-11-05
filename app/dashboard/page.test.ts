@@ -31,9 +31,9 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
-const getPlatformAdmin = vi.fn();
+const requirePlatformAdmin = vi.fn();
 vi.mock("@/lib/platform-access", () => ({
-  getPlatformAdmin: () => getPlatformAdmin(),
+  requirePlatformAdmin: () => requirePlatformAdmin(),
 }));
 
 const getGroupMemberships = vi.fn();
@@ -76,8 +76,8 @@ beforeEach(() => {
   profileResult.mockResolvedValue({
     data: { role: "member", org_id: "org-1", preferred_name: null, first_name: "Ann" },
   });
-  getPlatformAdmin.mockReset();
-  getPlatformAdmin.mockResolvedValue(null);
+  requirePlatformAdmin.mockReset();
+  requirePlatformAdmin.mockResolvedValue({ ok: false, status: 403 });
   getGroupMemberships.mockReset();
   getDiscoveryOn.mockReset();
   getDiscoveryOn.mockResolvedValue(false);
@@ -123,9 +123,19 @@ describe("DashboardPage", () => {
 
   it("sends an operator with no profile to Platform", async () => {
     profileResult.mockResolvedValue({ data: null, error: { code: "PGRST116", message: "no rows" } });
-    getPlatformAdmin.mockResolvedValue({ id: "user-1" });
+    requirePlatformAdmin.mockResolvedValue({ ok: true, user: { id: "user-1" } });
 
     await expect(DashboardPage()).rejects.toMatchObject({ target: "/platform" });
+  });
+
+  it("shows the failed read, not the waiting screen, when the operator check goes unanswered", async () => {
+    profileResult.mockResolvedValue({ data: null, error: { code: "PGRST116", message: "no rows" } });
+    requirePlatformAdmin.mockResolvedValue({ ok: false, status: 403, unavailable: true });
+
+    const element = await DashboardPage();
+
+    expect(childTypes(element)).toContain(ErrorState);
+    expect(childTypes(element)).not.toContain(SignOutButton);
   });
 
   it("does not ask the operator gate about a person who has a profile", async () => {
@@ -133,7 +143,7 @@ describe("DashboardPage", () => {
 
     await DashboardPage();
 
-    expect(getPlatformAdmin).not.toHaveBeenCalled();
+    expect(requirePlatformAdmin).not.toHaveBeenCalled();
   });
 
   it("renders the no-group card with discovery forwarded", async () => {
