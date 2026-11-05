@@ -248,10 +248,12 @@ function filterExposure(chain) {
     if (m.name === "select" || m.name === "from" || WRITES.has(m.name)) continue;
     const first = stringArg(m);
     if (m.name === "or") {
-      if (first === null) continue;
-      const onProfiles = chain.table === "profiles" ? m.args.length < 2 : false;
+      if (m.args.length === 0) continue;
+      // The source text, so a template with substitutions is still searched.
+      const filters = first ?? m.args[0].getText().replace(/^[`"']/, "");
+      const onProfiles = chain.table === "profiles" && m.args.length < 2;
       const embedded = m.args.length > 1 && /["'`]profiles["'`]/.test(m.args[1].getText());
-      if ((onProfiles || embedded) && OR_EMAIL.test(first)) return `.or() on email`;
+      if ((onProfiles || embedded) && OR_EMAIL.test(filters)) return `.or() on email`;
       continue;
     }
     if (m.name === "match") {
