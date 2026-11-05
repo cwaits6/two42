@@ -128,16 +128,20 @@ test.describe("a couple on the team", () => {
       data: { groupId: TEAM_ID, serviceDate: sundayAfterBlock(), attendeeProfileIds: ["not-checked-first"] },
     });
     expect(outside.status()).toBe(400);
+    expect(await outside.json()).toEqual({ error: "That date is not one of the team's dates" });
     await page.goto(TEAM_PATH);
     await expect(signUpButtons(page)).toHaveCount(SUNDAYS - 3);
   });
 });
 
-/** The Sunday after the block: next Sunday plus the block's 30 weeks. */
+/**
+ * The Sunday after the block: the block's first Sunday plus its 30 weeks.
+ * Mirrors SETUP_SQL, where a Sunday starts the block a week out.
+ */
 function sundayAfterBlock(): string {
   const today = new Date();
-  const next = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
-  next.setUTCDate(next.getUTCDate() + ((7 - next.getUTCDay()) % 7) + SUNDAYS * 7);
+  const next = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  next.setUTCDate(next.getUTCDate() + (7 - next.getUTCDay()) + SUNDAYS * 7);
   return next.toISOString().slice(0, 10);
 }
 

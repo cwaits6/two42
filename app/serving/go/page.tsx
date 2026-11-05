@@ -177,11 +177,12 @@ export default async function ServingLinkPage({
       );
     }
     const teamDates = teamServiceDates(settings, today);
-    if (!isUpcomingServiceDate(payload.d, today) || !teamDates.includes(payload.d)) {
+    const passed = !isUpcomingServiceDate(payload.d, today);
+    if (passed || !teamDates.includes(payload.d)) {
       return (
         <ServingNotice
           title={dateLabel}
-          em="has passed"
+          em={passed ? "has passed" : "is not one of the team's dates"}
           body="The Serving page shows the dates that are still open."
         />
       );

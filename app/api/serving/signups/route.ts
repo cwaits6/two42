@@ -10,7 +10,9 @@ import {
   type NamedProfile,
 } from "@/lib/serving/server";
 
-const FAILED = NextResponse.json({ error: "Something went wrong — please try again" }, { status: 500 });
+// A function, not a constant: a Response body can be sent only once.
+const failed = () =>
+  NextResponse.json({ error: "Something went wrong — please try again" }, { status: 500 });
 
 function stringList(value: unknown): string[] {
   return Array.isArray(value) ? [...new Set(value.filter((v): v is string => typeof v === "string"))] : [];
@@ -83,7 +85,7 @@ export async function POST(request: Request) {
       groupId,
       lookupError[1]
     );
-    return FAILED;
+    return failed();
   }
 
   if (!group || !settings?.enabled || !profile) {
@@ -225,7 +227,7 @@ export async function PATCH(request: Request) {
     .maybeSingle();
   if (signupError) {
     console.error("Serving change lookup failed for %s:", signupId, signupError);
-    return FAILED;
+    return failed();
   }
   if (!signup) {
     return NextResponse.json({ error: "Signup not found" }, { status: 404 });
@@ -305,7 +307,7 @@ export async function DELETE(request: Request) {
   // was cancelled.
   if (signupError) {
     console.error("Serving signup lookup failed for %s:", signupId, signupError);
-    return FAILED;
+    return failed();
   }
   if (!signup) {
     return NextResponse.json({ error: "Signup not found" }, { status: 404 });

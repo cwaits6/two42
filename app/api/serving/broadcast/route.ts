@@ -129,7 +129,7 @@ export async function POST(request: Request) {
   const dates = teamServiceDates(settings, today);
   if (dates.length === 0) {
     return NextResponse.json(
-      { error: "Every upcoming date is covered — nothing to ask for!" },
+      { error: "This team has no dates to sign up for" },
       { status: 400 }
     );
   }
