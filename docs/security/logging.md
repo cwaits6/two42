@@ -19,7 +19,7 @@ One JSON object per line, on standard output, for every level:
 | `route` | The page or API route pattern (`/join/[token]`, never the real address), or an edge function's name. Shared code in `lib/` and `components/` writes none. |
 | `step` | Optional. A fixed `lower_snake_case` label for the stage, such as a table name. |
 | `code` | The error's code, read as described below. Absent when no error was passed. |
-| `ref` | A short random reference, eight characters. |
+| `ref` | A short random reference, eight characters. For an error nothing caught, the framework's digest instead (see "The reference"). |
 | `ids` | Optional. Row ids (UUIDs) and counts. |
 
 To find where a line came from, search the source for its `what`.
@@ -42,6 +42,11 @@ An error passed as text is written as the code `string`, and one with none of
 the fields above as `unknown`. An empty `code`, which the database client
 uses for a request that got no response, is written as `empty`.
 
+Code that turns a database error into a new `Error` or into text logs the
+original first, on the line before, because the copy carries no code. Such a
+failure is logged twice: once where it happened, with its code, and once
+where it was caught, with `Error` or `string`.
+
 ## What is never written
 
 Error messages, details and hints. Row values. Names, emails, phone numbers
@@ -49,10 +54,27 @@ and addresses. Prayer and announcement text. Request and response bodies.
 Tokens, keys and signed links, whole or in part. Real page addresses and
 query strings.
 
-The helper enforces this by shape, not by trust in the call site: `route` is
-dropped unless it is a pattern or a function name, `step` unless it is a
-label, and an `ids` value unless it is a UUID or a finite number. So an email
-or a token passed by mistake is not written.
+The helper checks the shape of what it is given: `route` is dropped unless
+it looks like a pattern or a function name, `step` unless it is a label, and
+an `ids` value unless it is a UUID or a finite number. That stops an address
+with a query, a hash or a host, and an email, a name or a phone number.
+
+Shape cannot stop everything, so the call site carries the rest:
+
+- A real path such as `/join/<token>` has the shape of a pattern. `route` is
+  always a fixed string, which lint requires; never a path read from the
+  request.
+- An invite token is a UUID, the same shape as a row id. Never put a token in
+  `ids`.
+- `stepOf()` turns any text into a label. Pass it only a fixed label or a
+  bucket name, never a value a person entered.
+
+A stored photo is logged by its kind and the id of the row it belongs to,
+not by its path. A photo left behind after a person is deleted, or refused
+because its key names another church, is one line each. The object is in
+the `avatars` bucket under `<keyOrg>/<step>/<entity>/`. A line with no
+`keyOrg` is a key from before org partitioning, under `<step>/<entity>/`, or
+`<entity>/` when it has no `step` either.
 
 ## The reference
 
@@ -62,8 +84,12 @@ The reference is made on the server, where the failure is logged.
   "Try again" in the failed state (`components/states/ErrorState.tsx`). Every
   line logged while that page rendered carries the same value.
 - **A page that threw** shows the framework's digest as its reference
-  (`app/error.tsx`). The framework writes the same digest to the server log
-  beside the error.
+  (`app/error.tsx`). `onRequestError` in `instrumentation.ts` writes a helper
+  line with that digest as its `ref`, the route pattern and the error's code.
+  The digest is a hash of the error's message and stack, not a random value:
+  the same failure shows the same digest each time, so it names the failure
+  and not the one request. Lines the page logged before it threw carry their
+  own random reference, next to that line in the log.
 - **A read made in the browser**, and **a failed save answered by an API
   route**, show no reference. The first has no server log line; the second
   logs one with its own reference that is not shown.
@@ -86,13 +112,15 @@ browser's console, which stays on the person's own device.
 - ESLint (`eslint.config.mjs`) forbids direct `console` use in `app/`,
   `lib/`, `components/`, `supabase/functions/`, `instrumentation*.ts` and
   `proxy.ts`, tests excepted, and requires the first argument of `logError`,
-  `logWarn` and `logInfo` to be a fixed string.
+  `logWarn` and `logInfo`, and any `route` passed to them, to be a fixed
+  string.
 
 ## What this does not cover
 
 - **The framework's own output for an exception nothing caught.** It prints
-  the error's message and stack beside the digest. Code that can fail on
-  people's data should catch the failure and log it through the helper.
+  the error's message and stack beside the digest, next to the helper's line
+  for the same failure. Code that can fail on people's data should catch the
+  failure and log it through the helper.
 - **Request logs kept by the hosts.**
 - **Optional tracing** (`instrumentation.ts`, `instrumentation.node.ts`). It
   is off unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set and names no vendor.
@@ -100,5 +128,9 @@ browser's console, which stays on the person's own device.
   an invite token in `/join/<token>`, and its query string. A span for an
   outgoing request records the full address with its query, which for a
   database read holds the filter values, such as an email being looked up.
-  Request and response bodies and headers are not recorded. Point it only at
-  a collector you run or trust with that.
+  Request and response bodies are not recorded. Headers are not recorded,
+  except that a span for an incoming request holds the browser's user agent
+  and the client's address. A span that failed records the exception's
+  message and stack, which can quote row values. This is read from the
+  installed packages, not from a running collector. Point it only at a
+  collector you run or trust with that.
