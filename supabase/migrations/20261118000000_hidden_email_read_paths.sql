@@ -121,3 +121,8 @@ where p.is_unlisted = false
   and p.role = any (array['member'::text, 'admin'::text])
   and p.org_id = (select public.app_request_org_id())
 group by p.id;
+
+-- The profiles update policy calls get_profile_email() in its WITH CHECK, and
+-- that policy applies to authenticated only, so no request without a session
+-- reaches the function.
+revoke execute on function public.get_profile_email(uuid) from public, anon;

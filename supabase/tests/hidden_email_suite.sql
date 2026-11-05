@@ -79,7 +79,9 @@ begin
   insert into auth.users (id, email) values (gen_random_uuid(), 'owner@hidden-other.example.test');
 end $$;
 
--- Isaac leads the team; Ruth is on it with announcements off.
+-- Isaac leads the team; Ruth is on it with announcements off. Caleb and
+-- Hannah are on it for the count block, which makes one pending and takes the
+-- other's address away.
 insert into public.teams (id, org_id, group_id, name)
 select 'bbbb0000-0000-0000-0000-0000000000e1', g.org_id, g.id, 'Hidden email suite team'
   from public.groups g where g.id = 'c0000000-0000-0000-0000-00000000000b';
@@ -87,7 +89,8 @@ insert into public.team_members (org_id, team_id, profile_id, is_leader)
 select p.org_id, 'bbbb0000-0000-0000-0000-0000000000e1', p.id, p.email = 'isaac.seedly@example.test'
   from public.profiles p
  where p.email in ('isaac.seedly@example.test', 'leo.loremsworth@example.test',
-                   'chloe.mockingham@example.test', 'ruth.fixtureton@example.test');
+                   'chloe.mockingham@example.test', 'ruth.fixtureton@example.test',
+                   'caleb.dummyfield@example.test', 'hannah.loremsworth@example.test');
 update public.profiles set email_announcements = false where email = 'ruth.fixtureton@example.test';
 
 -- Every person and whether the directory may show their address, read with
@@ -230,8 +233,10 @@ select is(
   '42501', 'a request with no session cannot call the helper');
 
 -- The helper's visibility arms are a hand copy of the profiles read policy,
--- which a definer function cannot reuse. For every caller it must return an
--- address for exactly the people whose row that policy shows them.
+-- which a definer function cannot reuse. For each caller below it must return
+-- an address for exactly the people whose row that policy shows them. Chloe
+-- and Ruth are callers so that the states below reach every arm: a person
+-- seen only through the household, and a caller who is pending.
 create function pg_temp.helper_follows_profiles_policy(_state text) returns setof text language sql as $$
   select is(
     pg_temp.val(caller, $q$
@@ -243,6 +248,7 @@ create function pg_temp.helper_follows_profiles_policy(_state text) returns seto
     caller || ' gets an email only where the profile is visible: ' || _state)
   from unnest(array['admin@local.dev', 'amelia.demoski@example.test', 'henry.mockingham@example.test',
                     'isaac.seedly@example.test', 'zoe.dummyfield@example.test',
+                    'chloe.mockingham@example.test', 'ruth.fixtureton@example.test',
                     'owner@hidden-other.example.test']) caller;
 $$;
 
@@ -268,7 +274,27 @@ select is(
   pg_temp.val('isaac.seedly@example.test', format(
     'select public.profile_directory_email(%L)', pg_temp.uid('henry.mockingham@example.test'))),
   '<null>', 'a member gets no email for an unlisted person');
+select is(
+  pg_temp.val('chloe.mockingham@example.test', format(
+    'select public.profile_directory_email(%L)', pg_temp.uid('henry.mockingham@example.test'))),
+  'henry.mockingham@example.test', 'someone in an unlisted person''s household still gets their visible email');
 update public.profiles set is_unlisted = false where email = 'henry.mockingham@example.test';
+
+-- Henry in no group: Chloe sees him only through the household.
+create temp table henry_groups as
+  select * from public.group_members where profile_id = pg_temp.uid('henry.mockingham@example.test');
+delete from public.group_members where profile_id = pg_temp.uid('henry.mockingham@example.test');
+select pg_temp.helper_follows_profiles_policy('shared groups, a household member in no shared group');
+select is(
+  pg_temp.val(reader.email, format(
+    'select public.profile_directory_email(%L)', pg_temp.uid('henry.mockingham@example.test'))),
+  reader.want,
+  reader.who || ' and a person in no group of theirs')
+from (values
+  ('chloe.mockingham@example.test', 'henry.mockingham@example.test', 'the household gets the visible email: Chloe'),
+  ('isaac.seedly@example.test', '<null>', 'nobody else does: a member')
+) reader(email, want, who);
+insert into public.group_members select * from henry_groups;
 
 update public.profiles set role = 'pending' where email = 'ruth.fixtureton@example.test';
 select pg_temp.helper_follows_profiles_policy('shared groups, one person pending');
@@ -277,8 +303,39 @@ update public.profiles set role = 'member' where email = 'ruth.fixtureton@exampl
 update public.organizations set directory_visibility = 'org'
  where id = (select org_id from public.profiles where email = 'isaac.seedly@example.test');
 select pg_temp.helper_follows_profiles_policy('whole church');
+
+-- Pending callers, where the whole church is otherwise visible: someone not
+-- yet approved reads their own address and nobody else's, a household
+-- member's included.
+update public.profiles set role = 'pending'
+ where email in ('ruth.fixtureton@example.test', 'chloe.mockingham@example.test');
+select pg_temp.helper_follows_profiles_policy('whole church, two callers pending');
+select is(
+  pg_temp.val('ruth.fixtureton@example.test',
+    $q$select coalesce(string_agg(public.profile_directory_email(e.id), ','), 'nobody') from everyone e
+        where public.profile_directory_email(e.id) is not null$q$),
+  'ruth.fixtureton@example.test', 'a pending person gets their own visible email from the helper and no other');
+select is(
+  pg_temp.val(reader.email, format(
+    'select public.profile_directory_email(%L)', pg_temp.uid('henry.mockingham@example.test'))),
+  '<null>',
+  reader.who || ' gets no email for a member')
+from (values
+  ('ruth.fixtureton@example.test', 'a pending person'),
+  ('chloe.mockingham@example.test', 'a pending person in the member''s household')
+) reader(email, who);
+update public.profiles set role = 'member'
+ where email in ('ruth.fixtureton@example.test', 'chloe.mockingham@example.test');
 update public.organizations set directory_visibility = 'shared_groups'
  where id = (select org_id from public.profiles where email = 'isaac.seedly@example.test');
+
+-- ── The household's own read path ───────────────────────────────────────────
+-- The profiles update policy calls get_profile_email() as the signed-in
+-- person, so that grant stays. Nothing calls it without a session.
+select is(
+  has_function_privilege(r, 'public.get_profile_email(uuid)', 'execute'),
+  r = 'authenticated', r || ': execute on get_profile_email')
+from unnest(array['public', 'anon', 'authenticated']) r;
 
 -- ── The owner ───────────────────────────────────────────────────────────────
 select is(
@@ -349,11 +406,23 @@ select is(
   '<null>', 'the helper stops returning it at once');
 
 -- ── The team email count ────────────────────────────────────────────────────
+-- The send's three rules, one person each: Ruth has announcements off, Caleb
+-- is pending and Hannah has no address. Isaac, Leo and Chloe are left.
+update public.profiles set role = 'pending' where email = 'caleb.dummyfield@example.test';
+update public.profiles set email = null where email = 'hannah.loremsworth@example.test';
+select is(
+  (select count(*)::int || ' on the team, ' || count(*) filter (where p.role = 'pending') || ' pending, '
+          || count(*) filter (where p.email is null) || ' with no email, '
+          || count(*) filter (where not p.email_announcements) || ' with announcements off'
+     from public.team_members tm join public.profiles p on p.id = tm.profile_id
+    where tm.team_id = 'bbbb0000-0000-0000-0000-0000000000e1'),
+  '6 on the team, 1 pending, 1 with no email, 1 with announcements off',
+  'non-vacuity: the team holds one person for each rule the count applies');
 select is(
   pg_temp.val(caller.email,
     $q$select public.serving_team_email_count('bbbb0000-0000-0000-0000-0000000000e1')$q$),
   '3',
-  caller.who || ' gets the number an email to the team reaches, hidden addresses included, announcements off left out')
+  caller.who || ' gets the number an email to the team reaches: hidden addresses included; pending, no address and announcements off left out')
 from (values
   ('isaac.seedly@example.test', 'the team lead'),
   ('zoe.dummyfield@example.test', 'the group leader')
