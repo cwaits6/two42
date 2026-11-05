@@ -52,7 +52,7 @@ export default async function DashboardPage() {
 
   if (!profile || landing === "waiting") {
     return (
-      <PageContainer size="reading" centered>
+      <PageContainer size="reading">
         <PageHeader
           title="Waiting for approval"
           subtitle="A church admin reviews your account. Once you are approved, your groups appear here."

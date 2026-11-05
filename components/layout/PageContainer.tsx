@@ -4,7 +4,7 @@ type PageContainerSize = "reading" | "default" | "wide";
 
 interface PageContainerProps {
   size?: PageContainerSize;
-  /** For a page with no sidebar beside it, which sits in the middle of the screen. */
+  /** For a page a signed-out person can reach, which sits in the middle of the screen. */
   centered?: boolean;
   className?: string;
   children: React.ReactNode;
