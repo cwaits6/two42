@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
   requests: [] as Record<string, unknown>[],
   loadError: null as { code: string } | null,
   emailsError: null as { code: string } | null,
+  viewerError: null as { code: string } | null,
   updates: [] as { table: string; values: unknown }[],
   updateResult: { data: [{ id: "row" }], error: null } as {
     data: { id: string }[] | null;
@@ -23,7 +24,10 @@ const state = vi.hoisted(() => ({
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
     auth: {
-      getUser: async () => ({ data: { user: { id: "me" } } }),
+      getUser: async () =>
+        state.viewerError
+          ? { data: { user: null }, error: state.viewerError }
+          : { data: { user: { id: "me" } }, error: null },
     },
     // The address arrives by the church admin read, never on the profile rows.
     rpc: async () => ({
@@ -53,6 +57,8 @@ vi.mock("@/lib/supabase/client", () => ({
     },
   }),
 }));
+
+vi.mock("@/components/ui/select", async () => await import("@/components/ui/select.mock"));
 
 const push = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {}, push }) }));
@@ -124,6 +130,7 @@ beforeEach(() => {
   state.requests = [];
   state.loadError = null;
   state.emailsError = null;
+  state.viewerError = null;
   state.updates = [];
   state.updateResult = { data: [{ id: "row" }], error: null };
   toast.success.mockClear();
@@ -234,6 +241,28 @@ describe("MembersList", () => {
     expect(host.textContent).not.toContain("Ben Test");
   });
 
+  it("shows the error state, not rows with Edit only, when the first load can't tell who is looking", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    state.viewerError = { code: "over_request_rate_limit" };
+    await mount();
+    expect(host.textContent).toContain("Couldn't load");
+    expect(bodyRows()).toHaveLength(0);
+    expect(logged).toHaveBeenCalledExactlyOnceWith("Failed to read the viewer: code=%s", "over_request_rate_limit");
+    logged.mockRestore();
+  });
+
+  it("keeps every row's actions when a later load can't tell who is looking", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    await mount();
+    state.viewerError = { code: "over_request_rate_limit" };
+    await choose("Ben Test", "Move to pending");
+    await click("Move to pending");
+
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith("Couldn't load the latest members. Try again.");
+    expect(await openMenu("Ben Test")).toEqual(["Edit", "Move to pending", "Delete account"]);
+    logged.mockRestore();
+  });
+
   it("does not report a role change that matched no row", async () => {
     state.updateResult = { data: [], error: null };
     await mount();
@@ -274,5 +303,24 @@ describe("MembersList", () => {
     expect(bodyRows().map((row) => row.querySelector("td")?.textContent)).toEqual(["Cy Test"]);
     expect(host.textContent).toContain("1 of 4 members");
     expect(await openMenu("Cy Test")).toEqual(["Edit", "Delete account"]);
+  });
+
+  it("narrows to one role, with every tab counting the rows it would show, until the filters are cleared", async () => {
+    state.profiles.push(profile("cy", "Cy", "pending"));
+    await mount();
+    expect(tab(/^All/).textContent).toBe("All (3)");
+
+    await click("Church admin");
+    expect(bodyRows().map((row) => row.querySelector("td")?.textContent)).toEqual(["Ada Test"]);
+    expect(tab(/^All/).textContent).toBe("All (1)");
+    expect(tab(/^Pending/).textContent).toBe("Pending (0)");
+    expect(host.textContent).toContain("1 of 3 members");
+
+    await act(async () => tab(/^Pending/).click());
+    expect(bodyRows()).toHaveLength(0);
+    await click("Clear filters");
+    expect(bodyRows()).toHaveLength(3);
+    expect(tab(/^All/).textContent).toBe("All (3)");
+    expect(tab(/^Pending/).textContent).toBe("Pending (1)");
   });
 });

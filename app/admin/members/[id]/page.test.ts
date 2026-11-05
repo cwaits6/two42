@@ -55,6 +55,9 @@ vi.mock("@/lib/supabase/server", () => ({
       };
       return chain;
     },
+    rpc: () => ({
+      eq: () => ({ maybeSingle: async () => ({ data: { email: "ada@example.test" }, error: null }) }),
+    }),
   }),
 }));
 

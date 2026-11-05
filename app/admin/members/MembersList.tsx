@@ -78,7 +78,7 @@ export function MembersList() {
       { data: reqs, error: requestsError },
       { data: mems, error: membersError },
       { data: emails, error: emailsError },
-      { data: auth },
+      { data: auth, error: viewerError },
     ] = await Promise.all([
       supabase
         .from("access_requests")
@@ -93,9 +93,11 @@ export function MembersList() {
       supabase.rpc("admin_member_emails"),
       supabase.auth.getUser(),
     ]);
-    if (requestsError || membersError || emailsError) {
-      if (emailsError) console.error("Failed to load member emails, code:", emailsError.code);
-      else console.error("Failed to load members:", requestsError ?? membersError);
+    // Without the viewer every row would offer Edit only, with no reason shown.
+    if (viewerError) console.error("Failed to read the viewer: code=%s", viewerError.code);
+    if (emailsError) console.error("Failed to load member emails, code:", emailsError.code);
+    if (requestsError || membersError || emailsError || viewerError) {
+      if (requestsError || membersError) console.error("Failed to load members:", requestsError ?? membersError);
       if (loadedOnce.current) toast.error(failureMessage("load the latest members"));
       else setStatus("failed");
       return;
