@@ -193,26 +193,29 @@ export async function runHourly(
     let sendFailures = 0;
     const queue = [...(claimed ?? [])];
 
-    // The cap is reserved for the claimed rows only, the people still
-    // unsent, so a retry never pays for what already went out. A refusal is
-    // a deliberate skip, never a failure: the claims go back and a later
-    // firing may send them if the cap allows.
-    if (queue.length > 0 && !(await reserveEmailQuota(supabase, org.id, queue.length))) {
-      console.warn("[org %s] daily email cap reached, leaving %d reminder(s) for a later firing", org.id, queue.length);
-      capped += queue.length;
-      for (const row of queue) record(releasedIds, row);
-      queue.length = 0;
-    }
-
+    // The cap counts attempts, so each reminder reserves its own place just
+    // before it is mailed: a claim released unmailed (out of time, a rate
+    // limit, the cap itself) costs nothing, and a refused send costs one
+    // each time it is tried. A refusal by the cap is a deliberate skip,
+    // never a failure: the claims go back and a later firing may send them
+    // if the cap allows.
+    let capReached = false;
     const send = deps.sender(org);
     while (queue.length > 0) {
       const row = queue.shift()!;
-      if (budgetExhausted || rateLimited) {
+      if (budgetExhausted || rateLimited || capReached) {
         record(releasedIds, row);
         continue;
       }
       if (outOfTime()) {
         budgetExhausted = true;
+        record(releasedIds, row);
+        continue;
+      }
+      if (!(await reserveEmailQuota(supabase, org.id, 1))) {
+        capReached = true;
+        capped += queue.length + 1;
+        console.warn("[org %s] daily email cap reached, leaving %d reminder(s) for a later firing", org.id, queue.length + 1);
         record(releasedIds, row);
         continue;
       }

@@ -37,12 +37,13 @@ interface FakeOptions {
   claims?: Record<string, ClaimRow[]>;
   failSettings?: boolean;
   failSettle?: boolean;
-  /** The church's daily email cap refuses every reservation. */
-  capReached?: boolean;
+  /** How many more reminders the church's daily email cap allows; unlimited when absent. */
+  capLeft?: number;
 }
 
 function fakeClient(options: FakeOptions = {}) {
   const queries: Recorded[] = [];
+  let capLeft = options.capLeft ?? Infinity;
 
   function from(table: string) {
     const recorded: Recorded = { table, filters: [] };
@@ -81,7 +82,7 @@ function fakeClient(options: FakeOptions = {}) {
     from,
     rpc(fn: string, args: { _org_id: string }) {
       queries.push({ rpc: fn, args, filters: [] });
-      if (fn === "email_quota_consume") return Promise.resolve({ data: !options.capReached, error: null });
+      if (fn === "email_quota_consume") return Promise.resolve({ data: capLeft-- > 0, error: null });
       return Promise.resolve({ data: options.claims?.[args._org_id] ?? [], error: null });
     },
   } as unknown as HourlyClient;
@@ -222,7 +223,9 @@ Deno.test("a due team is claimed once per church, mailed, and settled per team",
     ["t2", "cat@example.test", "2026-11-05", "2026-11-08"],
   ]);
 
-  const [settings, rpc, quota, settleT1, settleT2] = queries;
+  const [settings, rpc, ...rest] = queries;
+  const quota = rest.filter((q) => q.rpc === "email_quota_consume");
+  const [settleT1, settleT2] = rest.filter((q) => q.table === "serving_reminder_sends");
   assertEquals(settings.table, "serving_team_settings");
   assertEquals(rpc.rpc, "serving_reminder_claim");
   assertEquals(rpc.args, {
@@ -231,10 +234,9 @@ Deno.test("a due team is claimed once per church, mailed, and settled per team",
     _service_date: "2026-11-08",
     _team_ids: ["t1", "t2"],
   });
-  // The cap is reserved once per church, for the claimed rows only.
-  assertEquals(quota.rpc, "email_quota_consume");
-  assertEquals(quota.args, { _org_id: "ny", _n: 3 });
-  assertEquals(queries.length, 5);
+  // The cap is reserved one reminder at a time, each just before its send.
+  assertEquals(quota.map((q) => q.args), Array(3).fill({ _org_id: "ny", _n: 1 }));
+  assertEquals(queries.length, 7);
   assertEquals(settleT1.table, "serving_reminder_sends");
   assertEquals(settleT1.values, { sent_at: NOW.toISOString() });
   assertEquals(settleT1.filters, ["org_id=ny", "team_id=t1", "send_date=2026-11-05", 'profile_id in ["ann","bob"]']);
@@ -263,7 +265,7 @@ Deno.test("a church at its daily email cap releases every claim, mails nothing, 
   const { client, queries } = fakeClient({
     rows: { ny: [team("t1", 9), team("t2", 9)] },
     claims: { ny: [claim("t1", "ann"), claim("t2", "bob")] },
-    capReached: true,
+    capLeft: 0,
   });
   const { deps: d, sent } = deps();
   const summary = await runHourly(client, [church("ny", "America/New_York")], d);
@@ -277,6 +279,27 @@ Deno.test("a church at its daily email cap releases every claim, mails nothing, 
   assertEquals(settles.map((q) => [q.values, q.filters.at(-1)]), [
     [{ claimed_at: null }, 'profile_id in ["ann"]'],
     [{ claimed_at: null }, 'profile_id in ["bob"]'],
+  ]);
+  // Asked once: the reminders behind the refused one are released unasked.
+  assertEquals(queries.filter((q) => q.rpc === "email_quota_consume").length, 1);
+});
+
+Deno.test("a cap reached partway mails what it allowed and releases the rest", async () => {
+  const { client, queries } = fakeClient({
+    rows: { ny: [team("t1", 9)] },
+    claims: { ny: [claim("t1", "ann"), claim("t1", "bob"), claim("t1", "cat")] },
+    capLeft: 1,
+  });
+  const { deps: d, sent } = deps();
+  const summary = await runHourly(client, [church("ny", "America/New_York")], d);
+  assertEquals(sent.map((r) => r.email), ["ann@example.test"]);
+  assertEquals(summary.emailsSent, 1);
+  assertEquals(summary.capped, 2);
+  assertEquals(summary.failedItems, []);
+  const settles = queries.filter((q) => q.table === "serving_reminder_sends");
+  assertEquals(settles.map((q) => [q.values, q.filters.at(-1)]), [
+    [{ sent_at: NOW.toISOString() }, 'profile_id in ["ann"]'],
+    [{ claimed_at: null }, 'profile_id in ["bob","cat"]'],
   ]);
 });
 
@@ -346,6 +369,8 @@ Deno.test("a rate limit releases every remaining claim and stops the firing", as
     [{ claimed_at: null }, 'profile_id in ["bob"]'],
     [{ claimed_at: null }, 'profile_id in ["cat"]'],
   ]);
+  // Only the two reminders that were tried are counted against the cap.
+  assertEquals(queries.filter((q) => q.rpc === "email_quota_consume").length, 2);
   // The second church is never read.
   assertEquals(queriesFor(queries, "chicago").length, 0);
 });
@@ -372,6 +397,7 @@ Deno.test("a firing out of budget stops starting teams, releases what it claimed
     [{ sent_at: NOW.toISOString() }, 'profile_id in ["ann"]'],
     [{ claimed_at: null }, 'profile_id in ["bob"]'],
   ]);
+  assertEquals(queries.filter((q) => q.rpc === "email_quota_consume").length, 1);
   assertEquals(queriesFor(queries, "chicago").length, 0);
 });
 
