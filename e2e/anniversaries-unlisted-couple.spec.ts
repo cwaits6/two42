@@ -29,7 +29,10 @@ const SEED_SQL = `
    where id = '${HOUSEHOLD}';
 `;
 
-// Two days out, so the couple would be on every filter, This week included.
+// The date is two days out in the church's zone, which is the zone the page
+// takes "today" from, or the last day of that month when it comes sooner. That
+// keeps the couple on every filter: This week, This month and all. No year, so
+// a February 29 is a date the row accepts.
 const SETUP_SQL = `
   insert into public.family_members
     (id, org_id, family_id, first_name, last_name, relationship, claimed_profile_id)
@@ -37,8 +40,20 @@ const SETUP_SQL = `
     ('${CLAIMED_RECORD}', ${ORG_OF_HOUSEHOLD}, '${HOUSEHOLD}', 'Chloe', 'Mockingham', 'spouse', '${CHLOE}');
   update public.organizations set directory_visibility = 'org' where id = ${ORG_OF_HOUSEHOLD};
   update public.family_units
-     set anniversary_month = extract(month from current_date + 2)::int,
-         anniversary_day = extract(day from current_date + 2)::int
+     set anniversary_month = extract(month from soon.day)::int,
+         anniversary_day = extract(day from soon.day)::int,
+         anniversary_year = null
+    from (
+      select least(
+               church.today + 2,
+               (date_trunc('month', church.today) + interval '1 month - 1 day')::date
+             ) as day
+        from (
+          select (now() at time zone timezone)::date as today
+            from public.organizations
+           where id = ${ORG_OF_HOUSEHOLD}
+        ) church
+    ) soon
    where id = '${HOUSEHOLD}';
 `;
 

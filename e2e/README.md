@@ -31,7 +31,7 @@ retries the start once if it fails on a port bind.
 
 On a shared local stack the specs assume the seed defaults for
 `directory_visibility`, `group_creation_policy` (`approval`) and
-`group_discovery` (on), and that no group is private; the three specs that
+`group_discovery` (on), and that no group is private; the four specs that
 change those settings normalise them back in `beforeAll` and `afterAll`.
 `admin-join-queue.spec.ts` is the one spec that inserts rows — a join request
 and the membership its approval creates — and it deletes both in `beforeAll`
@@ -59,10 +59,11 @@ to the Mockingham household through the page, inserts an invited adult and an
 approved access request through the same container, and deletes those rows there
 in `beforeAll` and `afterAll`. `anniversaries-unlisted-couple.spec.ts` opens the
 directory to the whole church, adds a household record claimed by Chloe to the
-Mockingham household and unlists Henry and Chloe through the same container,
-because the seed has no claimed spouse record; it deletes the record and puts
-the seeded listing, anniversary and `directory_visibility` back in `beforeAll`
-and `afterAll`.
+Mockingham household, moves the household's anniversary to within two days of
+today in the church's time zone and unlists Henry and Chloe through the same
+container, because the seed has no claimed spouse record; it deletes the record
+and puts the seeded listing, anniversary and `directory_visibility` back in
+`beforeAll` and `afterAll`.
 
 ## Personas
 
