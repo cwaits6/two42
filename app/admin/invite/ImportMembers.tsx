@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
+import type { MemberEmail } from "@/lib/profileColumns";
 import { Upload, Mail, AlertCircle, CheckCircle2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -98,7 +99,7 @@ export function ImportMembers() {
 
     const existingSet = new Set(
       (existingProfiles || [])
-        .map((p: { email: string | null }) => p.email?.toLowerCase())
+        .map((p: MemberEmail) => p.email?.toLowerCase())
         .filter(Boolean)
     );
 

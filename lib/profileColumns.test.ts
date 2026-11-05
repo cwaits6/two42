@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Database } from "@/lib/supabase/database.types";
 import { PROFILE_COLUMNS, withEmail, type ProfileColumns } from "./profileColumns";
 
 // A Profile field missing here fails tsc, so the list cannot fall behind the type.
@@ -37,11 +38,17 @@ const FIELDS: Record<keyof ProfileColumns, true> = {
   updated_at: true,
 };
 
+// A Profile field that is not a column of the table fails tsc: the select
+// would ask the database for a column it does not have.
+const COLUMN_NAMES: readonly (keyof Database["public"]["Tables"]["profiles"]["Row"])[] = Object.keys(
+  FIELDS,
+) as (keyof ProfileColumns)[];
+
 describe("PROFILE_COLUMNS", () => {
   const columns = PROFILE_COLUMNS.split(",").map((c) => c.trim());
 
   it("lists every profile field except the address", () => {
-    expect([...columns].sort()).toEqual(Object.keys(FIELDS).sort());
+    expect([...columns].sort()).toEqual([...COLUMN_NAMES].sort());
   });
 
   it("never asks for the address or for all columns", () => {

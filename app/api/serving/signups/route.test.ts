@@ -44,6 +44,29 @@ function cookieClient(timezone: string) {
   };
 }
 
+// The request client carries no address; they come from a service read of
+// profiles scoped to an org. Any other table is a different read, and throws.
+function serviceClient(result: { data: unknown; error: unknown }, filters: [string, unknown][] = []) {
+  return {
+    from: (table: string) => {
+      if (table !== "profiles") throw new Error(`unexpected service read of ${table}`);
+      return {
+        select: () => ({
+          eq: (column: string, value: unknown) => {
+            filters.push([column, value]);
+            return {
+              in: async (inColumn: string, ids: unknown) => {
+                filters.push([inColumn, ids]);
+                return result;
+              },
+            };
+          },
+        }),
+      };
+    },
+  };
+}
+
 function signup(serviceDate: string) {
   return POST(
     new Request("http://localhost/api/serving/signups", {
@@ -166,6 +189,39 @@ describe("POST /api/serving/signups team dates", () => {
     expect(booked).toEqual(["2026-11-01", "2026-11-08"]);
   });
 
+  it("mails the confirmation to the address read for the attendee in the team's church", async () => {
+    sendSignupConfirmation.mockReset();
+    createClient.mockResolvedValue(teamClient());
+    const filters: [string, unknown][] = [];
+    createServiceClient.mockResolvedValue(
+      serviceClient({ data: [{ id: "user-1", email: "ann@example.test" }], error: null }, filters),
+    );
+
+    const res = await request("2026-11-01");
+
+    expect(res.status).toBe(200);
+    expect(filters).toEqual([
+      ["org_id", "org-1"],
+      ["id", ["user-1"]],
+    ]);
+    expect(sendSignupConfirmation).toHaveBeenCalledTimes(1);
+    expect(sendSignupConfirmation.mock.calls[0][1]).toMatchObject({
+      orgId: "org-1",
+      serviceDate: "2026-11-01",
+      recipient: { id: "user-1", email: "ann@example.test" },
+    });
+  });
+
+  it("keeps the booking and mails nobody when the address can't be read", async () => {
+    sendSignupConfirmation.mockReset();
+    createClient.mockResolvedValue(teamClient());
+    createServiceClient.mockResolvedValue(serviceClient({ data: null, error: { code: "XX000" } }));
+
+    expect((await request("2026-11-01")).status).toBe(200);
+    expect(booked).toEqual(["2026-11-01"]);
+    expect(sendSignupConfirmation).not.toHaveBeenCalled();
+  });
+
   it("answers 400 when the database refuses the date", async () => {
     createClient.mockResolvedValue(teamClient({ code: "SV006" }));
     const res = await request("2026-11-01");
@@ -182,21 +238,6 @@ describe("PATCH /api/serving/signups", () => {
     { id: "david", email: "david@example.test" },
     { id: "lena", email: "lena@example.test" },
   ];
-
-  // The request client carries no address; they come from a service read
-  // scoped to the signup row's org.
-  function serviceClient(result: { data: unknown; error: unknown }, filters: [string, unknown][] = []) {
-    return {
-      from: () => ({
-        select: () => ({
-          eq: (column: string, value: unknown) => {
-            filters.push([column, value]);
-            return { in: async () => result };
-          },
-        }),
-      }),
-    };
-  }
 
   function changeClient() {
     return {
@@ -236,7 +277,10 @@ describe("PATCH /api/serving/signups", () => {
     const res = await addLena();
 
     expect(res.status).toBe(200);
-    expect(filters).toEqual([["org_id", "org-1"]]);
+    expect(filters).toEqual([
+      ["org_id", "org-1"],
+      ["id", ["david", "lena"]],
+    ]);
     expect(sendSignupConfirmation).toHaveBeenCalledTimes(1);
     expect(sendSignupConfirmation.mock.calls[0][1]).toMatchObject({
       serviceDate: "2026-11-08",
