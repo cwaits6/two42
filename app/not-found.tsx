@@ -2,9 +2,9 @@ import Link from "next/link";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { buttonVariants } from "@/components/ui/button-variants";
-import { siteConfig } from "@/lib/config";
+import { pageTitle } from "@/lib/pageTitle";
 
-export const metadata = { title: `Page not found | ${siteConfig.name}` };
+export const generateMetadata = () => pageTitle("Page not found");
 
 export default function NotFound() {
   return (
