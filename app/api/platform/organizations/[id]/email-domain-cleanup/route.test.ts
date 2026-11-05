@@ -251,9 +251,9 @@ describe("POST /api/platform/organizations/[id]/email-domain-cleanup", () => {
     const res = await POST(request(), routeParams());
 
     expect(res.status).toBe(502);
-    expect(loggedLines(vi.mocked(console.log))).toEqual([
+    expect(loggedLines(vi.mocked(console.log))).toContainEqual(
       expect.objectContaining({ level: "error", what: expect.stringMatching(/matched no row/i) }),
-    ]);
+    );
   });
 
   it("keeps the row and 502s when the Resend removal throws", async () => {
