@@ -13,10 +13,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { createClient } from "@/lib/supabase/client";
+import { signOutHere } from "@/lib/signOut";
 import type { Account } from "./account";
-
-const SIGN_OUT_FAILED = "Couldn't sign out everywhere. Other devices may still be signed in.";
 
 // Clears the phone bar, which sits above the menu while the drawer is open.
 const MENU_COLLISION_PADDING = { top: 76, right: 5, bottom: 5, left: 5 };
@@ -38,11 +36,9 @@ export function AccountBlock({
 
   const signOut = async () => {
     onNavigate?.();
-    const { error } = await createClient().auth.signOut();
-    // A failed sign-out has usually ended the session on this device and
-    // only missed revoking it on the server, so the frame is reloaded either
-    // way and shows whichever is true.
-    if (error) toast.error(SIGN_OUT_FAILED);
+    const outcome = await signOutHere();
+    if (outcome.message) toast.error(outcome.message);
+    if (!outcome.signedOut) return;
     router.push("/");
     router.refresh();
   };

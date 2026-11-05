@@ -5,6 +5,10 @@
 
 export const NETWORK_ERROR = "Couldn't reach the server. Check your connection and try again.";
 
+// No next step: this device is signed out, so there is no session left to
+// try again with.
+export const SIGNED_OUT_HERE_ONLY = "Couldn't sign out everywhere. Other devices may still be signed in.";
+
 const NEXT_STEP: Partial<Record<number, string>> = {
   401: "Sign in again, then try again.",
   403: "You don't have permission to do that.",
