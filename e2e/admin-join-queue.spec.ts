@@ -45,6 +45,16 @@ function restoreSeed() {
 test.beforeAll(() => restoreSeed());
 test.afterAll(() => restoreSeed());
 
+// Other kinds of request use the same empty text, so each page's join
+// requests are found by their own heading.
+function joinRequestsSection(page: Page) {
+  return page.locator("section").filter({ has: page.getByRole("heading", { name: "Join requests" }) });
+}
+
+function joinRequestsNeed(page: Page) {
+  return page.getByRole("listitem").filter({ hasText: "Join requests" });
+}
+
 function groupCRow(page: Page) {
   return page.getByRole("listitem").filter({ hasText: "Group C" });
 }
@@ -98,7 +108,7 @@ test.describe("the org admin, who does not lead Group C, declining", () => {
     await dialog.getByRole("button", { name: "Decline" }).click();
     await expect(page.getByText("Request declined.")).toBeVisible();
     await expect(queue).toHaveCount(0);
-    await expect(page.getByText(NONE_WAITING)).toBeVisible();
+    await expect(joinRequestsSection(page).getByText(NONE_WAITING)).toBeVisible();
 
     await withIsaac(browser, baseURL, async (isaac) => {
       // Still one group, so the switcher is still a static label; and a
@@ -135,10 +145,10 @@ test.describe("the org admin, who does not lead Group C, approving", () => {
     await queue.getByRole("button", { name: "Approve" }).click();
     await expect(page.getByText(`${ISAAC.name} joined Group C.`)).toBeVisible();
     await expect(queue).toHaveCount(0);
-    await expect(page.getByText(NONE_WAITING)).toBeVisible();
+    await expect(joinRequestsSection(page).getByText(NONE_WAITING)).toBeVisible();
 
     await page.goto("/admin");
-    await expect(page.getByText(NONE_WAITING)).toBeVisible();
+    await expect(joinRequestsNeed(page).getByText(NONE_WAITING)).toBeVisible();
     await expect(page.getByRole("button", { name: REVIEW_ACTION })).toHaveCount(0);
 
     await withIsaac(browser, baseURL, async (isaac) => {
