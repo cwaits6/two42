@@ -13,6 +13,7 @@ import { groupReminders } from "@/lib/events/reminders";
 import { CalendarSubscriptionCard } from "./CalendarSubscriptionCard";
 import { EventRemindersCard } from "./EventRemindersCard";
 import { GroupDetailsForm } from "./GroupDetailsForm";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = groupPageTitle("Group details");
 
@@ -41,7 +42,7 @@ export default async function GroupDetailsSettingsPage({
     getGroupCalendar(supabase, profile.org_id, group.id),
     getGroupSettings(supabase, profile.org_id, group.id),
   ]);
-  if (error) console.error("Failed to load the group's details: code=%s", error.code);
+  if (error) logError("Failed to load the group's details", error, { route: "/g/[groupId]/settings/details" });
 
   return (
     <PageContainer size="reading">

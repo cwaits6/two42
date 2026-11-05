@@ -35,6 +35,7 @@ import type { ClassTeacherWithProfile } from "@/lib/types";
 import { STORED_MEMBER_ROLES } from "@/lib/roles";
 import { useLeaveGuard } from "@/components/useLeaveGuard";
 import { aboutChanges, hasChanges, type LeaderEntry } from "./aboutChanges";
+import { logError } from "@/lib/log";
 
 type Person = NonNullable<ClassTeacherWithProfile["profiles"]>;
 
@@ -116,7 +117,7 @@ export function AboutEditor({
       .eq("group_id", groupId)
       .in("profiles.role", STORED_MEMBER_ROLES);
     if (error) {
-      console.error("Failed to load the group's members:", error);
+      logError("Failed to load the group's members", error, { route: "/g/[groupId]/about/edit" });
       setCandidatesFailed(true);
       return;
     }

@@ -13,6 +13,7 @@ import { EditEventForm } from "./EditEventForm";
 import { groupPageTitle } from "@/lib/pageTitle";
 import { getGroupSettings } from "@/lib/groups/settings";
 import { groupSharing } from "@/lib/calendar/sharing";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = groupPageTitle("Edit event");
 
@@ -30,7 +31,7 @@ export default async function EditEventPage({
   ]);
 
   if (error) {
-    console.error("Failed to load the event to edit:", error);
+    logError("Failed to load the event to edit", error, { route: "/g/[groupId]/calendar/[id]/edit" });
     return (
       <PageContainer size="reading">
         <PageHeader

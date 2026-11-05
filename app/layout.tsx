@@ -21,6 +21,7 @@ import { mintSignedUrl } from "@/lib/storageRead";
 import type { ActiveGroup } from "@/lib/groups/active";
 import type { GroupCreationPolicy } from "@/lib/groups/creation";
 import "./globals.css";
+import { logError } from "@/lib/log";
 
 const fraunces = Fraunces({
   variable: "--font-serif",
@@ -90,8 +91,8 @@ export default async function RootLayout({
     // route — but both degrade silently otherwise: a failed profile read
     // hides a member's nav, and a null groupData silently denies serving
     // access. No row is not an error: a platform admin has no profile.
-    if (error) console.error("Layout: failed to load profile:", error);
-    if (groupError) console.error("Layout: failed to load team memberships:", groupError);
+    if (error) logError("Layout: failed to load profile", error);
+    if (groupError) logError("Layout: failed to load team memberships", groupError);
     profile = data;
 
     const loadServingAccess = async () => {
@@ -107,7 +108,7 @@ export default async function RootLayout({
     // read hides the group nav and lets the page surface the error.
     const loadNavMemberships = () =>
       getGroupMemberships().catch((e: unknown) => {
-        console.error("Layout: failed to load group memberships:", e);
+        logError("Layout: failed to load group memberships", e);
         return [];
       });
     [hasServingAccess, memberships, discoveryOn, creationPolicy, photoUrl] = await Promise.all([

@@ -15,6 +15,7 @@ import { orgTimeZoneById } from "@/lib/time/orgZone";
 import { LinkActionConfirm } from "@/components/serving/LinkActionConfirm";
 import { ServingNotice } from "@/components/serving/ServingNotice";
 import { pageTitle } from "@/lib/pageTitle";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = () => pageTitle("Serving");
 
@@ -76,7 +77,7 @@ export default async function ServingLinkPage({
     .maybeSingle();
 
   if (groupError) {
-    console.error("Serving link page: group lookup failed for %s:", payload.g, groupError);
+    logError("Serving link page: group lookup failed", groupError, { route: "/serving/go", ids: { group: payload.g } });
     return LOAD_FAILED;
   }
 
@@ -134,13 +135,10 @@ export default async function ServingLinkPage({
 
   const loadError = profileError ?? settingsError ?? membershipError ?? signupError;
   if (loadError) {
-    console.error(
-      "Serving link page: lookup failed for profile %s, group %s, date %s:",
-      payload.p,
-      payload.g,
-      payload.d,
-      loadError
-    );
+    logError("Serving link page: lookup failed", loadError, {
+      route: "/serving/go",
+      ids: { profile: payload.p, group: payload.g },
+    });
     return LOAD_FAILED;
   }
 
@@ -153,13 +151,10 @@ export default async function ServingLinkPage({
   // rows. A cross-org pairing renders the same copy as any invalid link — a
   // distinguishing message would be an org-existence oracle.
   if (profile.org_id !== group.org_id) {
-    console.error(
-      "Serving link page: cross-org denial — profile org %s does not match group org %s (g=%s, p=%s)",
-      profile.org_id,
-      group.org_id,
-      payload.g,
-      payload.p
-    );
+    logError("Serving link page: cross-org denial — profile org does not match group org", undefined, {
+      route: "/serving/go",
+      ids: { profileOrg: profile.org_id, groupOrg: group.org_id, group: payload.g, profile: payload.p },
+    });
     return INVALID_LINK;
   }
 
@@ -223,7 +218,7 @@ export default async function ServingLinkPage({
         .eq("org_id", group.org_id)
         .in("service_date", candidates);
       if (takenError) {
-        console.error("Serving link page: following dates lookup failed for group %s:", payload.g, takenError);
+        logError("Serving link page: following dates lookup failed", takenError, { route: "/serving/go", ids: { group: payload.g } });
       } else {
         const covered = new Set((taken ?? []).map((s) => s.service_date));
         extraDates = openDatesAfter(payload.d, teamDates, (d) => !covered.has(d), settings.extra_weeks);

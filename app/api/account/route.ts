@@ -1,5 +1,6 @@
 import { currentPerson } from "@/lib/account/currentPerson";
 import { deletePerson, deletionResponse, loadDeletionSummary } from "@/lib/account/deletion";
+import { logError } from "@/lib/log";
 
 function denied(status: 401 | 403) {
   return Response.json({ error: status === 401 ? "Unauthorized" : "Forbidden" }, { status });
@@ -14,7 +15,7 @@ export async function GET() {
       ? Response.json(summary)
       : Response.json({ error: "Not found" }, { status: 404 });
   } catch (err) {
-    console.error("Deletion summary failed:", err instanceof Error ? err.message : typeof err);
+    logError("Deletion summary failed", err, { route: "/api/account" });
     return Response.json({ error: "Failed to load" }, { status: 500 });
   }
 }

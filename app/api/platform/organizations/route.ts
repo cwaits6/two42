@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { EMAIL, EMAIL_MAX_LENGTH } from "@/lib/branding";
 import { requirePlatformAdmin } from "@/lib/platform-access";
 import { createServiceClient } from "@/lib/supabase/server";
+import { logError } from "@/lib/log";
 
 export async function POST(request: Request) {
   const gate = await requirePlatformAdmin();
@@ -72,7 +73,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, orgId });
   } catch (error) {
-    console.error("Organization create error:", error);
+    logError("Organization create error", error, { route: "/api/platform/organizations" });
     return NextResponse.json(
       { error: "Failed to create organization" },
       { status: 500 }

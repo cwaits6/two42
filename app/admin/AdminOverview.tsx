@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { pendingJoinRequestsSummary } from "@/lib/groups/joinQueue";
 import { getPendingJoinRequests } from "@/lib/groups/pendingJoinRequests";
 import { overviewNeeds } from "./overviewNeeds";
+import { logError } from "@/lib/log";
 
 /** The church at a glance. Requests are reviewed on their own pages, so each has one home. */
 export async function AdminOverview() {
@@ -22,7 +23,7 @@ export async function AdminOverview() {
 
   const failed = [members, households, groups, accessRequests, groupRequests].find((r) => r.error);
   if (failed) {
-    console.error("Failed to load the overview:", failed.error?.code);
+    logError("Failed to load the overview", failed.error, { route: "/admin" });
     return <ErrorState thing="the overview" />;
   }
 

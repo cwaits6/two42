@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/platform-access";
 import { createServiceClient } from "@/lib/supabase/server";
 import { MAX_DAILY_EMAIL_CAP } from "@/lib/email/quota";
+import { logError } from "@/lib/log";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -82,7 +83,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Email cap update error for org %s:", id, error);
+    logError("Email cap update error for org", error, { route: "/api/platform/organizations/[id]/email-cap", ids: { org: id } });
     return NextResponse.json(
       { error: "Failed to update the email cap" },
       { status: 500 }

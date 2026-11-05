@@ -21,6 +21,7 @@ import {
   type PasswordFieldErrors,
 } from "../_components/passwordRules";
 import { useFieldFocus } from "../_components/useFieldFocus";
+import { logError, logWarn } from "@/lib/log";
 
 const SIGN_UP_ERRORS: Record<string, string> = {
   ...PASSWORD_AUTH_ERRORS,
@@ -87,7 +88,7 @@ export function SetupAccountForm() {
       });
     }
     verifyToken().catch((err) => {
-      console.error(err);
+      logError("Failed to verify the account setup link", err, { route: "/setup-account" });
       setView({ kind: "failed" });
     });
   }, [token, supabase, router, attempt]);
@@ -119,7 +120,7 @@ export function SetupAccountForm() {
 
     if (error) {
       setLoading(false);
-      console.error(error);
+      logError("Failed to create the account", error, { route: "/setup-account" });
       setFormError(
         SIGN_UP_ERRORS[error.code ?? ""] ?? failureMessage("create your account", error.status),
       );
@@ -143,12 +144,14 @@ export function SetupAccountForm() {
           body: JSON.stringify({ invite_token: tokenData.invite_token }),
         });
         if (!claimRes.ok) {
-          const text = await claimRes.text().catch(() => "");
-          console.warn("Failed to claim family invite after signup — status %s: %s", claimRes.status, text);
+          logWarn("Failed to claim family invite after signup", undefined, {
+            route: "/setup-account",
+            ids: { status: claimRes.status },
+          });
         }
       } catch {
         // Non-fatal — the account is created; an admin can link the family manually
-        console.warn("Failed to claim family invite after signup");
+        logWarn("Failed to claim family invite after signup", undefined, { route: "/setup-account" });
       }
     }
 

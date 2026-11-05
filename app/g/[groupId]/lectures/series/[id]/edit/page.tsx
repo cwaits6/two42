@@ -7,6 +7,7 @@ import { groupPath } from "@/lib/groups/active";
 import { requireGroupLeader } from "@/lib/groups/server";
 import { groupPageTitle } from "@/lib/pageTitle";
 import { SeriesForm } from "../../SeriesForm";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = groupPageTitle("Edit series");
 
@@ -26,7 +27,7 @@ export default async function EditSeriesPage({
     .eq("group_id", group.id)
     .maybeSingle();
   if (error) {
-    console.error("Failed to load series: code=%s message=%s", error.code, error.message);
+    logError("Failed to load series", error, { route: "/g/[groupId]/lectures/series/[id]/edit" });
   } else if (!series) {
     notFound();
   }

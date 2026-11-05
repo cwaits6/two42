@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/platform-access";
 import { createServiceClient } from "@/lib/supabase/server";
 import { removeResendDomain } from "@/lib/email/resendDomains";
+import { logError } from "@/lib/log";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -72,20 +73,18 @@ export async function POST(_request: Request, { params }: RouteParams) {
         .eq("id", row.id)
         .eq("org_id", org.id);
       if (markError) {
-        console.error(
-          "Email domain cleanup retry: failed to record the attempt (org=%s, id=%s):",
-          org.id,
-          row.id,
-          markError
-        );
+        logError("Email domain cleanup retry: failed to record the attempt", markError, {
+          route: "/api/platform/organizations/[id]/email-domain-cleanup",
+          ids: { org: org.id, id: row.id },
+        });
       } else if (!markCount) {
         // Zero-row writes report success silently — the row disappeared
         // (e.g. the org admin's own DELETE finished it) between the select
         // above and this update. Not an error, just worth a log line.
-        console.error(
-          "Email domain cleanup retry: attempt-timestamp write matched no row — likely raced with a concurrent cleanup (org=%s, id=%s):",
-          org.id,
-          row.id
+        logError(
+          "Email domain cleanup retry: attempt-timestamp write matched no row — likely raced with a concurrent cleanup",
+          undefined,
+          { route: "/api/platform/organizations/[id]/email-domain-cleanup", ids: { org: org.id, id: row.id } }
         );
       }
       return NextResponse.json(
@@ -110,7 +109,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Email domain cleanup retry error for org %s:", id, error);
+    logError("Email domain cleanup retry error for org", error, { route: "/api/platform/organizations/[id]/email-domain-cleanup", ids: { org: id } });
     return NextResponse.json(
       { error: "Failed to retry the domain cleanup" },
       { status: 500 }

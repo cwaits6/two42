@@ -21,6 +21,7 @@ import {
 } from "@/lib/contrast";
 import type { Database } from "@/lib/supabase/database.types";
 import { NETWORK_ERROR, operatorMessage } from "@/lib/errorCopy";
+import { logError } from "@/lib/log";
 
 type OrgStatus = Database["public"]["Enums"]["org_status"];
 
@@ -150,7 +151,7 @@ export function OrganizationDetail({
       router.refresh();
       return true;
     } catch (err) {
-      console.error(err);
+      logError("Platform organization save request failed", err, { route: "/platform/organizations/[id]" });
       toast.error(NETWORK_ERROR);
       return false;
     } finally {
@@ -175,7 +176,7 @@ export function OrganizationDetail({
       toast.success(`Invite sent to ${owner.email}.`);
       router.refresh();
     } catch (err) {
-      console.error(err);
+      logError("Platform founding-admin invite request failed", err, { route: "/platform/organizations/[id]" });
       toast.error(NETWORK_ERROR);
     } finally {
       setBusy(null);
@@ -209,7 +210,7 @@ export function OrganizationDetail({
       toast.success("Daily email limit saved.");
       router.refresh();
     } catch (err) {
-      console.error(err);
+      logError("Platform email cap save request failed", err, { route: "/platform/organizations/[id]" });
       toast.error(NETWORK_ERROR);
     } finally {
       setBusy(null);
@@ -234,7 +235,7 @@ export function OrganizationDetail({
       toast.success("Domain cleanup finished.");
       router.refresh();
     } catch (err) {
-      console.error(err);
+      logError("Platform email domain cleanup request failed", err, { route: "/platform/organizations/[id]" });
       toast.error(NETWORK_ERROR);
     } finally {
       setBusy(null);

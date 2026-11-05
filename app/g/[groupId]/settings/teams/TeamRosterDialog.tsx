@@ -18,6 +18,7 @@ import { ArrowLeft, Plus, Search, Star, X } from "lucide-react";
 import { setGroupMembership } from "@/lib/memberGroups";
 import { displayName, initials } from "@/lib/names";
 import type { MemberGroup, Profile } from "@/lib/types";
+import { logError } from "@/lib/log";
 
 type RosterProfile = Pick<
   Profile,
@@ -115,7 +116,7 @@ export function TeamRosterDialog({
         setLoadedTeamId(teamId);
       } catch (err) {
         if (cancelled) return;
-        console.error("TeamRosterDialog load failed", err);
+        logError("TeamRosterDialog load failed", err, { route: "/g/[groupId]/settings/teams" });
         toast.error("Failed to load roster.");
       }
     }

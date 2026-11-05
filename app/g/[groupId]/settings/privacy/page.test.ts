@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement, ReactNode } from "react";
 import type { ActiveGroup } from "@/lib/groups/active";
 import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
+import { loggedLines } from "@/lib/log/testing";
 
 class NotFoundSentinel extends Error {}
 
@@ -63,7 +64,7 @@ beforeEach(() => {
   requireGroupLeader.mockReset();
   getDiscoveryOn.mockReset();
   groupFlags.mockReset();
-  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 describe("GroupPrivacySettingsPage", () => {
@@ -102,7 +103,7 @@ describe("GroupPrivacySettingsPage", () => {
     const element = await GroupPrivacySettingsPage({ params: Promise.resolve({ groupId: A_ID }) });
 
     expectUnavailable(element);
-    expect(console.error).toHaveBeenCalled();
+    expect(loggedLines(vi.mocked(console.log)).map((line) => line.code)).toEqual(["57014"]);
   });
 
   it("shows the unavailable notice when the flags read returns no row", async () => {

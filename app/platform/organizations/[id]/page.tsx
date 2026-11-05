@@ -13,6 +13,7 @@ import {
   type OwnerRequest,
 } from "./OrganizationDetail";
 import { pageTitle } from "@/lib/pageTitle";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = () => pageTitle("Organization");
 
@@ -51,7 +52,7 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
   // Distinguish "read failed" from "no such organization" — both leave org
   // null, but only the second should bounce to the list.
   if (orgError) {
-    console.error("Platform organization detail read failed", orgError);
+    logError("Platform organization detail read failed", orgError, { route: "/platform/organizations/[id]" });
     return (
       <PageContainer>
         <PageHeader title="Organization" backHref="/platform/organizations" backLabel="Back to organizations" />
@@ -73,7 +74,7 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
   // A failed read here would render "No founding-admin request exists",
   // which could lead an operator to provision a second owner.
   if (ownerError) {
-    console.error("Platform founding-admin read failed", ownerError);
+    logError("Platform founding-admin read failed", ownerError, { route: "/platform/organizations/[id]" });
     return (
       <PageContainer>
         <PageHeader title={org.name} subtitle={createdLabel(org.created_at)} backHref="/platform/organizations" backLabel="Back to organizations" />
@@ -116,11 +117,10 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
 
   let emailCap: EmailCapInfo | null = null;
   if (capError || usageError) {
-    console.error(
-      "Platform email cap read failed for org %s:",
-      id,
-      { capError, usageError },
-    );
+    logError("Platform email cap read failed", capError ?? usageError, {
+      route: "/platform/organizations/[id]",
+      ids: { org: id },
+    });
   } else {
     emailCap = {
       dailyCap: capRow?.daily_cap ?? DEFAULT_DAILY_EMAIL_CAP,
@@ -131,7 +131,7 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
 
   let emailDomain: EmailDomainInfo;
   if (domainError) {
-    console.error("Platform email domain read failed for org %s:", id, domainError);
+    logError("Platform email domain read failed", domainError, { route: "/platform/organizations/[id]", ids: { org: id } });
     emailDomain = { loaded: false };
   } else {
     emailDomain = {

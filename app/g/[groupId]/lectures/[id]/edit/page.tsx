@@ -9,6 +9,7 @@ import { groupPageTitle } from "@/lib/pageTitle";
 import { readList } from "@/lib/supabase/readList";
 import { LessonForm } from "../../LessonForm";
 import { lessonDraftFrom } from "../../lessonDraft";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = groupPageTitle("Edit lesson");
 
@@ -35,11 +36,7 @@ export default async function EditLessonPage({
       .order("created_at", { ascending: false }),
   ]);
   if (lessonRead.error) {
-    console.error(
-      "Failed to load lesson: code=%s message=%s",
-      lessonRead.error.code,
-      lessonRead.error.message,
-    );
+    logError("Failed to load lesson", lessonRead.error, { route: "/g/[groupId]/lectures/[id]/edit" });
   } else if (!lessonRead.data) {
     notFound();
   }

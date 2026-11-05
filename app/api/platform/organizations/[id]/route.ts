@@ -3,6 +3,7 @@ import { requirePlatformAdmin } from "@/lib/platform-access";
 import { createServiceClient } from "@/lib/supabase/server";
 import { CONTROL, EMAIL, EMAIL_MAX_LENGTH, validateAccent } from "@/lib/branding";
 import type { Database } from "@/lib/supabase/database.types";
+import { logError } from "@/lib/log";
 
 type OrgStatus = Database["public"]["Enums"]["org_status"];
 
@@ -185,7 +186,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Organization update error:", error);
+    logError("Organization update error", error, { route: "/api/platform/organizations/[id]" });
     return NextResponse.json(
       { error: "Failed to update organization" },
       { status: 500 }

@@ -6,6 +6,7 @@
 // and the table switch from email-cap/route.test.ts.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { loggedLines } from "@/lib/log/testing";
 
 const requirePlatformAdmin = vi.fn();
 vi.mock("@/lib/platform-access", () => ({
@@ -127,8 +128,7 @@ beforeEach(() => {
   createServiceClient.mockReset();
   domainsRemove.mockReset();
   requirePlatformAdmin.mockResolvedValue({ ok: true, user: { id: "admin-1" } });
-  vi.spyOn(console, "error").mockImplementation(() => {});
-  vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockClear().mockImplementation(() => {});
 });
 
 describe("POST /api/platform/organizations/[id]/email-domain-cleanup", () => {
@@ -251,11 +251,9 @@ describe("POST /api/platform/organizations/[id]/email-domain-cleanup", () => {
     const res = await POST(request(), routeParams());
 
     expect(res.status).toBe(502);
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringMatching(/matched no row/i),
-      "org-1",
-      "row-1",
-    );
+    expect(loggedLines(vi.mocked(console.log))).toEqual([
+      expect.objectContaining({ level: "error", what: expect.stringMatching(/matched no row/i) }),
+    ]);
   });
 
   it("keeps the row and 502s when the Resend removal throws", async () => {

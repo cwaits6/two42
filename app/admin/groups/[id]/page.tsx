@@ -11,6 +11,7 @@ import { getGroupMemberships } from "@/lib/groups/server";
 import { displayName } from "@/lib/names";
 import { pageTitle } from "@/lib/pageTitle";
 import { createClient } from "@/lib/supabase/server";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = () => pageTitle("Group");
 
@@ -34,7 +35,7 @@ export default async function AdminGroupPage({ params }: { params: Promise<{ id:
     getGroupMemberships().catch(() => null),
   ]);
   if (error || !memberships) {
-    if (error) console.error("Failed to load group:", error.code);
+    if (error) logError("Failed to load group", error, { route: "/admin/groups/[id]" });
     return (
       <PageContainer size="reading">
         <PageHeader title="Group" backHref="/admin/groups" backLabel="Back to Groups" />

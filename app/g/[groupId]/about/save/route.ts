@@ -6,11 +6,13 @@ import { STORED_MEMBER_ROLES } from "@/lib/roles";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { parseAboutChanges, type LeaderChanges, type LeaderEdit, type LeaderEntry } from "../edit/aboutChanges";
+import { logError } from "@/lib/log";
+import { stepOf } from "@/lib/log/step";
 
 type RequestClient = Awaited<ReturnType<typeof createClient>>;
 
 function failed(what: string, error: unknown) {
-  console.error("Failed to save the About page %s:", what, error);
+  logError("Failed to save the About page", error, { route: "/g/[groupId]/about/save", step: stepOf(what) });
   return NextResponse.json({ error: "Save failed" }, { status: 500 });
 }
 

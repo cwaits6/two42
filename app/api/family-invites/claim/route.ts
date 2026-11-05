@@ -1,5 +1,6 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { logError, logWarn } from "@/lib/log";
 
 /**
  * POST /api/family-invites/claim
@@ -51,7 +52,11 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   if (inviteError) {
-    console.error("family-invites/claim: invite lookup error:", inviteError);
+    logError(
+      "family-invites/claim: invite lookup error",
+      inviteError,
+      { route: "/api/family-invites/claim" },
+    );
   }
 
   if (inviteError || !invite) {
@@ -85,7 +90,11 @@ export async function POST(request: Request) {
     .single();
 
   if (callerError) {
-    console.error("family-invites/claim: caller profile lookup error:", callerError);
+    logError(
+      "family-invites/claim: caller profile lookup error",
+      callerError,
+      { route: "/api/family-invites/claim" },
+    );
     return NextResponse.json(
       { error: "Failed to link profile to family" },
       { status: 500 },
@@ -93,12 +102,13 @@ export async function POST(request: Request) {
   }
 
   if (callerProfile.org_id !== invite.org_id) {
-    console.error(
-      "family-invites/claim: caller org %s does not match invite org %s (user=%s, invite=%s)",
-      callerProfile.org_id,
-      invite.org_id,
-      user.id,
-      invite.id,
+    logError(
+      "family-invites/claim: caller org does not match invite org",
+      undefined,
+      {
+        route: "/api/family-invites/claim",
+        ids: { caller_org: callerProfile.org_id, invite_org: invite.org_id, user: user.id, invite: invite.id },
+      },
     );
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -116,9 +126,13 @@ export async function POST(request: Request) {
     .select("id");
 
   if (profileError) {
-    console.error(
-      "family-invites/claim: profile update error (user=%s, invite=%s, org=%s):",
-      user.id, invite.id, invite.org_id, profileError,
+    logError(
+      "family-invites/claim: profile update error",
+      profileError,
+      {
+        route: "/api/family-invites/claim",
+        ids: { user: user.id, invite: invite.id, org: invite.org_id },
+      },
     );
     return NextResponse.json({ error: "Failed to link profile to family" }, { status: 500 });
   }
@@ -126,9 +140,13 @@ export async function POST(request: Request) {
   // Zero rows after the org check above passed means the profile row moved or
   // vanished mid-request — a tenancy anomaly, not an ordinary failure.
   if (!linked || linked.length === 0) {
-    console.error(
-      "family-invites/claim: scoped profile update matched 0 rows (user=%s, invite=%s, org=%s)",
-      user.id, invite.id, invite.org_id,
+    logError(
+      "family-invites/claim: scoped profile update matched 0 rows",
+      undefined,
+      {
+        route: "/api/family-invites/claim",
+        ids: { user: user.id, invite: invite.id, org: invite.org_id },
+      },
     );
     return NextResponse.json({ error: "Failed to link profile to family" }, { status: 500 });
   }
@@ -142,9 +160,13 @@ export async function POST(request: Request) {
     .select("id");
 
   if (fmError || !fmUpdated || fmUpdated.length === 0) {
-    console.error(
-      "family-invites/claim: family_members update matched 0 rows or failed (user=%s, invite=%s, org=%s):",
-      user.id, invite.id, invite.org_id, fmError,
+    logError(
+      "family-invites/claim: family_members update matched 0 rows or failed",
+      fmError,
+      {
+        route: "/api/family-invites/claim",
+        ids: { user: user.id, invite: invite.id, org: invite.org_id },
+      },
     );
     // Non-fatal — profile is already linked; log and continue
   }
@@ -158,9 +180,10 @@ export async function POST(request: Request) {
     .select("id");
 
   if (acceptError || !accepted || accepted.length === 0) {
-    console.warn(
-      "family-invites/claim: failed to mark invite accepted (id=%s, org=%s):",
-      invite.id, invite.org_id, acceptError,
+    logWarn(
+      "family-invites/claim: failed to mark invite accepted",
+      acceptError,
+      { route: "/api/family-invites/claim", ids: { invite: invite.id, org: invite.org_id } },
     );
     // Profile is already linked; return partial success so admin can remediate
     return NextResponse.json({ success: true, warning: "Profile linked but invite record was not updated." });

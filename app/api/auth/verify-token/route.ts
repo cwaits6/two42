@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { logError } from "@/lib/log";
 
 export async function POST(request: Request) {
   const { token } = await request.json();
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
     .single();
 
   if (error && error.code !== "PGRST116") {
-    console.error("Signup token lookup failed:", error);
+    logError("Signup token lookup failed", error, { route: "/api/auth/verify-token" });
   }
 
   // org_id is NOT NULL in the schema, so a falsy value is an invariant

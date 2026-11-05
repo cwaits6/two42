@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { logError } from "@/lib/log";
 
 /** POST /api/admin/family-members — create a new family member record */
 export async function POST(request: Request) {
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
     .single();
 
   if (error) {
-    console.error("family-members POST error:", error);
+    logError("family-members POST error", error, { route: "/api/admin/family-members" });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

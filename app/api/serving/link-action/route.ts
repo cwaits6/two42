@@ -11,6 +11,7 @@ import {
   notifyLeadersOfCancel,
   type NamedProfile,
 } from "@/lib/serving/server";
+import { logError } from "@/lib/log";
 
 function stringList(value: unknown): string[] {
   return Array.isArray(value) ? [...new Set(value.filter((v): v is string => typeof v === "string"))] : [];
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   if (groupError) {
-    console.error("Signed-link group lookup failed for group %s:", payload.g, groupError);
+    logError("Signed-link group lookup failed for group", groupError, { route: "/api/serving/link-action", ids: { group: payload.g } });
     return NextResponse.json(
       { error: "Something went wrong — please try again" },
       { status: 500 }
@@ -97,12 +98,10 @@ export async function POST(request: Request) {
   ]);
 
   if (profileError || settingsError) {
-    console.error(
-      "Signed-link profile/settings lookup failed for profile %s, group %s:",
-      payload.p,
-      payload.g,
-      profileError ?? settingsError
-    );
+    logError("Signed-link profile/settings lookup failed", profileError ?? settingsError, {
+      route: "/api/serving/link-action",
+      ids: { profile: payload.p, group: payload.g },
+    });
     return NextResponse.json(
       { error: "Something went wrong — please try again" },
       { status: 500 }
@@ -121,13 +120,10 @@ export async function POST(request: Request) {
   // rows. A cross-org pairing gets the same response as any invalid link — a
   // distinguishing message would be an org-existence oracle.
   if (profile.org_id !== group.org_id) {
-    console.error(
-      "Signed-link cross-org denial: profile org %s does not match group org %s (g=%s, p=%s)",
-      profile.org_id,
-      group.org_id,
-      payload.g,
-      payload.p
-    );
+    logError("Signed-link cross-org denial: profile org does not match group org", undefined, {
+      route: "/api/serving/link-action",
+      ids: { profileOrg: profile.org_id, groupOrg: group.org_id, group: payload.g, profile: payload.p },
+    });
     return NextResponse.json(
       { error: "This link is no longer valid — please use the site instead" },
       { status: 400 }
@@ -164,12 +160,10 @@ export async function POST(request: Request) {
       .eq("org_id", group.org_id)
       .maybeSingle();
     if (membershipError) {
-      console.error(
-        "Signed-link membership lookup failed for profile %s, group %s:",
-        profile.id,
-        payload.g,
-        membershipError
-      );
+      logError("Signed-link membership lookup failed", membershipError, {
+        route: "/api/serving/link-action",
+        ids: { profile: profile.id, group: payload.g },
+      });
       return NextResponse.json(
         { error: "Something went wrong — please try again" },
         { status: 500 }
@@ -217,14 +211,10 @@ export async function POST(request: Request) {
         // message below, so the log is the only place that distinction
         // survives.
         if (rpcError?.code !== "SV001") {
-          console.error(
-            "Signed-link signup rpc failed for group %s on %s (profile %s, data=%s):",
-            payload.g,
-            date,
-            payload.p,
-            rpc === null ? "null" : "present",
-            rpcError
-          );
+          logError("Signed-link signup rpc failed for group", rpcError, {
+            route: "/api/serving/link-action",
+            ids: { group: payload.g, profile: payload.p },
+          });
         }
         return { code: rpcError?.code ?? "failed" };
       }
@@ -287,12 +277,10 @@ export async function POST(request: Request) {
   // member their cancellation already happened when the read merely failed
   // makes them stop trying, and the roster is wrong on Sunday.
   if (cancelLookupError) {
-    console.error(
-      "Signed-link cancel lookup failed for group %s, date %s:",
-      payload.g,
-      payload.d,
-      cancelLookupError
-    );
+    logError("Signed-link cancel lookup failed for group", cancelLookupError, {
+      route: "/api/serving/link-action",
+      ids: { group: payload.g },
+    });
     return NextResponse.json(
       { error: "Something went wrong — please try again" },
       { status: 500 }
@@ -325,7 +313,7 @@ export async function POST(request: Request) {
     .eq("id", signup.id)
     .eq("org_id", group.org_id);
   if (deleteError) {
-    console.error("Signed-link cancel failed:", deleteError);
+    logError("Signed-link cancel failed", deleteError, { route: "/api/serving/link-action" });
     return NextResponse.json({ error: "Failed to cancel" }, { status: 500 });
   }
 
@@ -340,7 +328,7 @@ export async function POST(request: Request) {
       excludeProfileId: profile.id,
     });
   } catch (err) {
-    console.error("Serving cancel notice failed:", err);
+    logError("Serving cancel notice failed", err, { route: "/api/serving/link-action" });
   }
 
   return NextResponse.json({ success: true, action: "cancel" });

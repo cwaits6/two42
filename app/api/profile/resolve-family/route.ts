@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { isMemberRole } from "@/lib/roles";
+import { logError } from "@/lib/log";
 
 /**
  * POST /api/profile/resolve-family
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
     .limit(5);
 
   if (error) {
-    console.error("resolve-family error:", error);
+    logError("resolve-family error", error, { route: "/api/profile/resolve-family" });
     return NextResponse.json({ error: "Query failed" }, { status: 500 });
   }
 

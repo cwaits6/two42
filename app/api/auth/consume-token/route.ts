@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { logError } from "@/lib/log";
 
 export async function POST(request: Request) {
   const { token } = await request.json();
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   if (lookupError) {
-    console.error("Failed to look up signup token:", lookupError);
+    logError("Failed to look up signup token", lookupError, { route: "/api/auth/consume-token" });
     return NextResponse.json({ error: "Failed to invalidate token" }, { status: 500 });
   }
 
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
     .eq("org_id", row.org_id);
 
   if (error) {
-    console.error("Failed to consume signup token:", error);
+    logError("Failed to consume signup token", error, { route: "/api/auth/consume-token" });
     return NextResponse.json({ error: "Failed to invalidate token" }, { status: 500 });
   }
 

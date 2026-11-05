@@ -10,6 +10,7 @@
 // `.rpc("org_email_domain_claim")` call that performs the cap-checked insert.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { loggedLines } from "@/lib/log/testing";
 
 const requireOrgAdmin = vi.fn();
 vi.mock("@/lib/members/access", () => ({
@@ -201,14 +202,15 @@ const resendCreated = {
   error: null,
 };
 
+let logSpy: ReturnType<typeof vi.spyOn>;
+
 beforeEach(() => {
   requireOrgAdmin.mockReset();
   createServiceClient.mockReset();
   domainsCreate.mockReset();
   domainsRemove.mockReset();
   requireOrgAdmin.mockResolvedValue({ ok: true, orgId: "org-1" });
-  vi.spyOn(console, "error").mockImplementation(() => {});
-  vi.spyOn(console, "warn").mockImplementation(() => {});
+  logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -477,7 +479,7 @@ describe("POST /api/admin/email-domain — claim and rollback", () => {
       ["id", "row-1"],
       ["org_id", "org-1"],
     ]);
-    expect(console.error).toHaveBeenCalled();
+    expect(loggedLines(logSpy).some((line) => line.level === "error")).toBe(true);
   });
 
   it("logs distinctly when the cleanup_pending marker update affects zero rows (row raced away by a concurrent cleanup)", async () => {
@@ -493,12 +495,8 @@ describe("POST /api/admin/email-domain — claim and rollback", () => {
     const res = await POST(claimRequest());
 
     expect(res.status).toBe(500);
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringMatching(/cleanup_pending/i),
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
+    expect(loggedLines(logSpy).map((line) => line.what)).toContainEqual(
+      expect.stringMatching(/cleanup_pending write matched no row/),
     );
   });
 
@@ -562,7 +560,7 @@ describe("POST /api/admin/email-domain — claim and rollback", () => {
       ["id", "row-1"],
       ["org_id", "org-1"],
     ]);
-    expect(console.error).toHaveBeenCalled();
+    expect(loggedLines(logSpy).some((line) => line.level === "error")).toBe(true);
   });
 
   it("rolls back the insert and returns 500 when domains.create throws instead of resolving", async () => {

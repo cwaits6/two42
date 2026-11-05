@@ -9,6 +9,7 @@ import { isUuid } from "@/lib/groups/active";
 import { INVITE_INVALID_TEXT } from "@/lib/groups/invites";
 import type { Database } from "@/lib/supabase/database.types";
 import { createServiceClient } from "@/lib/supabase/server";
+import { logError } from "@/lib/log";
 
 const SIGNUP_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -72,13 +73,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       case "GI006":
         return NextResponse.json(CANNOT_SIGN_UP, { status: 409 });
       default:
-        console.error("Join route: redeem failed:", error);
+        logError("Join route: redeem failed", error, { route: "/api/join/[token]" });
         return NextResponse.json({ error: "Failed to process the invite" }, { status: 500 });
     }
   }
   const row: RedeemedRow | undefined = data?.[0];
   if (!row) {
-    console.error("Join route: redeem returned no row");
+    logError("Join route: redeem returned no row", undefined, { route: "/api/join/[token]" });
     return NextResponse.json({ error: "Failed to process the invite" }, { status: 500 });
   }
 
@@ -91,11 +92,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       .eq("id", row!.access_request_id)
       .eq("org_id", row!.org_id);
     if (clearError) {
-      console.error(
-        "Join route: setup email never sent AND the token could not be cleared; access_requests row %s (org=%s) holds an unsent token:",
-        row!.access_request_id,
-        row!.org_id,
+      logError(
+        "Join route: setup email never sent AND the token could not be cleared; access_requests row holds an unsent token",
         clearError,
+        { route: "/api/join/[token]", ids: { accessRequest: row!.access_request_id, org: row!.org_id } },
       );
     }
   }
@@ -117,7 +117,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       await resolveEmailBranding(row.org_id),
     );
   } catch (sendError) {
-    console.error("Join route: setup email failed for access_requests row %s:", row.access_request_id, sendError);
+    logError("Join route: setup email failed for access_requests row", sendError, { route: "/api/join/[token]", ids: { accessRequest: row.access_request_id } });
     await clearToken();
     return NextResponse.json(
       { error: "We couldn't send the email right now. Try again in a few minutes." },

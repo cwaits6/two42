@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { failureMessage } from "@/lib/errorCopy";
 import { AuthShell } from "../_components/AuthShell";
+import { logError } from "@/lib/log";
 
 const BACK_TO_SIGN_IN = {
   altPrompt: "Remembered it?",
@@ -30,7 +31,7 @@ export function ForgotPasswordForm() {
       redirectTo: `${window.location.origin}/api/auth/callback?next=/update-password`,
     });
     setLoading(false);
-    if (error) console.error(error);
+    if (error) logError("Failed to send the password link", error, { route: "/forgot-password" });
     if (error && error.status !== 429) {
       setSendError(failureMessage("send the link", error.status || "network"));
       return false;

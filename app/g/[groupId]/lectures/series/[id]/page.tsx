@@ -13,6 +13,7 @@ import { formatLessonDate, lessonsInOrder, partNumbers, seriesDateRange } from "
 import { pageTitle } from "@/lib/pageTitle";
 import { readList } from "@/lib/supabase/readList";
 import { LessonList, MetaLine } from "../../LessonList";
+import { logError } from "@/lib/log";
 
 type SeriesLesson = {
   id: string;
@@ -64,11 +65,7 @@ export default async function SeriesPage({
   ]);
 
   if (seriesRead.error) {
-    console.error(
-      "Failed to load series: code=%s message=%s",
-      seriesRead.error.code,
-      seriesRead.error.message,
-    );
+    logError("Failed to load series", seriesRead.error, { route: "/g/[groupId]/lectures/series/[id]" });
     return (
       <PageContainer>
         <PageHeader title="Series" backHref={libraryHref} backLabel="Back to Lessons" />

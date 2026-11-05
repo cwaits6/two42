@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isUuid } from "@/lib/groups/active";
 import { createServiceClient } from "@/lib/supabase/server";
+import { logError } from "@/lib/log";
 
 const MAX_NAME_LENGTH = 120;
 const MAX_MESSAGE_LENGTH = 2000;
@@ -40,7 +41,11 @@ export async function POST(request: Request) {
     .eq("token", token)
     .maybeSingle();
   if (inviteError) {
-    console.error("family-invites/request: invite lookup failed:", inviteError);
+    logError(
+      "family-invites/request: invite lookup failed",
+      inviteError,
+      { route: "/api/family-invites/request" },
+    );
     return NextResponse.json({ error: "Failed to submit the request" }, { status: 500 });
   }
   if (!invite || invite.accepted_at) {
@@ -55,7 +60,11 @@ export async function POST(request: Request) {
     .in("status", ["pending", "approved"])
     .limit(1);
   if (existingError) {
-    console.error("family-invites/request: existing request lookup failed:", existingError);
+    logError(
+      "family-invites/request: existing request lookup failed",
+      existingError,
+      { route: "/api/family-invites/request" },
+    );
     return NextResponse.json({ error: "Failed to submit the request" }, { status: 500 });
   }
   if (existing && existing.length > 0) {
@@ -71,7 +80,11 @@ export async function POST(request: Request) {
     status: "pending",
   });
   if (insertError) {
-    console.error("family-invites/request: insert failed:", insertError);
+    logError(
+      "family-invites/request: insert failed",
+      insertError,
+      { route: "/api/family-invites/request" },
+    );
     return NextResponse.json({ error: "Failed to submit the request" }, { status: 500 });
   }
 

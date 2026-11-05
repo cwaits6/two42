@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { isMemberRole } from "@/lib/roles";
 import { householdUpdates } from "./householdUpdates";
+import { logError } from "@/lib/log";
 
 // Raised by the family_units_phone_owner_guard trigger, the server's own refusal.
 const PHONE_OWNER_REFUSED = "HP001";
@@ -85,7 +86,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Only that spouse can choose their own number." }, { status: 403 });
   }
   if (error) {
-    console.error("household PATCH error:", error);
+    logError("household PATCH error", error, { route: "/api/household" });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { titleCaseName } from "@/lib/sanitize";
 import { isMemberRole } from "@/lib/roles";
+import { logError } from "@/lib/log";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -102,7 +103,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     .single();
 
   if (error) {
-    console.error("household/members PATCH error:", error);
+    logError("household/members PATCH error", error, { route: "/api/household/members/[id]" });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
@@ -137,7 +138,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
   const { error } = await supabase.from("family_members").delete().eq("id", id);
 
   if (error) {
-    console.error("household/members DELETE error:", error);
+    logError("household/members DELETE error", error, { route: "/api/household/members/[id]" });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

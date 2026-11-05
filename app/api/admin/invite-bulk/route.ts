@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireOrgAdmin } from "@/lib/members/access";
 import { findExistingInvitees, sendMemberInvite } from "@/lib/members/invite";
 import { normalizeEmail } from "@/lib/members/invite-form";
+import { logError } from "@/lib/log";
 
 export async function POST(request: Request) {
   const gate = await requireOrgAdmin();
@@ -37,10 +38,10 @@ export async function POST(request: Request) {
   try {
     existing = await findExistingInvitees(gate.orgId, normalizedEmails);
   } catch (err) {
-    console.error(
-      "invite-bulk: existing-member check failed (org=%s):",
-      gate.orgId,
-      err instanceof Error ? err.name : typeof err
+    logError(
+      "invite-bulk: existing-member check failed",
+      err,
+      { route: "/api/admin/invite-bulk", ids: { org: gate.orgId } },
     );
     return NextResponse.json({ error: "Failed to send invites." }, { status: 500 });
   }

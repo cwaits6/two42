@@ -50,6 +50,7 @@ import { displayName } from "@/lib/names";
 import { createClient } from "@/lib/supabase/client";
 import { fetchAll } from "@/lib/supabase/fetchAll";
 import type { GroupInvite } from "@/lib/types";
+import { logError } from "@/lib/log";
 
 const EMPTY_TEXT = "No invite links yet. Add one and share it by text or email.";
 
@@ -99,7 +100,7 @@ export function InviteLinksManager({ groupId, groupName, timeZone }: InviteLinks
     ]);
     if (seq !== loadSeq.current) return;
     if (inviteRows.error || useRows.error) {
-      console.error("Failed to load invite links:", inviteRows.error ?? useRows.error);
+      logError("Failed to load invite links", inviteRows.error ?? useRows.error, { route: "/g/[groupId]/settings/invites" });
       setLoadFailed(true);
       setLoading(false);
       return;

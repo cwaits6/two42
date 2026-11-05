@@ -1,5 +1,6 @@
 import { currentPerson } from "@/lib/account/currentPerson";
 import { buildAccountExport } from "@/lib/account/export";
+import { logError } from "@/lib/log";
 
 export async function GET() {
   const person = await currentPerson();
@@ -20,7 +21,7 @@ export async function GET() {
       },
     });
   } catch (err) {
-    console.error("Account export failed:", err instanceof Error ? err.message : typeof err);
+    logError("Account export failed", err, { route: "/api/account/export" });
     return new Response("Failed to build export", { status: 500 });
   }
 }

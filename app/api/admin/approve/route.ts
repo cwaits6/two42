@@ -4,6 +4,7 @@ import { resolveEmailBranding } from "@/lib/email/identity";
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { siteConfig } from "@/lib/config";
+import { logError } from "@/lib/log";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -82,14 +83,17 @@ export async function POST(request: Request) {
         // The row is now stuck approved with a token nobody received. Name it
         // by id (never the email — PII stays out of logs) so an operator can
         // find and repair it.
-        console.error(
-          "Invite email send failed AND rollback failed; access_requests row %s (org=%s) is approved with an unsent token:",
-          updated[0].id,
-          orgId,
-          rollbackError
+        logError(
+          "Invite email send failed AND rollback failed; access_requests row is approved with an unsent token",
+          rollbackError,
+          { route: "/api/admin/approve", ids: { access_request: updated[0].id, org: orgId } },
         );
       } else {
-        console.error("Invite email send failed; approval rolled back:", sendError);
+        logError(
+          "Invite email send failed; approval rolled back",
+          sendError,
+          { route: "/api/admin/approve" },
+        );
       }
       return NextResponse.json(
         { error: "Failed to send invite email" },
@@ -99,7 +103,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Approval error:", error);
+    logError("Approval error", error, { route: "/api/admin/approve" });
     return NextResponse.json(
       { error: "Failed to process approval" },
       { status: 500 }
