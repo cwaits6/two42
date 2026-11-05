@@ -213,9 +213,17 @@ select is(
   'an event inserted without the column sends 1 day before');
 
 select lives_ok(
-  $$ update public.events set reminder_days_before = v from unnest(array[0, 1, 2, 7]) as v
-     where id = current_setting('er.single')::uuid $$,
-  'an event takes 0, 1, 2 and 7');
+  $$ update public.events set reminder_days_before = 0 where id = current_setting('er.single')::uuid $$,
+  'an event takes 0');
+select lives_ok(
+  $$ update public.events set reminder_days_before = 1 where id = current_setting('er.single')::uuid $$,
+  'an event takes 1');
+select lives_ok(
+  $$ update public.events set reminder_days_before = 2 where id = current_setting('er.single')::uuid $$,
+  'an event takes 2');
+select lives_ok(
+  $$ update public.events set reminder_days_before = 7 where id = current_setting('er.single')::uuid $$,
+  'an event takes 7');
 select throws_ok(
   $$ update public.events set reminder_days_before = 3 where id = current_setting('er.single')::uuid $$,
   '23514', null, 'an event refuses 3 days');

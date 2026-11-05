@@ -130,6 +130,9 @@ export function seriesDatesBetween(
   const frequency = rule.recurrence_frequency;
   if (!frequency) return [];
   const interval = rule.recurrence_interval ?? 1;
+  // The column has no lower bound, and a step of zero or less never reaches
+  // the end of the window.
+  if (!Number.isInteger(interval) || interval < 1) return [];
   const until = rule.recurrence_end_mode === "until" && rule.recurrence_until
     ? new Date(rule.recurrence_until).getTime()
     : null;

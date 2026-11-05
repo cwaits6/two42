@@ -102,6 +102,15 @@ Deno.test("every other week skips the week between", () => {
   );
 });
 
+Deno.test("a step of zero or less has no series dates", () => {
+  const after = at("2026-11-01T00:00:00Z");
+  const upTo = at("2026-12-01T00:00:00Z");
+  for (const recurrence_interval of [0, -1, 1.5]) {
+    const rule = weekly("2026-10-29T00:00:00.000Z", { recurrence_interval });
+    assertEquals(seriesDatesBetween(rule, CHICAGO, after, upTo), []);
+  }
+});
+
 Deno.test("a row that does not repeat has no series dates", () => {
   const rule = weekly("2026-10-29T00:00:00.000Z", { recurrence_frequency: null });
   assertEquals(seriesDatesBetween(rule, CHICAGO, at("2026-10-01T00:00:00Z"), at("2026-12-31T00:00:00Z")), []);
