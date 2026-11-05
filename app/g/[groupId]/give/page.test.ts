@@ -130,6 +130,14 @@ describe("GivePage", () => {
     steward_role: null,
   };
 
+  it("keeps one Add fund, in the header, beside the funds", async () => {
+    state.role = "leader";
+    state.funds = [LIVE];
+    const html = await render();
+    expect(html).toContain("New roof");
+    expect(count(html, ADD_FUND)).toBe(1);
+  });
+
   it.each(["hidden funds", "hidden fund methods"] as const)(
     "keeps the funds members see when a leader's read of %s fails",
     async (failedRead) => {
