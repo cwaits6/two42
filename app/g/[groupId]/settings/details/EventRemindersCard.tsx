@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { failureMessage } from "@/lib/errorCopy";
 import { GROUP_REMINDER_ITEMS, reminderLabel, type GroupReminders } from "@/lib/events/reminders";
 import { createClient } from "@/lib/supabase/client";
 
@@ -49,7 +50,7 @@ export function EventRemindersCard({
     setSaving(false);
     if (error || !data?.length) {
       setValues(before);
-      toast.error("Couldn't save the event reminder setting. Please try again.");
+      toast.error(failureMessage("save the event reminder setting"));
       return;
     }
     toast.success(saved);
