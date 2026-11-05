@@ -66,6 +66,16 @@ describe("useSettingSave", () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
+  it("writes nothing and says nothing when the value picked is the one already saved", async () => {
+    write.mockResolvedValue(true);
+    await change();
+    await change();
+
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
   it("ignores a second change while the first is being written", async () => {
     let settle: (ok: boolean) => void = () => {};
     write.mockImplementation(() => new Promise((resolve) => (settle = resolve)));

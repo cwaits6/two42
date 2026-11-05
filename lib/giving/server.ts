@@ -15,6 +15,11 @@ import { mintSignedUrls } from "@/lib/storageRead";
 import { readList } from "@/lib/supabase/readList";
 import type { MemberOption } from "@/components/giving/FundForm";
 
+/** What a stored giving_manage_mode means; a church with no row has the default. */
+export function stewardsMayManage(mode: string | null | undefined): boolean {
+  return (mode ?? "stewards") === "stewards";
+}
+
 /** Whether members may put up and manage their own giving links */
 export async function givingStewardsCanManage(
   supabase: SupabaseClient,
@@ -26,7 +31,7 @@ export async function givingStewardsCanManage(
     .eq("org_id", orgId)
     .eq("key", "giving_manage_mode")
     .maybeSingle();
-  return (data?.value ?? "stewards") === "stewards";
+  return stewardsMayManage(data?.value);
 }
 
 type StewardAvatarSource = {

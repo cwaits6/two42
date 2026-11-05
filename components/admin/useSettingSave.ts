@@ -21,7 +21,7 @@ interface SettingSave<T> {
 /**
  * How every church setting saves: the moment its control changes. The control
  * shows the new value while the write runs and goes back to the saved one if
- * the write fails, so it never shows a value the church doesn't have.
+ * the write fails.
  */
 export function useSettingSave<T>(initial: T, { write, saved, action }: SettingSave<T>) {
   const [value, setValue] = useState(initial);
@@ -32,6 +32,8 @@ export function useSettingSave<T>(initial: T, { write, saved, action }: SettingS
 
   /** Resolves true when the setting was saved. */
   async function save(next: T): Promise<boolean> {
+    // A Select reports a pick of the option it already shows; that is not a change.
+    if (Object.is(next, value)) return true;
     if (inFlight.current) return false;
     inFlight.current = true;
     const previous = value;

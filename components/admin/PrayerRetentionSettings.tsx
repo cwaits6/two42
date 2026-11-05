@@ -61,6 +61,8 @@ export function PrayerRetentionSettings({ orgId, retention }: PrayerRetentionSet
   const shownLabel = PRAYER_RETENTION_OPTIONS.find((o) => o.value === String(shown))?.label;
 
   function choose(next: PrayerRetention) {
+    // Picking the period in force must not warn of a deletion that changes nothing.
+    if (next === value) return;
     if (next === "off") save(next);
     else setAsking(next);
   }
