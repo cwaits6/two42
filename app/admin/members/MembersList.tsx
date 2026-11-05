@@ -22,7 +22,7 @@ import type { AccessRequest, Profile, UserRole } from "@/lib/types";
 import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
 import { requestedOn } from "@/lib/groups/joinQueue";
 import { invitedNotSignedUp } from "@/lib/members/invited";
-import { PROFILE_COLUMNS, withEmail, type MemberEmail, type ProfileColumns } from "@/lib/profileColumns";
+import { PROFILE_COLUMNS, type MemberEmail, type ProfileColumns } from "@/lib/profileColumns";
 import { displayName } from "@/lib/names";
 import { personNameOrEmail } from "@/lib/serving/display";
 import { toUserRole } from "@/lib/roles";
@@ -98,7 +98,8 @@ export function MembersList({
     const emailById = new Map(((emails || []) as MemberEmail[]).map((e) => [e.profile_id, e.email]));
     setMembers(
       (mems || []).map((m) => ({
-        ...withEmail(m, emailById.get(m.id) ?? null),
+        ...m,
+        email: emailById.get(m.id) ?? null,
         role: toUserRole(m.role),
       })),
     );

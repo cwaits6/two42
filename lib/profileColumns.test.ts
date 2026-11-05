@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Database } from "@/lib/supabase/database.types";
-import { PROFILE_COLUMNS, withEmail, type ProfileColumns } from "./profileColumns";
+import { PROFILE_COLUMNS, type ProfileColumns } from "./profileColumns";
 
 // A Profile field missing here fails tsc, so the list cannot fall behind the type.
 const FIELDS: Record<keyof ProfileColumns, true> = {
@@ -54,17 +54,5 @@ describe("PROFILE_COLUMNS", () => {
   it("never asks for the address or for all columns", () => {
     expect(columns).not.toContain("email");
     expect(columns).not.toContain("*");
-  });
-});
-
-describe("withEmail", () => {
-  it("adds the address without changing the row", () => {
-    const row = { id: "p1", first_name: "Chloe" } as ProfileColumns;
-    expect(withEmail(row, "chloe@example.test")).toEqual({
-      id: "p1",
-      first_name: "Chloe",
-      email: "chloe@example.test",
-    });
-    expect(withEmail(row, null).email).toBeNull();
   });
 });

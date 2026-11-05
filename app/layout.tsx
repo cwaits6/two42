@@ -16,7 +16,7 @@ import { getRequestBranding } from "@/lib/branding";
 import { getDiscoveryOn } from "@/lib/groups/discovery";
 import { getGroupCreationPolicy } from "@/lib/groups/creationPolicy";
 import { getGroupMemberships } from "@/lib/groups/server";
-import { PROFILE_COLUMNS, withEmail, type ProfileColumns } from "@/lib/profileColumns";
+import { PROFILE_COLUMNS, type ProfileColumns } from "@/lib/profileColumns";
 import type { ActiveGroup } from "@/lib/groups/active";
 import type { GroupCreationPolicy } from "@/lib/groups/creation";
 import "./globals.css";
@@ -90,7 +90,7 @@ export default async function RootLayout({
     // access. No row is not an error: a platform admin has no profile.
     if (error) console.error("Layout: failed to load profile:", error);
     if (groupError) console.error("Layout: failed to load team memberships:", groupError);
-    profile = data && withEmail(data, null);
+    profile = data && { ...data, email: null };
 
     const loadServingAccess = async () => {
       if (!groupData?.length) return false;

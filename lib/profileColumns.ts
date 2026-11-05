@@ -16,7 +16,3 @@ export interface MemberEmail {
   profile_id: string;
   email: string | null;
 }
-
-export function withEmail(row: ProfileColumns, email: string | null): Profile {
-  return { ...row, email };
-}

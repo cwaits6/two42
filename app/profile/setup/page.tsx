@@ -3,7 +3,7 @@ import { mintSignedUrl } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PROFILE_COLUMNS, withEmail, type ProfileColumns } from "@/lib/profileColumns";
+import { PROFILE_COLUMNS, type ProfileColumns } from "@/lib/profileColumns";
 import { SetupWizard } from "./SetupWizard";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { isMemberRole } from "@/lib/roles";
@@ -26,7 +26,7 @@ export default async function ProfileSetupPage() {
 
   if (!row) redirect("/dashboard");
   // The wizard shows the sign-in address, never the one on the profile.
-  const profile = withEmail(row, null);
+  const profile = { ...row, email: null };
 
   // Only approved members should be doing setup
   if (!isMemberRole(profile.role)) {

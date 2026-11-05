@@ -5,7 +5,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { displayName } from "@/lib/names";
 import type { FamilyUnit } from "@/lib/types";
-import { PROFILE_COLUMNS, withEmail, type MemberEmail, type ProfileColumns } from "@/lib/profileColumns";
+import { PROFILE_COLUMNS, type MemberEmail, type ProfileColumns } from "@/lib/profileColumns";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { pageTitle } from "@/lib/pageTitle";
 
@@ -44,7 +44,7 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
   // The form saves whatever is in its Email field, so it must not open blank
   // over an address that failed to load.
   if (addressError) throw new Error(`Failed to load the member's email (${addressError.code})`);
-  const profile = withEmail(row, address?.email ?? null);
+  const profile = { ...row, email: address?.email ?? null };
 
   return (
     <PageContainer size="reading">

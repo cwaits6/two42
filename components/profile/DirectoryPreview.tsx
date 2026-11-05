@@ -14,7 +14,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
 import { PersonCard } from "@/components/directory/PersonCard";
-import { PROFILE_COLUMNS, withEmail, type ProfileColumns } from "@/lib/profileColumns";
+import { PROFILE_COLUMNS, type ProfileColumns } from "@/lib/profileColumns";
 import type {
   DirectoryProfile,
   FamilyDirectoryFull,
@@ -93,7 +93,7 @@ export function DirectoryPreview() {
       setLoading(false);
       return;
     }
-    const profile = withEmail(row, ownEmail);
+    const profile = { ...row, email: ownEmail };
 
     const groups = (groupRows || [])
       .map((r) => r.teams as unknown as (GroupChip & { display_order: number }) | null)

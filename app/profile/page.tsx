@@ -10,7 +10,7 @@ import type { Profile, FamilyUnit, FamilyMember } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { isMemberRole } from "@/lib/roles";
 import { pageTitle } from "@/lib/pageTitle";
-import { PROFILE_COLUMNS, withEmail, type ProfileColumns } from "@/lib/profileColumns";
+import { PROFILE_COLUMNS, type ProfileColumns } from "@/lib/profileColumns";
 
 export const generateMetadata = () => pageTitle("My profile");
 
@@ -26,7 +26,7 @@ export default async function ProfilePage() {
   ]);
 
   if (!row) redirect("/dashboard");
-  const profile = withEmail(row, ownEmail);
+  const profile = { ...row, email: ownEmail };
   if (!isMemberRole(profile.role)) {
     redirect("/dashboard");
   }
@@ -107,7 +107,7 @@ export default async function ProfilePage() {
     // Nobody in a household reads another person's address; the edit sheet
     // leaves the field out.
     householdProfiles = canEditSpouseProfiles
-      ? ((othersRes.data ?? []) as ProfileColumns[]).map((p) => withEmail(p, null))
+      ? ((othersRes.data ?? []) as ProfileColumns[]).map((p) => ({ ...p, email: null }))
       : ((othersRes.data ?? []) as HouseholdSummary[]);
     familyMembers = fmsRes.data ?? [];
   }
