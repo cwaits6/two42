@@ -2593,6 +2593,93 @@ $$;
 ALTER FUNCTION "public"."rls_auto_enable"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."serving_reminder_claim"("_org_id" "uuid", "_send_date" "date", "_service_date" "date", "_team_ids" "uuid"[]) RETURNS TABLE("team_id" "uuid", "profile_id" "uuid", "email" "text", "first_name" "text", "preferred_name" "text")
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _team uuid;
+  _team_org uuid;
+begin
+  foreach _team in array coalesce(_team_ids, '{}') loop
+    select t.org_id into _team_org from public.teams t where t.id = _team;
+    if _team_org is null or _team_org is distinct from _org_id then
+      raise exception 'serving reminder claim rejected: team % is not in org %', _team, _org_id
+        using errcode = 'SR001';
+    end if;
+
+    insert into public.serving_reminder_passes (org_id, team_id, send_date)
+    values (_org_id, _team, _send_date)
+    on conflict do nothing;
+
+    if found then
+      insert into public.serving_reminder_sends (org_id, team_id, send_date, profile_id)
+      select _org_id, _team, _send_date, p.id
+      from public.serving_signups s
+      join public.serving_signup_attendees a on a.signup_id = s.id and a.org_id = s.org_id
+      join public.profiles p on p.id = a.profile_id and p.org_id = a.org_id
+      where s.org_id = _org_id
+        and s.team_id = _team
+        and s.service_date = _service_date
+        and p.email is not null
+        and p.role <> 'pending';
+    end if;
+  end loop;
+
+  return query
+  with claimed as (
+    update public.serving_reminder_sends x
+       set claimed_at = pg_catalog.now()
+     where x.org_id = _org_id
+       and x.send_date = _send_date
+       and x.team_id = any (coalesce(_team_ids, '{}'))
+       and x.sent_at is null
+       and (x.claimed_at is null or x.claimed_at < pg_catalog.now() - interval '10 minutes')
+    returning x.team_id, x.profile_id
+  )
+  select c.team_id, c.profile_id, p.email, p.first_name, p.preferred_name
+  from claimed c
+  join public.profiles p on p.id = c.profile_id and p.org_id = _org_id
+  where p.email is not null;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."serving_reminder_claim"("_org_id" "uuid", "_send_date" "date", "_service_date" "date", "_team_ids" "uuid"[]) OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."serving_reminder_claim"("_org_id" "uuid", "_send_date" "date", "_service_date" "date", "_team_ids" "uuid"[]) IS 'Starts the day''s reminder pass for each team that has none, fixing its recipients, then claims every unsent reminder in those passes and returns the people to mail. Tenant anchor: each team''s own org_id, compared with _org_id; a mismatch raises SR001. service_role only.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."serving_reminder_passes_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) RETURNS integer
+    LANGUAGE "sql"
+    SET "search_path" TO ''
+    AS $$
+  with doomed as (
+    select p.team_id, p.send_date
+    from public.serving_reminder_passes p
+    where p.org_id = _org_id and p.send_date < _before
+    order by p.send_date
+    limit _limit
+  ),
+  gone as (
+    delete from public.serving_reminder_passes p
+    using doomed d
+    where p.org_id = _org_id and p.team_id = d.team_id and p.send_date = d.send_date
+    returning 1
+  )
+  select count(*)::integer from gone;
+$$;
+
+
+ALTER FUNCTION "public"."serving_reminder_passes_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."serving_reminder_passes_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) IS 'Deletes at most _limit of one church''s reminder passes with a send_date before _before, oldest first, and returns how many went. Tenant anchor: the _org_id predicate on every row it reads and deletes. service_role only.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."serving_signup_apply"("_group_id" "uuid", "_service_date" "date", "_actor_id" "uuid", "_attendee_ids" "uuid"[]) RETURNS TABLE("signup_id" "uuid", "signup_org_id" "uuid", "created" boolean)
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO ''
@@ -2603,7 +2690,15 @@ declare
   _family_id uuid;
   _attendee_total bigint;
   _attendee_valid bigint;
+  _off_team bigint;
   _enabled boolean;
+  _schedule text;
+  _window_weeks integer;
+  _date_from date;
+  _date_to date;
+  _zone text;
+  _today date;
+  _first date;
   _signup_id uuid;
   _existing_by uuid;
   _created boolean;
@@ -2663,14 +2758,46 @@ begin
       using errcode = 'SV002';
   end if;
 
-  select sts.enabled into _enabled
+  -- Being on the team is the one rule for who can serve: the caller has
+  -- already checked the actor's own standing, and everyone else on the
+  -- date (the spouse) has to hold a team_members row for this team.
+  select count(*) into _off_team
+  from (select distinct att.pid from unnest(_attendee_ids) as att(pid)) ids
+  where ids.pid is distinct from _actor_id
+    and not exists (
+      select 1 from public.team_members tm
+      where tm.team_id = _group_id and tm.org_id = _org and tm.profile_id = ids.pid
+    );
+
+  if _off_team > 0 then
+    raise exception 'serving signup rejected: an attendee is not on team %', _group_id
+      using errcode = 'SV004';
+  end if;
+
+  select sts.enabled, sts.schedule, sts.window_weeks, sts.date_from, sts.date_to, o.timezone
+    into _enabled, _schedule, _window_weeks, _date_from, _date_to, _zone
   from public.serving_team_settings sts
+  join public.organizations o on o.id = sts.org_id
   where sts.team_id = _group_id
     and sts.org_id = _org;
 
   if not coalesce(_enabled, false) then
     raise exception 'serving signups not enabled for group %', _group_id
       using errcode = 'SV003';
+  end if;
+
+  -- The first Sunday on or after the church's local date opens the rolling
+  -- window; a set block is bounded by its own From and To instead.
+  _today := (pg_catalog.now() at time zone _zone)::date;
+  _first := _today + (7 - extract(dow from _today)::integer) % 7;
+
+  if _service_date is null
+     or extract(dow from _service_date) <> 0
+     or _service_date < _today
+     or (_schedule = 'set' and (_service_date < _date_from or _service_date > _date_to))
+     or (_schedule <> 'set' and _service_date >= _first + _window_weeks * 7) then
+    raise exception 'serving signup rejected: % is not one of the dates of group %', _service_date, _group_id
+      using errcode = 'SV006';
   end if;
 
   -- unique (team_id, service_date) is the race guard. DO NOTHING (not
@@ -2718,6 +2845,132 @@ ALTER FUNCTION "public"."serving_signup_apply"("_group_id" "uuid", "_service_dat
 
 
 COMMENT ON FUNCTION "public"."serving_signup_apply"("_group_id" "uuid", "_service_date" "date", "_actor_id" "uuid", "_attendee_ids" "uuid"[]) IS 'Atomic serving signup + attendee insert pair. Tenant anchor: org_id resolved from the teams row named by _group_id (a team id), never a caller parameter; every other row is asserted to carry it. service_role only — the HMAC signed-link route passes its validated profile id as _actor_id.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."serving_signup_change"("_signup_id" "uuid", "_attendee_ids" "uuid"[]) RETURNS TABLE("added" integer, "removed" integer)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _actor uuid;
+  _org uuid;
+  _team uuid;
+  _family uuid;
+  _actor_family uuid;
+  _actor_relationship text;
+  _created_by uuid;
+  _involved boolean;
+  _total bigint;
+  _valid bigint;
+  _off_team bigint;
+  _added integer;
+  _removed integer;
+begin
+  _actor := auth.uid();
+  if _actor is null then
+    raise exception 'serving change rejected: no authenticated principal' using errcode = 'SV002';
+  end if;
+
+  select s.org_id, s.team_id, s.family_id, s.created_by into _org, _team, _family, _created_by
+  from public.serving_signups s
+  where s.id = _signup_id;
+
+  if _org is null or _org is distinct from public.app_request_org_id() then
+    raise exception 'serving change rejected: signup % does not resolve to the request org', _signup_id
+      using errcode = 'SV002';
+  end if;
+
+  select p.family_id, p.relationship into _actor_family, _actor_relationship
+  from public.profiles p
+  where p.id = _actor and p.org_id = _org;
+
+  _involved := _created_by = _actor or exists (
+    select 1 from public.serving_signup_attendees a
+    where a.signup_id = _signup_id and a.org_id = _org and a.profile_id = _actor
+  );
+  if not _involved then
+    raise exception 'serving change rejected: actor % is not on signup %', _actor, _signup_id
+      using errcode = 'SV005';
+  end if;
+
+  if _attendee_ids is null or coalesce(array_length(_attendee_ids, 1), 0) = 0 then
+    raise exception 'serving change rejected: attendees must be non-empty' using errcode = 'SV002';
+  end if;
+
+  -- The household rule from the actor's side: the actor, or the actor's
+  -- spouse when the actor is the primary or spouse of a household. count(*) over the DISTINCT subquery so a NULL element
+  -- still counts on the total side and fails the comparison.
+  select count(*) into _total
+  from (select distinct att.pid from unnest(_attendee_ids) as att(pid)) ids;
+
+  select count(*) into _valid
+  from (select distinct att.pid from unnest(_attendee_ids) as att(pid)) ids
+  join public.profiles p on p.id = ids.pid
+  where p.org_id = _org
+    and (
+      p.id = _actor
+      or (
+        _actor_family is not null
+        and _actor_relationship in ('primary', 'spouse')
+        and p.family_id = _actor_family
+        and p.relationship in ('primary', 'spouse')
+      )
+    );
+
+  if _valid <> _total then
+    raise exception 'serving change rejected: attendee outside actor %''s household', _actor
+      using errcode = 'SV002';
+  end if;
+
+  -- Being on the team is the one rule for who can serve: the actor's own
+  -- standing was checked when the date was taken, and anyone else put on
+  -- it has to hold a team_members row for the signup's team.
+  select count(*) into _off_team
+  from (select distinct att.pid from unnest(_attendee_ids) as att(pid)) ids
+  where ids.pid is distinct from _actor
+    and not exists (
+      select 1 from public.team_members tm
+      where tm.team_id = _team and tm.org_id = _org and tm.profile_id = ids.pid
+    );
+
+  if _off_team > 0 then
+    raise exception 'serving change rejected: an attendee is not on team %', _team
+      using errcode = 'SV004';
+  end if;
+
+  with gone as (
+    delete from public.serving_signup_attendees a
+    where a.signup_id = _signup_id
+      and a.org_id = _org
+      and a.profile_id <> all (_attendee_ids)
+    returning 1
+  )
+  select count(*) into _removed from gone;
+
+  with came as (
+    insert into public.serving_signup_attendees (org_id, signup_id, profile_id)
+    select _org, _signup_id, ids.pid
+    from (select distinct att.pid from unnest(_attendee_ids) as att(pid)) ids
+    on conflict on constraint serving_signup_attendees_pkey do nothing
+    returning 1
+  )
+  select count(*) into _added from came;
+
+  -- The household label on the schedule follows the people now on the date.
+  update public.serving_signups s
+     set family_id = case when _total > 1 then _actor_family else null end
+   where s.id = _signup_id and s.org_id = _org;
+
+  return query select _added, _removed;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."serving_signup_change"("_signup_id" "uuid", "_attendee_ids" "uuid"[]) OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."serving_signup_change"("_signup_id" "uuid", "_attendee_ids" "uuid"[]) IS 'Replaces who is serving on one date. Actor from auth.uid(); tenant anchor: the signup row''s org pinned against app_request_org_id(), fail-closed on NULL. The actor must have tapped Sign up or be listed on the date, and every new attendee must be the actor or the actor''s spouse, on the team. Raises SV002, SV004 or SV005.';
 
 
 
@@ -3879,6 +4132,38 @@ COMMENT ON COLUMN "public"."serving_broadcasts"."team_id" IS 'Team id (reference
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."serving_reminder_passes" (
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "team_id" "uuid" NOT NULL,
+    "send_date" "date" NOT NULL,
+    "started_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."serving_reminder_passes" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."serving_reminder_passes" IS 'One serving reminder pass per team per local day. Its existence means that day''s reminder is handled for the team. Read and written by the service key only; deleted by the nightly job after its retention.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."serving_reminder_sends" (
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "team_id" "uuid" NOT NULL,
+    "send_date" "date" NOT NULL,
+    "profile_id" "uuid" NOT NULL,
+    "claimed_at" timestamp with time zone,
+    "sent_at" timestamp with time zone
+);
+
+
+ALTER TABLE "public"."serving_reminder_sends" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."serving_reminder_sends" IS 'One person''s reminder in a pass: claimed_at while a send is in flight, sent_at once Resend accepted it. Read and written by the service key only; goes with its pass and with the person.';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."serving_signup_attendees" (
     "signup_id" "uuid" NOT NULL,
     "profile_id" "uuid" NOT NULL,
@@ -3916,8 +4201,17 @@ CREATE TABLE IF NOT EXISTS "public"."serving_team_settings" (
     "updated_by" "uuid",
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "schedule" "text" DEFAULT 'rolling'::"text" NOT NULL,
+    "date_from" "date",
+    "date_to" "date",
+    "extra_weeks" smallint DEFAULT 0 NOT NULL,
+    "send_hour" smallint,
+    CONSTRAINT "serving_team_settings_dates_check" CHECK (((("schedule" = 'rolling'::"text") AND ("date_from" IS NULL) AND ("date_to" IS NULL)) OR (("schedule" = 'set'::"text") AND ("date_from" IS NOT NULL) AND ("date_to" IS NOT NULL) AND ("date_to" > "date_from") AND ("date_to" <= (("date_from" + '1 year'::interval))::"date")))),
+    CONSTRAINT "serving_team_settings_extra_weeks_check" CHECK ((("extra_weeks" >= 0) AND ("extra_weeks" <= 3))),
     CONSTRAINT "serving_team_settings_reminder_days_check" CHECK (("reminder_days" <@ ARRAY[0, 1, 2, 3, 4, 5, 6])),
     CONSTRAINT "serving_team_settings_reminder_method_check" CHECK (("reminder_method" = 'email'::"text")),
+    CONSTRAINT "serving_team_settings_schedule_check" CHECK (("schedule" = ANY (ARRAY['rolling'::"text", 'set'::"text"]))),
+    CONSTRAINT "serving_team_settings_send_hour_check" CHECK ((("send_hour" >= 6) AND ("send_hour" <= 21))),
     CONSTRAINT "serving_team_settings_window_weeks_check" CHECK ((("window_weeks" >= 1) AND ("window_weeks" <= 26)))
 );
 
@@ -3926,6 +4220,26 @@ ALTER TABLE "public"."serving_team_settings" OWNER TO "postgres";
 
 
 COMMENT ON COLUMN "public"."serving_team_settings"."team_id" IS 'Team id (references teams).';
+
+
+
+COMMENT ON COLUMN "public"."serving_team_settings"."schedule" IS 'rolling: the next window_weeks Sundays. set: the Sundays from date_from to date_to.';
+
+
+
+COMMENT ON COLUMN "public"."serving_team_settings"."date_from" IS 'First day of a set block; null on rolling.';
+
+
+
+COMMENT ON COLUMN "public"."serving_team_settings"."date_to" IS 'Last day of a set block, after date_from and within a year of it; null on rolling.';
+
+
+
+COMMENT ON COLUMN "public"."serving_team_settings"."extra_weeks" IS 'How many following weeks a sign-up offers in one go, 0 to 3. 0 asks nothing.';
+
+
+
+COMMENT ON COLUMN "public"."serving_team_settings"."send_hour" IS 'Whole hour in the church''s time zone the serving reminder goes out, 6 to 21. NULL means not chosen, and the job uses its default hour.';
 
 
 
@@ -4316,6 +4630,21 @@ ALTER TABLE ONLY "public"."serving_broadcasts"
 
 
 
+ALTER TABLE ONLY "public"."serving_reminder_passes"
+    ADD CONSTRAINT "serving_reminder_passes_pkey" PRIMARY KEY ("team_id", "send_date");
+
+
+
+ALTER TABLE ONLY "public"."serving_reminder_passes"
+    ADD CONSTRAINT "serving_reminder_passes_team_id_org_id_key" UNIQUE ("team_id", "send_date", "org_id");
+
+
+
+ALTER TABLE ONLY "public"."serving_reminder_sends"
+    ADD CONSTRAINT "serving_reminder_sends_pkey" PRIMARY KEY ("team_id", "send_date", "profile_id");
+
+
+
 ALTER TABLE ONLY "public"."serving_signup_attendees"
     ADD CONSTRAINT "serving_signup_attendees_pkey" PRIMARY KEY ("signup_id", "profile_id");
 
@@ -4634,6 +4963,14 @@ CREATE INDEX "rsvps_user_id_idx" ON "public"."rsvps" USING "btree" ("user_id");
 
 
 CREATE INDEX "serving_broadcasts_org_id_idx" ON "public"."serving_broadcasts" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "serving_reminder_passes_org_send_date_idx" ON "public"."serving_reminder_passes" USING "btree" ("org_id", "send_date");
+
+
+
+CREATE INDEX "serving_reminder_sends_profile_id_idx" ON "public"."serving_reminder_sends" USING "btree" ("profile_id");
 
 
 
@@ -5376,6 +5713,31 @@ ALTER TABLE ONLY "public"."serving_broadcasts"
 
 
 
+ALTER TABLE ONLY "public"."serving_reminder_passes"
+    ADD CONSTRAINT "serving_reminder_passes_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."serving_reminder_passes"
+    ADD CONSTRAINT "serving_reminder_passes_team_id_fkey" FOREIGN KEY ("team_id", "org_id") REFERENCES "public"."teams"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."serving_reminder_sends"
+    ADD CONSTRAINT "serving_reminder_sends_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."serving_reminder_sends"
+    ADD CONSTRAINT "serving_reminder_sends_pass_fkey" FOREIGN KEY ("team_id", "send_date", "org_id") REFERENCES "public"."serving_reminder_passes"("team_id", "send_date", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."serving_reminder_sends"
+    ADD CONSTRAINT "serving_reminder_sends_profile_id_fkey" FOREIGN KEY ("profile_id", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE CASCADE;
+
+
+
 ALTER TABLE ONLY "public"."serving_signup_attendees"
     ADD CONSTRAINT "serving_signup_attendees_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
 
@@ -6017,14 +6379,6 @@ CREATE POLICY "Team leads and group leaders can view serving broadcasts" ON "pub
 
 
 
-CREATE POLICY "Team members and group leaders can create serving signups" ON "public"."serving_signups" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("created_by" = ( SELECT "auth"."uid"() AS "uid")) AND ("public"."is_team_lead"("team_id") OR (EXISTS ( SELECT 1
-   FROM "public"."team_members" "tm"
-  WHERE (("tm"."profile_id" = ( SELECT "auth"."uid"() AS "uid")) AND ("tm"."team_id" = "serving_signups"."team_id")))) OR (EXISTS ( SELECT 1
-   FROM "public"."teams" "t"
-  WHERE (("t"."id" = "serving_signups"."team_id") AND ("t"."org_id" = "serving_signups"."org_id") AND "public"."is_group_leader"("t"."group_id")))))));
-
-
-
 ALTER TABLE "public"."about_page" ENABLE ROW LEVEL SECURITY;
 
 
@@ -6241,6 +6595,14 @@ CREATE POLICY "org isolation" ON "public"."serving_broadcasts" AS RESTRICTIVE TO
 
 
 
+CREATE POLICY "org isolation" ON "public"."serving_reminder_passes" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."serving_reminder_sends" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
 CREATE POLICY "org isolation" ON "public"."serving_signup_attendees" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
@@ -6306,6 +6668,12 @@ ALTER TABLE "public"."rsvps" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."serving_broadcasts" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."serving_reminder_passes" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."serving_reminder_sends" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."serving_signup_attendees" ENABLE ROW LEVEL SECURITY;
@@ -6652,8 +7020,24 @@ GRANT ALL ON FUNCTION "public"."rls_auto_enable"() TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."serving_reminder_claim"("_org_id" "uuid", "_send_date" "date", "_service_date" "date", "_team_ids" "uuid"[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."serving_reminder_claim"("_org_id" "uuid", "_send_date" "date", "_service_date" "date", "_team_ids" "uuid"[]) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."serving_reminder_passes_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."serving_reminder_passes_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."serving_signup_apply"("_group_id" "uuid", "_service_date" "date", "_actor_id" "uuid", "_attendee_ids" "uuid"[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."serving_signup_apply"("_group_id" "uuid", "_service_date" "date", "_actor_id" "uuid", "_attendee_ids" "uuid"[]) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."serving_signup_change"("_signup_id" "uuid", "_attendee_ids" "uuid"[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."serving_signup_change"("_signup_id" "uuid", "_attendee_ids" "uuid"[]) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."serving_signup_change"("_signup_id" "uuid", "_attendee_ids" "uuid"[]) TO "service_role";
 
 
 
@@ -7013,6 +7397,14 @@ GRANT ALL ON TABLE "public"."rsvps" TO "service_role";
 GRANT ALL ON TABLE "public"."serving_broadcasts" TO "anon";
 GRANT ALL ON TABLE "public"."serving_broadcasts" TO "authenticated";
 GRANT ALL ON TABLE "public"."serving_broadcasts" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."serving_reminder_passes" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."serving_reminder_sends" TO "service_role";
 
 
 
