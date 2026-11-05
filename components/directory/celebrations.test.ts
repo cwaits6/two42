@@ -274,7 +274,7 @@ describe("anniversaryEntries", () => {
     expect(anniversaryEntries(families, NOV_3)).toEqual([]);
   });
 
-  it("leaves out a couple whose claimed spouse's profile the viewer can't read", () => {
+  it("leaves out a couple whose claimed spouse isn't in members", () => {
     const claimedSpouse = householdRecord({
       first_name: "Susan",
       relationship: "spouse",

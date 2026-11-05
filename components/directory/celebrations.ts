@@ -79,11 +79,11 @@ export function isThisWeek(month: number, day: number, today: Date): boolean {
 
 /**
  * The spouse a couple can be shown with. A claimed spouse counts only when
- * their profile is in `members`. The view keeps a claimed family_members row
- * whose profile the viewer can't read, and nothing in the row says why: the
- * spouse is unlisted, pending, or listed but in none of the viewer's groups
- * while the directory is limited to shared groups. The last is a listed couple
- * the viewer loses the row for.
+ * their profile is in `members`. The view keeps the claimed family_members row
+ * when the profile is missing, and nothing in the row says why: the spouse is
+ * unlisted, pending, moved out of the household, or listed but in none of the
+ * viewer's groups while the directory is limited to shared groups. The last
+ * two are listed people the viewer loses the couple's row for.
  */
 function nameableSpouse(family: FamilyDirectoryFull) {
   return (
