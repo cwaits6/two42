@@ -19,7 +19,7 @@ export async function signOutHere(): Promise<SignOutOutcome> {
 
   const { data, error: sessionError } = await supabase.auth.getSession();
   if (sessionError || data.session) {
-    return { signedOut: false, message: failureMessage("sign out", error.status) };
+    return { signedOut: false, message: failureMessage("sign out", error.status || "network") };
   }
   return { signedOut: true, message: SIGNED_OUT_HERE_ONLY };
 }

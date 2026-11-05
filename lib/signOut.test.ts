@@ -49,4 +49,10 @@ describe("signOutHere", () => {
     getSession.mockResolvedValue({ data: { session: null }, error: { status: 429 } });
     expect((await signOutHere()).message).toBe("Couldn't sign out. Wait a minute, then try again.");
   });
+
+  it("says to check the connection when the request never got an answer", async () => {
+    signOut.mockResolvedValue({ error: { status: 0 } });
+    getSession.mockResolvedValue({ data: { session: null }, error: { status: 0 } });
+    expect((await signOutHere()).message).toBe("Couldn't sign out. Check your connection and try again.");
+  });
 });

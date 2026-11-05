@@ -56,7 +56,7 @@ test.describe("a team lead who does not lead the group", () => {
 
   test("adds and removes a group member, and is offered only the group's members", async ({ page }) => {
     await page.goto(TEAM_PATH);
-    // Being on a team is what puts Serving among the group's pages.
+    // Being on a team with signups on is what puts Serving among the group's pages.
     await expect(
       page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Serving", exact: true }),
     ).toBeVisible();
