@@ -10,6 +10,7 @@
 // tested offline against the structural type below.
 
 import { chunk } from "./chunk.ts";
+import { logError } from "./log.ts";
 
 export interface EventRecipient {
   id: string;
@@ -89,12 +90,9 @@ export async function resolveEventReminderRecipients(
       // A profile can have no email — skip, don't throw. Log the id, never
       // the address.
       if (!p.email) {
-        console.error(
-          "[org %s] skipping reminder: profile %s has no email (event %s)",
-          orgId,
-          p.id,
-          eventId,
-        );
+        logError("skipping reminder: profile has no email", undefined, {
+          ids: { org: orgId, profile: p.id, event: eventId },
+        });
         continue;
       }
       recipients.push({ id: p.id, first_name: p.first_name, preferred_name: p.preferred_name, email: p.email });

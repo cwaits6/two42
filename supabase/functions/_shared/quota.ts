@@ -11,6 +11,8 @@
 // Deliberately free of any @supabase/supabase-js import so it can be unit
 // tested offline against the structural type below.
 
+import { logError } from "./log.ts";
+
 interface QuotaResult {
   data: boolean | null;
   error: { message: string } | null;
@@ -35,11 +37,9 @@ export async function reserveEmailQuota(
   // A negative batch IS a caller bug: refuse rather than approve a send the
   // quota never accounted for (fail closed, same as an RPC error).
   if (n < 0) {
-    console.error(
-      "[org %s] email quota check got a negative batch (n=%d), refusing send",
-      orgId,
-      n,
-    );
+    logError("email quota check got a negative batch, refusing send", undefined, {
+      ids: { org: orgId, n },
+    });
     return false;
   }
   try {
@@ -48,22 +48,12 @@ export async function reserveEmailQuota(
       _n: n,
     });
     if (error) {
-      console.error(
-        "[org %s] email quota check failed (n=%d), refusing send:",
-        orgId,
-        n,
-        error,
-      );
+      logError("email quota check failed, refusing send", error, { ids: { org: orgId, n } });
       return false;
     }
     return data === true;
   } catch (err) {
-    console.error(
-      "[org %s] email quota check threw (n=%d), refusing send:",
-      orgId,
-      n,
-      err,
-    );
+    logError("email quota check threw, refusing send", err, { ids: { org: orgId, n } });
     return false;
   }
 }

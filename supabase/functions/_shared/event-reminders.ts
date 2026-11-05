@@ -26,6 +26,7 @@ import {
   summarize,
 } from "./orgs.ts";
 import type { SendOutcome } from "./serving-hourly.ts";
+import { logWarn } from "./log.ts";
 
 type QueryError = { message: string } | null;
 
@@ -247,7 +248,7 @@ export async function runEventReminders(
         if (capReached || !(await reserveEmailQuota(supabase, org.id, 1))) {
           if (!capReached) {
             capReached = true;
-            console.warn("[org %s] daily email cap reached, event reminders past it are not sent", org.id);
+            logWarn("daily email cap reached, event reminders past it are not sent", undefined, { ids: { org: org.id } });
           }
           capped += queue.length - index;
           releasedIds.push(...queue.slice(index).map((rest) => rest.profile_id));

@@ -12,6 +12,7 @@ import { serviceKeyCallerOnly } from "../_shared/caller-auth.ts";
 import { type CleanupClient, cleanUpOrgs, summarizeCleanup } from "../_shared/cleanup.ts";
 import { listActiveOrgs, type OrgListClient } from "../_shared/orgs.ts";
 import { resolveServiceKey } from "../_shared/service-key.ts";
+import { logError } from "../_shared/log.ts";
 
 Deno.serve(serviceKeyCallerOnly(async () => {
   try {
@@ -30,7 +31,7 @@ Deno.serve(serviceKeyCallerOnly(async () => {
       headers: { "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error("clean-up-expired-data failed:", err);
+    logError("clean-up-expired-data failed", err, { route: "clean-up-expired-data" });
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
       { status: 500, headers: { "Content-Type": "application/json" } },

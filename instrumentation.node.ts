@@ -14,6 +14,7 @@ import {
   ATTR_SERVICE_VERSION,
 } from "@opentelemetry/semantic-conventions";
 import { name as serviceName, version as serviceVersion } from "./package.json";
+import { logError } from "./lib/log/core";
 
 const sdk = new NodeSDK({
   resource: resourceFromAttributes({
@@ -40,6 +41,6 @@ process.on("SIGTERM", () => {
   sdk
     .shutdown()
     .catch((error) =>
-      console.error("[otel] error shutting down OpenTelemetry SDK", error),
+      logError("[otel] error shutting down OpenTelemetry SDK", error),
     );
 });

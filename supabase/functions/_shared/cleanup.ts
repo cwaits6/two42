@@ -14,6 +14,7 @@ import {
   prayerCutoff,
   reminderCutoff,
 } from "./retention.ts";
+import { logError, logInfo } from "./log.ts";
 
 /** Passes one call to a reminder prune function deletes at most. */
 export const DELETE_BATCH = 500;
@@ -283,9 +284,9 @@ export async function cleanUpOrgs(
   const results: OrgCleanupResult[] = [];
   for (const orgId of orgIds) {
     const result = await cleanUpOrg(supabase, orgId, now);
-    console.log("[org %s] expired data removed: %s", orgId, JSON.stringify(result.removed));
+    logInfo("expired data removed", { ids: { org: orgId, ...result.removed } });
     for (const { step, error } of result.failures) {
-      console.error("[org %s] cleanup failed at %s: %s", orgId, step, error);
+      logError("cleanup failed", error, { step: step.replaceAll(" ", "_"), ids: { org: orgId } });
     }
     results.push(result);
   }

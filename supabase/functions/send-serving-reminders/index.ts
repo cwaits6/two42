@@ -60,6 +60,7 @@ import {
   type OrgListClient,
   type OrgRunCounts,
 } from "../_shared/orgs.ts";
+import { logError, logInfo, logWarn } from "../_shared/log.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -312,12 +313,10 @@ async function runDaily(
 
       const allowed = await reserveEmailQuota(supabase, orgId, recipients.length);
       if (!allowed) {
-        console.warn(
-          "[org %s] team %s: daily email cap reached, skipping %d reminder(s)",
-          orgId,
-          team_id,
-          recipients.length,
-        );
+        logWarn("daily email cap reached, skipping reminders", undefined, {
+          route: "send-serving-reminders",
+          ids: { org: orgId, team: team_id, skipped: recipients.length },
+        });
         continue;
       }
 
@@ -349,12 +348,10 @@ async function runDaily(
     } catch (err) {
       // Keyed by team_id, never the team name — names are org-defined free
       // text (tenant content) and fragile as diagnostic keys.
-      console.error(
-        "[org %s] team %s failed, continuing with remaining teams:",
-        orgId,
-        team_id,
-        err,
-      );
+      logError("team failed, continuing with remaining teams", err, {
+        route: "send-serving-reminders",
+        ids: { org: orgId, team: team_id },
+      });
       itemFailures.push({
         item: team_id,
         error: err instanceof Error ? err.message : String(err),
@@ -484,12 +481,10 @@ async function runMonthly(
       // empty batch, so no length guard is needed here.
       const allowed = await reserveEmailQuota(supabase, orgId, recipients.length);
       if (!allowed) {
-        console.warn(
-          "[org %s] team %s: daily email cap reached, skipping %d broadcast email(s)",
-          orgId,
-          team_id,
-          recipients.length,
-        );
+        logWarn("daily email cap reached, skipping broadcast emails", undefined, {
+          route: "send-serving-reminders",
+          ids: { org: orgId, team: team_id, skipped: recipients.length },
+        });
       }
       const sendList = allowed ? recipients : [];
 
@@ -543,12 +538,10 @@ async function runMonthly(
         // Full error object, not .message — serving_broadcasts has composite
         // (team_id, org_id) FKs, whose violations put the offending key values
         // in `details`/`hint` while `message` stays generic.
-        console.error(
-          "[org %s] serving_broadcasts insert failed for team %s:",
-          orgId,
-          team_id,
-          broadcastError,
-        );
+        logError("serving_broadcasts insert failed for team", broadcastError, {
+          route: "send-serving-reminders",
+          ids: { org: orgId, team: team_id },
+        });
         itemFailures.push({
           item: team_id,
           error: `serving_broadcasts insert failed: ${broadcastError.message}`,
@@ -557,12 +550,10 @@ async function runMonthly(
     } catch (err) {
       // Keyed by team_id, never the team name — names are org-defined free
       // text (tenant content) and fragile as diagnostic keys.
-      console.error(
-        "[org %s] team %s failed, continuing with remaining teams:",
-        orgId,
-        team_id,
-        err,
-      );
+      logError("team failed, continuing with remaining teams", err, {
+        route: "send-serving-reminders",
+        ids: { org: orgId, team: team_id },
+      });
       itemFailures.push({
         item: team_id,
         error: err instanceof Error ? err.message : String(err),
@@ -637,7 +628,7 @@ Deno.serve(serviceKeyCallerOnly(async (req) => {
       if (body?.mode === "monthly") mode = "monthly";
       if (body?.mode === "hourly") mode = "hourly";
     } catch (err) {
-      console.error("request body present but unparseable, defaulting to daily:", err);
+      logError("request body present but unparseable, defaulting to daily", err, { route: "send-serving-reminders" });
     }
   }
 
@@ -653,17 +644,19 @@ Deno.serve(serviceKeyCallerOnly(async (req) => {
       const hourly = await runHourlyMode(supabase, orgs);
       // One line at most, and none for a firing that did nothing.
       if (hourly.due > 0 || hourly.failed.length > 0 || hourly.failedItems.length > 0) {
-        console.log(
-          "hourly run: %d team(s) due, %d sent, %d rejected, %d capped, %d org(s) failed, %d team(s) failed%s%s",
-          hourly.due,
-          hourly.emailsSent,
-          hourly.emailsFailed,
-          hourly.capped,
-          hourly.failed.length,
-          hourly.failedItems.length,
-          hourly.budgetExhausted ? ", stopped at the time budget" : "",
-          hourly.rateLimited ? ", stopped at Resend's rate limit" : "",
-        );
+        logInfo("hourly run", {
+          route: "send-serving-reminders",
+          ids: {
+            due: hourly.due,
+            sent: hourly.emailsSent,
+            rejected: hourly.emailsFailed,
+            capped: hourly.capped,
+            orgsFailed: hourly.failed.length,
+            teamsFailed: hourly.failedItems.length,
+            stoppedAtTimeBudget: Number(hourly.budgetExhausted),
+            stoppedAtRateLimit: Number(hourly.rateLimited),
+          },
+        });
       }
       // Running out of time or being rate limited is not a failure: the next
       // firing picks up what is left through the sent record.
@@ -693,14 +686,16 @@ Deno.serve(serviceKeyCallerOnly(async (req) => {
     );
 
     if (summary.failed.length > 0 || summary.failedItems.length > 0 || summary.emailsFailed > 0) {
-      console.error(
-        "%s run completed with failures: %d/%d orgs failed, %d teams failed, %d emails rejected",
-        mode,
-        summary.failed.length,
-        summary.orgs,
-        summary.failedItems.length,
-        summary.emailsFailed,
-      );
+      logError("run completed with failures", undefined, {
+        route: "send-serving-reminders",
+        step: mode,
+        ids: {
+          orgsFailed: summary.failed.length,
+          orgs: summary.orgs,
+          teamsFailed: summary.failedItems.length,
+          rejected: summary.emailsFailed,
+        },
+      });
     }
 
     // Status contract: see summarize() in _shared/orgs.ts — 500 when any org
@@ -717,7 +712,7 @@ Deno.serve(serviceKeyCallerOnly(async (req) => {
     // Total failure (e.g. listActiveOrgs threw) — no org ran. The body means
     // net._http_response carries a diagnosis instead of an empty 500; the
     // per-org-failure case above also returns 500 but with `failed[]` populated.
-    console.error("%s reminder run aborted before completion:", mode, err);
+    logError("reminder run aborted before completion", err, { route: "send-serving-reminders", step: mode });
     return new Response(
       JSON.stringify({ mode, error: err instanceof Error ? err.message : String(err) }),
       { status: 500, headers: { "Content-Type": "application/json" } }

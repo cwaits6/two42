@@ -21,6 +21,7 @@ import {
   type Org,
   type OrgRunCounts,
 } from "./orgs.ts";
+import { logWarn } from "./log.ts";
 
 type QueryError = { message: string } | null;
 
@@ -215,7 +216,7 @@ export async function runHourly(
       if (!(await reserveEmailQuota(supabase, org.id, 1))) {
         capReached = true;
         capped += queue.length + 1;
-        console.warn("[org %s] daily email cap reached, leaving %d reminder(s) for a later firing", org.id, queue.length + 1);
+        logWarn("daily email cap reached, leaving reminders for a later firing", undefined, { ids: { org: org.id, left: queue.length + 1 } });
         record(releasedIds, row);
         continue;
       }

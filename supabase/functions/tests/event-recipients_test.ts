@@ -124,20 +124,28 @@ Deno.test("resolves RSVPs through current group membership to approved profiles 
 });
 
 Deno.test("logs each skipped profile by id, never by address", async () => {
-  const { client } = makeFakeClient(TABLES);
-  const logged: unknown[][] = [];
-  const original = console.error;
-  console.error = (...args: unknown[]) => {
-    logged.push(args);
+  // The log line keeps an id only when it is a UUID.
+  const noEmail = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  const { client } = makeFakeClient({
+    rsvps: [{ user_id: noEmail, status: "yes" }],
+    group_members: [{ profile_id: noEmail }],
+    profiles: [{ id: noEmail, first_name: "Dee", preferred_name: null, email: null, role: "member" }],
+  });
+  const logged: string[] = [];
+  const original = console.log;
+  console.log = (line: string) => {
+    logged.push(line);
   };
   try {
     await resolveEventReminderRecipients(client, ORG, GROUP, EVENT);
   } finally {
-    console.error = original;
+    console.log = original;
   }
   assertEquals(logged.length, 1);
-  assertEquals(logged[0].includes("d"), true);
-  assertEquals(JSON.stringify(logged[0]).includes("@"), false);
+  const line = JSON.parse(logged[0]);
+  assertEquals(line.what, "skipping reminder: profile has no email");
+  assertEquals(line.ids, { org: ORG, profile: noEmail, event: EVENT });
+  assertEquals(logged[0].includes("@"), false);
 });
 
 Deno.test("no RSVPs short-circuits before touching group_members", async () => {

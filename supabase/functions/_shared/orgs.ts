@@ -15,6 +15,8 @@
 // Deliberately free of any @supabase/supabase-js import so it can be unit
 // tested offline against the structural type below.
 
+import { logError } from "./log.ts";
+
 export interface Org {
   id: string;
   name: string;
@@ -152,7 +154,7 @@ export async function forEachOrg(
         ...(itemFailures?.length ? { itemFailures } : {}),
       });
     } catch (err) {
-      console.error("[org %s] reminder run failed:", org.id, err);
+      logError("reminder run failed", err, { ids: { org: org.id } });
       // OrgRunError carries whatever was sent (and which items had already
       // failed) before the mid-run abort; ordinary errors fall back to zeroes.
       const counts: OrgRunCounts = err instanceof OrgRunError
