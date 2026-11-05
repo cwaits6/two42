@@ -15,23 +15,35 @@ import { mintSignedUrls } from "@/lib/storageRead";
 import { readList } from "@/lib/supabase/readList";
 import type { MemberOption } from "@/components/giving/FundForm";
 
-/** What a stored giving_manage_mode means; a church with no row has the default. */
-export function stewardsMayManage(mode: string | null | undefined): boolean {
-  return (mode ?? "stewards") === "stewards";
-}
-
-/** Whether members may put up and manage their own giving links */
-export async function givingStewardsCanManage(
+/**
+ * The church's stored giving rule: whether members may put up and manage their
+ * own giving links. A church with no row has the default, which is that they
+ * may. Null when the read failed, for a control that must not show a value the
+ * church doesn't have.
+ */
+export async function readStewardsCanManage(
   supabase: SupabaseClient,
   orgId: string
-): Promise<boolean> {
-  const { data } = await supabase
+): Promise<boolean | null> {
+  const { data, error } = await supabase
     .from("site_settings")
     .select("value")
     .eq("org_id", orgId)
     .eq("key", "giving_manage_mode")
     .maybeSingle();
-  return stewardsMayManage(data?.value);
+  if (error) {
+    console.error("Failed to load the giving setting: code=%s", error.code);
+    return null;
+  }
+  return (data?.value ?? "stewards") === "stewards";
+}
+
+/** Whether members may put up and manage their own giving links; a failed read gives the default. */
+export async function givingStewardsCanManage(
+  supabase: SupabaseClient,
+  orgId: string
+): Promise<boolean> {
+  return (await readStewardsCanManage(supabase, orgId)) ?? true;
 }
 
 type StewardAvatarSource = {

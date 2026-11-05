@@ -6,7 +6,7 @@ import { DirectoryVisibilitySettings } from "@/components/admin/DirectoryVisibil
 import { GivingSettings } from "@/components/giving/GivingSettings";
 import { ErrorState } from "@/components/states/ErrorState";
 import { getDirectoryVisibility } from "@/lib/directory/visibility";
-import { stewardsMayManage } from "@/lib/giving/server";
+import { readStewardsCanManage } from "@/lib/giving/server";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { PrayerRetentionSettings } from "@/components/admin/PrayerRetentionSettings";
 import { TimezoneSettings } from "@/components/admin/TimezoneSettings";
@@ -29,25 +29,20 @@ export async function ChurchSettings() {
     .single();
   if (profile?.role !== "admin") redirect("/dashboard");
 
-  // Read here, not through the member-facing helpers: those resolve a failed
-  // read to the fail-closed value, which a control would show as the setting.
-  const [rulesRead, givingRead, directoryVisibility, prayerRetention] = await Promise.all([
+  // The church's row is read here, not through the member-facing helpers: those
+  // resolve a failed read to the fail-closed value, which a control would show
+  // as the setting.
+  const [rulesRead, stewardsCanManage, directoryVisibility, prayerRetention] = await Promise.all([
     supabase
       .from("organizations")
       .select("group_discovery, group_creation_policy, timezone")
       .eq("id", profile.org_id)
       .maybeSingle(),
-    supabase
-      .from("site_settings")
-      .select("value")
-      .eq("org_id", profile.org_id)
-      .eq("key", "giving_manage_mode")
-      .maybeSingle(),
+    readStewardsCanManage(supabase, profile.org_id),
     getDirectoryVisibility(),
     getPrayerRetention(),
   ]);
   if (rulesRead.error) console.error("Failed to load the church's rules: code=%s", rulesRead.error.code);
-  if (givingRead.error) console.error("Failed to load the giving setting: code=%s", givingRead.error.code);
   const rules = rulesRead.error ? null : rulesRead.data;
   const timeZone = rules && isValidTimeZone(rules.timezone) ? rules.timezone : null;
 
@@ -72,10 +67,10 @@ export async function ChurchSettings() {
         <ErrorState thing="the group settings" />
       )}
       <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Giving</h2>
-      {givingRead.error ? (
+      {stewardsCanManage === null ? (
         <ErrorState thing="the giving setting" />
       ) : (
-        <GivingSettings stewardsCanManage={stewardsMayManage(givingRead.data?.value)} />
+        <GivingSettings stewardsCanManage={stewardsCanManage} />
       )}
       <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Events</h2>
       {timeZone ? (
