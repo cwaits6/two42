@@ -194,7 +194,7 @@ repository's CI runs it against the hosted project every six hours.
 
 | Job | When (UTC) | Function |
 |---|---|---|
-| `send-event-reminders-daily` | 15:00 daily | `send-event-reminders` |
+| `send-event-reminders-daily` | 15:00, 16:00 and 17:00 daily | `send-event-reminders` |
 | `send-serving-reminders-hourly` | Every hour, on the hour | `send-serving-reminders` |
 | `send-serving-monthly-broadcast` | 15:00 on the 1st | `send-serving-reminders` |
 | `clean-up-expired-data-nightly` | 09:00 daily | `clean-up-expired-data` |
