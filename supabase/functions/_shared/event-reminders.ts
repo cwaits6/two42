@@ -29,6 +29,25 @@ import type { SendOutcome } from "./serving-hourly.ts";
 
 type QueryError = { message: string } | null;
 
+/**
+ * The mode a job body names. A body with no mode is the job as it was
+ * scheduled before the sent record; null is a body that names neither, which
+ * must not run: the mode without the record mails again at every firing.
+ */
+export function reminderMode(rawBody: string): "dates" | "before-dates" | null {
+  if (!rawBody.trim()) return "before-dates";
+  let body: unknown;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    return null;
+  }
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return null;
+  const mode = (body as { mode?: unknown }).mode;
+  if (mode === undefined) return "before-dates";
+  return mode === "dates" ? "dates" : null;
+}
+
 /** One reminder event_reminder_claim() handed this firing. */
 export interface EventClaimRow {
   profile_id: string;
@@ -44,6 +63,7 @@ interface EventsChain extends PromiseLike<{ data: ReminderEventRow[] | null; err
   gt(column: string, value: string): EventsChain;
   gte(column: string, value: string): EventsChain;
   lte(column: string, value: string): EventsChain;
+  in(column: string, values: readonly string[]): EventsChain;
   order(column: string): EventsChain;
   range(from: number, to: number): EventsChain;
 }
@@ -106,6 +126,7 @@ const EVENT_SELECT =
 // The database API returns at most this many rows a request.
 const PAGE = 1000;
 const SETTLE_CHUNK = 100;
+const SERIES_CHUNK = 100;
 const DAY_MS = 86_400_000;
 
 async function readEvents(
@@ -141,7 +162,18 @@ async function readRows(supabase: EventRemindersClient, orgId: string, now: Date
       .not("series_id", "is", null)
       .gte("series_occurrence_date", new Date(cycle - DAY_MS).toISOString())
       .lte("series_occurrence_date", new Date(cycle + (LONGEST_DAYS_BEFORE + 1) * DAY_MS).toISOString()));
-  return [...new Map([...series, ...upcoming, ...ownDates].map((row) => [row.id, row])).values()];
+  const rows = new Map([...series, ...upcoming, ...ownDates].map((row) => [row.id, row]));
+  // A date moved earlier than its series' first date is inside the horizon
+  // while the series row, which holds its choice, starts past it.
+  const unreadSeries = new Set<string>();
+  for (const row of rows.values()) {
+    if (row.series_id && !rows.has(row.series_id)) unreadSeries.add(row.series_id);
+  }
+  for (const ids of chunk([...unreadSeries], SERIES_CHUNK)) {
+    const found = await readEvents(supabase, orgId, "series of edited dates", (chain) => chain.in("id", ids));
+    for (const row of found) rows.set(row.id, row);
+  }
+  return [...rows.values()];
 }
 
 export async function runEventReminders(

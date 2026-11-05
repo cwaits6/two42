@@ -9,15 +9,11 @@
 // one cycle sees the same window.
 
 import { localDay, seriesDatesBetween, type SeriesRule } from "./event-dates.ts";
-
-/** The first hour of the job's cron schedule, which opens each cycle. */
-export const REMINDER_FIRING_HOUR_UTC = 15;
+import { DAYS_BEFORE, REMINDER_FIRING_HOUR_UTC } from "./event-reminder-schedule.ts";
 
 const DAY_MS = 86_400_000;
 
-/** The choices an event can hold besides 0, "No reminder". */
-const DAYS_BEFORE = [1, 2, 7];
-export const LONGEST_DAYS_BEFORE = 7;
+export const LONGEST_DAYS_BEFORE = Math.max(...DAYS_BEFORE);
 
 /** The latest 15:00 UTC at or before `now`. */
 export function cycleStart(now: Date): Date {

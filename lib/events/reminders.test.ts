@@ -8,6 +8,7 @@ import {
   REMINDER_ITEMS,
   reminderLabel,
 } from "./reminders";
+import { DAYS_BEFORE, REMINDER_FIRING_HOUR_UTC } from "@/supabase/functions/_shared/event-reminder-schedule";
 
 const migration = readFileSync("supabase/migrations/20261117000000_event_reminder_choices.sql", "utf8");
 
@@ -28,6 +29,17 @@ describe("reminder choices", () => {
     expect(GROUP_REMINDER_ITEMS.map((item) => Number(item.value)).sort((a, b) => a - b)).toEqual(
       allowed("group_settings_event_reminder_default_days_check")
     );
+  });
+
+  it("has the job send for every choice the events column accepts but no reminder", () => {
+    expect([...DAYS_BEFORE].sort((a, b) => a - b)).toEqual(
+      allowed("events_reminder_days_before_check").filter((days) => days !== 0)
+    );
+  });
+
+  it("opens the job's day at the first hour the migration schedules it", () => {
+    const schedule = /'send-event-reminders-daily',\s*'0 (\d+)-\d+ \* \* \*'/.exec(migration);
+    expect(Number(schedule?.[1])).toBe(REMINDER_FIRING_HOUR_UTC);
   });
 
   it("names each choice", () => {

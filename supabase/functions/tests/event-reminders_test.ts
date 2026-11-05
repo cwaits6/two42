@@ -8,6 +8,7 @@ import {
   type EventClaimRow,
   type EventReminder,
   type EventRemindersClient,
+  reminderMode,
   runEventReminders,
 } from "../_shared/event-reminders.ts";
 import type { Org } from "../_shared/orgs.ts";
@@ -59,6 +60,8 @@ interface Recorded {
 interface FakeOptions {
   /** Per org, the rows the single-event read returns. */
   events?: Record<string, ReminderEventRow[]>;
+  /** Per org, rows only a read by id returns: series starting past the horizon. */
+  byId?: Record<string, ReminderEventRow[]>;
   /** Per org, the groups that are off. */
   groupsOff?: Record<string, string[]>;
   /** Per event id, what each claim call returns in turn; an Error is a refused call. */
@@ -100,6 +103,11 @@ function fakeClient(options: FakeOptions = {}) {
         const org = recorded.filters.find((f) => f.startsWith("org_id="))?.slice("org_id=".length) ?? "";
         if (table === "events") {
           if (options.failEvents) return resolve({ data: null, error: { message: "events refused" } });
+          const ids = recorded.filters.find((f) => f.startsWith("id in "))?.slice("id in ".length);
+          if (ids) {
+            const wanted = JSON.parse(ids) as string[];
+            return resolve({ data: (options.byId?.[org] ?? []).filter((row) => wanted.includes(row.id)), error: null });
+          }
           const single = recorded.filters.includes("recurrence_frequency is null");
           return resolve({ data: single ? options.events?.[org] ?? [] : [], error: null });
         }
@@ -178,6 +186,43 @@ Deno.test("every chain and every call carries the church being run", async () =>
     _occurrence_date: "2026-11-05",
     _reply_event_id: null,
   });
+});
+
+Deno.test("a date moved earlier than its series' first date is reminded, its series read by id in the same church", async () => {
+  const series = event("s", 15 * 24, { recurrence_frequency: "weekly", recurrence_end_mode: "never" });
+  const moved = event("m", 3, { series_id: "s", series_occurrence_date: series.start_time });
+  const { client, queries } = fakeClient({
+    events: { o: [moved] },
+    byId: { o: [series] },
+    claims: { s: [[claim("ann")]] },
+  });
+  const { deps: d, mailed } = deps();
+  const summary = await runEventReminders(client, [church("o")], d);
+
+  assertEquals(summary.due, 1);
+  assertEquals(mailed.map((m) => [m.date.recordEventId, m.date.replyEventId, m.date.startIso]), [
+    ["s", "m", moved.start_time],
+  ]);
+  assertEquals(
+    queries.filter((q) => q.table === "events" && q.filters.some((f) => f.startsWith("id in "))).map((q) => q.filters),
+    [["org_id=o", 'id in ["s"]']],
+  );
+});
+
+Deno.test("a series already read is not read again by id", async () => {
+  const { client, queries } = fakeClient({ events: { o: [event("e", 3)] } });
+  await runEventReminders(client, [church("o")], deps().deps);
+  assertEquals(queries.some((q) => q.filters.some((f) => f.startsWith("id in "))), false);
+});
+
+Deno.test("a body runs the mode it names, the earlier schedule's body runs without the record, and anything else runs nothing", () => {
+  assertEquals(reminderMode('{"mode":"dates"}'), "dates");
+  assertEquals(reminderMode("{}"), "before-dates");
+  assertEquals(reminderMode(""), "before-dates");
+  assertEquals(reminderMode('{"mode":"daily"}'), null);
+  assertEquals(reminderMode('{"mode":'), null);
+  assertEquals(reminderMode("[]"), null);
+  assertEquals(reminderMode("null"), null);
 });
 
 Deno.test("an accepted send is settled as sent, under the date's own key", async () => {
