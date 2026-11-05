@@ -46,7 +46,7 @@ Canonical assets are outlined SVGs in [`public/brand/`](../../public/brand) — 
 
 Fraunces and Inter load via `next/font/google`.
 
-**Case** — copy is written in sentence case, and the screen shows it that way. Capitals set in CSS are allowed for a short label that names a section of a page, a few words above its content, such as "About this event" on the event page or a list heading on Serving. Form labels, buttons, page and dialog titles and anything a person reads as a sentence stay in sentence case: the sign-in form's label reads "Email", not "EMAIL".
+**Case** — Capitals set in CSS are allowed for a short label that names a section of a page, a few words above its content, such as "About this event" on the event page or a list heading on Serving. Form labels stay in sentence case: the sign-in form's label reads "Email", not "EMAIL".
 
 ---
 
