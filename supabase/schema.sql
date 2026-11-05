@@ -546,6 +546,109 @@ COMMENT ON FUNCTION "public"."email_quota_consume"("_org_id" "uuid", "_n" intege
 
 
 
+CREATE OR REPLACE FUNCTION "public"."event_reminder_claim"("_org_id" "uuid", "_event_id" "uuid", "_occurrence_date" "date", "_reply_event_id" "uuid") RETURNS TABLE("profile_id" "uuid", "email" "text", "first_name" "text", "preferred_name" "text")
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _event_org uuid;
+  _group uuid;
+begin
+  select e.org_id, e.group_id into _event_org, _group
+  from public.events e
+  where e.id = _event_id;
+
+  if _event_org is null or _event_org is distinct from _org_id then
+    raise exception 'event reminder claim rejected: event % is not in org %', _event_id, _org_id
+      using errcode = 'ER001';
+  end if;
+
+  if _reply_event_id is not null and not exists (
+    select 1 from public.events e
+    where e.id = _reply_event_id and e.org_id = _org_id and e.series_id = _event_id
+  ) then
+    raise exception 'event reminder claim rejected: % is not a date of event %', _reply_event_id, _event_id
+      using errcode = 'ER001';
+  end if;
+
+  insert into public.event_reminder_passes (org_id, event_id, occurrence_date)
+  values (_org_id, _event_id, _occurrence_date)
+  on conflict do nothing;
+
+  if found then
+    insert into public.event_reminder_sends (org_id, event_id, occurrence_date, profile_id)
+    select _org_id, _event_id, _occurrence_date, p.id
+    from public.profiles p
+    left join public.rsvps own
+      on own.org_id = _org_id and own.event_id = _reply_event_id and own.user_id = p.id
+    left join public.rsvps series
+      on series.org_id = _org_id and series.event_id = _event_id and series.user_id = p.id
+    where p.org_id = _org_id
+      and p.email is not null
+      and p.role <> 'pending'
+      and p.email_event_reminders
+      and coalesce(own.status, series.status) in ('yes', 'maybe')
+      and exists (
+        select 1 from public.group_members gm
+        where gm.org_id = _org_id and gm.group_id = _group and gm.profile_id = p.id
+      );
+  end if;
+
+  return query
+  with claimed as (
+    update public.event_reminder_sends x
+       set claimed_at = pg_catalog.now()
+     where x.org_id = _org_id
+       and x.event_id = _event_id
+       and x.occurrence_date = _occurrence_date
+       and x.sent_at is null
+       and (x.claimed_at is null or x.claimed_at < pg_catalog.now() - interval '10 minutes')
+    returning x.profile_id
+  )
+  select c.profile_id, p.email, p.first_name, p.preferred_name
+  from claimed c
+  join public.profiles p on p.id = c.profile_id and p.org_id = _org_id
+  where p.email is not null
+    and p.email_event_reminders;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."event_reminder_claim"("_org_id" "uuid", "_event_id" "uuid", "_occurrence_date" "date", "_reply_event_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."event_reminder_claim"("_org_id" "uuid", "_event_id" "uuid", "_occurrence_date" "date", "_reply_event_id" "uuid") IS 'Starts the reminder pass for one date of an event when it has none, fixing its recipients, then claims every unsent reminder in the pass and returns the people to mail. Tenant anchor: the event''s own org_id, compared with _org_id; a mismatch raises ER001. service_role only.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."event_reminder_passes_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) RETURNS integer
+    LANGUAGE "sql"
+    SET "search_path" TO ''
+    AS $$
+  with doomed as (
+    select p.event_id, p.occurrence_date
+    from public.event_reminder_passes p
+    where p.org_id = _org_id and p.occurrence_date < _before
+    order by p.occurrence_date
+    limit _limit
+  ),
+  gone as (
+    delete from public.event_reminder_passes p
+    using doomed d
+    where p.org_id = _org_id and p.event_id = d.event_id and p.occurrence_date = d.occurrence_date
+    returning 1
+  )
+  select count(*)::integer from gone;
+$$;
+
+
+ALTER FUNCTION "public"."event_reminder_passes_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."event_reminder_passes_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) IS 'Deletes at most _limit of one church''s event reminder passes with an occurrence_date before _before, oldest first, and returns how many went. Tenant anchor: the _org_id predicate on every row it reads and deletes. service_role only.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."family_anniversary_hidden"("_family_id" "uuid") RETURNS boolean
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO ''
@@ -2409,6 +2512,23 @@ COMMENT ON FUNCTION "public"."profiles_keep_one_church_admin"() IS 'Trigger func
 
 
 
+CREATE OR REPLACE FUNCTION "public"."profiles_own_event_reminders"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  if auth.uid() is not null and auth.uid() is distinct from old.id then
+    raise exception 'only the person can change their own event reminders setting'
+      using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."profiles_own_event_reminders"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."provision_organization"("_name" "text", "_owner_email" "text") RETURNS "uuid"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO ''
@@ -3255,6 +3375,38 @@ CREATE TABLE IF NOT EXISTS "public"."event_calendars" (
 ALTER TABLE "public"."event_calendars" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."event_reminder_passes" (
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "event_id" "uuid" NOT NULL,
+    "occurrence_date" "date" NOT NULL,
+    "started_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."event_reminder_passes" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."event_reminder_passes" IS 'One event reminder pass per event date. Its existence means that date''s reminder is handled. Read and written by the service key only; deleted with the event, and by the nightly job after its retention.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."event_reminder_sends" (
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "event_id" "uuid" NOT NULL,
+    "occurrence_date" "date" NOT NULL,
+    "profile_id" "uuid" NOT NULL,
+    "claimed_at" timestamp with time zone,
+    "sent_at" timestamp with time zone
+);
+
+
+ALTER TABLE "public"."event_reminder_sends" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."event_reminder_sends" IS 'One person''s reminder in a pass: claimed_at while a send is in flight, sent_at once Resend accepted it. Read and written by the service key only; goes with its pass and with the person.';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."events" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "title" "text" NOT NULL,
@@ -3284,10 +3436,12 @@ CREATE TABLE IF NOT EXISTS "public"."events" (
     "calendar_meeting_details" boolean,
     "calendar_event_notes" boolean,
     "calendar_event_location" boolean,
+    "reminder_days_before" smallint DEFAULT 1 NOT NULL,
     CONSTRAINT "events_is_cancelled_exception_only" CHECK (((NOT "is_cancelled") OR (("series_id" IS NOT NULL) AND ("series_occurrence_date" IS NOT NULL)))),
     CONSTRAINT "events_meeting_lead_minutes_check" CHECK ((("meeting_lead_minutes" >= 0) AND ("meeting_lead_minutes" <= 1440))),
     CONSTRAINT "events_recurrence_end_mode_check" CHECK (("recurrence_end_mode" = ANY (ARRAY['never'::"text", 'count'::"text", 'until'::"text"]))),
-    CONSTRAINT "events_recurrence_frequency_check" CHECK (("recurrence_frequency" = ANY (ARRAY['daily'::"text", 'weekly'::"text", 'monthly'::"text", 'yearly'::"text"])))
+    CONSTRAINT "events_recurrence_frequency_check" CHECK (("recurrence_frequency" = ANY (ARRAY['daily'::"text", 'weekly'::"text", 'monthly'::"text", 'yearly'::"text"]))),
+    CONSTRAINT "events_reminder_days_before_check" CHECK (("reminder_days_before" = ANY (ARRAY[0, 1, 2, 7])))
 );
 
 
@@ -3303,6 +3457,10 @@ COMMENT ON COLUMN "public"."events"."calendar_event_notes" IS 'Overrides group_s
 
 
 COMMENT ON COLUMN "public"."events"."calendar_event_location" IS 'Overrides group_settings.calendar_event_location for this event or series; null follows the group.';
+
+
+
+COMMENT ON COLUMN "public"."events"."reminder_days_before" IS 'Days before the start that the reminder goes out: 1, 2 or 7, or 0 for none. On a repeating event it applies to every date; a date edited on its own follows its series and this column on its row is not read.';
 
 
 
@@ -3383,6 +3541,7 @@ CREATE TABLE IF NOT EXISTS "public"."profiles" (
     "setup_completed" boolean DEFAULT false NOT NULL,
     "email_announcements" boolean DEFAULT true NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "email_event_reminders" boolean DEFAULT true NOT NULL,
     CONSTRAINT "profiles_birth_day_check" CHECK ((("birth_day" >= 1) AND ("birth_day" <= 31))),
     CONSTRAINT "profiles_birth_month_check" CHECK ((("birth_month" >= 1) AND ("birth_month" <= 12))),
     CONSTRAINT "profiles_birth_year_check" CHECK ((("birth_year" >= 1900) AND ("birth_year" <= 2100))),
@@ -3392,6 +3551,10 @@ CREATE TABLE IF NOT EXISTS "public"."profiles" (
 
 
 ALTER TABLE "public"."profiles" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."profiles"."email_event_reminders" IS 'False stops event reminder emails to this person. Separate from email_announcements; only the person can change it.';
+
 
 
 CREATE OR REPLACE VIEW "public"."families_directory" WITH ("security_invoker"='true') AS
@@ -3778,6 +3941,9 @@ CREATE TABLE IF NOT EXISTS "public"."group_settings" (
     "calendar_meeting_details" boolean DEFAULT true NOT NULL,
     "calendar_event_notes" boolean DEFAULT true NOT NULL,
     "calendar_event_location" boolean DEFAULT true NOT NULL,
+    "event_reminders_enabled" boolean DEFAULT true NOT NULL,
+    "event_reminder_default_days" smallint DEFAULT 1 NOT NULL,
+    CONSTRAINT "group_settings_event_reminder_default_days_check" CHECK (("event_reminder_default_days" = ANY (ARRAY[1, 2, 7]))),
     CONSTRAINT "group_settings_serving_link_mode_check" CHECK (("serving_link_mode" = ANY (ARRAY['signed'::"text", 'login'::"text"]))),
     CONSTRAINT "group_settings_weekly_prayer_call_url_check" CHECK ((("weekly_prayer_call_url" IS NULL) OR ("weekly_prayer_call_url" ~ '^https://'::"text"))),
     CONSTRAINT "group_settings_weekly_zoom_url_check" CHECK ((("weekly_zoom_url" IS NULL) OR ("weekly_zoom_url" ~ '^https://'::"text")))
@@ -3800,6 +3966,14 @@ COMMENT ON COLUMN "public"."group_settings"."calendar_event_notes" IS 'Calendar 
 
 
 COMMENT ON COLUMN "public"."group_settings"."calendar_event_location" IS 'Calendar subscriptions include each event''s location; false links to the event page instead.';
+
+
+
+COMMENT ON COLUMN "public"."group_settings"."event_reminders_enabled" IS 'False sends no event reminders for the group, whatever each event chose; the events keep their choice.';
+
+
+
+COMMENT ON COLUMN "public"."group_settings"."event_reminder_default_days" IS 'What Add event starts on for reminder_days_before. Changing it changes no existing event.';
 
 
 
@@ -4365,6 +4539,21 @@ ALTER TABLE ONLY "public"."event_calendars"
 
 
 
+ALTER TABLE ONLY "public"."event_reminder_passes"
+    ADD CONSTRAINT "event_reminder_passes_event_id_occurrence_date_org_id_key" UNIQUE ("event_id", "occurrence_date", "org_id");
+
+
+
+ALTER TABLE ONLY "public"."event_reminder_passes"
+    ADD CONSTRAINT "event_reminder_passes_pkey" PRIMARY KEY ("event_id", "occurrence_date");
+
+
+
+ALTER TABLE ONLY "public"."event_reminder_sends"
+    ADD CONSTRAINT "event_reminder_sends_pkey" PRIMARY KEY ("event_id", "occurrence_date", "profile_id");
+
+
+
 ALTER TABLE ONLY "public"."events"
     ADD CONSTRAINT "events_id_org_group_unique" UNIQUE ("id", "org_id", "group_id");
 
@@ -4727,6 +4916,14 @@ CREATE INDEX "event_calendars_group_id_idx" ON "public"."event_calendars" USING 
 
 
 CREATE INDEX "event_calendars_org_id_idx" ON "public"."event_calendars" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "event_reminder_passes_org_occurrence_date_idx" ON "public"."event_reminder_passes" USING "btree" ("org_id", "occurrence_date");
+
+
+
+CREATE INDEX "event_reminder_sends_profile_id_idx" ON "public"."event_reminder_sends" USING "btree" ("profile_id");
 
 
 
@@ -5167,6 +5364,10 @@ CREATE OR REPLACE TRIGGER "profiles_keep_one_church_admin" BEFORE DELETE OR UPDA
 
 
 
+CREATE OR REPLACE TRIGGER "profiles_own_event_reminders" BEFORE UPDATE OF "email_event_reminders" ON "public"."profiles" FOR EACH ROW WHEN (("old"."email_event_reminders" IS DISTINCT FROM "new"."email_event_reminders")) EXECUTE FUNCTION "public"."profiles_own_event_reminders"();
+
+
+
 CREATE OR REPLACE TRIGGER "profiles_touch_updated_at" BEFORE UPDATE ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."touch_updated_at"();
 
 
@@ -5275,6 +5476,31 @@ ALTER TABLE ONLY "public"."event_calendars"
 
 ALTER TABLE ONLY "public"."event_calendars"
     ADD CONSTRAINT "event_calendars_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."event_reminder_passes"
+    ADD CONSTRAINT "event_reminder_passes_event_id_fkey" FOREIGN KEY ("event_id", "org_id") REFERENCES "public"."events"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."event_reminder_passes"
+    ADD CONSTRAINT "event_reminder_passes_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."event_reminder_sends"
+    ADD CONSTRAINT "event_reminder_sends_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."event_reminder_sends"
+    ADD CONSTRAINT "event_reminder_sends_pass_fkey" FOREIGN KEY ("event_id", "occurrence_date", "org_id") REFERENCES "public"."event_reminder_passes"("event_id", "occurrence_date", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."event_reminder_sends"
+    ADD CONSTRAINT "event_reminder_sends_profile_id_fkey" FOREIGN KEY ("profile_id", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE CASCADE;
 
 
 
@@ -6397,6 +6623,12 @@ ALTER TABLE "public"."class_teachers" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."event_calendars" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."event_reminder_passes" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."event_reminder_sends" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."events" ENABLE ROW LEVEL SECURITY;
 
 
@@ -6472,6 +6704,14 @@ CREATE POLICY "org isolation" ON "public"."class_teachers" AS RESTRICTIVE TO "au
 
 
 CREATE POLICY "org isolation" ON "public"."event_calendars" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."event_reminder_passes" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."event_reminder_sends" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
 
@@ -6739,6 +6979,16 @@ GRANT ALL ON FUNCTION "public"."email_quota_consume"("_org_id" "uuid", "_n" inte
 
 
 
+REVOKE ALL ON FUNCTION "public"."event_reminder_claim"("_org_id" "uuid", "_event_id" "uuid", "_occurrence_date" "date", "_reply_event_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."event_reminder_claim"("_org_id" "uuid", "_event_id" "uuid", "_occurrence_date" "date", "_reply_event_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."event_reminder_passes_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."event_reminder_passes_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."family_anniversary_hidden"("_family_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."family_anniversary_hidden"("_family_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."family_anniversary_hidden"("_family_id" "uuid") TO "service_role";
@@ -7003,6 +7253,12 @@ GRANT ALL ON FUNCTION "public"."profiles_keep_one_church_admin"() TO "service_ro
 
 
 
+GRANT ALL ON FUNCTION "public"."profiles_own_event_reminders"() TO "anon";
+GRANT ALL ON FUNCTION "public"."profiles_own_event_reminders"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."profiles_own_event_reminders"() TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."provision_organization"("_name" "text", "_owner_email" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."provision_organization"("_name" "text", "_owner_email" "text") TO "service_role";
 
@@ -7108,6 +7364,14 @@ GRANT ALL ON TABLE "public"."class_teachers" TO "service_role";
 GRANT ALL ON TABLE "public"."event_calendars" TO "anon";
 GRANT ALL ON TABLE "public"."event_calendars" TO "authenticated";
 GRANT ALL ON TABLE "public"."event_calendars" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."event_reminder_passes" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."event_reminder_sends" TO "service_role";
 
 
 
