@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import ts from "typescript";
-import { judgeAll, scanSource, selectExposure } from "./check-profile-email-reads.mjs";
+import { judgeAll, profileEmbedNames, scanSource, selectExposure } from "./check-profile-email-reads.mjs";
 
 const REQUEST = `import { createClient } from "@/lib/supabase/server";\nconst supabase = await createClient();\n`;
 
@@ -34,6 +34,23 @@ describe("selectExposure", () => {
 
   it("does not take another relation's columns for a profile's", () => {
     expect(selectExposure("id, access_requests(email), family_units(*)", true)).toBeNull();
+  });
+
+  it("sees an aggregate over the column", () => {
+    expect(selectExposure("email.count()", true)).toBe("email");
+    expect(selectExposure("id, profiles(email.count())", false)).toBe("email");
+    expect(selectExposure("id.count(), count()", true)).toBeNull();
+  });
+});
+
+describe("profileEmbedNames", () => {
+  it("lists the name each profiles embed in a select is reached by", () => {
+    expect([...profileEmbedNames("id, author:profiles!inner(id), teams(lead:profiles!fk(id), groups(name))")]).toEqual([
+      "author",
+      "lead",
+    ]);
+    expect([...profileEmbedNames("id, profiles(id)")]).toEqual(["profiles"]);
+    expect([...profileEmbedNames("id, owner:family_units(id)")]).toEqual([]);
   });
 });
 
@@ -106,6 +123,106 @@ describe("request-client reads of profiles", () => {
     ).toEqual(["app/page.tsx .eq() on an embedded profiles.email"]);
   });
 
+  const members = (select, filter) => page(`await supabase.from("team_members").select("${select}")${filter};`);
+
+  it("refuses a filter on a profiles embed reached by its alias", () => {
+    expect(members("id, author:profiles!inner(first_name)", `.eq("author.email", a)`)).toEqual([
+      "app/page.tsx .eq() on an embedded profiles.email",
+    ]);
+    expect(members("id, teams(lead:profiles!fk(first_name))", `.ilike("lead.email", a)`)).toEqual([
+      "app/page.tsx .ilike() on an embedded profiles.email",
+    ]);
+    expect(members("id, author:profiles!inner(first_name)", `.eq("author.first_name", a)`)).toEqual([]);
+    expect(members("id, requests:access_requests(id)", `.eq("requests.email", a)`)).toEqual([]);
+  });
+
+  it("refuses an ordering or a filter that an option points at a profiles embed", () => {
+    expect(members("id, profiles(first_name)", `.order("email", { referencedTable: "profiles" })`)).toEqual([
+      "app/page.tsx .order() on an embedded profiles.email",
+    ]);
+    expect(members("id, profiles(first_name)", `.order("email", { foreignTable: "profiles" })`)).toEqual([
+      "app/page.tsx .order() on an embedded profiles.email",
+    ]);
+    expect(members("id, author:profiles(first_name)", `.order("email", { ascending: true, referencedTable: "author" })`)).toEqual([
+      "app/page.tsx .order() on an embedded profiles.email",
+    ]);
+    expect(members("id, profiles!inner(id)", `.or("first_name.eq.a,email.eq.b", { referencedTable: "profiles" })`)).toEqual([
+      "app/page.tsx .or() on an embedded profiles.email",
+    ]);
+    expect(members("id, profiles(first_name)", `.order("email", options)`)).toEqual([
+      "app/page.tsx .order() on an embedded profiles.email",
+    ]);
+    expect(members("id, profiles(first_name)", `.order("email", { ...options })`)).toEqual([
+      "app/page.tsx .order() on an embedded profiles.email",
+    ]);
+    expect(members("id, profiles(first_name), teams(name)", `.order("email", { referencedTable: "teams" })`)).toEqual([]);
+    expect(members("id, profiles(first_name)", `.order("first_name", { referencedTable: "profiles" })`)).toEqual([]);
+    expect(members("id, profiles(first_name)", `.order("created_at", { ascending: false })`)).toEqual([]);
+  });
+
+  it("refuses an embedded email named as a .match() key or inside an .or() string", () => {
+    expect(members("id, profiles!inner(id)", `.match({ "profiles.email": a })`)).toEqual([
+      "app/page.tsx .match() on an embedded profiles.email",
+    ]);
+    expect(members("id, author:profiles!inner(id)", `.or("author.email.eq.a")`)).toEqual([
+      "app/page.tsx .or() on an embedded profiles.email",
+    ]);
+    expect(members("id, profiles!inner(id)", `.match({ team_id: a })`)).toEqual([]);
+  });
+
+  it("reads a quoted or cast filter name like a bare one", () => {
+    const profiles = (filter) => page(`await supabase.from("profiles").select("id")${filter};`);
+    expect(profiles(`.or('"email".eq.a')`)).toEqual(["app/page.tsx .or() on email"]);
+    expect(profiles(`.or('first_name.eq.a,and(last_name.eq.b,"email".ilike.c)')`)).toEqual(["app/page.tsx .or() on email"]);
+    expect(profiles(`.eq('"email"', a)`)).toEqual(["app/page.tsx .eq() on email"]);
+    expect(profiles(`.eq("email::text", a)`)).toEqual(["app/page.tsx .eq() on email"]);
+    expect(profiles(`.match({ "email": a })`)).toEqual(["app/page.tsx .match() on email"]);
+    expect(members("id, profiles!inner(id)", `.eq('"profiles"."email"', a)`)).toEqual([
+      "app/page.tsx .eq() on an embedded profiles.email",
+    ]);
+    expect(profiles(`.or("first_name.eq.email,last_name.eq.b")`)).toEqual([]);
+  });
+
+  it("follows a constant to a filter argument, and fails closed on one it cannot read", () => {
+    const fn = (body) => check({ "lib/read.ts": `async function read(column, address) {\n  const supabase = await createClient();\n${body}\n}` });
+    const unread = (method) => `lib/read.ts a .${method}() argument that is not literal text; write it as one`;
+    expect(fn(`  const col = "email";\n  await supabase.from("profiles").select("id").eq(col, address);`)).toEqual([
+      "lib/read.ts .eq() on email",
+    ]);
+    expect(fn(`  const filters = "email.eq.a";\n  await supabase.from("profiles").select("id").or(filters);`)).toEqual([
+      "lib/read.ts .or() on email",
+    ]);
+    expect(fn(`  const col = "first_name";\n  await supabase.from("profiles").select("id").eq(col, address);`)).toEqual([]);
+    expect(fn(`  await supabase.from("profiles").select("id").eq(column, address);`)).toEqual([unread("eq")]);
+    expect(fn(`  let col = "id";\n  await supabase.from("profiles").select("id").order(col);`)).toEqual([unread("order")]);
+    expect(fn(`  await supabase.from("profiles").select("id").or(filtersFor(address));`)).toEqual([unread("or")]);
+    expect(fn(`  const keys = { email: address };\n  await supabase.from("profiles").select("id").match(keys);`)).toEqual([
+      unread("match"),
+    ]);
+    expect(fn(`  await supabase.from("profiles").select("id").match({ ...keys });`)).toEqual([unread("match")]);
+    expect(fn(`  await supabase.from("profiles").select("id").match({ [column]: address });`)).toEqual([unread("match")]);
+    expect(fn(`  await supabase.from("team_members").select("id, profiles!inner(id)").eq(column, address);`)).toEqual([
+      unread("eq"),
+    ]);
+    expect(fn(`  await supabase.from("teams").select("id").eq(column, address);`)).toEqual([]);
+    expect(fn(`  await supabase.from("profiles").select("id").in("id", ids).limit(count).range(start, end);`)).toEqual([]);
+  });
+
+  it("lets a template .or() string take a substitution as a value, never as a column", () => {
+    const or = (template) => page("await supabase.from(\"profiles\").select(\"id\").or(`" + template + "`);");
+    const unread = "app/page.tsx a .or() argument that is not literal text; write it as one";
+    expect(or("first_name.ilike.%${q}%,last_name.ilike.%${q}%")).toEqual([]);
+    expect(or("first_name.ilike.%${q}%,${column}.eq.a")).toEqual([unread]);
+    expect(or("${filters}")).toEqual([unread]);
+    expect(or("first_name.eq.a,and(${column}.eq.b)")).toEqual([unread]);
+  });
+
+  it("judges a filter method it has never heard of", () => {
+    expect(page(`await supabase.from("profiles").select("id").someNewFilter("email", a);`)).toEqual([
+      "app/page.tsx .someNewFilter() on email",
+    ]);
+  });
+
   it("reads a spread embed and quoted names like any other", () => {
     expect(page(`await supabase.from("team_members").select("id, ...profiles(email)");`)).toEqual([
       "app/page.tsx a select of email from profiles",
@@ -130,6 +247,11 @@ describe("request-client reads of profiles", () => {
     expect(page(`await supabase.from(tableFor(kind)).select("id, name").eq("id", id);`)).toEqual([]);
     expect(page(`await supabase.storage.from(bucket).upload(key, file);`)).toEqual([]);
     expect(page(`const names = Array.from(people).filter((p) => p.email).map((p) => p.name);`)).toEqual([]);
+    expect(page(`const has = Array.from(fields).includes("email");`)).toEqual([]);
+    expect(page(`await supabase.storage.from(bucket).remove(keys);`)).toEqual([]);
+    expect(page(`await supabase.from(tableFor(kind)).update({ bio }).eq("email", address);`)).toEqual([
+      "app/page.tsx .eq() on email",
+    ]);
     expect(scanSource("app/page.tsx", REQUEST + `await supabase.from(tableFor(kind)).select("*");`).findings[0].table).toBe(unknown);
   });
 
@@ -138,6 +260,21 @@ describe("request-client reads of profiles", () => {
       "app/page.tsx a select of all columns from profiles",
     ]);
     expect(page(`const TEAMS = "teams";\nawait supabase.from(TEAMS).select("*");`)).toEqual([]);
+  });
+
+  it("resolves a name through its nearest declaration, not the file's", () => {
+    const fn = (outer, params, body) =>
+      check({ "lib/read.ts": `${outer}\nasync function read(${params}) {\n  const supabase = await createClient();\n${body}\n}` });
+    expect(fn(`const T = "teams";`, "", `  const T = "profiles";\n  await supabase.from(T).select("*");`)).toEqual([
+      "lib/read.ts a select of all columns from profiles",
+    ]);
+    expect(fn(`const S = "id";`, "", `  const S = "email";\n  await supabase.from("profiles").select(S);`)).toEqual([
+      "lib/read.ts a select of email from profiles",
+    ]);
+    expect(fn(`const S = "id";`, "S", `  await supabase.from("profiles").select(S);`)).toEqual([
+      "lib/read.ts a select argument that is not a literal column list; write it as one",
+    ]);
+    expect(fn(`const S = "id";`, "", `  await supabase.from("profiles").select(S);`)).toEqual([]);
   });
 
   it("follows a query builder held in a variable through the function that holds it", () => {
@@ -153,6 +290,19 @@ describe("request-client reads of profiles", () => {
     ]);
     expect(fn(`  let q = supabase.from("profiles").select("id, first_name");\n  if (address) q = q.eq("family_id", address);\n  await q;`)).toEqual([]);
     expect(fn(`  let q = supabase.from("teams").select("id");\n  q = q.eq("email", address);\n  await q;`)).toEqual([]);
+  });
+
+  it("follows a held builder through a wrapper, a ternary and a second variable", () => {
+    const fn = (body) => check({ "lib/read.ts": `async function read(address) {\n  const supabase = await createClient();\n${body}\n}` });
+    const all = ["lib/read.ts a select of all columns from profiles"];
+    const eq = ["lib/read.ts .eq() on email"];
+    expect(fn(`  const q = supabase.from("profiles") as any;\n  await q.select("*");`)).toEqual(all);
+    expect(fn(`  const q = (supabase.from("profiles"))!;\n  await q.select("*");`)).toEqual(all);
+    expect(fn(`  const q = address ? supabase.from("profiles").select("id") : null;\n  await q.eq("email", address);`)).toEqual(eq);
+    expect(fn(`  const base = supabase.from("profiles");\n  const q = base.select("id");\n  await q.eq("email", address);`)).toEqual(eq);
+    expect(fn(`  const q = supabase.from("profiles");\n  const r = q;\n  await r.select("*");`)).toEqual(all);
+    expect(fn(`  let q = supabase.from("profiles").select("id");\n  q = q.order("id");\n  const r = q.limit(5);\n  await r.eq("email", address);`)).toEqual(eq);
+    expect(fn(`  const rows = await supabase.from("profiles").select("id");\n  rows.data.filter((p) => p.email);`)).toEqual([]);
   });
 
   it("never matches the directory view", () => {
@@ -282,6 +432,22 @@ describe("which client a chain runs on", () => {
         "lib/run.ts": `async function run(admin) {\n  let db = await createServiceClient();\n  if (!admin) db = await createClient();\n  await db.from("profiles").select("*");\n}`,
       }),
     ).toEqual(["lib/run.ts a select of all columns from profiles"]);
+  });
+
+  it("takes no variable for a service client once anything else is assigned to it", () => {
+    const all = ["lib/run.ts a select of all columns from profiles"];
+    const run = (reassign) =>
+      check({ "lib/run.ts": `async function run(other) {\n  let db = await createServiceClient();\n  ${reassign};\n  await db.from("profiles").select("*");\n}` });
+    expect(run(`db ||= await createClient()`)).toEqual(all);
+    expect(run(`db ??= other`)).toEqual(all);
+    expect(run(`[db] = [other]`)).toEqual(all);
+    expect(run(`({ db } = other)`)).toEqual(all);
+    expect(run(`other.db = 1`)).toEqual([]);
+    expect(
+      check({
+        "lib/run.ts": `export async function load(db) {\n  db = await createClient();\n  return db.from("profiles").select("*");\n}\nasync function send() {\n  await load(await createServiceClient());\n}`,
+      }),
+    ).toEqual(all);
   });
 
   it("judges a root it cannot place as the request client", () => {

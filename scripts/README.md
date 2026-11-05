@@ -197,12 +197,27 @@ through the request client in `app/`, `components/` and `lib/`:
   insert, update, upsert or delete;
 - a `profiles` select that names `email`;
 - a filter or ordering on `profiles.email`, including inside an `.or()` string
-  and through `.match()`;
+  and through `.match()`, with the name quoted or cast or not;
 - an embedded `profiles(…)` on any table, at any depth, with `*` or `email`
-  inside it, or a filter on `profiles.email`;
-- a select argument it cannot read. It resolves a string literal, a template
-  whose substitutions are constants, and a constant declared in the same file
-  or exported from a directly imported one. Anything else fails closed.
+  inside it;
+- a filter or ordering on an embedded `profiles.email`, reached by the table
+  name (`.eq("profiles.email", …)`), by an alias the select gives the embed
+  (`.eq("author.email", …)`), or by `referencedTable` / `foreignTable`
+  (`.order("email", { referencedTable: "profiles" })`);
+- an argument it cannot read: a select argument on any chain, and a filter or
+  ordering argument on a chain that reads `profiles`, as its table or through
+  an embed. It resolves a string literal, a template whose substitutions are
+  constants, and a constant, either the nearest enclosing declaration of its
+  name or one exported from a directly imported file. A filter column held in
+  a `let`, a parameter or a function's result, a `.match()` object held in a
+  variable and an options object that is not written in place all fail closed.
+  A template `.or()` string may take a substitution as a value
+  (`` `first_name.ilike.%${q}%` ``), never where a column name goes: at the
+  start of the string, or straight after a comma or an opening parenthesis.
+
+Every builder method is read as a filter except the ones known to name no
+column (`limit`, `range`, `single` and the like), so a filter method the check
+has never heard of is still judged.
 
 Which client: a chain is on the service client when the nearest enclosing
 declaration of its root is a variable whose every value is a
@@ -214,21 +229,37 @@ Every other chain is judged as a request-client read: a name bound to the
 request client in the function at hand, whatever another function in the file
 binds it to; a root that is a property (`gate.supabase`), `this`, a
 destructured name or an import; and a helper with no call site, since its
-client cannot be proven. A table that is not known text is judged as
-`profiles`.
+client cannot be proven. A variable given anything else by any kind of
+assignment, and a parameter assigned inside its function, are request clients
+too. A table that is not known text is judged as `profiles` when the chain
+selects or writes, which a query always does and `Array.from()` or a storage
+bucket does not.
 
 A query builder held in a variable (`let q = supabase.from("profiles")…;
 q = q.eq(…)`) is read together with the calls made on that variable in the
-function that declares it.
+function that builds it. A second variable given the builder or a chain on it
+is followed too, through a cast, parentheses, `!`, a ternary and `??`.
 
 There is no marker and no exemption list. Select `PROFILE_COLUMNS` from
 `lib/profileColumns.ts`, or name the columns, and read an address through
 `get_own_email()`, `admin_member_emails()` or `profiles_directory`.
 
-Known limits: an embed written through a foreign key column instead of the
-table name (`author:created_by(*)`) is not recognised as a `profiles` embed. A
-query builder handed to another function, returned, or stored on an object is
-read only as far as the chain that built it.
+Known limits. No scanned file uses any of these shapes, and the check does not
+see them:
+
+- An embed written through a foreign key column instead of the table name
+  (`author:created_by(*)`) is not recognised as a `profiles` embed, in a
+  select or in a filter on it.
+- A query builder handed to another function, returned, or stored on an object
+  is read only as far as the chain that built it. Held builders are matched by
+  variable name inside one function.
+- A method reached without a dot: `c["from"](…)`, `q["select"](…)`,
+  `const { from } = c`.
+- A helper's callers are found by its name, as calls. One passed by reference
+  (`const g = h`, `.map(h)`) is not counted as a call site, and two helpers
+  with the same name share their call sites.
+- A `var`, or a function declaration, that shadows a client's name is not seen
+  as a declaration.
 
 Tested with fixture strings in `scripts/check-profile-email-reads.test.mjs`.
 
