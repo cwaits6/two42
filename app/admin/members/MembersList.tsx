@@ -1,13 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -17,54 +24,57 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Clock, Pencil, Search, UserPlus } from "lucide-react";
-import type { AccessRequest, Profile, UserRole } from "@/lib/types";
-import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
-import { requestedOn } from "@/lib/groups/joinQueue";
+import { Clock, Ellipsis, Search, UserPlus } from "lucide-react";
+import type { AccessRequest, Profile } from "@/lib/types";
+import { failureMessage } from "@/lib/errorCopy";
 import { invitedNotSignedUp } from "@/lib/members/invited";
 import { PROFILE_COLUMNS, type MemberEmail, type ProfileColumns } from "@/lib/profileColumns";
-import { displayName } from "@/lib/names";
-import { personNameOrEmail } from "@/lib/serving/display";
 import { toUserRole } from "@/lib/roles";
-import { ApprovalQueue } from "@/components/admin/ApprovalQueue";
-import { matchesSearch } from "@/components/admin/adminSearch";
-import { DeletePersonButton } from "@/components/account/DeletePersonButton";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { useDeletePerson } from "@/components/account/DeletePersonButton";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/states/EmptyState";
 import { ErrorState } from "@/components/states/ErrorState";
 import { LoadingState } from "@/components/states/LoadingState";
-import { ROLE_OPTIONS, roleChangeCopy, roleLockReason } from "./memberRoles";
-import { logError } from "@/lib/log";
+import { ROLE_LABELS } from "./memberRoles";
+import {
+  filterMemberRows,
+  memberActions,
+  statusCounts,
+  toMemberRows,
+  type MemberRow,
+  type MemberStatus,
+  type RoleFilter,
+  type StatusFilter,
+} from "./memberRows";
+import { RoleChangeDialog, type RoleChange } from "./RoleChangeDialog";
 
-// Raised by the profiles trigger when a change would leave the church with
-// no church admin.
-const LAST_CHURCH_ADMIN = "CA001";
-const ALREADY_REVIEWED = "This request was already reviewed.";
+const ROLE_FILTERS: { value: RoleFilter; label: string }[] = [
+  { value: "all", label: "All roles" },
+  { value: "member", label: ROLE_LABELS.member },
+  { value: "admin", label: ROLE_LABELS.admin },
+];
 
-interface RoleChange {
-  member: Profile;
-  role: UserRole;
-}
+const STATUS_TABS: { value: StatusFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "invited", label: "Invited" },
+  { value: "pending", label: "Pending" },
+];
 
-export function MembersList({
-  initialTab,
-  timeZone,
-}: {
-  initialTab: "members" | "requests";
-  timeZone: string;
-}) {
+const STATUS_LABELS: Record<MemberStatus, string> = { invited: "Invited", pending: "Pending" };
+
+export function MembersList() {
   const [requests, setRequests] = useState<AccessRequest[]>([]);
   const [members, setMembers] = useState<Profile[]>([]);
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
   const [query, setQuery] = useState("");
-  const [busyRequestId, setBusyRequestId] = useState<string | null>(null);
-  const [declining, setDeclining] = useState<AccessRequest | null>(null);
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [roleChange, setRoleChange] = useState<RoleChange | null>(null);
   const loadedOnce = useRef(false);
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
 
   const loadData = useCallback(async () => {
     const [
@@ -87,8 +97,8 @@ export function MembersList({
       supabase.auth.getUser(),
     ]);
     if (requestsError || membersError || emailsError) {
-      if (emailsError) logError("Failed to load member emails", emailsError, { route: "/admin/members" });
-      else logError("Failed to load members", requestsError ?? membersError, { route: "/admin/members" });
+      if (emailsError) console.error("Failed to load member emails, code:", emailsError.code);
+      else console.error("Failed to load members:", requestsError ?? membersError);
       if (loadedOnce.current) toast.error(failureMessage("load the latest members"));
       else setStatus("failed");
       return;
@@ -111,85 +121,11 @@ export function MembersList({
     loadData();
   }, [loadData]);
 
-  async function approve(request: AccessRequest) {
-    setBusyRequestId(request.id);
-    try {
-      const res = await fetch("/api/admin/approve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: request.email, name: request.name }),
-      });
-      if (!res.ok) {
-        toast.error(failureMessage("approve the request", res.status, { 404: ALREADY_REVIEWED }));
-        if (res.status === 404) await loadData();
-        return;
-      }
-      toast.success("Request approved.");
-      await loadData();
-    } catch {
-      toast.error(NETWORK_ERROR);
-    } finally {
-      setBusyRequestId(null);
-    }
-  }
-
-  async function decline(request: AccessRequest) {
-    setBusyRequestId(request.id);
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error(failureMessage("decline the request", 401));
-        return;
-      }
-      // A write RLS rejects matches zero rows without an error, and so does a
-      // decline that lost the race to another admin's review.
-      const { data, error } = await supabase
-        .from("access_requests")
-        .update({
-          status: "denied",
-          reviewed_by: user.id,
-          reviewed_at: new Date().toISOString(),
-        })
-        .eq("id", request.id)
-        .eq("status", "pending")
-        .select("id");
-      if (error) {
-        logError("Failed to decline the request", error, { route: "/admin/members" });
-        toast.error(failureMessage("decline the request"));
-        return;
-      }
-      toast[data.length ? "success" : "error"](data.length ? "Request declined." : ALREADY_REVIEWED);
-      setDeclining(null);
-      await loadData();
-    } finally {
-      setBusyRequestId(null);
-    }
-  }
-
-  async function saveRole({ member, role }: RoleChange) {
-    const { data, error } = await supabase
-      .from("profiles")
-      .update({ role })
-      .eq("id", member.id)
-      .select("id");
-
-    if (error?.code === LAST_CHURCH_ADMIN) {
-      toast.error("Couldn't change this role. A church needs at least one church admin.");
-      setRoleChange(null);
-      await loadData();
-      return;
-    }
-    if (error || !data?.length) {
-      toast.error(failureMessage("change this role"));
-      return;
-    }
-
-    toast.success("Role changed.");
-    setRoleChange(null);
-    await loadData();
-  }
+  const deletion = useDeletePerson({ subject: "other", onDeleted: loadData });
+  const rows = useMemo(
+    () => toMemberRows(members, invitedNotSignedUp(requests, members)),
+    [members, requests],
+  );
 
   const header = (
     <PageHeader
@@ -221,7 +157,7 @@ export function MembersList({
 
   if (status !== "ready") {
     return (
-      <PageContainer>
+      <PageContainer size="wide">
         {header}
         {status === "loading" ? (
           <LoadingState thing="members" />
@@ -238,224 +174,221 @@ export function MembersList({
     );
   }
 
-  const pendingRequests = requests.filter((r) => r.status === "pending");
-  const invited = invitedNotSignedUp(requests, members);
-  const shownInvited = invited.filter((r) => matchesSearch(query, [r.name, r.email]));
-  const shownMembers = members.filter((m) =>
-    matchesSearch(query, [displayName(m), m.first_name, m.last_name, m.email]),
-  );
-  const total = members.length + invited.length;
-  const shown = shownMembers.length + shownInvited.length;
-  const changeCopy =
-    roleChange && roleChangeCopy(displayName(roleChange.member), roleChange.member.role, roleChange.role);
+  const counts = statusCounts(rows, { query, role: roleFilter });
+  const shown = filterMemberRows(rows, { query, role: roleFilter, status: statusFilter });
+  const searching = query.trim() !== "";
+  const filtering = roleFilter !== "all" || statusFilter !== "all";
+
+  // The name's link is the way in by keyboard; the rest of the row is the same
+  // target for a pointer. Menu items render in a portal but still bubble here.
+  function openRow(event: MouseEvent, row: MemberRow) {
+    if (!row.profileId) return;
+    if ((event.target as Element).closest('a, button, [role="menu"]')) return;
+    router.push(`/admin/members/${row.profileId}`);
+  }
+
+  function clearFilters() {
+    setQuery("");
+    setRoleFilter("all");
+    setStatusFilter("all");
+  }
 
   return (
-    <PageContainer>
+    <PageContainer size="wide">
       {header}
 
-      <Tabs defaultValue={initialTab}>
-        <TabsList className="mb-6">
-          <TabsTrigger value="members" className="min-h-11 px-6 text-base">
-            Members ({total})
-          </TabsTrigger>
-          <TabsTrigger value="requests" className="min-h-11 px-6 text-base">
-            Requests
-            {pendingRequests.length > 0 && (
-              <Badge variant="destructive" className="ml-2">
-                {pendingRequests.length}
-              </Badge>
-            )}
-          </TabsTrigger>
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end">
+        <div className="flex w-full max-w-md flex-col gap-2">
+          <Label htmlFor="member-search" className="text-base">
+            Search members
+          </Label>
+          <div className="relative">
+            <Search
+              className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              id="member-search"
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Name or email"
+              autoComplete="off"
+              className="pl-10 text-base"
+            />
+          </div>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="member-role-filter" className="text-base">
+            Role
+          </Label>
+          <Select
+            items={ROLE_FILTERS}
+            value={roleFilter}
+            onValueChange={(value) => value && setRoleFilter(value)}
+          >
+            <SelectTrigger id="member-role-filter" className="w-full text-base sm:w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ROLE_FILTERS.map((option) => (
+                <SelectItem key={option.value} value={option.value} className="text-base">
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)}>
+        <TabsList className="mb-2">
+          {STATUS_TABS.map((tab) => (
+            <TabsTrigger key={tab.value} value={tab.value} className="px-4 sm:px-6">
+              {tab.label} ({counts[tab.value]})
+            </TabsTrigger>
+          ))}
         </TabsList>
 
-        <TabsContent value="members">
-          <div className="mb-6 max-w-md space-y-2">
-            <Label htmlFor="member-search" className="text-base">
-              Search members
-            </Label>
-            <div className="relative">
-              <Search
-                className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <Input
-                id="member-search"
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Name or email"
-                autoComplete="off"
-                className="pl-10 text-base"
-              />
-            </div>
-            {query.trim() && (
-              <p role="status" className="text-base text-muted-foreground">
-                {shown} of {total} members
-              </p>
-            )}
-          </div>
+        <TabsContent value={statusFilter}>
+          {(searching || filtering) && (
+            <p role="status" className="mb-4 text-base text-muted-foreground">
+              {shown.length} of {rows.length} members
+            </p>
+          )}
 
-          {shown === 0 ? (
-            <EmptyState
-              icon={Search}
-              message={query.trim() ? "No members match that search." : "No members yet."}
-              action={
-                query.trim() ? (
+          {shown.length === 0 ? (
+            rows.length === 0 ? (
+              <EmptyState icon={Search} message="No members yet." />
+            ) : filtering ? (
+              <EmptyState
+                icon={Search}
+                message="No members match those filters."
+                action={
+                  <Button variant="outline" onClick={clearFilters}>
+                    Clear filters
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                icon={Search}
+                message="No members match that search."
+                action={
                   <Button variant="outline" onClick={() => setQuery("")}>
                     Clear search
                   </Button>
-                ) : undefined
-              }
-            />
+                }
+              />
+            )
           ) : (
-            <div className="space-y-3">
-              {shownInvited.map((req) => (
-                <Card key={req.id} className="border-dashed">
-                  <CardContent>
-                    <p className="text-xl font-semibold">{req.name}</p>
-                    <p className="text-base text-muted-foreground">{req.email}</p>
-                    <Badge variant="outline" className="mt-1">
-                      <Clock className="mr-1 h-4 w-4" aria-hidden="true" />
-                      Invited, not signed up yet
-                    </Badge>
-                  </CardContent>
-                </Card>
-              ))}
-              {shownMembers.map((member) => {
-                const lockReason = roleLockReason(member, viewerId, members);
-                const controlId = `role-${member.id}`;
-                return (
-                  <Card key={member.id}>
-                    <CardContent>
-                      <div className="flex flex-col gap-4">
-                        <div>
-                          <p className="text-xl font-semibold">{displayName(member)}</p>
-                          {member.email && (
-                            <p className="break-words text-base text-muted-foreground">{member.email}</p>
-                          )}
-                          {member.role === "pending" && (
-                            <Badge variant="outline" className="mt-1">
-                              Pending
-                            </Badge>
-                          )}
-                          {lockReason && (
-                            <p id={`${controlId}-hint`} className="mt-1 text-base text-muted-foreground">
-                              {lockReason}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-                          <div className="space-y-1">
-                            <Label htmlFor={controlId} className="text-base">
-                              Role
-                            </Label>
-                            <Select
-                              items={ROLE_OPTIONS}
-                              value={member.role === "pending" ? null : member.role}
-                              disabled={lockReason !== null}
-                              onValueChange={(v) => {
-                                if (v && v !== member.role) {
-                                  setRoleChange({ member, role: v as UserRole });
-                                }
-                              }}
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead className="hidden md:table-cell">Email</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead className="hidden md:table-cell">Status</TableHead>
+                  <TableHead className="w-11">
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {shown.map((row) => {
+                  const actions = memberActions(row, viewerId);
+                  const { profileId } = row;
+                  return (
+                    <TableRow
+                      key={row.key}
+                      onClick={(event) => openRow(event, row)}
+                      className={profileId ? "cursor-pointer hover:bg-muted/50" : undefined}
+                    >
+                      <TableCell className="font-semibold md:whitespace-nowrap">
+                        {profileId ? (
+                          <Link
+                            href={`/admin/members/${profileId}`}
+                            className="inline-flex min-h-11 items-center underline-offset-4 hover:underline"
+                          >
+                            {row.name}
+                          </Link>
+                        ) : (
+                          <span className="inline-flex min-h-11 items-center">{row.name}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden max-w-72 truncate text-muted-foreground md:table-cell">
+                        {row.email}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {row.role
+                          ? ROLE_LABELS[row.role]
+                          : row.status && <span className="md:hidden">{STATUS_LABELS[row.status]}</span>}
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {row.status && (
+                          <Badge variant="outline">
+                            {row.status === "invited" && <Clock aria-hidden="true" />}
+                            {STATUS_LABELS[row.status]}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="pl-0 pr-2">
+                        {profileId && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label={`More actions for ${row.name}`}
+                                />
+                              }
                             >
-                              <SelectTrigger
-                                id={controlId}
-                                aria-describedby={lockReason ? `${controlId}-hint` : undefined}
-                                className="w-full text-base sm:w-44"
-                              >
-                                <SelectValue placeholder="Choose a role" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {ROLE_OPTIONS.map((r) => (
-                                  <SelectItem key={r.value} value={r.value} className="text-base">
-                                    {r.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="flex flex-wrap gap-3 *:flex-1 sm:*:flex-none">
-                            <Button
-                              variant="outline"
-                              nativeButton={false}
-                              render={<Link href={`/admin/members/${member.id}`} />}
-                              aria-label={`Edit ${displayName(member)}`}
-                            >
-                              <Pencil className="h-4 w-4" aria-hidden="true" />
-                              Edit
-                            </Button>
-                            {member.role !== "pending" && lockReason === null && (
-                              <Button
-                                variant="outline"
-                                onClick={() => setRoleChange({ member, role: "pending" })}
-                                aria-label={`Move ${displayName(member)} to pending`}
-                              >
-                                Move to pending
-                              </Button>
-                            )}
-                            {member.id !== viewerId && (
-                              <DeletePersonButton
-                                url={`/api/admin/members/${member.id}`}
-                                subject="other"
-                                label="Delete account"
-                                ariaLabel={`Delete ${personNameOrEmail(member)}'s account`}
-                                onDeleted={loadData}
-                              />
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
+                              <Ellipsis aria-hidden="true" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-auto min-w-48">
+                              {actions.includes("edit") && (
+                                <DropdownMenuItem
+                                  onClick={() => router.push(`/admin/members/${profileId}`)}
+                                >
+                                  Edit
+                                </DropdownMenuItem>
+                              )}
+                              {actions.includes("pending") && (
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    setRoleChange({
+                                      member: { id: profileId, name: row.name, role: row.role ?? "pending" },
+                                      role: "pending",
+                                    })
+                                  }
+                                >
+                                  Move to pending
+                                </DropdownMenuItem>
+                              )}
+                              {actions.includes("delete") && (
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onClick={() => deletion.request(`/api/admin/members/${profileId}`)}
+                                >
+                                  Delete account
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           )}
-        </TabsContent>
-
-        <TabsContent value="requests">
-          <ApprovalQueue
-            rows={pendingRequests.map((req) => ({
-              id: req.id,
-              title: req.name,
-              subtitle: req.email,
-              quote: req.message ?? undefined,
-              meta: `Requested ${requestedOn(req.created_at, timeZone)}`,
-            }))}
-            onApprove={(id) => {
-              const request = pendingRequests.find((r) => r.id === id);
-              if (request) approve(request);
-            }}
-            onDecline={(id) => setDeclining(pendingRequests.find((r) => r.id === id) ?? null)}
-            busyId={busyRequestId}
-            emptyText="No requests waiting."
-          />
         </TabsContent>
       </Tabs>
 
-      <ConfirmDialog
-        open={declining !== null}
-        onOpenChange={(open) => !open && setDeclining(null)}
-        title={`Decline ${declining?.name ?? ""}'s request?`}
-        description="They won't get an invite. They can ask again later."
-        confirmLabel="Decline request"
-        pendingLabel="Declining…"
-        onConfirm={async () => {
-          if (declining) await decline(declining);
-        }}
-      />
-      <ConfirmDialog
-        open={roleChange !== null}
-        onOpenChange={(open) => !open && setRoleChange(null)}
-        title={changeCopy?.title ?? ""}
-        description={changeCopy?.description}
-        confirmLabel={changeCopy?.confirmLabel ?? ""}
-        pendingLabel="Saving…"
-        onConfirm={async () => {
-          if (roleChange) await saveRole(roleChange);
-        }}
-      />
+      <RoleChangeDialog change={roleChange} onClose={() => setRoleChange(null)} onSaved={loadData} />
+      {deletion.dialog}
     </PageContainer>
   );
 }

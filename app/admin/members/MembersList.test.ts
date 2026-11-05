@@ -54,7 +54,8 @@ vi.mock("@/lib/supabase/client", () => ({
   }),
 }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }));
+const push = vi.hoisted(() => vi.fn());
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {}, push }) }));
 
 const { MembersList } = await import("./MembersList");
 
@@ -70,12 +71,12 @@ const profile = (id: string, first: string, role: string) => ({
 let root: Root;
 let host: HTMLDivElement;
 
-async function mount(tab: "members" | "requests" = "members") {
+async function mount() {
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
   await act(async () => {
-    root.render(createElement(MembersList, { initialTab: tab, timeZone: "America/Chicago" }));
+    root.render(createElement(MembersList));
   });
 }
 
@@ -89,6 +90,35 @@ function button(name: string): HTMLButtonElement {
 
 const click = (name: string) => act(async () => button(name).click());
 
+const menuItems = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+
+/** Opens a person's "More actions" menu and returns what it offers. */
+async function openMenu(person: string): Promise<string[]> {
+  await click(`More actions for ${person}`);
+  return menuItems().map((item) => item.textContent ?? "");
+}
+
+async function choose(person: string, action: string) {
+  await openMenu(person);
+  const item = menuItems().find((i) => i.textContent === action);
+  if (!item) throw new Error(`${person}'s menu has no ${action}`);
+  await act(async () => item.click());
+}
+
+async function search(text: string) {
+  const field = host.querySelector<HTMLInputElement>("#member-search")!;
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+  await act(async () => {
+    setter.call(field, text);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+const tab = (name: RegExp) => [...host.querySelectorAll<HTMLElement>('[role="tab"]')].find((t) => name.test(t.textContent ?? ""))!;
+const bodyRows = () => [...host.querySelectorAll("tbody tr")];
+
+const INVITE = { id: "r1", name: "Ben Test", email: "other.ben@example.test", status: "approved", signup_token: "token" };
+
 beforeEach(() => {
   state.profiles = [profile("me", "Ada", "admin"), profile("you", "Ben", "member")];
   state.requests = [];
@@ -98,6 +128,7 @@ beforeEach(() => {
   state.updateResult = { data: [{ id: "row" }], error: null };
   toast.success.mockClear();
   toast.error.mockClear();
+  push.mockClear();
   vi.stubGlobal("fetch", vi.fn());
 });
 
@@ -108,28 +139,59 @@ afterEach(async () => {
 });
 
 describe("MembersList", () => {
-  it("opens on Members with readable roles and no raw values", async () => {
+  it("opens on everyone, one row each, with readable roles and no raw values", async () => {
     await mount();
-    expect(host.textContent).toContain("Members (2)");
+    expect(tab(/^All/).textContent).toBe("All (2)");
+    expect(bodyRows()).toHaveLength(2);
     expect(host.textContent).toContain("Church admin");
     expect(host.textContent).not.toMatch(/(?<!church )\badmin\b/i);
   });
 
+  it("shows nothing destructive until a row's menu is opened", async () => {
+    await mount();
+    expect(document.body.textContent).not.toContain("Delete account");
+    expect(document.body.textContent).not.toContain("Move to pending");
+
+    expect(await openMenu("Ben Test")).toEqual(["Edit", "Move to pending", "Delete account"]);
+  });
+
+  it("offers the viewer nothing but Edit on their own row", async () => {
+    await mount();
+    expect(await openMenu("Ada Test")).toEqual(["Edit"]);
+  });
+
   it("asks before moving someone to pending, and saves only once confirmed", async () => {
     await mount();
-    await click("Move Ben Test to pending");
+    await choose("Ben Test", "Move to pending");
     expect(state.updates).toEqual([]);
     expect(document.body.textContent).toContain("Move Ben Test back to pending?");
 
     await click("Move to pending");
     expect(state.updates).toEqual([{ table: "profiles", values: { role: "pending" } }]);
     expect(toast.success).toHaveBeenCalledWith("Role changed.");
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("asks the server what Delete account would delete before anything is deleted", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 500 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await mount();
+    await choose("Ben Test", "Delete account");
+
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith("/api/admin/members/you");
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("opens Edit member from the menu", async () => {
+    await mount();
+    await choose("Ben Test", "Edit");
+    expect(push).toHaveBeenCalledExactlyOnceWith("/admin/members/you");
   });
 
   it("says why when the database refuses to demote the last church admin", async () => {
     state.updateResult = { data: null, error: { code: "CA001" } };
     await mount();
-    await click("Move Ben Test to pending");
+    await choose("Ben Test", "Move to pending");
     await click("Move to pending");
     expect(toast.error).toHaveBeenCalledWith(
       "Couldn't change this role. A church needs at least one church admin.",
@@ -140,7 +202,7 @@ describe("MembersList", () => {
   it("says so when the list can't be re-read after a saved change", async () => {
     await mount();
     state.loadError = { code: "XX000" };
-    await click("Move Ben Test to pending");
+    await choose("Ben Test", "Move to pending");
     await click("Move to pending");
     expect(toast.success).toHaveBeenCalledWith("Role changed.");
     expect(toast.error).toHaveBeenCalledWith("Couldn't load the latest members. Try again.");
@@ -163,70 +225,42 @@ describe("MembersList", () => {
   it("does not report a role change that matched no row", async () => {
     state.updateResult = { data: [], error: null };
     await mount();
-    await click("Move Ben Test to pending");
+    await choose("Ben Test", "Move to pending");
     await click("Move to pending");
     expect(toast.error).toHaveBeenCalledWith("Couldn't change this role. Try again.");
   });
 
-  it("locks the viewer's own role and offers them no move to pending", async () => {
-    await mount();
-    expect(host.textContent).toContain("A church needs at least one church admin");
-    expect(() => button("Move Ada Test to pending")).toThrow();
-  });
-
   it("filters what is loaded by name or email", async () => {
     await mount();
-    const search = host.querySelector<HTMLInputElement>("#member-search")!;
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-    await act(async () => {
-      setter.call(search, "ben@");
-      search.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    await search("ben@");
     expect(host.textContent).toContain("1 of 2 members");
+    expect(tab(/^All/).textContent).toBe("All (1)");
     expect(host.textContent).toContain("Ben Test");
     expect(host.textContent).not.toContain("Ada Test");
   });
 
-  it("lists and counts an invitee who shares a member's name, and finds them by email", async () => {
-    state.requests = [
-      { id: "r1", name: "Ben Test", email: "other.ben@example.test", status: "approved", signup_token: "token" },
-    ];
+  it("lists and counts an invitee who shares a member's name, with no menu, and finds them by email", async () => {
+    state.requests = [INVITE];
     await mount();
-    expect(host.textContent).toContain("Members (3)");
-    expect(host.textContent).toContain("Invited, not signed up yet");
-    const search = host.querySelector<HTMLInputElement>("#member-search")!;
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-    await act(async () => {
-      setter.call(search, "other.ben@");
-      search.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    expect(tab(/^All/).textContent).toBe("All (3)");
+    expect(tab(/^Invited/).textContent).toBe("Invited (1)");
+    expect(host.querySelectorAll('[aria-label="More actions for Ben Test"]')).toHaveLength(1);
+
+    await search("other.ben@");
     expect(host.textContent).toContain("1 of 3 members");
-    expect(host.textContent).toContain("Invited, not signed up yet");
+    expect(bodyRows()).toHaveLength(1);
+    expect(bodyRows()[0].textContent).toContain("Invited");
   });
 
-  it("sends Approve once however many times it is pressed", async () => {
-    state.requests = [
-      {
-        id: "r1",
-        name: "Cy Park",
-        email: "cy@example.test",
-        message: null,
-        status: "pending",
-        created_at: "2026-10-01T12:00:00Z",
-      },
-    ];
-    let settle: (response: unknown) => void = () => {};
-    const fetchMock = vi.fn(() => new Promise((resolve) => (settle = resolve)));
-    vi.stubGlobal("fetch", fetchMock);
+  it("narrows to one status, and each tab's count is the rows it shows", async () => {
+    state.profiles.push(profile("cy", "Cy", "pending"));
+    state.requests = [INVITE];
+    await mount();
+    expect(tab(/^Pending/).textContent).toBe("Pending (1)");
 
-    await mount("requests");
-    await click("Approve");
-    expect(button("Approve").disabled).toBe(true);
-    expect(button("Decline").disabled).toBe(true);
-    await click("Approve");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-
-    await act(async () => settle({ ok: true, status: 200 }));
-    expect(toast.success).toHaveBeenCalledWith("Request approved.");
+    await act(async () => tab(/^Pending/).click());
+    expect(bodyRows().map((row) => row.querySelector("td")?.textContent)).toEqual(["Cy Test"]);
+    expect(host.textContent).toContain("1 of 4 members");
+    expect(await openMenu("Cy Test")).toEqual(["Edit", "Delete account"]);
   });
 });

@@ -278,11 +278,14 @@ test.describe("a church admin", () => {
     await page.goto("/admin/members");
     const search = page.getByLabel("Search members");
     await search.fill(PERSONAS.admin.email);
-    await expect(page.getByRole("button", { name: /^Edit / })).toHaveCount(1);
-    await expect(page.getByRole("button", { name: /^Delete .*'s account$/ })).toHaveCount(0);
+    await page.getByRole("button", { name: `More actions for ${PERSONAS.admin.name}` }).click();
+    await expect(page.getByRole("menuitem", { name: "Edit" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Delete account" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
 
     await search.fill(REMOVED.email);
-    await page.getByRole("button", { name: `Delete ${REMOVED.name}'s account` }).click();
+    await page.getByRole("button", { name: `More actions for ${REMOVED.name}` }).click();
+    await page.getByRole("menuitem", { name: "Delete account" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: `Delete ${REMOVED.name}'s account?` })).toBeVisible();
     await dialog.getByRole("button", { name: "Delete account" }).click();
