@@ -274,7 +274,7 @@ describe("anniversaryEntries", () => {
     expect(anniversaryEntries(families, NOV_3)).toEqual([]);
   });
 
-  it("leaves out a couple whose claimed spouse is unlisted or pending", () => {
+  it("leaves out a couple whose claimed spouse's profile the viewer can't read", () => {
     const claimedSpouse = householdRecord({
       first_name: "Susan",
       relationship: "spouse",
