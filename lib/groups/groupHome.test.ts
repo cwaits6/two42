@@ -724,6 +724,19 @@ describe("New in the group", () => {
     expect(dated).toMatchObject({ detail: "James 2:14–26 · Sun, Nov 1" });
   });
 
+  it("gives a lesson tile the picture for its YouTube link, and none for any other link", () => {
+    const result = tiles({
+      lessons: [
+        lesson({ id: "youtube", video_url: "https://youtu.be/jNQXAC9IVRw?si=x" }),
+        lesson({ id: "other", video_url: "https://zoom.us/rec/1" }),
+      ],
+    });
+    expect(result.map((t) => [t.key, t.kind === "lesson" && t.thumbnail])).toEqual([
+      ["lesson-youtube", "https://img.youtube.com/vi/jNQXAC9IVRw/hqdefault.jpg"],
+      ["lesson-other", null],
+    ]);
+  });
+
   it("shows an answered prayer's name, but none when anonymous", () => {
     expect(tiles({ prayers: [answered({})] })[0]).toMatchObject({ name: "David Reyes" });
     expect(tiles({ prayers: [answered({ is_anonymous: true })] })[0]).toMatchObject({ name: null });
