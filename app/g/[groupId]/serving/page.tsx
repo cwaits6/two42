@@ -79,7 +79,7 @@ export default async function ServingPage({
     supabase
       .from("team_members")
       .select(
-        "team_id, is_leader, profiles(id, email, role, first_name, last_name, preferred_name, avatar_url)"
+        "team_id, is_leader, profiles(id, role, first_name, last_name, preferred_name, avatar_url)"
       )
       .in("team_id", teamIds),
     supabase

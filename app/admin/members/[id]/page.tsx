@@ -4,7 +4,8 @@ import { ProfileForm } from "@/components/profile/ProfileForm";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { displayName } from "@/lib/names";
-import type { Profile, FamilyUnit } from "@/lib/types";
+import type { FamilyUnit } from "@/lib/types";
+import { PROFILE_COLUMNS, withEmail, type MemberEmail, type ProfileColumns } from "@/lib/profileColumns";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { pageTitle } from "@/lib/pageTitle";
 
@@ -29,8 +30,9 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
 
   if (currentProfile?.role !== "admin") redirect("/dashboard");
 
-  const [{ data: profile }, { data: families }] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", id).single<Profile>(),
+  const [{ data: row }, { data: address, error: addressError }, { data: families }] = await Promise.all([
+    supabase.from("profiles").select(PROFILE_COLUMNS).eq("id", id).single<ProfileColumns>(),
+    supabase.rpc("admin_member_emails").eq("profile_id", id).maybeSingle<MemberEmail>(),
     supabase
       .from("family_units")
       .select("*")
@@ -38,7 +40,11 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
       .returns<FamilyUnit[]>(),
   ]);
 
-  if (!profile) notFound();
+  if (!row) notFound();
+  // The form saves whatever is in its Email field, so it must not open blank
+  // over an address that failed to load.
+  if (addressError) throw new Error(`Failed to load the member's email (${addressError.code})`);
+  const profile = withEmail(row, address?.email ?? null);
 
   return (
     <PageContainer size="reading">

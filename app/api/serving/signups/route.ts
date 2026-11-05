@@ -18,6 +18,33 @@ function stringList(value: unknown): string[] {
   return Array.isArray(value) ? [...new Set(value.filter((v): v is string => typeof v === "string"))] : [];
 }
 
+/**
+ * Adds each person's address for a confirmation. Client roles cannot read
+ * profiles.email, and a spouse may hide theirs from the directory, so this is
+ * a service-role read. `orgId` comes from the RLS-read team or signup row. A
+ * failed read leaves the addresses out, which skips the confirmation and
+ * keeps the booking.
+ */
+async function withAddresses<T extends NamedProfile>(
+  people: T[],
+  orgId: string
+): Promise<Array<T & { email: string | null }>> {
+  const emailById = new Map<string, string | null>();
+  try {
+    const service = await createServiceClient();
+    const { data, error } = await service
+      .from("profiles")
+      .select("id, email")
+      .eq("org_id", orgId)
+      .in("id", people.map((p) => p.id));
+    if (error) console.error("Serving confirmation address read failed: code=%s", error.code);
+    for (const row of data ?? []) emailById.set(row.id, row.email);
+  } catch {
+    console.error("Serving confirmation address read failed: no service client");
+  }
+  return people.map((p) => ({ ...p, email: emailById.get(p.id) ?? null }));
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
@@ -110,7 +137,7 @@ export async function POST(request: Request) {
   // primary or spouse of the same household.
   const { data: attendees } = await supabase
     .from("profiles")
-    .select("id, first_name, last_name, preferred_name, email, family_id, relationship")
+    .select("id, first_name, last_name, preferred_name, family_id, relationship")
     .in("id", attendeeIds);
 
   if (!attendees || attendees.length !== attendeeIds.length) {
@@ -196,7 +223,7 @@ export async function POST(request: Request) {
     teamId: groupId,
     teamName: group.name,
     booked: outcome.booked,
-    attendees,
+    attendees: await withAddresses(attendees, group.org_id),
   });
 
   return NextResponse.json({ signup: { id: outcome.booked[0].signupId }, ...outcome });
@@ -259,10 +286,10 @@ export async function PATCH(request: Request) {
   const team = signup.teams as unknown as { name: string; group_id: string } | null;
   const { data: people } = await supabase
     .from("profiles")
-    .select("id, first_name, last_name, preferred_name, email")
+    .select("id, first_name, last_name, preferred_name")
     .in("id", attendeeIds);
-  const attendees = (people ?? []) as Array<NamedProfile & { email: string | null }>;
   if (team) {
+    const attendees = await withAddresses((people ?? []) as NamedProfile[], signup.org_id);
     await sendBookingConfirmations(supabase, {
       orgId: signup.org_id,
       groupId: team.group_id,

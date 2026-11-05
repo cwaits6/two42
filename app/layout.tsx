@@ -16,6 +16,7 @@ import { getRequestBranding } from "@/lib/branding";
 import { getDiscoveryOn } from "@/lib/groups/discovery";
 import { getGroupCreationPolicy } from "@/lib/groups/creationPolicy";
 import { getGroupMemberships } from "@/lib/groups/server";
+import { PROFILE_COLUMNS, withEmail, type ProfileColumns } from "@/lib/profileColumns";
 import type { ActiveGroup } from "@/lib/groups/active";
 import type { GroupCreationPolicy } from "@/lib/groups/creation";
 import "./globals.css";
@@ -76,7 +77,7 @@ export default async function RootLayout({
   if (user) {
     const supabase = await createClient();
     const [{ data, error }, { data: groupData, error: groupError }, { data: platformAdmin }] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+      supabase.from("profiles").select(PROFILE_COLUMNS).eq("id", user.id).maybeSingle<ProfileColumns>(),
       supabase.from("team_members").select("team_id").eq("profile_id", user.id),
       // Nav affordance only — every /platform surface re-checks
       // server-side; an RPC error just hides the link (fail closed).
@@ -89,7 +90,7 @@ export default async function RootLayout({
     // access. No row is not an error: a platform admin has no profile.
     if (error) console.error("Layout: failed to load profile:", error);
     if (groupError) console.error("Layout: failed to load team memberships:", groupError);
-    profile = data;
+    profile = data && withEmail(data, null);
 
     const loadServingAccess = async () => {
       if (!groupData?.length) return false;

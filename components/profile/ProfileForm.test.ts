@@ -283,6 +283,22 @@ describe("ProfileForm inline errors", () => {
     expect(document.body.textContent).not.toContain("Hide my email");
   });
 
+  it("leaves the Email field out for someone editing another household member", async () => {
+    await mount({ email: null }, { editingOther: true });
+    expect(document.querySelector("#email")).toBeNull();
+    expect(document.querySelector("#hide_email")).not.toBeNull();
+    await act(async () => root.unmount());
+    document.body.innerHTML = "";
+
+    await mount({}, { isAdmin: true });
+    expect(document.querySelector("#email")).not.toBeNull();
+    await act(async () => root.unmount());
+    document.body.innerHTML = "";
+
+    await mount();
+    expect(document.querySelector("#email")).not.toBeNull();
+  });
+
   it("shows initials from the preferred name, like the directory", async () => {
     await mount({ first_name: "Augusta", preferred_name: "Gussie", last_name: "Lovelace" });
     expect(document.querySelector('[data-slot="avatar-fallback"]')?.textContent).toBe("GL");

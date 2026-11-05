@@ -3,7 +3,7 @@ import { mintSignedUrl } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
-import type { Profile } from "@/lib/types";
+import { PROFILE_COLUMNS, withEmail, type ProfileColumns } from "@/lib/profileColumns";
 import { SetupWizard } from "./SetupWizard";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { isMemberRole } from "@/lib/roles";
@@ -18,13 +18,15 @@ export default async function ProfileSetupPage() {
 
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
+  const { data: row } = await supabase
     .from("profiles")
-    .select("*")
+    .select(PROFILE_COLUMNS)
     .eq("id", user.id)
-    .single<Profile>();
+    .single<ProfileColumns>();
 
-  if (!profile) redirect("/dashboard");
+  if (!row) redirect("/dashboard");
+  // The wizard shows the sign-in address, never the one on the profile.
+  const profile = withEmail(row, null);
 
   // Only approved members should be doing setup
   if (!isMemberRole(profile.role)) {

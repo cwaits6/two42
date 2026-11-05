@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
   profiles: [] as Record<string, unknown>[],
   requests: [] as Record<string, unknown>[],
   loadError: null as { code: string } | null,
+  emailsError: null as { code: string } | null,
   updates: [] as { table: string; values: unknown }[],
   updateResult: { data: [{ id: "row" }], error: null } as {
     data: { id: string }[] | null;
@@ -24,11 +25,19 @@ vi.mock("@/lib/supabase/client", () => ({
     auth: {
       getUser: async () => ({ data: { user: { id: "me" } } }),
     },
+    // The address is not a column a client role can select: it arrives by
+    // the church admin read, never on the profile rows.
+    rpc: async () => ({
+      data: state.profiles.map((p) => ({ profile_id: p.id, email: p.email })),
+      error: state.emailsError,
+    }),
     from: (table: string) => {
-      const rows = table === "profiles" ? state.profiles : state.requests;
+      const rows =
+        table === "profiles" ? state.profiles.map((p) => ({ ...p, email: undefined })) : state.requests;
       const chain = {
         select: () => chain,
         order: () => chain,
+        returns: () => chain,
         eq: () => chain,
         update: (values: unknown) => {
           state.updates.push({ table, values });
@@ -85,6 +94,7 @@ beforeEach(() => {
   state.profiles = [profile("me", "Ada", "admin"), profile("you", "Ben", "member")];
   state.requests = [];
   state.loadError = null;
+  state.emailsError = null;
   state.updates = [];
   state.updateResult = { data: [{ id: "row" }], error: null };
   toast.success.mockClear();
@@ -142,6 +152,13 @@ describe("MembersList", () => {
     await mount();
     expect(host.textContent).toContain("Couldn't load");
     expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("shows the error state when the emails can't be read", async () => {
+    state.emailsError = { code: "42501" };
+    await mount();
+    expect(host.textContent).toContain("Couldn't load");
+    expect(host.textContent).not.toContain("Ben Test");
   });
 
   it("does not report a role change that matched no row", async () => {

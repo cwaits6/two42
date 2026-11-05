@@ -135,9 +135,18 @@ export async function POST(request: Request) {
   // loadOrgSnapshot throws hand-written errors. Wrapping planImport in the
   // same block would log a planner crash as "snapshot load failed" — sending
   // whoever debugs it to the wrong module — with an unbounded message.
+  // The planner matches rows to people by address, so a failed read stops
+  // the import rather than planning every row as a new person.
+  const { data: addresses, error: addressError } = await gate.supabase.rpc("admin_member_emails");
+  if (addressError) {
+    console.error("members import: address read failed: code=%s", addressError.code);
+    return json({ error: "Failed to load member data" }, 500);
+  }
+  const emails = new Map(addresses.map((a) => [a.profile_id, a.email]));
+
   let snapshot;
   try {
-    snapshot = await loadOrgSnapshot(gate.supabase, gate.orgId);
+    snapshot = await loadOrgSnapshot(gate.supabase, gate.orgId, emails);
   } catch (err) {
     console.error("members import: snapshot load failed:", err);
     return json({ error: "Failed to load member data" }, 500);

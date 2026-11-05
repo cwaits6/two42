@@ -88,12 +88,8 @@ export function ImportMembers() {
       return;
     }
 
-    // Query existing profiles by email to mark already-joined members
-    const emails = candidates.map((c) => c.email);
-    const { data: existingProfiles, error: existingError } = await supabase
-      .from("profiles")
-      .select("email")
-      .in("email", emails);
+    // Mark the people who have already joined.
+    const { data: existingProfiles, error: existingError } = await supabase.rpc("admin_member_emails");
     if (existingError) {
       console.error("Import members: failed to check existing members:", existingError.code);
       setDetectionError("Couldn't check who has already joined. Choose the file again.");

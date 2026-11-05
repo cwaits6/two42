@@ -98,7 +98,7 @@ export interface OrgSnapshot {
 // Single string literals (not concatenations) so supabase-js can parse the
 // column list at the type level instead of degrading to GenericStringError.
 const PROFILE_COLUMNS =
-  "id, email, role, relationship, first_name, last_name, preferred_name, phone_mobile, phone_home, phone_work, birth_month, birth_day, birth_year, address_line1, address_line2, city, state, postal_code, occupation, employer, family_id, is_unlisted, email_announcements, hide_email";
+  "id, role, relationship, first_name, last_name, preferred_name, phone_mobile, phone_home, phone_work, birth_month, birth_day, birth_year, address_line1, address_line2, city, state, postal_code, occupation, employer, family_id, is_unlisted, email_announcements, hide_email";
 
 const FAMILY_MEMBER_COLUMNS =
   "id, family_id, first_name, last_name, preferred_name, birth_month, birth_day, birth_year, relationship, is_class_member, claimed_profile_id";
@@ -106,10 +106,14 @@ const FAMILY_MEMBER_COLUMNS =
 /**
  * Load one org's roster. Throws on any query error with a message naming the
  * table only — never row content (PII stays out of logs).
+ *
+ * `emails` is each person's address by profile id, from the caller's
+ * admin_member_emails() read: client roles cannot select profiles.email.
  */
 export async function loadOrgSnapshot(
   supabase: SupabaseClient<Database>,
-  orgId: string
+  orgId: string,
+  emails: ReadonlyMap<string, string | null>
 ): Promise<OrgSnapshot> {
   const [profiles, families, familyMembers, groups, profileGroups, requests] =
     await Promise.all([
@@ -155,6 +159,7 @@ export async function loadOrgSnapshot(
   return {
     profiles: (profiles.data ?? []).map((p) => ({
       ...p,
+      email: emails.get(p.id) ?? null,
       role: toUserRole(p.role),
     })),
     families: families.data ?? [],

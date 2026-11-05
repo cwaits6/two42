@@ -7,9 +7,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const createClient = vi.fn();
+const createServiceClient = vi.fn();
 vi.mock("@/lib/supabase/server", () => ({
   createClient: () => createClient(),
-  createServiceClient: vi.fn(),
+  createServiceClient: () => createServiceClient(),
 }));
 
 const notifyLeadersOfCancel = vi.fn();
@@ -53,6 +54,7 @@ function signup(serviceDate: string) {
 }
 
 beforeEach(() => {
+  createServiceClient.mockReset();
   vi.useFakeTimers();
   // 9:30pm Sunday, Nov 1 in New York.
   vi.setSystemTime(new Date("2026-11-02T02:30:00Z"));
@@ -174,12 +176,30 @@ describe("POST /api/serving/signups team dates", () => {
 });
 
 describe("PATCH /api/serving/signups", () => {
-  const david = { id: "david", first_name: "David", last_name: "Reyes", preferred_name: null, email: "david@example.test" };
-  const lena = { id: "lena", first_name: "Lena", last_name: "Reyes", preferred_name: null, email: "lena@example.test" };
+  const david = { id: "david", first_name: "David", last_name: "Reyes", preferred_name: null };
+  const lena = { id: "lena", first_name: "Lena", last_name: "Reyes", preferred_name: null };
+  const addresses = [
+    { id: "david", email: "david@example.test" },
+    { id: "lena", email: "lena@example.test" },
+  ];
 
-  it("mails only the spouse just added, naming both people on the date", async () => {
-    sendSignupConfirmation.mockReset();
-    createClient.mockResolvedValue({
+  // The request client carries no address; they come from a service read
+  // scoped to the signup row's org.
+  function serviceClient(result: { data: unknown; error: unknown }, filters: [string, unknown][] = []) {
+    return {
+      from: () => ({
+        select: () => ({
+          eq: (column: string, value: unknown) => {
+            filters.push([column, value]);
+            return { in: async () => result };
+          },
+        }),
+      }),
+    };
+  }
+
+  function changeClient() {
+    return {
       auth: { getUser: async () => ({ data: { user: { id: "david" } } }) },
       from: (table: string) =>
         table === "serving_signups"
@@ -196,22 +216,44 @@ describe("PATCH /api/serving/signups", () => {
             })
           : { select: () => ({ in: async () => ({ data: [david, lena], error: null }) }) },
       rpc: () => ({ single: async () => ({ data: { added: 1, removed: 0 }, error: null }) }),
-    });
+    };
+  }
 
-    const res = await PATCH(
+  const addLena = () =>
+    PATCH(
       new Request("http://localhost/api/serving/signups", {
         method: "PATCH",
         body: JSON.stringify({ signupId: "signup-1", attendeeProfileIds: ["david", "lena"] }),
       }),
     );
 
+  it("mails only the spouse just added, naming both people on the date", async () => {
+    sendSignupConfirmation.mockReset();
+    createClient.mockResolvedValue(changeClient());
+    const filters: [string, unknown][] = [];
+    createServiceClient.mockResolvedValue(serviceClient({ data: addresses, error: null }, filters));
+
+    const res = await addLena();
+
     expect(res.status).toBe(200);
+    expect(filters).toEqual([["org_id", "org-1"]]);
     expect(sendSignupConfirmation).toHaveBeenCalledTimes(1);
     expect(sendSignupConfirmation.mock.calls[0][1]).toMatchObject({
       serviceDate: "2026-11-08",
       recipient: { id: "lena", email: "lena@example.test" },
       attendees: [david, lena],
     });
+  });
+
+  it("keeps the change and mails nobody when the addresses can't be read", async () => {
+    sendSignupConfirmation.mockReset();
+    createClient.mockResolvedValue(changeClient());
+    createServiceClient.mockResolvedValue(serviceClient({ data: null, error: { code: "XX000" } }));
+    expect((await addLena()).status).toBe(200);
+
+    createServiceClient.mockRejectedValue(new Error("no service key"));
+    expect((await addLena()).status).toBe(200);
+    expect(sendSignupConfirmation).not.toHaveBeenCalled();
   });
 });
 
