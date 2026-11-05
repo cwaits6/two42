@@ -1,7 +1,8 @@
 import type { GroupSettings } from "@/lib/types";
+import { DAYS_BEFORE } from "@/supabase/functions/_shared/event-reminder-schedule";
 
 /** What an event can hold in `reminder_days_before`; 0 sends none. */
-export const REMINDER_DAYS = [1, 2, 7, 0] as const;
+export const REMINDER_DAYS = [...DAYS_BEFORE, 0] as const;
 export type ReminderDays = (typeof REMINDER_DAYS)[number];
 
 const LABELS: Record<ReminderDays, string> = {

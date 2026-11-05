@@ -28,7 +28,7 @@ export function cycleStart(now: Date): Date {
  * `after < start <= upTo`. Null when the event chose no reminder.
  */
 export function reminderWindow(daysBefore: number, now: Date): { after: Date; upTo: Date } | null {
-  if (!DAYS_BEFORE.includes(daysBefore)) return null;
+  if (!(DAYS_BEFORE as readonly number[]).includes(daysBefore)) return null;
   const cycle = cycleStart(now).getTime();
   return {
     after: new Date(cycle + (daysBefore - 1) * DAY_MS),
