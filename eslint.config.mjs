@@ -22,6 +22,36 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  {
+    // Logs go through lib/log, which writes no error text; see docs/security/logging.md.
+    files: [
+      "app/**/*.{ts,tsx}",
+      "lib/**/*.{ts,tsx}",
+      "components/**/*.{ts,tsx}",
+      "supabase/functions/**/*.ts",
+      "instrumentation.ts",
+      "instrumentation.node.ts",
+      "proxy.ts",
+    ],
+    ignores: [
+      "**/*.test.ts",
+      "**/*.test.tsx",
+      "supabase/functions/tests/**",
+      "lib/log/core.ts",
+      "supabase/functions/_shared/log.ts",
+    ],
+    rules: {
+      "no-console": "error",
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "CallExpression[callee.name=/^log(Error|Warn|Info)$/] > :nth-child(1):not(Literal):not(TemplateLiteral[expressions.length=0])",
+          message: "Say what failed in a fixed string. Row ids go in ids.",
+        },
+      ],
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
