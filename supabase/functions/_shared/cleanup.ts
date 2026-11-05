@@ -15,7 +15,7 @@ import {
   reminderCutoff,
 } from "./retention.ts";
 
-/** Passes one serving_reminder_passes_prune() call deletes at most. */
+/** Passes one call to a reminder prune function deletes at most. */
 export const DELETE_BATCH = 500;
 
 type QueryError = { message: string } | null;
@@ -44,7 +44,7 @@ export interface CleanupClient {
     select(columns: string, options?: { count: "exact" }): ReadChain;
   };
   rpc(
-    fn: "serving_reminder_passes_prune",
+    fn: "serving_reminder_passes_prune" | "event_reminder_passes_prune",
     args: { _org_id: string; _before: string; _limit: number },
   ): PromiseLike<{ data: number | null; error: QueryError }>;
 }
@@ -56,6 +56,7 @@ export interface RemovedCounts {
   feedback: number;
   prayerRequests: number;
   reminderPasses: number;
+  eventReminderPasses: number;
 }
 
 export interface OrgCleanupResult {
@@ -129,6 +130,7 @@ export async function cleanUpOrg(
     feedback: 0,
     prayerRequests: 0,
     reminderPasses: 0,
+    eventReminderPasses: 0,
   };
   const failures: OrgCleanupResult["failures"] = [];
 
@@ -247,19 +249,27 @@ export async function cleanUpOrg(
   // A table that grows every day is cleared a bounded set at a time, so one
   // night after a gap never deletes everything in one statement. The
   // database API cannot limit a delete, so the bound lives in the function.
-  await attempt("serving_reminder_passes", async () => {
-    for (;;) {
-      const { data, error } = await supabase.rpc("serving_reminder_passes_prune", {
-        _org_id: orgId,
-        _before: reminderCutoff(now),
-        _limit: DELETE_BATCH,
-      });
-      if (error) throw new Error(error.message);
-      if (data === null) throw new Error("the delete returned no count");
-      removed.reminderPasses += data;
-      if (data < DELETE_BATCH) return;
-    }
-  });
+  function prune(
+    key: "reminderPasses" | "eventReminderPasses",
+    table: "serving_reminder_passes" | "event_reminder_passes",
+  ) {
+    return attempt(table, async () => {
+      for (;;) {
+        const { data, error } = await supabase.rpc(`${table}_prune`, {
+          _org_id: orgId,
+          _before: reminderCutoff(now),
+          _limit: DELETE_BATCH,
+        });
+        if (error) throw new Error(error.message);
+        if (data === null) throw new Error("the delete returned no count");
+        removed[key] += data;
+        if (data < DELETE_BATCH) return;
+      }
+    });
+  }
+
+  await prune("reminderPasses", "serving_reminder_passes");
+  await prune("eventReminderPasses", "event_reminder_passes");
 
   return { orgId, removed, failures };
 }
