@@ -313,9 +313,15 @@ export function dateNotices(events: Event[], ctx: HomeContext): HomeNotice[] {
  * The event for the Clay join panel: one set to show on Home, from its join
  * window opening until the ended grace period runs out. Meeting fields live on
  * the series anchor; an exception row inherits them. A live event outranks one
- * that has ended.
+ * that has ended. An ended event stays only while there is a lesson to send
+ * people to: without one its panel has nothing but the title.
  */
-function startingNowEvent(occurrences: Event[], anchors: Map<string, Event>, ctx: HomeContext) {
+function startingNowEvent(
+  occurrences: Event[],
+  anchors: Map<string, Event>,
+  ctx: HomeContext,
+  hasLessons: boolean,
+) {
   const { now, groupId } = ctx;
   const candidates = occurrences.flatMap((occurrence) => {
     const meeting = (occurrence.series_id && anchors.get(occurrence.series_id)) || occurrence;
@@ -327,6 +333,7 @@ function startingNowEvent(occurrences: Event[], anchors: Map<string, Event>, ctx
     candidates.find((c) => stateOf(c) === "live") ??
     candidates.find(
       (c) =>
+        hasLessons &&
         stateOf(c) === "ended" &&
         meetingEndMs(c.occurrence.start_time, c.occurrence.end_time) + ENDED_GRACE_MS > now.getTime(),
     );
@@ -782,7 +789,7 @@ export function buildGroupHome(reads: GroupHomeReads, ctx: HomeContext): GroupHo
       new Date(now.getTime() - EVENTS_LOOKBACK_MS),
     );
     notices = dateNotices(events, ctx);
-    starting = startingNowEvent(occurrences, anchors, ctx);
+    starting = startingNowEvent(occurrences, anchors, ctx, reads.lessonCount > 0);
     eventsAhead = occurrences.some((o) => !hasEnded(o, now));
     // Replies pick the chosen button and signups the serving tag, so the rows fail with either.
     rows =

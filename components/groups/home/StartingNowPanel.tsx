@@ -15,11 +15,13 @@ export function StartingNowPanel({
   recordingsHref,
 }: {
   event: StartingNowEvent;
-  /** Where "Watch the recording" points after the event ends; null hides it. */
+  /** Where "Watch the recording" points after the event ends; null drops the panel once it has ended. */
   recordingsHref: string | null;
 }) {
   const { meetingUrl, meetingId, passcode, startTime, endTime, leadMinutes } = event;
   const ended = useJoinState(startTime, endTime, leadMinutes) === "ended";
+  // An event can end while Home is open; with no recording to offer, the panel goes with it.
+  if (ended && !recordingsHref) return null;
   const details = [meetingId && `Meeting ID ${meetingId}`, passcode && `Passcode ${passcode}`]
     .filter(Boolean)
     .join(" · ");
@@ -36,16 +38,14 @@ export function StartingNowPanel({
           {event.title}
         </Link>
       </h2>
-      {ended ? (
-        recordingsHref && (
-          <>
-            <p className="mt-2 font-sans text-base">Missed it? The recording is posted to Lessons.</p>
-            <Link href={recordingsHref} className={`mt-3 ${LIGHT_BUTTON}`}>
-              <Play className="h-5 w-5" aria-hidden="true" />
-              Watch the recording
-            </Link>
-          </>
-        )
+      {ended && recordingsHref ? (
+        <>
+          <p className="mt-2 font-sans text-base">Missed it? The recording is posted to Lessons.</p>
+          <Link href={recordingsHref} className={`mt-3 ${LIGHT_BUTTON}`}>
+            <Play className="h-5 w-5" aria-hidden="true" />
+            Watch the recording
+          </Link>
+        </>
       ) : (
         <>
           {meetingUrl ? (

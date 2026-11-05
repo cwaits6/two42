@@ -259,16 +259,32 @@ describe("the Starting now panel", () => {
     );
   });
 
-  it("stays through the ended grace period, then goes", () => {
-    const ended = (hoursAgo: number) =>
-      event({
-        id: "call",
-        start_time: new Date(NOW.getTime() - (hoursAgo + 1) * 3_600_000).toISOString(),
-        end_time: new Date(NOW.getTime() - hoursAgo * 3_600_000).toISOString(),
-        ...CALL,
-      });
-    expect(buildGroupHome(reads({ events: [ended(2)] }), ctx()).startingNow).not.toBeNull();
-    expect(buildGroupHome(reads({ events: [ended(4)] }), ctx()).startingNow).toBeNull();
+  const ended = (hoursAgo: number) =>
+    event({
+      id: "call",
+      start_time: new Date(NOW.getTime() - (hoursAgo + 1) * 3_600_000).toISOString(),
+      end_time: new Date(NOW.getTime() - hoursAgo * 3_600_000).toISOString(),
+      ...CALL,
+    });
+
+  it("stays through the ended grace period when there is a lesson to link to, then goes", () => {
+    const withLesson = (hoursAgo: number) =>
+      buildGroupHome(reads({ events: [ended(hoursAgo)], lessonCount: 1 }), ctx());
+    expect(withLesson(2).startingNow?.title).toBe("Call");
+    expect(withLesson(4).startingNow).toBeNull();
+  });
+
+  it("goes as soon as the event ends when there is no lesson to link to", () => {
+    const home = buildGroupHome(reads({ events: [ended(2)], lessonCount: 0 }), ctx());
+    expect(home.startingNow).toBeNull();
+    expect(home.nothingAtAll).toBe(true);
+  });
+
+  it("shows a live event whether or not there is a lesson", () => {
+    const live = event({ id: "call", start_time: "2026-11-03T14:10:00Z", ...CALL });
+    expect(buildGroupHome(reads({ events: [live], lessonCount: 0 }), ctx()).startingNow?.title).toBe(
+      "Call",
+    );
   });
 
   it("shows only an event set to show on Home, and only one with meeting details", () => {
@@ -421,7 +437,10 @@ describe("This week", () => {
 
     it("drops the date while its only event sits in the join panel's ended grace period", () => {
       const endedCall = { ...call, start_time: "2026-11-03T13:00:00Z", end_time: "2026-11-03T13:50:00Z" };
-      const home = buildGroupHome(reads({ events: [endedCall], signups: servingToday }), ctx());
+      const home = buildGroupHome(
+        reads({ events: [endedCall], signups: servingToday, lessonCount: 1 }),
+        ctx(),
+      );
       expect(home.startingNow?.title).toBe("call");
       expect(home.weekRows).toEqual([]);
     });
