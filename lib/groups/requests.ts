@@ -1,4 +1,4 @@
-// The pending-request read the Admin overview and Admin › Groups share.
+// The pending group requests a church admin reviews on the Requests page.
 // No React, no next/* imports.
 
 export interface Requester {

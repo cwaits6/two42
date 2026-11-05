@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  NO_PENDING_JOIN_REQUESTS_TEXT,
   groupPendingJoinRequests,
-  pendingJoinRequestsSummary,
   requestedOn,
   toPendingJoinRequest,
   type PendingJoinRequest,
@@ -71,20 +69,6 @@ describe("groupPendingJoinRequests", () => {
     const rows = [request("1", groupA), request("2", groupC)];
     const remaining = rows.filter((r) => r.id !== "1");
     expect(groupPendingJoinRequests(remaining).map((s) => s.group.id)).toEqual(["c"]);
-  });
-});
-
-describe("pendingJoinRequestsSummary", () => {
-  it("says so when the queue is empty", () => {
-    expect(pendingJoinRequestsSummary(0)).toBe(NO_PENDING_JOIN_REQUESTS_TEXT);
-  });
-
-  it.each([
-    [1, "1 join request waiting."],
-    [2, "2 join requests waiting."],
-    [12, "12 join requests waiting."],
-  ])("counts %i", (count, text) => {
-    expect(pendingJoinRequestsSummary(count)).toBe(text);
   });
 });
 

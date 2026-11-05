@@ -22,8 +22,6 @@ export interface JoinQueueSection {
   requests: PendingJoinRequest[];
 }
 
-export const NO_PENDING_JOIN_REQUESTS_TEXT = "No requests waiting.";
-
 /** One row of pending_group_join_requests(), as the function returns it. */
 export interface PendingJoinRequestRow {
   id: string;
@@ -82,10 +80,4 @@ export function requestedOn(createdAt: string, timeZone: string): string {
     year: "numeric",
     timeZone,
   });
-}
-
-/** The Admin overview's one-line count of requests waiting across every group. */
-export function pendingJoinRequestsSummary(count: number): string {
-  if (count === 0) return NO_PENDING_JOIN_REQUESTS_TEXT;
-  return `${count} join request${count === 1 ? "" : "s"} waiting.`;
 }

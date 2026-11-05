@@ -16,9 +16,7 @@ test.describe.configure({ mode: "serial" });
 const DB_CONTAINER = "supabase_db_small-group-hub";
 const ISAAC = PERSONAS.oneGroup;
 const SWITCHER = "Switch group. Current group: Group B";
-const ONE_WAITING = "1 join request waiting.";
 const NONE_WAITING = "No requests waiting.";
-const REVIEW_ACTION = "Review join requests";
 
 // Scoped to Isaac's rows on Group C only: the stack is shared, and another
 // spec may hold rows of its own for him.
@@ -45,16 +43,6 @@ function restoreSeed() {
 test.beforeAll(() => restoreSeed());
 test.afterAll(() => restoreSeed());
 
-// Other kinds of request use the same empty text, so each page's join
-// requests are found by their own heading.
-function joinRequestsSection(page: Page) {
-  return page.locator("section").filter({ has: page.getByRole("heading", { name: "Join requests" }) });
-}
-
-function joinRequestsNeed(page: Page) {
-  return page.getByRole("listitem").filter({ hasText: "Join requests" });
-}
-
 function groupCRow(page: Page) {
   return page.getByRole("listitem").filter({ hasText: "Group C" });
 }
@@ -63,6 +51,16 @@ async function askToJoinGroupC(page: Page) {
   await page.goto("/find-a-group");
   await groupCRow(page).getByRole("button", { name: "Request to join" }).click();
   await expect(groupCRow(page)).toContainText("Request sent");
+}
+
+/**
+ * How many requests of every kind the Requests page says are waiting. Read
+ * rather than assumed: the stack is shared and may hold other requests.
+ */
+async function requestsWaiting(page: Page): Promise<number> {
+  const total = page.getByRole("status").filter({ hasText: /requests? waiting\.$/ });
+  await expect(total.or(page.getByText(NONE_WAITING))).toBeVisible();
+  return (await total.count()) ? Number.parseInt(await total.innerText(), 10) : 0;
 }
 
 /** Isaac's own view, opened beside the admin's page in the same test. */
@@ -88,19 +86,19 @@ test.describe("a member of Group B only", () => {
 test.describe("the org admin, who does not lead Group C, declining", () => {
   test.use({ persona: "admin" });
 
-  test("sees it counted on the overview and declines it under Group C; Isaac stays out", async ({
+  test("sees it counted on Requests and declines it under Group C; Isaac stays out", async ({
     page,
     browser,
     baseURL,
   }) => {
     if (!baseURL) throw new Error("baseURL is not configured");
 
-    await page.goto("/admin");
-    await expect(page.getByText(ONE_WAITING)).toBeVisible();
-    await page.getByRole("button", { name: REVIEW_ACTION }).click();
-    await expect(page).toHaveURL(/\/admin\/groups$/);
+    await page.goto("/admin/requests");
+    const waiting = await requestsWaiting(page);
+    expect(waiting).toBeGreaterThan(0);
 
-    const queue = page.getByRole("region", { name: "Group C" });
+    const joinRequests = page.getByRole("region", { name: "Join requests" });
+    const queue = joinRequests.getByRole("region", { name: "Group C" });
     await expect(queue.getByText(ISAAC.name)).toBeVisible();
     await queue.getByRole("button", { name: "Decline" }).click();
     const dialog = page.getByRole("dialog");
@@ -108,7 +106,7 @@ test.describe("the org admin, who does not lead Group C, declining", () => {
     await dialog.getByRole("button", { name: "Decline" }).click();
     await expect(page.getByText("Request declined.")).toBeVisible();
     await expect(queue).toHaveCount(0);
-    await expect(joinRequestsSection(page).getByText(NONE_WAITING)).toBeVisible();
+    expect(await requestsWaiting(page)).toBe(waiting - 1);
 
     await withIsaac(browser, baseURL, async (isaac) => {
       // Still one group, so the switcher is still a static label; and a
@@ -132,24 +130,25 @@ test.describe("a member of Group B only, declined once", () => {
 test.describe("the org admin, who does not lead Group C, approving", () => {
   test.use({ persona: "admin" });
 
-  test("approves it under Group C, Isaac gains the group, and the overview count clears", async ({
+  test("approves it under Group C, Isaac gains the group, and the count on Requests drops", async ({
     page,
     browser,
     baseURL,
   }) => {
     if (!baseURL) throw new Error("baseURL is not configured");
 
-    await page.goto("/admin/groups");
-    const queue = page.getByRole("region", { name: "Group C" });
+    await page.goto("/admin/requests");
+    const waiting = await requestsWaiting(page);
+    const queue = page.getByRole("region", { name: "Join requests" }).getByRole("region", { name: "Group C" });
     await expect(queue.getByText(ISAAC.name)).toBeVisible();
     await queue.getByRole("button", { name: "Approve" }).click();
     await expect(page.getByText(`${ISAAC.name} joined Group C.`)).toBeVisible();
     await expect(queue).toHaveCount(0);
-    await expect(joinRequestsSection(page).getByText(NONE_WAITING)).toBeVisible();
+    expect(await requestsWaiting(page)).toBe(waiting - 1);
 
-    await page.goto("/admin");
-    await expect(joinRequestsNeed(page).getByText(NONE_WAITING)).toBeVisible();
-    await expect(page.getByRole("button", { name: REVIEW_ACTION })).toHaveCount(0);
+    await page.reload();
+    expect(await requestsWaiting(page)).toBe(waiting - 1);
+    await expect(page.getByRole("region", { name: "Group C" })).toHaveCount(0);
 
     await withIsaac(browser, baseURL, async (isaac) => {
       await isaac.goto(`/g/${GROUP_B}/dashboard`);
