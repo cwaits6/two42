@@ -178,6 +178,15 @@ describe("ProfileForm inline errors", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it("takes the day's message away with the month for No date", async () => {
+    const form = await mount({ birth_month: 5, birth_day: null });
+    await form.submit();
+    await form.choose("birth_month", "No date");
+
+    expect(form.field("birth_day").getAttribute("aria-invalid")).toBeNull();
+    expect(form.message("birth_day")).toBeUndefined();
+  });
+
   it("marks a malformed email and an out-of-range birth year", async () => {
     const form = await mount({ email: "jane@", birth_year: 1850 }, { isAdmin: true });
     await form.submit();

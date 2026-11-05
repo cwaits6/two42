@@ -591,6 +591,13 @@ export function ProfileForm({
                   if (!month) {
                     update("birth_day", "");
                     update("birth_year", "");
+                    // An already-empty day or year is no change to `update`, so its message would stay.
+                    setErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.birth_day;
+                      delete next.birth_year;
+                      return next;
+                    });
                   }
                 }}
                 error={errors.birth_month}
