@@ -73,7 +73,7 @@ export function LoginForm() {
         <div className="space-y-1.5">
           <Label
             htmlFor="email"
-            className="font-sans text-lg font-semibold tracking-[0.08em] uppercase text-foreground"
+            className="font-sans text-lg font-semibold text-foreground"
           >
             Email
           </Label>
@@ -90,7 +90,7 @@ export function LoginForm() {
         <div className="space-y-1.5">
           <Label
             htmlFor="password"
-            className="font-sans text-lg font-semibold tracking-[0.08em] uppercase text-foreground"
+            className="font-sans text-lg font-semibold text-foreground"
           >
             Password
           </Label>
