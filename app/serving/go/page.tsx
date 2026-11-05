@@ -237,9 +237,7 @@ export default async function ServingLinkPage({
         teamName={group.name}
         date={payload.d}
         today={today}
-        // Without the address: a spouse with no name on file must not show
-        // as their email, which they may hide.
-        spouseName={spouse ? spouseFirstName({ ...spouse, email: null }) : null}
+        spouseName={spouse ? spouseFirstName(spouse) : null}
         extraDates={extraDates}
       />
     );

@@ -7,7 +7,7 @@
  */
 import { after } from "next/server";
 import { displayName } from "@/lib/names";
-import { personName } from "@/lib/serving/display";
+import { personName, personNameOrEmail } from "@/lib/serving/display";
 import { notifyLeadersOfCancel } from "@/lib/serving/server";
 import { removeAvatarObjects } from "@/lib/storageDelete";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -58,11 +58,10 @@ async function loadFunds(service: ServiceClient, orgId: string, personId: string
     first_name: string | null;
     last_name: string | null;
     preferred_name: string | null;
-    email: string | null;
   }>(
     await service
       .from("profiles")
-      .select("id, role, first_name, last_name, preferred_name, email")
+      .select("id, role, first_name, last_name, preferred_name")
       .eq("org_id", orgId)
       .in("id", seconds),
     "second people",
@@ -164,7 +163,7 @@ export async function loadDeletionSummary(
     .map((g) => g.groups?.name ?? "");
 
   return {
-    name: personName(target),
+    name: personNameOrEmail(target),
     lastChurchAdmin: target.role === "admin" && otherAdmins.length === 0,
     platformOperator: operators.length > 0,
     groupContent:
@@ -230,7 +229,6 @@ interface DeletedPerson {
   first_name: string | null;
   last_name: string | null;
   preferred_name: string | null;
-  email: string | null;
   photo_keys: string[];
   opened_dates: { team_id: string; group_id: string; team_name: string; service_date: string }[];
 }

@@ -1,21 +1,46 @@
 import { describe, expect, it } from "vitest";
-import { coupleName, ownSignupLabel, personInitials, personName, signupDisplayName, spouseFirstName } from "./display";
+import {
+  coupleName,
+  ownSignupLabel,
+  personInitials,
+  personName,
+  personNameOrEmail,
+  signupDisplayName,
+  spouseFirstName,
+} from "./display";
 
 const blank = { first_name: null, last_name: null, preferred_name: null };
+// A row read with its address, as the service client's send paths hold it.
+const nameless = { ...blank, id: "new", email: "new@x.test" };
 
 describe("personName", () => {
   it("uses the name when there is one", () => {
-    expect(personName({ ...blank, first_name: "Daniel", preferred_name: "Danny", last_name: "Smith", email: "d@x.test" })).toBe(
-      "Danny Smith",
-    );
+    expect(personName({ ...blank, first_name: "Daniel", preferred_name: "Danny", last_name: "Smith" })).toBe("Danny Smith");
   });
 
-  it("shows the email for someone with no name yet", () => {
-    expect(personName({ ...blank, first_name: "  ", email: "new@x.test" })).toBe("new@x.test");
+  it("says so when there is no name", () => {
+    expect(personName({ ...blank, first_name: "  " })).toBe("No name on file");
   });
+});
 
-  it("says so when there is neither", () => {
-    expect(personName(blank)).toBe("No name on file");
+describe("a row that carries an address", () => {
+  it("is never named by it, in any label other people read", () => {
+    const named = { ...blank, id: "david", first_name: "David", last_name: "Reyes" };
+    expect(personName(nameless)).toBe("No name on file");
+    expect(spouseFirstName(nameless)).toBe("No name on file");
+    expect(personInitials(nameless)).toBe("?");
+    expect(coupleName(named, nameless)).toBe("David Reyes & No name on file");
+    expect(signupDisplayName([nameless])).toBe("No name on file");
+    expect(signupDisplayName([named, nameless])).toBe("David Reyes & No name on file");
+    expect(ownSignupLabel([named, nameless], "david")).toBe("You & No name on file");
+  });
+});
+
+describe("personNameOrEmail", () => {
+  it("uses the name when there is one, and the email only when there is none", () => {
+    expect(personNameOrEmail({ ...blank, first_name: "Ada", last_name: "Lovelace", email: "ada@x.test" })).toBe("Ada Lovelace");
+    expect(personNameOrEmail(nameless)).toBe("new@x.test");
+    expect(personNameOrEmail({ ...blank, email: null })).toBe("No name on file");
   });
 });
 
@@ -30,9 +55,6 @@ describe("coupleName", () => {
     expect(coupleName({ ...blank, first_name: "David", last_name: "Reyes" }, { ...blank, first_name: "Lena", last_name: "Cho" })).toBe(
       "David Reyes & Lena Cho",
     );
-    expect(coupleName({ ...blank, first_name: "David", last_name: "Reyes" }, { ...blank, email: "lena@x.test" })).toBe(
-      "David Reyes & lena@x.test",
-    );
   });
 
   it("uses the preferred name", () => {
@@ -43,10 +65,6 @@ describe("coupleName", () => {
 });
 
 describe("signupDisplayName", () => {
-  it("shows a single attendee without a name by their email", () => {
-    expect(signupDisplayName([{ ...blank, email: "new@x.test" }])).toBe("new@x.test");
-  });
-
   it("names a couple by name, never by household", () => {
     expect(signupDisplayName([{ ...blank, first_name: "David", last_name: "Reyes" }, { ...blank, first_name: "Lena", last_name: "Reyes" }])).toBe(
       "David & Lena Reyes",
@@ -68,14 +86,13 @@ describe("ownSignupLabel", () => {
     expect(ownSignupLabel([ben], "me")).toBe("Ben Hale");
   });
 
-  it("calls a spouse without a first name by what is on file", () => {
-    expect(spouseFirstName({ ...blank, email: "ben@x.test" })).toBe("ben@x.test");
+  it("calls a spouse without a first name by their last name", () => {
+    expect(spouseFirstName({ ...blank, last_name: "Hale" })).toBe("Hale");
   });
 });
 
 describe("personInitials", () => {
-  it("takes the email's first letter when there is no name", () => {
-    expect(personInitials({ ...blank, email: "new@x.test" })).toBe("N");
-    expect(personInitials({ ...blank, first_name: "Ada", last_name: "Lovelace", email: "new@x.test" })).toBe("AL");
+  it("takes the name's initials", () => {
+    expect(personInitials({ ...blank, first_name: "Ada", last_name: "Lovelace" })).toBe("AL");
   });
 });

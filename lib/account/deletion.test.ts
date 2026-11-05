@@ -158,12 +158,12 @@ describe("deletePerson: team leads, after the response", () => {
     });
   });
 
-  it("names someone with no name by their email", async () => {
+  it("never names someone to the leaders by their email", async () => {
     const { state } = setup();
     state.rpcResult = { ...DELETED, first_name: null, last_name: null, opened_dates: [date] };
     await deletePerson(ORG, "ada");
     await runAfterResponse();
-    expect(notifyLeadersOfCancel.mock.calls[0][1].memberLabel).toBe("ada@example.test");
+    expect(notifyLeadersOfCancel.mock.calls[0][1].memberLabel).toBe("No name on file");
   });
 
   it("logs a failed team without its message, and tries the next team", async () => {
@@ -199,13 +199,13 @@ describe("loadDeletionSummary", () => {
     expect(await loadDeletionSummary(ORG, "outsider", "church_admin")).toBeNull();
   });
 
-  it("names someone with no name by their email", async () => {
+  it("names the person being deleted by their email when they have no name", async () => {
     setup({ profiles: [person("ada", { first_name: null, last_name: null, email: "ada@example.test" })] });
-    const summary = await loadDeletionSummary(ORG, "ada", "church_admin");
-    expect(summary?.name).toBe("ada@example.test");
+    expect((await loadDeletionSummary(ORG, "ada", "church_admin"))?.name).toBe("ada@example.test");
+    expect((await loadDeletionSummary(ORG, "ada", "self"))?.name).toBe("ada@example.test");
   });
 
-  it("names a second person with no name by their email", async () => {
+  it("never names a second person by their email", async () => {
     setup({
       giving_funds: funds,
       group_members: memberships,
@@ -213,7 +213,7 @@ describe("loadDeletionSummary", () => {
     });
     const summary = await loadDeletionSummary(ORG, "ada", "self");
     expect(summary?.groupContent).toMatchObject({
-      fundsPassedOn: [{ name: "Passes on", recipient: "ben@example.test" }],
+      fundsPassedOn: [{ name: "Passes on", recipient: "No name on file" }],
     });
   });
 

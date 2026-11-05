@@ -24,7 +24,7 @@ import { requestedOn } from "@/lib/groups/joinQueue";
 import { invitedNotSignedUp } from "@/lib/members/invited";
 import { PROFILE_COLUMNS, withEmail, type MemberEmail, type ProfileColumns } from "@/lib/profileColumns";
 import { displayName } from "@/lib/names";
-import { personName } from "@/lib/serving/display";
+import { personNameOrEmail } from "@/lib/serving/display";
 import { toUserRole } from "@/lib/roles";
 import { ApprovalQueue } from "@/components/admin/ApprovalQueue";
 import { matchesSearch } from "@/components/admin/adminSearch";
@@ -397,7 +397,7 @@ export function MembersList({
                                 url={`/api/admin/members/${member.id}`}
                                 subject="other"
                                 label="Delete account"
-                                ariaLabel={`Delete ${personName(member)}'s account`}
+                                ariaLabel={`Delete ${personNameOrEmail(member)}'s account`}
                                 onDeleted={loadData}
                               />
                             )}
