@@ -129,16 +129,15 @@ export default async function ServingSchedulePage({
   if (groupError) console.error("team roster group read failed:", groupError.message);
 
   // How many people an email to the team reaches. Only the server knows who
-  // has an address, so the roster size stands in when the count is missing.
-  let memberCount = (memberRows ?? []).filter(
-    (row) => (row.profiles as unknown as { role: string } | null)?.role !== "pending",
-  ).length;
+  // has an address; null when it could not say, and the dialog then names no
+  // number rather than a guess from the roster.
+  let emailReach: number | null = null;
   if (canManageRoster) {
     const { data: reach, error: reachError } = await supabase.rpc("serving_team_email_count", {
       _team_id: teamId,
     });
     if (reachError) console.error("team email count read failed, code:", reachError.code);
-    else if (reach !== null) memberCount = reach;
+    else emailReach = reach;
   }
 
   // Pending profiles are household peers who never signed in, not people to
@@ -314,7 +313,7 @@ export default async function ServingSchedulePage({
                 teamName={team.name}
                 openDates={dates.filter((d) => !entries[d])}
                 today={today}
-                memberCount={memberCount ?? 0}
+                emailReach={emailReach}
               />
               {teamSettings}
             </div>
