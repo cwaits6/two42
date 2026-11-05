@@ -26,7 +26,7 @@ import {
   summarize,
 } from "./orgs.ts";
 import type { SendOutcome } from "./serving-hourly.ts";
-import { logWarn } from "./log.ts";
+import { logError, logWarn } from "./log.ts";
 
 type QueryError = { message: string } | null;
 
@@ -141,6 +141,7 @@ async function readEvents(
     const { data, error } = await filter(
       supabase.from("events").select(EVENT_SELECT).eq("org_id", orgId),
     ).order("id").range(from, from + PAGE - 1);
+    if (error) logError("events query failed", error, { ids: { org: orgId } });
     if (error) throw new Error(`events query (${what}) failed: ${error.message}`);
     rows.push(...(data ?? []));
     if ((data ?? []).length < PAGE) return rows;
@@ -198,6 +199,7 @@ export async function runEventReminders(
       .select("group_id")
       .eq("org_id", org.id)
       .eq("event_reminders_enabled", false);
+    if (error) logError("group_settings query failed", error, { ids: { org: org.id } });
     if (error) throw new Error(`group_settings query failed: ${error.message}`);
     const dates = dueDates({
       rows,

@@ -4,6 +4,7 @@ import { siteConfig } from "@/lib/config";
 import { eventSharing, SHARE_ALL, type CalendarSharing, type SharingColumns } from "@/lib/calendar/sharing";
 import type { CalendarKeepOut } from "@/lib/ics-utils";
 import type { Event } from "@/lib/types";
+import { logError } from "@/lib/log";
 
 /**
  * Each of `groupIds`' calendar sharing defaults, for the groups that saved
@@ -24,6 +25,7 @@ export async function calendarSharingByGroup(
     .eq("org_id", orgId)
     .in("group_id", groupIds);
   if (error) {
+    logError("Failed to load calendar sharing settings", error, { step: "group_settings", ids: { org: orgId } });
     throw new Error(`Failed to load calendar sharing settings: ${error.message}`);
   }
   return new Map(

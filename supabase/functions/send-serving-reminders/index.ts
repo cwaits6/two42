@@ -247,6 +247,7 @@ async function runDaily(
   if (teamSettingsError) {
     // Genuinely org-level: no team loop has begun, so there is nothing to
     // isolate per-team yet (itemFailures is necessarily empty here).
+    logError("serving_team_settings query failed", teamSettingsError, { route: "send-serving-reminders", ids: { org: orgId } });
     throw new OrgRunError(`serving_team_settings query failed: ${teamSettingsError.message}`, { sent, sendFailures, itemFailures });
   }
   if (!teamSettings?.length) return { sent, sendFailures, itemFailures };
@@ -268,6 +269,7 @@ async function runDaily(
       if (groupError) {
         // Recorded via the catch below — this used to be a silent skip whose
         // only record was a log line, invisible to the run summary.
+        logError("teams query failed", groupError, { route: "send-serving-reminders", ids: { org: orgId, team: team_id } });
         throw new Error(`teams query failed: ${groupError.message}`);
       }
       if (!group) continue; // a genuinely absent team is not an error
@@ -286,6 +288,7 @@ async function runDaily(
         .eq("service_date", serviceDate)
         .maybeSingle();
       if (signupError) {
+        logError("serving_signups query failed", signupError, { route: "send-serving-reminders", ids: { org: orgId, team: team_id } });
         throw new Error(`serving_signups query failed: ${signupError.message}`);
       }
 
@@ -388,6 +391,7 @@ async function runMonthly(
   if (teamSettingsError) {
     // Genuinely org-level: no team loop has begun, so there is nothing to
     // isolate per-team yet (itemFailures is necessarily empty here).
+    logError("serving_team_settings query failed", teamSettingsError, { route: "send-serving-reminders", ids: { org: orgId } });
     throw new OrgRunError(`serving_team_settings query failed: ${teamSettingsError.message}`, { sent, sendFailures, itemFailures });
   }
   if (!teamSettings?.length) return { sent, sendFailures, itemFailures };
@@ -411,6 +415,7 @@ async function runMonthly(
       if (groupError) {
         // Recorded via the catch below — this used to be a silent skip whose
         // only record was a log line, invisible to the run summary.
+        logError("teams query failed", groupError, { route: "send-serving-reminders", ids: { org: orgId, team: team_id } });
         throw new Error(`teams query failed: ${groupError.message}`);
       }
       if (!group) continue; // a genuinely absent team is not an error
@@ -437,6 +442,7 @@ async function runMonthly(
         .eq("team_id", team_id)
         .in("service_date", serviceDates);
       if (signupsError) {
+        logError("serving_signups query failed", signupsError, { route: "send-serving-reminders", ids: { org: orgId, team: team_id } });
         throw new Error(`serving_signups query failed: ${signupsError.message}`);
       }
 
@@ -455,6 +461,7 @@ async function runMonthly(
         .eq("org_id", orgId)
         .eq("team_id", team_id);
       if (membersError) {
+        logError("team_members query failed", membersError, { route: "send-serving-reminders", ids: { org: orgId, team: team_id } });
         throw new Error(`team_members query failed: ${membersError.message}`);
       }
 

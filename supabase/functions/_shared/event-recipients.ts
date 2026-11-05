@@ -54,6 +54,7 @@ export async function resolveEventReminderRecipients(
     .eq("org_id", orgId)
     .eq("event_id", eventId)
     .in("status", ["yes", "maybe"]);
+  if (rsvpsError) logError("rsvps query failed", rsvpsError, { ids: { org: orgId, event: eventId } });
   if (rsvpsError) throw new Error(`rsvps query failed: ${rsvpsError.message}`);
   const rsvpIds = (rsvps ?? []).map((r) => r.user_id as string);
   if (rsvpIds.length === 0) return [];
@@ -66,6 +67,7 @@ export async function resolveEventReminderRecipients(
       .eq("org_id", orgId)
       .eq("group_id", groupId)
       .in("profile_id", ids);
+    if (membersError) logError("group_members query failed", membersError, { ids: { org: orgId, event: eventId } });
     if (membersError) throw new Error(`group_members query failed: ${membersError.message}`);
     memberIds.push(...(members ?? []).map((m) => m.profile_id as string));
   }
@@ -80,6 +82,7 @@ export async function resolveEventReminderRecipients(
       .select("id, first_name, preferred_name, email, role")
       .eq("org_id", orgId)
       .in("id", ids);
+    if (profilesError) logError("profiles query failed", profilesError, { ids: { org: orgId, event: eventId } });
     if (profilesError) throw new Error(`profiles query failed: ${profilesError.message}`);
     for (
       const p of (profiles ?? []) as unknown as Array<

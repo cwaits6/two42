@@ -233,6 +233,7 @@ async function runBeforeDates(
         .eq("is_cancelled", false)
         .gte("start_time", now.toISOString())
         .lte("start_time", tomorrow.toISOString());
+      if (eventsError) logError("events query failed", eventsError, { route: "send-event-reminders", ids: { org: org.id, group: group.id } });
       if (eventsError) throw new Error(`events query failed: ${eventsError.message}`);
       if (!events?.length) continue;
 

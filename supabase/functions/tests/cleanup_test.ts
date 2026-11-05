@@ -59,14 +59,14 @@ function fakeClient(tables: Record<string, Row[]>, options: FakeOptions = {}) {
         const failsHere = !options.failOnlyOrg ||
           filters.includes(`eq org_id=${options.failOnlyOrg}`);
         if (options.failDelete?.includes(table) && failsHere) {
-          return { count: null, error: { message: `${table} delete refused` } };
+          return { count: null, error: { message: `${table} delete refused`, code: "57014" } };
         }
         const doomed = matching();
         tables[table] = (tables[table] ?? []).filter((row) => !doomed.includes(row));
         return { count: options.nullCount?.includes(table) ? null : doomed.length, error: null };
       }
       if (options.failRead?.includes(table)) {
-        return { data: null, count: null, error: { message: `${table} read refused` } };
+        return { data: null, count: null, error: { message: `${table} read refused`, code: "42501" } };
       }
       const rows = matching();
       return {
@@ -111,7 +111,7 @@ function fakeClient(tables: Record<string, Row[]>, options: FakeOptions = {}) {
     const day = table === "event_reminder_passes" ? "occurrence_date" : "send_date";
     queries.push({ table, op: "rpc", filters: [`eq org_id=${args._org_id}`, `lt ${day}=${args._before}`] });
     if (options.failDelete?.includes(table)) {
-      return { data: null, error: { message: `${table} delete refused` } };
+      return { data: null, error: { message: `${table} delete refused`, code: "57014" } };
     }
     const doomed = (tables[table] ?? [])
       .filter((row) => row.org_id === args._org_id && (row[day] as string) < args._before)
@@ -568,6 +568,11 @@ Deno.test("one church failing does not stop the next, and the summary carries th
     assertEquals(summary.removed.find((r) => r.org === OTHER_ORG)?.feedback, 1);
     assertEquals(ids(tables.feedback), ["stuck"]);
     assertEquals(lines.some((line) => line.includes(ORG) && line.includes("feedback")), true);
+    // The failure reaches the summary as text, so its code is logged where the delete answered.
+    assertEquals(
+      lines.map((line) => JSON.parse(line)).filter((line) => line.code === "57014").map((line) => line.step),
+      ["feedback"],
+    );
     assertEquals(lines.some((line) => line.includes("secret message text")), false);
   } finally {
     console.log = originalLog;

@@ -8,7 +8,7 @@ import {
   orgObjectPath,
   parseStoragePublicUrl,
 } from "@/lib/storagePaths";
-import { logWarn } from "@/lib/log";
+import { logError, logWarn } from "@/lib/log";
 import { stepOf } from "@/lib/log/step";
 
 export type ImageUploadType = "avatar" | "event" | "family";
@@ -100,6 +100,7 @@ export async function uploadImage(
     });
 
   if (error) {
+    logError("uploadImage: upload failed", error, { step: stepOf(config.bucket) });
     throw new Error(`Upload failed: ${error.message}`);
   }
 
@@ -136,6 +137,7 @@ export async function deleteImage(
     .remove([fullPath]);
 
   if (error) {
+    logError("deleteImage: remove failed", error, { step: stepOf(config.bucket) });
     throw new Error(`Delete failed: ${error.message}`);
   }
 

@@ -73,6 +73,7 @@ export async function listActiveOrgs(supabase: OrgListClient): Promise<Org[]> {
     .select("id, name, branding, timezone, org_email_domains(domain, status)")
     .eq("status", "active")
     .order("id");
+  if (error) logError("organizations query failed", error);
   if (error) throw new Error(`Failed to list organizations: ${error.message}`);
   return data ?? [];
 }
