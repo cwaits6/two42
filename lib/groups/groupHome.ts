@@ -5,7 +5,14 @@ import { DateTime } from "luxon";
 import { celebrationsThisWeek } from "@/components/directory/celebrations";
 import { calendarDate } from "@/components/directory/utils";
 import { groupPath } from "@/lib/groups/active";
-import { formatServingDate, daysUntil, todayIn, upcomingServiceDates } from "@/lib/serving/dates";
+import {
+  daysUntil,
+  formatMonthDay,
+  formatServingDate,
+  teamServiceDates,
+  todayIn,
+  type TeamDatesSettings,
+} from "@/lib/serving/dates";
 import { lessonThumbnail } from "@/lib/lessons";
 import { ENDED_GRACE_MS, getJoinState, hasMeeting, meetingEndMs } from "@/lib/meetings";
 import { displayName } from "@/lib/names";
@@ -29,7 +36,9 @@ export const EVENTS_LOOKBACK_MS = DAY_MS;
 const MAX_NEW_TILES = 3;
 const MAX_SERVING_CARDS = 2;
 
-export type ServingTeamRow = { team_id: string; window_weeks: number; teams: { name: string } };
+export type ServingTeamRow = TeamDatesSettings & { team_id: string; teams: { name: string } };
+/** A set block's lead gets the To do this many days before its last date. */
+export const MORE_DATES_NOTICE_DAYS = 14;
 export type ServingSignupRow = {
   team_id: string;
   service_date: string;
@@ -65,6 +74,8 @@ export type GroupHomeReads = {
   roster: RosterRow[] | null;
   servingTeams: ServingTeamRow[] | null;
   myTeamIds: string[] | null;
+  /** The teams the viewer leads, for the To do a team lead gets. */
+  myLeadTeamIds: string[] | null;
   signups: ServingSignupRow[] | null;
   pendingJoinCount: number | null;
   drafts: DraftRow[] | null;
@@ -440,7 +451,7 @@ export function teamCoverage(
 ): TeamCoverage[] {
   return teams
     .flatMap((team) => {
-      const window = upcomingServiceDates(team.window_weeks, today);
+      const window = teamServiceDates(team, today);
       const onTeam = signups.filter(
         (s) => s.team_id === team.team_id && window.includes(s.service_date),
       );
@@ -487,9 +498,31 @@ export function servingCards(
     });
 }
 
+/** The teams on set dates whose last date is near: the lead has to set more. */
+export function needsMoreDates(teams: ServingTeamRow[], today: string): ServingTeamRow[] {
+  return teams.filter(
+    (team) =>
+      team.schedule === "set" &&
+      team.date_to !== null &&
+      daysUntil(team.date_to, today) >= 0 &&
+      daysUntil(team.date_to, today) <= MORE_DATES_NOTICE_DAYS,
+  );
+}
+
+function moreDatesRows(teams: ServingTeamRow[], groupId: string, today: string): TodoRow[] {
+  return needsMoreDates(teams, today).map((team) => ({
+    kind: "serving",
+    key: `serving-dates-${team.team_id}`,
+    title: `${team.teams.name} needs more dates`,
+    detail: `Last date is ${formatMonthDay(team.date_to!, today)}`,
+    href: groupPath(groupId, `/serving/${team.team_id}`),
+  }));
+}
+
 function todoRows(
   pendingJoinCount: number,
   coverage: TeamCoverage[],
+  servingTeams: ServingTeamRow[],
   drafts: DraftRow[],
   groupId: string,
   today: string,
@@ -505,6 +538,7 @@ function todoRows(
       href: groupPath(groupId, "/settings/privacy"),
     });
   }
+  rows.push(...moreDatesRows(servingTeams, groupId, today));
   for (const team of coverage) {
     rows.push({
       kind: "serving",
@@ -714,10 +748,20 @@ export function buildGroupHome(reads: GroupHomeReads, ctx: HomeContext): GroupHo
   const coverage =
     servingTeams && signups ? teamCoverage(servingTeams, signups, userId, today) : null;
 
+  // A leader's To do covers the group; a team lead's only the set-date teams
+  // they lead that are running out of dates.
   const todo = !isLeader
-    ? []
+    ? servingTeams && reads.myLeadTeamIds
+      ? moreDatesRows(
+          servingTeams.filter((team) => reads.myLeadTeamIds!.includes(team.team_id)),
+          groupId,
+          today,
+        )
+      : reads.myLeadTeamIds?.length === 0
+        ? []
+        : null
     : coverage && reads.pendingJoinCount !== null && reads.drafts
-      ? todoRows(reads.pendingJoinCount, coverage, reads.drafts, groupId, today)
+      ? todoRows(reads.pendingJoinCount, coverage, servingTeams!, reads.drafts, groupId, today)
       : null;
 
   const cards = isLeader

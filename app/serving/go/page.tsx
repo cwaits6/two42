@@ -1,8 +1,16 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { getServingLinkMode } from "@/lib/serving/config";
 import { verifyServingToken } from "@/lib/serving/links";
-import { formatServingDate, isUpcomingServiceDate, todayIn } from "@/lib/serving/dates";
-import { findSpouse, resolveSignupLabel } from "@/lib/serving/server";
+import {
+  SIGNUP_SETTINGS_SELECT,
+  formatServingDate,
+  isUpcomingServiceDate,
+  openDatesAfter,
+  teamServiceDates,
+  todayIn,
+} from "@/lib/serving/dates";
+import { signupDisplayName, spouseFirstName } from "@/lib/serving/display";
+import { findSpouse } from "@/lib/serving/server";
 import { orgTimeZoneById } from "@/lib/time/orgZone";
 import { LinkActionConfirm } from "@/components/serving/LinkActionConfirm";
 import { ServingNotice } from "@/components/serving/ServingNotice";
@@ -97,12 +105,12 @@ export default async function ServingLinkPage({
     // be asserted by the explicit profile/group org check below.
     service
       .from("profiles")
-      .select("id, org_id, first_name, preferred_name, family_id, role")
+      .select("id, org_id, first_name, preferred_name, family_id, relationship, role")
       .eq("id", payload.p)
       .maybeSingle(),
     service
       .from("serving_team_settings")
-      .select("enabled")
+      .select(SIGNUP_SETTINGS_SELECT)
       .eq("team_id", payload.g)
       .eq("org_id", group.org_id)
       .maybeSingle(),
@@ -157,7 +165,6 @@ export default async function ServingLinkPage({
 
   const today = todayIn(await orgTimeZoneById(service, group.org_id));
   const dateLabel = formatServingDate(payload.d, today);
-  const firstName = profile.preferred_name || profile.first_name || null;
 
   if (payload.a === "signup") {
     if (!membership) {
@@ -169,11 +176,13 @@ export default async function ServingLinkPage({
         />
       );
     }
-    if (!isUpcomingServiceDate(payload.d, today)) {
+    const teamDates = teamServiceDates(settings, today);
+    const passed = !isUpcomingServiceDate(payload.d, today);
+    if (passed || !teamDates.includes(payload.d)) {
       return (
         <ServingNotice
           title={dateLabel}
-          em="has passed"
+          em={passed ? "has passed" : "is not one of the team's dates"}
           body="The Serving page shows the dates that are still open."
         />
       );
@@ -187,15 +196,7 @@ export default async function ServingLinkPage({
           preferred_name: string | null;
         })
         .filter(Boolean);
-      // resolveSignupLabel is non-fatal: the household name only enriches
-      // the "already covered" copy, so a failed read degrades to the
-      // attendee names.
-      const coveredLabel = await resolveSignupLabel(
-        service,
-        attendees,
-        signup.family_id,
-        group.org_id
-      );
+      const coveredLabel = signupDisplayName(attendees);
       return (
         <ServingNotice
           title={dateLabel}
@@ -208,25 +209,36 @@ export default async function ServingLinkPage({
     // Offer the spouse option when the member has one on file. findSpouse is
     // non-fatal: a failed read degrades to not offering the option rather
     // than blocking the signup.
-    let spouseName: string | null = null;
-    if (profile.family_id) {
-      const spouse = await findSpouse(
-        service,
-        profile.family_id,
-        profile.id,
-        group.org_id
-      );
-      spouseName = spouse ? spouse.preferred_name || spouse.first_name : null;
+    const spouse = await findSpouse(service, profile, group.org_id, payload.g);
+
+    // The following weeks the team asks about, when they are open. A failed
+    // read offers none rather than offering a date that may be taken.
+    let extraDates: string[] = [];
+    const candidates = teamDates.slice(teamDates.indexOf(payload.d) + 1, teamDates.indexOf(payload.d) + 1 + settings.extra_weeks);
+    if (candidates.length > 0) {
+      const { data: taken, error: takenError } = await service
+        .from("serving_signups")
+        .select("service_date")
+        .eq("team_id", payload.g)
+        .eq("org_id", group.org_id)
+        .in("service_date", candidates);
+      if (takenError) {
+        console.error("Serving link page: following dates lookup failed for group %s:", payload.g, takenError);
+      } else {
+        const covered = new Set((taken ?? []).map((s) => s.service_date));
+        extraDates = openDatesAfter(payload.d, teamDates, (d) => !covered.has(d), settings.extra_weeks);
+      }
     }
 
     return (
       <LinkActionConfirm
         token={token}
         action="signup"
-        firstName={firstName}
         teamName={group.name}
-        dateLabel={dateLabel}
-        spouseName={spouseName}
+        date={payload.d}
+        today={today}
+        spouseName={spouse ? spouseFirstName(spouse) : null}
+        extraDates={extraDates}
       />
     );
   }
@@ -253,10 +265,11 @@ export default async function ServingLinkPage({
     <LinkActionConfirm
       token={token}
       action="cancel"
-      firstName={firstName}
       teamName={group.name}
-      dateLabel={dateLabel}
+      date={payload.d}
+      today={today}
       spouseName={null}
+      extraDates={[]}
     />
   );
 }

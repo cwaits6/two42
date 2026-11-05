@@ -571,14 +571,13 @@ select is(
     where schemaname = 'public'
       and (qual like '%is_team_lead%' or with_check like '%is_team_lead%')
       and (tablename, policyname) in (
-        ('serving_signups', 'Team members and group leaders can create serving signups'),
         ('serving_signups', 'Owners, attendees, team leads and group leaders can delete serving signups'),
         ('serving_signup_attendees', 'Signup owners can remove attendees'),
         ('serving_broadcasts', 'Team leads and group leaders can view serving broadcasts'),
         ('serving_broadcasts', 'Team leads and group leaders can log serving broadcasts'),
         ('serving_team_settings', 'Team leads and group leaders can insert serving settings'),
         ('serving_team_settings', 'Team leads and group leaders can update serving settings'))),
-  7, 'all seven serving write/lead policies call is_team_lead()');
+  6, 'all six serving write/lead policies call is_team_lead()');
 select is(
   (select count(*)::int from pg_policies
     where schemaname = 'public' and tablename in ('teams', 'team_members')

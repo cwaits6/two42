@@ -1,13 +1,14 @@
 name: Check scheduled jobs
 
-# Fails, which emails the maintainer, when the latest cron firing didn't run or
-# didn't get a 200 back. Runs within pg_net's 6-hour response retention.
+# Fails, which emails the maintainer, when a cron firing in the last six
+# hours didn't run or didn't get a 200 back: the hourly serving reminders,
+# clean-up-expired-data at 09:00 UTC, and the 15:00 UTC reminder jobs. Every
+# six hours, which is pg_net's response retention, so no firing is missed.
 # Read-only against the hosted database; see scripts/README.md.
 
 on:
   schedule:
-    - cron: '30 9 * * *'  # after clean-up-expired-data at 09:00 UTC
-    - cron: '30 15 * * *' # after the reminder jobs at 15:00 UTC
+    - cron: '30 3,9,15,21 * * *'
   workflow_dispatch:
 
 permissions:
@@ -15,7 +16,7 @@ permissions:
 
 jobs:
   check:
-    name: Check the latest firing
+    name: Check the last six hours of firings
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -34,7 +35,7 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
-      - name: Read the latest firing
+      - name: Read the firings since the last check
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |

@@ -402,6 +402,23 @@ value in its own org-filtered query, not on `listActiveOrgs()`: functions deploy
 before migrations, and a missing column on that shared select would stop the
 reminder jobs for the window. `prayer_retention_suite.sql` pins the matrix.
 
+### Serving reminder record
+
+`serving_reminder_passes` and `serving_reminder_sends`
+(`20261116000000_serving_blocks_couples_reminder_time.sql`) record which team
+had its reminder pass on which local day and which person's reminder was
+claimed and sent. Both carry `org_id` with the fail-closed default, the
+restrictive isolation floor, composite foreign keys (to `teams`, to the pass,
+and to `profiles`, which cascades when the person is deleted) and **no
+permissive policy or client grant**: only the service key reads or writes
+them, through `serving_reminder_claim()` and the hourly job's settle updates,
+every chain carrying the church's id. The nightly `clean-up-expired-data` job
+deletes a church's passes with a `send_date` older than 35 days through
+`serving_reminder_passes_prune()`, at most 500 per call, and the sends go
+with them. Nothing else holds a person's reminder
+history. `serving_reminder_record_suite.sql` pins the grants, the claim and
+the cascade.
+
 ### Group creation
 
 Who may start a group is an org setting read by RLS and by a definer
@@ -924,6 +941,17 @@ table's own FK.
   client sessions only. Database-level access by the operator can still link a
   request to its author; whether that changes is decided with the prayer
   encryption work.
+- A team's dates (a rolling window or a set block) are one rule held in
+  three places: `teamServiceDates()` in `lib/serving/dates.ts` for the
+  screens and the two signup routes, its mirror in
+  `supabase/functions/_shared/serving-dates.ts` for the reminder job, and
+  the date check in `serving_signup_apply()` (`SV006`), which is what holds
+  against a request that skips the routes. `serving_signups` has no INSERT
+  policy, so the function is the only way a client takes a date. Nothing
+  generates one copy from another: `lib/email/layout.test.ts` compares the
+  two TypeScript copies on the same inputs, and
+  `supabase/tests/serving_team_dates_suite.sql` holds both sides of each
+  bound in the function.
 - The edge functions' `group_id` / `team_id` bindings are review-enforced:
   `check-service-role-org-scope.mjs` proves each chain names the predicate,
   not that it binds the right variable. `_shared/event-recipients.ts` and

@@ -32,6 +32,8 @@ const henry: TeamRosterPerson = {
   last_name: "Mockingham",
   preferred_name: null,
   avatar_url: null,
+  family_id: null,
+  relationship: null,
 };
 const zoe = { ...henry, id: "p-zoe", email: "zoe@example.test", first_name: "Zoe", last_name: "Dummyfield" };
 const nameless = { ...henry, id: "p-new", email: "newcomer@example.test", first_name: null, last_name: null };
@@ -126,6 +128,34 @@ describe("TeamRoster add-people search", () => {
     await search("newcomer");
 
     expect(addButtons()).toEqual(["Add newcomer@example.test to Greeters"]);
+  });
+
+  it("asks about a spouse who is in the group but not on the team, and adds both", async () => {
+    result = { data: [{ profile_id: "x" }], error: null, status: 201 };
+    const marcus = { ...henry, id: "p-marcus", first_name: "Marcus", last_name: "Bell", family_id: "f-bell", relationship: "primary" };
+    const dana = { ...henry, id: "p-dana", first_name: "Dana", last_name: "Bell", family_id: "f-bell", relationship: "spouse" };
+    const kid = { ...henry, id: "p-kid", first_name: "Sam", last_name: "Bell", family_id: "f-bell", relationship: "child" };
+    await mount([zoe, marcus, dana, kid]);
+    await click("Add person");
+    await click("Add Marcus Bell to Greeters");
+    expect(document.body.textContent).toContain("Also add Dana Bell?");
+    await click("Add both");
+    expect(toast.success).toHaveBeenCalledWith("Added Marcus Bell and Dana Bell to Greeters.");
+
+    await click("Add Sam Bell to Greeters");
+    expect(document.body.textContent).not.toContain("Also add");
+    expect(toast.success).toHaveBeenLastCalledWith("Added Sam Bell to Greeters.");
+  });
+
+  it("adds just the one person when asked to", async () => {
+    result = { data: [{ profile_id: "x" }], error: null, status: 201 };
+    const marcus = { ...henry, id: "p-marcus", first_name: "Marcus", last_name: "Bell", family_id: "f-bell", relationship: "primary" };
+    const dana = { ...henry, id: "p-dana", first_name: "Dana", last_name: "Bell", family_id: "f-bell", relationship: "spouse" };
+    await mount([marcus, dana]);
+    await click("Add person");
+    await click("Add Marcus Bell to Greeters");
+    await click("Just Marcus");
+    expect(toast.success).toHaveBeenCalledWith("Added Marcus Bell to Greeters.");
   });
 
   it("still finds people by name", async () => {

@@ -8,8 +8,11 @@ import { contrastRatio } from "@/lib/contrast";
 import { BRANDING_DEFAULTS } from "@/lib/branding";
 import {
   formatServiceDateWithYear,
+  serviceDatesBetween,
+  teamServiceDates,
   todayIn,
   upcomingServiceDates,
+  type TeamDatesSettings,
 } from "@/lib/serving/dates";
 import * as edgeDates from "@/supabase/functions/_shared/serving-dates";
 import {
@@ -279,5 +282,18 @@ describe("the edge functions' dates match the app's", () => {
       expect(edgeDates.upcomingServiceDates(6, today)).toEqual(upcomingServiceDates(6, today));
       expect(edgeDates.formatServiceDateWithYear(today)).toBe(formatServiceDateWithYear(today));
     }
+  });
+
+  it("agree on a team's dates: rolling, and a set block before, during, after and at its end", () => {
+    const rolling: TeamDatesSettings = { schedule: "rolling", window_weeks: 8, date_from: null, date_to: null };
+    const block: TeamDatesSettings = { schedule: "set", window_weeks: 8, date_from: "2026-10-11", date_to: "2027-05-02" };
+    const days = ["2026-09-30", "2026-10-11", "2026-12-25", "2027-05-02", "2027-05-03", "2027-08-01"];
+    for (const today of days) {
+      expect(edgeDates.teamServiceDates(rolling, today)).toEqual(teamServiceDates(rolling, today));
+      expect(edgeDates.teamServiceDates(block, today)).toEqual(teamServiceDates(block, today));
+    }
+    expect(teamServiceDates(block, "2026-09-30")).toHaveLength(30);
+    expect(teamServiceDates(block, "2027-05-03")).toEqual([]);
+    expect(edgeDates.serviceDatesBetween("2026-10-11", "2027-05-02")).toEqual(serviceDatesBetween("2026-10-11", "2027-05-02"));
   });
 });

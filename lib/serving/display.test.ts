@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { personInitials, personName, signupDisplayName } from "./display";
+import { coupleName, ownSignupLabel, personInitials, personName, signupDisplayName, spouseFirstName } from "./display";
 
 const blank = { first_name: null, last_name: null, preferred_name: null };
 
@@ -19,17 +19,57 @@ describe("personName", () => {
   });
 });
 
-describe("signupDisplayName", () => {
-  it("shows a single attendee without a name by their email", () => {
-    expect(signupDisplayName([{ ...blank, email: "new@x.test" }], null)).toBe("new@x.test");
+describe("coupleName", () => {
+  it("joins the first names before a shared last name", () => {
+    expect(coupleName({ ...blank, first_name: "David", last_name: "Reyes" }, { ...blank, first_name: "Lena", last_name: "Reyes" })).toBe(
+      "David & Lena Reyes",
+    );
   });
 
-  it("uses the household name for a couple", () => {
-    expect(signupDisplayName([{ ...blank, first_name: "A" }, { ...blank, first_name: "B" }], "The Smiths")).toBe("The Smiths");
+  it("keeps both full names when the last names differ or one is missing", () => {
+    expect(coupleName({ ...blank, first_name: "David", last_name: "Reyes" }, { ...blank, first_name: "Lena", last_name: "Cho" })).toBe(
+      "David Reyes & Lena Cho",
+    );
+    expect(coupleName({ ...blank, first_name: "David", last_name: "Reyes" }, { ...blank, email: "lena@x.test" })).toBe(
+      "David Reyes & lena@x.test",
+    );
+  });
+
+  it("uses the preferred name", () => {
+    expect(coupleName({ ...blank, first_name: "Benjamin", preferred_name: "Ben", last_name: "Hale" }, { ...blank, first_name: "Ann", last_name: "Hale" })).toBe(
+      "Ben & Ann Hale",
+    );
+  });
+});
+
+describe("signupDisplayName", () => {
+  it("shows a single attendee without a name by their email", () => {
+    expect(signupDisplayName([{ ...blank, email: "new@x.test" }])).toBe("new@x.test");
+  });
+
+  it("names a couple by name, never by household", () => {
+    expect(signupDisplayName([{ ...blank, first_name: "David", last_name: "Reyes" }, { ...blank, first_name: "Lena", last_name: "Reyes" }])).toBe(
+      "David & Lena Reyes",
+    );
   });
 
   it("names nobody when no attendee is visible", () => {
-    expect(signupDisplayName([], null)).toBe("Someone");
+    expect(signupDisplayName([])).toBe("Someone");
+  });
+});
+
+describe("ownSignupLabel", () => {
+  const me = { ...blank, id: "me", first_name: "Hannah", last_name: "Hale" };
+  const ben = { ...blank, id: "ben", first_name: "Benjamin", preferred_name: "Ben", last_name: "Hale" };
+
+  it("says You, You & Ben, or the spouse alone", () => {
+    expect(ownSignupLabel([me], "me")).toBe("You");
+    expect(ownSignupLabel([me, ben], "me")).toBe("You & Ben");
+    expect(ownSignupLabel([ben], "me")).toBe("Ben Hale");
+  });
+
+  it("calls a spouse without a first name by what is on file", () => {
+    expect(spouseFirstName({ ...blank, email: "ben@x.test" })).toBe("ben@x.test");
   });
 });
 

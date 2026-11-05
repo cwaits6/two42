@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { readList } from "@/lib/supabase/readList";
 import { toWallRow } from "@/lib/prayer";
-import { todayIn, MAX_WINDOW_WEEKS } from "@/lib/serving/dates";
+import { todayIn } from "@/lib/serving/dates";
 import { dayKey } from "@/lib/time/zone";
 import {
   EVENTS_LOOKBACK_MS,
@@ -88,9 +88,8 @@ export async function loadGroupHomeReads(
   const newSince = new Date(now.getTime() - NEW_WINDOW_MS);
   const newSinceIso = newSince.toISOString();
   const newSinceDay = dayKey(newSinceIso, timeZone);
-  const lastServingDate = new Date(
-    Date.parse(`${today}T00:00:00Z`) + MAX_WINDOW_WEEKS * 7 * 24 * 60 * 60 * 1000,
-  )
+  // A set block runs up to a year, so the signups read reaches that far.
+  const lastServingDate = new Date(Date.parse(`${today}T00:00:00Z`) + 366 * 24 * 60 * 60 * 1000)
     .toISOString()
     .slice(0, 10);
 
@@ -102,7 +101,7 @@ export async function loadGroupHomeReads(
     families,
     roster,
     servingTeams,
-    myTeamIds,
+    myTeams,
     signups,
     pendingJoinCount,
     drafts,
@@ -158,19 +157,17 @@ export async function loadGroupHomeReads(
       .then((read) => readList<RosterRow>(read, "the group's roster")),
     client
       .from("serving_team_settings")
-      .select("team_id, window_weeks, teams!inner(name, group_id)")
+      .select("team_id, schedule, window_weeks, date_from, date_to, teams!inner(name, group_id)")
       .eq("org_id", orgId)
       .eq("enabled", true)
       .eq("teams.group_id", groupId)
       .then((read) => readList(read, "serving team settings") as unknown as ServingTeamRow[] | null),
-    isLeader
-      ? Promise.resolve([] as string[])
-      : client
-          .from("team_members")
-          .select("team_id")
-          .eq("org_id", orgId)
-          .eq("profile_id", userId)
-          .then((read) => readList(read, "the viewer's teams")?.map((m) => m.team_id) ?? null),
+    client
+      .from("team_members")
+      .select("team_id, is_leader")
+      .eq("org_id", orgId)
+      .eq("profile_id", userId)
+      .then((read) => readList(read, "the viewer's teams")),
     client
       .from("serving_signups")
       .select("team_id, service_date, teams!inner(name, group_id), serving_signup_attendees(profile_id)")
@@ -257,7 +254,8 @@ export async function loadGroupHomeReads(
     families,
     roster,
     servingTeams,
-    myTeamIds,
+    myTeamIds: myTeams?.map((m) => m.team_id) ?? null,
+    myLeadTeamIds: myTeams?.filter((m) => m.is_leader).map((m) => m.team_id) ?? null,
     signups,
     pendingJoinCount,
     drafts,

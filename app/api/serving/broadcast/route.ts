@@ -4,7 +4,7 @@ import { displayName } from "@/lib/names";
 import { resolveEmailBranding } from "@/lib/email/identity";
 import { getServingLinkMode } from "@/lib/serving/config";
 import { createServingToken } from "@/lib/serving/links";
-import { todayIn, upcomingServiceDates } from "@/lib/serving/dates";
+import { teamServiceDates, todayIn } from "@/lib/serving/dates";
 import { orgTimeZoneById } from "@/lib/time/orgZone";
 import { sendServingBroadcastEmail } from "@/lib/email/serving";
 import { reserveEmailQuota } from "@/lib/email/quota";
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
       .maybeSingle(),
     supabase
       .from("serving_team_settings")
-      .select("enabled, window_weeks")
+      .select("enabled, schedule, window_weeks, date_from, date_to")
       .eq("team_id", groupId)
       .maybeSingle(),
   ]);
@@ -126,7 +126,13 @@ export async function POST(request: Request) {
   // Open dates are recomputed here — the email must reflect the truth at
   // send time, not what the leader's page showed when it loaded
   const today = todayIn(await orgTimeZoneById(supabase, group.org_id));
-  const dates = upcomingServiceDates(settings.window_weeks, today);
+  const dates = teamServiceDates(settings, today);
+  if (dates.length === 0) {
+    return NextResponse.json(
+      { error: "This team has no dates to sign up for" },
+      { status: 400 }
+    );
+  }
   const { data: signups, error: signupsError } = await supabase
     .from("serving_signups")
     .select("service_date")

@@ -1,18 +1,24 @@
 # scripts/
 
-## `check-scheduled-jobs.sql` — did the latest cron firing work?
+## `check-scheduled-jobs.sql` — did the last six hours of cron firings work?
 
-Run by `.github/workflows/scheduled-jobs-check.yml` at 09:30 and 15:30 UTC,
-half an hour after the cron firings. The workflow fails, and GitHub emails the
-maintainer, if a job didn't run, a response wasn't a 200, or responses are
-missing. A 401 means the vault's `cron_service_role_key` matches none of the
-function's keys.
+Run by `.github/workflows/scheduled-jobs-check.yml` every six hours, at 03:30,
+09:30, 15:30 and 21:30 UTC. Each run covers every firing in the six hours
+before it: the hourly `send-serving-reminders-hourly` job, the nightly
+`clean-up-expired-data-nightly` job at 09:00 UTC, the 15:00 UTC
+`send-event-reminders-daily` job and, on the 1st, the monthly serving
+broadcast. The workflow fails, and GitHub emails the maintainer, if a job
+didn't run, a response wasn't a 200, or a firing's responses are missing. A 401
+means the vault's `cron_service_role_key` matches none of the function's keys.
 
-It only reads, and prints statuses and counts, never response bodies, because
-the logs are public. `pg_net` keeps responses for 6 hours, so a manual run more
-than 6 hours after a firing fails with a message saying so. The job names and
+The rules live in `private.scheduled_jobs_check(_now)`, defined in a migration
+so `supabase/tests/scheduled_jobs_check_suite.sql` can run them against made-up
+firings; the script only calls it. It reads, and prints statuses and counts,
+never return messages or response bodies, because the logs are public. `pg_net`
+keeps responses for 6 hours, so the schedule can't be stretched; set
+`scheduled_check.now` to check an earlier window by hand. The job names and
 hours are copied from the cron schedules, so a schedule change needs a matching
-change here.
+change in the function.
 
 ## `rekey-storage-objects.mjs` — one-time legacy storage re-key
 

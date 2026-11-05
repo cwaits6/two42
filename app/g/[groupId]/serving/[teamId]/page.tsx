@@ -5,8 +5,15 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { ErrorState } from "@/components/states/ErrorState";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
-import { personName, signupDisplayName } from "@/lib/serving/display";
-import { pastServiceDates, todayIn, upcomingServiceDates } from "@/lib/serving/dates";
+import { ownSignupLabel, personName, signupDisplayName, spouseFirstName } from "@/lib/serving/display";
+import {
+  DEFAULT_TEAM_DATES,
+  openDatesLine,
+  pastServiceDates,
+  teamServiceDates,
+  todayIn,
+} from "@/lib/serving/dates";
+import { findSpouse } from "@/lib/serving/server";
 import {
   ServingSchedule,
   type ScheduleEntry,
@@ -42,7 +49,10 @@ const byName = (a: TeamRosterPerson, b: TeamRosterPerson) =>
   personName(a).localeCompare(personName(b));
 
 const SIGNUP_SELECT =
-  "id, service_date, created_by, family_id, serving_signup_attendees(profiles(id, email, first_name, last_name, preferred_name))";
+  "id, service_date, created_by, serving_signup_attendees(profiles(id, email, first_name, last_name, preferred_name))";
+
+const ROSTER_PROFILE =
+  "profiles(id, email, role, first_name, last_name, preferred_name, avatar_url, family_id, relationship)";
 
 export default async function ServingSchedulePage({
   params,
@@ -61,7 +71,7 @@ export default async function ServingSchedulePage({
     await Promise.all([
       supabase
         .from("profiles")
-        .select("id, org_id, role, family_id, first_name, last_name, preferred_name")
+        .select("id, org_id, role, family_id, relationship, first_name, last_name, preferred_name")
         .eq("id", user.id)
         .single(),
       supabase
@@ -104,14 +114,12 @@ export default async function ServingSchedulePage({
     await Promise.all([
       supabase
         .from("team_members")
-        .select(
-          "is_leader, profiles(id, email, role, first_name, last_name, preferred_name, avatar_url)"
-        )
+        .select(`is_leader, ${ROSTER_PROFILE}`)
         .eq("team_id", teamId),
       canManageRoster
         ? supabase
             .from("group_members")
-            .select("profiles(id, email, role, first_name, last_name, preferred_name, avatar_url)")
+            .select(ROSTER_PROFILE)
             .eq("group_id", group.id)
         : Promise.resolve({ data: [], error: null }),
     ]);
@@ -133,33 +141,28 @@ export default async function ServingSchedulePage({
   let rosterMembers: TeamRosterMember[] = [];
   let rosterCandidates: TeamRosterPerson[] = [];
   if (canManageRoster && !rosterUnavailable) {
+    const person = (p: RosterProfile): TeamRosterPerson => ({
+      id: p.id,
+      email: p.email,
+      first_name: p.first_name,
+      last_name: p.last_name,
+      preferred_name: p.preferred_name,
+      avatar_url: p.avatar_url,
+      family_id: p.family_id,
+      relationship: p.relationship,
+    });
     const onTeam = new Set<string>();
     for (const row of memberRows ?? []) {
       const p = row.profiles as unknown as RosterProfile | null;
       if (!p) continue;
       onTeam.add(p.id);
       if (p.role === "pending") continue;
-      rosterMembers.push({
-        id: p.id,
-        email: p.email,
-        first_name: p.first_name,
-        last_name: p.last_name,
-        preferred_name: p.preferred_name,
-        avatar_url: p.avatar_url,
-        is_leader: row.is_leader,
-      });
+      rosterMembers.push({ ...person(p), is_leader: row.is_leader });
     }
     for (const row of groupRows ?? []) {
       const p = row.profiles as unknown as RosterProfile | null;
       if (!p || p.role === "pending" || onTeam.has(p.id)) continue;
-      rosterCandidates.push({
-        id: p.id,
-        email: p.email,
-        first_name: p.first_name,
-        last_name: p.last_name,
-        preferred_name: p.preferred_name,
-        avatar_url: p.avatar_url,
-      });
+      rosterCandidates.push(person(p));
     }
     rosterMembers.sort((a, b) =>
       a.is_leader !== b.is_leader ? (a.is_leader ? -1 : 1) : byName(a, b)
@@ -178,57 +181,51 @@ export default async function ServingSchedulePage({
   }
 
   const today = todayIn(await getOrgTimeZone());
-  const dates = upcomingServiceDates(settings?.window_weeks ?? 8, today);
+  const teamDates = settings
+    ? {
+        schedule: settings.schedule === "set" ? ("set" as const) : ("rolling" as const),
+        window_weeks: settings.window_weeks,
+        date_from: settings.date_from,
+        date_to: settings.date_to,
+      }
+    : DEFAULT_TEAM_DATES;
+  const dates = teamServiceDates(teamDates, today);
 
+  // One bounded read for the dates shown, however long the block, and one
+  // for everything before it.
   const [signupRead, pastSignupRead] = await Promise.all([
+    dates.length > 0
+      ? supabase
+          .from("serving_signups")
+          .select(SIGNUP_SELECT)
+          .eq("team_id", teamId)
+          .gte("service_date", dates[0])
+          .lte("service_date", dates[dates.length - 1])
+      : Promise.resolve({ data: [], error: null }),
     supabase
       .from("serving_signups")
       .select(SIGNUP_SELECT)
       .eq("team_id", teamId)
-      .gte("service_date", dates[0])
-      .lte("service_date", dates[dates.length - 1]),
-    supabase
-      .from("serving_signups")
-      .select(SIGNUP_SELECT)
-      .eq("team_id", teamId)
-      .lt("service_date", dates[0])
+      .lt("service_date", dates[0] ?? today)
       .order("service_date", { ascending: false }),
   ]);
   const signups = readList(signupRead, "upcoming serving signups");
   const pastSignupRows = readList(pastSignupRead, "past serving signups");
   const scheduleUnavailable = !signups || !pastSignupRows;
 
-  // Household names for couple signups. A failed read degrades the label to
-  // the attendees' joined names.
-  const familyIds = [
-    ...new Set(
-      [...(signups ?? []), ...(pastSignupRows ?? [])]
-        .filter((s) => (s.serving_signup_attendees?.length ?? 0) > 1 && s.family_id)
-        .map((s) => s.family_id as string)
-    ),
-  ];
-  const familyNames = new Map<string, string>();
-  if (familyIds.length > 0) {
-    const { data: families } = await supabase
-      .from("family_units")
-      .select("id, family_name")
-      .in("id", familyIds);
-    for (const f of families ?? []) familyNames.set(f.id, f.family_name);
-  }
-
   const toEntry = (s: NonNullable<typeof signups>[number]): ScheduleEntry => {
     const attendees = (s.serving_signup_attendees ?? [])
       .map((a) => a.profiles as unknown as AttendeeProfile)
-      .filter(Boolean);
+      .filter(Boolean)
+      // Whoever tapped Sign up comes first in a couple's name.
+      .sort((a, b) => (a.id === s.created_by ? -1 : b.id === s.created_by ? 1 : 0));
     return {
       id: s.id,
       date: s.service_date,
       createdBy: s.created_by ?? "",
       attendeeIds: attendees.map((a) => a.id),
-      label: signupDisplayName(
-        attendees,
-        s.family_id ? (familyNames.get(s.family_id) ?? null) : null
-      ),
+      label: signupDisplayName(attendees),
+      ownLabel: ownSignupLabel(attendees, user.id),
     };
   };
 
@@ -246,30 +243,11 @@ export default async function ServingSchedulePage({
       }))
     : [];
 
-  // Spouse option for the attendee picker ("just me" / "me & spouse").
-  // Uses the service client so pending profiles (spouse never logged in) are visible.
-  let spouse: { id: string; name: string } | null = null;
-  if (profile.family_id) {
-    const service = await createServiceClient();
-    // org_id comes from the caller's own RLS-scoped profile read above; the
-    // filter is required on a service-role read even though the composite FK
-    // already prevents a cross-org household.
-    const { data: spouseRow } = await service
-      .from("profiles")
-      .select("id, first_name, last_name, preferred_name")
-      .eq("family_id", profile.family_id)
-      .eq("org_id", profile.org_id)
-      .in("relationship", ["primary", "spouse"])
-      .neq("id", user.id)
-      .limit(1)
-      .maybeSingle();
-    if (spouseRow) {
-      spouse = {
-        id: spouseRow.id,
-        name: spouseRow.preferred_name || spouseRow.first_name || "spouse",
-      };
-    }
-  }
+  // The spouse option for "Me & Ben", on the service client so a spouse who
+  // never signed in (a pending profile) is still found. org_id comes from
+  // the caller's own RLS-scoped profile read above.
+  const spouseRow = await findSpouse(await createServiceClient(), profile, profile.org_id, teamId);
+  const spouse = spouseRow ? { id: spouseRow.id, name: spouseFirstName(spouseRow) } : null;
 
   const teamSettings = canManageRoster && (
     <ServingSettingsDialog
@@ -279,7 +257,9 @@ export default async function ServingSchedulePage({
           ? {
               enabled: settings.enabled ?? false,
               reminder_days: settings.reminder_days ?? [4, 5],
-              window_weeks: settings.window_weeks ?? 8,
+              ...teamDates,
+              extra_weeks: settings.extra_weeks ?? 0,
+              send_hour: settings.send_hour ?? null,
             }
           : null
       }
@@ -297,7 +277,11 @@ export default async function ServingSchedulePage({
             {team.name}
           </span>
         }
-        subtitle={team.description || "Pick an open date to serve."}
+        subtitle={
+          settings?.enabled && !scheduleUnavailable
+            ? openDatesLine(dates, (d) => !entries[d], today)
+            : team.description || undefined
+        }
       />
 
       {!settings?.enabled && canManageRoster && (
@@ -334,12 +318,12 @@ export default async function ServingSchedulePage({
 
           <ServingSchedule
             teamId={teamId}
-            teamName={team.name}
             dates={dates}
             today={today}
             entries={entries}
             userId={user.id}
             spouse={spouse}
+            extraWeeks={settings?.extra_weeks ?? 0}
             canSignUp={canSignUp}
             canManage={canManageRoster}
           />

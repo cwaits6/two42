@@ -546,6 +546,15 @@ begin
   update public.profiles set family_id = fam, relationship = 'spouse' where id = spouse_a;
   update public.profiles set role = 'admin' where id = admin_a;
 
+  -- The spouse is on the team: being on it is the one rule for who can be
+  -- put on a date, and the household rule only decides who may add whom.
+  insert into public.group_members (org_id, group_id, profile_id, role)
+    select t.org_id, t.group_id, spouse_a, 'member'
+    from public.teams t where t.id = current_setting('svrpc.group_a')::uuid
+    on conflict do nothing;
+  insert into public.team_members (org_id, profile_id, team_id)
+    values (org_a, spouse_a, current_setting('svrpc.group_a')::uuid);
+
   perform set_config('svrpc.spouse_a', spouse_a::text, true);
   perform set_config('svrpc.admin_a', admin_a::text, true);
   perform set_config('svrpc.sunday4', (current_setting('svrpc.sunday1')::date + 21)::text, true);
@@ -699,6 +708,79 @@ end $$;
 
 select is(current_setting('svrpc.direct_insert_err'), '42501',
   'signup owner cannot attach an arbitrary same-org, non-household profile via direct insert (RLS 42501) — CWA-61');
+
+-- ── A spouse in the household but not on the team ───────────────────────────
+-- The outsider becomes the owner's spouse: the household rule now passes and
+-- team membership is the only thing standing between them and the date.
+do $$
+declare
+  r record;
+  fam uuid;
+  offteam_err text := 'no error';
+  onteam_err text := 'no error';
+begin
+  insert into public.family_units (org_id, family_name)
+    values (current_setting('svrpc.org_a')::uuid, 'Owner household') returning id into fam;
+  update public.profiles set family_id = fam, relationship = 'primary'
+    where id = current_setting('svrpc.owner_a')::uuid;
+  update public.profiles set family_id = fam, relationship = 'spouse'
+    where id = current_setting('svrpc.outsider_a')::uuid;
+
+  set local role service_role;
+  begin
+    select * into r from public.serving_signup_apply(
+      current_setting('svrpc.group_a')::uuid,
+      (current_setting('svrpc.sunday1')::date + 42)::date,
+      current_setting('svrpc.owner_a')::uuid,
+      array[current_setting('svrpc.owner_a')::uuid,
+            current_setting('svrpc.outsider_a')::uuid]);
+  exception when others then
+    offteam_err := sqlstate;
+  end;
+  reset role;
+  perform set_config('svrpc.offteam_rows', (
+    select count(*)::text from public.serving_signups
+    where team_id = current_setting('svrpc.group_a')::uuid
+      and service_date = (current_setting('svrpc.sunday1')::date + 42)), true);
+
+  insert into public.group_members (org_id, group_id, profile_id, role)
+    select t.org_id, t.group_id, current_setting('svrpc.outsider_a')::uuid, 'member'
+    from public.teams t where t.id = current_setting('svrpc.group_a')::uuid
+    on conflict do nothing;
+  insert into public.team_members (org_id, profile_id, team_id) values
+    (current_setting('svrpc.org_a')::uuid, current_setting('svrpc.outsider_a')::uuid,
+     current_setting('svrpc.group_a')::uuid);
+
+  set local role service_role;
+  begin
+    select * into r from public.serving_signup_apply(
+      current_setting('svrpc.group_a')::uuid,
+      (current_setting('svrpc.sunday1')::date + 42)::date,
+      current_setting('svrpc.owner_a')::uuid,
+      array[current_setting('svrpc.owner_a')::uuid,
+            current_setting('svrpc.outsider_a')::uuid]);
+  exception when others then
+    onteam_err := sqlstate;
+  end;
+  reset role;
+
+  perform set_config('svrpc.offteam_err', offteam_err, true);
+  perform set_config('svrpc.onteam_err', onteam_err, true);
+end $$;
+
+select is(current_setting('svrpc.offteam_err'), 'SV004',
+  'a spouse who is not on the team cannot be put on a date (SV004)');
+select is(current_setting('svrpc.offteam_rows'), '0',
+  'the refusal wrote no signup row');
+select is(current_setting('svrpc.onteam_err'), 'no error',
+  'the same spouse, once on the team, can be put on the date');
+select is(
+  (select count(*) from public.serving_signup_attendees a
+    join public.serving_signups s on s.id = a.signup_id
+    where s.team_id = current_setting('svrpc.group_a')::uuid
+      and s.service_date = (current_setting('svrpc.sunday1')::date + 42)::date),
+  2::bigint,
+  'and both are on it');
 
 select * from finish();
 rollback;

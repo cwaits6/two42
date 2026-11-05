@@ -5,6 +5,8 @@ import { assertEquals, assertThrows } from "jsr:@std/assert@1";
 import {
   formatServiceDateWithYear,
   reminderRun,
+  serviceDatesBetween,
+  teamServiceDates,
   todayIn,
   upcomingServiceDates,
   weekdayOf,
@@ -115,4 +117,14 @@ Deno.test("every daily run acts on the next date across daylight saving", () => 
       assertEquals(serviceDate >= today, true, zone);
     }
   }
+});
+
+Deno.test("a set block lists its Sundays from today on, and the rolling default is the window", () => {
+  const block = { schedule: "set" as const, window_weeks: 8, date_from: "2026-10-11", date_to: "2027-05-02" };
+  assertEquals(teamServiceDates(block, "2026-10-01").length, 30);
+  assertEquals(teamServiceDates(block, "2027-04-26"), ["2027-05-02"]);
+  assertEquals(teamServiceDates(block, "2027-05-03"), []);
+  assertEquals(serviceDatesBetween("2026-11-02", "2026-11-22"), ["2026-11-08", "2026-11-15", "2026-11-22"]);
+  const rolling = { schedule: "rolling" as const, window_weeks: 3, date_from: null, date_to: null };
+  assertEquals(teamServiceDates(rolling, "2026-11-04"), upcomingServiceDates(3, "2026-11-04"));
 });

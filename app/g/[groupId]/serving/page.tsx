@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { RoleRoster, type RosterMember } from "@/components/serving/RoleRoster";
 import { TeamDot } from "@/components/serving/TeamDot";
-import { formatServingDate, todayIn, upcomingServiceDates } from "@/lib/serving/dates";
+import { formatServingDate, teamServiceDates, todayIn } from "@/lib/serving/dates";
 import { personName } from "@/lib/serving/display";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
@@ -197,7 +197,7 @@ export default async function ServingPage({
           <ul className="space-y-4">
             {signupTeams.map((team) => {
               const settings = settingsMap.get(team.id)!;
-              const window = upcomingServiceDates(settings.window_weeks, today);
+              const window = teamServiceDates(settings, today);
               const isTeamLead = membershipMap.get(team.id) === true;
               const isMember = membershipMap.has(team.id);
               const members = rosters.get(team.id) ?? [];

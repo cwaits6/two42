@@ -7,6 +7,8 @@ const DAY_MS = 86_400_000;
 export const EXPIRED_RETENTION_DAYS = 90;
 export const FEEDBACK_RETENTION_MONTHS = 12;
 export const PRAYER_RETENTION_MONTHS = [6, 12, 24] as const;
+/** Serving reminder passes hold who was reminded; a month covers any question about one. */
+export const REMINDER_RETENTION_DAYS = 35;
 
 export function daysBefore(now: Date, days: number): Date {
   return new Date(now.getTime() - days * DAY_MS);
@@ -31,6 +33,11 @@ export function monthsBefore(now: Date, months: number): Date {
 /** Cutoff for access requests, household invites and group invites. */
 export function expiredCutoff(now: Date): string {
   return daysBefore(now, EXPIRED_RETENTION_DAYS).toISOString();
+}
+
+/** The send date before which a serving reminder pass goes, "YYYY-MM-DD". */
+export function reminderCutoff(now: Date): string {
+  return daysBefore(now, REMINDER_RETENTION_DAYS).toISOString().slice(0, 10);
 }
 
 export function feedbackCutoff(now: Date): string {

@@ -12,7 +12,11 @@ import {
   feedbackCutoff,
   isLiveSignupToken,
   prayerCutoff,
+  reminderCutoff,
 } from "./retention.ts";
+
+/** Passes one serving_reminder_passes_prune() call deletes at most. */
+export const DELETE_BATCH = 500;
 
 type QueryError = { message: string } | null;
 
@@ -39,6 +43,10 @@ export interface CleanupClient {
     delete(options: { count: "exact" }): DeleteChain;
     select(columns: string, options?: { count: "exact" }): ReadChain;
   };
+  rpc(
+    fn: "serving_reminder_passes_prune",
+    args: { _org_id: string; _before: string; _limit: number },
+  ): PromiseLike<{ data: number | null; error: QueryError }>;
 }
 
 export interface RemovedCounts {
@@ -47,6 +55,7 @@ export interface RemovedCounts {
   groupInvites: number;
   feedback: number;
   prayerRequests: number;
+  reminderPasses: number;
 }
 
 export interface OrgCleanupResult {
@@ -119,6 +128,7 @@ export async function cleanUpOrg(
     groupInvites: 0,
     feedback: 0,
     prayerRequests: 0,
+    reminderPasses: 0,
   };
   const failures: OrgCleanupResult["failures"] = [];
 
@@ -232,6 +242,23 @@ export async function cleanUpOrg(
         .delete({ count: "exact" })
         .eq("org_id", orgId)
         .lt("created_at", cutoff));
+  });
+
+  // A table that grows every day is cleared a bounded set at a time, so one
+  // night after a gap never deletes everything in one statement. The
+  // database API cannot limit a delete, so the bound lives in the function.
+  await attempt("serving_reminder_passes", async () => {
+    for (;;) {
+      const { data, error } = await supabase.rpc("serving_reminder_passes_prune", {
+        _org_id: orgId,
+        _before: reminderCutoff(now),
+        _limit: DELETE_BATCH,
+      });
+      if (error) throw new Error(error.message);
+      if (data === null) throw new Error("the delete returned no count");
+      removed.reminderPasses += data;
+      if (data < DELETE_BATCH) return;
+    }
   });
 
   return { orgId, removed, failures };

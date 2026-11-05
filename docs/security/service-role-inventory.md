@@ -164,12 +164,24 @@ wedge that Sunday behind `unique (group_id, service_date)`:
 
 - `serving_signup_apply(_group_id, _service_date, _actor_id, _attendee_ids)`
   — the atomic core. EXECUTE: `service_role` only (the signed-link route
-  passes its HMAC-validated profile id as the actor).
+  passes its HMAC-validated profile id as the actor). Every attendee other
+  than the actor must hold a `team_members` row for the team in the team's
+  org (`SV004`): the household rule decides who may add whom, being on the
+  team decides who can be on a date
+  (`20261116000000_serving_blocks_couples_reminder_time.sql`). The date must
+  be one of the team's dates (`SV006`): a Sunday, not before the church's
+  local date, inside the set block or the rolling window, read from the
+  team's own `serving_team_settings` row and the org's time zone.
 - `serving_signup_create(_group_id, _service_date, _attendee_ids)` — the
   authenticated entry point; actor from `auth.uid()`, group org pinned
-  against `app_request_org_id()`, RLS INSERT-policy arms re-checked.
-  EXECUTE: `authenticated` + `service_role`. No `anon` grant on either —
-  the signed-link routes run server-side on the service-role client.
+  against `app_request_org_id()`, the caller's standing on the team
+  checked in the body. EXECUTE: `authenticated` + `service_role`. No `anon`
+  grant on either — the signed-link routes run server-side on the
+  service-role client.
+
+`serving_signups` has no INSERT policy, so these two functions are the only
+way a client takes a date and their rules cannot be skipped with a direct
+insert.
 
 `SECURITY DEFINER` bypasses RLS, so **the org resolution and equality checks
 in the function bodies are the tenant boundary; no lint sees them.**
@@ -179,13 +191,60 @@ parameter; every other row asserted to carry it) is review-enforced. The
 grant matrix and the org checks are pinned by
 `supabase/tests/serving_signup_rpc_suite.sql`.
 
+## Changing who is serving — a definer-function bypass surface
+
+`serving_signup_change(_signup_id, _attendee_ids)`
+(`20261116000000_serving_blocks_couples_reminder_time.sql`) replaces the people
+on one date: a couple, one of them, or the other. EXECUTE: `authenticated` and
+`service_role`, no `anon` grant; reached from `PATCH /api/serving/signups` on
+the cookie-bound client.
+
+`SECURITY DEFINER` bypasses RLS, so **the checks in the body are the whole
+permission.** The actor comes from `auth.uid()` only; the org from the signup
+row, pinned against `app_request_org_id()` and fail-closed on NULL; the actor
+must have tapped Sign up or be listed on the date (`SV005` otherwise); and
+every new attendee must be the actor, or the actor's spouse when the actor is
+the primary or spouse of a household, in the same org (`SV002` otherwise),
+and on the signup's team (`SV004` otherwise, from an org-filtered
+`team_members` read). A group leader or team lead who is not on the date is
+refused: they cancel it instead. The grants, each refusal and the attendee row counts are pinned by
+`supabase/tests/serving_signup_change_suite.sql`.
+
+## Serving reminder claim — service-key only, SECURITY INVOKER
+
+`serving_reminder_claim(_org_id, _send_date, _service_date, _team_ids)` (same
+migration) is what the hourly `send-serving-reminders` job calls, once per
+church per firing, before it mails anyone. It starts the day's pass for each
+team that has none, fixing that pass's recipients from the service date's
+attendees with an email who are not pending, then claims every unsent
+reminder in those passes atomically and returns the people to mail. EXECUTE:
+`service_role` only. It is `SECURITY INVOKER`: its only caller holds
+`BYPASSRLS`, so a definer grant would add nothing, and the org checks in the
+body are what keep a call inside one church. Each team's own `teams.org_id` is
+compared with `_org_id`; a mismatch raises `SR001` before any write. The
+tables it writes, `serving_reminder_passes` and `serving_reminder_sends`, carry
+the restrictive isolation floor and no permissive policy or client grant at
+all: only the service key reads or writes the sent record. Both are pinned by
+`supabase/tests/serving_reminder_record_suite.sql`.
+
+`serving_reminder_passes_prune(_org_id, _before, _limit)` (same migration) is
+what the nightly `clean-up-expired-data` job calls, in a loop per church,
+to delete that church's passes with a `send_date` before the retention
+cutoff: at most `_limit` per call, oldest first, the sends going with each
+pass through the foreign key. It exists because PostgREST cannot limit a
+delete. EXECUTE: `service_role` only, `SECURITY INVOKER` for the same
+reason as the claim; every row it reads and deletes is filtered on
+`_org_id`, which the job takes from `listActiveOrgs()`. The same suite pins
+the grant, the bound and that another church's passes stay.
+
 ## Person deletion RPC — a definer-function bypass surface
 
 `delete_person(_person_id, _org_id)`
 (`20261113000000_delete_person.sql`) runs every database step of deleting a
 person in one transaction: refusing a platform operator and the last church
 admin, serving dates, sign-up records, household entries, and the
-`auth.users` row, which cascades to the profile and through it to the fund
+`auth.users` row, which cascades to the profile, through it to the person's
+`serving_reminder_sends` rows, and to the fund
 rules below (`20261115000000_fund_recipients_in_group.sql`). EXECUTE: `service_role` only,
 reached from `deletePerson()` in `lib/account/deletion.ts`.
 
@@ -660,14 +719,14 @@ Execute on both trigger functions is revoked from `public, anon, authenticated`.
 | `app/api/platform/organizations/route.ts` | `provision_organization()` is EXECUTE-granted to `service_role` only | Platform-admin authority; the RPC creates the org and derives everything from it transactionally | `rpc("provision_organization")` only |
 | `app/api/platform/organizations/[id]/route.ts` | Status/branding/`custom_email_domain_enabled` writes on the tenant root, whose only org-admin write policy is the single-column `directory_visibility` UPDATE (the custom-domain flag is platform-operator-only by design: no grant to the org's own admin, this route is its sole write path) | Platform-admin authority; org id from the route param | `organizations` read + update `.eq("id", id)` (branding merged, never replaced) |
 | `app/api/platform/organizations/[id]/invite-owner/route.ts` | Mints the founding admin's `signup_token`; the platform admin's own-org RLS could never reach the new org's request row | Platform-admin authority; org id from the route param | `access_requests` update `.eq("org_id", id).eq("approved_role", "admin").eq("email", ownerEmail)`; rollback update on the same filters + minted token; email branding via `resolveEmailBranding(id)` |
-| `app/serving/go/page.tsx` | Unauthenticated, HMAC-signed serving link; no session exists to satisfy RLS | HMAC-validated `teams` row (`org_id` and `group_id`); link rejected when `profiles.org_id` disagrees | `group_settings` (link mode, on the team's `group_id`), `serving_team_settings`, `team_members`, `serving_signups` (all on `team_id`), `profiles` (spouse), `family_units` (label), `organizations` `.eq("id", org_id)` (the time zone that decides which dates have passed) |
-| `app/g/[groupId]/serving/[teamId]/page.tsx` | Surfaces pending (never-logged-in) spouse profiles that RLS hides from the caller | Caller's own RLS-scoped profile | `profiles` (spouse lookup) |
+| `app/serving/go/page.tsx` | Unauthenticated, HMAC-signed serving link; no session exists to satisfy RLS | HMAC-validated `teams` row (`org_id` and `group_id`); link rejected when `profiles.org_id` disagrees | `group_settings` (link mode, on the team's `group_id`), `serving_team_settings`, `team_members`, `serving_signups` (all on `team_id`, including the following dates a booking would add, `.in("service_date", candidates)`), `team_members` with embedded `profiles` through `findSpouse()` (spouse, on `org_id` and `team_id`), `organizations` `.eq("id", org_id)` (the time zone that decides which dates have passed) |
+| `app/g/[groupId]/serving/[teamId]/page.tsx` | Surfaces pending (never-logged-in) spouse profiles that RLS hides from the caller | Caller's own RLS-scoped profile | `team_members` with embedded `profiles` through `findSpouse()` (spouse, on `org_id` and `team_id`) |
 | `app/join/family/[token]/page.tsx` | Signed family-invite link resolved before login; no session | The `family_invites` row itself: looked up by `token` alone (unscoped by org — the row is what resolves it), and only for a well-formed uuid; fails closed on a lookup error, on no row and on an accepted invite | `family_invites` (with its `family_members` / `family_units` embeds, reached by the row's own composite FKs) |
 | `app/api/family-invites/request/route.ts` | A household invitee files their access request before login; no session, and `access_requests` has no client INSERT policy | The `family_invites` row looked up by `token` alone (the org anchor); 404 on no row or an already-claimed invite, 500 on a lookup error | `access_requests` existing-request select `.eq("org_id", invite.org_id)` and insert carrying `org_id: invite.org_id` and `invite_token: invite.token` |
 | `app/join/[token]/page.tsx` | Group invite link resolved before login (and for a signed-in member, before the group's own policies can see them); no session | The `group_invites` row looked up by `token` alone (unscoped — the row is what resolves the org); a lookup error renders "Couldn't load this invite." with a retry, no row or a dead link renders the one invalid message | `group_invites` (with `groups` / `organizations` embeds by the row's own FKs); `group_invite_uses` count `.eq("invite_id", id).eq("org_id", org_id)`. The signed-in viewer's own `profiles` and `group_members` rows are read on the request client |
 | `app/api/join/[token]/route.ts` | `group_invite_redeem()` is EXECUTE-granted to `service_role` only, and the route holds the signup token it mails | The function resolves the org from the token row inside the transaction (`// org-anchor:` on the `.rpc()`); the returned `org_id` anchors the quota reservation, the branding read and the rollback | `rpc("group_invite_redeem")`; `access_requests` token-clearing update `.eq("id", access_request_id).eq("org_id", org_id)` when quota refuses or the send fails |
-| `app/api/serving/signups/route.ts` | Post-delete notification email lookups for affected members | The deleted signup row's own `org_id` (authorised by the RLS-checked delete); the link's group from its `teams` embed | `team_members` (leaders, on `team_id`), `family_units` (label) |
-| `app/api/serving/link-action/route.ts` | Same HMAC signed-link pattern as `serving/go`; no session | HMAC-validated `teams` row (`org_id` and `group_id`); link rejected when `profiles.org_id` disagrees | `group_settings` (link mode), `serving_team_settings`, `team_members`, `serving_signups` (read/delete — cancel path; all on `team_id`), `rpc(serving_signup_apply)` (the signup + attendee insert pair, one transaction; the function re-derives the org from the `teams` row and enforces it internally — CWA-47 / #313), `profiles` (spouse), `family_units` (label), `organizations` `.eq("id", org_id)` (the time zone that decides which dates have passed) |
+| `app/api/serving/signups/route.ts` | Post-delete notification email lookups for affected members | The deleted signup row's own `org_id` (authorised by the RLS-checked delete); the link's group from its `teams` embed | `team_members` (leaders, on `team_id`) |
+| `app/api/serving/link-action/route.ts` | Same HMAC signed-link pattern as `serving/go`; no session | HMAC-validated `teams` row (`org_id` and `group_id`); link rejected when `profiles.org_id` disagrees | `group_settings` (link mode), `serving_team_settings`, `team_members`, `serving_signups` (read/delete — cancel path; all on `team_id`), `rpc(serving_signup_apply)` (once per date; the signup + attendee insert pair, one transaction; the function re-derives the org from the `teams` row and enforces it internally — CWA-47 / #313), `team_members` with embedded `profiles` through `findSpouse()` (spouse, on `org_id` and `team_id`), `organizations` `.eq("id", org_id)` (the time zone that decides which dates have passed) |
 | `app/api/serving/broadcast/route.ts` | Fans out email to all team members regardless of caller's RLS visibility | RLS-scoped `teams` row (`org_id` and `group_id`); the caller must lead the team or its group (a `group_members` read on the request client) | `team_members` (recipients, on `team_id`), `group_settings` (link mode, on `org_id` + `group_id`) |
 | `app/api/calendar/feed.ics/route.ts` | Bearer-token calendar subscription; no session | `calendar_subscription_tokens` row (`org_id` stamped at issuance); owner role re-checked; the owner's `group_members` rows are the group boundary | `group_members` (the owner's groups), `events` `.in("group_id", …)` (every repeating series whatever its start, and exception rows, cancelled ones included, by the original slot `series_occurrence_date` — they remove deleted and moved dates), `organizations` `.eq("id", org_id)` (the time zone series dates are expanded in), `group_settings` `.in("group_id", …)` (each group's calendar sharing defaults — join details, notes, location — which an event or series may override on its own row; a failed read is a 500), `serving_signups` `.in("teams.group_id", …)`, `profiles` (owner), token expiry update. A `?group=` outside the owner's groups yields an empty 200; a failed membership read is a 500 |
 | `app/api/auth/consume-token/route.ts` | Pre-login token flow; no session yet | The resolved `access_requests` row (`signup_token` is globally UNIQUE today — scoping is correctness-under-change) | `access_requests` update on `(id, org_id)` |
@@ -746,6 +805,24 @@ mode per group through `resolveGroupLinkMode()` (`group_settings`, on
 profiles. Both shared modules are pure, with recorded-chain tests under
 `supabase/functions/tests/`.
 
+The serving reminders run hourly (`_shared/serving-hourly.ts`). Each firing
+decides from the church's clock alone whether any team could be due, so a
+church outside 6 AM to 10 PM costs no query; a church inside it costs one
+`serving_team_settings` read with its `teams` and today's
+`serving_reminder_passes` and `serving_reminder_sends` embedded (FK
+traversals from the org-filtered parent); and only teams due with a reminder
+still unsent reach `serving_reminder_claim()`, one call per church with the
+church's id from `listActiveOrgs()`. Every send is claimed in that call before
+Resend is called, reserves one place against the church's daily email cap
+just before it is mailed (so a claim released unmailed costs nothing),
+carries an `Idempotency-Key` built from the record's key,
+and is settled on `serving_reminder_sends` with `org_id`, `team_id`,
+`send_date` and `profile_id`. The run stops starting new teams at a time
+budget and leaves the rest to the next firing; the record keeps that safe.
+`tests/serving-hourly_test.ts` asserts the query count per church against a
+recording fake, and `tests/serving-due_test.ts` the due rules across both
+clock changes.
+
 Audit result (CWA-58, re-audited with the group flip): every query chain
 across both entry points and the two shared modules carries an explicit
 `org_id` predicate (or an explicit `org_id` on insert) plus `group_id` /
@@ -777,7 +854,7 @@ outside its scan set entirely, so these calls are covered by review and by
 |------|--------------------------|-------------------------|------------|
 | `supabase/functions/send-event-reminders/index.ts` | Cron job; reads events/RSVPs and emails attendees with no user session | Reminder fan-out iterates all rows across orgs | Refuses any caller but a service key. **Implemented (Phase 3, #212):** iterates active orgs via `_shared/orgs.ts`, every query filtered on `org_id`, per-org failures isolated so one org cannot suppress another's send. **Group scope:** org → group iteration, events on `group_id`, recipients gated on current group membership, per-group failures in `failedItems[]`. **Branding (CWA-56, #322):** `organizations.branding` rides along on the already-org-anchored `listActiveOrgs()` select — no new service-role call site, no new unscoped query — and is validated by `_shared/branding.ts` (a mirror of `lib/branding.ts` + `lib/email/identity.ts`) before reaching any CSS or RFC 5322 sink. **Link origin:** every link is built on the one canonical host (the `SITE_URL` function secret) — no query. **Time zone:** `organizations.timezone` rides along on the same `listActiveOrgs()` select and formats the reminder's event time |
 | `supabase/functions/send-serving-reminders/index.ts` | Cron job; reads serving signups and emails assignees with no user session | Same as `send-event-reminders` | Refuses any caller but a service key. **Implemented (Phase 3, #212):** same per-org iteration and `org_id` filters; `resolveCanSign` org-scoped; `serving_broadcasts` audit rows stamped with the processed row's org, not a constant. **Branding (CWA-56, #322):** same `listActiveOrgs()` ride-along, validated by `_shared/branding.ts`. **Link origin:** the same canonical `SITE_URL`, threaded into every cancel/signup/team-page link. **Per-team isolation (CWA-50, #316):** a failing team is recorded in the run summary's `failedItems[]` keyed by `team_id` — ids, never org-defined team names, in operator diagnostics. **Group scope:** the link mode is per group (`group_settings` through `_shared/groups.ts`), every `serving_*` query is on `team_id`, and links open `/g/<group_id>/serving/<team_id>` |
-| `supabase/functions/clean-up-expired-data/index.ts` | Cron job; deletes expired requests, invites, feedback and, for a church that opted in, prayer requests, with no user session | A delete missing its filter removes another church's data for good | Refuses any caller but a service key. Iterates active orgs, one org-filtered delete per rule, failures isolated per step and per org. The rules and their boundaries are unit-tested in `tests/retention_test.ts` and `tests/cleanup_test.ts` |
+| `supabase/functions/clean-up-expired-data/index.ts` | Cron job; deletes expired requests, invites, feedback, serving reminder passes older than 35 days (through `serving_reminder_passes_prune()`, at most 500 per call, their sends through the foreign key) and, for a church that opted in, prayer requests, with no user session | A delete missing its filter removes another church's data for good | Refuses any caller but a service key. Iterates active orgs, one org-filtered delete per rule, failures isolated per step and per org. The rules and their boundaries are unit-tested in `tests/retention_test.ts` and `tests/cleanup_test.ts` |
 
 All three check their own caller first, because each acts unattended: the
 reminder jobs send email that cannot be recalled, and the cleanup job deletes
