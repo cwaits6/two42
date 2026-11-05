@@ -78,8 +78,12 @@ describe("OrganizationDetail daily email limit", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("fills the limit after a retried read, and keeps unsaved branding through it", async () => {
+  it("shows a failed read of the limit with no field, fills it after a retry, and keeps unsaved branding", async () => {
     await render(null);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Couldn't load the daily email limit.",
+    );
+    expect(container.querySelector("#email-daily-cap")).toBeNull();
     await type("branding-display-name", "Unsaved name");
 
     await render(LOADED);
