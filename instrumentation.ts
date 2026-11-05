@@ -1,5 +1,5 @@
 import type { Instrumentation } from "next";
-import { writeLog } from "./lib/log/core";
+import { digestReference, writeLog } from "./lib/log/core";
 
 // Next.js instrumentation entry point (loaded once at server boot).
 // https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
@@ -19,18 +19,15 @@ export async function register() {
   await import("./instrumentation.node");
 }
 
-const DIGEST = /^[A-Za-z0-9_-]{1,40}$/;
-
 // An error nothing caught reaches app/error.tsx with only the framework's
 // digest, so that digest is the reference this line is written under.
 export const onRequestError: Instrumentation.onRequestError = (error, _request, context) => {
-  const digest = (error as { digest?: unknown } | null)?.digest;
   writeLog(
     "error",
     "Request failed with an error nothing caught",
     error,
     // The framework's route pattern; the request's own path is never read.
     { route: context.routePath, step: context.routeType },
-    typeof digest === "string" && DIGEST.test(digest) ? digest : undefined,
+    digestReference(error),
   );
 };

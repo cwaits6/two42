@@ -61,4 +61,11 @@ describe("an error nothing caught", () => {
     const [{ ref }] = loggedLines(logged);
     expect(ref).toMatch(/^[A-HJ-NP-Z2-9]{8}$/);
   });
+
+  it("shows no reference on the error page when the digest is not a plain token", () => {
+    const html = renderToStaticMarkup(createElement(ErrorPage, { error: thrown(`/join/${TOKEN}`), reset: () => {} }));
+
+    expect(html).not.toContain("Reference");
+    expect(html).not.toContain(TOKEN);
+  });
 });

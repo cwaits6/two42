@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { newReference, writeLog, type LogContext, type LogLevel } from "./core";
 
-export { stepOf, type LogContext } from "./core";
+export { digestReference, stepOf, type LogContext } from "./core";
 
 const slot = cache(() => ({ reference: null as string | null }));
 
