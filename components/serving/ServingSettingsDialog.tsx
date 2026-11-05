@@ -26,6 +26,7 @@ import { Settings } from "lucide-react";
 import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
 import {
+  DEFAULT_TEAM_DATES,
   MAX_EXTRA_WEEKS,
   MAX_WINDOW_WEEKS,
   blockError,
@@ -68,7 +69,7 @@ export function ServingSettingsDialog({ teamId, settings }: ServingSettingsDialo
   const [enabled, setEnabled] = useState(settings?.enabled ?? false);
   const [reminderDays, setReminderDays] = useState<number[]>(settings?.reminder_days ?? [4, 5]);
   const [schedule, setSchedule] = useState<"rolling" | "set">(settings?.schedule ?? "rolling");
-  const [windowWeeks, setWindowWeeks] = useState(String(settings?.window_weeks ?? 8));
+  const [windowWeeks, setWindowWeeks] = useState(String(settings?.window_weeks ?? DEFAULT_TEAM_DATES.window_weeks));
   const [dateFrom, setDateFrom] = useState(settings?.date_from ?? "");
   const [dateTo, setDateTo] = useState(settings?.date_to ?? "");
   const [extraWeeks, setExtraWeeks] = useState(settings?.extra_weeks ?? 0);
@@ -118,7 +119,7 @@ export function ServingSettingsDialog({ teamId, settings }: ServingSettingsDialo
         enabled,
         reminder_days: reminderDays,
         schedule,
-        window_weeks: schedule === "rolling" ? Number(windowWeeks) : (settings?.window_weeks ?? 8),
+        window_weeks: schedule === "rolling" ? Number(windowWeeks) : (settings?.window_weeks ?? DEFAULT_TEAM_DATES.window_weeks),
         date_from: schedule === "set" ? dateFrom : null,
         date_to: schedule === "set" ? dateTo : null,
         extra_weeks: extraWeeks,

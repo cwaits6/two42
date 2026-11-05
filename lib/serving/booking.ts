@@ -34,8 +34,10 @@ export async function bookDates(
 
 /**
  * Confirms every newly booked date to every attendee with an email, so both
- * spouses get the message and the calendar invite. Never throws: an email
- * failure must not undo a booking that is already in place.
+ * spouses get the message and the calendar invite. `recipients` narrows who
+ * is mailed, never who the message names: someone added to a date held by
+ * their spouse is told about the couple. Never throws: an email failure must
+ * not undo a booking that is already in place.
  */
 export async function sendBookingConfirmations(
   supabase: SupabaseClient,
@@ -46,13 +48,14 @@ export async function sendBookingConfirmations(
     teamName: string;
     booked: BookedDate[];
     attendees: Array<NamedProfile & { email: string | null }>;
+    recipients?: Array<NamedProfile & { email: string | null }>;
   }
 ): Promise<void> {
   for (const { date, signupId, created } of opts.booked) {
     // A re-signup of a date already held is not a new booking, and a second
     // confirmation would read as a double booking.
     if (!created) continue;
-    for (const attendee of opts.attendees) {
+    for (const attendee of opts.recipients ?? opts.attendees) {
       if (!attendee.email) continue;
       try {
         await sendSignupConfirmation(supabase, {

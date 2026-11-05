@@ -1,5 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
-import { bookDates } from "./booking";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const sendSignupConfirmation = vi.fn();
+vi.mock("@/lib/serving/server", () => ({
+  sendSignupConfirmation: (...args: unknown[]) => sendSignupConfirmation(...args),
+}));
+
+const { bookDates, sendBookingConfirmations } = await import("./booking");
 import { bookingMessage, type BookingOutcome } from "./bookingOutcome";
 import { formatMonthDay } from "./dates";
 
@@ -34,6 +41,45 @@ describe("bookDates", () => {
   it("returns the chosen date's own error untouched", async () => {
     const outcome = await bookDates(["2026-11-15", "2026-11-22"], async () => ({ code: "SV004" }));
     expect(outcome).toEqual({ code: "SV004" });
+  });
+});
+
+describe("sendBookingConfirmations", () => {
+  const david = { id: "david", first_name: "David", last_name: "Reyes", preferred_name: null, email: "david@example.test" };
+  const lena = { id: "lena", first_name: "Lena", last_name: "Reyes", preferred_name: null, email: "lena@example.test" };
+  const base = {
+    orgId: "org-1",
+    groupId: "grp-1",
+    teamId: "team-1",
+    teamName: "Greeters",
+    booked: [{ date: "2026-11-15", signupId: "s-1", created: true }],
+  };
+  const mailed = () =>
+    sendSignupConfirmation.mock.calls.map(([, opts]) => [opts.recipient.id, opts.attendees.map((a: { id: string }) => a.id)]);
+
+  beforeEach(() => sendSignupConfirmation.mockReset());
+
+  it("mails everyone on the date, each message naming both", async () => {
+    await sendBookingConfirmations({} as SupabaseClient, { ...base, attendees: [david, lena] });
+    expect(mailed()).toEqual([
+      ["david", ["david", "lena"]],
+      ["lena", ["david", "lena"]],
+    ]);
+  });
+
+  it("mails only the spouse just added, and still names the couple", async () => {
+    await sendBookingConfirmations({} as SupabaseClient, { ...base, attendees: [david, lena], recipients: [lena] });
+    expect(mailed()).toEqual([["lena", ["david", "lena"]]]);
+  });
+
+  it("mails nobody for a date that was already held, or a person with no email", async () => {
+    await sendBookingConfirmations({} as SupabaseClient, {
+      ...base,
+      booked: [{ date: "2026-11-15", signupId: "s-1", created: false }],
+      attendees: [david],
+    });
+    await sendBookingConfirmations({} as SupabaseClient, { ...base, attendees: [{ ...david, email: null }] });
+    expect(sendSignupConfirmation).not.toHaveBeenCalled();
   });
 });
 

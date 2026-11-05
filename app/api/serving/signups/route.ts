@@ -182,6 +182,8 @@ export async function POST(request: Request) {
           { error: "You're not on this team" },
           { status: 403 }
         );
+      case "SV006":
+        return NextResponse.json({ error: "That date is not one of the team's dates" }, { status: 400 });
     }
     return NextResponse.json({ error: "Failed to sign up" }, { status: 500 });
   }
@@ -250,7 +252,7 @@ export async function PATCH(request: Request) {
   }
 
   // Whoever was just put on the date gets the confirmation and the calendar
-  // invite, the same as at a sign-up.
+  // invite, the same as at a sign-up, naming everyone now on the date.
   const before = new Set((signup.serving_signup_attendees ?? []).map((a) => a.profile_id));
   const team = signup.teams as unknown as { name: string; group_id: string } | null;
   const { data: people } = await supabase
@@ -265,7 +267,8 @@ export async function PATCH(request: Request) {
       teamId: signup.team_id,
       teamName: team.name,
       booked: [{ date: signup.service_date, signupId: signup.id, created: true }],
-      attendees: attendees.filter((a) => !before.has(a.id)),
+      attendees,
+      recipients: attendees.filter((a) => !before.has(a.id)),
     });
   }
 

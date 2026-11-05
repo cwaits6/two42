@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { MAX_BLOCK_YEARS, MAX_EXTRA_WEEKS, MAX_WINDOW_WEEKS } from "./dates";
+import { DEFAULT_TEAM_DATES, MAX_BLOCK_YEARS, MAX_EXTRA_WEEKS, MAX_WINDOW_WEEKS } from "./dates";
 import {
   DEFAULT_SEND_HOUR as JOB_DEFAULT_SEND_HOUR,
   FIRST_SEND_HOUR as JOB_FIRST_SEND_HOUR,
@@ -51,5 +51,9 @@ describe("the settings the database accepts", () => {
     expect(migration).toContain(`check (extra_weeks between 0 and ${MAX_EXTRA_WEEKS})`);
     expect(migration).toContain(`date_to <= (date_from + interval '${MAX_BLOCK_YEARS} year')::date`);
     expect(schedule).toContain(`window_weeks between 1 and ${MAX_WINDOW_WEEKS}`);
+  });
+
+  it("default a team's window to the weeks the app shows without a settings row", () => {
+    expect(schedule).toContain(`window_weeks int not null default ${DEFAULT_TEAM_DATES.window_weeks} `);
   });
 });

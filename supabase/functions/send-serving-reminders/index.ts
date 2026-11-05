@@ -424,7 +424,7 @@ async function runMonthly(
       const serviceDates = teamServiceDates(
         {
           schedule: settings.schedule === "set" ? "set" : "rolling",
-          window_weeks: settings.window_weeks ?? 8,
+          window_weeks: settings.window_weeks,
           date_from: settings.date_from ?? null,
           date_to: settings.date_to ?? null,
         },

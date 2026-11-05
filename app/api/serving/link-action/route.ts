@@ -251,6 +251,11 @@ export async function POST(request: Request) {
             { error: "You're no longer on this team — please use the site instead" },
             { status: 403 }
           );
+        case "SV006":
+          return NextResponse.json(
+            { error: "That date is not one of the team's dates" },
+            { status: 400 }
+          );
       }
       return NextResponse.json({ error: "Failed to sign up" }, { status: 500 });
     }
