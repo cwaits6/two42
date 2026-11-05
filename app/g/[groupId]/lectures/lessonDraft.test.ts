@@ -22,7 +22,6 @@ const typed: LessonDraft = {
   lecture_date: "2026-06-07",
   description: "Romans 8",
   summary: "We read Romans 8 together.",
-  thumbnail_url: "",
 };
 
 describe("withAddedSeries", () => {
@@ -61,14 +60,9 @@ describe("validateLesson", () => {
     expect(errors.video_url).toBe("Enter a link to the recording.");
   });
 
-  it("refuses links that are not http or https", () => {
-    const errors = validateLesson({
-      ...typed,
-      video_url: "youtu.be/abc",
-      thumbnail_url: "javascript:x",
-    });
+  it("refuses a recording link that is not http or https", () => {
+    const errors = validateLesson({ ...typed, video_url: "youtu.be/abc" });
     expect(errors.video_url).toBe("Enter a link that starts with http:// or https://");
-    expect(errors.thumbnail_url).toBe("Enter an image link that starts with http:// or https://");
   });
 });
 
@@ -89,8 +83,16 @@ describe("lessonColumns", () => {
       lecture_date: null,
       description: null,
       summary: null,
-      thumbnail_url: null,
     });
+  });
+
+  it("leaves a stored thumbnail link out of the write, so a save neither sets nor clears it", () => {
+    const stored = {
+      ...lessonColumns({ ...typed, series_id: "s1" }),
+      thumbnail_url: "https://example.test/t.jpg",
+    };
+    expect(lessonColumns(lessonDraftFrom(stored))).not.toHaveProperty("thumbnail_url");
+    expect(lessonColumns(emptyLessonDraft([]))).not.toHaveProperty("thumbnail_url");
   });
 
   it("round-trips a saved lesson through the form", () => {

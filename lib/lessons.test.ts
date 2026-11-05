@@ -7,6 +7,8 @@ import {
   partNumbers,
   safeHttpUrl,
   seriesDateRange,
+  thumbnailFailed,
+  youTubeId,
 } from "./lessons";
 
 describe("formatLessonDate", () => {
@@ -97,26 +99,73 @@ describe("safeHttpUrl", () => {
   });
 });
 
+describe("youTubeId", () => {
+  it.each([
+    ["https://www.youtube.com/watch?v=jNQXAC9IVRw", "jNQXAC9IVRw"],
+    ["https://youtube.com/watch?v=jNQXAC9IVRw&t=30s", "jNQXAC9IVRw"],
+    ["https://m.youtube.com/watch?feature=share&v=jNQXAC9IVRw", "jNQXAC9IVRw"],
+    ["https://www.youtube.com/watch?v=jNQXAC9IVRw#t=30", "jNQXAC9IVRw"],
+    ["https://youtu.be/jNQXAC9IVRw", "jNQXAC9IVRw"],
+    ["https://youtu.be/jNQXAC9IVRw?si=AbC_dEf-123", "jNQXAC9IVRw"],
+    ["https://www.youtube.com/embed/jNQXAC9IVRw?rel=0", "jNQXAC9IVRw"],
+    ["https://www.youtube-nocookie.com/embed/jNQXAC9IVRw", "jNQXAC9IVRw"],
+    ["https://www.youtube.com/v/jNQXAC9IVRw", "jNQXAC9IVRw"],
+    ["https://www.youtube.com/shorts/jNQXAC9IVRw", "jNQXAC9IVRw"],
+    ["https://youtube.com/shorts/jNQXAC9IVRw?feature=share", "jNQXAC9IVRw"],
+    ["https://www.youtube.com/live/jNQXAC9IVRw?si=AbC_dEf-123", "jNQXAC9IVRw"],
+    ["https://www.youtube.com/live/jNQXAC9IVRw/", "jNQXAC9IVRw"],
+    ["HTTPS://WWW.YOUTUBE.COM/watch?v=jNQXAC9IVRw", "jNQXAC9IVRw"],
+  ])("reads the id from %s", (link, id) => {
+    expect(youTubeId(new URL(link))).toBe(id);
+  });
+
+  it.each([
+    "https://notyoutube.com/watch?v=jNQXAC9IVRw",
+    "https://youtube.com.example.test/watch?v=jNQXAC9IVRw",
+    "https://example.test/go?to=https://youtu.be/jNQXAC9IVRw",
+    "https://example.test/?v=jNQXAC9IVRw",
+    "https://www.youtube.com/",
+    "https://www.youtube.com/watch",
+    "https://www.youtube.com/channel/jNQXAC9IVRw",
+    "https://www.youtube.com/shorts/",
+    "https://youtu.be/",
+    "https://zoom.us/rec/jNQXAC9IVRw",
+  ])("has none for %s", (link) => {
+    expect(youTubeId(new URL(link))).toBeNull();
+  });
+});
+
+describe("thumbnailFailed", () => {
+  it("treats a picture the browser could not load as failed", () => {
+    expect(thumbnailFailed({ naturalWidth: 0, naturalHeight: 0 })).toBe(true);
+    expect(thumbnailFailed({ naturalWidth: 480, naturalHeight: 360 })).toBe(false);
+  });
+
+  it("treats YouTube's grey card for a removed video as failed", () => {
+    expect(thumbnailFailed({ naturalWidth: 120, naturalHeight: 90 })).toBe(true);
+  });
+});
+
 describe("lessonThumbnail", () => {
-  it("prefers the lesson's own thumbnail", () => {
-    expect(
-      lessonThumbnail({
-        video_url: "https://youtu.be/abc123",
-        thumbnail_url: "https://example.test/t.jpg",
-      }),
-    ).toBe("https://example.test/t.jpg");
+  it("is YouTube's picture for a YouTube recording", () => {
+    expect(lessonThumbnail({ video_url: "https://www.youtube.com/watch?v=abc123" })).toBe(
+      "https://img.youtube.com/vi/abc123/hqdefault.jpg",
+    );
+    expect(lessonThumbnail({ video_url: "https://youtube.com/shorts/abc123?feature=share" })).toBe(
+      "https://img.youtube.com/vi/abc123/hqdefault.jpg",
+    );
   });
 
-  it("falls back to YouTube's for a YouTube recording", () => {
-    expect(
-      lessonThumbnail({ video_url: "https://www.youtube.com/watch?v=abc123", thumbnail_url: null }),
-    ).toBe("https://img.youtube.com/vi/abc123/hqdefault.jpg");
+  it("has none for other recordings or an unsafe link", () => {
+    expect(lessonThumbnail({ video_url: "https://zoom.us/rec/1" })).toBeNull();
+    expect(lessonThumbnail({ video_url: "javascript:x" })).toBeNull();
   });
 
-  it("has none for other recordings or an unsafe thumbnail", () => {
-    expect(lessonThumbnail({ video_url: "https://zoom.us/rec/1", thumbnail_url: null })).toBeNull();
-    expect(
-      lessonThumbnail({ video_url: "https://zoom.us/rec/1", thumbnail_url: "javascript:x" }),
-    ).toBeNull();
+  it("ignores a thumbnail link stored on the lesson", () => {
+    const stored = { thumbnail_url: "https://example.test/t.jpg" };
+    expect(lessonThumbnail({ ...stored, video_url: "https://youtu.be/abc123" })).toBe(
+      "https://img.youtube.com/vi/abc123/hqdefault.jpg",
+    );
+    expect(lessonThumbnail({ ...stored, video_url: "https://zoom.us/rec/1" })).toBeNull();
   });
 });

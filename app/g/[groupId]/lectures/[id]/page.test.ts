@@ -24,7 +24,6 @@ vi.mock("@/lib/supabase/server", () => ({
             title: "One",
             description: null,
             video_url: "https://example.test/video",
-            thumbnail_url: null,
             lecture_date: null,
             summary: null,
             series_id: null,

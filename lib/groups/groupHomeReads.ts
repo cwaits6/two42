@@ -203,7 +203,7 @@ export async function loadGroupHomeReads(
       : Promise.resolve([] as DraftRow[]),
     client
       .from("lectures")
-      .select("id, title, video_url, thumbnail_url, lecture_date, scripture_reference, created_at")
+      .select("id, title, video_url, lecture_date, scripture_reference, created_at")
       .eq("org_id", orgId)
       .eq("group_id", groupId)
       .or(

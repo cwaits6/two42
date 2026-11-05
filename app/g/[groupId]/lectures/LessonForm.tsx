@@ -239,25 +239,6 @@ export function LessonForm({
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="thumbnail_url" className="text-lg">
-                Thumbnail link <Optional />
-              </Label>
-              <Input
-                id="thumbnail_url"
-                type="url"
-                inputMode="url"
-                value={draft.thumbnail_url}
-                onChange={(e) => update("thumbnail_url", e.target.value)}
-                className="text-lg py-6"
-                {...invalidFieldProps("thumbnail_url", errors.thumbnail_url)}
-              />
-              <p className="text-base text-muted-foreground">
-                Leave it empty to use the YouTube thumbnail.
-              </p>
-              <FieldError fieldId="thumbnail_url" message={errors.thumbnail_url} />
-            </div>
-
             <div className="flex flex-col gap-3 border-t border-border pt-5 sm:flex-row">
               <Button type="submit" size="lg" disabled={saving}>
                 {saving ? "Saving…" : "Save lesson"}

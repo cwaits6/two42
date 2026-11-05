@@ -650,7 +650,6 @@ describe("New in the group", () => {
   const lesson = (over: Partial<LessonRow> & { id: string }): LessonRow => ({
     title: over.id,
     video_url: "https://example.test/v",
-    thumbnail_url: null,
     lecture_date: "2026-11-01",
     scripture_reference: "James 2:14–26",
     created_at: "2026-11-01T12:00:00Z",
@@ -723,6 +722,19 @@ describe("New in the group", () => {
     expect(undated).toMatchObject({ kind: "lesson", detail: "James 2:14–26" });
     const [dated] = tiles({ lessons: [lesson({ id: "d" })] });
     expect(dated).toMatchObject({ detail: "James 2:14–26 · Sun, Nov 1" });
+  });
+
+  it("gives a lesson tile the picture for its YouTube link, and none for any other link", () => {
+    const result = tiles({
+      lessons: [
+        lesson({ id: "youtube", video_url: "https://youtu.be/jNQXAC9IVRw?si=x" }),
+        lesson({ id: "other", video_url: "https://zoom.us/rec/1" }),
+      ],
+    });
+    expect(result.map((t) => [t.key, t.kind === "lesson" && t.thumbnail])).toEqual([
+      ["lesson-youtube", "https://img.youtube.com/vi/jNQXAC9IVRw/hqdefault.jpg"],
+      ["lesson-other", null],
+    ]);
   });
 
   it("shows an answered prayer's name, but none when anonymous", () => {
