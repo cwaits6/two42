@@ -6,12 +6,14 @@ const state = vi.hoisted(() => ({
   role: "leader",
   lessons: [] as unknown[],
   series: [] as unknown[],
+  failedTable: null as "lectures" | "lecture_series" | null,
 }));
 
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children?: ReactNode }) =>
     createElement("a", { href }, children),
 }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }));
 vi.mock("@/lib/groups/server", () => ({
   requireActiveGroup: async (id: string) => ({ id, name: "Grace", role: state.role }),
 }));
@@ -24,7 +26,11 @@ vi.mock("@/lib/supabase/server", () => ({
         eq: () => chain,
         order: () => chain,
         then: (resolve: (value: unknown) => void) =>
-          resolve({ data: table === "lectures" ? state.lessons : state.series, error: null }),
+          resolve(
+            table === state.failedTable
+              ? { data: null, error: { code: "57014", message: "x" } }
+              : { data: table === "lectures" ? state.lessons : state.series, error: null },
+          ),
       };
       return chain;
     },
@@ -56,6 +62,8 @@ async function render(searchParams: { view?: string; filter?: string } = {}) {
 
 beforeEach(() => {
   state.role = "leader";
+  state.failedTable = null;
+  vi.spyOn(console, "error").mockImplementation(() => {});
   state.series = [{ id: "s1", name: "Acts", teacher: "Ana", is_archived: false }];
   state.lessons = [lesson("l1", "s1", "Written"), lesson("l2", null, null)];
 });
@@ -81,6 +89,18 @@ describe("LessonsPage for a leader", () => {
     expect(html.indexOf(`href="${BASE}/new"`)).toBeGreaterThan(html.indexOf("No lessons yet."));
     expect(count(html, `href="${BASE}/series"`)).toBe(1);
   });
+
+  it.each(["lectures", "lecture_series"] as const)(
+    "keeps Add lesson in the header when the read of %s fails",
+    async (failedTable) => {
+      state.lessons = [];
+      state.failedTable = failedTable;
+      const html = await render();
+      expect(html).toContain("load lessons.");
+      expect(count(html, `href="${BASE}/new"`)).toBe(1);
+      expect(html).not.toContain("No lessons yet.");
+    },
+  );
 
   it("filters to the lessons that need a summary, counted in the tab", async () => {
     const html = await render({ filter: "needs-summary" });

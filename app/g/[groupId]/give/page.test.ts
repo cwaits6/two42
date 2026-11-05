@@ -6,7 +6,7 @@ const state = vi.hoisted(() => ({
   manageMode: "stewards",
   role: "member",
   funds: [] as unknown[],
-  failedRead: null as "hidden funds" | "hidden fund methods" | null,
+  failedRead: null as "funds" | "fund methods" | "hidden funds" | "hidden fund methods" | null,
   settingFilters: [] as [string, unknown][],
 }));
 
@@ -31,10 +31,8 @@ function query(table: string) {
       return chain;
     },
     then: (resolve: (r: unknown) => unknown) => {
-      const failed =
-        !memberRead &&
-        ((table === "giving_funds" && state.failedRead === "hidden funds") ||
-          (table === "giving_fund_methods" && state.failedRead === "hidden fund methods"));
+      const read = `${memberRead ? "" : "hidden "}${table === "giving_funds" ? "funds" : "fund methods"}`;
+      const failed = read === state.failedRead;
       if (failed) return Promise.resolve(resolve({ data: null, error: { code: "57014", message: "x" } }));
       return Promise.resolve(resolve({ data: table === "giving_funds" ? state.funds : [], error: null }));
     },
@@ -146,11 +144,27 @@ describe("GivePage", () => {
     }
   );
 
-  it("does not call the page empty when a leader's read of hidden funds fails", async () => {
-    state.role = "leader";
-    state.failedRead = "hidden funds";
+  it.each(["hidden funds", "hidden fund methods"] as const)(
+    "does not call the page empty when a leader's read of %s fails",
+    async (failedRead) => {
+      state.role = "leader";
+      state.failedRead = failedRead;
+      const html = await render();
+      expect(html).toContain("load hidden funds.");
+      expect(html).not.toContain("No funds yet.");
+      expect(count(html, ADD_FUND)).toBe(1);
+    }
+  );
+
+  // A fund with no readable payment method is left off a member's list, so both reads can fail with nothing shown.
+  it.each([
+    ["funds", []],
+    ["fund methods", [LIVE]],
+  ] as const)("keeps Add fund in the header when the read of %s fails", async (failedRead, funds) => {
+    state.funds = [...funds];
+    state.failedRead = failedRead;
     const html = await render();
-    expect(html).toContain("load hidden funds.");
+    expect(html).toContain("load funds.");
     expect(html).not.toContain("No funds yet.");
     expect(count(html, ADD_FUND)).toBe(1);
   });
