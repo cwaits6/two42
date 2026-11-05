@@ -28,12 +28,14 @@ vi.mock("@/lib/supabase/client", () => ({
               },
             }),
             select: () => ({
-              eq: () => ({
+              eq: (column: string, id: string) => ({
                 not: () => ({
                   limit: async () =>
-                    written.claimedReadError
-                      ? { data: null, error: written.claimedReadError }
-                      : { data: written.claimedKept, error: null },
+                    column !== "claimed_profile_id" || id !== "p1"
+                      ? { data: [], error: null }
+                      : written.claimedReadError
+                        ? { data: null, error: written.claimedReadError }
+                        : { data: written.claimedKept, error: null },
                 }),
               }),
             }),

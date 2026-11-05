@@ -19,7 +19,16 @@ vi.mock("@/lib/supabase/client", () => ({
           return { error: table === failing.table ? { code: "XX000" } : null };
         },
       }),
-      select: () => ({ eq: () => ({ not: () => ({ limit: async () => ({ data: claimed.kept, error: null }) }) }) }),
+      select: () => ({
+        eq: (column: string, id: string) => ({
+          not: () => ({
+            limit: async () => ({
+              data: column === "claimed_profile_id" && id === "p1" ? claimed.kept : [],
+              error: null,
+            }),
+          }),
+        }),
+      }),
       insert: async () => ({ error: null }),
     }),
   }),
