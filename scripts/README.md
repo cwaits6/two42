@@ -183,10 +183,13 @@ The same command also enforces:
 
 ## `check-profile-email-reads.mjs` — no request-client read of a person's email
 
-Client roles cannot read `profiles.email`, and PostgREST refuses the whole
-request (`42501`) when any part of it touches a column the role cannot read.
-`select("*")` on `profiles` is such a request, and so is an embedded
-`profiles(*)` on another table. This script runs second in
+The app does not read `profiles.email` on the request client. A hidden address
+read there reaches a member who should not see it, and once client roles hold
+no `SELECT` on the column, PostgREST refuses the whole request (`42501`) when
+any part of it touches the column: `select("*")` on `profiles` is such a
+request, and so is an embedded `profiles(*)` on another table. That grant is
+still in place (`docs/security/tenancy-model.md`, "Known limits"), so this
+check is what keeps the column unread until it goes. It runs second in
 `npm run guard:tenancy`, in the same blocking CI job, and fails on each of these
 through the request client in `app/`, `components/` and `lib/`:
 
@@ -201,20 +204,31 @@ through the request client in `app/`, `components/` and `lib/`:
   whose substitutions are constants, and a constant declared in the same file
   or exported from a directly imported one. Anything else fails closed.
 
-Which client: a chain is on the service client when its root is bound from
-`createServiceClient()` in the same file, or is a function parameter that every
-call site in the scanned files fills with such a binding (directly, or through
-another function's parameter that is itself always filled with one). Those
-chains are skipped, because the service-role guard above already demands their
-`org_id`. Everything else is treated as the request client. A helper with no
-call site fails, since its client cannot be proven.
+Which client: a chain is on the service client when the nearest enclosing
+declaration of its root is a variable whose every value is a
+`createServiceClient()` call, or a function parameter that every call site in
+the scanned files fills with such a binding (directly, or through another
+function's parameter that is itself always filled with one). Those chains are
+skipped, because the service-role guard above already demands their `org_id`.
+Every other chain is judged as a request-client read: a name bound to the
+request client in the function at hand, whatever another function in the file
+binds it to; a root that is a property (`gate.supabase`), `this`, a
+destructured name or an import; and a helper with no call site, since its
+client cannot be proven. A table that is not known text is judged as
+`profiles`.
+
+A query builder held in a variable (`let q = supabase.from("profiles")…;
+q = q.eq(…)`) is read together with the calls made on that variable in the
+function that declares it.
 
 There is no marker and no exemption list. Select `PROFILE_COLUMNS` from
 `lib/profileColumns.ts`, or name the columns, and read an address through
 `get_own_email()`, `admin_member_emails()` or `profiles_directory`.
 
-Known limit: an embed written through a foreign key column instead of the table
-name (`author:created_by(*)`) is not recognised as a `profiles` embed.
+Known limits: an embed written through a foreign key column instead of the
+table name (`author:created_by(*)`) is not recognised as a `profiles` embed. A
+query builder handed to another function, returned, or stored on an object is
+read only as far as the chain that built it.
 
 Tested with fixture strings in `scripts/check-profile-email-reads.test.mjs`.
 

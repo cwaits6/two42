@@ -108,7 +108,8 @@ const FAMILY_MEMBER_COLUMNS =
  * table only — never row content (PII stays out of logs).
  *
  * `emails` is each person's address by profile id, from the caller's
- * admin_member_emails() read: client roles cannot select profiles.email.
+ * admin_member_emails() read, since profiles.email is not read on the
+ * request client.
  */
 export async function loadOrgSnapshot(
   supabase: SupabaseClient<Database>,

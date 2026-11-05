@@ -25,8 +25,7 @@ vi.mock("@/lib/supabase/client", () => ({
     auth: {
       getUser: async () => ({ data: { user: { id: "me" } } }),
     },
-    // The address is not a column a client role can select: it arrives by
-    // the church admin read, never on the profile rows.
+    // The address arrives by the church admin read, never on the profile rows.
     rpc: async () => ({
       data: state.profiles.map((p) => ({ profile_id: p.id, email: p.email })),
       error: state.emailsError,

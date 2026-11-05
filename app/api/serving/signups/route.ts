@@ -19,9 +19,9 @@ function stringList(value: unknown): string[] {
 }
 
 /**
- * Adds each person's address for a confirmation. Client roles cannot read
- * profiles.email, and a spouse may hide theirs from the directory, so this is
- * a service-role read. `orgId` comes from the RLS-read team or signup row. A
+ * Adds each person's address for a confirmation. The request client does not
+ * read profiles.email, and a spouse may hide theirs from the directory, so
+ * this is a service-role read. `orgId` comes from the RLS-read team or signup row. A
  * failed read leaves the addresses out, which skips the confirmation and
  * keeps the booking.
  */

@@ -1,9 +1,10 @@
 import type { Profile } from "@/lib/types";
 
 /**
- * Every column the app reads off a profile row except the address. Client
- * roles cannot read profiles.email; an address comes from get_own_email(),
- * admin_member_emails() or profiles_directory.
+ * Every column the app reads off a profile row except the address, which is
+ * never read from the table on the request client: it comes from
+ * get_own_email(), admin_member_emails() or profiles_directory, which apply
+ * the person's hide_email setting.
  */
 export const PROFILE_COLUMNS =
   "id, first_name, last_name, preferred_name, role, avatar_url, phone, phone_mobile, phone_home, phone_work, bio, address_line1, address_line2, city, state, postal_code, birth_month, birth_day, birth_year, occupation, employer, family_id, is_unlisted, hide_email, relationship, email_announcements, email_event_reminders, setup_completed, approved_at, approved_by, created_at, updated_at";
