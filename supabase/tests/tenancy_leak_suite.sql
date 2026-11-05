@@ -155,6 +155,11 @@ begin
   -- Service-role-only the same way; the retired worker's outcome log.
   insert into public.org_domain_worker_events (org_id, domain, event)
     values (_org, _tag || '.domains.example.test', 'detached');
+  -- The reminder sent record is service-role-only the same way.
+  insert into public.serving_reminder_passes (org_id, team_id, send_date)
+    values (_org, _serving_group, current_date);
+  insert into public.serving_reminder_sends (org_id, team_id, send_date, profile_id)
+    values (_org, _serving_group, current_date, _owner);
 end;
 $$;
 
@@ -312,10 +317,12 @@ begin
 
   for i in 1 .. array_length(tables, 1) loop
     if error_states[i] = '42501'
-       and tables[i] in ('org_email_usage', 'org_email_limits', 'org_domain_worker_events') then
+       and tables[i] in ('org_email_usage', 'org_email_limits', 'org_domain_worker_events',
+                         'serving_reminder_passes', 'serving_reminder_sends') then
       -- Service-role-only tables (restrictive policy, ALL privileges
       -- revoked — org_email_usage / org_email_limits /
-      -- org_domain_worker_events): a privilege denial is the intended,
+      -- org_domain_worker_events / serving_reminder_passes /
+      -- serving_reminder_sends): a privilege denial is the intended,
       -- stronger-than-row-filtering isolation outcome, not a broken check.
       -- Scoped to exactly those tables so a normal tenant table losing
       -- authenticated read access still fails.
