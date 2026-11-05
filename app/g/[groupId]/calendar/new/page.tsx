@@ -12,6 +12,7 @@ import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { groupPageTitle } from "@/lib/pageTitle";
 import { getGroupSettings } from "@/lib/groups/settings";
 import { groupSharing } from "@/lib/calendar/sharing";
+import { GROUP_REMINDERS_DEFAULT, groupReminders } from "@/lib/events/reminders";
 
 export const generateMetadata = groupPageTitle("Add event");
 
@@ -33,12 +34,13 @@ export default async function NewEventPage({
     .single();
   if (!profile) redirect("/dashboard");
 
-  // The form still works without the group's sharing settings: it says it is
-  // following them without naming them, and saves nulls that follow them.
-  const [calendar, timeZone, sharing] = await Promise.all([
+  // The form still works without the group's settings: it says it is
+  // following the sharing ones without naming them and saves nulls that
+  // follow them, and the reminder starts on 1 day before.
+  const [calendar, timeZone, settings] = await Promise.all([
     getGroupCalendar(supabase, profile.org_id, group.id),
     getOrgTimeZone(),
-    getGroupSettings(supabase, profile.org_id, group.id).then(groupSharing, () => null),
+    getGroupSettings(supabase, profile.org_id, group.id).catch(() => null),
   ]);
 
   return (
@@ -56,7 +58,8 @@ export default async function NewEventPage({
         orgId={profile.org_id}
         calendarId={calendar?.id ?? null}
         timeZone={timeZone}
-        groupSharing={sharing}
+        groupSharing={settings && groupSharing(settings)}
+        groupReminders={settings ? groupReminders(settings) : GROUP_REMINDERS_DEFAULT}
       />
     </Suspense>
   );

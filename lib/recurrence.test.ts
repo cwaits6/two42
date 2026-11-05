@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   addRecurrenceInterval,
+  buildExceptionMap,
   countUpcomingOccurrences,
   expandOccurrences,
   expandUpcomingEvents,
   occurrenceEndTime,
 } from "./recurrence";
-import { formatEventTime } from "@/lib/time/zone";
+import { dayKey, formatEventTime } from "@/lib/time/zone";
+import { localDay, seriesDatesBetween, stepOccurrence } from "@/supabase/functions/_shared/event-dates";
 import type { Event } from "@/lib/types";
 
 const NY = "America/New_York";
@@ -286,3 +288,92 @@ describe("countUpcomingOccurrences", () => {
   });
 });
 
+
+// The reminder job cannot import this module, so it steps dates with its own
+// copy of the rules. These fail when the two disagree.
+describe("the reminder job's dates agree with the calendar's", () => {
+  const ZONES = ["America/Chicago", "America/New_York", "America/Phoenix", "Europe/London", "Australia/Lord_Howe", "Asia/Kolkata", "UTC"];
+  const STARTS = [
+    "2026-10-27T00:00:00.000Z",
+    // Inside the hour US clocks skip in March, and the hour they repeat in November.
+    "2026-03-01T08:30:00.000Z",
+    "2026-03-08T07:30:00.000Z",
+    "2026-10-25T06:30:00.000Z",
+    "2026-11-01T06:30:00.000Z",
+    "2026-11-01T07:30:00.000Z",
+    // The same for Europe.
+    "2026-03-29T01:30:00.000Z",
+    "2026-10-25T00:30:00.000Z",
+    // Month ends, a leap day, and a start with milliseconds.
+    "2026-01-31T18:00:00.000Z",
+    "2024-02-29T15:00:00.000Z",
+    "2026-08-31T23:59:59.123Z",
+  ];
+  const STEPS: [string, number][] = [["daily", 200], ["weekly", 110], ["monthly", 40], ["yearly", 8]];
+
+  it("steps to the same instant and the same day, across clock changes", () => {
+    const mismatches: string[] = [];
+    for (const zone of ZONES) {
+      for (const start of STARTS) {
+        for (const [frequency, max] of STEPS) {
+          for (let n = 0; n <= max; n++) {
+            const calendar = addRecurrenceInterval(start, frequency, n, zone);
+            const job = stepOccurrence(start, frequency, n, zone);
+            if (calendar !== job || dayKey(calendar, zone) !== localDay(job, zone)) {
+              mismatches.push(`${zone} ${start} ${frequency} x${n}: ${calendar} vs ${job}`);
+            }
+          }
+        }
+      }
+    }
+    expect(mismatches.slice(0, 5)).toEqual([]);
+  });
+
+  it("finds the same dates in a window, with a date taken out and each way a series ends", () => {
+    const from = new Date("2026-11-05T15:00:00.000Z");
+    const day = 86_400_000;
+    const ends: Partial<Event>[] = [
+      { recurrence_end_mode: "never" },
+      { recurrence_end_mode: "count", recurrence_count: 40 },
+      { recurrence_end_mode: "until", recurrence_until: "2027-03-20T00:00:00.000Z" },
+    ];
+    const mismatches: string[] = [];
+    for (const zone of ZONES) {
+      for (const start of STARTS) {
+        for (const [frequency] of STEPS) {
+          for (const interval of [1, 2]) {
+            for (const end of ends) {
+              const anchor = series({
+                id: "a",
+                start_time: start,
+                end_time: null,
+                recurrence_frequency: frequency as Event["recurrence_frequency"],
+                recurrence_interval: interval,
+                recurrence_count: null,
+                recurrence_until: null,
+                ...end,
+              });
+              const removed = addRecurrenceInterval(start, frequency, interval * 3, zone);
+              const exception = series({ id: "x", series_id: "a", series_occurrence_date: removed, start_time: removed });
+              const excluded = buildExceptionMap([exception], zone).get("a");
+              // The 1 day, 2 day and 1 week windows of a firing, and a long one.
+              for (const [lo, hi] of [[0, 1], [1, 2], [6, 7], [0, 90]]) {
+                const after = new Date(from.getTime() + lo * day);
+                const upTo = new Date(from.getTime() + hi * day);
+                const calendar = expandOccurrences(anchor, zone, excluded, upTo, after)
+                  .map((e) => new Date(e.start_time))
+                  .filter((d) => d > after && d <= upTo)
+                  .map((d) => d.toISOString());
+                const job = seriesDatesBetween(anchor, zone, after, upTo, new Set([localDay(removed, zone)]));
+                if (JSON.stringify(calendar) !== JSON.stringify(job)) {
+                  mismatches.push(`${zone} ${start} ${frequency}/${interval} ${end.recurrence_end_mode} +${lo}..${hi}d`);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(mismatches.slice(0, 5)).toEqual([]);
+  });
+});

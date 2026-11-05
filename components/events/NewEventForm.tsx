@@ -26,6 +26,8 @@ import { EventTimeFields } from "@/components/events/EventTimeFields";
 import { LocationInput } from "@/components/events/LocationInput";
 import { MeetingFieldsSection, meetingFieldErrors, type MeetingFieldErrors } from "@/components/events/MeetingFieldsSection";
 import { CalendarSharingFields } from "@/components/events/CalendarSharingFields";
+import { ReminderField } from "@/components/events/ReminderField";
+import type { GroupReminders } from "@/lib/events/reminders";
 import { sharingColumns, type CalendarSharing } from "@/lib/calendar/sharing";
 import { nextWholeHour } from "@/components/events/eventTimes";
 import { ensureGroupCalendar } from "@/lib/groups/calendar";
@@ -68,6 +70,8 @@ interface NewEventFormProps {
   timeZone: string;
   /** What the group's calendar subscriptions share; null when it couldn't be loaded. */
   groupSharing: CalendarSharing | null;
+  /** The group's default for a new event's reminder, and whether its reminders are on. */
+  groupReminders: GroupReminders;
 }
 
 type FieldErrors = MeetingFieldErrors & {
@@ -83,6 +87,7 @@ export function NewEventForm({
   calendarId,
   timeZone,
   groupSharing,
+  groupReminders,
 }: NewEventFormProps) {
   const [loading, setLoading] = useState(false);
   const [isRsvpEnabled, setIsRsvpEnabled] = useState(true);
@@ -98,6 +103,7 @@ export function NewEventForm({
   const [meetingShowOnDashboard, setMeetingShowOnDashboard] = useState(true);
   const [meetingLeadMinutes, setMeetingLeadMinutes] = useState("15");
   const [ownSharing, setOwnSharing] = useState<CalendarSharing | null>(null);
+  const [reminderDays, setReminderDays] = useState(groupReminders.defaultDays);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [focusTarget, setFocusTarget] = useState<{ id: string } | null>(null);
   const clearError = (key: keyof FieldErrors) =>
@@ -199,6 +205,7 @@ export function NewEventForm({
       meeting_passcode: meetingPasscode.trim() || null,
       meeting_show_on_dashboard: meetingShowOnDashboard,
       meeting_lead_minutes: Number(meetingLeadMinutes),
+      reminder_days_before: reminderDays,
       ...sharingColumns(ownSharing),
     }).select("id").single();
 
@@ -274,6 +281,12 @@ export function NewEventForm({
               />
               <Label htmlFor="is_rsvp_enabled" className="text-lg">Ask for RSVPs</Label>
             </div>
+
+            <ReminderField
+              value={reminderDays}
+              onChange={setReminderDays}
+              groupOff={!groupReminders.enabled}
+            />
 
             <div className="space-y-4 rounded-2xl border border-border bg-background p-4">
               <div className="flex items-center gap-3">

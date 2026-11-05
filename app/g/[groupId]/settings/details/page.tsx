@@ -9,7 +9,9 @@ import { getGroupSettings } from "@/lib/groups/settings";
 import { groupPageTitle } from "@/lib/pageTitle";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { groupReminders } from "@/lib/events/reminders";
 import { CalendarSubscriptionCard } from "./CalendarSubscriptionCard";
+import { EventRemindersCard } from "./EventRemindersCard";
 import { GroupDetailsForm } from "./GroupDetailsForm";
 
 export const generateMetadata = groupPageTitle("Group details");
@@ -68,6 +70,7 @@ export default async function GroupDetailsSettingsPage({
               calendar_event_location: settings.calendar_event_location,
             }}
           />
+          <EventRemindersCard groupId={group.id} initial={groupReminders(settings)} />
         </div>
       ) : (
         <ErrorState thing="this group's details" />

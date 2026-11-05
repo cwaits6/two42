@@ -12,6 +12,8 @@ export type GroupSettingsValues = Pick<
   | "calendar_meeting_details"
   | "calendar_event_notes"
   | "calendar_event_location"
+  | "event_reminders_enabled"
+  | "event_reminder_default_days"
 >;
 
 export const GROUP_SETTINGS_DEFAULTS: GroupSettingsValues = {
@@ -23,6 +25,8 @@ export const GROUP_SETTINGS_DEFAULTS: GroupSettingsValues = {
   calendar_meeting_details: true,
   calendar_event_notes: true,
   calendar_event_location: true,
+  event_reminders_enabled: true,
+  event_reminder_default_days: 1,
 };
 
 /**
@@ -40,7 +44,7 @@ export async function getGroupSettings(
   const { data, error } = await supabase
     .from("group_settings")
     .select(
-      "weekly_zoom_url, zoom_meeting_time, weekly_prayer_call_url, weekly_prayer_call_time, serving_link_mode, calendar_meeting_details, calendar_event_notes, calendar_event_location"
+      "weekly_zoom_url, zoom_meeting_time, weekly_prayer_call_url, weekly_prayer_call_time, serving_link_mode, calendar_meeting_details, calendar_event_notes, calendar_event_location, event_reminders_enabled, event_reminder_default_days"
     )
     .eq("org_id", orgId)
     .eq("group_id", groupId)
@@ -62,6 +66,8 @@ export async function getGroupSettings(
     calendar_meeting_details: data.calendar_meeting_details ?? true,
     calendar_event_notes: data.calendar_event_notes ?? true,
     calendar_event_location: data.calendar_event_location ?? true,
+    event_reminders_enabled: data.event_reminders_enabled ?? true,
+    event_reminder_default_days: data.event_reminder_default_days ?? 1,
   };
 }
 

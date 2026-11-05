@@ -17,6 +17,11 @@ vi.mock("@/components/GoogleMapsScript", () => ({ GoogleMapsScript: () => null }
 vi.mock("@/components/events/LocationInput", () => ({
   LocationInput: ({ id, name }: { id: string; name: string }) => createElement("input", { id, name }),
 }));
+// The real field is a listbox jsdom cannot open; this stands in for a choice.
+vi.mock("@/components/events/ReminderField", () => ({
+  ReminderField: ({ onChange }: { onChange: (days: number) => void }) =>
+    createElement("button", { type: "button", id: "reminder", onClick: () => onChange(0) }),
+}));
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
     from: () => ({
@@ -51,6 +56,7 @@ const event = {
   calendar_meeting_details: null,
   calendar_event_notes: null,
   calendar_event_location: false,
+  reminder_days_before: 2,
 } as unknown as Event;
 
 let mounted: { root: Root; container: HTMLElement } | null = null;
@@ -65,7 +71,7 @@ afterEach(() => {
   }
 });
 
-async function mount() {
+async function mount(shown: Event = event) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -74,9 +80,10 @@ async function mount() {
     root.render(
       createElement(EditEventForm, {
         groupId: "g1",
-        event,
+        event: shown,
         timeZone: "America/Chicago",
         groupSharing: { joinDetails: false, notes: true, location: true },
+        groupRemindersOff: false,
       })
     )
   );
@@ -122,5 +129,31 @@ describe("EditEventForm calendar subscriptions", () => {
       calendar_event_notes: null,
       calendar_event_location: null,
     });
+  });
+});
+
+describe("EditEventForm reminder", () => {
+  it("keeps the event's choice when it is not changed", async () => {
+    const { submit } = await mount();
+    await submit();
+    expect(update.mock.calls[0][0]).toMatchObject({ reminder_days_before: 2 });
+  });
+
+  it("saves the choice the leader made", async () => {
+    const { container, submit } = await mount();
+    await act(async () => container.querySelector<HTMLElement>("#reminder")!.click());
+    await submit();
+    expect(update.mock.calls[0][0]).toMatchObject({ reminder_days_before: 0 });
+  });
+
+  it("offers no choice on a moved date and saves none: it follows its series", async () => {
+    const { container, submit } = await mount({
+      ...event,
+      series_id: "s1",
+      series_occurrence_date: "2026-11-05T18:00:00.000Z",
+    } as Event);
+    expect(container.querySelector("#reminder")).toBeNull();
+    await submit();
+    expect(update.mock.calls[0][0]).not.toHaveProperty("reminder_days_before");
   });
 });
