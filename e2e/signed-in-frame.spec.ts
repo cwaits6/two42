@@ -82,9 +82,11 @@ for (const { persona, path, nav, pages, rows } of CASES) {
       await expect(page.getByRole("button", { name: "Menu", exact: true })).toHaveCount(0);
       await expect(page.getByRole("contentinfo")).toHaveCount(0);
       await expect(page.getByRole("link", { name: "two42" })).toBeVisible();
-      await expect(page.getByRole("navigation")).toHaveCount(1);
+      // The frame's own menu. A page may hold a navigation landmark of its own inside main.
+      const frameNav = page.getByRole("navigation").and(page.locator(":not(main *)"));
+      await expect(frameNav).toHaveCount(1);
       await expect(page.getByRole("navigation", { name: nav })).toBeVisible();
-      if (pages) await expect(page.getByRole("navigation").getByRole("link")).toHaveText(pages);
+      if (pages) await expect(frameNav.getByRole("link")).toHaveText(pages);
 
       await page.getByRole("button", ACCOUNT).click();
       await expect(page.getByRole("menuitem")).toHaveText(rows);
