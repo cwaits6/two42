@@ -14,7 +14,7 @@ than 6 hours after a firing fails with a message saying so. The job names and
 hours are copied from the cron schedules, so a schedule change needs a matching
 change here.
 
-## `rekey-storage-objects.mjs` — one-time legacy storage re-key (CWA-57)
+## `rekey-storage-objects.mjs` — one-time legacy storage re-key
 
 Moves pre-CWA-57 storage objects onto the org-partitioned key layout
 (`<org_id>/<kind>/<entity_id>/<file>`) and updates the matching URL column
@@ -54,7 +54,7 @@ legacy objects keep rendering (public buckets serve reads without consulting
 RLS) but cannot be deleted or overwritten by any client — see
 `docs/security/tenancy-model.md` ("Storage tenancy").
 
-## `check-service-role-org-scope.mjs` — the service-role tenancy guard (CWA-44)
+## `check-service-role-org-scope.mjs` — the service-role tenancy guard
 
 Service-role Supabase clients carry `BYPASSRLS`, so the `.eq("org_id", …)`
 filters on their query chains **are** the tenant boundary — the isolation

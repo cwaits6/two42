@@ -52,34 +52,12 @@ export function validateGroupDescription(raw: string): Validated<string | null> 
   return { ok: true, value: value || null };
 }
 
-export const GROUP_CREATION_POLICY_OPTIONS: {
-  value: GroupCreationPolicy;
-  label: string;
-  description: string;
-}[] = [
-  {
-    value: "open",
-    label: "Open",
-    description: "Any member can create a group. It goes live at once.",
-  },
-  {
-    value: "approval",
-    label: "Approval required",
-    description: "A member asks for a group. An org admin approves it.",
-  },
-  {
-    value: "admins",
-    label: "Org admins only",
-    description: "Only org admins create groups.",
-  },
-];
-
 const ERROR_MESSAGES: Record<string, string> = {
-  GC001: "Your organization does not let members create groups.",
+  GC001: "Your church does not let members create groups.",
   GC002: "Your account cannot create groups yet.",
-  GC003: "That person is not an approved member of your organization.",
+  GC003: "That person is not an approved member of your church.",
   GC004: "That request is no longer waiting for approval.",
-  GC005: "Only an org admin can do that.",
+  GC005: "Only a church admin can do that.",
   GC006: "Enter a group name.",
   GC007: `Keep the group name to ${GROUP_NAME_MAX} characters and the meeting time and place to ${GROUP_DESCRIPTION_MAX}.`,
 };

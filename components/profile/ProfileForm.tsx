@@ -32,6 +32,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
+import { initials } from "@/lib/names";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { Camera, Check } from "lucide-react";
 import { CheckRow } from "@/components/profile/CheckRow";
@@ -370,9 +371,7 @@ export function ProfileForm({
     !avatarCaller ||
     canManageAvatar(avatarCaller, { id: profile.id, family_id: savedFamilyId });
 
-  const initials =
-    `${state.first_name.charAt(0)}${state.last_name.charAt(0)}`.toUpperCase() ||
-    "??";
+  const someoneElse = editingOther || isAdmin;
 
   const householdItems = [
     { value: "none", label: "No household" },
@@ -395,7 +394,7 @@ export function ProfileForm({
               <Avatar className="h-20 w-20 shrink-0">
                 {avatarUrl && <AvatarImage src={avatarUrl} alt="Profile photo" />}
                 <AvatarFallback className="bg-brand-primary text-2xl text-white">
-                  {initials}
+                  {initials(state)}
                 </AvatarFallback>
               </Avatar>
               <Button
@@ -500,7 +499,7 @@ export function ProfileForm({
             {!isAdmin && <EmailChangeHint />}
             <CheckRow
               id="hide_email"
-              label="Hide my email from the directory"
+              label={someoneElse ? "Hide email from the directory" : "Hide my email from the directory"}
               checked={state.hide_email}
               onChange={(v) => update("hide_email", v)}
             />
@@ -763,7 +762,7 @@ export function ProfileForm({
           <div className="space-y-1">
             <CheckRow
               id="is_unlisted"
-              label={editingOther || isAdmin ? "Hide from the directory" : "Hide me from the directory"}
+              label={someoneElse ? "Hide from the directory" : "Hide me from the directory"}
               checked={state.is_unlisted}
               onChange={(v) => update("is_unlisted", v)}
             />
