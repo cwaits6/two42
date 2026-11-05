@@ -197,7 +197,8 @@ through the request client in `app/`, `components/` and `lib/`:
   insert, update, upsert or delete;
 - a `profiles` select that names `email`;
 - a filter or ordering on `profiles.email`, including inside an `.or()` string
-  and through `.match()`, with the name quoted or cast or not;
+  and through `.match()`, with the name quoted or cast or not. Every term of
+  a comma-separated ordering is read (`.order("first_name,email.desc")`);
 - an embedded `profiles(…)` on any table, at any depth, with `*` or `email`
   inside it;
 - a filter or ordering on an embedded `profiles.email`, reached by the table

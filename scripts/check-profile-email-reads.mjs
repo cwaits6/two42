@@ -30,6 +30,7 @@
  * A filter or ordering argument must resolve the same way on a chain that
  * reads profiles, as its table or through an embed. An embed is reached by
  * the table name, by an alias the select gives it, or by `referencedTable`.
+ * An ordering is a comma-separated list, and every term of it is read.
  * A template `.or()` string may take a substitution as a value, never as a
  * column name.
  *
@@ -437,6 +438,15 @@ function columnPath(text) {
   return segments.map((seg) => seg.replace(/"/g, "").split(/::|->/)[0].trim());
 }
 
+const ORDER_MODIFIERS = new Set(["asc", "desc", "nullsfirst", "nullslast"]);
+
+/** One term of an ordering, `[embed.]column[.desc][.nullsfirst]`, as its column path. */
+function orderColumnPath(term) {
+  const path = columnPath(term);
+  while (path.length > 1 && ORDER_MODIFIERS.has(path.at(-1))) path.pop();
+  return path;
+}
+
 /**
  * The embed a call's options point its column at (`referencedTable`, or the
  * older `foreignTable`): undefined when it names none, null when it cannot be
@@ -478,7 +488,11 @@ function filterExposure(chain, resolve) {
     if (NOT_A_FILTER.has(m.name) || m.args.length === 0) continue;
     const referenced = referencedEmbed(m, resolve);
     const onProfiles =
-      referenced === undefined ? chain.onProfiles : referenced === null || names.has(columnPath(referenced).at(-1));
+      referenced === undefined
+        ? chain.onProfiles
+        : referenced === null
+          ? readsProfiles
+          : names.has(columnPath(referenced).at(-1));
     const unread = () => {
       if (readsProfiles || onProfiles) reasons.push(`a .${m.name}() argument that is not literal text; write it as one`);
     };
@@ -523,6 +537,7 @@ function filterExposure(chain, resolve) {
     }
     const column = resolve(arg);
     if (column === null) unread();
+    else if (m.name === "order") splitTopLevel(column).forEach((term) => judge(orderColumnPath(term)));
     else judge(columnPath(column));
   }
   return [...new Set(reasons)];

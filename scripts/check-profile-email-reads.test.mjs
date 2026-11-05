@@ -91,6 +91,15 @@ describe("request-client reads of profiles", () => {
     expect(page(`await supabase.from("profiles").select("id").eq("hide_email", true).order("first_name");`)).toEqual([]);
   });
 
+  it("reads every term of a comma-separated ordering", () => {
+    for (const terms of ["first_name,email", "email,first_name", "first_name, email", "email.desc,first_name", "first_name,email.desc.nullslast"]) {
+      expect(page(`await supabase.from("profiles").select("id").order("${terms}");`)).toEqual([
+        "app/page.tsx .order() on email",
+      ]);
+    }
+    expect(page(`await supabase.from("profiles").select("id").order("last_name,first_name.desc");`)).toEqual([]);
+  });
+
   it("refuses an .or() string that names the email", () => {
     expect(
       page("await supabase.from(\"profiles\").select(\"id\").or(`first_name.ilike.%${q}%,email.ilike.%${q}%`);"),
@@ -155,7 +164,16 @@ describe("request-client reads of profiles", () => {
     expect(members("id, profiles(first_name)", `.order("email", { ...options })`)).toEqual([
       "app/page.tsx .order() on an embedded profiles.email",
     ]);
+    expect(members("id, lead:profiles(first_name)", `.order("first_name,email", { referencedTable: "lead" })`)).toEqual([
+      "app/page.tsx .order() on an embedded profiles.email",
+    ]);
+    expect(members("id, profiles(first_name)", `.order("first_name,profiles.email")`)).toEqual([
+      "app/page.tsx .order() on an embedded profiles.email",
+    ]);
     expect(members("id, profiles(first_name), teams(name)", `.order("email", { referencedTable: "teams" })`)).toEqual([]);
+    expect(
+      page(`const options = { ascending: false };\nawait supabase.from("access_requests").select("id").order("email", options);`),
+    ).toEqual([]);
     expect(members("id, profiles(first_name)", `.order("first_name", { referencedTable: "profiles" })`)).toEqual([]);
     expect(members("id, profiles(first_name)", `.order("created_at", { ascending: false })`)).toEqual([]);
   });
