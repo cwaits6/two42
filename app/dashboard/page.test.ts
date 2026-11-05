@@ -138,6 +138,16 @@ describe("DashboardPage", () => {
     expect(childTypes(element)).not.toContain(SignOutButton);
   });
 
+  it("shows the failed read, not the waiting screen, when the operator check finds no session", async () => {
+    profileResult.mockResolvedValue({ data: null, error: { code: "PGRST116", message: "no rows" } });
+    requirePlatformAdmin.mockResolvedValue({ ok: false, status: 401 });
+
+    const element = await DashboardPage();
+
+    expect(childTypes(element)).toContain(ErrorState);
+    expect(childTypes(element)).not.toContain(SignOutButton);
+  });
+
   it("does not ask the operator gate about a person who has a profile", async () => {
     getGroupMemberships.mockResolvedValue([A]);
 

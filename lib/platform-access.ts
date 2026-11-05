@@ -12,8 +12,8 @@ export type PlatformAdminGate =
  * client (never the service client): is_platform_admin() is SECURITY DEFINER
  * over platform_admins keyed on auth.uid(), so the answer is server-owned
  * state the caller cannot influence. Fails closed on an RPC error — a
- * platform admin is the one principal with cross-org reach, so "couldn't
- * tell" must mean "no".
+ * platform admin is the one principal with cross-org reach, so a check that
+ * couldn't tell denies, and says so with `unavailable`.
  *
  * Route handlers use the discriminated result to distinguish 401 (no user)
  * from 403 (signed-in non-platform-admin), matching
