@@ -1029,6 +1029,12 @@ export function HouseholdsManager() {
 
                       <div>
                         <Label>Birthday (optional)</Label>
+                        {editingMember?.claimed_profile_id && (
+                          <p className="text-base text-muted-foreground mt-1">
+                            The directory shows the birthday on {editingMember.first_name}&apos;s profile. Change that
+                            one in Edit member.
+                          </p>
+                        )}
                         <div className={`grid gap-2 mt-1 ${memberIsChildWithoutAccount ? "grid-cols-2" : "grid-cols-3"}`}>
                           <MonthSelect
                             id="fm_birth_month"

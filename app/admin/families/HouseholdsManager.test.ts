@@ -208,6 +208,23 @@ describe("HouseholdsManager", () => {
     });
   });
 
+  it("says where the directory's birthday is kept, only for a person with an account", async () => {
+    const note = "The directory shows the birthday on Liam's profile. Change that one in Edit member.";
+    state.members = [LIAM];
+    await mount();
+    await click("Edit Test");
+    await click("Edit Liam");
+    expect(dialogTexts()).not.toContain(note);
+    await act(async () => root.unmount());
+    document.body.innerHTML = "";
+
+    state.members = [{ ...LIAM, claimed_profile_id: "p1" }];
+    await mount();
+    await click("Edit Test");
+    await click("Edit Liam");
+    expect(dialogTexts()).toContain(note);
+  });
+
   it("clears the year's validation error when the year field goes", async () => {
     state.members = [{ ...LIAM, birth_year: 1800 }];
     await mount();
