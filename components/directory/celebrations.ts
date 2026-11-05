@@ -78,9 +78,10 @@ export function isThisWeek(month: number, day: number, today: Date): boolean {
 }
 
 /**
- * A claimed spouse is named only when their profile is in `members`: the view
- * drops an unlisted or pending profile from there but keeps their family_members
- * row, and nothing in the row tells the two apart.
+ * The spouse a couple can be shown with. A claimed spouse counts only when
+ * their profile is in `members`: the view drops an unlisted or pending profile
+ * from there but keeps their family_members row, and nothing in the row tells
+ * the two apart.
  */
 function nameableSpouse(family: FamilyDirectoryFull) {
   return (
@@ -156,13 +157,10 @@ export function anniversaryEntries(
   const result: AnniversaryEntry[] = [];
 
   for (const family of families) {
-    const hasSpouse =
-      family.members.some((m) => m.relationship === "spouse") ||
-      family.family_members_list.some((fm) => fm.relationship === "spouse");
     const month = family.anniversary_month;
     const day = family.anniversary_day;
     const year = family.anniversary_year;
-    if (!month || !day || !hasSpouse) continue;
+    if (!month || !day || !nameableSpouse(family)) continue;
 
     result.push({
       key: family.id,

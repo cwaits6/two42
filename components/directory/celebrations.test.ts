@@ -274,17 +274,36 @@ describe("anniversaryEntries", () => {
     expect(anniversaryEntries(families, NOV_3)).toEqual([]);
   });
 
-  it("keeps a couple whose claimed spouse is unlisted or pending, and never names that spouse", () => {
+  it("leaves out a couple whose claimed spouse is unlisted or pending", () => {
+    const claimedSpouse = householdRecord({
+      first_name: "Susan",
+      relationship: "spouse",
+      claimed_profile_id: "b",
+    });
+    const families = [
+      household({ ...couple, members: [], family_members_list: [claimedSpouse] }),
+      household({
+        ...couple,
+        members: [asMember("a", "primary", "Frank")],
+        family_members_list: [claimedSpouse],
+      }),
+    ];
+    const entries = anniversaryEntries(families, NOV_3);
+    for (const when of ["week", "month", "all"] as const) {
+      expect(celebrationSections(entries, when, NOV_3)).toEqual([]);
+    }
+  });
+
+  it("keeps a couple whose claimed spouse is listed", () => {
     const family = household({
-      anniversary_month: 11,
-      anniversary_day: 5,
-      anniversary_year: 2004,
-      members: [asMember("a", "primary", "Frank")],
+      ...couple,
       family_members_list: [
         householdRecord({ first_name: "Susan", relationship: "spouse", claimed_profile_id: "b" }),
       ],
     });
-    expect(anniversaryEntries([family], NOV_3).map((e) => e.coupleName)).toEqual(["Frank Miller"]);
+    expect(anniversaryEntries([family], NOV_3).map((e) => e.coupleName)).toEqual([
+      "Frank & Susan Miller",
+    ]);
   });
 });
 
