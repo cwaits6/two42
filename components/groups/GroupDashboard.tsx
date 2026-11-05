@@ -87,7 +87,6 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
   const reads = await loadGroupHomeReads(supabase, { ...context, orgId: viewer.org_id });
   const home = buildGroupHome(reads, context);
   const href = (path: string) => groupPath(group.id, path);
-  const recordingsHref = reads.lessonCount > 0 ? href("/lectures") : null;
 
   if (home.nothingAtAll) {
     return (
@@ -112,9 +111,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
       {greeting}
 
       <div className="space-y-12">
-        {home.startingNow && (
-          <StartingNowPanel event={home.startingNow} recordingsHref={recordingsHref} />
-        )}
+        {home.startingNow && <StartingNowPanel event={home.startingNow} />}
 
         {home.notices.length > 0 && (
           <div className="space-y-3">

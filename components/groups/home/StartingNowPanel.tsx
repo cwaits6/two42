@@ -10,15 +10,8 @@ const LIGHT_BUTTON =
   "flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-card px-4 py-3 font-sans text-base font-semibold text-brand-primary-text transition-colors hover:bg-brand-warm";
 
 /** Home's one big panel: Clay, from the join window opening until the ended grace period runs out. */
-export function StartingNowPanel({
-  event,
-  recordingsHref,
-}: {
-  event: StartingNowEvent;
-  /** Where "Watch the recording" points after the event ends; null drops the panel once it has ended. */
-  recordingsHref: string | null;
-}) {
-  const { meetingUrl, meetingId, passcode, startTime, endTime, leadMinutes } = event;
+export function StartingNowPanel({ event }: { event: StartingNowEvent }) {
+  const { meetingUrl, meetingId, passcode, startTime, endTime, leadMinutes, recordingsHref } = event;
   const ended = useJoinState(startTime, endTime, leadMinutes) === "ended";
   // An event can end while Home is open; with no recording to offer, the panel goes with it.
   if (ended && !recordingsHref) return null;

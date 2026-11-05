@@ -23,8 +23,9 @@ function panel(startsIn: number, recordingsHref: string | null) {
     startTime: iso(startsIn),
     endTime: iso(startsIn + HOUR),
     leadMinutes: 15,
+    recordingsHref,
   };
-  return renderToStaticMarkup(createElement(StartingNowPanel, { event, recordingsHref }));
+  return renderToStaticMarkup(createElement(StartingNowPanel, { event }));
 }
 
 describe("StartingNowPanel", () => {

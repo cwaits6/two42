@@ -270,7 +270,10 @@ describe("the Starting now panel", () => {
   it("stays through the ended grace period when there is a lesson to link to, then goes", () => {
     const withLesson = (hoursAgo: number) =>
       buildGroupHome(reads({ events: [ended(hoursAgo)], lessonCount: 1 }), ctx());
-    expect(withLesson(2).startingNow?.title).toBe("Call");
+    expect(withLesson(2).startingNow).toMatchObject({
+      title: "Call",
+      recordingsHref: "/g/g1/lectures",
+    });
     expect(withLesson(4).startingNow).toBeNull();
   });
 
@@ -282,9 +285,10 @@ describe("the Starting now panel", () => {
 
   it("shows a live event whether or not there is a lesson", () => {
     const live = event({ id: "call", start_time: "2026-11-03T14:10:00Z", ...CALL });
-    expect(buildGroupHome(reads({ events: [live], lessonCount: 0 }), ctx()).startingNow?.title).toBe(
-      "Call",
-    );
+    expect(buildGroupHome(reads({ events: [live], lessonCount: 0 }), ctx()).startingNow).toMatchObject({
+      title: "Call",
+      recordingsHref: null,
+    });
   });
 
   it("shows only an event set to show on Home, and only one with meeting details", () => {

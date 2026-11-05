@@ -129,13 +129,16 @@ export async function loadGroupHomeReads(
       .eq("org_id", orgId)
       .eq("user_id", userId)
       .then((read) => readList(read, "the viewer's RSVPs") as Rsvp[] | null),
-    // A courtesy for the recording link: a failed count just leaves the link out.
+    // A failed count reads as no lessons, which drops the recording link and the ended panel.
     client
       .from("lectures")
       .select("id", { count: "exact", head: true })
       .eq("org_id", orgId)
       .eq("group_id", groupId)
-      .then(({ count }) => count ?? 0),
+      .then(({ count, error }) => {
+        if (error) console.error("Failed to count lessons: code=%s", error.code);
+        return count ?? 0;
+      }),
     // The Directory's reads and order, so Home's first names match its list.
     client
       .from("profiles_directory")

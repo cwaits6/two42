@@ -112,6 +112,8 @@ export type StartingNowEvent = {
   startTime: string;
   endTime: string | null;
   leadMinutes: number;
+  /** Where "Watch the recording" points once the event ends; null when the group has no lesson. */
+  recordingsHref: string | null;
 };
 
 export type TodoRow = {
@@ -323,6 +325,7 @@ function startingNowEvent(
   hasLessons: boolean,
 ) {
   const { now, groupId } = ctx;
+  const recordingsHref = hasLessons ? groupPath(groupId, "/lectures") : null;
   const candidates = occurrences.flatMap((occurrence) => {
     const meeting = (occurrence.series_id && anchors.get(occurrence.series_id)) || occurrence;
     return hasMeeting(meeting) && meeting.meeting_show_on_dashboard ? [{ occurrence, meeting }] : [];
@@ -333,7 +336,7 @@ function startingNowEvent(
     candidates.find((c) => stateOf(c) === "live") ??
     candidates.find(
       (c) =>
-        hasLessons &&
+        recordingsHref !== null &&
         stateOf(c) === "ended" &&
         meetingEndMs(c.occurrence.start_time, c.occurrence.end_time) + ENDED_GRACE_MS > now.getTime(),
     );
@@ -350,6 +353,7 @@ function startingNowEvent(
       startTime: occurrence.start_time,
       endTime: occurrence.end_time,
       leadMinutes: meeting.meeting_lead_minutes,
+      recordingsHref,
     } satisfies StartingNowEvent,
   };
 }
