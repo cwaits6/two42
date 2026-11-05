@@ -106,6 +106,55 @@ describe("request-client reads of profiles", () => {
     ).toEqual(["app/page.tsx .eq() on an embedded profiles.email"]);
   });
 
+  it("reads a spread embed and quoted names like any other", () => {
+    expect(page(`await supabase.from("team_members").select("id, ...profiles(email)");`)).toEqual([
+      "app/page.tsx a select of email from profiles",
+    ]);
+    expect(page(`await supabase.from("profiles").select('id, "email"');`)).toEqual([
+      "app/page.tsx a select of email from profiles",
+    ]);
+    expect(page(`await supabase.from("team_members").select('id, "profiles"("email")');`)).toEqual([
+      "app/page.tsx a select of email from profiles",
+    ]);
+    expect(page(`await supabase.from("team_members").select("id, ...profiles(first_name)");`)).toEqual([]);
+  });
+
+  it("judges a table that is not known text as profiles", () => {
+    const unknown = "a table that is not a literal, judged as profiles";
+    expect(page(`await supabase.from(tableFor(kind)).select("*");`)).toEqual([
+      "app/page.tsx a select of all columns from profiles",
+    ]);
+    expect(page(`await supabase.from(tableFor(kind)).select("id").eq("email", address);`)).toEqual([
+      "app/page.tsx .eq() on email",
+    ]);
+    expect(page(`await supabase.from(tableFor(kind)).select("id, name").eq("id", id);`)).toEqual([]);
+    expect(page(`await supabase.storage.from(bucket).upload(key, file);`)).toEqual([]);
+    expect(page(`const names = Array.from(people).filter((p) => p.email).map((p) => p.name);`)).toEqual([]);
+    expect(scanSource("app/page.tsx", REQUEST + `await supabase.from(tableFor(kind)).select("*");`).findings[0].table).toBe(unknown);
+  });
+
+  it("follows a top-level constant to the table name", () => {
+    expect(page(`const PEOPLE = "profiles";\nawait supabase.from(PEOPLE).select("*");`)).toEqual([
+      "app/page.tsx a select of all columns from profiles",
+    ]);
+    expect(page(`const TEAMS = "teams";\nawait supabase.from(TEAMS).select("*");`)).toEqual([]);
+  });
+
+  it("follows a query builder held in a variable through the function that holds it", () => {
+    const fn = (body) => check({ "lib/read.ts": `async function read(address) {\n  const supabase = await createClient();\n${body}\n}` });
+    expect(fn(`  const q = supabase.from("profiles");\n  await q.select("*");`)).toEqual([
+      "lib/read.ts a select of all columns from profiles",
+    ]);
+    expect(fn(`  let q = supabase.from("profiles").select("id");\n  if (address) q = q.eq("email", address);\n  await q;`)).toEqual([
+      "lib/read.ts .eq() on email",
+    ]);
+    expect(fn(`  let q;\n  q = supabase.from("profiles").select("id");\n  await q.order("email");`)).toEqual([
+      "lib/read.ts .order() on email",
+    ]);
+    expect(fn(`  let q = supabase.from("profiles").select("id, first_name");\n  if (address) q = q.eq("family_id", address);\n  await q;`)).toEqual([]);
+    expect(fn(`  let q = supabase.from("teams").select("id");\n  q = q.eq("email", address);\n  await q;`)).toEqual([]);
+  });
+
   it("never matches the directory view", () => {
     expect(page(`await supabase.from("profiles_directory").select("*").eq("email", address);`)).toEqual([]);
   });
@@ -197,6 +246,56 @@ describe("which client a chain runs on", () => {
       }),
     ).toEqual([
       "lib/send.ts a select of email from profiles; recipients() takes its client as a parameter and app/page.tsx:3 does not pass a service client",
+    ]);
+  });
+
+  it("judges a name by its nearest declaration when two functions bind it to different clients", () => {
+    const send = `async function send(orgId) {\n  const supabase = await createServiceClient();\n  await supabase.from("profiles").select("id, email").eq("org_id", orgId);\n}\n`;
+    const read = (chain) => `async function read() {\n  const supabase = await createClient();\n  await supabase.${chain};\n}\n`;
+    expect(check({ "app/api/x/route.ts": send + read(`from("profiles").select("*")`) })).toEqual([
+      "app/api/x/route.ts a select of all columns from profiles",
+    ]);
+    expect(check({ "app/api/x/route.ts": send + read(`from("teams").select("id, profiles(email)")`) })).toEqual([
+      "app/api/x/route.ts a select of email from profiles",
+    ]);
+    expect(check({ "app/api/x/route.ts": send + read(`from("profiles").select("id, first_name")`) })).toEqual([]);
+  });
+
+  it("judges a parameter that shadows a service binding by its callers", () => {
+    expect(
+      check({
+        "app/api/x/route.ts": `const supabase = await createServiceClient();\nexport async function load(supabase) {\n  return supabase.from("profiles").select("*");\n}`,
+        "app/page.tsx": `${REQUEST}await load(supabase);`,
+      }),
+    ).toEqual([
+      "app/api/x/route.ts a select of all columns from profiles; load() takes its client as a parameter and app/page.tsx:3 does not pass a service client",
+    ]);
+  });
+
+  it("takes a variable for a service client only when every value it is given is one", () => {
+    const body = (assign) =>
+      `async function run(orgId) {\n  let service;\n  try {\n    service = ${assign};\n  } catch {\n    return;\n  }\n  await service.from("profiles").select("id, email").eq("org_id", orgId);\n}`;
+    expect(check({ "lib/run.ts": body("await createServiceClient()") })).toEqual([]);
+    expect(check({ "lib/run.ts": body("await createClient()") })).toEqual(["lib/run.ts a select of email from profiles"]);
+    expect(
+      check({
+        "lib/run.ts": `async function run(admin) {\n  let db = await createServiceClient();\n  if (!admin) db = await createClient();\n  await db.from("profiles").select("*");\n}`,
+      }),
+    ).toEqual(["lib/run.ts a select of all columns from profiles"]);
+  });
+
+  it("judges a root it cannot place as the request client", () => {
+    expect(check({ "lib/repo.ts": `class Repo {\n  async all() {\n    return this.supabase.from("profiles").select("*");\n  }\n}` })).toEqual([
+      "lib/repo.ts a select of all columns from profiles",
+    ]);
+    expect(check({ "app/page.tsx": `const gate = await requireOrgAdmin();\nawait gate.supabase.from("profiles").select("id, email");` })).toEqual([
+      "app/page.tsx a select of email from profiles",
+    ]);
+    expect(check({ "app/page.tsx": `await (await createClient()).from("profiles").select("*");` })).toEqual([
+      "app/page.tsx a select of all columns from profiles",
+    ]);
+    expect(check({ "app/page.tsx": `const { supabase } = await requireOrgAdmin();\nawait supabase.from("profiles").order("email").select("id");` })).toEqual([
+      "app/page.tsx .order() on email",
     ]);
   });
 

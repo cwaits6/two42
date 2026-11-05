@@ -2,26 +2,34 @@
 /**
  * Static guard: no request-client read of profiles.email.
  *
- * Client roles are losing SELECT on profiles.email, and PostgREST answers
- * 42501 for the whole request when any part of it touches a column the role
- * cannot read. That includes `select("*")`, a bare `.select()` after a write,
+ * The app reads a person's address through three paths that apply their
+ * hide_email setting, never from the table on the request client. Client
+ * roles are also to hold no SELECT on the column, and PostgREST answers 42501
+ * for the whole request when any part of it touches a column the role cannot
+ * read. That includes `select("*")`, a bare `.select()` after a write,
  * a filter or ordering on the column, and an embedded `profiles(...)` on
  * another table. This script walks the TypeScript AST of every tracked file
  * in app/, components/ and lib/ and fails on each of those shapes when the
  * chain runs on the request client.
  *
- * A chain is on the service client, and skipped, when its root is bound from
- * createServiceClient() in the same file, or is a function parameter that
- * every call site in the scanned files fills with such a binding. Those
- * chains carry an explicit org_id, which check-service-role-org-scope.mjs
- * enforces. Every other root is treated as the request client.
+ * A chain is on the service client, and skipped, when the nearest enclosing
+ * declaration of its root is a variable bound from createServiceClient(), or
+ * a function parameter that every call site in the scanned files fills with
+ * such a binding. Those chains carry an explicit org_id, which
+ * check-service-role-org-scope.mjs enforces. Every other chain is judged as a
+ * request-client read: a root that is a property, `this`, an import, or a
+ * name the walk cannot place, and a table that is not known text is judged
+ * as profiles.
  *
  * A select argument must resolve to text: a string literal, a template whose
  * substitutions are constants, or a constant, declared in the same file or
  * exported from a directly imported one. Anything else fails closed.
  *
- * Known limit: an embed written through a foreign key column instead of the
+ * Known limits: an embed written through a foreign key column instead of the
  * table name (`author:created_by(*)`) is not recognised as a profiles embed.
+ * A query builder held in a variable is followed inside the function that
+ * declares it, and no further: one handed to another function, returned, or
+ * stored on an object is read only as far as the chain that built it.
  *
  * There is no marker and no allowlist. The address has three read paths:
  * get_own_email(), admin_member_emails() and profiles_directory.
@@ -77,7 +85,8 @@ export function splitTopLevel(text) {
  */
 export function parseSelectItem(item) {
   const open = item.indexOf("(");
-  const head = (open === -1 ? item : item.slice(0, open)).trim();
+  // A spread embed (`...profiles(email)`) and quoted names read the same columns.
+  const head = (open === -1 ? item : item.slice(0, open)).replace(/^\s*\.\.\./, "").replace(/"/g, "").trim();
   // A cast is `::`, so only a single colon separates an alias.
   const alias = head.match(/^[\w$]+\s*:(?!:)\s*/);
   const named = alias ? head.slice(alias[0].length) : head;
@@ -194,34 +203,121 @@ function isServiceClientCall(node) {
   );
 }
 
-function serviceBindingsOf(sourceFile) {
-  const bindings = new Set();
-  (function visit(node) {
-    if (
-      ts.isVariableDeclaration(node) &&
-      node.initializer &&
-      ts.isIdentifier(node.name) &&
-      isServiceClientCall(node.initializer)
-    ) {
-      bindings.add(node.name.text);
+function bindsName(nameNode, name) {
+  if (ts.isIdentifier(nameNode)) return nameNode.text === name;
+  return nameNode.elements.some((el) => !ts.isOmittedExpression(el) && bindsName(el.name, name));
+}
+
+function declarationIn(list, name) {
+  return list.declarations.find((decl) => bindsName(decl.name, name)) ?? null;
+}
+
+/**
+ * What `name` refers to where `node` stands: the nearest enclosing variable
+ * declaration or function parameter, or null for an import, a global or
+ * anything else. Two functions in one file may bind the same name to
+ * different clients, so a file-wide lookup by name is not enough.
+ */
+function bindingOf(node, name) {
+  for (let scope = node.parent; scope; scope = scope.parent) {
+    if (ts.isFunctionLike(scope)) {
+      const index = scope.parameters.findIndex((p) => bindsName(p.name, name));
+      if (index !== -1) return { fn: scope, index, plain: ts.isIdentifier(scope.parameters[index].name) };
     }
-    ts.forEachChild(node, visit);
-  })(sourceFile);
-  return bindings;
-}
-
-/** Index of the plain identifier parameter named `name`, or -1. */
-function paramIndex(fn, name) {
-  return fn.parameters.findIndex((p) => ts.isIdentifier(p.name) && p.name.text === name);
-}
-
-/** The nearest enclosing function that declares `name` as a parameter. */
-function paramOwner(node, name) {
-  for (let fn = enclosingFunction(node); fn; fn = enclosingFunction(fn.parent)) {
-    const index = paramIndex(fn, name);
-    if (index !== -1) return { fn, index };
+    if (
+      ts.isSourceFile(scope) ||
+      ts.isBlock(scope) ||
+      ts.isModuleBlock(scope) ||
+      ts.isCaseClause(scope) ||
+      ts.isDefaultClause(scope)
+    ) {
+      for (const stmt of scope.statements) {
+        const decl = ts.isVariableStatement(stmt) && declarationIn(stmt.declarationList, name);
+        if (decl) return { decl, scope };
+      }
+    }
+    if (
+      (ts.isForStatement(scope) || ts.isForOfStatement(scope) || ts.isForInStatement(scope)) &&
+      scope.initializer &&
+      ts.isVariableDeclarationList(scope.initializer)
+    ) {
+      const decl = declarationIn(scope.initializer, name);
+      if (decl) return { decl, scope };
+    }
+    if (ts.isCatchClause(scope) && scope.variableDeclaration && bindsName(scope.variableDeclaration.name, name)) {
+      return { decl: scope.variableDeclaration, scope };
+    }
   }
   return null;
+}
+
+/**
+ * Which client an identifier holds: "service", a `{ fnName, index }` when it
+ * is a named function's parameter, whose callers decide, or "request".
+ */
+function clientOf(identifier) {
+  const binding = bindingOf(identifier, identifier.text);
+  if (binding?.decl) {
+    const { name, initializer } = binding.decl;
+    if (!ts.isIdentifier(name)) return "request";
+    // Every value the variable is given, a later assignment included
+    // (`let service; try { service = await createServiceClient(); }`).
+    const values = initializer ? [initializer] : [];
+    (function visit(node) {
+      if (
+        ts.isBinaryExpression(node) &&
+        node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+        ts.isIdentifier(node.left) &&
+        node.left.text === name.text
+      ) {
+        values.push(node.right);
+      }
+      ts.forEachChild(node, visit);
+    })(binding.scope);
+    return values.length > 0 && values.every(isServiceClientCall) ? "service" : "request";
+  }
+  if (binding?.fn && binding.plain) {
+    const fnName = functionName(binding.fn);
+    if (fnName) return { fnName, index: binding.index };
+  }
+  return "request";
+}
+
+/**
+ * The calls made later on a query builder that `head` leaves in a variable
+ * (`let q = c.from("profiles").select("id"); q = q.eq("email", x)`), inside
+ * the function that declares it.
+ */
+function continuedMethods(head) {
+  const parent = head.parent;
+  let holder = null;
+  if (ts.isVariableDeclaration(parent) && parent.initializer === head && ts.isIdentifier(parent.name)) {
+    holder = parent.name;
+  } else if (
+    ts.isBinaryExpression(parent) &&
+    parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+    parent.right === head &&
+    ts.isIdentifier(parent.left)
+  ) {
+    holder = parent.left;
+  }
+  if (!holder) return [];
+  const methods = [];
+  (function visit(node) {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      outermostChainCall(node) === node &&
+      node !== head
+    ) {
+      const chain = collectMethods(node);
+      let root = node;
+      for (let i = 0; i < chain.length; i++) root = unwrap(root.expression.expression);
+      if (ts.isIdentifier(root) && root.text === holder.text) methods.push(...chain);
+    }
+    ts.forEachChild(node, visit);
+  })(enclosingFunction(head) ?? head.getSourceFile());
+  return methods;
 }
 
 function stringArg(m, index = 0) {
@@ -251,17 +347,17 @@ function filterExposure(chain) {
       if (m.args.length === 0) continue;
       // The source text, so a template with substitutions is still searched.
       const filters = first ?? m.args[0].getText().replace(/^[`"']/, "");
-      const onProfiles = chain.table === "profiles" && m.args.length < 2;
+      const onProfiles = chain.onProfiles && m.args.length < 2;
       const embedded = m.args.length > 1 && /["'`]profiles["'`]/.test(m.args[1].getText());
       if ((onProfiles || embedded) && OR_EMAIL.test(filters)) return `.or() on email`;
       continue;
     }
     if (m.name === "match") {
-      if (chain.table === "profiles" && namesEmailKey(m.args[0])) return `.match() on email`;
+      if (chain.onProfiles && namesEmailKey(m.args[0])) return `.match() on email`;
       continue;
     }
     if (first === null) continue;
-    if (chain.table === "profiles" && first === "email") return `.${m.name}() on email`;
+    if (chain.onProfiles && first === "email") return `.${m.name}() on email`;
     if (first.startsWith("profiles.email")) return `.${m.name}() on an embedded profiles.email`;
   }
   return null;
@@ -275,7 +371,6 @@ function filterExposure(chain) {
  */
 export function scanSource(rel, text, loadModule = () => null) {
   const sourceFile = parse(rel, text);
-  const serviceBindings = serviceBindingsOf(sourceFile);
   const findings = [];
   const pending = [];
   const calls = [];
@@ -296,11 +391,9 @@ export function scanSource(rel, text, loadModule = () => null) {
             if (isServiceClientCall(arg)) return { service: true };
             const id = unwrap(arg);
             if (!ts.isIdentifier(id)) return { service: false };
-            if (serviceBindings.has(id.text)) return { service: true };
-            const owner = paramOwner(node, id.text);
-            return owner
-              ? { service: false, param: { fnName: functionName(owner.fn), index: owner.index } }
-              : { service: false };
+            const client = clientOf(id);
+            if (client === "service") return { service: true };
+            return client === "request" ? { service: false } : { service: false, param: client };
           }),
         });
       }
@@ -312,24 +405,23 @@ export function scanSource(rel, text, loadModule = () => null) {
       node.expression.name.text === "from" &&
       node.arguments.length > 0
     ) {
-      const table = unwrap(node.arguments[0]);
       const root = chainRoot(node.expression.expression);
-      if (
-        (ts.isStringLiteral(table) || ts.isNoSubstitutionTemplateLiteral(table)) &&
-        root &&
-        !/^[A-Z]/.test(root.text) &&
-        !serviceBindings.has(root.text)
-      ) {
+      const client = root ? clientOf(root) : "request";
+      if (client !== "service") {
+        const head = outermostChainCall(node);
+        // Null when the table is not known text; the chain is then judged as profiles.
+        const table = resolveText(node.arguments[0], sourceFile, rel, loadModule);
         const chain = {
-          table: table.text,
+          table: table ?? "a table that is not a literal, judged as profiles",
+          onProfiles: table === null || table === "profiles",
           line: lineOf(sourceFile, node),
-          methods: collectMethods(outermostChainCall(node)),
+          methods: [...collectMethods(head), ...continuedMethods(head)],
         };
         const reasons = [];
         for (const m of chain.methods) {
           if (m.name !== "select") continue;
           if (m.args.length === 0) {
-            if (chain.table === "profiles") reasons.push("a bare .select() reads all columns");
+            if (chain.onProfiles) reasons.push("a bare .select() reads all columns");
             continue;
           }
           const resolved = resolveText(m.args[0], sourceFile, rel, loadModule);
@@ -337,7 +429,7 @@ export function scanSource(rel, text, loadModule = () => null) {
             reasons.push("a select argument that is not a literal column list; write it as one");
             continue;
           }
-          const hit = selectExposure(resolved, chain.table === "profiles");
+          const hit = selectExposure(resolved, chain.onProfiles);
           if (hit) reasons.push(`a select of ${hit} from profiles`);
         }
         const filter = filterExposure(chain);
@@ -345,10 +437,8 @@ export function scanSource(rel, text, loadModule = () => null) {
 
         if (reasons.length > 0) {
           const entry = { file: rel, line: chain.line, table: chain.table, reasons };
-          const owner = paramOwner(node, root.text);
-          const fnName = owner && functionName(owner.fn);
-          if (fnName) pending.push({ ...entry, fnName, index: owner.index });
-          else findings.push(entry);
+          if (client === "request") findings.push(entry);
+          else pending.push({ ...entry, ...client });
         }
       }
     }
@@ -438,7 +528,7 @@ function main() {
       for (const reason of f.reasons) console.error(`  ${reason}`);
     }
     console.error(
-      "\nClient roles cannot read profiles.email. Select PROFILE_COLUMNS from lib/profileColumns.ts, " +
+      "\nThe app reads no address from profiles on the request client. Select PROFILE_COLUMNS from lib/profileColumns.ts, " +
         "or name the columns, and read an address through get_own_email(), admin_member_emails() " +
         "or profiles_directory. See scripts/README.md."
     );
