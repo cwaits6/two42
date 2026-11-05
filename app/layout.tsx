@@ -1,6 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { Header } from "@/components/layout/Header";
@@ -9,6 +7,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { SidebarProvider } from "@/components/layout/SidebarContext";
 import { buildAccount } from "@/components/layout/account";
 import { GroupProvider } from "@/components/groups/GroupProvider";
+import { PageMeasurement } from "@/components/analytics/PageMeasurement";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { getOptionalUser } from "@/lib/supabase/current-user";
@@ -178,8 +177,7 @@ export default async function RootLayout({
         {/* Signed in, Help, Privacy and Terms live in the account menu. */}
         {!user && <Footer />}
         <Toaster />
-        <Analytics />
-        <SpeedInsights />
+        <PageMeasurement />
       </body>
     </html>
   );
