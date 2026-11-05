@@ -12,11 +12,15 @@ import { DAYS_BEFORE, REMINDER_FIRING_HOUR_UTC } from "@/supabase/functions/_sha
 
 const migration = readFileSync("supabase/migrations/20261117000000_event_reminder_choices.sql", "utf8");
 
+const checkLists = new Map(
+  [...migration.matchAll(/constraint (\w+) check \(\w+ in \(([\d, ]+)\)\)/g)].map(([, name, list]) => [name, list])
+);
+
 /** The values a check constraint in the migration allows. */
 function allowed(constraint: string): number[] {
-  const list = new RegExp(`constraint ${constraint} check \\(\\w+ in \\(([\\d, ]+)\\)\\)`).exec(migration);
+  const list = checkLists.get(constraint);
   if (!list) throw new Error(`No ${constraint} in the migration`);
-  return list[1].split(",").map(Number).sort((a, b) => a - b);
+  return list.split(",").map(Number).sort((a, b) => a - b);
 }
 
 describe("reminder choices", () => {
