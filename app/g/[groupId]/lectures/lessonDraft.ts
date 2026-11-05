@@ -12,10 +12,9 @@ export type LessonDraft = {
   lecture_date: string;
   description: string;
   summary: string;
-  thumbnail_url: string;
 };
 
-export type LessonFieldErrors = Partial<Record<"title" | "video_url" | "thumbnail_url", string>>;
+export type LessonFieldErrors = Partial<Record<"title" | "video_url", string>>;
 
 export type SeriesDraft = { name: string; teacher: string };
 
@@ -33,7 +32,6 @@ export function emptyLessonDraft(
     lecture_date: "",
     description: "",
     summary: "",
-    thumbnail_url: "",
   };
 }
 
@@ -44,7 +42,6 @@ export function lessonDraftFrom(lesson: {
   lecture_date: string | null;
   description: string | null;
   summary: string | null;
-  thumbnail_url: string | null;
 }): LessonDraft {
   return {
     series_id: lesson.series_id ?? NO_SERIES,
@@ -53,7 +50,6 @@ export function lessonDraftFrom(lesson: {
     lecture_date: lesson.lecture_date ?? "",
     description: lesson.description ?? "",
     summary: lesson.summary ?? "",
-    thumbnail_url: lesson.thumbnail_url ?? "",
   };
 }
 
@@ -64,10 +60,6 @@ export function validateLesson(draft: LessonDraft): LessonFieldErrors {
   const video = draft.video_url.trim();
   if (!video) errors.video_url = "Enter a link to the recording.";
   else if (!safeHttpUrl(video)) errors.video_url = "Enter a link that starts with http:// or https://";
-  const thumbnail = draft.thumbnail_url.trim();
-  if (thumbnail && !safeHttpUrl(thumbnail)) {
-    errors.thumbnail_url = "Enter an image link that starts with http:// or https://";
-  }
   return errors;
 }
 
@@ -81,7 +73,6 @@ export function lessonColumns(draft: LessonDraft) {
     lecture_date: draft.lecture_date || null,
     description: orNull(draft.description),
     summary: orNull(draft.summary),
-    thumbnail_url: orNull(draft.thumbnail_url),
   };
 }
 

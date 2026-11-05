@@ -71,14 +71,6 @@ describe("LessonThumbnail", () => {
     expect(fallback()).not.toBeNull();
   });
 
-  it("keeps a 120×90 picture from any other host", async () => {
-    const { img, fallback } = await mount("https://example.test/small.jpg");
-    settle(img()!, 120, 90);
-    await act(async () => img()!.dispatchEvent(new Event("load")));
-    expect(img()).not.toBeNull();
-    expect(fallback()).toBeNull();
-  });
-
   it("notices a picture that already failed before the handlers attached", async () => {
     const proto = HTMLImageElement.prototype;
     const complete = Object.getOwnPropertyDescriptor(proto, "complete")!;

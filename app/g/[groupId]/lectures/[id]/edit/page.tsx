@@ -24,7 +24,7 @@ export default async function EditLessonPage({
   const [lessonRead, seriesRead] = await Promise.all([
     supabase
       .from("lectures")
-      .select("id, series_id, title, video_url, lecture_date, description, summary, thumbnail_url")
+      .select("id, series_id, title, video_url, lecture_date, description, summary")
       .eq("id", id)
       .eq("group_id", group.id)
       .maybeSingle(),

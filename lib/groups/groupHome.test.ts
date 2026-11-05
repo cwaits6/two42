@@ -650,7 +650,6 @@ describe("New in the group", () => {
   const lesson = (over: Partial<LessonRow> & { id: string }): LessonRow => ({
     title: over.id,
     video_url: "https://example.test/v",
-    thumbnail_url: null,
     lecture_date: "2026-11-01",
     scripture_reference: "James 2:14–26",
     created_at: "2026-11-01T12:00:00Z",

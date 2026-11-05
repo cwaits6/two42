@@ -115,13 +115,8 @@ export function youTubeId(url: URL): string | null {
 
 const YOUTUBE_THUMBNAIL = "https://img.youtube.com/vi/";
 
-/** The lesson's own thumbnail, else YouTube's for a YouTube recording. */
-export function lessonThumbnail(lesson: {
-  video_url: string;
-  thumbnail_url: string | null;
-}): string | null {
-  const own = safeHttpUrl(lesson.thumbnail_url);
-  if (own) return own;
+/** YouTube's thumbnail for a YouTube recording, else null. */
+export function lessonThumbnail(lesson: { video_url: string }): string | null {
   const video = safeHttpUrl(lesson.video_url);
   const id = video ? youTubeId(new URL(video)) : null;
   return id ? `${YOUTUBE_THUMBNAIL}${id}/hqdefault.jpg` : null;
@@ -132,13 +127,7 @@ export function lessonThumbnail(lesson: {
  * browser could not load it, or YouTube answered with the 120×90 grey card
  * it serves in place of a removed video's picture.
  */
-export function thumbnailFailed(img: {
-  src: string;
-  naturalWidth: number;
-  naturalHeight: number;
-}): boolean {
+export function thumbnailFailed(img: { naturalWidth: number; naturalHeight: number }): boolean {
   if (img.naturalWidth === 0) return true;
-  return (
-    img.src.startsWith(YOUTUBE_THUMBNAIL) && img.naturalWidth === 120 && img.naturalHeight === 90
-  );
+  return img.naturalWidth === 120 && img.naturalHeight === 90;
 }

@@ -42,7 +42,6 @@ export type LessonRow = {
   id: string;
   title: string;
   video_url: string;
-  thumbnail_url: string | null;
   lecture_date: string | null;
   scripture_reference: string | null;
   created_at: string;

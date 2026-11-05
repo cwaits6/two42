@@ -347,10 +347,7 @@ describe("content security policy", () => {
   });
 
   it("lets the origin lessonThumbnail builds through img-src", async () => {
-    const thumbnail = lessonThumbnail({
-      video_url: "https://youtu.be/jNQXAC9IVRw",
-      thumbnail_url: null,
-    });
+    const thumbnail = lessonThumbnail({ video_url: "https://youtu.be/jNQXAC9IVRw" });
     expect(thumbnail).not.toBeNull();
     const origin = new URL(thumbnail!).origin;
     const req = new NextRequest("https://two42.io/g/x/lectures", {

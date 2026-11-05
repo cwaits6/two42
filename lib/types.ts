@@ -192,7 +192,6 @@ export interface Lecture {
   title: string;
   description: string | null;
   video_url: string;
-  thumbnail_url: string | null;
   lecture_date: string | null;
   created_by: string | null;
   created_at: string;

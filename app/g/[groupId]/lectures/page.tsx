@@ -22,7 +22,6 @@ type Lesson = {
   title: string;
   description: string | null;
   video_url: string;
-  thumbnail_url: string | null;
   lecture_date: string | null;
   summary: string | null;
   series_id: string | null;
@@ -54,7 +53,7 @@ export default async function LessonsPage({
     supabase
       .from("lectures")
       .select(
-        "id, title, description, video_url, thumbnail_url, lecture_date, summary, series_id",
+        "id, title, description, video_url, lecture_date, summary, series_id",
       )
       .eq("group_id", group.id)
       .order("lecture_date", { ascending: false, nullsFirst: false })

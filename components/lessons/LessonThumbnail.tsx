@@ -23,7 +23,7 @@ export function LessonThumbnail({
 
   if (!src || failed) return <>{fallback}</>;
   return (
-    // eslint-disable-next-line @next/next/no-img-element -- Lesson thumbnails can be arbitrary stored URLs.
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       ref={ref}
       src={src}

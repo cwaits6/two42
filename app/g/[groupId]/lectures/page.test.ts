@@ -39,7 +39,6 @@ const lesson = (id: string, seriesId: string | null, summary: string | null) => 
   title: `Lesson ${id}`,
   description: null,
   video_url: "https://example.test/video",
-  thumbnail_url: null,
   lecture_date: "2026-01-01",
   summary,
   series_id: seriesId,

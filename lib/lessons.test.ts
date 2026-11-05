@@ -137,41 +137,35 @@ describe("youTubeId", () => {
 
 describe("thumbnailFailed", () => {
   it("treats a picture the browser could not load as failed", () => {
-    expect(thumbnailFailed({ src: "https://example.test/t.jpg", naturalWidth: 0, naturalHeight: 0 })).toBe(true);
-    expect(thumbnailFailed({ src: "https://example.test/t.jpg", naturalWidth: 640, naturalHeight: 360 })).toBe(false);
+    expect(thumbnailFailed({ naturalWidth: 0, naturalHeight: 0 })).toBe(true);
+    expect(thumbnailFailed({ naturalWidth: 480, naturalHeight: 360 })).toBe(false);
   });
 
-  it("treats YouTube's grey card for a removed video as failed, but not a small picture elsewhere", () => {
-    const youtube = "https://img.youtube.com/vi/jNQXAC9IVRw/hqdefault.jpg";
-    expect(thumbnailFailed({ src: youtube, naturalWidth: 120, naturalHeight: 90 })).toBe(true);
-    expect(thumbnailFailed({ src: youtube, naturalWidth: 480, naturalHeight: 360 })).toBe(false);
-    expect(thumbnailFailed({ src: "https://example.test/t.jpg", naturalWidth: 120, naturalHeight: 90 })).toBe(false);
+  it("treats YouTube's grey card for a removed video as failed", () => {
+    expect(thumbnailFailed({ naturalWidth: 120, naturalHeight: 90 })).toBe(true);
   });
 });
 
 describe("lessonThumbnail", () => {
-  it("prefers the lesson's own thumbnail", () => {
-    expect(
-      lessonThumbnail({
-        video_url: "https://youtu.be/abc123",
-        thumbnail_url: "https://example.test/t.jpg",
-      }),
-    ).toBe("https://example.test/t.jpg");
+  it("is YouTube's picture for a YouTube recording", () => {
+    expect(lessonThumbnail({ video_url: "https://www.youtube.com/watch?v=abc123" })).toBe(
+      "https://img.youtube.com/vi/abc123/hqdefault.jpg",
+    );
+    expect(lessonThumbnail({ video_url: "https://youtube.com/shorts/abc123?feature=share" })).toBe(
+      "https://img.youtube.com/vi/abc123/hqdefault.jpg",
+    );
   });
 
-  it("falls back to YouTube's for a YouTube recording", () => {
-    expect(
-      lessonThumbnail({ video_url: "https://www.youtube.com/watch?v=abc123", thumbnail_url: null }),
-    ).toBe("https://img.youtube.com/vi/abc123/hqdefault.jpg");
-    expect(
-      lessonThumbnail({ video_url: "https://youtube.com/shorts/abc123?feature=share", thumbnail_url: null }),
-    ).toBe("https://img.youtube.com/vi/abc123/hqdefault.jpg");
+  it("has none for other recordings or an unsafe link", () => {
+    expect(lessonThumbnail({ video_url: "https://zoom.us/rec/1" })).toBeNull();
+    expect(lessonThumbnail({ video_url: "javascript:x" })).toBeNull();
   });
 
-  it("has none for other recordings or an unsafe thumbnail", () => {
-    expect(lessonThumbnail({ video_url: "https://zoom.us/rec/1", thumbnail_url: null })).toBeNull();
-    expect(
-      lessonThumbnail({ video_url: "https://zoom.us/rec/1", thumbnail_url: "javascript:x" }),
-    ).toBeNull();
+  it("ignores a thumbnail link stored on the lesson", () => {
+    const stored = { thumbnail_url: "https://example.test/t.jpg" };
+    expect(lessonThumbnail({ ...stored, video_url: "https://youtu.be/abc123" })).toBe(
+      "https://img.youtube.com/vi/abc123/hqdefault.jpg",
+    );
+    expect(lessonThumbnail({ ...stored, video_url: "https://zoom.us/rec/1" })).toBeNull();
   });
 });
