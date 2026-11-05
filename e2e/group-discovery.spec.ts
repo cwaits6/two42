@@ -146,4 +146,18 @@ test.describe("a member of Group B and Group C", () => {
     await expect(row(page, "Group C")).toContainText("You are a member");
     await expect(page.getByText(PRIVATE_TAG)).toHaveCount(0);
   });
+
+  test("has Find a group as the last row of the group switcher only while the church allows it", async ({ page }) => {
+    const switcherRows = async () => {
+      await page.goto(`/g/${GROUP_B}/dashboard`);
+      await page.getByRole("button", { name: "Switch group. Current group: Group B" }).click();
+      return page.getByRole("menuitem");
+    };
+
+    await setDiscovery(true);
+    await expect(await switcherRows()).toHaveText(["All groups", "Group B", "Group C", "Find a group"]);
+
+    await setDiscovery(false);
+    await expect(await switcherRows()).toHaveText(["All groups", "Group B", "Group C"]);
+  });
 });

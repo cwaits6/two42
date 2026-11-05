@@ -21,19 +21,19 @@ function model(path: string, viewer: { memberships: ActiveGroup[]; hasServingAcc
     items = useSidebarModel();
     return null;
   };
-  renderToStaticMarkup(
-    createElement(GroupProvider, {
-      memberships: viewer.memberships,
-      discoveryOn: viewer.discoveryOn ?? false,
-      creation: { policy: "approval", isOrgAdmin: false },
-      children: createElement(SidebarProvider, {
-        account: null,
-        hasServingAccess: viewer.hasServingAccess ?? false,
-        orgName: "Sample Organization",
-        children: createElement(Probe),
-      }),
-    })
-  );
+  const frame = {
+    account: null,
+    hasServingAccess: viewer.hasServingAccess ?? false,
+    orgName: "Sample Organization",
+    children: createElement(Probe),
+  };
+  const groups = {
+    memberships: viewer.memberships,
+    discoveryOn: viewer.discoveryOn ?? false,
+    creation: { policy: "approval" as const, isOrgAdmin: false },
+    children: createElement(SidebarProvider, frame),
+  };
+  renderToStaticMarkup(createElement(GroupProvider, groups));
   const block = items.find((i) => i.kind === "groupBlock");
   return {
     labels: items.flatMap((i) => (i.kind === "link" ? [i.label] : [])),

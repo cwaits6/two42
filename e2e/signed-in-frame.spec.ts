@@ -8,18 +8,40 @@ const OWN = ["My profile", "Settings"];
 const INFO = ["Help", "Privacy", "Terms", "Sign out"];
 const ACCOUNT = { name: /^Account menu\. Signed in as \S/ };
 
+const GROUP_PAGES = ["Home", "Calendar", "Announcements", "Prayer", "Lessons", "Directory", "Give", "About"];
+
 // The page a persona's frame is checked on, the page list they get there, and
-// every row of their account menu in order. Church admin is offered to the
-// church admin alone and Platform to the operator alone.
-const CASES: { persona: PersonaKey; path: string; nav: string; rows: string[] }[] = [
-  { persona: "oneGroup", path: "/dashboard", nav: "Main navigation", rows: [...OWN, ...INFO] },
-  { persona: "twoGroups", path: `/g/${GROUP_B}/dashboard`, nav: "Main navigation", rows: [...OWN, ...INFO] },
-  { persona: "leadsB", path: `/g/${GROUP_B}/dashboard`, nav: "Main navigation", rows: [...OWN, ...INFO] },
+// every row of their account menu in order. Group settings is offered to the
+// leader alone, Church admin to the church admin alone and Platform to the
+// operator alone. The church admin and Platform page lists belong to those
+// areas' own specs, so only their landmark is checked here.
+const CASES: { persona: PersonaKey; path: string; nav: string; pages?: string[]; rows: string[] }[] = [
+  {
+    persona: "oneGroup",
+    path: "/dashboard",
+    nav: "Main navigation",
+    pages: [...GROUP_PAGES, "Find a group"],
+    rows: [...OWN, ...INFO],
+  },
+  {
+    persona: "twoGroups",
+    path: `/g/${GROUP_B}/dashboard`,
+    nav: "Main navigation",
+    pages: GROUP_PAGES,
+    rows: [...OWN, ...INFO],
+  },
+  {
+    persona: "leadsB",
+    path: `/g/${GROUP_B}/dashboard`,
+    nav: "Main navigation",
+    pages: [...GROUP_PAGES, "Group settings", "Find a group"],
+    rows: [...OWN, ...INFO],
+  },
   { persona: "admin", path: "/admin", nav: "Admin navigation", rows: [...OWN, "Church admin", ...INFO] },
   { persona: "operator", path: "/platform", nav: "Platform navigation", rows: ["Platform", ...INFO] },
 ];
 
-for (const { persona, path, nav, rows } of CASES) {
+for (const { persona, path, nav, pages, rows } of CASES) {
   test.describe(`the frame for ${persona}, on a phone`, () => {
     test.use({ persona, viewport: PHONE });
 
@@ -45,6 +67,7 @@ for (const { persona, path, nav, rows } of CASES) {
       const menu = page.getByRole("dialog", { name: "Menu" });
       await expect(menu.getByRole("navigation")).toHaveCount(1);
       await expect(menu.getByRole("navigation", { name: nav })).toBeVisible();
+      if (pages) await expect(menu.getByRole("navigation").getByRole("link")).toHaveText(pages);
 
       await menu.getByRole("button", ACCOUNT).click();
       await expect(page.getByRole("menuitem")).toHaveText(rows);
@@ -61,6 +84,7 @@ for (const { persona, path, nav, rows } of CASES) {
       await expect(page.getByRole("link", { name: "two42" })).toBeVisible();
       await expect(page.getByRole("navigation")).toHaveCount(1);
       await expect(page.getByRole("navigation", { name: nav })).toBeVisible();
+      if (pages) await expect(page.getByRole("navigation").getByRole("link")).toHaveText(pages);
 
       await page.getByRole("button", ACCOUNT).click();
       await expect(page.getByRole("menuitem")).toHaveText(rows);
@@ -104,6 +128,37 @@ test.describe("a member of two groups, on a computer", () => {
     await expect(nav.getByRole("button", { name: "Switch group. Showing all groups" })).toBeVisible();
   });
 });
+
+// The sign-out request is answered here, so the session the persona's cached
+// sign-in depends on is never revoked on the server.
+for (const { outcome, status } of [
+  { outcome: "the server ends the session", status: 204 },
+  { outcome: "the server cannot be told", status: 500 },
+]) {
+  test.describe(`an operator who signs out when ${outcome}`, () => {
+    test.use({ persona: "operator", viewport: DESKTOP });
+
+    test("is signed out on this device and told the truth about the others", async ({ page }) => {
+      let requests = 0;
+      await page.route("**/auth/v1/logout**", (route) => {
+        requests += 1;
+        return route.fulfill({ status, contentType: "application/json", body: "{}" });
+      });
+
+      await page.goto("/platform");
+      await page.getByRole("button", ACCOUNT).click();
+      await page.getByRole("menuitem", { name: "Sign out" }).click();
+
+      await page.waitForURL("/");
+      await expect(page.getByRole("banner").getByRole("button", { name: "Sign in" })).toBeVisible();
+      await expect(page.getByRole("button", ACCOUNT)).toHaveCount(0);
+      await expect(page.getByText("Couldn't sign out everywhere. Other devices may still be signed in.")).toHaveCount(
+        status === 204 ? 0 : 1
+      );
+      expect(requests).toBe(1);
+    });
+  });
+}
 
 test("a signed-out visitor keeps the sign-in form and the footer", async ({ page }) => {
   await page.goto("/login");
