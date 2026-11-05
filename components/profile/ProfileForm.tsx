@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { mintSignedUrl, uploadImage } from "@/lib/uploadImage";
 import { relObjectPath } from "@/lib/storagePaths";
@@ -163,6 +164,7 @@ export function ProfileForm({
   avatarCaller = null,
   onSaved,
 }: ProfileFormProps) {
+  const router = useRouter();
   const [state, setState] = useState<FormState>(initialState(profile));
   const [avatarUrl, setAvatarUrl] = useState<string | null>(profile.avatar_url);
   // The family assignment as last persisted — what the storage RLS policy
@@ -237,6 +239,8 @@ export function ProfileForm({
         .eq("id", profile.id);
       if (error) throw error;
       toast.success("Photo updated.");
+      // The frame shows the signed-in person's own photo and name.
+      router.refresh();
     } catch (err) {
       console.error(err);
       toast.error(failureMessage("upload the photo"));
@@ -374,6 +378,7 @@ export function ProfileForm({
     if (isAdmin) setSavedFamilyId(state.family_id || null);
     if (claimed?.kept) toast.info(`Profile saved. ${CLAIMED_BIRTHDAY_KEPT}`);
     else toast.success("Profile saved.");
+    router.refresh();
     onSaved?.();
   };
 

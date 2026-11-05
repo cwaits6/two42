@@ -328,6 +328,8 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
         .eq("id", profile.id);
       if (error) throw error;
       toast.success("Photo updated.");
+      // The frame shows the signed-in person's own photo and name.
+      router.refresh();
     } catch (err) {
       console.error(err);
       toast.error(failureMessage("upload the photo"));
@@ -499,6 +501,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
       if (claimed?.kept) toast.info(`Profile set up. ${CLAIMED_BIRTHDAY_KEPT}`);
       else toast.success("Profile set up.");
       router.push("/directory");
+      router.refresh();
     } catch (err) {
       console.error(err);
       toast.error(failureMessage("finish setting up your profile"));

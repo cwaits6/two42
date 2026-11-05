@@ -48,6 +48,8 @@ vi.mock("@/lib/supabase/client", () => ({
           },
   }),
 }));
+const refresh = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("@/lib/uploadImage", () => ({ mintSignedUrl: vi.fn(), uploadImage: vi.fn() }));
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
 vi.mock("sonner", () => ({ toast }));
@@ -335,6 +337,17 @@ describe("ProfileForm inline errors", () => {
 
     expect(document.querySelector('[aria-invalid="true"]')).toBeNull();
     expect(update).toHaveBeenCalledOnce();
+  });
+
+  it("reloads the frame after a save, and not after a refused one", async () => {
+    const form = await mount();
+    await form.type("first_name", "");
+    await form.submit();
+    expect(refresh).not.toHaveBeenCalled();
+
+    await form.type("first_name", "Ada");
+    await form.submit();
+    expect(refresh).toHaveBeenCalledOnce();
   });
 
   it("says the save failed when no row was written", async () => {
