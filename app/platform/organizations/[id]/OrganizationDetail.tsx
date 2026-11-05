@@ -10,6 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
+import { useFieldFocus } from "@/app/(auth)/_components/useFieldFocus";
+import { ErrorState } from "@/components/states/ErrorState";
 import {
   ACCENT_CONTRAST_MIN,
   ACCENT_CONTRAST_REFERENCE,
@@ -104,12 +107,14 @@ export function OrganizationDetail({
   emailDomain,
 }: OrganizationDetailProps) {
   const router = useRouter();
+  const focusField = useFieldFocus();
   const [branding, setBranding] = useState(org.branding);
   const [brandingError, setBrandingError] = useState<string | null>(null);
-  const [capInput, setCapInput] = useState(
-    emailCap ? String(emailCap.dailyCap) : ""
-  );
-  const [capError, setCapError] = useState<string | null>(null);
+  // Null until the operator types, so the field follows the limit as read:
+  // a read that fails and then succeeds on retry fills it.
+  const [capDraft, setCapDraft] = useState<string | null>(null);
+  const capInput = capDraft ?? (emailCap ? String(emailCap.dailyCap) : "");
+  const [capError, setCapError] = useState<string | undefined>();
   const [confirmSuspend, setConfirmSuspend] = useState(false);
   const [busy, setBusy] = useState<
     "branding" | "invite" | "status" | "emailCap" | "customDomain" | "domainCleanup" | null
@@ -171,7 +176,7 @@ export function OrganizationDetail({
       router.refresh();
     } catch (err) {
       console.error(err);
-      toast.error("Network error. Please try again.");
+      toast.error(NETWORK_ERROR);
     } finally {
       setBusy(null);
     }
@@ -183,10 +188,11 @@ export function OrganizationDetail({
     const parsed = Number(capInput);
     if (capInput.trim() === "" || !Number.isInteger(parsed) || parsed < 0) {
       setCapError("Enter a whole number of emails per day (0 or more).");
+      focusField("email-daily-cap");
       return;
     }
     setBusy("emailCap");
-    setCapError(null);
+    setCapError(undefined);
     try {
       const res = await fetch(`/api/platform/organizations/${org.id}/email-cap`, {
         method: "PATCH",
@@ -204,7 +210,7 @@ export function OrganizationDetail({
       router.refresh();
     } catch (err) {
       console.error(err);
-      toast.error("Network error. Please try again.");
+      toast.error(NETWORK_ERROR);
     } finally {
       setBusy(null);
     }
@@ -229,7 +235,7 @@ export function OrganizationDetail({
       router.refresh();
     } catch (err) {
       console.error(err);
-      toast.error("Network error. Please try again.");
+      toast.error(NETWORK_ERROR);
     } finally {
       setBusy(null);
     }
@@ -390,14 +396,14 @@ export function OrganizationDetail({
                   type="number"
                   min={0}
                   value={capInput}
-                  onChange={(e) => setCapInput(e.target.value)}
+                  onChange={(e) => {
+                    setCapDraft(e.target.value);
+                    setCapError(undefined);
+                  }}
+                  {...invalidFieldProps("email-daily-cap", capError)}
                 />
+                <FieldError fieldId="email-daily-cap" message={capError} />
               </div>
-              {capError && (
-                <p className="text-base font-medium text-destructive" role="alert">
-                  {capError}
-                </p>
-              )}
               <Button
                 size="lg"
                 className="text-lg"
@@ -408,9 +414,7 @@ export function OrganizationDetail({
               </Button>
             </>
           ) : (
-            <p className="text-base text-muted-foreground">
-              Couldn&apos;t load the daily email limit. Refresh to try again.
-            </p>
+            <ErrorState thing="the daily email limit" className="py-6" />
           )}
         </CardContent>
       </Card>
@@ -448,9 +452,7 @@ export function OrganizationDetail({
               <p className="text-base text-muted-foreground">No domain claimed.</p>
             )
           ) : (
-            <p className="text-base text-muted-foreground">
-              Couldn&apos;t load the sending domain. Refresh to try again.
-            </p>
+            <ErrorState thing="the sending domain" className="py-6" />
           )}
           {org.customEmailDomainEnabled ? (
             <Button

@@ -4,10 +4,14 @@ import { getPlatformAdmin } from "@/lib/platform-access";
 import { createServiceClient } from "@/lib/supabase/server";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ErrorState } from "@/components/states/ErrorState";
 import { Card, CardContent } from "@/components/ui/card";
 import { pageTitle } from "@/lib/pageTitle";
 
 export const generateMetadata = () => pageTitle("Platform overview");
+
+const linkClass =
+  "inline-flex min-h-11 items-center text-base font-semibold text-brand-primary-text underline underline-offset-4 hover:text-foreground";
 
 export default async function PlatformOverviewPage() {
   const user = await getPlatformAdmin();
@@ -20,6 +24,19 @@ export default async function PlatformOverviewPage() {
   // predicate here. See docs/security/service-role-inventory.md.
   const { data: orgs, error } = await service.from("organizations").select("id, status");
 
+  const shortcuts = (
+    <nav aria-label="Platform shortcuts" className="mt-8 flex flex-wrap gap-x-6">
+      <Link href="/platform/organizations" className={linkClass}>
+        Manage organizations
+      </Link>
+      {/* The only way to the password form for an operator who belongs to
+          no church: the account menu links to Settings for members only. */}
+      <Link href="/settings" className={linkClass}>
+        Change password or email
+      </Link>
+    </nav>
+  );
+
   // A failed read would otherwise render a confident "0 active, 0 suspended"
   // — wrong lifecycle data is worse here than an explicit failure.
   if (error) {
@@ -27,9 +44,8 @@ export default async function PlatformOverviewPage() {
     return (
       <PageContainer>
         <PageHeader title="Overview" />
-        <p className="text-base">
-          Could not load organization counts. Try again in a moment.
-        </p>
+        <ErrorState thing="organization counts" />
+        {shortcuts}
       </PageContainer>
     );
   }
@@ -56,14 +72,7 @@ export default async function PlatformOverviewPage() {
         </Card>
       </div>
 
-      <p className="mt-8">
-        <Link
-          href="/platform/organizations"
-          className="inline-flex min-h-11 items-center text-base font-semibold text-brand-primary-text underline underline-offset-4 hover:text-foreground"
-        >
-          Manage organizations
-        </Link>
-      </p>
+      {shortcuts}
     </PageContainer>
   );
 }

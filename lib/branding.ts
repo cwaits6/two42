@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { siteConfig } from "@/lib/config";
 import { HEX } from "@/lib/contrast";
+import { EMAIL, EMAIL_MAX_LENGTH } from "@/lib/emailAddress";
 
 // The contrast math and the write-path accent guard live in
 // lib/contrast.ts so the client-side branding form can share them; this
@@ -21,6 +22,7 @@ export {
   validateAccent,
   type AccentValidation,
 } from "@/lib/contrast";
+export { EMAIL, EMAIL_MAX_LENGTH } from "@/lib/emailAddress";
 
 export type OrgBranding = {
   display_name: string;
@@ -40,13 +42,6 @@ export const BRANDING_DEFAULTS: OrgBranding = {
 // own CR/LF strip as defence-in-depth.
 export const CONTROL = /[\u0000-\u001F\u007F-\u009F]/g;
 
-// reply_to becomes an RFC 5322 Reply-To header via the Resend API, which
-// rejects malformed addresses — and sendInviteEmail throws on rejection, so
-// one bad character in the branding column would 500 every invite send.
-// Deliberately conservative: over-rejecting yields no Reply-To header, which
-// is the pre-branding behavior and strictly better than a failed send.
-export const EMAIL = /^[^\s@<>,;:"\\]+@[^\s@<>,;:"\\]+\.[^\s@<>,;:"\\]+$/;
-
 /**
  * Merge a raw branding jsonb value onto the defaults. Falls back per-key —
  * an invalid accent must not discard a valid display_name. A non-object
@@ -60,7 +55,7 @@ export function resolveBranding(raw: unknown): OrgBranding {
   const name =
     typeof b.display_name === "string" ? b.display_name.replace(CONTROL, "").trim() : "";
   const replyTo = typeof b.reply_to === "string" ? b.reply_to.trim() : null;
-  const replyToValid = replyTo !== null && replyTo.length <= 254 && EMAIL.test(replyTo);
+  const replyToValid = replyTo !== null && replyTo.length <= EMAIL_MAX_LENGTH && EMAIL.test(replyTo);
   if (replyTo !== null && replyTo !== "" && !replyToValid) {
     // The one silent fallback worth a signal: a dropped Reply-To is far more
     // surprising than a dropped color, and the cause (a branding column) is

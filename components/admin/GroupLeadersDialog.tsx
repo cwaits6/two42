@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ErrorState } from "@/components/states/ErrorState";
 import { createClient } from "@/lib/supabase/client";
 import { displayName } from "@/lib/names";
 import {
@@ -46,6 +47,7 @@ interface GroupLeadersViewProps {
   onQueryChange: (query: string) => void;
   onAdd: (candidate: Candidate) => void;
   onRemove: (person: LeaderPerson) => void;
+  onRetryLoad: () => void;
 }
 
 /** The dialog's body: current leaders by default, an explicit add mode to name one. */
@@ -61,6 +63,7 @@ export function GroupLeadersView({
   onQueryChange,
   onAdd,
   onRemove,
+  onRetryLoad,
 }: GroupLeadersViewProps) {
   const adding = mode.kind === "add";
   const title = !adding
@@ -100,9 +103,7 @@ export function GroupLeadersView({
       )}
 
       {loadFailed ? (
-        <p role="alert" className="py-4 text-base text-muted-foreground">
-          Couldn&apos;t load this group&apos;s leaders. Close this and open it again.
-        </p>
+        <ErrorState thing="this group's leaders" onRetry={onRetryLoad} className="py-6" />
       ) : !roster ? (
         <p className="py-4 text-base text-muted-foreground">Loading leaders…</p>
       ) : adding ? (
@@ -289,14 +290,15 @@ export function GroupLeadersDialog({
   }, [supabase, groupId]);
 
   /**
-   * Re-read the roster after a committed write. A failed read drops the
-   * stale list rather than keep showing it: acting on it would hit rows the
-   * write already changed. Resolves false when the read failed or the
-   * dialog has since moved on.
+   * Re-read the roster, after a committed write or to retry a failed read.
+   * A failed read drops the stale list rather than keep showing it: acting
+   * on it would hit rows the write already changed. Resolves false when the
+   * read failed or the dialog has since moved on. Only a write changes what
+   * the page behind the dialog shows, so a retry leaves that page alone.
    */
-  async function refresh(id: string, seq: number): Promise<boolean> {
+  async function refresh(id: string, seq: number, wrote: boolean): Promise<boolean> {
     const loaded = await loadLeaderRoster(supabase, id);
-    onChanged();
+    if (wrote) onChanged();
     if (writeSeq.current !== seq) return false;
     setRoster(loaded);
     setLoadFailed(loaded === null);
@@ -324,18 +326,18 @@ export function GroupLeadersDialog({
       if (replacing) {
         const removeError = await removeLeader(supabase, group.id, replacing.id);
         if (removeError) {
-          const reloaded = await refresh(group.id, seq);
+          const reloaded = await refresh(group.id, seq, true);
           if (writeSeq.current !== seq) return;
           setMode({ kind: "leaders" });
           setQuery("");
           setError(
             `${displayName(person)} is a leader now, but ${displayName(replacing)} is still one. ` +
-              (reloaded ? "Remove them below." : "Close this and open it again to remove them."),
+              (reloaded ? "Remove them below." : "Remove them from the list once it loads."),
           );
           return;
         }
       }
-      await refresh(group.id, seq);
+      await refresh(group.id, seq, true);
       if (writeSeq.current !== seq) return;
       changeMode({ kind: "leaders" });
     } finally {
@@ -354,7 +356,7 @@ export function GroupLeadersDialog({
         if (writeSeq.current === seq) setError(removeError);
         return;
       }
-      await refresh(group.id, seq);
+      await refresh(group.id, seq, true);
     } finally {
       if (writeSeq.current === seq) setBusy(false);
     }
@@ -376,6 +378,7 @@ export function GroupLeadersDialog({
             onQueryChange={setQuery}
             onAdd={handleAdd}
             onRemove={handleRemove}
+            onRetryLoad={() => refresh(group.id, writeSeq.current, false)}
           />
         )}
       </DialogContent>

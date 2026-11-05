@@ -10,13 +10,12 @@ import { getGroupMemberships } from "@/lib/groups/server";
 import { GroupDashboard } from "@/components/groups/GroupDashboard";
 import { HomeLauncher } from "@/components/groups/HomeLauncher";
 import { NoGroupCard } from "@/components/groups/NoGroupCard";
+import { landingFor, NO_ROW } from "@/lib/landing";
 import { pageTitle } from "@/lib/pageTitle";
+import { requirePlatformAdmin } from "@/lib/platform-access";
 import { SignOutButton } from "@/app/join/[token]/SignOutButton";
 
 export const generateMetadata = () => pageTitle("Home");
-
-// PostgREST's "no row" from .single(): the profile is missing, not unreadable.
-const NO_ROW = "PGRST116";
 
 // Home. A member of exactly one group is always inside it, so Home is that
 // group's dashboard; two or more groups get the launcher; none get the
@@ -32,17 +31,26 @@ export default async function DashboardPage() {
     .eq("id", user.id)
     .single();
 
+  const failedRead = (
+    <PageContainer>
+      <PageHeader title="Home" />
+      <ErrorState thing="Home" />
+    </PageContainer>
+  );
+
   if (error && error.code !== NO_ROW) {
     console.error("Failed to load the viewer's profile: code=%s message=%s", error.code, error.message);
-    return (
-      <PageContainer>
-        <PageHeader title="Home" />
-        <ErrorState thing="Home" />
-      </PageContainer>
-    );
+    return failedRead;
   }
 
-  if (!profile || profile.role === "pending") {
+  // Only a plain 403 is a "no". The waiting screen would misinform an operator
+  // on an unanswered check, and sign-in would return a person with valid claims here.
+  const gate = profile ? null : await requirePlatformAdmin();
+  if (gate && !gate.ok && (gate.status === 401 || gate.unavailable)) return failedRead;
+  const landing = landingFor(profile, gate?.ok === true);
+  if (landing === "platform") redirect("/platform");
+
+  if (!profile || landing === "waiting") {
     return (
       <PageContainer size="reading">
         <PageHeader
