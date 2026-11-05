@@ -8,8 +8,25 @@
 // check against orgId here is what stands in for the isolation policy.
 
 import { createServiceClient } from "@/lib/supabase/server";
-import { keyIsInAnotherOrg } from "@/lib/storagePaths";
-import { logError } from "@/lib/log";
+import { keyIsInAnotherOrg, STORAGE_KINDS } from "@/lib/storagePaths";
+import { logError, type LogContext } from "@/lib/log";
+import { stepOf } from "@/lib/log/step";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * A key as the ids in it, never the path: the kind and the row the object
+ * belongs to are enough to find its folder without listing the org's.
+ */
+function keyContext(orgId: string, key: string): LogContext {
+  const segments = key.split("/");
+  const kind = segments.find((segment) => STORAGE_KINDS.some((known) => known === segment));
+  const ids = segments.filter((segment) => UUID.test(segment));
+  return {
+    step: kind && stepOf(kind),
+    ids: { org: orgId, keyOrg: ids.length > 1 ? ids[0] : undefined, entity: ids.at(-1) },
+  };
+}
 
 /**
  * Removes objects from the avatars bucket. `orgId` must come from a validated
@@ -22,8 +39,8 @@ import { logError } from "@/lib/log";
 export async function removeAvatarObjects(orgId: string, keys: string[]): Promise<string[]> {
   const allowed = keys.filter((key) => !keyIsInAnotherOrg(key, orgId));
   const refused = keys.filter((key) => keyIsInAnotherOrg(key, orgId));
-  if (refused.length > 0) {
-    logError("removeAvatarObjects: refused a key outside org", undefined, { ids: { org: orgId, keys: refused.length } });
+  for (const key of refused) {
+    logError("removeAvatarObjects: refused a key outside org", undefined, keyContext(orgId, key));
   }
   if (allowed.length === 0) return refused;
 
@@ -32,6 +49,7 @@ export async function removeAvatarObjects(orgId: string, keys: string[]): Promis
     const service = await createServiceClient();
     // org-anchor: storage.objects has no org_id; the keys were checked against orgId above
     const { data, error } = await service.storage.from("avatars").remove(allowed);
+    if (error) logError("removeAvatarObjects: remove failed", error, { ids: { org: orgId, keys: allowed.length } });
     if (error) throw new Error(error.message);
     removed = new Set((data ?? []).map((object) => object.name));
   } catch (err) {
@@ -39,8 +57,8 @@ export async function removeAvatarObjects(orgId: string, keys: string[]): Promis
   }
 
   const left = allowed.filter((key) => !removed.has(key));
-  if (left.length > 0) {
-    logError("removeAvatarObjects: still stored in org", undefined, { ids: { org: orgId, keys: left.length } });
+  for (const key of left) {
+    logError("removeAvatarObjects: still stored in org", undefined, keyContext(orgId, key));
   }
   return [...refused, ...left];
 }
