@@ -26,6 +26,7 @@ import { retiredFlagResets } from "@/lib/members/retiredHideFlags";
 import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
 import { anniversaryColumns, birthdayColumns } from "@/components/profile/birthday";
 import { MonthSelect } from "@/components/profile/MonthSelect";
+import { clearClaimedBirthday } from "@/components/profile/claimedBirthday";
 import { relLabel } from "@/components/directory/utils";
 import { toast } from "sonner";
 import { Camera, Check, Plus } from "lucide-react";
@@ -460,6 +461,11 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
         .update({ ...updates, ...retiredFlagResets(profile, updates) })
         .eq("id", profile.id);
       if (profileError) throw profileError;
+
+      if (updates.birth_month === null) {
+        const claimedError = await clearClaimedBirthday(profile.id);
+        if (claimedError) throw claimedError;
+      }
 
       if (householdId && hasSpouse && anniversary.month) {
         const { error } = await supabase

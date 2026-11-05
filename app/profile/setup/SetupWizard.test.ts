@@ -1,0 +1,139 @@
+// @vitest-environment jsdom
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Profile } from "@/lib/types";
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const writes: { table: string; values: Record<string, unknown>; column: string; id: string }[] = [];
+vi.mock("@/lib/supabase/client", () => ({
+  createClient: () => ({
+    from: (table: string) => ({
+      update: (values: Record<string, unknown>) => ({
+        eq: async (column: string, id: string) => {
+          writes.push({ table, values, column, id });
+          return { error: null };
+        },
+      }),
+      insert: async () => ({ error: null }),
+    }),
+  }),
+}));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {} }) }));
+vi.mock("@/lib/uploadImage", () => ({ mintSignedUrl: vi.fn(), uploadImage: vi.fn() }));
+const toast = { success: vi.fn(), error: vi.fn() };
+vi.mock("sonner", () => ({ toast }));
+
+const { SetupWizard } = await import("./SetupWizard");
+
+const PROFILE = {
+  id: "p1",
+  first_name: "Ada",
+  last_name: "Lovelace",
+  family_id: "f1",
+  birth_month: 12,
+  birth_day: 10,
+  birth_year: 1990,
+} as Profile;
+
+let root: Root;
+
+async function mount() {
+  const host = document.createElement("div");
+  document.body.append(host);
+  root = createRoot(host);
+  await act(async () => {
+    root.render(
+      createElement(SetupWizard, {
+        profile: PROFILE,
+        userEmail: "ada@example.test",
+        householdName: "Lovelace Family",
+      }),
+    );
+  });
+}
+
+const field = (id: string) => document.getElementById(id) as HTMLInputElement;
+async function click(name: string) {
+  const found = [...document.querySelectorAll("button")].findLast((b) => b.textContent?.trim() === name);
+  if (!found) throw new Error(`No button named ${name}`);
+  await act(async () => found.click());
+}
+async function choose(id: string, option: string) {
+  await act(async () => field(id).click());
+  const found = [...document.querySelectorAll('[role="option"]')].find((o) => o.textContent === option);
+  if (!found) throw new Error(`No option ${option}`);
+  await act(async () => (found as HTMLElement).click());
+}
+async function type(id: string, value: string) {
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+  await act(async () => {
+    setValue.call(field(id), value);
+    field(id).dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+beforeEach(() => {
+  writes.length = 0;
+  vi.clearAllMocks();
+  vi.stubGlobal("scrollTo", () => {});
+});
+
+afterEach(async () => {
+  await act(async () => root.unmount());
+  document.body.innerHTML = "";
+  vi.unstubAllGlobals();
+});
+
+describe("choosing No date in the setup wizard", () => {
+  it("clears the whole birthday, on the profile and the household record it claimed", async () => {
+    await mount();
+    await choose("birth_month", "No date");
+
+    expect(field("birth_day").value).toBe("");
+    expect(field("birth_year").value).toBe("");
+
+    await click("Continue");
+    await click("Continue");
+    await click("Continue");
+    await click("Finish setup");
+
+    const cleared = { birth_month: null, birth_day: null, birth_year: null };
+    expect(writes[0]).toMatchObject({ table: "profiles", values: cleared, id: "p1" });
+    expect(writes[1]).toEqual({ table: "family_members", values: cleared, column: "claimed_profile_id", id: "p1" });
+    expect(toast.success).toHaveBeenCalledWith("Profile set up.");
+  });
+
+  it("leaves the claimed household record alone when the birthday is kept", async () => {
+    await mount();
+    await click("Continue");
+    await click("Continue");
+    await click("Continue");
+    await click("Finish setup");
+
+    expect(writes.map((w) => w.table)).toEqual(["profiles", "profiles"]);
+  });
+
+  it("clears the whole anniversary, and writes none", async () => {
+    await mount();
+    await click("Continue");
+    await click("Continue");
+    await click("Add spouse");
+    await type("add_first_name", "Grace");
+    await click("Add spouse");
+    await choose("anniversary_month", "October");
+    await type("anniversary_day", "3");
+    await type("anniversary_year", "2009");
+    await choose("anniversary_month", "No date");
+
+    expect(field("anniversary_day").value).toBe("");
+    expect(field("anniversary_year").value).toBe("");
+
+    await click("Continue");
+    await click("Finish setup");
+
+    expect(writes.some((w) => w.table === "family_units")).toBe(false);
+    expect(toast.success).toHaveBeenCalledWith("Profile set up.");
+  });
+});

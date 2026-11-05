@@ -7,15 +7,30 @@ import type { FamilyUnit, Profile } from "@/lib/types";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const update = vi.fn();
-const written = { rows: [{ id: "p1" }] };
+const claimedUpdate = vi.fn();
+const written = {
+  rows: [{ id: "p1" }] as { id: string }[] | null,
+  error: null as { code: string } | null,
+  claimedError: null as { code: string } | null,
+};
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
-    from: () => ({
-      update: (values: unknown) => {
-        update(values);
-        return { eq: () => ({ select: async () => ({ data: written.rows, error: null }) }) };
-      },
-    }),
+    from: (table: string) =>
+      table === "family_members"
+        ? {
+            update: (values: unknown) => ({
+              eq: async (column: string, id: string) => {
+                claimedUpdate(values, column, id);
+                return { error: written.claimedError };
+              },
+            }),
+          }
+        : {
+            update: (values: unknown) => {
+              update(values);
+              return { eq: () => ({ select: async () => ({ data: written.rows, error: written.error }) }) };
+            },
+          },
   }),
 }));
 vi.mock("@/lib/uploadImage", () => ({ mintSignedUrl: vi.fn(), uploadImage: vi.fn() }));
@@ -65,6 +80,8 @@ let root: Root;
 beforeEach(() => {
   vi.clearAllMocks();
   written.rows = [{ id: "p1" }];
+  written.error = null;
+  written.claimedError = null;
 });
 
 afterEach(async () => {
@@ -289,7 +306,39 @@ describe("ProfileForm inline errors", () => {
     expect(onSaved).not.toHaveBeenCalled();
   });
 
-  it("clears the whole birthday for No date, and saves it blank", async () => {
+  it("says the save failed when the write errors", async () => {
+    written.rows = null;
+    written.error = { code: "XX000" };
+    const onSaved = vi.fn();
+    const form = await mount({ birth_month: null, birth_day: null }, { onSaved });
+    await form.submit();
+
+    expect(toast.error).toHaveBeenCalledWith("Couldn't save the profile. Try again.");
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(claimedUpdate).not.toHaveBeenCalled();
+  });
+
+  it("leaves the claimed household record alone when the birthday is kept", async () => {
+    const form = await mount();
+    await form.submit();
+
+    expect(toast.success).toHaveBeenCalledWith("Profile saved.");
+    expect(claimedUpdate).not.toHaveBeenCalled();
+  });
+
+  it("says the save failed when the claimed household record's birthday can't be cleared", async () => {
+    written.claimedError = { code: "XX000" };
+    const onSaved = vi.fn();
+    const form = await mount({ birth_month: null, birth_day: null }, { onSaved });
+    await form.submit();
+
+    expect(toast.error).toHaveBeenCalledWith("Couldn't save the profile. Try again.");
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it("clears the whole birthday for No date, on the profile and the household record it claimed", async () => {
     const form = await mount({ birth_month: 12, birth_day: 10, birth_year: 1990 });
     await form.choose("birth_month", "No date");
 
@@ -298,9 +347,10 @@ describe("ProfileForm inline errors", () => {
     expect(form.field("birth_month").querySelector('[data-slot="select-value"]')?.textContent).toBe("Month");
 
     await form.submit();
-    expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({ birth_month: null, birth_day: null, birth_year: null }),
-    );
+    const cleared = { birth_month: null, birth_day: null, birth_year: null };
+    expect(update).toHaveBeenCalledWith(expect.objectContaining(cleared));
+    expect(claimedUpdate).toHaveBeenCalledWith(cleared, "claimed_profile_id", "p1");
+    expect(toast.success).toHaveBeenCalledWith("Profile saved.");
   });
 });
 

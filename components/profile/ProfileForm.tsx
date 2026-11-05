@@ -39,6 +39,7 @@ import { CheckRow } from "@/components/profile/CheckRow";
 import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
 import { birthdayColumns, birthdayErrors } from "@/components/profile/birthday";
 import { MonthSelect } from "@/components/profile/MonthSelect";
+import { clearClaimedBirthday } from "@/components/profile/claimedBirthday";
 import { DirectoryNotice } from "@/components/profile/DirectoryNotice";
 import { retiredFlagResets } from "@/lib/members/retiredHideFlags";
 import {
@@ -354,10 +355,15 @@ export function ProfileForm({
       .eq("id", profile.id)
       .select("id");
 
+    const profileSaved = !error && saved.length > 0;
+    const claimedError =
+      profileSaved && updates.birth_month === null ? await clearClaimedBirthday(profile.id) : null;
+
     setSaving(false);
 
-    if (error || saved.length === 0) {
+    if (!profileSaved || claimedError) {
       if (error) console.error(error);
+      if (claimedError) console.error("clearing the claimed birthday failed", claimedError.code);
       toast.error(failureMessage("save the profile"));
       return;
     }
