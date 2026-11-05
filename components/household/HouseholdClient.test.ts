@@ -14,6 +14,7 @@ const toast = { success: vi.fn(), error: vi.fn() };
 vi.mock("sonner", () => ({ toast }));
 
 const { HouseholdClient } = await import("./HouseholdClient");
+const { householdFieldErrors } = await import("@/app/api/household/householdUpdates");
 
 const ME = { id: "me", first_name: "Ada", last_name: "Okafor", relationship: "primary" } as Profile;
 const FAMILY = {
@@ -29,7 +30,7 @@ const FAMILY = {
 let root: Root;
 const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
 
-async function mount() {
+async function mount(family = FAMILY, householdProfiles: Profile[] = []) {
   const host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -37,9 +38,9 @@ async function mount() {
     root.render(
       createElement(HouseholdClient, {
         currentProfile: ME,
-        family: FAMILY,
+        family,
         initialFamilyMembers: [],
-        householdProfiles: [],
+        householdProfiles,
         onEditSelf: () => {},
       }),
     );
@@ -98,6 +99,55 @@ describe("saving household details", () => {
 
     await type("family_name", "Okafor");
     expect(field("family_name").hasAttribute("aria-invalid")).toBe(false);
+  });
+
+  it("marks an invalid home phone on its field and sends nothing", async () => {
+    await mount();
+    await type("phone_home", "12");
+    await save();
+
+    expect(field("phone_home").getAttribute("aria-invalid")).toBe("true");
+    expect(message("phone_home")).toBe("Enter a valid phone number.");
+    expect(document.activeElement).toBe(field("phone_home"));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("doesn't judge or send a home phone hidden behind a spouse's number", async () => {
+    const spouse = { id: "sp", first_name: "Obi", last_name: "Okafor", relationship: "spouse" } as Profile;
+    await mount({ ...FAMILY, phone_home: "555-0105", phone_profile_id: "sp" }, [spouse]);
+    expect(field("phone_home")).toBeNull();
+    await save();
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(savedBody()).not.toHaveProperty("phone_home");
+  });
+
+  it("marks fields in the order the shared rule lists them, so focus lands on the first on screen", async () => {
+    await mount();
+    await type("family_name", " ");
+    await type("state", "ZZ");
+    await type("postal_code", "12");
+    await type("phone_home", "12");
+    await type("anniversary_day", "");
+    await type("anniversary_year", "1800");
+    await save();
+
+    const marked = [...document.querySelectorAll('[aria-invalid="true"]')].map((el) => el.id);
+    expect(marked).toEqual(
+      Object.keys(
+        householdFieldErrors({
+          family_name: " ",
+          state: "ZZ",
+          postal_code: "12",
+          phone_home: "12",
+          anniversary_month: "10",
+          anniversary_day: "",
+          anniversary_year: "1800",
+        }),
+      ),
+    );
+    expect(marked).toHaveLength(6);
+    expect(document.activeElement).toBe(field("family_name"));
   });
 
   it("still marks a month with no day", async () => {

@@ -14,7 +14,16 @@ const state = vi.hoisted(() => ({
   invites: [] as { id: string }[],
 }));
 
-const FAMILY = { id: "f1", family_name: "Test", photo_url: null, org_id: "o1" };
+const FAMILY = {
+  id: "f1",
+  family_name: "Test",
+  photo_url: null,
+  org_id: "o1",
+  anniversary_month: 10,
+  anniversary_day: 3,
+  anniversary_year: 2009,
+};
+const householdUpdate = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
@@ -25,6 +34,10 @@ vi.mock("@/lib/supabase/client", () => ({
         eq: () => chain,
         not: () => chain,
         delete: () => ({ eq: async () => ({ error: null }) }),
+        update: (values: unknown) => {
+          householdUpdate(values);
+          return { eq: async () => ({ error: null }) };
+        },
         is: () => chain,
         limit: async () => ({ data: state.invites, error: null }),
         then: (resolve: (value: unknown) => void) =>
@@ -107,6 +120,7 @@ beforeEach(() => {
   state.members = [];
   state.invites = [];
   fetchMock.mockClear();
+  householdUpdate.mockClear();
   vi.stubGlobal("fetch", fetchMock);
   toast.success.mockClear();
   toast.error.mockClear();
@@ -165,6 +179,32 @@ describe("HouseholdsManager", () => {
 
       expect(dialogTexts()).not.toContain("Change Liam to Child?");
       expect(savedBody()).toMatchObject({ relationship: "child" });
+    });
+  });
+
+  describe("choosing No date", () => {
+    it("clears a household's whole anniversary", async () => {
+      await mount();
+      await click("Edit Test");
+      await click("No date");
+      await click("Save changes");
+
+      expect(householdUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ anniversary_month: null, anniversary_day: null, anniversary_year: null }),
+      );
+      expect(toast.success).toHaveBeenCalledWith("Household saved.");
+    });
+
+    it("clears a person's whole birthday", async () => {
+      state.members = [LIAM];
+      await mount();
+      await click("Edit Test");
+      await click("Edit Liam");
+      await click("No date");
+      await click("Save");
+
+      expect(savedBody()).toMatchObject({ birth_month: null, birth_day: null, birth_year: null });
+      expect(toast.success).toHaveBeenCalledWith("Liam saved.");
     });
   });
 
