@@ -259,7 +259,10 @@ export async function GET(request: Request) {
   try {
     icsString = generateCombinedICS(feedEvents, servingSignups);
   } catch (err) {
-    logError("ICS generation failed", err, { route: "/api/calendar/feed.ics" });
+    logError("ICS generation failed", err, {
+      route: "/api/calendar/feed.ics",
+      ids: { org: sub.org_id, user: sub.user_id },
+    });
     return new Response("Failed to generate calendar feed", { status: 500 });
   }
 

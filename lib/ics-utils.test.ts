@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { calendarEntries, eventToICSAttributes, servingToICSAttributes } from "@/lib/ics-utils";
+import { describe, expect, it, vi } from "vitest";
+import { calendarEntries, eventToICSAttributes, generateCombinedICS, servingToICSAttributes } from "@/lib/ics-utils";
+import { loggedLines } from "@/lib/log/testing";
 import type { Event } from "@/lib/types";
 
 const event = {
@@ -197,5 +198,20 @@ describe("details kept out of calendars", () => {
     expect(attrs.url).toBeUndefined();
     expect(attrs.description).toBeUndefined();
     expect(attrs.location).toBeUndefined();
+  });
+});
+
+describe("an event the calendar library refuses", () => {
+  // The thrown Error is a new object, so the route's catch sees no cause; this line keeps it.
+  it("logs the library's error class before the failure is rethrown as text", () => {
+    const logged = vi.spyOn(console, "log").mockImplementation(() => {});
+    const refused = { ...event, meeting_url: "https://zoom.us/j/1 2" } as Event;
+
+    expect(() => generateCombinedICS([{ event: refused, meeting: refused }], [])).toThrow("Failed to generate ICS");
+
+    expect(loggedLines(logged)).toEqual([
+      { level: "error", what: "ICS generation failed", code: "ValidationError", ref: expect.any(String) },
+    ]);
+    logged.mockRestore();
   });
 });

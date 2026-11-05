@@ -203,7 +203,10 @@ export async function GET(
       keepOutFor(sharing, event, sharingSource)
     );
   } catch (err) {
-    logError("ICS generation failed", err, { route: "/api/events/[id]/ics" });
+    logError("ICS generation failed", err, {
+      route: "/api/events/[id]/ics",
+      ids: { org: sub.org_id, event: id },
+    });
     return new Response("Failed to generate calendar file", { status: 500 });
   }
 

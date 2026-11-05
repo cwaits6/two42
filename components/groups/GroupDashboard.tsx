@@ -17,6 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { LessonThumbnail } from "@/components/lessons/LessonThumbnail";
+import { logError } from "@/lib/log";
 import { createClient } from "@/lib/supabase/server";
 import { groupPath, type ActiveGroup } from "@/lib/groups/active";
 import { greetingName } from "@/lib/groups/greeting";
@@ -58,7 +59,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
   const user = await getOptionalUser();
   if (!user) redirect("/login");
 
-  const [{ data: viewer }, timeZone] = await Promise.all([
+  const [{ data: viewer, error: viewerError }, timeZone] = await Promise.all([
     supabase
       .from("profiles")
       .select("org_id, preferred_name, first_name")
@@ -73,6 +74,7 @@ export async function GroupDashboard({ group }: { group: ActiveGroup }) {
 
   // Every read below filters on this org, so without it there is nothing to ask for.
   if (!viewer) {
+    logError("Failed to load the viewer for group Home", viewerError);
     return (
       <PageContainer>
         {greeting}

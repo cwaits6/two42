@@ -1,5 +1,6 @@
 import { createEvents, type EventAttributes } from "ics";
 import type { Event } from "@/lib/types";
+import { logError } from "@/lib/log";
 import { hasMeeting, notesWithMeeting, type MeetingDetails } from "@/lib/meetings";
 import { expandUpcomingEvents } from "@/lib/recurrence";
 import { dayKey } from "@/lib/time/zone";
@@ -140,6 +141,7 @@ export function generateSingleEventICS(
     )
   );
   if (error || !value) {
+    logError("ICS generation failed", error);
     throw new Error(`Failed to generate ICS: ${error?.message ?? "unknown error"}`);
   }
   return value;
@@ -148,6 +150,7 @@ export function generateSingleEventICS(
 export function generateMultiEventICS(events: Event[]): string {
   const { error, value } = createEvents(events.map((event) => eventToICSAttributes(event)));
   if (error || !value) {
+    logError("ICS generation failed", error);
     throw new Error(`Failed to generate ICS: ${error?.message ?? "unknown error"}`);
   }
   return value;
@@ -180,6 +183,7 @@ export function servingToICSAttributes(input: ServingICSInput): EventAttributes 
 export function generateServingICS(input: ServingICSInput): string {
   const { error, value } = createEvents([servingToICSAttributes(input)]);
   if (error || !value) {
+    logError("ICS generation failed", error);
     throw new Error(`Failed to generate ICS: ${error?.message ?? "unknown error"}`);
   }
   return value;
@@ -210,6 +214,7 @@ export function generateCombinedICS(
   }
   const { error, value } = createEvents(all);
   if (error || !value) {
+    logError("ICS generation failed", error);
     throw new Error(`Failed to generate ICS: ${error?.message ?? "unknown error"}`);
   }
   return value;
