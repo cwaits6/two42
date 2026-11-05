@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/platform-access";
 import { createServiceClient } from "@/lib/supabase/server";
-import { CONTROL, EMAIL, validateAccent } from "@/lib/branding";
+import { CONTROL, EMAIL, EMAIL_MAX_LENGTH, validateAccent } from "@/lib/branding";
 import type { Database } from "@/lib/supabase/database.types";
 
 type OrgStatus = Database["public"]["Enums"]["org_status"];
@@ -65,7 +65,7 @@ function validateBrandingPatch(
     const replyTo = raw.reply_to.trim();
     if (replyTo === "") {
       branding.reply_to = null;
-    } else if (replyTo.length > 254 || !EMAIL.test(replyTo)) {
+    } else if (replyTo.length > EMAIL_MAX_LENGTH || !EMAIL.test(replyTo)) {
       return { ok: false, error: "Reply-to must be a valid email address." };
     } else {
       branding.reply_to = replyTo;

@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
-import { EMAIL } from "@/lib/branding";
+import { EMAIL, EMAIL_MAX_LENGTH } from "@/lib/branding";
 import { siteConfig } from "@/lib/config";
 import { resolveEmailBranding } from "@/lib/email/identity";
 import { reserveEmailQuota } from "@/lib/email/quota";
@@ -44,7 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     typeof body === "object" && body !== null ? body : {};
   const name = typeof fields.name === "string" ? fields.name.trim() : "";
   const email = typeof fields.email === "string" ? fields.email.trim() : "";
-  if (!name || !email || email.length > 254 || !EMAIL.test(email)) {
+  if (!name || !email || email.length > EMAIL_MAX_LENGTH || !EMAIL.test(email)) {
     return NextResponse.json({ error: "Enter your name and a valid email address." }, { status: 400 });
   }
 
