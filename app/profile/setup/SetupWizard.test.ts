@@ -7,13 +7,14 @@ import type { Profile } from "@/lib/types";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const writes: { table: string; values: Record<string, unknown>; column: string; id: string }[] = [];
+const failing: { table?: string } = {};
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
     from: (table: string) => ({
       update: (values: Record<string, unknown>) => ({
         eq: async (column: string, id: string) => {
           writes.push({ table, values, column, id });
-          return { error: null };
+          return { error: table === failing.table ? { code: "XX000" } : null };
         },
       }),
       insert: async () => ({ error: null }),
@@ -39,14 +40,14 @@ const PROFILE = {
 
 let root: Root;
 
-async function mount() {
+async function mount(profile: Profile = PROFILE) {
   const host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
   await act(async () => {
     root.render(
       createElement(SetupWizard, {
-        profile: PROFILE,
+        profile,
         userEmail: "ada@example.test",
         householdName: "Lovelace Family",
       }),
@@ -76,6 +77,7 @@ async function type(id: string, value: string) {
 
 beforeEach(() => {
   writes.length = 0;
+  failing.table = undefined;
   vi.clearAllMocks();
   vi.stubGlobal("scrollTo", () => {});
 });
@@ -103,6 +105,31 @@ describe("choosing No date in the setup wizard", () => {
     expect(writes[0]).toMatchObject({ table: "profiles", values: cleared, id: "p1" });
     expect(writes[1]).toEqual({ table: "family_members", values: cleared, column: "claimed_profile_id", id: "p1" });
     expect(toast.success).toHaveBeenCalledWith("Profile set up.");
+  });
+
+  it("leaves the claimed household record alone when the profile had no birthday to clear", async () => {
+    await mount({ ...PROFILE, birth_month: null, birth_day: null, birth_year: null });
+    await click("Continue");
+    await click("Continue");
+    await click("Continue");
+    await click("Finish setup");
+
+    expect(writes.map((w) => w.table)).toEqual(["profiles", "profiles"]);
+    expect(toast.success).toHaveBeenCalledWith("Profile set up.");
+  });
+
+  it("doesn't finish setup when the claimed household record's birthday can't be cleared", async () => {
+    failing.table = "family_members";
+    await mount();
+    await choose("birth_month", "No date");
+    await click("Continue");
+    await click("Continue");
+    await click("Continue");
+    await click("Finish setup");
+
+    expect(toast.error).toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(writes.some((w) => "setup_completed" in w.values)).toBe(false);
   });
 
   it("leaves the claimed household record alone when the birthday is kept", async () => {

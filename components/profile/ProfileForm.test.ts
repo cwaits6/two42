@@ -310,12 +310,21 @@ describe("ProfileForm inline errors", () => {
     written.rows = null;
     written.error = { code: "XX000" };
     const onSaved = vi.fn();
-    const form = await mount({ birth_month: null, birth_day: null }, { onSaved });
+    const form = await mount({ birth_month: 12, birth_day: 10 }, { onSaved });
+    await form.choose("birth_month", "No date");
     await form.submit();
 
     expect(toast.error).toHaveBeenCalledWith("Couldn't save the profile. Try again.");
     expect(toast.success).not.toHaveBeenCalled();
     expect(onSaved).not.toHaveBeenCalled();
+    expect(claimedUpdate).not.toHaveBeenCalled();
+  });
+
+  it("leaves the claimed household record alone when the profile had no birthday to clear", async () => {
+    const form = await mount({ birth_month: null, birth_day: null, birth_year: null });
+    await form.submit();
+
+    expect(toast.success).toHaveBeenCalledWith("Profile saved.");
     expect(claimedUpdate).not.toHaveBeenCalled();
   });
 
@@ -330,7 +339,8 @@ describe("ProfileForm inline errors", () => {
   it("says the save failed when the claimed household record's birthday can't be cleared", async () => {
     written.claimedError = { code: "XX000" };
     const onSaved = vi.fn();
-    const form = await mount({ birth_month: null, birth_day: null }, { onSaved });
+    const form = await mount({ birth_month: 12, birth_day: 10 }, { onSaved });
+    await form.choose("birth_month", "No date");
     await form.submit();
 
     expect(toast.error).toHaveBeenCalledWith("Couldn't save the profile. Try again.");
