@@ -14,7 +14,7 @@ describe("buildAccount", () => {
   it("gives a member their own pages, then Help, Privacy and Terms", () => {
     const a = account({ profile: { ...isaac, role: "member" }, email: "isaac@example.test" });
     expect(labels(a)).toEqual(["My profile", "Settings", ...INFO]);
-    expect(a).toMatchObject({ name: "Isaac Seedly", initials: "IS", homeHref: "/dashboard" });
+    expect(a).toMatchObject({ name: "Isaac Seedly", initials: "IS" });
     expect(a.rows.map((r) => r.href)).toEqual([
       "/profile",
       "/settings",
@@ -38,7 +38,6 @@ describe("buildAccount", () => {
       initials: "P",
       isMember: false,
       isChurchAdmin: false,
-      homeHref: "/",
     });
   });
 
@@ -50,7 +49,7 @@ describe("buildAccount", () => {
   it("offers a pending person only Help, Privacy and Terms, under their own name", () => {
     const a = account({ profile: { ...isaac, role: "pending" }, email: "isaac@example.test" });
     expect(labels(a)).toEqual(INFO);
-    expect(a).toMatchObject({ name: "Isaac Seedly", initials: "IS", isMember: false, homeHref: "/" });
+    expect(a).toMatchObject({ name: "Isaac Seedly", initials: "IS", isMember: false });
   });
 
   it("reads an unrecognized stored role as pending", () => {
@@ -68,6 +67,14 @@ describe("buildAccount", () => {
       email: "someone@example.test",
     });
     expect(a).toMatchObject({ name: "someone@example.test", initials: "S" });
+  });
+
+  it("names a person by a preferred name alone", () => {
+    const a = account({
+      profile: { first_name: null, last_name: null, preferred_name: "Ike", role: "member" },
+      email: "someone@example.test",
+    });
+    expect(a).toMatchObject({ name: "Ike", initials: "I" });
   });
 
   it("still names the block with neither a name nor an address", () => {

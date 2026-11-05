@@ -1,4 +1,4 @@
-import { displayName, initials } from "@/lib/names";
+import { displayName, hasName, initials, type NameParts } from "@/lib/names";
 import { isMemberRole, toUserRole } from "@/lib/roles";
 import { INFO_LINKS } from "./infoLinks";
 
@@ -17,18 +17,11 @@ export type Account = {
   isMember: boolean;
   isChurchAdmin: boolean;
   isOperator: boolean;
-  /** Where the wordmark goes. */
-  homeHref: "/dashboard" | "/";
   /** The account menu in order; Sign out is an action that follows these. */
   rows: AccountRow[];
 };
 
-type AccountProfile = {
-  first_name: string | null;
-  last_name: string | null;
-  preferred_name?: string | null;
-  role: string;
-};
+type AccountProfile = NameParts & { role: string };
 
 export function buildAccount(input: {
   /** The signed-in person's own row; an operator has none. */
@@ -41,7 +34,7 @@ export function buildAccount(input: {
   const { profile, email, isOperator, photoUrl } = input;
   const isMember = !!profile && isMemberRole(profile.role);
   const isChurchAdmin = !!profile && toUserRole(profile.role) === "admin";
-  const named = !!profile && [profile.preferred_name, profile.first_name, profile.last_name].some((p) => p?.trim());
+  const named = hasName(profile);
 
   const rows: AccountRow[] = [];
   // Both pages send anyone who is not an approved member back to Home, so
@@ -63,7 +56,6 @@ export function buildAccount(input: {
     isMember,
     isChurchAdmin,
     isOperator,
-    homeHref: isMember ? "/dashboard" : "/",
     rows,
   };
 }

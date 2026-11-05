@@ -80,8 +80,10 @@ describe("Header signed in", () => {
     expect(render(member)).toMatch(/<header[^>]*md:hidden/);
   });
 
-  it("sends the wordmark to Home for a member and to the front door for anyone else", () => {
-    expect(render(member)).toMatch(/<a[^>]*href="\/dashboard"[^>]*><img[^>]*two42-wordmark/);
-    expect(render(pending)).toMatch(/<a[^>]*href="\/"[^>]*><img[^>]*two42-wordmark/);
+  it("sends the wordmark to Home for everyone signed in, and to the front door signed out", () => {
+    for (const who of [member, pending, operator]) {
+      expect(render(who)).toMatch(/<a[^>]*href="\/dashboard"[^>]*><img[^>]*two42-wordmark/);
+    }
+    expect(render(null)).toMatch(/<a[^>]*href="\/"[^>]*><img[^>]*two42-wordmark/);
   });
 });

@@ -24,7 +24,7 @@ export function Sidebar({ account }: { account: Account }) {
           collapsed ? "flex-col px-2" : "justify-between pl-5 pr-2"
         }`}
       >
-        <Wordmark href={account.homeHref} mark={collapsed} />
+        <Wordmark href="/dashboard" mark={collapsed} />
         <button
           type="button"
           onClick={() => setCollapsed(!collapsed)}

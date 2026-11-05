@@ -20,6 +20,7 @@ import { Wordmark } from "./Wordmark";
 export function Header() {
   const { account } = useSidebar();
   const [scrolled, setScrolled] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
@@ -30,20 +31,20 @@ export function Header() {
 
   return (
     <header
-      // Signed in, the bar sits above the drawer's overlay (z-50) so it shows
-      // whether the drawer is open or closed.
+      // The bar rises above the overlay layer (z-50) only while its own drawer
+      // is open, so it never covers another sheet or dialog.
       className={`sticky top-0 w-full border-b border-border transition-all duration-300 ${
-        account ? "z-[60] md:hidden" : "z-50"
-      } ${scrolled ? "bg-background/95 backdrop-blur shadow-sm" : "bg-background"}`}
+        drawerOpen ? "z-[60]" : "z-50"
+      } ${account ? "md:hidden" : ""} ${scrolled ? "bg-background/95 backdrop-blur shadow-sm" : "bg-background"}`}
     >
       {/* Top accent bar */}
       <div className="h-1 w-full bg-gradient-to-r from-brand-primary-light via-brand-primary to-brand-accent" />
 
       <div className="flex h-16 w-full items-center justify-between px-4">
-        <Wordmark href={account ? account.homeHref : "/"} />
+        <Wordmark href={account ? "/dashboard" : "/"} />
 
         {account ? (
-          <MenuDrawer account={account} />
+          <MenuDrawer account={account} open={drawerOpen} onOpenChange={setDrawerOpen} />
         ) : (
           pathname !== "/login" && (
             <Button
@@ -61,18 +62,25 @@ export function Header() {
   );
 }
 
-function MenuDrawer({ account }: { account: Account }) {
-  const [open, setOpen] = useState(false);
+function MenuDrawer({
+  account,
+  open,
+  onOpenChange,
+}: {
+  account: Account;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const pathname = usePathname();
-  const close = () => setOpen(false);
+  const close = () => onOpenChange(false);
 
   // Safety net: close the drawer whenever the route changes.
   useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
+    onOpenChange(false);
+  }, [pathname, onOpenChange]);
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetTrigger
         render={<Button variant="ghost" size="lg" aria-expanded={open} className="gap-2 text-foreground" />}
       >
