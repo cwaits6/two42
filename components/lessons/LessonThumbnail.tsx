@@ -11,17 +11,18 @@ export function LessonThumbnail({
   src: string | null;
   fallback: ReactNode;
 }) {
-  const [failed, setFailed] = useState(false);
+  // Keyed by source so a different picture gets its own attempt.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const ref = useRef<HTMLImageElement>(null);
 
   // The image usually settles before hydration, so its load and error events
   // have already fired by the time the handlers below attach.
   useEffect(() => {
     const img = ref.current;
-    if (img?.complete && thumbnailFailed(img)) setFailed(true);
-  }, []);
+    if (img?.complete && thumbnailFailed(img)) setFailedSrc(src);
+  }, [src]);
 
-  if (!src || failed) return <>{fallback}</>;
+  if (!src || failedSrc === src) return <>{fallback}</>;
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
@@ -29,8 +30,10 @@ export function LessonThumbnail({
       src={src}
       alt=""
       className="h-full w-full object-cover"
-      onLoad={(e) => setFailed(thumbnailFailed(e.currentTarget))}
-      onError={() => setFailed(true)}
+      onLoad={(e) => {
+        if (thumbnailFailed(e.currentTarget)) setFailedSrc(src);
+      }}
+      onError={() => setFailedSrc(src)}
     />
   );
 }

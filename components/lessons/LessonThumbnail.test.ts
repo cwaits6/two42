@@ -14,10 +14,15 @@ async function mount(src: string | null) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
-  await act(async () =>
-    root!.render(createElement(LessonThumbnail, { src, fallback: createElement("span", { "data-fallback": "" }) })),
-  );
+  const render = (next: string | null) =>
+    act(async () =>
+      root!.render(
+        createElement(LessonThumbnail, { src: next, fallback: createElement("span", { "data-fallback": "" }) }),
+      ),
+    );
+  await render(src);
   return {
+    render,
     img: () => container.querySelector("img"),
     fallback: () => container.querySelector("[data-fallback]"),
   };
@@ -69,6 +74,16 @@ describe("LessonThumbnail", () => {
     await act(async () => img()!.dispatchEvent(new Event("load")));
     expect(img()).toBeNull();
     expect(fallback()).not.toBeNull();
+  });
+
+  it("tries a different picture after an earlier one failed", async () => {
+    const other = "https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg";
+    const { img, fallback, render } = await mount(YOUTUBE);
+    await act(async () => img()!.dispatchEvent(new Event("error")));
+    expect(fallback()).not.toBeNull();
+    await render(other);
+    expect(img()?.getAttribute("src")).toBe(other);
+    expect(fallback()).toBeNull();
   });
 
   it("notices a picture that already failed before the handlers attached", async () => {
