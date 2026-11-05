@@ -44,7 +44,12 @@ export async function ChurchSettings() {
   ]);
   if (rulesRead.error) console.error("Failed to load the church's rules: code=%s", rulesRead.error.code);
   const rules = rulesRead.error ? null : rulesRead.data;
-  const timeZone = rules && isValidTimeZone(rules.timezone) ? rules.timezone : null;
+  // A stored zone this runtime doesn't know still gets the control: it is the
+  // only place a church admin can pick one that works.
+  if (rules && !isValidTimeZone(rules.timezone)) {
+    console.error("Unknown church time zone: %s", rules.timezone);
+  }
+  const timeZone = rules ? rules.timezone : null;
 
   return (
     <>

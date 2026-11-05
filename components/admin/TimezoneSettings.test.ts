@@ -24,6 +24,10 @@ describe("timeZoneLabel", () => {
     );
     expect(timeZoneLabel("UTC", JULY)).toBe("UTC");
   });
+
+  it("shows a zone the runtime doesn't know as its id, with no offset", () => {
+    expect(timeZoneLabel("Nowhere/Bogus", JULY)).toBe("Nowhere/Bogus");
+  });
 });
 
 describe("timeZoneOptions", () => {

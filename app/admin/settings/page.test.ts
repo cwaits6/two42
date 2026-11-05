@@ -168,6 +168,21 @@ describe("ChurchSettings", () => {
     expect(controls.get(TimezoneSettings)).toMatchObject({ orgId: ORG_ID, timezone: "America/Chicago" });
   });
 
+  it("keeps the time zone control when the stored zone is one the runtime doesn't know", async () => {
+    reads.organizations = { data: { ...RULES, timezone: "Nowhere/Bogus" }, error: null };
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const { controls, things } = await render();
+
+      expect(things).toEqual([]);
+      expect(controls.get(TimezoneSettings)).toMatchObject({ orgId: ORG_ID, timezone: "Nowhere/Bogus" });
+      expect(logged).toHaveBeenCalledWith("Unknown church time zone: %s", "Nowhere/Bogus");
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
   it("reads a church with no giving row as the default, not as a failure", async () => {
     reads.site_settings = { data: null, error: null };
 

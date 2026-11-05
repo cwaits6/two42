@@ -38,14 +38,16 @@ export const US_TIME_ZONES = Object.keys(US_ZONE_NAMES);
 
 /**
  * What a person reads for a zone; the stored value stays the IANA id. US zones
- * by name, others as "London, Europe (UTC+01:00)" with the offset at `now`.
+ * by name, others as "London, Europe (UTC+01:00)" with the offset at `now`,
+ * and a zone this runtime doesn't know as its id.
  */
 export function timeZoneLabel(zone: string, now: DateTime = DateTime.now()): string {
   const named = US_ZONE_NAMES[zone];
   if (named) return named;
   const parts = zone.replaceAll("_", " ").split("/");
-  if (parts.length === 1) return zone;
-  return `${parts[parts.length - 1]}, ${parts[0]} (UTC${now.setZone(zone).toFormat("ZZ")})`;
+  const local = now.setZone(zone);
+  if (parts.length === 1 || !local.isValid) return zone;
+  return `${parts[parts.length - 1]}, ${parts[0]} (UTC${local.toFormat("ZZ")})`;
 }
 
 /**
