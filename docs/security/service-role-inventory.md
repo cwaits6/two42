@@ -827,8 +827,9 @@ flag enforcing anything (see
 `send-event-reminders` runs in the mode its cron body names
 (`{"mode":"dates"}`, `_shared/event-reminders.ts`). Per church from
 `listActiveOrgs()`, it makes three reads of `events` (repeating events,
-rows starting within a week, and dates edited or deleted on their own) and
-one of `group_settings` (the groups that turned reminders off), each on
+rows starting within a week, and dates edited or deleted on their own), a
+fourth by `id` for the series of a date it read whose series row starts
+later than that week, and one of `group_settings` (the groups that turned reminders off), each on
 `org_id`, bound to `org.id` from the `forEachOrg()` callback; works out the
 dates due in pure code (`_shared/event-reminder-due.ts`,
 `_shared/event-dates.ts`); and calls `event_reminder_claim()` once per date
@@ -843,14 +844,16 @@ the org on every chain and call against a recording fake, and
 `tests/event-reminder-due_test.ts` the due rules on both sides of each
 bound and across both clock changes.
 
-With any other body the function runs as it did before the sent record: it
+With no body, or a body that names no mode, the function runs as it did
+before the sent record: it
 lists the org's groups through `listGroups()` (`_shared/groups.ts`), reads
 each group's events on `org_id` + `group_id`, and resolves recipients through
 `resolveEventReminderRecipients()` (`_shared/event-recipients.ts`): RSVPs
 ∩ current `group_members` of the event's group → non-pending profiles with
 an email. That mode exists only for a function deployed ahead of the
 migration that schedules the dates mode, and goes once a release has run on
-it. A failing group is recorded in `failedItems[]` keyed by `group_id` and
+it. A body that names any other mode, or does not parse, is refused
+with 400 and nothing is read or sent (`reminderMode()`). A failing group is recorded in `failedItems[]` keyed by `group_id` and
 the org's other groups still run. `send-serving-reminders` keeps its team loop,
 reads `teams.group_id` with the team name, and resolves the serving link
 mode per group through `resolveGroupLinkMode()` (`group_settings`, on
@@ -906,7 +909,7 @@ outside its scan set entirely, so these calls are covered by review and by
 
 | File | Why service-role is used | Historical tenancy risk | Mitigation |
 |------|--------------------------|-------------------------|------------|
-| `supabase/functions/send-event-reminders/index.ts` | Cron job; reads events/RSVPs and emails attendees with no user session | Reminder fan-out iterates all rows across orgs | Refuses any caller but a service key. **Implemented (Phase 3, #212):** iterates active orgs via `_shared/orgs.ts`, every query filtered on `org_id`, per-org failures isolated so one org cannot suppress another's send. **Group scope:** org → group iteration, events on `group_id`, recipients gated on current group membership, per-group failures in `failedItems[]`. **Branding (CWA-56, #322):** `organizations.branding` rides along on the already-org-anchored `listActiveOrgs()` select — no new service-role call site, no new unscoped query — and is validated by `_shared/branding.ts` (a mirror of `lib/branding.ts` + `lib/email/identity.ts`) before reaching any CSS or RFC 5322 sink. **Link origin:** every link is built on the one canonical host (the `SITE_URL` function secret) — no query. **Time zone:** `organizations.timezone` rides along on the same `listActiveOrgs()` select and formats the reminder's event time |
+| `supabase/functions/send-event-reminders/index.ts` | Cron job; reads events and sends reminders with no user session | Reminder fan-out iterates all rows across orgs | Refuses any caller but a service key. **Implemented (Phase 3, #212):** iterates active orgs via `_shared/orgs.ts`, every query filtered on `org_id`, per-org failures isolated so one org cannot suppress another's send. **Dates mode:** events read on `org_id`, the dates due worked out in pure code, and each date's recipients chosen and claimed in `event_reminder_claim()` with `_org_id` from the same iteration; per-event failures in `failedItems[]`. **Deploy-window mode** (a body with no mode): org → group iteration, events on `group_id`, recipients gated on current group membership, per-group failures in `failedItems[]`. **Branding (CWA-56, #322):** `organizations.branding` rides along on the already-org-anchored `listActiveOrgs()` select — no new service-role call site, no new unscoped query — and is validated by `_shared/branding.ts` (a mirror of `lib/branding.ts` + `lib/email/identity.ts`) before reaching any CSS or RFC 5322 sink. **Link origin:** every link is built on the one canonical host (the `SITE_URL` function secret) — no query. **Time zone:** `organizations.timezone` rides along on the same `listActiveOrgs()` select and formats the reminder's event time |
 | `supabase/functions/send-serving-reminders/index.ts` | Cron job; reads serving signups and emails assignees with no user session | Same as `send-event-reminders` | Refuses any caller but a service key. **Implemented (Phase 3, #212):** same per-org iteration and `org_id` filters; `resolveCanSign` org-scoped; `serving_broadcasts` audit rows stamped with the processed row's org, not a constant. **Branding (CWA-56, #322):** same `listActiveOrgs()` ride-along, validated by `_shared/branding.ts`. **Link origin:** the same canonical `SITE_URL`, threaded into every cancel/signup/team-page link. **Per-team isolation (CWA-50, #316):** a failing team is recorded in the run summary's `failedItems[]` keyed by `team_id` — ids, never org-defined team names, in operator diagnostics. **Group scope:** the link mode is per group (`group_settings` through `_shared/groups.ts`), every `serving_*` query is on `team_id`, and links open `/g/<group_id>/serving/<team_id>` |
 | `supabase/functions/clean-up-expired-data/index.ts` | Cron job; deletes expired requests, invites, feedback, serving and event reminder passes older than 35 days (through `serving_reminder_passes_prune()` and `event_reminder_passes_prune()`, at most 500 per call, their sends through the foreign key) and, for a church that opted in, prayer requests, with no user session | A delete missing its filter removes another church's data for good | Refuses any caller but a service key. Iterates active orgs, one org-filtered delete per rule, failures isolated per step and per org. The rules and their boundaries are unit-tested in `tests/retention_test.ts` and `tests/cleanup_test.ts` |
 

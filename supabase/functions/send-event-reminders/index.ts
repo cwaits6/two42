@@ -10,12 +10,15 @@
 //     twice — see _shared/event-reminders.ts. The first firing sends; the
 //     other two finish what a failed or cut-off firing left. Scheduled by
 //     supabase/migrations/20261117000000_event_reminder_choices.sql.
-//   - before dates (no body, or any other body): the mode the job ran with
-//     before it posted a mode, with no sent record and no reminder for the
+//   - before dates (no body, or a body with no mode): the mode the job ran
+//     with before it posted a mode, with no sent record and no reminder for the
 //     later dates of a repeating event. Kept so a function deployed ahead of
 //     the migration that schedules the dates mode behaves as before; remove
 //     it, with sendEmail() and _shared/event-recipients.ts, once a release
 //     has run on the dates mode.
+//
+// A body that names any other mode, or does not parse, is refused with 400
+// and sends nothing.
 //
 // Runs with the service key (BYPASSRLS), so tenant isolation lives in the
 // query text: iterates every active organization and filters each query on
@@ -38,7 +41,12 @@ import {
   resolveEventReminderRecipients,
   type EventRecipientClient,
 } from "../_shared/event-recipients.ts";
-import { type EventReminder, type EventRemindersClient, runEventReminders } from "../_shared/event-reminders.ts";
+import {
+  type EventReminder,
+  type EventRemindersClient,
+  reminderMode,
+  runEventReminders,
+} from "../_shared/event-reminders.ts";
 import { formatReminderDate } from "../_shared/event-time.ts";
 import { listGroups, type GroupClient } from "../_shared/groups.ts";
 import { eventReminderEmail } from "../_shared/email-html.ts";
@@ -297,17 +305,13 @@ async function runBeforeDates(
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 Deno.serve(serviceKeyCallerOnly(async (req) => {
-  let mode = "before-dates";
-  // A present but unparseable body is an alarm: the job's {"mode":"dates"}
-  // did not arrive, and the run falls back to the mode that keeps no sent
-  // record.
-  const rawBody = await req.text().catch(() => "");
-  if (rawBody.trim()) {
-    try {
-      if (JSON.parse(rawBody)?.mode === "dates") mode = "dates";
-    } catch (err) {
-      console.error("request body present but unparseable, running without the sent record:", err);
-    }
+  const mode = reminderMode(await req.text());
+  if (!mode) {
+    console.error("request body names no mode this job runs, nothing sent");
+    return new Response(JSON.stringify({ error: "unrecognised body" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   try {
