@@ -278,7 +278,9 @@ test.describe("a church admin", () => {
     await page.goto("/admin/members");
     const search = page.getByLabel("Search members");
     await search.fill(PERSONAS.admin.email);
-    await page.getByRole("button", { name: `More actions for ${PERSONAS.admin.name}` }).click();
+    const ownMenu = page.getByRole("button", { name: /^More actions for / });
+    await expect(ownMenu).toHaveCount(1);
+    await ownMenu.click();
     await expect(page.getByRole("menuitem", { name: "Edit" })).toBeVisible();
     await expect(page.getByRole("menuitem", { name: "Delete account" })).toHaveCount(0);
     await page.keyboard.press("Escape");
