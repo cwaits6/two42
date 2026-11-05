@@ -100,7 +100,7 @@ describe("log line", () => {
   });
 
   // Shape cannot tell these from a pattern or an id, so call sites must not pass them;
-  // lint requires a fixed string for `route`.
+  // lint requires a fixed string only for a `route` written inside the call.
   it("cannot tell a bare path or a UUID token from what it accepts", () => {
     const line = JSON.parse(
       formatLine("error", "x", undefined, { route: "/join/Zk3-secret-invite-token", ids: { token: UUID } }, "REF"),

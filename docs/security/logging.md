@@ -57,13 +57,20 @@ query strings.
 The helper checks the shape of what it is given: `route` is dropped unless
 it looks like a pattern or a function name, `step` unless it is a label, and
 an `ids` value unless it is a UUID or a finite number. That stops an address
-with a query, a hash or a host, and an email, a name or a phone number.
+with a query, a hash or a scheme, an email in any of the three, and any text
+in `ids`.
 
 Shape cannot stop everything, so the call site carries the rest:
 
+- A lowercase name such as `mary_smith` has the shape of a `step`, and
+  `/mary-smith` the shape of a `route`. A string of digits such as a phone
+  number fits a `route`, and a number fits `ids`. Never pass a value a person
+  entered in any of the three.
+
 - A real path such as `/join/<token>` has the shape of a pattern. `route` is
-  always a fixed string, which lint requires; never a path read from the
-  request.
+  always a fixed string, never a path read from the request. Lint requires a
+  fixed string only when `route` is written inside the call; it does not see
+  a `route` on a context object built elsewhere, or one passed to `writeLog`.
 - An invite token is a UUID, the same shape as a row id. Never put a token in
   `ids`.
 - `stepOf()` turns any text into a label. Pass it only a fixed label or a
@@ -72,7 +79,9 @@ Shape cannot stop everything, so the call site carries the rest:
 A stored photo is logged by its kind and the id of the row it belongs to,
 not by its path. A photo left behind after a person is deleted, or refused
 because its key names another church, is one line each. The object is in
-the `avatars` bucket under `<keyOrg>/<step>/<entity>/`. A line with no
+the `avatars` bucket under `<keyOrg>/<step>/<entity>/`. `step` is the folder
+name with its hyphen written as an underscore, so a `family_members` line
+means the `family-members` folder. A line with no
 `keyOrg` is a key from before org partitioning, under `<step>/<entity>/`, or
 `<entity>/` when it has no `step` either.
 
@@ -88,8 +97,10 @@ The reference is made on the server, where the failure is logged.
   line with that digest as its `ref`, the route pattern and the error's code.
   The digest is a hash of the error's message and stack, not a random value:
   the same failure shows the same digest each time, so it names the failure
-  and not the one request. Lines the page logged before it threw carry their
-  own random reference, next to that line in the log.
+  and not the one request. On a page that logs a failure and then throws, the
+  line holding the real error code was written first, under its own random
+  reference that is not shown. Nothing in either line names the other: only
+  the time joins the two.
 - **A read made in the browser**, and **a failed save answered by an API
   route**, show no reference. The first has no server log line; the second
   logs one with its own reference that is not shown.
@@ -112,8 +123,8 @@ browser's console, which stays on the person's own device.
 - ESLint (`eslint.config.mjs`) forbids direct `console` use in `app/`,
   `lib/`, `components/`, `supabase/functions/`, `instrumentation*.ts` and
   `proxy.ts`, tests excepted, and requires the first argument of `logError`,
-  `logWarn` and `logInfo`, and any `route` passed to them, to be a fixed
-  string.
+  `logWarn` and `logInfo`, and any `route` written in the call, to be a
+  fixed string.
 
 ## What this does not cover
 
