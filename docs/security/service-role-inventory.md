@@ -699,6 +699,46 @@ Two plain (not definer) triggers from the same migration close write oracles:
 `service_role` is outside both, and no service-role client reads
 `prayer_requests` or `prayer_wall`.
 
+## Hidden email helpers — definer-function bypass surfaces
+
+A person's address has three read paths that do not need `SELECT` on
+`profiles.email` (`20261118000000_hidden_email_read_paths.sql`): the owner's
+`get_own_email()`, and three `SECURITY DEFINER` functions. Each resolves the
+church from the signed-in person through `app_request_org_id()`, sets an empty
+`search_path`, and is executable by `authenticated` only (revoked from
+`public`, `anon` and `service_role`).
+
+- `profile_directory_email(_profile_id)` — the address `profiles_directory`
+  shows for one person. NULL when the person hides their email, for every
+  caller including the owner and a church admin, and NULL wherever the
+  `profiles` read policy hides the person from the caller. The view stays
+  `security_invoker`, so the restrictive `org_id` policy and the read policy
+  still decide which rows exist; only this one column comes from the function.
+  The parameter is only the row key, and the function can be called with any
+  id, so **its visibility arms repeat the `profiles` read policy and no lint
+  sees them**: if that policy changes, change the arms with it, or an address
+  is returned for a person whose row is hidden.
+- `admin_member_emails()` — every profile id and address in the caller's
+  church, hidden or not. Rows only when `is_admin()`; no rows for anyone else.
+  It takes no parameter. Church admin Members, the member edit page, and the
+  member import and export read addresses here on the request client, so none
+  of them needs a service-role client.
+- `serving_team_email_count(_team_id)` — how many people on a team an email to
+  the team reaches: an address on file, not pending, announcements on, the
+  same rule `app/api/serving/broadcast/route.ts` sends by. The team row is
+  read under the caller's org, and the count is NULL unless the caller leads
+  that team or its group. It returns a number and never an address.
+
+The grant matrix, each arm, the mirror of the read policy and the second-church
+cases are pinned by `supabase/tests/hidden_email_suite.sql`, and all three are
+called as a church admin of another church in
+`supabase/tests/tenancy_leak_suite.sql`.
+
+`get_profile_email(profile_id)` predates these and is not one of the read
+paths: it returns the address of someone in the caller's own household, hidden
+or not, and stays executable by `anon` and `authenticated` because the
+`profiles` update policy calls it in its `WITH CHECK` as the querying role.
+
 ## Household anniversary gate — a definer-function bypass surface (`family_anniversary_hidden`)
 
 `public.family_anniversary_hidden(_family_id)`
@@ -760,7 +800,7 @@ Execute on both trigger functions is revoked from `public, anon, authenticated`.
 | `app/api/family-invites/request/route.ts` | A household invitee files their access request before login; no session, and `access_requests` has no client INSERT policy | The `family_invites` row looked up by `token` alone (the org anchor); 404 on no row or an already-claimed invite, 500 on a lookup error | `access_requests` existing-request select `.eq("org_id", invite.org_id)` and insert carrying `org_id: invite.org_id` and `invite_token: invite.token` |
 | `app/join/[token]/page.tsx` | Group invite link resolved before login (and for a signed-in member, before the group's own policies can see them); no session | The `group_invites` row looked up by `token` alone (unscoped — the row is what resolves the org); a lookup error renders "Couldn't load this invite." with a retry, no row or a dead link renders the one invalid message | `group_invites` (with `groups` / `organizations` embeds by the row's own FKs); `group_invite_uses` count `.eq("invite_id", id).eq("org_id", org_id)`. The signed-in viewer's own `profiles` and `group_members` rows are read on the request client |
 | `app/api/join/[token]/route.ts` | `group_invite_redeem()` is EXECUTE-granted to `service_role` only, and the route holds the signup token it mails | The function resolves the org from the token row inside the transaction (`// org-anchor:` on the `.rpc()`); the returned `org_id` anchors the quota reservation, the branding read and the rollback | `rpc("group_invite_redeem")`; `access_requests` token-clearing update `.eq("id", access_request_id).eq("org_id", org_id)` when quota refuses or the send fails |
-| `app/api/serving/signups/route.ts` | Post-delete notification email lookups for affected members | The deleted signup row's own `org_id` (authorised by the RLS-checked delete); the link's group from its `teams` embed | `team_members` (leaders, on `team_id`) |
+| `app/api/serving/signups/route.ts` | Post-delete notification email lookups for affected members; the addresses a booking or change confirmation goes to, which no client role can read and a spouse may hide | The deleted signup row's own `org_id` (authorised by the RLS-checked delete); the link's group from its `teams` embed. For confirmations, the RLS-read `teams` row's `org_id` on a booking and the RLS-read signup row's on a change, after the attendees were validated on the request client | `team_members` (leaders, on `team_id`); `profiles` (`id, email`, on `org_id` and the validated attendee ids) |
 | `app/api/serving/link-action/route.ts` | Same HMAC signed-link pattern as `serving/go`; no session | HMAC-validated `teams` row (`org_id` and `group_id`); link rejected when `profiles.org_id` disagrees | `group_settings` (link mode), `serving_team_settings`, `team_members`, `serving_signups` (read/delete — cancel path; all on `team_id`), `rpc(serving_signup_apply)` (once per date; the signup + attendee insert pair, one transaction; the function re-derives the org from the `teams` row and enforces it internally — CWA-47 / #313), `team_members` with embedded `profiles` through `findSpouse()` (spouse, on `org_id` and `team_id`), `organizations` `.eq("id", org_id)` (the time zone that decides which dates have passed) |
 | `app/api/serving/broadcast/route.ts` | Fans out email to all team members regardless of caller's RLS visibility | RLS-scoped `teams` row (`org_id` and `group_id`); the caller must lead the team or its group (a `group_members` read on the request client) | `team_members` (recipients, on `team_id`), `group_settings` (link mode, on `org_id` + `group_id`) |
 | `app/api/calendar/feed.ics/route.ts` | Bearer-token calendar subscription; no session | `calendar_subscription_tokens` row (`org_id` stamped at issuance); owner role re-checked; the owner's `group_members` rows are the group boundary | `group_members` (the owner's groups), `events` `.in("group_id", …)` (every repeating series whatever its start, and exception rows, cancelled ones included, by the original slot `series_occurrence_date` — they remove deleted and moved dates), `organizations` `.eq("id", org_id)` (the time zone series dates are expanded in), `group_settings` `.in("group_id", …)` (each group's calendar sharing defaults — join details, notes, location — which an event or series may override on its own row; a failed read is a 500), `serving_signups` `.in("teams.group_id", …)`, `profiles` (owner), token expiry update. A `?group=` outside the owner's groups yields an empty 200; a failed membership read is a 500 |

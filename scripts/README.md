@@ -181,6 +181,43 @@ The same command also enforces:
   exclusion list may hardcode the retired default-org UUID. The default is
   in-scope: new files are swept unless the list says why not.
 
+## `check-profile-email-reads.mjs` — no request-client read of a person's email
+
+Client roles cannot read `profiles.email`, and PostgREST refuses the whole
+request (`42501`) when any part of it touches a column the role cannot read.
+`select("*")` on `profiles` is such a request, and so is an embedded
+`profiles(*)` on another table. This script runs second in
+`npm run guard:tenancy`, in the same blocking CI job, and fails on each of these
+through the request client in `app/`, `components/` and `lib/`:
+
+- a `profiles` select of all columns: `"*"`, or a bare `.select()` after an
+  insert, update, upsert or delete;
+- a `profiles` select that names `email`;
+- a filter or ordering on `profiles.email`, including inside an `.or()` string
+  and through `.match()`;
+- an embedded `profiles(…)` on any table, at any depth, with `*` or `email`
+  inside it, or a filter on `profiles.email`;
+- a select argument it cannot read. It resolves a string literal, a template
+  whose substitutions are constants, and a constant declared in the same file
+  or exported from a directly imported one. Anything else fails closed.
+
+Which client: a chain is on the service client when its root is bound from
+`createServiceClient()` in the same file, or is a function parameter that every
+call site in the scanned files fills with such a binding (directly, or through
+another function's parameter that is itself always filled with one). Those
+chains are skipped, because the service-role guard above already demands their
+`org_id`. Everything else is treated as the request client. A helper with no
+call site fails, since its client cannot be proven.
+
+There is no marker and no exemption list. Select `PROFILE_COLUMNS` from
+`lib/profileColumns.ts`, or name the columns, and read an address through
+`get_own_email()`, `admin_member_emails()` or `profiles_directory`.
+
+Known limit: an embed written through a foreign key column instead of the table
+name (`author:created_by(*)`) is not recognised as a `profiles` embed.
+
+Tested with fixture strings in `scripts/check-profile-email-reads.test.mjs`.
+
 ## `start-supabase-stack.sh` — the CI jobs' stack start
 
 The `Playwright boundaries` job in `.github/workflows/test.yml` and the weekly

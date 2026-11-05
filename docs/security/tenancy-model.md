@@ -897,6 +897,23 @@ reads nor writes them, and the values they hid were deleted by
 until a later release drops them, so nothing hidden through the app still
 deployed can show in the meantime. That release re-runs the sweep first.
 
+`hide_email` is enforced below the app. The address has three read paths, and
+no request-client code reads `profiles.email`:
+
+- the person reads their own through `get_own_email()`;
+- a church admin reads every address in their own church through
+  `admin_member_emails()`;
+- everyone else reads `profiles_directory`, whose `email` comes from
+  `profile_directory_email()` and is NULL when its owner hides it, for every
+  caller. A household primary or spouse can still change the setting for
+  someone in their household; they are not shown the address.
+
+`npm run guard:tenancy` fails on a request-client read of all columns of
+`profiles`, of `profiles.email`, or of either through an embed
+(`scripts/check-profile-email-reads.mjs`). The three definer functions are
+described in [`service-role-inventory.md`](service-role-inventory.md) ("Hidden
+email helpers").
+
 Two pieces of this cross a boundary worth naming:
 
 - **`family_anniversary_hidden(uuid)`** gates the household's anniversary in both
