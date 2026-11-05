@@ -12,7 +12,7 @@ began as CWA-7 Phase 0, #209, when the boundary was still a future change.)
 **Adding a new `createServiceClient()` call site? Add a row here in the same
 PR, with the justification and the tenancy risk.**
 
-## Automated enforcement (CWA-44)
+## Automated enforcement
 
 The blocking `Service-role org_id guard` CI job runs
 [`scripts/check-service-role-org-scope.mjs`](../../scripts/README.md), which
@@ -65,7 +65,7 @@ does and does not see, stated precisely:
   `app/api/household/link-member/route.ts`); the pin proves the comparison
   and its denial log exist, not that the code path is reached.
 
-## Phase 3 status (CWA-10 / #212)
+## Org scoping status
 
 `org_id` is now the database-enforced boundary for anon/authenticated roles
 (see [`tenancy-model.md`](tenancy-model.md)) — but service-role clients
@@ -139,7 +139,7 @@ What earlier phases already closed on this surface:
 - The DB-layer analogue, `giving_stewards_can_manage()`, is org-scoped in
   the schema itself.
 
-## Phase 4a status (CWA-11 / #213, stream 1/2)
+## Platform operator surface status
 
 The `/platform` operator surface introduces a new anchor class:
 **platform-admin authority**. Every `/platform` site below gates on
@@ -154,7 +154,7 @@ org-owned table touched (`access_requests`) is always filtered
 boundary. The restrictive RLS floor gains no platform-admin escape hatch;
 the cross-org reach lives only in these app-layer sites.
 
-## Serving signup RPC — a definer-function bypass surface (CWA-47 / #313)
+## Serving signup RPC — a definer-function bypass surface
 
 The serving signup insert pair (`serving_signups` + `serving_signup_attendees`)
 is written by a `SECURITY DEFINER` function pair
@@ -518,7 +518,7 @@ calls `group_invite_join` on the browser client, which is not service-rooted;
 `app/g/[groupId]/settings/invites/InviteLinksManager.tsx` reads and writes
 `group_invites` on the browser client under the policies above.
 
-## Email quota RPC — a definer-function bypass surface (CWA-72 / #365)
+## Email quota RPC — a definer-function bypass surface
 
 The per-org daily send cap (`org_email_usage` + `org_email_limits`) is
 enforced by a `SECURITY DEFINER` function
