@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Building2, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/states/EmptyState";
+import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import {
   Dialog,
   DialogContent,
@@ -37,21 +39,54 @@ interface OrganizationsListProps {
 // the operator a round trip.
 const EMAIL = /^[^\s@<>,;:"\\]+@[^\s@<>,;:"\\]+\.[^\s@<>,;:"\\]+$/;
 
+type Field = "org-name" | "org-owner-email";
+type FieldErrors = Partial<Record<Field, string>>;
+
+/** The Add organization form's errors, keyed by the field each belongs to. */
+export function addOrganizationErrors(name: string, ownerEmail: string): FieldErrors {
+  const found: FieldErrors = {};
+  if (!name) found["org-name"] = "Enter the organization's name.";
+  if (!ownerEmail) {
+    found["org-owner-email"] = "Enter the first admin's email.";
+  } else if (ownerEmail.length > 254 || !EMAIL.test(ownerEmail)) {
+    found["org-owner-email"] = "Enter an email address like name@example.com.";
+  }
+  return found;
+}
+
 export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: "", ownerEmail: "" });
+  const [errors, setErrors] = useState<FieldErrors>({});
+  // An object, so a second submit with the same first error still refocuses.
+  const [focusTarget, setFocusTarget] = useState<{ id: Field } | null>(null);
+
+  // Focus waits for the render that ties the message to the field, so a
+  // screen reader reads the message when focus lands.
+  useEffect(() => {
+    if (focusTarget) document.getElementById(focusTarget.id)?.focus();
+  }, [focusTarget]);
+
+  function openDialog(open: boolean) {
+    setDialogOpen(open);
+    setErrors({});
+  }
+
+  function edit(field: Field, patch: Partial<typeof form>) {
+    setForm({ ...form, ...patch });
+    if (field in errors) setErrors({ ...errors, [field]: undefined });
+  }
 
   async function handleCreate() {
     const name = form.name.trim();
     const ownerEmail = form.ownerEmail.trim();
-    if (!name || !ownerEmail) {
-      toast.error("Enter a name and the first admin's email.");
-      return;
-    }
-    if (ownerEmail.length > 254 || !EMAIL.test(ownerEmail)) {
-      toast.error("Enter a valid email address for the first admin.");
+    const found = addOrganizationErrors(name, ownerEmail);
+    setErrors(found);
+    const first = (Object.keys(found) as Field[])[0];
+    if (first) {
+      setFocusTarget({ id: first });
       return;
     }
 
@@ -85,7 +120,7 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
         <Button
           size="lg"
           className="text-lg"
-          onClick={() => setDialogOpen(true)}
+          onClick={() => openDialog(true)}
         >
           <Plus className="mr-1 h-5 w-5" />
           Add organization
@@ -93,11 +128,7 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
       </div>
 
       {initialOrgs.length === 0 ? (
-        <Card>
-          <CardContent className="pt-6 text-center">
-            <p className="text-base text-muted-foreground">No organizations yet.</p>
-          </CardContent>
-        </Card>
+        <EmptyState icon={Building2} message="No organizations yet." />
       ) : (
         <div className="space-y-3">
           {initialOrgs.map((org) => (
@@ -143,7 +174,7 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
         </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={openDialog}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add organization</DialogTitle>
@@ -155,9 +186,11 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
               <Input
                 id="org-name"
                 value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                onChange={(e) => edit("org-name", { name: e.target.value })}
                 placeholder="e.g. Grace Chapel"
+                {...invalidFieldProps("org-name", errors["org-name"])}
               />
+              <FieldError fieldId="org-name" message={errors["org-name"]} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="org-owner-email">First admin&apos;s email</Label>
@@ -165,9 +198,11 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
                 id="org-owner-email"
                 type="email"
                 value={form.ownerEmail}
-                onChange={(e) => setForm({ ...form, ownerEmail: e.target.value })}
+                onChange={(e) => edit("org-owner-email", { ownerEmail: e.target.value })}
                 placeholder="e.g. admin@gracechapel.org"
+                {...invalidFieldProps("org-owner-email", errors["org-owner-email"])}
               />
+              <FieldError fieldId="org-owner-email" message={errors["org-owner-email"]} />
               <p className="text-sm text-muted-foreground">
                 They become its church admin. Send their invite from the
                 organization page once it is added.
@@ -176,7 +211,7 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+            <Button variant="outline" onClick={() => openDialog(false)}>
               Cancel
             </Button>
             <Button

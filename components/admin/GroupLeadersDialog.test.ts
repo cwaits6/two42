@@ -20,6 +20,9 @@ vi.mock("@/components/ui/dialog", () => {
   };
 });
 
+// The failed-load state offers Try again, which reads the app router.
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }));
+
 const { GroupLeadersView } = await import("./GroupLeadersDialog");
 type ViewProps = Parameters<typeof GroupLeadersView>[0];
 
@@ -49,6 +52,7 @@ function render(overrides: Partial<ViewProps> = {}) {
       onQueryChange: () => {},
       onAdd: () => {},
       onRemove: () => {},
+      onRetryLoad: () => {},
       ...overrides,
     }),
   );
@@ -97,6 +101,7 @@ describe("GroupLeadersView", () => {
     expect(render({ roster: null })).toContain("Loading leaders…");
     const failed = render({ roster: null, loadFailed: true });
     expect(failed).toContain("Couldn&#x27;t load this group&#x27;s leaders.");
+    expect(failed).toContain("Try again");
     expect(failed).not.toContain("Loading leaders…");
   });
 });

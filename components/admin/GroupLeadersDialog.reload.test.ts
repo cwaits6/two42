@@ -41,6 +41,8 @@ function stubClient(memberReads: Result[], writes: (Result | Promise<Result>)[] 
 
 let client: ReturnType<typeof stubClient>;
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => client }));
+// The failed-load state offers Try again, which reads the app router.
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }));
 vi.mock("@/components/ui/dialog", () => {
   const passthrough = (tag: string) =>
     function Part({ children }: { children?: ReactNode }) {
@@ -112,6 +114,18 @@ describe("GroupLeadersDialog after a saved write", () => {
     expect(container.textContent).not.toContain("Ada Lovelace");
     expect(container.textContent).toContain("Couldn't load this group's leaders.");
     expect(container.textContent).not.toContain("permission denied");
+  });
+
+  it("loads the leaders again when Try again is chosen after a failed load", async () => {
+    client = stubClient([failed, { data: [{ profile_id: "a", role: "leader" }], error: null }]);
+    await render();
+    expect(container.textContent).toContain("Couldn't load this group's leaders.");
+
+    const retry = [...container.querySelectorAll("button")].find((b) => b.textContent === "Try again");
+    await act(async () => retry?.click());
+
+    expect(container.textContent).toContain("Ada Lovelace");
+    expect(container.textContent).not.toContain("Couldn't load");
   });
 
   it("shows the new leaders when the reload succeeds", async () => {

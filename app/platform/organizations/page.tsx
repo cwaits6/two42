@@ -3,6 +3,7 @@ import { getPlatformAdmin } from "@/lib/platform-access";
 import { createServiceClient } from "@/lib/supabase/server";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ErrorState } from "@/components/states/ErrorState";
 import { OrganizationsList, type PlatformOrg } from "./OrganizationsList";
 import { pageTitle } from "@/lib/pageTitle";
 
@@ -31,9 +32,7 @@ export default async function PlatformOrganizationsPage() {
     return (
       <PageContainer size="wide">
         <PageHeader title="Organizations" />
-        <p className="text-base">
-          Could not load organizations. Try again in a moment.
-        </p>
+        <ErrorState thing="organizations" />
       </PageContainer>
     );
   }

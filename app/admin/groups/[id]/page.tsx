@@ -4,6 +4,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/states/EmptyState";
+import { ErrorState } from "@/components/states/ErrorState";
 import { Users } from "lucide-react";
 import { isUuid } from "@/lib/groups/active";
 import { getGroupMemberships } from "@/lib/groups/server";
@@ -33,7 +34,12 @@ export default async function AdminGroupPage({ params }: { params: Promise<{ id:
   ]);
   if (error) {
     console.error("Failed to load group:", error.code);
-    throw new Error("Failed to load group");
+    return (
+      <PageContainer size="reading">
+        <PageHeader title="Group" backHref="/admin/groups" backLabel="Back to Groups" />
+        <ErrorState thing="this group" />
+      </PageContainer>
+    );
   }
   if (!group) notFound();
 

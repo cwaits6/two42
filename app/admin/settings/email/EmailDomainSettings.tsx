@@ -11,6 +11,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ErrorState } from "@/components/states/ErrorState";
 import { LoadingState } from "@/components/states/LoadingState";
 import type { Tables } from "@/lib/supabase/database.types";
 
@@ -287,14 +288,7 @@ export function EmailDomainSettings() {
       />
 
       {cardState === "load-failed" ? (
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-lg text-muted-foreground">
-              Failed to load your sending domain settings. Refresh to try
-              again.
-            </p>
-          </CardContent>
-        </Card>
+        <ErrorState thing="your sending domain settings" onRetry={load} />
       ) : cardState === "not-enabled" ? (
         <Card>
           <CardHeader>

@@ -3,6 +3,7 @@ import { getPlatformAdmin } from "@/lib/platform-access";
 import { createServiceClient } from "@/lib/supabase/server";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ErrorState } from "@/components/states/ErrorState";
 import { DEFAULT_DAILY_EMAIL_CAP } from "@/lib/email/quota";
 import {
   OrganizationDetail,
@@ -54,9 +55,7 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
     return (
       <PageContainer>
         <PageHeader title="Organization" backHref="/platform/organizations" backLabel="Back to organizations" />
-        <p className="text-base">
-          Could not load this organization. Try again in a moment.
-        </p>
+        <ErrorState thing="this organization" />
       </PageContainer>
     );
   }
@@ -78,9 +77,7 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
     return (
       <PageContainer>
         <PageHeader title={org.name} subtitle={createdLabel(org.created_at)} backHref="/platform/organizations" backLabel="Back to organizations" />
-        <p className="text-base">
-          Could not load the founding-admin request. Try again in a moment.
-        </p>
+        <ErrorState thing="the first admin" />
       </PageContainer>
     );
   }

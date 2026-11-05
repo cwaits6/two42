@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ErrorState } from "@/components/states/ErrorState";
 import { createClient } from "@/lib/supabase/client";
 import { displayName } from "@/lib/names";
 import {
@@ -46,6 +47,7 @@ interface GroupLeadersViewProps {
   onQueryChange: (query: string) => void;
   onAdd: (candidate: Candidate) => void;
   onRemove: (person: LeaderPerson) => void;
+  onRetryLoad: () => void;
 }
 
 /** The dialog's body: current leaders by default, an explicit add mode to name one. */
@@ -61,6 +63,7 @@ export function GroupLeadersView({
   onQueryChange,
   onAdd,
   onRemove,
+  onRetryLoad,
 }: GroupLeadersViewProps) {
   const adding = mode.kind === "add";
   const title = !adding
@@ -100,9 +103,7 @@ export function GroupLeadersView({
       )}
 
       {loadFailed ? (
-        <p role="alert" className="py-4 text-base text-muted-foreground">
-          Couldn&apos;t load this group&apos;s leaders. Close this and open it again.
-        </p>
+        <ErrorState thing="this group's leaders" onRetry={onRetryLoad} className="py-6" />
       ) : !roster ? (
         <p className="py-4 text-base text-muted-foreground">Loading leaders…</p>
       ) : adding ? (
@@ -303,6 +304,16 @@ export function GroupLeadersDialog({
     return loaded !== null;
   }
 
+  /** Repeats a failed read, dropping the result if the dialog has since moved on. */
+  async function retryLoad() {
+    if (!groupId) return;
+    const seq = writeSeq.current;
+    const loaded = await loadLeaderRoster(supabase, groupId);
+    if (writeSeq.current !== seq) return;
+    setRoster(loaded);
+    setLoadFailed(loaded === null);
+  }
+
   function changeMode(next: LeadersMode) {
     setMode(next);
     setQuery("");
@@ -376,6 +387,7 @@ export function GroupLeadersDialog({
             onQueryChange={setQuery}
             onAdd={handleAdd}
             onRemove={handleRemove}
+            onRetryLoad={retryLoad}
           />
         )}
       </DialogContent>
