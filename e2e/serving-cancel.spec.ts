@@ -56,9 +56,17 @@ test.beforeAll(() => runSql(SETUP_SQL));
 test.beforeEach(() => runSql(SIGNUP_SQL));
 test.afterAll(() => runSql(DROP_SQL));
 
-const openDates = (page: Page) => page.getByText("still needs someone");
+const openDates = (page: Page) => page.getByRole("button", { name: /^Sign up for / });
+// Henry and Chloe are each other's spouse on the team, so their own date
+// offers Change, and cancelling is inside it.
+const changeButton = (page: Page) => page.getByRole("button", { name: /^Change / });
 const cancelButton = (page: Page) => page.getByRole("button", { name: /^Cancel signup for / });
 const removeButton = (page: Page) => page.getByRole("button", { name: /^Remove .* from .*\d/ });
+
+async function startCancel(page: Page) {
+  await changeButton(page).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Cancel this date" }).click();
+}
 
 async function expectDateOpensAfter(page: Page, confirmLabel: string) {
   await page.getByRole("dialog").getByRole("button", { name: confirmLabel }).click();
@@ -67,6 +75,7 @@ async function expectDateOpensAfter(page: Page, confirmLabel: string) {
 
   await page.reload();
   await expect(openDates(page)).toHaveCount(WINDOW_WEEKS);
+  await expect(changeButton(page)).toHaveCount(0);
   await expect(cancelButton(page)).toHaveCount(0);
   await expect(removeButton(page)).toHaveCount(0);
 }
@@ -78,7 +87,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 800 
     test("cancels a date they did not sign up for, and it opens up", async ({ page }) => {
       await page.goto(TEAM_PATH);
       await expect(openDates(page)).toHaveCount(WINDOW_WEEKS - 1);
-      await cancelButton(page).click();
+      await startCancel(page);
       await expectDateOpensAfter(page, "Cancel signup");
     });
   });
@@ -89,7 +98,7 @@ test.describe("the person who tapped Sign up", () => {
 
   test("can still cancel the date", async ({ page }) => {
     await page.goto(TEAM_PATH);
-    await cancelButton(page).click();
+    await startCancel(page);
     await expectDateOpensAfter(page, "Cancel signup");
   });
 });
@@ -112,6 +121,7 @@ test.describe("a team member not listed on the date", () => {
   test("sees no way to cancel it, and the API refuses them", async ({ page }) => {
     await page.goto(TEAM_PATH);
     await expect(openDates(page)).toHaveCount(WINDOW_WEEKS - 1);
+    await expect(changeButton(page)).toHaveCount(0);
     await expect(cancelButton(page)).toHaveCount(0);
     await expect(removeButton(page)).toHaveCount(0);
 

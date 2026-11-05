@@ -69,7 +69,9 @@ test.describe("a team lead who does not lead the group", () => {
     await expect(adding.getByText(MEMBER)).toHaveCount(0);
     await expect(adding.getByText(LEAD.name)).toHaveCount(0);
 
+    // Zoe's spouse is in the group and not on the team, so the lead is asked about both.
     await adding.getByRole("button", { name: `Add ${GROUP_B_ONLY} to ${TEAM_NAME}` }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Just Zoe" }).click();
     await expect(page.getByText(`Added ${GROUP_B_ONLY} to ${TEAM_NAME}.`)).toBeVisible();
     await expect(adding.getByText(GROUP_B_ONLY)).toHaveCount(0);
 
