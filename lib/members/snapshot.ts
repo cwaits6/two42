@@ -156,6 +156,9 @@ export async function loadOrgSnapshot(
   if (groups.error) throw new Error("Failed to load teams");
   if (profileGroups.error) throw new Error("Failed to load team_members");
   if (requests.error) throw new Error("Failed to load access_requests");
+  // The two reads are separate, so a person added between them has no entry. Treating that as
+  // no address would drop it from an export and leave its login row unmatched on import.
+  if ((profiles.data ?? []).some((p) => !emails.has(p.id))) throw new Error("Failed to load member emails");
 
   return {
     profiles: (profiles.data ?? []).map((p) => ({

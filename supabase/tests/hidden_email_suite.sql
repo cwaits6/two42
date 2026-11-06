@@ -438,6 +438,11 @@ from (values
   ('admin@local.dev', 'a church admin who leads neither the team nor its group'),
   ('owner@hidden-other.example.test', 'another church''s admin')
 ) caller(email, who);
+update public.profiles set email = '' where email = 'leo.loremsworth@example.test';
+select is(
+  pg_temp.val('isaac.seedly@example.test',
+    $q$select public.serving_team_email_count('bbbb0000-0000-0000-0000-0000000000e1')$q$),
+  '2', 'an empty address counts as no address, as the send skips it');
 select is(
   pg_temp.attempt(null,
     $q$select public.serving_team_email_count('bbbb0000-0000-0000-0000-0000000000e1')$q$),

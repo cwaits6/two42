@@ -50,13 +50,14 @@ describe("POST /api/admin/members/import", () => {
     expect((await res.json()).summary).toMatchObject({ rows: 1, create: 0, error: 0, noChange: 1 });
   });
 
-  it("does not match that person when the read returns no address for them", async () => {
+  it("answers 500 when the address read has no row for someone on the roster", async () => {
     const csv = await exportedCsv();
     asAdmin(fakeRosterClient({ tables: HIDDEN_ROSTER, addresses: { data: [], error: null } }).client);
 
     const res = await upload(csv, "validate");
 
-    expect((await res.json()).summary.noChange).toBe(0);
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "Failed to load member data" });
   });
 
   it("answers 500 and writes nothing when the addresses can't be read", async () => {

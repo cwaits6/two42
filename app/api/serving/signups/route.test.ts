@@ -268,7 +268,7 @@ describe("PATCH /api/serving/signups", () => {
       }),
     );
 
-  it("mails only the spouse just added, naming both people on the date", async () => {
+  it("mails only the spouse just added and reads only their address, naming both people on the date", async () => {
     sendSignupConfirmation.mockReset();
     createClient.mockResolvedValue(changeClient());
     const filters: [string, unknown][] = [];
@@ -279,7 +279,7 @@ describe("PATCH /api/serving/signups", () => {
     expect(res.status).toBe(200);
     expect(filters).toEqual([
       ["org_id", "org-1"],
-      ["id", ["david", "lena"]],
+      ["id", ["lena"]],
     ]);
     expect(sendSignupConfirmation).toHaveBeenCalledTimes(1);
     expect(sendSignupConfirmation.mock.calls[0][1]).toMatchObject({

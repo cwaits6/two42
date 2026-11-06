@@ -64,11 +64,27 @@ describe("loadOrgSnapshot", () => {
     const { client } = fakeClient({
       data: { profiles: [{ id: "p1", role: "member" }, { id: "p2", role: "member" }] },
     });
-    const snapshot = await loadOrgSnapshot(client, "org-7", new Map([["p1", "ada@example.org"]]));
+    const snapshot = await loadOrgSnapshot(
+      client,
+      "org-7",
+      new Map([
+        ["p1", "ada@example.org"],
+        ["p2", null],
+      ])
+    );
     expect(snapshot.profiles.map((p) => [p.id, p.email])).toEqual([
       ["p1", "ada@example.org"],
       ["p2", null],
     ]);
+  });
+
+  it("throws when the map has no entry for someone on the roster", async () => {
+    const { client } = fakeClient({
+      data: { profiles: [{ id: "p1", role: "member" }, { id: "p2", role: "member" }] },
+    });
+    await expect(
+      loadOrgSnapshot(client, "org-7", new Map([["p1", "ada@example.org"]]))
+    ).rejects.toThrow(/^Failed to load member emails$/);
   });
 
   it("filters every one of the six selects on org_id", async () => {

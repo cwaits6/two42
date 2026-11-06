@@ -65,7 +65,7 @@ as $$
     join public.profiles p on p.id = tm.profile_id and p.org_id = tm.org_id
     where tm.team_id = t.id
       and tm.org_id = t.org_id
-      and p.email is not null
+      and p.email <> ''
       and p.role <> 'pending'
       and p.email_announcements
   )

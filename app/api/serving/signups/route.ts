@@ -289,7 +289,10 @@ export async function PATCH(request: Request) {
     .select("id, first_name, last_name, preferred_name")
     .in("id", attendeeIds);
   if (team) {
-    const attendees = await withAddresses((people ?? []) as NamedProfile[], signup.org_id);
+    const named = (people ?? []) as NamedProfile[];
+    const added = await withAddresses(named.filter((p) => !before.has(p.id)), signup.org_id);
+    const addressById = new Map(added.map((a) => [a.id, a.email]));
+    const attendees = named.map((p) => ({ ...p, email: addressById.get(p.id) ?? null }));
     await sendBookingConfirmations(supabase, {
       orgId: signup.org_id,
       groupId: team.group_id,
