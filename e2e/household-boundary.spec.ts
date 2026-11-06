@@ -10,11 +10,13 @@ test.describe("a member of one group", () => {
 
   test("lists only the households that share a group", async ({ page }) => {
     await page.goto("/directory/families");
+    // The frame names the signed-in person, so households are looked up in the page itself.
+    const households = page.getByRole("main");
     for (const shared of ["Dummyfield", "Fixtureton", "Loremsworth", "Mockingham", "Seedly"]) {
-      await expect(page.getByRole("button", { name: shared })).toBeVisible();
+      await expect(households.getByRole("button", { name: shared })).toBeVisible();
     }
     for (const other of ["Sampleton", "Testwell", "Demoski", "Stubbins", "Nullington"]) {
-      await expect(page.getByRole("button", { name: other })).toHaveCount(0);
+      await expect(households.getByRole("button", { name: other })).toHaveCount(0);
     }
   });
 

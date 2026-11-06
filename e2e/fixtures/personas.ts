@@ -25,6 +25,8 @@ export const PERSONAS = {
   householdPrimary: { email: "henry.mockingham@example.test", name: "Henry Mockingham" },
   /** Member of Group A and Group B; the household's spouse, married to `householdPrimary`. */
   spouse: { email: "chloe.mockingham@example.test", name: "Chloe Mockingham" },
+  /** Operator; belongs to no church and has no profile, so the frame shows their sign-in address. */
+  operator: { email: "platform@local.dev", name: "platform@local.dev" },
 } as const;
 
 export type PersonaKey = keyof typeof PERSONAS;

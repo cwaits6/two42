@@ -2,28 +2,61 @@ import { expect, test } from "./fixtures/auth";
 import { GROUP_B, type PersonaKey } from "./fixtures/personas";
 
 const PHONE = { width: 390, height: 844 };
+const DESKTOP = { width: 1280, height: 800 };
 
-// The page a persona's header is checked on: inside a group for everyone who
-// has one, and the admin area for the church admin.
-const CASES: { persona: PersonaKey; path: string; nav: string }[] = [
-  { persona: "oneGroup", path: "/dashboard", nav: "Main navigation" },
-  { persona: "twoGroups", path: `/g/${GROUP_B}/dashboard`, nav: "Main navigation" },
-  { persona: "admin", path: "/admin", nav: "Admin navigation" },
+const OWN = ["My profile", "Settings"];
+const INFO = ["Help", "Privacy", "Terms", "Sign out"];
+const ACCOUNT = { name: /^Account menu\. Signed in as \S/ };
+
+const GROUP_PAGES = ["Home", "Calendar", "Announcements", "Prayer", "Lessons", "Directory", "Give", "About"];
+
+// The page a persona's frame is checked on, the page list they get there, and
+// every row of their account menu in order. Group settings is offered to the
+// leader alone, Church admin to the church admin alone and Platform to the
+// operator alone. The church admin and Platform page lists belong to those
+// areas' own specs, so only their landmark is checked here.
+const CASES: { persona: PersonaKey; path: string; nav: string; pages?: string[]; rows: string[] }[] = [
+  {
+    persona: "oneGroup",
+    path: "/dashboard",
+    nav: "Main navigation",
+    pages: [...GROUP_PAGES, "Find a group"],
+    rows: [...OWN, ...INFO],
+  },
+  {
+    persona: "twoGroups",
+    path: `/g/${GROUP_B}/dashboard`,
+    nav: "Main navigation",
+    pages: GROUP_PAGES,
+    rows: [...OWN, ...INFO],
+  },
+  {
+    persona: "leadsB",
+    path: `/g/${GROUP_B}/dashboard`,
+    nav: "Main navigation",
+    pages: [...GROUP_PAGES, "Group settings", "Find a group"],
+    rows: [...OWN, ...INFO],
+  },
+  { persona: "admin", path: "/admin", nav: "Admin navigation", rows: [...OWN, "Church admin", ...INFO] },
+  { persona: "operator", path: "/platform", nav: "Platform navigation", rows: ["Platform", ...INFO] },
 ];
 
-for (const { persona, path, nav } of CASES) {
-  test.describe(`signed in as ${persona}`, () => {
+for (const { persona, path, nav, pages, rows } of CASES) {
+  test.describe(`the frame for ${persona}, on a phone`, () => {
     test.use({ persona, viewport: PHONE });
 
-    test("the sign-in forms send them to Home", async ({ page }) => {
-      for (const route of ["/login", "/forgot-password"]) {
-        await page.goto(route);
-        expect(new URL(page.url()).pathname, route).toBe("/dashboard");
-        await expect(page.getByLabel("Password")).toHaveCount(0);
-      }
-    });
+    // Where an operator lands after signing in is not the frame's to decide.
+    if (persona !== "operator") {
+      test("the sign-in forms send them to Home", async ({ page }) => {
+        for (const route of ["/login", "/forgot-password"]) {
+          await page.goto(route);
+          expect(new URL(page.url()).pathname, route).toBe("/dashboard");
+          await expect(page.getByLabel("Password")).toHaveCount(0);
+        }
+      });
+    }
 
-    test("the header holds the wordmark and the menu, and nothing else", async ({ page }) => {
+    test("the bar holds the wordmark and one Menu button; the menu holds their pages and their account", async ({ page }) => {
       await page.goto(path);
       const header = page.getByRole("banner");
       await expect(header.getByRole("link", { name: "two42" })).toBeVisible();
@@ -32,16 +65,36 @@ for (const { persona, path, nav } of CASES) {
 
       await header.getByRole("button", { name: "Menu" }).click();
       const menu = page.getByRole("dialog", { name: "Menu" });
+      await expect(menu.getByRole("navigation")).toHaveCount(1);
       await expect(menu.getByRole("navigation", { name: nav })).toBeVisible();
-      for (const name of ["Privacy", "Terms", "Help"]) {
-        await expect(menu.getByRole("link", { name, exact: true })).toBeVisible();
-      }
-      await expect(menu.getByRole("button", { name: "Sign out" })).toHaveCount(1);
+      if (pages) await expect(menu.getByRole("navigation").getByRole("link")).toHaveText(pages);
+
+      await menu.getByRole("button", ACCOUNT).click();
+      await expect(page.getByRole("menuitem")).toHaveText(rows);
+    });
+  });
+
+  test.describe(`the frame for ${persona}, on a computer`, () => {
+    test.use({ persona, viewport: DESKTOP });
+
+    test("there is no Menu button; their pages and their account are on the page", async ({ page }) => {
+      await page.goto(path);
+      await expect(page.getByRole("button", { name: "Menu", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("contentinfo")).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "two42" })).toBeVisible();
+      // The frame's own menu. A page may hold a navigation landmark of its own inside main.
+      const frameNav = page.getByRole("navigation").and(page.locator(":not(main *)"));
+      await expect(frameNav).toHaveCount(1);
+      await expect(page.getByRole("navigation", { name: nav })).toBeVisible();
+      if (pages) await expect(frameNav.getByRole("link")).toHaveText(pages);
+
+      await page.getByRole("button", ACCOUNT).click();
+      await expect(page.getByRole("menuitem")).toHaveText(rows);
     });
   });
 }
 
-test.describe("a member of two groups", () => {
+test.describe("a member of two groups, on a phone", () => {
   test.use({ persona: "twoGroups", viewport: PHONE });
 
   test("switches group from inside the menu", async ({ page }) => {
@@ -55,6 +108,59 @@ test.describe("a member of two groups", () => {
     await expect(page.getByRole("menuitem").filter({ hasText: "Group C" })).toHaveCount(1);
   });
 });
+
+test.describe("a member of two groups, on a computer", () => {
+  test.use({ persona: "twoGroups", viewport: DESKTOP });
+
+  test("has one Home inside a group, and reaches all groups from the switcher and the wordmark", async ({ page }) => {
+    await page.goto(`/g/${GROUP_B}/dashboard`);
+    const nav = page.getByRole("navigation", { name: "Main navigation" });
+    const home = nav.getByRole("link", { name: "Home", exact: true });
+    await expect(home).toHaveCount(1);
+    await expect(home).toHaveAttribute("href", `/g/${GROUP_B}/dashboard`);
+    await expect(page.getByRole("link", { name: "two42" })).toHaveAttribute("href", "/dashboard");
+
+    await nav.getByRole("button", { name: "Switch group. Current group: Group B" }).click();
+    const first = page.getByRole("menuitem").first();
+    await expect(first).toHaveText("All groups");
+    await first.click();
+    await page.waitForURL("/dashboard");
+
+    await expect(nav.getByRole("link", { name: "Home", exact: true })).toHaveCount(1);
+    await expect(nav.getByRole("button", { name: "Switch group. Showing all groups" })).toBeVisible();
+  });
+});
+
+// The sign-out request is answered here, so the session the persona's cached
+// sign-in depends on is never revoked on the server.
+for (const { outcome, status } of [
+  { outcome: "the server ends the session", status: 204 },
+  { outcome: "the server cannot be told", status: 500 },
+]) {
+  test.describe(`an operator who signs out when ${outcome}`, () => {
+    test.use({ persona: "operator", viewport: DESKTOP });
+
+    test("is signed out on this device and told the truth about the others", async ({ page }) => {
+      let requests = 0;
+      await page.route("**/auth/v1/logout**", (route) => {
+        requests += 1;
+        return route.fulfill({ status, contentType: "application/json", body: "{}" });
+      });
+
+      await page.goto("/platform");
+      await page.getByRole("button", ACCOUNT).click();
+      await page.getByRole("menuitem", { name: "Sign out" }).click();
+
+      await page.waitForURL("/");
+      await expect(page.getByRole("banner").getByRole("button", { name: "Sign in" })).toBeVisible();
+      await expect(page.getByRole("button", ACCOUNT)).toHaveCount(0);
+      await expect(page.getByText("Couldn't sign out everywhere. Other devices may still be signed in.")).toHaveCount(
+        status === 204 ? 0 : 1
+      );
+      expect(requests).toBe(1);
+    });
+  });
+}
 
 test("a signed-out visitor keeps the sign-in form and the footer", async ({ page }) => {
   await page.goto("/login");

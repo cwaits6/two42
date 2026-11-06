@@ -1,26 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { failureMessage } from "@/lib/errorCopy";
-import { createClient } from "@/lib/supabase/client";
+import { signOutHere } from "@/lib/signOut";
 
 export function SignOutButton() {
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
   const [busy, setBusy] = useState(false);
 
   async function signOut() {
     setBusy(true);
-    const { error } = await supabase.auth.signOut();
+    const outcome = await signOutHere();
     setBusy(false);
-    if (error) {
-      toast.error(failureMessage("sign you out", error.status));
-      return;
-    }
-    router.refresh();
+    if (outcome.message) toast.error(outcome.message);
+    if (outcome.signedOut) router.refresh();
   }
 
   return (

@@ -2,24 +2,25 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { siteConfig } from "@/lib/config";
 import { usePathname } from "next/navigation";
-import type { Profile } from "@/lib/types";
-import { isMemberRole } from "@/lib/roles";
-import { AccountMenu } from "./AccountMenu";
+import { Menu } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import type { Account } from "./account";
+import { AccountBlock } from "./AccountBlock";
+import { FrameNav } from "./FrameNav";
+import { useSidebar } from "./SidebarContext";
+import { Wordmark } from "./Wordmark";
 
-interface HeaderProps {
-  signedIn: boolean;
-  profile: Profile | null;
-  hasServingAccess: boolean;
-  isPlatformAdmin?: boolean;
-  orgName: string;
-}
-
-/** The same header for everyone signed in: the wordmark, then the menu. */
-export function Header({ signedIn, profile, hasServingAccess, isPlatformAdmin = false, orgName }: HeaderProps) {
+/**
+ * The top bar. Signed out it offers Sign in at every width. Signed in it is
+ * the phone frame only: the wordmark and one Menu button, with the sidebar
+ * taking over from md up.
+ */
+export function Header() {
+  const { account } = useSidebar();
   const [scrolled, setScrolled] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
@@ -28,36 +29,22 @@ export function Header({ signedIn, profile, hasServingAccess, isPlatformAdmin = 
     return () => window.removeEventListener("scroll", handler);
   }, []);
 
-  const isMember = !!profile && isMemberRole(profile.role);
-
   return (
     <header
-      className={`sticky top-0 z-50 w-full border-b border-border transition-all duration-300 ${
-        scrolled ? "bg-background/95 backdrop-blur shadow-sm" : "bg-background"
-      }`}
+      // The bar rises above the overlay layer (z-50) only while its own drawer
+      // is open, so it never covers another sheet or dialog.
+      className={`sticky top-0 w-full border-b border-border transition-all duration-300 ${
+        drawerOpen ? "z-[60]" : "z-50"
+      } ${account ? "md:hidden" : ""} ${scrolled ? "bg-background/95 backdrop-blur shadow-sm" : "bg-background"}`}
     >
       {/* Top accent bar */}
       <div className="h-1 w-full bg-gradient-to-r from-brand-primary-light via-brand-primary to-brand-accent" />
 
       <div className="flex h-16 w-full items-center justify-between px-4">
-        <Link href={isMember ? "/dashboard" : "/"} className="flex items-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/brand/two42-wordmark.svg"
-            alt={siteConfig.name}
-            width={108}
-            height={28}
-            className="h-7 w-auto"
-          />
-        </Link>
+        <Wordmark href={account ? "/dashboard" : "/"} />
 
-        {signedIn ? (
-          <AccountMenu
-            profile={profile}
-            hasServingAccess={hasServingAccess}
-            isPlatformAdmin={isPlatformAdmin}
-            orgName={orgName}
-          />
+        {account ? (
+          <MenuDrawer account={account} open={drawerOpen} onOpenChange={setDrawerOpen} />
         ) : (
           pathname !== "/login" && (
             <Button
@@ -72,5 +59,45 @@ export function Header({ signedIn, profile, hasServingAccess, isPlatformAdmin = 
         )}
       </div>
     </header>
+  );
+}
+
+function MenuDrawer({
+  account,
+  open,
+  onOpenChange,
+}: {
+  account: Account;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const pathname = usePathname();
+  const close = () => onOpenChange(false);
+
+  // Safety net: close the drawer whenever the route changes.
+  useEffect(() => {
+    onOpenChange(false);
+  }, [pathname, onOpenChange]);
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetTrigger
+        render={<Button variant="ghost" size="lg" aria-expanded={open} className="gap-2 text-foreground" />}
+      >
+        <Menu className="h-6 w-6" aria-hidden="true" />
+        Menu
+      </SheetTrigger>
+      {/* The bar covers the drawer's top edge, so the built-in close button would sit under it. */}
+      <SheetContent side="right" showCloseButton={false} className="w-[300px] gap-0 pt-[4.25rem]">
+        <SheetTitle className="sr-only">Menu</SheetTitle>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <FrameNav account={account} onNavigate={close} />
+        </div>
+        <div className="border-t border-border p-2">
+          <AccountBlock account={account} onNavigate={close} />
+        </div>
+        <SheetClose className="sr-only">Close menu</SheetClose>
+      </SheetContent>
+    </Sheet>
   );
 }

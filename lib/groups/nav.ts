@@ -1,18 +1,16 @@
-// The sidebar as data. Every frame surface (desktop pane, collapsed rail,
-// phone drawer) renders the model built here, so a state cannot drift
-// between them, and every state the frame can be in is a row in nav.test.ts.
+// The page list as data. The desktop sidebar and the phone drawer render the
+// list built here, so a state cannot drift between them, and every state the
+// list can be in is a row in nav.test.ts.
 
 import {
   GROUP_PREFIX,
   groupInitials,
-  groupPath,
   swapGroupInPath,
   type ActiveGroup,
 } from "@/lib/groups/active";
 
 export type IconName =
   | "home"
-  | "dashboard"
   | "calendar"
   | "directory"
   | "announcements"
@@ -22,10 +20,7 @@ export type IconName =
   | "prayer"
   | "give"
   | "group-settings"
-  | "find-a-group"
-  | "profile"
-  | "settings"
-  | "admin";
+  | "find-a-group";
 
 export type SidebarLink = {
   kind: "link";
@@ -33,6 +28,8 @@ export type SidebarLink = {
   label: string;
   icon: IconName;
   exact?: boolean;
+  /** Set apart from the pages: smaller and muted. */
+  quiet?: true;
 };
 
 export type SwitcherRow = {
@@ -43,37 +40,36 @@ export type SwitcherRow = {
 
 export type SidebarItem =
   | SidebarLink
-  | {
+  | ({
       kind: "groupBlock";
-      mode: "static" | "switcher";
-      group: ActiveGroup;
       orgName: string;
       initials: string;
+      /** The page listing all of the person's groups: the switcher's first row. */
+      allGroupsHref: "/dashboard";
       rows: SwitcherRow[];
       findAGroupFooter: boolean;
-    }
-  | { kind: "yourGroups"; rows: { group: ActiveGroup; href: string }[] }
+    } & (
+      | { mode: "static"; group: ActiveGroup }
+      /** Null at the church level, where the switcher reads "All groups". */
+      | { mode: "switcher"; group: ActiveGroup | null }
+    ))
+  /** Spacing between clusters of pages. */
+  | { kind: "gap" }
+  /** A rule. */
   | { kind: "separator" };
 
 export type SidebarInput = {
   memberships: ActiveGroup[];
-  /** Inside-a-group semantics (useActiveGroup): null at the org level. */
+  /** Inside-a-group semantics (useActiveGroup): null at the church level. */
   activeGroup: ActiveGroup | null;
   discoveryOn: boolean;
   /** The viewer leads the active group. */
   isLeader: boolean;
-  isOrgAdmin: boolean;
   hasServingAccess: boolean;
-  collapsed: boolean;
-  phone: boolean;
   orgName: string;
 };
 
-export type SidebarModel = {
-  items: SidebarItem[];
-  showCollapseControl: boolean;
-  collapsed: boolean;
-};
+const GAP: SidebarItem = { kind: "gap" };
 
 const HOME: SidebarLink = { kind: "link", href: "/dashboard", label: "Home", icon: "home", exact: true };
 const FIND_A_GROUP: SidebarLink = {
@@ -81,106 +77,102 @@ const FIND_A_GROUP: SidebarLink = {
   href: "/find-a-group",
   label: "Find a group",
   icon: "find-a-group",
+  quiet: true,
 };
 
-// One entry: the directory page's own tabs are its navigation.
-function directoryItem(base: string): SidebarLink {
-  return { kind: "link", href: `${base}/directory`, label: "Directory", icon: "directory" };
-}
-
-function groupPages(group: ActiveGroup, input: SidebarInput): SidebarItem[] {
-  const link = (path: string, label: string, icon: IconName): SidebarLink => ({
+/**
+ * A group's pages in their three clusters. `churchBase` is where Home,
+ * Calendar and Directory live: the group's own prefix for a member of two or
+ * more groups, and the unprefixed addresses for a member of one.
+ */
+function groupPages(group: ActiveGroup, churchBase: string, input: SidebarInput): SidebarItem[] {
+  const groupBase = `${GROUP_PREFIX}/${group.id}`;
+  const link = (base: string, path: string, label: string, icon: IconName): SidebarLink => ({
     kind: "link",
-    href: groupPath(group.id, path),
+    href: `${base}${path}`,
     label,
     icon,
   });
+  const home: SidebarLink = churchBase ? link(churchBase, "/dashboard", "Home", "home") : HOME;
   const items: SidebarItem[] = [
-    link("/announcements", "Announcements", "announcements"),
-    link("/lectures", "Lessons", "lectures"),
-    link("/about", "About", "about"),
+    home,
+    link(churchBase, "/calendar", "Calendar", "calendar"),
+    link(groupBase, "/announcements", "Announcements", "announcements"),
+    GAP,
+    link(groupBase, "/prayer", "Prayer", "prayer"),
+    link(groupBase, "/lectures", "Lessons", "lectures"),
   ];
-  if (input.hasServingAccess) items.push(link("/serving", "Serving", "serving"));
-  items.push(link("/prayer", "Prayer", "prayer"), link("/give", "Give", "give"));
-  if (input.isLeader) items.push(link("/settings", "Group settings", "group-settings"));
+  if (input.hasServingAccess) items.push(link(groupBase, "/serving", "Serving", "serving"));
+  items.push(
+    GAP,
+    // One entry: the directory page's own tabs are its navigation.
+    link(churchBase, "/directory", "Directory", "directory"),
+    link(groupBase, "/give", "Give", "give"),
+    link(groupBase, "/about", "About", "about")
+  );
+  if (input.isLeader) {
+    items.push({ kind: "separator" }, link(groupBase, "/settings", "Group settings", "group-settings"));
+  }
   return items;
 }
 
-function groupBlock(
-  mode: "static" | "switcher",
-  group: ActiveGroup,
-  input: SidebarInput
-): SidebarItem {
-  const rows: SwitcherRow[] =
-    mode === "switcher"
-      ? input.memberships.map((m) => ({
-          group: m,
-          current: m.id === group.id,
-          href: (pathname: string) => swapGroupInPath(pathname, m),
-        }))
-      : [];
+function staticBlock(group: ActiveGroup, input: SidebarInput): SidebarItem {
   return {
     kind: "groupBlock",
-    mode,
+    mode: "static",
     group,
     orgName: input.orgName,
     initials: groupInitials(group.name),
-    rows,
-    findAGroupFooter: mode === "switcher" && input.discoveryOn,
+    allGroupsHref: "/dashboard",
+    rows: [],
+    findAGroupFooter: false,
   };
 }
 
-export function buildSidebar(input: SidebarInput): SidebarModel {
+function switcherBlock(group: ActiveGroup | null, input: SidebarInput): SidebarItem {
+  return {
+    kind: "groupBlock",
+    mode: "switcher",
+    group,
+    orgName: input.orgName,
+    initials: group ? groupInitials(group.name) : "",
+    allGroupsHref: "/dashboard",
+    rows: input.memberships.map((m) => ({
+      group: m,
+      current: m.id === group?.id,
+      href: (pathname: string) => swapGroupInPath(pathname, m),
+    })),
+    findAGroupFooter: input.discoveryOn,
+  };
+}
+
+export function buildSidebar(input: SidebarInput): SidebarItem[] {
   const { memberships, activeGroup, discoveryOn } = input;
-  const items: SidebarItem[] = [HOME];
 
   if (memberships.length === 0) {
-    if (discoveryOn) items.push(FIND_A_GROUP);
-  } else if (memberships.length === 1) {
+    return discoveryOn ? [HOME, GAP, FIND_A_GROUP] : [HOME];
+  }
+
+  if (memberships.length === 1) {
     const group = memberships[0];
-    if (discoveryOn) items.push(groupBlock("static", group, input), FIND_A_GROUP);
-    items.push(
-      { kind: "link", href: "/calendar", label: "Calendar", icon: "calendar" },
-      directoryItem(""),
-      ...groupPages(group, input)
-    );
-  } else if (!activeGroup) {
-    items.push(
-      { kind: "link", href: "/calendar", label: "Calendar", icon: "calendar" },
-      directoryItem(""),
-      {
-        kind: "yourGroups",
-        rows: memberships.map((group) => ({ group, href: groupPath(group.id, "/dashboard") })),
-      }
-    );
-    if (discoveryOn) items.push(FIND_A_GROUP);
-  } else {
-    const base = `${GROUP_PREFIX}/${activeGroup.id}`;
-    items.push(
-      groupBlock("switcher", activeGroup, input),
-      { kind: "link", href: `${base}/dashboard`, label: "Home", icon: "dashboard" },
-      { kind: "link", href: `${base}/calendar`, label: "Calendar", icon: "calendar" },
-      directoryItem(base),
-      ...groupPages(activeGroup, input)
-    );
+    const items = [staticBlock(group, input), ...groupPages(group, "", input)];
+    // A static block has no menu to hold it.
+    if (discoveryOn) items.push(GAP, FIND_A_GROUP);
+    return items;
   }
 
-  items.push(
-    { kind: "separator" },
-    { kind: "link", href: "/profile", label: "My Profile", icon: "profile" },
-    { kind: "link", href: "/settings", label: "Settings", icon: "settings" }
-  );
-
-  if (input.isOrgAdmin) {
-    items.push(
-      { kind: "separator" },
-      { kind: "link", href: "/admin", label: "Admin", icon: "admin" }
-    );
+  if (!activeGroup) {
+    return [
+      switcherBlock(null, input),
+      HOME,
+      { kind: "link", href: "/calendar", label: "Calendar", icon: "calendar" },
+      GAP,
+      { kind: "link", href: "/directory", label: "Directory", icon: "directory" },
+    ];
   }
 
-  return {
-    items,
-    showCollapseControl: !input.phone,
-    collapsed: input.collapsed,
-  };
+  return [
+    switcherBlock(activeGroup, input),
+    ...groupPages(activeGroup, `${GROUP_PREFIX}/${activeGroup.id}`, input),
+  ];
 }

@@ -46,11 +46,12 @@ export function areaFor(pathname: string): AreaKey | null {
 /** An area's destinations, led by the way back to Home. */
 export function AreaNav({
   area,
-  className,
+  collapsed = false,
   onNavigate,
 }: {
   area: AreaKey;
-  className?: string;
+  /** The collapsed sidebar: icons alone, each still named for a screen reader. */
+  collapsed?: boolean;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
@@ -58,19 +59,20 @@ export function AreaNav({
     exact ? pathname === href : pathname === href || pathname.startsWith(href + "/");
 
   return (
-    <nav aria-label={AREAS[area].label} className={`flex-col space-y-1 ${className ?? "flex"}`}>
+    <nav aria-label={AREAS[area].label} className="flex flex-col space-y-1">
       <Link
         href="/dashboard"
         onClick={onNavigate}
+        title={collapsed ? "Back to Home" : undefined}
         className="inline-flex min-h-11 items-center gap-2 px-3 text-base font-semibold text-brand-primary-text underline underline-offset-4 hover:text-foreground"
       >
-        <ArrowLeft className="h-5 w-5" aria-hidden="true" />
-        Back to Home
+        <ArrowLeft className="h-5 w-5 shrink-0" aria-hidden="true" />
+        <span className={collapsed ? "sr-only" : undefined}>Back to Home</span>
       </Link>
       <div className="border-t border-border my-2" role="separator" />
       {AREAS[area].sections.map((section, i) => (
         <Fragment key={section.label ?? i}>
-          {section.label && (
+          {section.label && !collapsed && (
             <p className="px-3 pt-4 pb-1 text-sm font-semibold uppercase text-muted-foreground tracking-wider">
               {section.label}
             </p>
@@ -83,6 +85,7 @@ export function AreaNav({
                 href={item.href}
                 onClick={onNavigate}
                 aria-current={active ? "page" : undefined}
+                title={collapsed ? item.label : undefined}
                 className={`flex min-h-11 items-center gap-3 px-3 py-2.5 rounded-lg text-base border-l-4 transition-colors ${
                   active
                     ? "bg-brand-warm text-brand-primary-text font-bold border-brand-primary"
@@ -90,22 +93,12 @@ export function AreaNav({
                 }`}
               >
                 <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-                <span>{item.label}</span>
+                <span className={collapsed ? "sr-only" : undefined}>{item.label}</span>
               </Link>
             );
           })}
         </Fragment>
       ))}
     </nav>
-  );
-}
-
-/** The area's persistent rail on desktop; on phone the same nav lives in the header menu. */
-export function AreaSidebar({ area }: { area: AreaKey }) {
-  return (
-    <AreaNav
-      area={area}
-      className="hidden w-60 shrink-0 overflow-y-auto border-r border-border bg-card px-2 py-4 md:flex"
-    />
   );
 }

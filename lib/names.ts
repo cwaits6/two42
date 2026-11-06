@@ -4,11 +4,13 @@
  * should go through these helpers so formatting stays consistent.
  */
 
-interface NameParts {
+export interface NameParts {
   first_name: string | null;
   last_name: string | null;
   preferred_name?: string | null;
 }
+
+const UNNAMED = "(unnamed)";
 
 /**
  * Display name for a member. Uses preferred_name instead of first_name if
@@ -16,11 +18,16 @@ interface NameParts {
  * "(unnamed)" if nothing is set.
  */
 export function displayName(p: NameParts | null | undefined): string {
-  if (!p) return "(unnamed)";
+  if (!p) return UNNAMED;
   const first = p.preferred_name?.trim() || p.first_name?.trim() || "";
   const last = p.last_name?.trim() || "";
   const name = [first, last].filter(Boolean).join(" ");
-  return name || "(unnamed)";
+  return name || UNNAMED;
+}
+
+/** Whether displayName() has a name to show rather than its fallback. */
+export function hasName(p: NameParts | null | undefined): boolean {
+  return displayName(p) !== UNNAMED;
 }
 
 /**

@@ -14,10 +14,7 @@ const base: SidebarInput = {
   activeGroup: null,
   discoveryOn: false,
   isLeader: false,
-  isOrgAdmin: false,
-  hasServingAccess: true,
-  collapsed: false,
-  phone: false,
+  hasServingAccess: false,
   orgName: "Grace Church",
 };
 
@@ -30,205 +27,177 @@ function outline(items: SidebarItem[]): string[] {
   return items.map((item) => {
     switch (item.kind) {
       case "link":
-        return `${item.label} ${item.href}`;
+        return `${item.label} ${item.href}${item.quiet ? " (quiet)" : ""}`;
       case "groupBlock":
         return `[groupBlock:${item.mode}]`;
-      case "yourGroups":
-        return `[yourGroups:${item.rows.length}]`;
+      case "gap":
+        return "[gap]";
       case "separator":
         return "[separator]";
     }
   });
 }
 
-const ACCOUNT = ["[separator]", "My Profile /profile", "Settings /settings"];
-const ADMIN = ["[separator]", "Admin /admin"];
+function block(items: SidebarItem[]) {
+  const found = items.find((i) => i.kind === "groupBlock");
+  if (found?.kind !== "groupBlock") throw new Error("expected a group block");
+  return found;
+}
 
-describe("buildSidebar — no group", () => {
-  it("shows Home and Account only with discovery off", () => {
-    const model = buildSidebar(input({}));
-    expect(outline(model.items)).toEqual(["Home /dashboard", ...ACCOUNT]);
+const FIND = "Find a group /find-a-group (quiet)";
+
+/** A group's pages, given where its Home, Calendar and Directory live. */
+function pages(id: string, churchBase: string, opts: { serving: boolean; leader: boolean }): string[] {
+  return [
+    `Home ${churchBase}/dashboard`,
+    `Calendar ${churchBase}/calendar`,
+    `Announcements /g/${id}/announcements`,
+    "[gap]",
+    `Prayer /g/${id}/prayer`,
+    `Lessons /g/${id}/lectures`,
+    ...(opts.serving ? [`Serving /g/${id}/serving`] : []),
+    "[gap]",
+    `Directory ${churchBase}/directory`,
+    `Give /g/${id}/give`,
+    `About /g/${id}/about`,
+    ...(opts.leader ? ["[separator]", `Group settings /g/${id}/settings`] : []),
+  ];
+}
+
+const FLAGS = [false, true].flatMap((leader) =>
+  [false, true].flatMap((serving) =>
+    [false, true].map((finding) => ({ leader, serving, finding }))
+  )
+);
+const flagTitle = "leader $leader, Serving $serving, finding groups $finding";
+
+describe("buildSidebar: no group", () => {
+  it("shows Home alone with finding groups off", () => {
+    expect(outline(buildSidebar(input({})))).toEqual(["Home /dashboard"]);
   });
 
-  it("adds Find a group with discovery on", () => {
-    const model = buildSidebar(input({ discoveryOn: true }));
-    expect(outline(model.items)).toEqual([
-      "Home /dashboard",
-      "Find a group /find-a-group",
-      ...ACCOUNT,
-    ]);
-  });
-
-  it("adds Admin for an org admin", () => {
-    expect(outline(buildSidebar(input({ isOrgAdmin: true })).items)).toEqual([
-      "Home /dashboard",
-      ...ACCOUNT,
-      ...ADMIN,
-    ]);
+  it("adds a quiet Find a group with finding groups on", () => {
+    expect(outline(buildSidebar(input({ discoveryOn: true })))).toEqual(["Home /dashboard", "[gap]", FIND]);
   });
 });
 
-describe("buildSidebar — one group", () => {
-  const one = { memberships: [A], activeGroup: A };
-
-  it("lists Calendar, Directory, then the group pages with no block when discovery is off", () => {
-    const model = buildSidebar(input({ ...one }));
-    expect(outline(model.items)).toEqual([
-      "Home /dashboard",
-      "Calendar /calendar",
-      "Directory /directory",
-      `Announcements /g/${A_ID}/announcements`,
-      `Lessons /g/${A_ID}/lectures`,
-      `About /g/${A_ID}/about`,
-      `Serving /g/${A_ID}/serving`,
-      `Prayer /g/${A_ID}/prayer`,
-      `Give /g/${A_ID}/give`,
-      ...ACCOUNT,
-    ]);
-    expect(model.items.some((i) => i.kind === "groupBlock")).toBe(false);
-  });
-
-  it("shows a static block and Find a group when discovery is on, never a switcher", () => {
-    const model = buildSidebar(input({ ...one, discoveryOn: true }));
-    expect(outline(model.items).slice(0, 4)).toEqual([
-      "Home /dashboard",
-      "[groupBlock:static]",
-      "Find a group /find-a-group",
-      "Calendar /calendar",
-    ]);
-    const block = model.items.find((i) => i.kind === "groupBlock");
-    expect(block).toMatchObject({
-      mode: "static",
-      group: A,
-      orgName: "Grace Church",
-      initials: "GF",
-      rows: [],
-      findAGroupFooter: false,
-    });
-  });
-
-  it("adds Group settings only for a leader", () => {
-    const member = buildSidebar(input({ ...one }));
-    const leader = buildSidebar(input({ ...one, isLeader: true }));
-    expect(outline(member.items)).not.toContain(`Group settings /g/${A_ID}/settings`);
-    expect(outline(leader.items)).toContain(`Group settings /g/${A_ID}/settings`);
-    expect(outline(leader.items).indexOf(`Group settings /g/${A_ID}/settings`)).toBe(
-      outline(leader.items).indexOf(`Give /g/${A_ID}/give`) + 1
+describe("buildSidebar: one group", () => {
+  it.each(FLAGS)(flagTitle, ({ leader, serving, finding }) => {
+    const items = buildSidebar(
+      input({
+        memberships: [A],
+        activeGroup: A,
+        isLeader: leader,
+        hasServingAccess: serving,
+        discoveryOn: finding,
+      })
     );
+    expect(outline(items)).toEqual([
+      "[groupBlock:static]",
+      ...pages(A_ID, "", { serving, leader }),
+      ...(finding ? ["[gap]", FIND] : []),
+    ]);
   });
 
-  it("follows hasServingAccess for the Serving entry", () => {
-    const model = buildSidebar(input({ ...one, hasServingAccess: false }));
-    expect(outline(model.items)).not.toContain(`Serving /g/${A_ID}/serving`);
-  });
-
-
-  it("appends Admin after Account for an org admin", () => {
-    const model = buildSidebar(input({ ...one, isOrgAdmin: true }));
-    expect(outline(model.items).slice(-5)).toEqual([...ACCOUNT, ...ADMIN]);
+  it("names the group in a block that never opens, whatever the finding groups setting", () => {
+    for (const discoveryOn of [false, true]) {
+      expect(block(buildSidebar(input({ memberships: [A], activeGroup: A, discoveryOn })))).toMatchObject({
+        mode: "static",
+        group: A,
+        orgName: "Grace Church",
+        initials: "GF",
+        rows: [],
+        findAGroupFooter: false,
+      });
+    }
   });
 });
 
-describe("buildSidebar — two or more groups, org level", () => {
+describe("buildSidebar: two or more groups, church level", () => {
   const two = { memberships: [A, B], activeGroup: null };
 
-  it("shows Home, Calendar, Directory, then Your groups", () => {
-    const model = buildSidebar(input({ ...two }));
-    expect(outline(model.items)).toEqual([
+  it.each([false, true])("lists the church's pages under an All groups switcher, finding groups %s", (finding) => {
+    const items = buildSidebar(input({ ...two, discoveryOn: finding, isLeader: true, hasServingAccess: true }));
+    expect(outline(items)).toEqual([
+      "[groupBlock:switcher]",
       "Home /dashboard",
       "Calendar /calendar",
+      "[gap]",
       "Directory /directory",
-      "[yourGroups:2]",
-      ...ACCOUNT,
     ]);
-    const yourGroups = model.items.find((i) => i.kind === "yourGroups");
-    expect(yourGroups).toEqual({
-      kind: "yourGroups",
-      rows: [
-        { group: A, href: `/g/${A_ID}/dashboard` },
-        { group: B, href: `/g/${B_ID}/dashboard` },
-      ],
-    });
-  });
-
-  it("adds Find a group after Your groups with discovery on", () => {
-    const model = buildSidebar(input({ ...two, discoveryOn: true }));
-    expect(outline(model.items).slice(3, 5)).toEqual([
-      "[yourGroups:2]",
-      "Find a group /find-a-group",
+    const switcher = block(items);
+    expect(switcher).toMatchObject({ group: null, initials: "", findAGroupFooter: finding });
+    expect(switcher.rows.map((r) => [r.group.id, r.current])).toEqual([
+      [A_ID, false],
+      [B_ID, false],
     ]);
   });
 });
 
-describe("buildSidebar — two or more groups, inside a group", () => {
-  const inside = { memberships: [A, B], activeGroup: B };
-
-  it("shows the switcher block, then the group's pages", () => {
-    const model = buildSidebar(input({ ...inside }));
-    expect(outline(model.items)).toEqual([
-      "Home /dashboard",
+describe("buildSidebar: two or more groups, inside a group", () => {
+  it.each(FLAGS)(flagTitle, ({ leader, serving, finding }) => {
+    const items = buildSidebar(
+      input({
+        memberships: [A, B],
+        activeGroup: B,
+        isLeader: leader,
+        hasServingAccess: serving,
+        discoveryOn: finding,
+      })
+    );
+    expect(outline(items)).toEqual([
       "[groupBlock:switcher]",
-      `Home /g/${B_ID}/dashboard`,
-      `Calendar /g/${B_ID}/calendar`,
-      `Directory /g/${B_ID}/directory`,
-      `Announcements /g/${B_ID}/announcements`,
-      `Lessons /g/${B_ID}/lectures`,
-      `About /g/${B_ID}/about`,
-      `Serving /g/${B_ID}/serving`,
-      `Prayer /g/${B_ID}/prayer`,
-      `Give /g/${B_ID}/give`,
-      ...ACCOUNT,
+      ...pages(B_ID, `/g/${B_ID}`, { serving, leader }),
     ]);
+    expect(block(items).findAGroupFooter).toBe(finding);
   });
 
   it("builds one switcher row per membership, marks the current one, and keeps the page on switch", () => {
-    const model = buildSidebar(input({ ...inside }));
-    const block = model.items.find((i) => i.kind === "groupBlock");
-    if (block?.kind !== "groupBlock") throw new Error("expected a group block");
-    expect(block.mode).toBe("switcher");
-    expect(block.rows.map((r) => [r.group.id, r.current])).toEqual([
+    const switcher = block(buildSidebar(input({ memberships: [A, B], activeGroup: B })));
+    expect(switcher.mode).toBe("switcher");
+    expect(switcher.allGroupsHref).toBe("/dashboard");
+    expect(switcher.rows.map((r) => [r.group.id, r.current])).toEqual([
       [A_ID, false],
       [B_ID, true],
     ]);
-    expect(block.rows[0].href(`/g/${B_ID}/directory`)).toBe(`/g/${A_ID}/directory`);
-    expect(block.rows[0].href(`/g/${B_ID}/calendar/evt-1`)).toBe(`/g/${A_ID}/calendar`);
-  });
-
-  it("carries the Find a group footer only when discovery is on", () => {
-    const off = buildSidebar(input({ ...inside })).items.find((i) => i.kind === "groupBlock");
-    const on = buildSidebar(input({ ...inside, discoveryOn: true })).items.find(
-      (i) => i.kind === "groupBlock"
-    );
-    expect(off).toMatchObject({ findAGroupFooter: false });
-    expect(on).toMatchObject({ findAGroupFooter: true });
-  });
-
-  it("adds Group settings for a leader of the active group", () => {
-    const model = buildSidebar(input({ memberships: [A, B], activeGroup: A, isLeader: true }));
-    expect(outline(model.items)).toContain(`Group settings /g/${A_ID}/settings`);
-  });
-
-});
-
-describe("buildSidebar — directory", () => {
-  it("is one link, with no sub-menu of the directory's tabs", () => {
-    const items = buildSidebar(input({ memberships: [A, B], activeGroup: B, discoveryOn: true })).items;
-    const entries = outline(items).filter((line) => line.includes("/directory"));
-    expect(entries).toEqual([`Directory /g/${B_ID}/directory`]);
+    expect(switcher.rows[0].href(`/g/${B_ID}/directory`)).toBe(`/g/${A_ID}/directory`);
+    expect(switcher.rows[0].href(`/g/${B_ID}/calendar/evt-1`)).toBe(`/g/${A_ID}/calendar`);
   });
 });
 
-describe("buildSidebar — rail and phone flags", () => {
-  it("passes collapsed through and shows the collapse control off the phone only", () => {
-    const rail = buildSidebar(input({ memberships: [A], activeGroup: A, collapsed: true }));
-    expect(rail.collapsed).toBe(true);
-    expect(rail.showCollapseControl).toBe(true);
-    expect(outline(rail.items)).toEqual(
-      outline(buildSidebar(input({ memberships: [A], activeGroup: A })).items)
-    );
+describe("buildSidebar: every state", () => {
+  const memberStates = [
+    { memberships: [], activeGroup: null },
+    { memberships: [A], activeGroup: A },
+    { memberships: [A, B], activeGroup: null },
+    { memberships: [A, B], activeGroup: B },
+  ];
+  const states = memberStates.flatMap((state) =>
+    FLAGS.map(({ leader, serving, finding }) =>
+      input({ ...state, isLeader: leader, hasServingAccess: serving, discoveryOn: finding })
+    )
+  );
 
-    const phone = buildSidebar(input({ memberships: [A], activeGroup: A, phone: true }));
-    expect(phone.showCollapseControl).toBe(false);
-    expect(phone.collapsed).toBe(false);
+  it("never shows two links with the same label", () => {
+    for (const state of states) {
+      const labels = buildSidebar(state).flatMap((i) => (i.kind === "link" ? [i.label] : []));
+      expect(new Set(labels).size, labels.join(", ")).toBe(labels.length);
+    }
+  });
+
+  it("offers Find a group in exactly one place when finding groups is on, and nowhere when off", () => {
+    for (const state of states) {
+      const items = buildSidebar(state);
+      const rows = items.filter((i) => i.kind === "link" && i.href === "/find-a-group").length;
+      const footers = items.filter((i) => i.kind === "groupBlock" && i.findAGroupFooter).length;
+      expect(rows + footers).toBe(state.discoveryOn ? 1 : 0);
+    }
+  });
+
+  it("lists Directory once, with no sub-menu of the directory's tabs", () => {
+    for (const state of states.filter((s) => s.memberships.length > 0)) {
+      const entries = outline(buildSidebar(state)).filter((line) => line.includes("/directory"));
+      expect(entries).toHaveLength(1);
+    }
   });
 });

@@ -48,11 +48,14 @@ vi.mock("@/lib/supabase/client", () => ({
           },
   }),
 }));
+const refresh = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("@/lib/uploadImage", () => ({ mintSignedUrl: vi.fn(), uploadImage: vi.fn() }));
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
 vi.mock("sonner", () => ({ toast }));
 
 const { ProfileForm } = await import("./ProfileForm");
+const { uploadImage } = await import("@/lib/uploadImage");
 
 const profile: Profile = {
   id: "p1",
@@ -335,6 +338,33 @@ describe("ProfileForm inline errors", () => {
 
     expect(document.querySelector('[aria-invalid="true"]')).toBeNull();
     expect(update).toHaveBeenCalledOnce();
+  });
+
+  it("reloads the frame after a save, and not after a refused one", async () => {
+    const form = await mount();
+    await form.type("first_name", "");
+    await form.submit();
+    expect(refresh).not.toHaveBeenCalled();
+
+    await form.type("first_name", "Ada");
+    await form.submit();
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it("reloads the frame after a photo upload, and not after a failed one", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await mount();
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(input, "files", { value: [new File(["x"], "face.png", { type: "image/png" })] });
+    const choose = () => act(async () => void input.dispatchEvent(new Event("change", { bubbles: true })));
+
+    vi.mocked(uploadImage).mockRejectedValueOnce(new Error("refused"));
+    await choose();
+    expect(refresh).not.toHaveBeenCalled();
+
+    vi.mocked(uploadImage).mockResolvedValueOnce("org/profiles/p1/avatar.png");
+    await choose();
+    expect(refresh).toHaveBeenCalledOnce();
   });
 
   it("says the save failed when no row was written", async () => {

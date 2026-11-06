@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ProfileForm } from "@/components/profile/ProfileForm";
 import { DirectoryPreview } from "@/components/profile/DirectoryPreview";
@@ -17,8 +16,6 @@ const eyebrow =
   "text-base font-bold uppercase tracking-wider text-muted-foreground";
 
 export function MyProfileView({ profile, family }: MyProfileViewProps) {
-  const router = useRouter();
-
   const city = profile.city
     ? `${profile.city}${profile.state ? `, ${profile.state}` : ""}`
     : family?.city
@@ -72,7 +69,6 @@ export function MyProfileView({ profile, family }: MyProfileViewProps) {
         families={[]}
         family={family}
         isAdmin={false}
-        onSaved={() => router.refresh()}
       />
     </div>
   );

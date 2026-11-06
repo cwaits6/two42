@@ -5,17 +5,12 @@ import {
   useDiscoveryOn,
   useGroupMemberships,
 } from "@/components/groups/GroupProvider";
-import { buildSidebar, type SidebarModel } from "@/lib/groups/nav";
-import type { Profile } from "@/lib/types";
+import { buildSidebar, type SidebarItem } from "@/lib/groups/nav";
+import { useSidebar } from "./SidebarContext";
 
-/** The sidebar model for the current viewer, path, and surface. */
-export function useSidebarModel(input: {
-  profile: Profile;
-  hasServingAccess: boolean;
-  orgName: string;
-  collapsed: boolean;
-  phone: boolean;
-}): SidebarModel {
+/** The page list for the current viewer and path. */
+export function useSidebarModel(): SidebarItem[] {
+  const { hasServingAccess, orgName } = useSidebar();
   const memberships = useGroupMemberships();
   const activeGroup = useActiveGroup();
   const discoveryOn = useDiscoveryOn();
@@ -24,10 +19,7 @@ export function useSidebarModel(input: {
     activeGroup,
     discoveryOn,
     isLeader: activeGroup?.role === "leader",
-    isOrgAdmin: input.profile.role === "admin",
-    hasServingAccess: input.hasServingAccess,
-    collapsed: input.collapsed,
-    phone: input.phone,
-    orgName: input.orgName,
+    hasServingAccess,
+    orgName,
   });
 }
