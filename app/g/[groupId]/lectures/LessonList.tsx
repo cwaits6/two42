@@ -24,7 +24,8 @@ export function MetaLine({
           {i > 0 && " "}
           <span className="inline-block max-w-full">
             {part}
-            {i < present.length - 1 && " ·"}
+            {/* A no-break space, so a wrap inside the part takes its last word along with the dot. */}
+            {i < present.length - 1 && "\u00a0·"}
           </span>
         </Fragment>
       ))}

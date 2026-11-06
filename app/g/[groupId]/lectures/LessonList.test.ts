@@ -2,18 +2,19 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { MetaLine } from "./LessonList";
 
+const NBSP = "\u00a0";
 const ITEM = /<span class="inline-block max-w-full">(.*?)<\/span>/g;
 const items = (parts: React.ReactNode[]) =>
   [...renderToStaticMarkup(MetaLine({ parts })!).matchAll(ITEM)].map((m) => m[1]);
 
 describe("MetaLine", () => {
   it("keeps each part whole, with its separator on the line it ends", () => {
-    expect(items(["Acts", "Part 2", "Jun 7, 2026"])).toEqual(["Acts ·", "Part 2 ·", "Jun 7, 2026"]);
+    expect(items(["Acts", "Part 2", "Jun 7, 2026"])).toEqual([`Acts${NBSP}·`, `Part 2${NBSP}·`, "Jun 7, 2026"]);
   });
 
   it("leaves no separator for a part that is absent", () => {
     expect(items([null, "Part 2", "", undefined, false, "Jun 7, 2026"])).toEqual([
-      "Part 2 ·",
+      `Part 2${NBSP}·`,
       "Jun 7, 2026",
     ]);
   });
