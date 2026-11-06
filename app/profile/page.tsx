@@ -42,7 +42,7 @@ export default async function ProfilePage() {
   );
 
   if (emailError) {
-    console.error("Failed to load own email, code:", emailError.code);
+    logError("Failed to load own email", emailError, { route: "/profile" });
     return (
       <PageContainer>
         {header}

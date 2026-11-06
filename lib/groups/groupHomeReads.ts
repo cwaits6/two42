@@ -138,7 +138,7 @@ export async function loadGroupHomeReads(
       .eq("group_id", groupId)
       .then(({ count, error, status }) => {
         // A head read has no body, so the status is the only detail an HTTP failure carries.
-        if (error) console.error("Failed to count lessons: code=%s status=%s", error.code, status);
+        if (error) logError("Failed to count lessons", error, { ids: { status } });
         return count ?? 0;
       }),
     // The Directory's reads and order, so Home's first names match its list.

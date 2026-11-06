@@ -34,7 +34,7 @@ export async function GET() {
   // An export without addresses is wrong, not degraded.
   const { data: addresses, error: addressError } = await gate.supabase.rpc("admin_member_emails");
   if (addressError) {
-    console.error("members export: address read failed: code=%s", addressError.code);
+    logError("members export: address read failed", addressError, { route: "/api/admin/members/export" });
     return new Response("Failed to build export", { status: 500 });
   }
   const emails = new Map(addresses.map((a) => [a.profile_id, a.email]));

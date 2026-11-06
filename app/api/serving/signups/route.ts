@@ -38,10 +38,10 @@ async function withAddresses<T extends NamedProfile>(
       .select("id, email")
       .eq("org_id", orgId)
       .in("id", people.map((p) => p.id));
-    if (error) console.error("Serving confirmation address read failed: code=%s", error.code);
+    if (error) logError("Serving confirmation address read failed", error, { route: "/api/serving/signups" });
     for (const row of data ?? []) emailById.set(row.id, row.email);
   } catch {
-    console.error("Serving confirmation address read failed: no service client");
+    logError("Serving confirmation address read failed: no service client", undefined, { route: "/api/serving/signups" });
   }
   return people.map((p) => ({ ...p, email: emailById.get(p.id) ?? null }));
 }

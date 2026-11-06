@@ -107,7 +107,7 @@ describe("loadOrgSnapshot", () => {
   it.each(TABLES)("logs the database's code for %s before throwing", async (table) => {
     const logged = vi.spyOn(console, "log").mockImplementation(() => {});
     const { client } = fakeClient({ errors: { [table]: { code: "57014", message: "ada@example.com" } } });
-    await expect(loadOrgSnapshot(client, ORG)).rejects.toThrow(table);
+    await expect(loadOrgSnapshot(client, ORG, NO_EMAILS)).rejects.toThrow(table);
     expect(loggedLines(logged)).toEqual([
       { level: "error", what: "Member snapshot read failed", step: table, code: "57014", ref: expect.any(String), ids: { org: ORG } },
     ]);

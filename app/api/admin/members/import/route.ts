@@ -140,7 +140,7 @@ export async function POST(request: Request) {
   // the import rather than planning every row as a new person.
   const { data: addresses, error: addressError } = await gate.supabase.rpc("admin_member_emails");
   if (addressError) {
-    console.error("members import: address read failed: code=%s", addressError.code);
+    logError("members import: address read failed", addressError, { route: "/api/admin/members/import" });
     return json({ error: "Failed to load member data" }, 500);
   }
   const emails = new Map(addresses.map((a) => [a.profile_id, a.email]));
