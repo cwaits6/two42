@@ -2,6 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { loggedLines } from "@/lib/log/testing";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -242,12 +243,14 @@ describe("MembersList", () => {
   });
 
   it("shows the error state, not rows with Edit only, when the first load can't tell who is looking", async () => {
-    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const logged = vi.spyOn(console, "log").mockImplementation(() => {});
     state.viewerError = { code: "over_request_rate_limit" };
     await mount();
     expect(host.textContent).toContain("Couldn't load");
     expect(bodyRows()).toHaveLength(0);
-    expect(logged).toHaveBeenCalledExactlyOnceWith("Failed to read the viewer: code=%s", "over_request_rate_limit");
+    expect(loggedLines(logged)).toEqual([
+      expect.objectContaining({ what: "Failed to read the viewer", code: "over_request_rate_limit", route: "/admin/members" }),
+    ]);
     logged.mockRestore();
   });
 

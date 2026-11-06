@@ -11,6 +11,7 @@ import { pageTitle } from "@/lib/pageTitle";
 import { toUserRole } from "@/lib/roles";
 import { roleLockReason } from "../memberRoles";
 import { MemberRole } from "./MemberRole";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = () => pageTitle("Edit member");
 
@@ -52,7 +53,10 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
   // An unknown count reads as one, the stricter of the two reasons the viewer's own role is locked.
   // A HEAD response has no body, so a failed count may carry no error and never a code.
   if (admins.error || admins.count === null) {
-    console.error("Failed to count church admins: code=%s status=%s", admins.error?.code, admins.status);
+    logError("Failed to count church admins", admins.error, {
+      route: "/admin/members/[id]",
+      ids: { status: admins.status },
+    });
   }
   const adminCount = admins.count ?? 1;
 

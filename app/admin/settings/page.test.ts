@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement, ReactNode } from "react";
+import { loggedLines } from "@/lib/log/testing";
 
 class RedirectSentinel extends Error {
   constructor(public readonly target: string) {
@@ -170,14 +171,17 @@ describe("ChurchSettings", () => {
 
   it("keeps the time zone control when the stored zone is one the runtime doesn't know", async () => {
     reads.organizations = { data: { ...RULES, timezone: "Nowhere/Bogus" }, error: null };
-    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const logged = vi.spyOn(console, "log").mockImplementation(() => {});
 
     try {
       const { controls, things } = await render();
 
       expect(things).toEqual([]);
       expect(controls.get(TimezoneSettings)).toMatchObject({ orgId: ORG_ID, timezone: "Nowhere/Bogus" });
-      expect(logged).toHaveBeenCalledWith("Unknown church time zone: %s", "Nowhere/Bogus");
+      expect(loggedLines(logged)).toContainEqual(
+        expect.objectContaining({ level: "warn", what: "Unknown church time zone", route: "/admin/settings" }),
+      );
+      expect(JSON.stringify(logged.mock.calls)).not.toContain("Nowhere/Bogus");
     } finally {
       logged.mockRestore();
     }

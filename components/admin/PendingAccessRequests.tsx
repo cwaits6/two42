@@ -9,6 +9,7 @@ import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
 import { requestedOn } from "@/lib/groups/joinQueue";
 import { createClient } from "@/lib/supabase/client";
 import type { AccessRequest } from "@/lib/types";
+import { logError } from "@/lib/log";
 
 const ALREADY_REVIEWED = "This request was already reviewed.";
 
@@ -76,7 +77,7 @@ export function PendingAccessRequests({
         .eq("status", "pending")
         .select("id");
       if (error) {
-        console.error("Failed to decline an access request: code=%s", error.code);
+        logError("Failed to decline an access request", error);
         toast.error(failureMessage("decline the request"));
         return;
       }

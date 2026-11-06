@@ -2,6 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { loggedLines } from "@/lib/log/testing";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -149,7 +150,7 @@ describe("PendingAccessRequests", () => {
   });
 
   it("keeps the request, and the question, when the decline fails", async () => {
-    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const logged = vi.spyOn(console, "log").mockImplementation(() => {});
     declined.rows = null;
     declined.error = { code: "XX000" };
 
@@ -160,7 +161,9 @@ describe("PendingAccessRequests", () => {
     expect(toast.success).not.toHaveBeenCalled();
     expect(onRemove).not.toHaveBeenCalled();
     expect(document.body.textContent).toContain("Decline Cy Park's request?");
-    expect(logged).toHaveBeenCalledExactlyOnceWith("Failed to decline an access request: code=%s", "XX000");
+    expect(loggedLines(logged)).toEqual([
+      expect.objectContaining({ what: "Failed to decline an access request", code: "XX000" }),
+    ]);
     logged.mockRestore();
   });
 

@@ -49,6 +49,7 @@ import {
   type StatusFilter,
 } from "./memberRows";
 import { RoleChangeDialog, type RoleChange } from "./RoleChangeDialog";
+import { logError } from "@/lib/log";
 
 const ROLE_FILTERS: { value: RoleFilter; label: string }[] = [
   { value: "all", label: "All roles" },
@@ -94,10 +95,10 @@ export function MembersList() {
       supabase.auth.getUser(),
     ]);
     // Without the viewer every row would offer Edit only, with no reason shown.
-    if (viewerError) console.error("Failed to read the viewer: code=%s", viewerError.code);
-    if (emailsError) console.error("Failed to load member emails, code:", emailsError.code);
+    if (viewerError) logError("Failed to read the viewer", viewerError, { route: "/admin/members" });
+    if (emailsError) logError("Failed to load member emails", emailsError, { route: "/admin/members" });
     if (requestsError || membersError || emailsError || viewerError) {
-      if (requestsError || membersError) console.error("Failed to load members:", requestsError ?? membersError);
+      if (requestsError || membersError) logError("Failed to load members", requestsError ?? membersError, { route: "/admin/members" });
       if (loadedOnce.current) toast.error(failureMessage("load the latest members"));
       else setStatus("failed");
       return;

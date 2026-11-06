@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement, ReactNode } from "react";
+import { loggedLines } from "@/lib/log/testing";
 
 vi.mock("next/navigation", () => ({
   redirect: (target: string) => {
@@ -114,15 +115,17 @@ describe("Edit member's role lock", () => {
     ["the API is down", { count: null, error: { message: "" }, status: 503 }],
     ["the response carries no error and no count", { count: null, error: null, status: 404 }],
   ])("reads an uncounted church as having one church admin when %s", async (_case, read) => {
-    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const logged = vi.spyOn(console, "log").mockImplementation(() => {});
     db.admins = 2;
     db.failedCount = read;
 
     expect(await lockReasonFor(VIEWER)).toBe(ADD_ANOTHER);
-    expect(logged).toHaveBeenCalledExactlyOnceWith(
-      "Failed to count church admins: code=%s status=%s",
-      undefined,
-      read.status,
-    );
+    expect(loggedLines(logged)).toEqual([
+      expect.objectContaining({
+        what: "Failed to count church admins",
+        route: "/admin/members/[id]",
+        ids: { status: read.status },
+      }),
+    ]);
   });
 });

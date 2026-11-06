@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { totalWaiting } from "./requestsWaiting";
+import { logError } from "@/lib/log";
 
 const REQUEST_TABLES = {
   access: "access_requests",
@@ -23,7 +24,7 @@ export async function getWaitingRequestCount(): Promise<number | null> {
     // A HEAD response has no body, so a failure carries no code and some carry
     // no error at all: the missing count is the only sure sign of one.
     if (error || count === null) {
-      console.error("Failed to count %s requests: code=%s status=%s", kind, error?.code, status);
+      logError("Failed to count requests", error, { step: REQUEST_TABLES[kind], ids: { status } });
       return null;
     }
     return count;

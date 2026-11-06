@@ -16,6 +16,7 @@ import { CUSTOM_SENDING_DOMAINS_ENABLED } from "@/lib/email/sendingDomains";
 import { OrgGroupControls } from "@/components/admin/OrgGroupControls";
 import { GroupDiscoverySettings } from "@/components/groups/GroupDiscoverySettings";
 import { parseGroupCreationPolicy } from "@/lib/groups/creation";
+import { logError, logWarn } from "@/lib/log";
 
 export async function ChurchSettings() {
   const supabase = await createClient();
@@ -42,12 +43,12 @@ export async function ChurchSettings() {
     getDirectoryVisibility(),
     getPrayerRetention(),
   ]);
-  if (rulesRead.error) console.error("Failed to load the church's rules: code=%s", rulesRead.error.code);
+  if (rulesRead.error) logError("Failed to load the church's rules", rulesRead.error, { route: "/admin/settings" });
   const rules = rulesRead.error ? null : rulesRead.data;
   // A stored zone this runtime doesn't know still gets the control: it is the
   // only place a church admin can pick one that works.
   if (rules && !isValidTimeZone(rules.timezone)) {
-    console.error("Unknown church time zone: %s", rules.timezone);
+    logWarn("Unknown church time zone", undefined, { route: "/admin/settings" });
   }
   const timeZone = rules ? rules.timezone : null;
 

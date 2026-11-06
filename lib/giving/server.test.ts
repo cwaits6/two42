@@ -8,6 +8,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loggedLines } from "@/lib/log/testing";
 
 vi.mock("@/lib/storageRead", () => ({
   mintSignedUrls: async (urls: Array<string | null | undefined>) =>
@@ -105,10 +106,12 @@ describe("readStewardsCanManage", () => {
   });
 
   it("tells a failed read from a church with no row", async () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleError = vi.spyOn(console, "log").mockImplementation(() => {});
     expect(await readStewardsCanManage(fakeClient().client, ORG)).toBe(true);
     expect(await readStewardsCanManage(failing, ORG)).toBeNull();
-    expect(consoleError).toHaveBeenCalledExactlyOnceWith("Failed to load the giving setting: code=%s", "XX000");
+    expect(loggedLines(consoleError)).toEqual([
+      expect.objectContaining({ what: "Failed to load the giving setting", code: "XX000" }),
+    ]);
     consoleError.mockRestore();
   });
 

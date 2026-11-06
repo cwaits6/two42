@@ -15,6 +15,7 @@ vi.mock("./useSidebarModel", () => ({
 
 const { FrameNav } = await import("./FrameNav");
 const { SidebarProvider } = await import("./SidebarContext");
+type ProviderProps = Parameters<typeof SidebarProvider>[0];
 
 const name = { first_name: "Isaac", last_name: "Seedly", preferred_name: null };
 const base = { email: "isaac@example.test", isOperator: false, photoUrl: null };
@@ -27,7 +28,11 @@ function render(account: Account, path: string, waitingRequests: number | null =
   pathname = path;
   const nav = createElement(FrameNav, { account });
   return renderToStaticMarkup(
-    createElement(SidebarProvider, { account, hasServingAccess: false, orgName: "Test Church", waitingRequests, children: nav }),
+    createElement(
+      SidebarProvider,
+      { account, hasServingAccess: false, orgName: "Test Church", waitingRequests } as ProviderProps,
+      nav,
+    ),
   );
 }
 

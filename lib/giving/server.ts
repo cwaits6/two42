@@ -14,6 +14,7 @@ import { displayName, initials } from "@/lib/names";
 import { mintSignedUrls } from "@/lib/storageRead";
 import { readList } from "@/lib/supabase/readList";
 import type { MemberOption } from "@/components/giving/FundForm";
+import { logError } from "@/lib/log";
 
 /**
  * The church's stored giving rule: whether members may put up and manage their
@@ -32,7 +33,7 @@ export async function readStewardsCanManage(
     .eq("key", "giving_manage_mode")
     .maybeSingle();
   if (error) {
-    console.error("Failed to load the giving setting: code=%s", error.code);
+    logError("Failed to load the giving setting", error);
     return null;
   }
   return (data?.value ?? "stewards") === "stewards";

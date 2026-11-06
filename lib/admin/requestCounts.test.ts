@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { requestsWaiting, totalWaiting } from "./requestsWaiting";
+import { loggedLines } from "@/lib/log/testing";
 
 const reads = vi.hoisted(() => ({
   counts: {} as Record<string, number>,
@@ -55,17 +56,14 @@ describe("getWaitingRequestCount", () => {
     ["the API is down", { message: "" }, 503],
     ["the response carries no error and no count", null, 404],
   ])("gives no number, rather than a short one, when %s for one kind", async (_case, error, status) => {
-    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const logged = vi.spyOn(console, "log").mockImplementation(() => {});
     reads.counts = { access_requests: 2, group_requests: 1 };
     reads.failing = { table: "group_join_requests", error, status };
 
     expect(await getWaitingRequestCount()).toBeNull();
-    expect(logged).toHaveBeenCalledExactlyOnceWith(
-      "Failed to count %s requests: code=%s status=%s",
-      "join",
-      undefined,
-      status,
-    );
+    expect(loggedLines(logged)).toEqual([
+      expect.objectContaining({ what: "Failed to count requests", step: "group_join_requests", ids: { status } }),
+    ]);
   });
 });
 
