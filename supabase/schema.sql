@@ -43,6 +43,24 @@ CREATE TYPE "public"."org_status" AS ENUM (
 ALTER TYPE "public"."org_status" OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."admin_member_emails"() RETURNS TABLE("profile_id" "uuid", "email" "text")
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select p.id, p.email
+  from public.profiles p
+  where p.org_id = public.app_request_org_id()
+    and public.is_admin();
+$$;
+
+
+ALTER FUNCTION "public"."admin_member_emails"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."admin_member_emails"() IS 'Every profile id and address in the caller''s church, hidden or not. Rows only for a church admin. Tenant anchor: the caller''s own org; takes no parameter.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."app_current_org_id"() RETURNS "uuid"
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO ''
@@ -2451,6 +2469,36 @@ $$;
 ALTER FUNCTION "public"."prayer_requests_author_sets_anonymity"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."profile_directory_email"("_profile_id" "uuid") RETURNS "text"
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select p.email
+  from public.profiles p
+  where p.id = _profile_id
+    and p.org_id = public.app_request_org_id()
+    and not p.hide_email
+    and (
+      p.id = auth.uid()
+      or public.is_admin()
+      or (p.family_id is not null and p.family_id = public.current_family_id() and public.is_member())
+      or (
+        public.is_member()
+        and not p.is_unlisted
+        and p.role in ('member', 'admin')
+        and (public.org_directory_visible() or public.shares_group_with(p.id))
+      )
+    );
+$$;
+
+
+ALTER FUNCTION "public"."profile_directory_email"("_profile_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."profile_directory_email"("_profile_id" "uuid") IS 'A person''s address as the directory shows it: null when hide_email, and null wherever the profiles read policy hides the person from the caller. Tenant anchor: the caller''s own org, never a parameter. Mirrors the profiles read policy and must change with it.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."profiles_keep_id"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     SET "search_path" TO ''
@@ -3147,6 +3195,34 @@ ALTER FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_da
 
 
 COMMENT ON FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_date" "date", "_attendee_ids" "uuid"[]) IS 'Authenticated serving signup entry point. Actor from auth.uid(); tenant anchor: the team''s org pinned against app_request_org_id(), fail-closed on NULL; the RLS INSERT-policy arms (non-pending team member, team lead, or a leader of the team''s group) are re-checked before delegating to serving_signup_apply().';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."serving_team_email_count"("_team_id" "uuid") RETURNS integer
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select (
+    select count(*)::integer
+    from public.team_members tm
+    join public.profiles p on p.id = tm.profile_id and p.org_id = tm.org_id
+    where tm.team_id = t.id
+      and tm.org_id = t.org_id
+      and p.email <> ''
+      and p.role <> 'pending'
+      and p.email_announcements
+  )
+  from public.teams t
+  where t.id = _team_id
+    and t.org_id = public.app_request_org_id()
+    and (public.is_team_lead(t.id) or public.is_group_leader(t.group_id));
+$$;
+
+
+ALTER FUNCTION "public"."serving_team_email_count"("_team_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."serving_team_email_count"("_team_id" "uuid") IS 'How many people on a team have an address on file, are not pending and take announcements. Null unless the caller leads the team or its group. Tenant anchor: the teams row, read under the caller''s own org.';
 
 
 
@@ -5218,10 +5294,7 @@ CREATE OR REPLACE VIEW "public"."profiles_directory" WITH ("security_invoker"='t
     "p"."bio",
     "p"."family_id",
     "p"."created_at",
-        CASE
-            WHEN "p"."hide_email" THEN NULL::"text"
-            ELSE "p"."email"
-        END AS "email",
+    "public"."profile_directory_email"("p"."id") AS "email",
         CASE
             WHEN "p"."hide_phone_mobile" THEN NULL::"text"
             ELSE "p"."phone_mobile"
@@ -6941,6 +7014,11 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."admin_member_emails"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."admin_member_emails"() TO "authenticated";
+
+
+
 GRANT ALL ON FUNCTION "public"."app_current_org_id"() TO "anon";
 GRANT ALL ON FUNCTION "public"."app_current_org_id"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."app_current_org_id"() TO "service_role";
@@ -7041,7 +7119,7 @@ GRANT ALL ON FUNCTION "public"."get_own_role"() TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."get_profile_email"("profile_id" "uuid") TO "anon";
+REVOKE ALL ON FUNCTION "public"."get_profile_email"("profile_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."get_profile_email"("profile_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_profile_email"("profile_id" "uuid") TO "service_role";
 
@@ -7242,6 +7320,11 @@ GRANT ALL ON FUNCTION "public"."prayer_requests_author_sets_anonymity"() TO "ser
 
 
 
+REVOKE ALL ON FUNCTION "public"."profile_directory_email"("_profile_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."profile_directory_email"("_profile_id" "uuid") TO "authenticated";
+
+
+
 GRANT ALL ON FUNCTION "public"."profiles_keep_id"() TO "anon";
 GRANT ALL ON FUNCTION "public"."profiles_keep_id"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."profiles_keep_id"() TO "service_role";
@@ -7300,6 +7383,11 @@ GRANT ALL ON FUNCTION "public"."serving_signup_change"("_signup_id" "uuid", "_at
 REVOKE ALL ON FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_date" "date", "_attendee_ids" "uuid"[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_date" "date", "_attendee_ids" "uuid"[]) TO "authenticated";
 GRANT ALL ON FUNCTION "public"."serving_signup_create"("_group_id" "uuid", "_service_date" "date", "_attendee_ids" "uuid"[]) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."serving_team_email_count"("_team_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."serving_team_email_count"("_team_id" "uuid") TO "authenticated";
 
 
 
