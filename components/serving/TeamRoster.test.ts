@@ -27,7 +27,6 @@ const { TeamRoster } = await import("./TeamRoster");
 
 const henry: TeamRosterPerson = {
   id: "p-henry",
-  email: "henry@example.test",
   first_name: "Henry",
   last_name: "Mockingham",
   preferred_name: null,
@@ -35,8 +34,8 @@ const henry: TeamRosterPerson = {
   family_id: null,
   relationship: null,
 };
-const zoe = { ...henry, id: "p-zoe", email: "zoe@example.test", first_name: "Zoe", last_name: "Dummyfield" };
-const nameless = { ...henry, id: "p-new", email: "newcomer@example.test", first_name: null, last_name: null };
+const zoe = { ...henry, id: "p-zoe", first_name: "Zoe", last_name: "Dummyfield" };
+const nameless = { ...henry, id: "p-new", first_name: null, last_name: null };
 
 let root: Root;
 
@@ -122,12 +121,12 @@ describe("TeamRoster add-people search", () => {
   const addButtons = () =>
     [...document.querySelectorAll("button")].map((b) => b.getAttribute("aria-label")).filter((l) => l?.startsWith("Add "));
 
-  it("finds someone with no name on file by the email they are shown as", async () => {
+  it("finds someone with no name on file by what they are shown as", async () => {
     await mount([zoe, nameless]);
     await click("Add person");
-    await search("newcomer");
+    await search("no name");
 
-    expect(addButtons()).toEqual(["Add newcomer@example.test to Greeters"]);
+    expect(addButtons()).toEqual(["Add No name on file to Greeters"]);
   });
 
   it("asks about a spouse who is in the group but not on the team, and adds both", async () => {

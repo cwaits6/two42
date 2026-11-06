@@ -63,7 +63,9 @@ Mockingham household, moves the household's anniversary to within two days of
 today in the church's time zone and unlists Henry and Chloe through the same
 container, because the seed has no claimed spouse record; it deletes the record
 and puts the seeded listing, anniversary and `directory_visibility` back in
-`beforeAll` and `afterAll`.
+`beforeAll` and `afterAll`. `hidden-email.spec.ts` turns Chloe's email setting
+on through the same container in `beforeAll` and puts the seed default (off)
+back in `afterAll`.
 
 ## Personas
 
@@ -114,6 +116,7 @@ not covered here.
 | `directory-no-hide-settings.spec.ts` | No hide setting but email and the listing on the profile, household and admin forms at 390 and 1280; a yearless anniversary shows month and day with no "Married"; a couple where a spouse hid it is on no Anniversaries filter; the email and listing settings remove the email and the person; the household phone shows a spouse's number under their name, follows them clearing it, and either spouse can clear the choice; the seed is restored in afterAll |
 | `children-directory.spec.ts`         | A child's Year field is gone from the add form, which says entered details are shown and that a child can't be invited; a child with only a name shows only that name to a member in the same group, with no "Child" label and no birthday; a seeded child's birthday shows without a year; the household's primary and the church admin still list and manage the children; the household invite and account setup forms state the 13 or older requirement; the added rows are deleted in afterAll |
 | `anniversaries-unlisted-couple.spec.ts` | Under "Everyone in …", a couple who are both listed has one Anniversaries row on every filter; a listed primary whose claimed spouse is unlisted keeps a row that names only the primary, and a couple who are both unlisted has none and no household name on the page; a listed primary whose spouse has no account keeps their row; the claimed record is deleted and the seed restored in afterAll |
+| `hidden-email.spec.ts`               | A member in the same group sees a person who hides their email with no email on their card, and still sees a visible one; the household's primary is shown their spouse's setting and no Email field; the person sees their own email on My profile; a church admin sees it in Members and in the Email field of that person's edit page; the setting is turned back off in afterAll |
 
 ## Adding a spec
 

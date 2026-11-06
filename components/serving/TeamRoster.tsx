@@ -20,7 +20,6 @@ import { personInitials, personName, spouseFirstName } from "@/lib/serving/displ
 
 export interface TeamRosterPerson {
   id: string;
-  email: string | null;
   first_name: string | null;
   last_name: string | null;
   preferred_name: string | null;
@@ -73,7 +72,7 @@ export function TeamRoster({ teamId, teamName, groupName, members, candidates }:
     const q = query.trim().toLowerCase();
     if (!q) return candidates;
     return candidates.filter((p) =>
-      [personName(p), p.first_name, p.last_name, p.email].filter(Boolean).join(" ").toLowerCase().includes(q),
+      [personName(p), p.first_name, p.last_name].filter(Boolean).join(" ").toLowerCase().includes(q),
     );
   }, [candidates, query]);
 

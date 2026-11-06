@@ -3,7 +3,6 @@ import { personInitials, personName } from "@/lib/serving/display";
 
 export interface RosterMember {
   id: string;
-  email: string | null;
   first_name: string | null;
   last_name: string | null;
   preferred_name: string | null;

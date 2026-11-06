@@ -897,6 +897,26 @@ reads nor writes them, and the values they hid were deleted by
 until a later release drops them, so nothing hidden through the app still
 deployed can show in the meantime. That release re-runs the sweep first.
 
+The app applies `hide_email` by where it reads the address. No request-client
+code reads `profiles.email`; the address has three read paths:
+
+- the person reads their own through `get_own_email()`;
+- a church admin reads every address in their own church through
+  `admin_member_emails()`;
+- everyone else reads `profiles_directory`, whose `email` comes from
+  `profile_directory_email()` and is NULL when its owner hides it, for every
+  caller. A household primary or spouse can still change the setting for
+  someone in their household; they are not shown the address.
+
+`npm run guard:tenancy` fails on a request-client read of all columns of
+`profiles`, of `profiles.email`, or of either through an embed
+(`scripts/check-profile-email-reads.mjs`). The three definer functions are
+described in [`service-role-inventory.md`](service-role-inventory.md) ("Hidden
+email helpers").
+
+The database does not enforce the setting on the table itself, and one older
+function returns a hidden address inside a household: see "Known limits".
+
 Two pieces of this cross a boundary worth naming:
 
 - **`family_anniversary_hidden(uuid)`** gates the household's anniversary in both
@@ -947,6 +967,20 @@ table's own FK.
 
 ## Known limits (accepted, tracked)
 
+- A hidden email is still readable from the table (T42-215 / #700).
+  `authenticated` holds a table-level `SELECT` on `profiles`, and a row policy
+  cannot hide one column, so a signed-in member who can see a person's row can
+  select `email` from `profiles` directly, or confirm an address by filtering
+  on it, whatever `hide_email` says. The app never does; a request written by
+  hand can. The fix is a column-level grant that leaves `email` out, the shape
+  `prayer_requests` has below. It ships as its own migration once no deployed
+  app code reads the column, because PostgREST refuses a whole request that
+  touches a column the role cannot read. `supabase/tests/hidden_email_suite.sql`
+  holds the assertions for it as TODO tests.
+- `get_profile_email(profile_id)` returns the address of anyone in the
+  caller's household, hidden or not, to `authenticated`. The `profiles`
+  update policy calls it in its `WITH CHECK` as the signed-in person, so the
+  grant cannot go until that policy arm is rewritten.
 - `feedback` and the two giving keys in `site_settings` stay org-level by
   decision: product feedback is about the app and read by org admins, and
   the giving toggles are org policy. Storage event-image keys stay

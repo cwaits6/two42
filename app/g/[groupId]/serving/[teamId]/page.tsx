@@ -37,7 +37,6 @@ export const generateMetadata = groupPageTitle("Serving");
 
 interface AttendeeProfile {
   id: string;
-  email: string | null;
   first_name: string | null;
   last_name: string | null;
   preferred_name: string | null;
@@ -49,10 +48,10 @@ const byName = (a: TeamRosterPerson, b: TeamRosterPerson) =>
   personName(a).localeCompare(personName(b));
 
 const SIGNUP_SELECT =
-  "id, service_date, created_by, serving_signup_attendees(profiles(id, email, first_name, last_name, preferred_name))";
+  "id, service_date, created_by, serving_signup_attendees(profiles(id, first_name, last_name, preferred_name))";
 
 const ROSTER_PROFILE =
-  "profiles(id, email, role, first_name, last_name, preferred_name, avatar_url, family_id, relationship)";
+  "profiles(id, role, first_name, last_name, preferred_name, avatar_url, family_id, relationship)";
 
 export default async function ServingSchedulePage({
   params,
@@ -128,13 +127,18 @@ export default async function ServingSchedulePage({
   const rosterUnavailable = !!(memberError || groupError);
   if (memberError) console.error("team roster read failed:", memberError.message);
   if (groupError) console.error("team roster group read failed:", groupError.message);
-  const memberCount = (memberRows ?? []).filter((row) => {
-    const member = row.profiles as unknown as {
-      email: string | null;
-      role: string;
-    } | null;
-    return !!member?.email && member.role !== "pending";
-  }).length;
+
+  // How many people an email to the team reaches. Only the server knows who
+  // has an address; null when it could not say, and the dialog then names no
+  // number rather than a guess from the roster.
+  let emailReach: number | null = null;
+  if (canManageRoster) {
+    const { data: reach, error: reachError } = await supabase.rpc("serving_team_email_count", {
+      _team_id: teamId,
+    });
+    if (reachError) console.error("team email count read failed, code:", reachError.code);
+    else emailReach = reach;
+  }
 
   // Pending profiles are household peers who never signed in, not people to
   // put on a team. A null embed is a profile RLS hides from the viewer.
@@ -143,7 +147,6 @@ export default async function ServingSchedulePage({
   if (canManageRoster && !rosterUnavailable) {
     const person = (p: RosterProfile): TeamRosterPerson => ({
       id: p.id,
-      email: p.email,
       first_name: p.first_name,
       last_name: p.last_name,
       preferred_name: p.preferred_name,
@@ -310,7 +313,7 @@ export default async function ServingSchedulePage({
                 teamName={team.name}
                 openDates={dates.filter((d) => !entries[d])}
                 today={today}
-                memberCount={memberCount ?? 0}
+                emailReach={emailReach}
               />
               {teamSettings}
             </div>

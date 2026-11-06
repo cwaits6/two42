@@ -7,9 +7,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const createClient = vi.fn();
+const createServiceClient = vi.fn();
 vi.mock("@/lib/supabase/server", () => ({
   createClient: () => createClient(),
-  createServiceClient: vi.fn(),
+  createServiceClient: () => createServiceClient(),
 }));
 
 const notifyLeadersOfCancel = vi.fn();
@@ -43,6 +44,29 @@ function cookieClient(timezone: string) {
   };
 }
 
+// The request client carries no address; they come from a service read of
+// profiles scoped to an org. Any other table is a different read, and throws.
+function serviceClient(result: { data: unknown; error: unknown }, filters: [string, unknown][] = []) {
+  return {
+    from: (table: string) => {
+      if (table !== "profiles") throw new Error(`unexpected service read of ${table}`);
+      return {
+        select: () => ({
+          eq: (column: string, value: unknown) => {
+            filters.push([column, value]);
+            return {
+              in: async (inColumn: string, ids: unknown) => {
+                filters.push([inColumn, ids]);
+                return result;
+              },
+            };
+          },
+        }),
+      };
+    },
+  };
+}
+
 function signup(serviceDate: string) {
   return POST(
     new Request("http://localhost/api/serving/signups", {
@@ -53,6 +77,7 @@ function signup(serviceDate: string) {
 }
 
 beforeEach(() => {
+  createServiceClient.mockReset();
   vi.useFakeTimers();
   // 9:30pm Sunday, Nov 1 in New York.
   vi.setSystemTime(new Date("2026-11-02T02:30:00Z"));
@@ -164,6 +189,39 @@ describe("POST /api/serving/signups team dates", () => {
     expect(booked).toEqual(["2026-11-01", "2026-11-08"]);
   });
 
+  it("mails the confirmation to the address read for the attendee in the team's church", async () => {
+    sendSignupConfirmation.mockReset();
+    createClient.mockResolvedValue(teamClient());
+    const filters: [string, unknown][] = [];
+    createServiceClient.mockResolvedValue(
+      serviceClient({ data: [{ id: "user-1", email: "ann@example.test" }], error: null }, filters),
+    );
+
+    const res = await request("2026-11-01");
+
+    expect(res.status).toBe(200);
+    expect(filters).toEqual([
+      ["org_id", "org-1"],
+      ["id", ["user-1"]],
+    ]);
+    expect(sendSignupConfirmation).toHaveBeenCalledTimes(1);
+    expect(sendSignupConfirmation.mock.calls[0][1]).toMatchObject({
+      orgId: "org-1",
+      serviceDate: "2026-11-01",
+      recipient: { id: "user-1", email: "ann@example.test" },
+    });
+  });
+
+  it("keeps the booking and mails nobody when the address can't be read", async () => {
+    sendSignupConfirmation.mockReset();
+    createClient.mockResolvedValue(teamClient());
+    createServiceClient.mockResolvedValue(serviceClient({ data: null, error: { code: "XX000" } }));
+
+    expect((await request("2026-11-01")).status).toBe(200);
+    expect(booked).toEqual(["2026-11-01"]);
+    expect(sendSignupConfirmation).not.toHaveBeenCalled();
+  });
+
   it("answers 400 when the database refuses the date", async () => {
     createClient.mockResolvedValue(teamClient({ code: "SV006" }));
     const res = await request("2026-11-01");
@@ -174,12 +232,15 @@ describe("POST /api/serving/signups team dates", () => {
 });
 
 describe("PATCH /api/serving/signups", () => {
-  const david = { id: "david", first_name: "David", last_name: "Reyes", preferred_name: null, email: "david@example.test" };
-  const lena = { id: "lena", first_name: "Lena", last_name: "Reyes", preferred_name: null, email: "lena@example.test" };
+  const david = { id: "david", first_name: "David", last_name: "Reyes", preferred_name: null };
+  const lena = { id: "lena", first_name: "Lena", last_name: "Reyes", preferred_name: null };
+  const addresses = [
+    { id: "david", email: "david@example.test" },
+    { id: "lena", email: "lena@example.test" },
+  ];
 
-  it("mails only the spouse just added, naming both people on the date", async () => {
-    sendSignupConfirmation.mockReset();
-    createClient.mockResolvedValue({
+  function changeClient() {
+    return {
       auth: { getUser: async () => ({ data: { user: { id: "david" } } }) },
       from: (table: string) =>
         table === "serving_signups"
@@ -196,22 +257,47 @@ describe("PATCH /api/serving/signups", () => {
             })
           : { select: () => ({ in: async () => ({ data: [david, lena], error: null }) }) },
       rpc: () => ({ single: async () => ({ data: { added: 1, removed: 0 }, error: null }) }),
-    });
+    };
+  }
 
-    const res = await PATCH(
+  const addLena = () =>
+    PATCH(
       new Request("http://localhost/api/serving/signups", {
         method: "PATCH",
         body: JSON.stringify({ signupId: "signup-1", attendeeProfileIds: ["david", "lena"] }),
       }),
     );
 
+  it("mails only the spouse just added and reads only their address, naming both people on the date", async () => {
+    sendSignupConfirmation.mockReset();
+    createClient.mockResolvedValue(changeClient());
+    const filters: [string, unknown][] = [];
+    createServiceClient.mockResolvedValue(serviceClient({ data: addresses, error: null }, filters));
+
+    const res = await addLena();
+
     expect(res.status).toBe(200);
+    expect(filters).toEqual([
+      ["org_id", "org-1"],
+      ["id", ["lena"]],
+    ]);
     expect(sendSignupConfirmation).toHaveBeenCalledTimes(1);
     expect(sendSignupConfirmation.mock.calls[0][1]).toMatchObject({
       serviceDate: "2026-11-08",
       recipient: { id: "lena", email: "lena@example.test" },
       attendees: [david, lena],
     });
+  });
+
+  it("keeps the change and mails nobody when the addresses can't be read", async () => {
+    sendSignupConfirmation.mockReset();
+    createClient.mockResolvedValue(changeClient());
+    createServiceClient.mockResolvedValue(serviceClient({ data: null, error: { code: "XX000" } }));
+    expect((await addLena()).status).toBe(200);
+
+    createServiceClient.mockRejectedValue(new Error("no service key"));
+    expect((await addLena()).status).toBe(200);
+    expect(sendSignupConfirmation).not.toHaveBeenCalled();
   });
 });
 

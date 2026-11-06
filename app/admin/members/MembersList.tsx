@@ -22,8 +22,9 @@ import type { AccessRequest, Profile, UserRole } from "@/lib/types";
 import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
 import { requestedOn } from "@/lib/groups/joinQueue";
 import { invitedNotSignedUp } from "@/lib/members/invited";
+import { PROFILE_COLUMNS, type MemberEmail, type ProfileColumns } from "@/lib/profileColumns";
 import { displayName } from "@/lib/names";
-import { personName } from "@/lib/serving/display";
+import { personNameOrEmail } from "@/lib/serving/display";
 import { toUserRole } from "@/lib/roles";
 import { ApprovalQueue } from "@/components/admin/ApprovalQueue";
 import { matchesSearch } from "@/components/admin/adminSearch";
@@ -68,6 +69,7 @@ export function MembersList({
     const [
       { data: reqs, error: requestsError },
       { data: mems, error: membersError },
+      { data: emails, error: emailsError },
       { data: auth },
     ] = await Promise.all([
       supabase
@@ -76,13 +78,16 @@ export function MembersList({
         .order("created_at", { ascending: false }),
       supabase
         .from("profiles")
-        .select("*")
+        .select(PROFILE_COLUMNS)
         .order("last_name", { ascending: true })
-        .order("first_name", { ascending: true }),
+        .order("first_name", { ascending: true })
+        .returns<ProfileColumns[]>(),
+      supabase.rpc("admin_member_emails"),
       supabase.auth.getUser(),
     ]);
-    if (requestsError || membersError) {
-      console.error("Failed to load members:", requestsError ?? membersError);
+    if (requestsError || membersError || emailsError) {
+      if (emailsError) console.error("Failed to load member emails, code:", emailsError.code);
+      else console.error("Failed to load members:", requestsError ?? membersError);
       if (loadedOnce.current) toast.error(failureMessage("load the latest members"));
       else setStatus("failed");
       return;
@@ -90,7 +95,14 @@ export function MembersList({
     loadedOnce.current = true;
     setViewerId(auth.user?.id ?? null);
     setRequests(reqs || []);
-    setMembers((mems || []).map((m) => ({ ...m, role: toUserRole(m.role) })));
+    const emailById = new Map(((emails || []) as MemberEmail[]).map((e) => [e.profile_id, e.email]));
+    setMembers(
+      (mems || []).map((m) => ({
+        ...m,
+        email: emailById.get(m.id) ?? null,
+        role: toUserRole(m.role),
+      })),
+    );
     setStatus("ready");
   }, [supabase]);
 
@@ -386,7 +398,7 @@ export function MembersList({
                                 url={`/api/admin/members/${member.id}`}
                                 subject="other"
                                 label="Delete account"
-                                ariaLabel={`Delete ${personName(member)}'s account`}
+                                ariaLabel={`Delete ${personNameOrEmail(member)}'s account`}
                                 onDeleted={loadData}
                               />
                             )}

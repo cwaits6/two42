@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { failureMessage, NETWORK_ERROR } from "@/lib/errorCopy";
+import type { MemberEmail } from "@/lib/profileColumns";
 import { Upload, Mail, AlertCircle, CheckCircle2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -88,12 +89,8 @@ export function ImportMembers() {
       return;
     }
 
-    // Query existing profiles by email to mark already-joined members
-    const emails = candidates.map((c) => c.email);
-    const { data: existingProfiles, error: existingError } = await supabase
-      .from("profiles")
-      .select("email")
-      .in("email", emails);
+    // Mark the people who have already joined.
+    const { data: existingProfiles, error: existingError } = await supabase.rpc("admin_member_emails");
     if (existingError) {
       console.error("Import members: failed to check existing members:", existingError.code);
       setDetectionError("Couldn't check who has already joined. Choose the file again.");
@@ -102,7 +99,7 @@ export function ImportMembers() {
 
     const existingSet = new Set(
       (existingProfiles || [])
-        .map((p: { email: string | null }) => p.email?.toLowerCase())
+        .map((p: MemberEmail) => p.email?.toLowerCase())
         .filter(Boolean)
     );
 

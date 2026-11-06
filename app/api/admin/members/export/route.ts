@@ -30,9 +30,17 @@ export async function GET() {
   // Split from the serialization below so the "table name only" claim about
   // `err` stays true by construction — a projection crash must not log as a
   // snapshot failure.
+  // An export without addresses is wrong, not degraded.
+  const { data: addresses, error: addressError } = await gate.supabase.rpc("admin_member_emails");
+  if (addressError) {
+    console.error("members export: address read failed: code=%s", addressError.code);
+    return new Response("Failed to build export", { status: 500 });
+  }
+  const emails = new Map(addresses.map((a) => [a.profile_id, a.email]));
+
   let snapshot;
   try {
-    snapshot = await loadOrgSnapshot(gate.supabase, gate.orgId);
+    snapshot = await loadOrgSnapshot(gate.supabase, gate.orgId, emails);
   } catch (err) {
     // err carries a table name only (see loadOrgSnapshot) — never row data.
     console.error("members export: snapshot load failed:", err);

@@ -10,6 +10,7 @@ import type { Profile, FamilyUnit, FamilyMember } from "@/lib/types";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { isMemberRole } from "@/lib/roles";
 import { pageTitle } from "@/lib/pageTitle";
+import { PROFILE_COLUMNS, type ProfileColumns } from "@/lib/profileColumns";
 
 export const generateMetadata = () => pageTitle("My profile");
 
@@ -19,13 +20,13 @@ export default async function ProfilePage() {
   const user = await getOptionalUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single<Profile>();
+  const [{ data: row }, { data: ownEmail, error: emailError }] = await Promise.all([
+    supabase.from("profiles").select(PROFILE_COLUMNS).eq("id", user.id).single<ProfileColumns>(),
+    supabase.rpc("get_own_email"),
+  ]);
 
-  if (!profile) redirect("/dashboard");
+  if (!row) redirect("/dashboard");
+  const profile = { ...row, email: ownEmail };
   if (!isMemberRole(profile.role)) {
     redirect("/dashboard");
   }
@@ -38,6 +39,16 @@ export default async function ProfilePage() {
   const header = (
     <PageHeader title="My profile" subtitle="Your contact details and your household." />
   );
+
+  if (emailError) {
+    console.error("Failed to load own email, code:", emailError.code);
+    return (
+      <PageContainer>
+        {header}
+        <ErrorState thing="your profile" />
+      </PageContainer>
+    );
+  }
 
   let family: FamilyUnit | null = null;
   let householdProfiles: (Profile | HouseholdSummary)[] = [];
@@ -60,11 +71,11 @@ export default async function ProfilePage() {
       canEditSpouseProfiles
         ? supabase
             .from("profiles")
-            .select("*")
+            .select(PROFILE_COLUMNS)
             .eq("family_id", profile.family_id)
             .neq("id", user.id)
             .order("first_name")
-            .returns<Profile[]>()
+            .returns<ProfileColumns[]>()
         : supabase
             .from("profiles")
             .select("id, first_name, last_name, preferred_name, relationship, role, avatar_url")
@@ -93,7 +104,11 @@ export default async function ProfilePage() {
       );
     }
     family = familyRes.data ?? null;
-    householdProfiles = othersRes.data ?? [];
+    // Nobody in a household reads another person's address; the edit sheet
+    // leaves the field out.
+    householdProfiles = canEditSpouseProfiles
+      ? ((othersRes.data ?? []) as ProfileColumns[]).map((p) => ({ ...p, email: null }))
+      : ((othersRes.data ?? []) as HouseholdSummary[]);
     familyMembers = fmsRes.data ?? [];
   }
 

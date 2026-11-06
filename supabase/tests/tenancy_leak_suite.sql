@@ -261,10 +261,24 @@ declare
   view_errors text[] := '{}';
   org_b_visible_count bigint;
   profiles_recursion_error text := null;
+  owner_b uuid := current_setting('leak_suite.owner_b')::uuid;
+  team_a uuid;
+  team_b uuid;
+  admin_email_ids uuid[];
+  admin_emails_own bigint;
+  admin_emails_cross bigint;
+  directory_email_own text;
+  directory_email_cross text;
+  team_count_own integer;
+  team_count_cross integer;
+  email_fn_error text := null;
   own_c bigint; cross_c bigint;
   t text;
   i int;
 begin
+  select id into team_a from public.teams where org_id = org_a;
+  select id into team_b from public.teams where org_id = org_b;
+
   select coalesce(array_agg(c.table_name::text order by c.table_name), '{}')
     into tables
     from information_schema.columns c
@@ -317,7 +331,25 @@ begin
     profiles_recursion_error := sqlerrm;
   end;
 
+  -- The address helpers are security definer, so no row policy stands
+  -- between them and org B: the org check in each body is the boundary.
+  begin
+    select array_agg(e.profile_id) into admin_email_ids from public.admin_member_emails() e;
+    directory_email_own := public.profile_directory_email(owner_a);
+    directory_email_cross := public.profile_directory_email(owner_b);
+    team_count_own := public.serving_team_email_count(team_a);
+    team_count_cross := public.serving_team_email_count(team_b);
+  exception when others then
+    email_fn_error := sqlerrm;
+  end;
+
   reset role;
+
+  -- Counted as postgres: under RLS org B's profiles would be invisible and
+  -- the cross count vacuously zero.
+  select count(*) filter (where p.org_id = org_a), count(*) filter (where p.org_id <> org_a)
+    into admin_emails_own, admin_emails_cross
+    from public.profiles p where p.id = any (admin_email_ids);
 
   for i in 1 .. array_length(tables, 1) loop
     if error_states[i] = '42501'
@@ -367,6 +399,25 @@ begin
 
   insert into tenancy_leak_results
     select ok(org_b_visible_count = 0, 'org A member cannot read org B''s organizations row');
+
+  if email_fn_error is not null then
+    insert into tenancy_leak_results
+      select fail('org A church admin address helper check errored: ' || email_fn_error);
+  else
+    insert into tenancy_leak_results
+      select ok(admin_emails_own >= 1, 'org A church admin reads own-org addresses from admin_member_emails()');
+    insert into tenancy_leak_results
+      select ok(admin_emails_cross = 0, 'org A church admin reads no org B address from admin_member_emails()');
+    insert into tenancy_leak_results
+      select ok(directory_email_own is not null, 'org A church admin reads an own-org address from profile_directory_email()');
+    insert into tenancy_leak_results
+      select ok(directory_email_cross is null, 'org A church admin reads no org B address from profile_directory_email()');
+    insert into tenancy_leak_results
+      select ok(team_count_own >= 1, 'org A group leader gets a count from serving_team_email_count() for an own-org team');
+    insert into tenancy_leak_results
+      select ok(team_count_cross is null, 'org A group leader gets no count from serving_team_email_count() for an org B team');
+  end if;
+
   insert into tenancy_leak_results
     select ok(profiles_recursion_error is null,
       coalesce('profiles SELECT does not recurse — got: ' || profiles_recursion_error,

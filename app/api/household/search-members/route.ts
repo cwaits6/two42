@@ -46,11 +46,9 @@ export async function GET(request: Request) {
   const safe = q.replace(/[,()]/g, "");
 
   // Search profiles without a household, matching first or last name.
-  // We select hide_email so we can respect the member's privacy setting
-  // before displaying their email in the UI.
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, first_name, last_name, preferred_name, avatar_url, email, hide_email")
+    .select("id, first_name, last_name, preferred_name, avatar_url")
     .is("family_id", null)
     .neq("id", user.id)
     .in("role", STORED_MEMBER_ROLES)
@@ -64,13 +62,21 @@ export async function GET(request: Request) {
   // Private buckets: the client renders these avatars directly, so
   // exchange stored URLs for signed URLs in the response.
   const rows = data ?? [];
-  const signedAvatars = await mintSignedUrls(rows.map((r) => r.avatar_url));
+  // The directory view carries an address only when its owner shows it.
+  const [signedAvatars, { data: addresses, error: addressError }] = await Promise.all([
+    mintSignedUrls(rows.map((r) => r.avatar_url)),
+    supabase
+      .from("profiles_directory")
+      .select("id, email")
+      .in("id", rows.map((r) => r.id)),
+  ]);
+  if (addressError) return NextResponse.json({ error: addressError.message }, { status: 500 });
+  const emailById = new Map(addresses.map((a) => [a.id, a.email]));
 
-  // Mask email for members who have opted out of showing it
-  const results = rows.map(({ hide_email, email, ...rest }, i) => ({
-    ...rest,
+  const results = rows.map((row, i) => ({
+    ...row,
     avatar_url: signedAvatars[i],
-    email: hide_email ? null : email,
+    email: emailById.get(row.id) ?? null,
   }));
 
   return NextResponse.json({ data: results });

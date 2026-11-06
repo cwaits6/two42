@@ -4,7 +4,6 @@ interface PersonNameParts {
   first_name: string | null;
   last_name: string | null;
   preferred_name?: string | null;
-  email?: string | null;
 }
 
 function hasName(p: PersonNameParts): boolean {
@@ -15,13 +14,24 @@ function firstOf(p: PersonNameParts): string {
   return p.preferred_name?.trim() || p.first_name?.trim() || "";
 }
 
+const NO_NAME = "No name on file";
+
 /**
- * A person's name, or their email when no name is on file yet — someone who
- * signed in but never filled in a profile still has to be recognisable on a
- * roster or a schedule.
+ * A person's name. Never their email: a name is shown to whoever sees the
+ * roster, schedule or message it lands in, and the person may hide their
+ * address from those readers.
  */
 export function personName(p: PersonNameParts): string {
-  return hasName(p) ? displayName(p) : p.email?.trim() || "No name on file";
+  return hasName(p) ? displayName(p) : NO_NAME;
+}
+
+/**
+ * A person's name, or their email when no name is on file. Only for a reader
+ * who may see the address whether or not it is hidden: the person themselves
+ * or a church admin.
+ */
+export function personNameOrEmail(p: PersonNameParts & { email: string | null }): string {
+  return hasName(p) ? displayName(p) : p.email?.trim() || NO_NAME;
 }
 
 /** The name a spouse is called by in "Me & Ben": the first name, or the whole name when there is none. */
@@ -29,9 +39,8 @@ export function spouseFirstName(p: PersonNameParts): string {
   return firstOf(p) || personName(p);
 }
 
-/** Avatar initials, from the email when there is no name. */
 export function personInitials(p: PersonNameParts): string {
-  return hasName(p) ? initials(p) : (p.email?.trim().charAt(0).toUpperCase() || "?");
+  return hasName(p) ? initials(p) : "?";
 }
 
 /**

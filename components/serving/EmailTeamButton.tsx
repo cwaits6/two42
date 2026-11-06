@@ -22,7 +22,18 @@ interface EmailTeamButtonProps {
   openDates: string[];
   /** Today in the church's time zone, "YYYY-MM-DD" */
   today: string;
-  memberCount: number;
+  /** How many people the email reaches; null when the count could not be read. */
+  emailReach: number | null;
+}
+
+/**
+ * The dialog's wording for a reach; it names a number only when it has one.
+ * `nobody` is a counted zero, never a count that could not be read.
+ */
+export function emailReachCopy(emailReach: number | null): { everyone: string; send: string; nobody: boolean } {
+  if (emailReach === null) return { everyone: "Everyone on the team", send: "Send", nobody: false };
+  const members = `${emailReach} member${emailReach !== 1 ? "s" : ""}`;
+  return { everyone: `Everyone on the team (${members})`, send: `Send to ${members}`, nobody: emailReach === 0 };
 }
 
 /**
@@ -34,8 +45,9 @@ export function EmailTeamButton({
   teamName,
   openDates,
   today,
-  memberCount,
+  emailReach,
 }: EmailTeamButtonProps) {
+  const copy = emailReachCopy(emailReach);
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
@@ -91,14 +103,14 @@ export function EmailTeamButton({
             <DialogTitle>Email {teamName}</DialogTitle>
           </DialogHeader>
 
-          {memberCount === 0 ? (
+          {copy.nobody ? (
             <p className="text-base text-foreground bg-muted border border-border rounded-md px-3 py-2">
               No one on this team can get email yet. Add people under Team
               members on this page first.
             </p>
           ) : (
             <p className="text-base text-muted-foreground">
-              Everyone on the team ({memberCount} member{memberCount !== 1 ? "s" : ""})
+              {copy.everyone}{" "}
               will get an email listing the open dates below, each with a
               button to sign up.
             </p>
@@ -132,10 +144,10 @@ export function EmailTeamButton({
               Cancel
             </Button>
             <Button
-              disabled={sending || memberCount === 0}
+              disabled={sending || copy.nobody}
               onClick={send}
             >
-              {sending ? "Sending…" : `Send to ${memberCount} member${memberCount !== 1 ? "s" : ""}`}
+              {sending ? "Sending…" : copy.send}
             </Button>
           </div>
         </DialogContent>

@@ -385,6 +385,8 @@ export function ProfileForm({
     canManageAvatar(avatarCaller, { id: profile.id, family_id: savedFamilyId });
 
   const someoneElse = editingOther || isAdmin;
+  // Someone else's address is a church admin's to read, not the household's.
+  const canSeeEmail = isAdmin || !editingOther;
 
   const householdItems = [
     { value: "none", label: "No household" },
@@ -496,20 +498,24 @@ export function ProfileForm({
 
           {/* Email */}
           <div className="space-y-2">
-            <Label htmlFor="email" className="text-base">
-              Email
-            </Label>
-            <Input
-              id="email"
-              type="email"
-              value={state.email}
-              onChange={(e) => update("email", e.target.value)}
-              disabled={!isAdmin}
-              className="py-5 text-base"
-              {...invalidFieldProps("email", errors.email)}
-            />
-            <FieldError fieldId="email" message={errors.email} />
-            {!isAdmin && <EmailChangeHint />}
+            {canSeeEmail && (
+              <>
+                <Label htmlFor="email" className="text-base">
+                  Email
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={state.email}
+                  onChange={(e) => update("email", e.target.value)}
+                  disabled={!isAdmin}
+                  className="py-5 text-base"
+                  {...invalidFieldProps("email", errors.email)}
+                />
+                <FieldError fieldId="email" message={errors.email} />
+                {!isAdmin && <EmailChangeHint />}
+              </>
+            )}
             <CheckRow
               id="hide_email"
               label={someoneElse ? "Hide email from the directory" : "Hide my email from the directory"}

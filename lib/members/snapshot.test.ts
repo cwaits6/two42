@@ -57,10 +57,39 @@ function fakeClient(options: {
   return { client, filters };
 }
 
+const NO_EMAILS = new Map<string, string | null>();
+
 describe("loadOrgSnapshot", () => {
+  it("takes each person's email from the caller's map, not from the row", async () => {
+    const { client } = fakeClient({
+      data: { profiles: [{ id: "p1", role: "member" }, { id: "p2", role: "member" }] },
+    });
+    const snapshot = await loadOrgSnapshot(
+      client,
+      "org-7",
+      new Map([
+        ["p1", "ada@example.org"],
+        ["p2", null],
+      ])
+    );
+    expect(snapshot.profiles.map((p) => [p.id, p.email])).toEqual([
+      ["p1", "ada@example.org"],
+      ["p2", null],
+    ]);
+  });
+
+  it("throws when the map has no entry for someone on the roster", async () => {
+    const { client } = fakeClient({
+      data: { profiles: [{ id: "p1", role: "member" }, { id: "p2", role: "member" }] },
+    });
+    await expect(
+      loadOrgSnapshot(client, "org-7", new Map([["p1", "ada@example.org"]]))
+    ).rejects.toThrow(/^Failed to load member emails$/);
+  });
+
   it("filters every one of the six selects on org_id", async () => {
     const { client, filters } = fakeClient({});
-    await loadOrgSnapshot(client, "org-7");
+    await loadOrgSnapshot(client, "org-7", NO_EMAILS);
     for (const table of TABLES) {
       expect(filters.get(table)).toContainEqual(["org_id", "org-7"]);
     }
@@ -68,7 +97,7 @@ describe("loadOrgSnapshot", () => {
 
   it.each(TABLES)("throws naming %s — and only the table — on its error", async (table) => {
     const { client } = fakeClient({ errors: { [table]: { message: "boom" } } });
-    await expect(loadOrgSnapshot(client, "org-7")).rejects.toThrow(table);
+    await expect(loadOrgSnapshot(client, "org-7", NO_EMAILS)).rejects.toThrow(table);
   });
 
   it("never puts row content in the thrown message", async () => {
@@ -80,7 +109,7 @@ describe("loadOrgSnapshot", () => {
         },
       },
     });
-    await expect(loadOrgSnapshot(client, "org-7")).rejects.toThrow(
+    await expect(loadOrgSnapshot(client, "org-7", NO_EMAILS)).rejects.toThrow(
       /^Failed to load profiles$/
     );
   });
@@ -94,7 +123,7 @@ describe("loadOrgSnapshot", () => {
         ],
       },
     });
-    const snapshot = await loadOrgSnapshot(client, "org-7");
+    const snapshot = await loadOrgSnapshot(client, "org-7", NO_EMAILS);
     expect(snapshot.accessRequestEmails).toEqual([
       "ada@example.org",
       "bob@example.org",
@@ -109,7 +138,7 @@ describe("loadOrgSnapshot", () => {
     const { client } = fakeClient({
       data: Object.fromEntries(TABLES.map((t) => [t, null])),
     });
-    const snapshot = await loadOrgSnapshot(client, "org-7");
+    const snapshot = await loadOrgSnapshot(client, "org-7", NO_EMAILS);
     expect(snapshot).toEqual({
       profiles: [],
       families: [],
@@ -138,7 +167,7 @@ describe("loadOrgSnapshot", () => {
       },
     } as unknown as SupabaseClient<Database>;
 
-    const pending = loadOrgSnapshot(client, "org-7");
+    const pending = loadOrgSnapshot(client, "org-7", NO_EMAILS);
     await vi.waitFor(() => expect(started).toHaveLength(6));
     resolveAll();
     await pending;

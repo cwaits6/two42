@@ -14,6 +14,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
 import { PersonCard } from "@/components/directory/PersonCard";
+import { PROFILE_COLUMNS, type ProfileColumns } from "@/lib/profileColumns";
 import type {
   DirectoryProfile,
   FamilyDirectoryFull,
@@ -78,19 +79,21 @@ export function DirectoryPreview() {
     }
 
     // Fetch fresh so the preview reflects the latest saved profile
-    const [{ data: profile, error }, { data: groupRows }] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", user.id).single<Profile>(),
+    const [{ data: row, error }, { data: ownEmail, error: emailError }, { data: groupRows }] = await Promise.all([
+      supabase.from("profiles").select(PROFILE_COLUMNS).eq("id", user.id).single<ProfileColumns>(),
+      supabase.rpc("get_own_email"),
       supabase
         .from("team_members")
         .select("teams(id, name, color, icon, display_order)")
         .eq("profile_id", user.id),
     ]);
 
-    if (error || !profile) {
+    if (error || emailError || !row) {
       toast.error(failureMessage("load your directory entry"));
       setLoading(false);
       return;
     }
+    const profile = { ...row, email: ownEmail };
 
     const groups = (groupRows || [])
       .map((r) => r.teams as unknown as (GroupChip & { display_order: number }) | null)
