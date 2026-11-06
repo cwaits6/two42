@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ApprovalQueue } from "@/components/admin/ApprovalQueue";
+import { requestsWaiting } from "@/lib/admin/requestsWaiting";
 import { createClient } from "@/lib/supabase/client";
 import { failureMessage } from "@/lib/errorCopy";
 import { groupCreationErrorMessage } from "@/lib/groups/creation";
@@ -11,20 +12,22 @@ import { requestedOn } from "@/lib/groups/joinQueue";
 import { displayName } from "@/lib/names";
 import type { PendingGroupRequest } from "@/lib/groups/requests";
 
+/** The list belongs to the caller, which is told when a request is decided and leaves it. */
 export function PendingGroupRequests({
-  initialRequests,
+  requests,
+  onRemove,
   timeZone,
 }: {
-  initialRequests: PendingGroupRequest[];
+  requests: PendingGroupRequest[];
+  onRemove: (id: string) => void;
   timeZone: string;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
-  const [requests, setRequests] = useState(initialRequests);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   function remove(id: string) {
-    setRequests((prev) => prev.filter((r) => r.id !== id));
+    onRemove(id);
     router.refresh();
   }
 
@@ -40,7 +43,7 @@ export function PendingGroupRequests({
         toast.error(groupCreationErrorMessage(error.code));
         return;
       }
-      toast.success(`Group created. ${displayName(request.requester)} leads it.`);
+      toast.success(`Group added. ${displayName(request.requester)} leads it.`);
       remove(id);
     } finally {
       setBusyId(null);
@@ -95,7 +98,7 @@ export function PendingGroupRequests({
       onApprove={approve}
       onDecline={decline}
       busyId={busyId}
-      emptyText="No requests waiting."
+      emptyText={requestsWaiting(0)}
     />
   );
 }

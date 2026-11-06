@@ -32,18 +32,12 @@ describe("roleChangeCopy", () => {
 });
 
 describe("roleLockReason", () => {
-  const viewer = { id: "me" };
-
-  it("leaves every other row open", () => {
-    expect(roleLockReason({ id: "you" }, "me", [{ role: "admin" }])).toBeNull();
+  it("leaves everyone else's role open", () => {
+    expect(roleLockReason("you", "me", 1)).toBeNull();
   });
 
-  it("explains the viewer's own row, naming the rule when they are the last admin", () => {
-    expect(roleLockReason(viewer, "me", [{ role: "admin" }, { role: "member" }])).toMatch(
-      /needs at least one church admin/,
-    );
-    expect(roleLockReason(viewer, "me", [{ role: "admin" }, { role: "admin" }])).toBe(
-      "Another church admin can change your role.",
-    );
+  it("explains the viewer's own role, naming the rule when they are the last admin", () => {
+    expect(roleLockReason("me", "me", 1)).toMatch(/needs at least one church admin/);
+    expect(roleLockReason("me", "me", 2)).toBe("Another church admin can change your role.");
   });
 });

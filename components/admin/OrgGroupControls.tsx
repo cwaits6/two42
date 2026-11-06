@@ -1,9 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -13,7 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/client";
-import { failureMessage } from "@/lib/errorCopy";
+import { useSettingSave } from "@/components/admin/useSettingSave";
 import {
   GROUP_CREATION_POLICIES,
   parseGroupCreationPolicy,
@@ -23,8 +20,8 @@ import {
 const POLICY_COPY: Record<GroupCreationPolicy, { label: string; description: string; saved: string }> = {
   open: {
     label: "Open",
-    description: "Any member can create a group. It goes live at once.",
-    saved: "Members can now create groups.",
+    description: "Any member can add a group. It goes live at once.",
+    saved: "Members can now add groups.",
   },
   approval: {
     label: "Approval required",
@@ -33,8 +30,8 @@ const POLICY_COPY: Record<GroupCreationPolicy, { label: string; description: str
   },
   admins: {
     label: "Church admins only",
-    description: "Only church admins create groups.",
-    saved: "Only church admins can create groups now.",
+    description: "Only church admins add groups.",
+    saved: "Only church admins can add groups now.",
   },
 };
 
@@ -49,30 +46,21 @@ interface OrgGroupControlsProps {
   policy: GroupCreationPolicy;
 }
 
-/** Church admin control for who can create groups. */
+/** Church admin control for who can add groups. */
 export function OrgGroupControls({ orgId, policy }: OrgGroupControlsProps) {
-  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
-  const [saved, setSaved] = useState(policy);
-  const [selected, setSelected] = useState(policy);
-  const [saving, setSaving] = useState(false);
-
-  async function save() {
-    setSaving(true);
-    const { data, error } = await supabase
-      .from("organizations")
-      .update({ group_creation_policy: selected })
-      .eq("id", orgId)
-      .select("group_creation_policy");
-    setSaving(false);
-    if (error || !data?.length) {
-      toast.error(failureMessage("save who can create groups"));
-      return;
-    }
-    setSaved(selected);
-    toast.success(POLICY_COPY[selected].saved);
-    router.refresh();
-  }
+  const { value: selected, saving, save } = useSettingSave(policy, {
+    write: async (next) => {
+      const { data, error } = await supabase
+        .from("organizations")
+        .update({ group_creation_policy: next })
+        .eq("id", orgId)
+        .select("group_creation_policy");
+      return !error && (data?.length ?? 0) > 0;
+    },
+    saved: (next) => POLICY_COPY[next].saved,
+    action: "save who can add groups",
+  });
 
   return (
     <div className="rounded-2xl border border-border bg-card px-5 py-4">
@@ -80,28 +68,23 @@ export function OrgGroupControls({ orgId, policy }: OrgGroupControlsProps) {
         <Label htmlFor="group-creation-policy" className="text-base">
           Who can add groups
         </Label>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Select
-            items={POLICY_OPTIONS}
-            value={selected}
-            onValueChange={(raw) => setSelected(parseGroupCreationPolicy(raw))}
-            disabled={saving}
-          >
-            <SelectTrigger id="group-creation-policy" className="h-12 w-full text-base sm:max-w-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {POLICY_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value} className="text-base">
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button onClick={save} disabled={saving || selected === saved}>
-            {saving ? "Saving…" : "Save rule"}
-          </Button>
-        </div>
+        <Select
+          items={POLICY_OPTIONS}
+          value={selected}
+          onValueChange={(raw) => save(parseGroupCreationPolicy(raw))}
+          disabled={saving}
+        >
+          <SelectTrigger id="group-creation-policy" className="h-12 w-full text-base sm:max-w-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {POLICY_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value} className="text-base">
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <p className="text-base text-muted-foreground">{POLICY_COPY[selected].description}</p>
       </div>
     </div>

@@ -1,14 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { failureMessage } from "@/lib/errorCopy";
+import { useSettingSave } from "@/components/admin/useSettingSave";
 import {
   PRAYER_RETENTION_OPTIONS,
   PRAYER_RETENTION_PERIODS,
@@ -49,30 +46,25 @@ interface PrayerRetentionSettingsProps {
 
 /** Church admin control for deleting prayer requests once they reach an age. */
 export function PrayerRetentionSettings({ orgId, retention }: PrayerRetentionSettingsProps) {
-  const [saved, setSaved] = useState<PrayerRetention>(retention);
-  const [selected, setSelected] = useState<PrayerRetention>(retention);
-  const [confirming, setConfirming] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const router = useRouter();
+  // A period deletes prayer requests, so it waits here until it is confirmed.
+  const [asking, setAsking] = useState<Exclude<PrayerRetention, "off"> | null>(null);
   const supabase = useMemo(() => createClient(), []);
-  const selectedLabel = PRAYER_RETENTION_OPTIONS.find((o) => o.value === String(selected))?.label;
-
-  async function save() {
-    setSaving(true);
-    const ok = await savePrayerRetention(supabase, orgId, selected);
-    setSaving(false);
-    if (!ok) {
-      toast.error(failureMessage("save the prayer request setting"));
-      return;
-    }
-    setSaved(selected);
-    setConfirming(false);
-    toast.success(
-      selected === "off"
+  const { value, saving, save } = useSettingSave<PrayerRetention>(retention, {
+    write: (next) => savePrayerRetention(supabase, orgId, next),
+    saved: (next) =>
+      next === "off"
         ? "Prayer requests will be kept."
-        : `Prayer requests will be deleted after ${PRAYER_RETENTION_PERIODS[selected]}.`
-    );
-    router.refresh();
+        : `Prayer requests will be deleted after ${PRAYER_RETENTION_PERIODS[next]}.`,
+    action: "save the prayer request setting",
+  });
+  const shown = asking ?? value;
+  const shownLabel = PRAYER_RETENTION_OPTIONS.find((o) => o.value === String(shown))?.label;
+
+  function choose(next: PrayerRetention) {
+    // Picking the period in force must not warn of a deletion that changes nothing.
+    if (next === value) return;
+    if (next === "off") save(next);
+    else setAsking(next);
   }
 
   return (
@@ -84,39 +76,32 @@ export function PrayerRetentionSettings({ orgId, retention }: PrayerRetentionSet
         Prayer requests are kept unless you choose a time here. The time counts from the day a
         request was posted, and deleting happens each night.
       </p>
-      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <Select
-          items={PRAYER_RETENTION_OPTIONS}
-          value={String(selected)}
-          onValueChange={(value) => value && setSelected(parsePrayerRetention(value))}
-        >
-          <SelectTrigger id="prayer-retention" className="w-full text-base sm:flex-1">
-            <SelectValue>{selectedLabel}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {PRAYER_RETENTION_OPTIONS.map((option) => (
-              <SelectItem key={option.value} value={option.value} className="text-base">
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button
-          size="lg"
-          className="text-base"
-          onClick={() => (selected === "off" ? save() : setConfirming(true))}
-          disabled={saving || selected === saved}
-        >
-          {saving && !confirming ? "Saving…" : "Save setting"}
-        </Button>
-      </div>
-      {selected !== "off" && (
+      <Select
+        items={PRAYER_RETENTION_OPTIONS}
+        value={String(shown)}
+        disabled={saving}
+        onValueChange={(next) => next && choose(parsePrayerRetention(next))}
+      >
+        <SelectTrigger id="prayer-retention" className="mt-3 w-full text-base sm:max-w-sm">
+          <SelectValue>{shownLabel}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {PRAYER_RETENTION_OPTIONS.map((option) => (
+            <SelectItem key={option.value} value={option.value} className="text-base">
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {asking !== null && (
         <ConfirmDialog
-          open={confirming}
-          onOpenChange={setConfirming}
+          open
+          onOpenChange={(open) => !open && setAsking(null)}
           pendingLabel="Saving…"
-          onConfirm={save}
-          {...prayerRetentionConfirmation(selected)}
+          onConfirm={async () => {
+            if (await save(asking)) setAsking(null);
+          }}
+          {...prayerRetentionConfirmation(asking)}
         />
       )}
     </div>

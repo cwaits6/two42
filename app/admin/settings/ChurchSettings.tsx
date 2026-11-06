@@ -6,13 +6,17 @@ import { DirectoryVisibilitySettings } from "@/components/admin/DirectoryVisibil
 import { GivingSettings } from "@/components/giving/GivingSettings";
 import { ErrorState } from "@/components/states/ErrorState";
 import { getDirectoryVisibility } from "@/lib/directory/visibility";
-import { givingStewardsCanManage } from "@/lib/giving/server";
+import { readStewardsCanManage } from "@/lib/giving/server";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { PrayerRetentionSettings } from "@/components/admin/PrayerRetentionSettings";
 import { TimezoneSettings } from "@/components/admin/TimezoneSettings";
 import { getPrayerRetention } from "@/lib/orgPrayerRetention";
-import { getOrgTimeZone } from "@/lib/time/orgZone";
+import { isValidTimeZone } from "@/lib/time/zone";
 import { CUSTOM_SENDING_DOMAINS_ENABLED } from "@/lib/email/sendingDomains";
+import { OrgGroupControls } from "@/components/admin/OrgGroupControls";
+import { GroupDiscoverySettings } from "@/components/groups/GroupDiscoverySettings";
+import { parseGroupCreationPolicy } from "@/lib/groups/creation";
+import { logError, logWarn } from "@/lib/log";
 
 export async function ChurchSettings() {
   const supabase = await createClient();
@@ -26,42 +30,79 @@ export async function ChurchSettings() {
     .single();
   if (profile?.role !== "admin") redirect("/dashboard");
 
-  const [stewardsCanManage, directoryVisibility, prayerRetention] = await Promise.all([
-    givingStewardsCanManage(supabase, profile.org_id),
+  // The church's row is read here, not through the member-facing helpers: those
+  // resolve a failed read to the fail-closed value, which a control would show
+  // as the setting.
+  const [rulesRead, stewardsCanManage, directoryVisibility, prayerRetention] = await Promise.all([
+    supabase
+      .from("organizations")
+      .select("group_discovery, group_creation_policy, timezone")
+      .eq("id", profile.org_id)
+      .maybeSingle(),
+    readStewardsCanManage(supabase, profile.org_id),
     getDirectoryVisibility(),
     getPrayerRetention(),
   ]);
+  if (rulesRead.error) logError("Failed to load the church's rules", rulesRead.error, { route: "/admin/settings" });
+  const rules = rulesRead.error ? null : rulesRead.data;
+  // A stored zone this runtime doesn't know still gets the control: it is the
+  // only place a church admin can pick one that works.
+  if (rules && !isValidTimeZone(rules.timezone)) {
+    logWarn("Unknown church time zone", undefined, { route: "/admin/settings" });
+  }
+  const timeZone = rules ? rules.timezone : null;
 
   return (
     <>
-      {CUSTOM_SENDING_DOMAINS_ENABLED && (
-        <div className="mb-8 flex flex-col gap-3 sm:flex-row">
-          <Button
-            size="lg"
-            variant="outline"
-            className="text-lg"
-            nativeButton={false}
-            render={<Link href="/admin/settings/email" />}
-          >
-            Email sending domain
-          </Button>
-        </div>
-      )}
       <h2 className="mb-3 text-xl font-bold text-foreground">Directory</h2>
       {directoryVisibility ? (
         <DirectoryVisibilitySettings orgId={profile.org_id} visibility={directoryVisibility} />
       ) : (
         <ErrorState thing="the directory setting" />
       )}
+      <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Groups</h2>
+      {rules ? (
+        <div className="space-y-4">
+          <GroupDiscoverySettings orgId={profile.org_id} discoveryOn={rules.group_discovery === true} />
+          <OrgGroupControls
+            orgId={profile.org_id}
+            policy={parseGroupCreationPolicy(rules.group_creation_policy)}
+          />
+        </div>
+      ) : (
+        <ErrorState thing="the group settings" />
+      )}
       <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Giving</h2>
-      <GivingSettings stewardsCanManage={stewardsCanManage} />
+      {stewardsCanManage === null ? (
+        <ErrorState thing="the giving setting" />
+      ) : (
+        <GivingSettings stewardsCanManage={stewardsCanManage} />
+      )}
       <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Events</h2>
-      <TimezoneSettings orgId={profile.org_id} timezone={await getOrgTimeZone()} />
+      {timeZone ? (
+        <TimezoneSettings orgId={profile.org_id} timezone={timeZone} />
+      ) : (
+        <ErrorState thing="the time zone" />
+      )}
       <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Prayer requests</h2>
       {prayerRetention ? (
         <PrayerRetentionSettings orgId={profile.org_id} retention={prayerRetention} />
       ) : (
         <ErrorState thing="the prayer request setting" />
+      )}
+      {CUSTOM_SENDING_DOMAINS_ENABLED && (
+        <>
+          <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Email</h2>
+          <Button
+            size="lg"
+            variant="outline"
+            className="w-full text-lg sm:w-auto"
+            nativeButton={false}
+            render={<Link href="/admin/settings/email" />}
+          >
+            Email sending domain
+          </Button>
+        </>
       )}
     </>
   );

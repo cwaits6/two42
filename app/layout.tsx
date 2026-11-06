@@ -16,6 +16,7 @@ import { getRequestBranding } from "@/lib/branding";
 import { getDiscoveryOn } from "@/lib/groups/discovery";
 import { getGroupCreationPolicy } from "@/lib/groups/creationPolicy";
 import { getGroupMemberships } from "@/lib/groups/server";
+import { getWaitingRequestCount } from "@/lib/admin/requestCounts";
 import { PROFILE_COLUMNS, type ProfileColumns } from "@/lib/profileColumns";
 import { mintSignedUrl } from "@/lib/storageRead";
 import type { ActiveGroup } from "@/lib/groups/active";
@@ -77,6 +78,7 @@ export default async function RootLayout({
   let discoveryOn = false;
   let creationPolicy: GroupCreationPolicy = "approval";
   let photoUrl: string | null = null;
+  let waitingRequests: number | null = null;
   if (user) {
     const supabase = await createClient();
     const [{ data, error }, { data: groupData, error: groupError }, { data: platformAdmin }] = await Promise.all([
@@ -111,13 +113,17 @@ export default async function RootLayout({
         logError("Layout: failed to load group memberships", e);
         return [];
       });
-    [hasServingAccess, memberships, discoveryOn, creationPolicy, photoUrl] = await Promise.all([
+    // Only a church admin's count is the whole church's; anyone else's would be a partial one.
+    const loadWaitingRequests = () =>
+      data?.role === "admin" ? getWaitingRequestCount().catch(() => null) : Promise.resolve(null);
+    [hasServingAccess, memberships, discoveryOn, creationPolicy, photoUrl, waitingRequests] = await Promise.all([
       loadServingAccess(),
       loadNavMemberships(),
       getDiscoveryOn(),
       getGroupCreationPolicy(),
       // Fail-soft: null renders the person's initials.
       mintSignedUrl(profile?.avatar_url),
+      loadWaitingRequests(),
     ]);
   }
 
@@ -170,7 +176,12 @@ export default async function RootLayout({
           discoveryOn={discoveryOn}
           creation={{ policy: creationPolicy, isOrgAdmin: profile?.role === "admin" }}
         >
-          <SidebarProvider account={account} hasServingAccess={hasServingAccess} orgName={b.display_name}>
+          <SidebarProvider
+            account={account}
+            hasServingAccess={hasServingAccess}
+            orgName={b.display_name}
+            waitingRequests={waitingRequests}
+          >
             <Header />
             <AppShell>{children}</AppShell>
           </SidebarProvider>

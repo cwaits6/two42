@@ -8,6 +8,10 @@ import type { FamilyUnit } from "@/lib/types";
 import { PROFILE_COLUMNS, type MemberEmail, type ProfileColumns } from "@/lib/profileColumns";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { pageTitle } from "@/lib/pageTitle";
+import { toUserRole } from "@/lib/roles";
+import { roleLockReason } from "../memberRoles";
+import { MemberRole } from "./MemberRole";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = () => pageTitle("Edit member");
 
@@ -30,7 +34,7 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
 
   if (currentProfile?.role !== "admin") redirect("/dashboard");
 
-  const [{ data: row }, { data: address, error: addressError }, { data: families }] = await Promise.all([
+  const [{ data: row }, { data: address, error: addressError }, { data: families }, admins] = await Promise.all([
     supabase.from("profiles").select(PROFILE_COLUMNS).eq("id", id).single<ProfileColumns>(),
     supabase.rpc("admin_member_emails").eq("profile_id", id).maybeSingle<MemberEmail>(),
     supabase
@@ -38,6 +42,7 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
       .select("*")
       .order("family_name")
       .returns<FamilyUnit[]>(),
+    supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "admin"),
   ]);
 
   if (!row) notFound();
@@ -45,6 +50,15 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
   // over an address that failed to load.
   if (addressError) throw new Error(`Failed to load the member's email (${addressError.code})`);
   const profile = { ...row, email: address?.email ?? null };
+  // An unknown count reads as one, the stricter of the two reasons the viewer's own role is locked.
+  // A HEAD response has no body, so a failed count may carry no error and never a code.
+  if (admins.error || admins.count === null) {
+    logError("Failed to count church admins", admins.error, {
+      route: "/admin/members/[id]",
+      ids: { status: admins.status },
+    });
+  }
+  const adminCount = admins.count ?? 1;
 
   return (
     <PageContainer size="reading">
@@ -53,6 +67,11 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
         subtitle={displayName(profile)}
         backHref="/admin/members"
         backLabel="Back to Members"
+      />
+
+      <MemberRole
+        member={{ id: profile.id, name: displayName(profile), role: toUserRole(profile.role) }}
+        lockReason={roleLockReason(profile.id, user.id, adminCount)}
       />
 
       <ProfileForm

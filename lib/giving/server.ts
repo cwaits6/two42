@@ -14,19 +14,37 @@ import { displayName, initials } from "@/lib/names";
 import { mintSignedUrls } from "@/lib/storageRead";
 import { readList } from "@/lib/supabase/readList";
 import type { MemberOption } from "@/components/giving/FundForm";
+import { logError } from "@/lib/log";
 
-/** Whether members may put up and manage their own giving links */
-export async function givingStewardsCanManage(
+/**
+ * The church's stored giving rule: whether members may put up and manage their
+ * own giving links. A church with no row has the default, which is that they
+ * may. Null when the read failed, for a control that must not show a value the
+ * church doesn't have.
+ */
+export async function readStewardsCanManage(
   supabase: SupabaseClient,
   orgId: string
-): Promise<boolean> {
-  const { data } = await supabase
+): Promise<boolean | null> {
+  const { data, error } = await supabase
     .from("site_settings")
     .select("value")
     .eq("org_id", orgId)
     .eq("key", "giving_manage_mode")
     .maybeSingle();
+  if (error) {
+    logError("Failed to load the giving setting", error);
+    return null;
+  }
   return (data?.value ?? "stewards") === "stewards";
+}
+
+/** Whether members may put up and manage their own giving links; a failed read gives the default. */
+export async function givingStewardsCanManage(
+  supabase: SupabaseClient,
+  orgId: string
+): Promise<boolean> {
+  return (await readStewardsCanManage(supabase, orgId)) ?? true;
 }
 
 type StewardAvatarSource = {

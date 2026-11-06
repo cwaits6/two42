@@ -1,4 +1,4 @@
-import type { Profile, UserRole } from "@/lib/types";
+import type { UserRole } from "@/lib/types";
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   pending: "Pending",
@@ -6,11 +6,14 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   admin: "Church admin",
 };
 
+/** A role a person holds once approved. */
+export type AssignedRole = Exclude<UserRole, "pending">;
+
 /**
  * What the role control offers. Pending is not a role to pick: moving someone
  * back to pending takes their group access away, so it is its own action.
  */
-export const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
+export const ROLE_OPTIONS: { value: AssignedRole; label: string }[] = [
   { value: "member", label: ROLE_LABELS.member },
   { value: "admin", label: ROLE_LABELS.admin },
 ];
@@ -52,18 +55,13 @@ export function roleChangeCopy(name: string, from: UserRole, to: UserRole): Role
 }
 
 /**
- * Why this row's role can't be changed here, or null when it can. Only the
- * viewer's own row is locked. The database refuses the last admin's demotion
- * whichever row it comes from; this says so before anyone tries.
+ * Why this person's role can't be changed here, or null when it can. Only the
+ * viewer's own role is locked. The database refuses the last admin's demotion
+ * whoever it comes from; this says so before anyone tries.
  */
-export function roleLockReason(
-  member: Pick<Profile, "id">,
-  viewerId: string | null,
-  members: Pick<Profile, "role">[],
-): string | null {
-  if (member.id !== viewerId) return null;
-  const admins = members.filter((m) => m.role === "admin").length;
-  return admins <= 1
+export function roleLockReason(memberId: string, viewerId: string | null, adminCount: number): string | null {
+  if (memberId !== viewerId) return null;
+  return adminCount <= 1
     ? "A church needs at least one church admin, so add another before changing your role."
     : "Another church admin can change your role.";
 }

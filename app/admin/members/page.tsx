@@ -1,5 +1,5 @@
+import { redirect } from "next/navigation";
 import { pageTitle } from "@/lib/pageTitle";
-import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { MembersList } from "./MembersList";
 
 export const generateMetadata = () => pageTitle("Members");
@@ -9,11 +9,7 @@ export default async function MembersPage({
 }: {
   searchParams: Promise<{ tab?: string }>;
 }) {
-  const { tab } = await searchParams;
-  return (
-    <MembersList
-      initialTab={tab === "requests" ? "requests" : "members"}
-      timeZone={await getOrgTimeZone()}
-    />
-  );
+  // Access requests were a tab here; links to it land where they are reviewed.
+  if ((await searchParams).tab === "requests") redirect("/admin/requests");
+  return <MembersList />;
 }

@@ -1,12 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { failureMessage } from "@/lib/errorCopy";
+import { useSettingSave } from "@/components/admin/useSettingSave";
 import type { DirectoryVisibility } from "@/lib/directory/visibility";
 
 interface DirectoryVisibilitySettingsProps {
@@ -17,29 +15,22 @@ interface DirectoryVisibilitySettingsProps {
 
 /** Church admin control for who a member can see in the directory. */
 export function DirectoryVisibilitySettings({ orgId, visibility }: DirectoryVisibilitySettingsProps) {
-  const [orgWide, setOrgWide] = useState(visibility === "org");
-  const router = useRouter();
-  const supabase = createClient();
-
-  async function toggle(next: boolean) {
-    setOrgWide(next);
-    const { data, error } = await supabase
-      .from("organizations")
-      .update({ directory_visibility: next ? "org" : "shared_groups" })
-      .eq("id", orgId)
-      .select("directory_visibility");
-    if (error || !data?.length) {
-      setOrgWide(!next);
-      toast.error(failureMessage("change who can see the directory"));
-      return;
-    }
-    toast.success(
+  const supabase = useMemo(() => createClient(), []);
+  const { value: orgWide, saving, save } = useSettingSave(visibility === "org", {
+    write: async (next) => {
+      const { data, error } = await supabase
+        .from("organizations")
+        .update({ directory_visibility: next ? "org" : "shared_groups" })
+        .eq("id", orgId)
+        .select("directory_visibility");
+      return !error && (data?.length ?? 0) > 0;
+    },
+    saved: (next) =>
       next
         ? "Members can now see everyone in the church."
-        : "Members now see only people who share a group with them."
-    );
-    router.refresh();
-  }
+        : "Members now see only people who share a group with them.",
+    action: "change who can see the directory",
+  });
 
   return (
     <div className="rounded-2xl border border-border bg-card px-5">
@@ -52,7 +43,7 @@ export function DirectoryVisibilitySettings({ orgId, visibility }: DirectoryVisi
             Otherwise members see only people who share a group with them.
           </p>
         </div>
-        <Switch id="directory-visibility" checked={orgWide} onCheckedChange={toggle} />
+        <Switch id="directory-visibility" checked={orgWide} disabled={saving} onCheckedChange={save} />
       </div>
     </div>
   );

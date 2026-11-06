@@ -30,25 +30,25 @@ function CopyList({ heading, items }: { heading: string; items: string[] }) {
   );
 }
 
-/** `url` answers GET with what the confirmation names, and DELETE with the deletion. */
-export function DeletePersonButton({
-  url,
+/**
+ * The delete-account flow without a control of its own, for a caller whose
+ * trigger is not a button, such as a menu item. `request(url)` asks the server
+ * what the confirmation names; `dialog` asks the person and deletes on confirm.
+ * `url` answers GET with what the confirmation names, and DELETE with the deletion.
+ */
+export function useDeletePerson({
   subject,
-  label,
-  ariaLabel,
   onDeleted,
 }: {
-  url: string;
   subject: DeletionSubject;
-  label: string;
-  ariaLabel?: string;
   onDeleted: () => void | Promise<void>;
 }) {
   const [loading, setLoading] = useState(false);
-  const [copy, setCopy] = useState<DeletionCopy | null>(null);
+  const [pending, setPending] = useState<{ url: string; copy: DeletionCopy } | null>(null);
   const action = subject === "self" ? "delete your account" : "delete this account";
 
-  async function openConfirmation() {
+  async function request(url: string) {
+    if (loading) return;
     setLoading(true);
     let gone: string | undefined;
     try {
@@ -65,7 +65,7 @@ export function DeletePersonButton({
         } else if (summary.lastChurchAdmin) {
           toast.error(LAST_CHURCH_ADMIN_MESSAGE[subject]);
         } else {
-          setCopy(deletionCopy(summary, subject));
+          setPending({ url, copy: deletionCopy(summary, subject) });
         }
         return;
       }
@@ -80,10 +80,11 @@ export function DeletePersonButton({
   }
 
   async function confirm() {
+    if (!pending) return;
     let res: Response;
     let body: { error?: unknown; photosNotRemoved?: number } | null;
     try {
-      res = await fetch(url, { method: "DELETE" });
+      res = await fetch(pending.url, { method: "DELETE" });
       body = await res.json().catch(() => null);
     } catch {
       toast.error(NETWORK_ERROR);
@@ -103,31 +104,59 @@ export function DeletePersonButton({
     }
 
     // Closed and reported before the reload, which reports its own failure.
-    setCopy(null);
+    setPending(null);
     await onDeleted();
   }
 
+  const copy = pending?.copy;
+  const dialog = (
+    <ConfirmDialog
+      open={pending !== null}
+      onOpenChange={(open) => !open && setPending(null)}
+      title={copy?.title ?? ""}
+      description={copy?.description}
+      confirmLabel={copy?.confirmLabel ?? ""}
+      pendingLabel={copy?.pendingLabel}
+      onConfirm={confirm}
+    >
+      {copy && (
+        <div className="space-y-3">
+          <CopyList heading="What goes" items={copy.goes} />
+          <CopyList heading="What stays" items={copy.stays} />
+        </div>
+      )}
+    </ConfirmDialog>
+  );
+
+  return { request, loading, dialog };
+}
+
+export function DeletePersonButton({
+  url,
+  subject,
+  label,
+  ariaLabel,
+  onDeleted,
+}: {
+  url: string;
+  subject: DeletionSubject;
+  label: string;
+  ariaLabel?: string;
+  onDeleted: () => void | Promise<void>;
+}) {
+  const deletion = useDeletePerson({ subject, onDeleted });
+
   return (
     <>
-      <Button variant="destructive" onClick={openConfirmation} disabled={loading} aria-label={ariaLabel}>
+      <Button
+        variant="destructive"
+        onClick={() => deletion.request(url)}
+        disabled={deletion.loading}
+        aria-label={ariaLabel}
+      >
         {label}
       </Button>
-      <ConfirmDialog
-        open={copy !== null}
-        onOpenChange={(open) => !open && setCopy(null)}
-        title={copy?.title ?? ""}
-        description={copy?.description}
-        confirmLabel={copy?.confirmLabel ?? ""}
-        pendingLabel={copy?.pendingLabel}
-        onConfirm={confirm}
-      >
-        {copy && (
-          <div className="space-y-3">
-            <CopyList heading="What goes" items={copy.goes} />
-            <CopyList heading="What stays" items={copy.stays} />
-          </div>
-        )}
-      </ConfirmDialog>
+      {deletion.dialog}
     </>
   );
 }

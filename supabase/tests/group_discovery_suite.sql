@@ -728,8 +728,11 @@ declare
   member_a1 uuid := current_setting('gd.member_a1')::uuid;
   lurker_a uuid := current_setting('gd.lurker_a')::uuid;
   owner_a uuid := current_setting('gd.owner_a')::uuid;
+  pending_a uuid := current_setting('gd.pending_a')::uuid;
+  owner_b uuid := current_setting('gd.owner_b')::uuid;
   leader_private bigint; member_private bigint; leader_policy bigint; member_policy bigint;
   admin_switch bigint; member_switch bigint;
+  leader_switch bigint; pending_switch bigint; foreign_switch bigint;
   insert_err text := 'none'; update_err text := 'none'; delete_err text := 'none';
 begin
   set local role authenticated;
@@ -768,7 +771,21 @@ begin
   update public.organizations set group_discovery = false where id = org_a;
   get diagnostics admin_switch = row_count;
 
+  -- Each tries the value the admin did not set, so a write that landed would show.
+  perform set_config('request.jwt.claims', json_build_object('sub', leader_a1)::text, true);
+  update public.organizations set group_discovery = true where id = org_a;
+  get diagnostics leader_switch = row_count;
+  perform set_config('request.jwt.claims', json_build_object('sub', pending_a)::text, true);
+  update public.organizations set group_discovery = true where id = org_a;
+  get diagnostics pending_switch = row_count;
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_b)::text, true);
+  update public.organizations set group_discovery = true where id = org_a;
+  get diagnostics foreign_switch = row_count;
+
   reset role;
+  perform set_config('gd.s9_leader_switch', leader_switch::text, true);
+  perform set_config('gd.s9_pending_switch', pending_switch::text, true);
+  perform set_config('gd.s9_foreign_switch', foreign_switch::text, true);
   perform set_config('gd.s9_leader_private', leader_private::text, true);
   perform set_config('gd.s9_member_private', member_private::text, true);
   perform set_config('gd.s9_leader_policy', leader_policy::text, true);
@@ -795,6 +812,12 @@ select is(current_setting('gd.s9_admin_switch')::int, 1,
   'the org admin''s discovery switch change matches one row');
 select is(current_setting('gd.s9_member_switch')::int, 0,
   'a member''s discovery switch change matches zero rows');
+select is(current_setting('gd.s9_leader_switch')::int, 0,
+  'a group leader''s discovery switch change matches zero rows');
+select is(current_setting('gd.s9_pending_switch')::int, 0,
+  'a pending account''s discovery switch change matches zero rows');
+select is(current_setting('gd.s9_foreign_switch')::int, 0,
+  'another org''s admin''s discovery switch change matches zero rows');
 select is(
   (select group_discovery from public.organizations where id = current_setting('gd.org_a')::uuid),
   false, 'and the org carries what the admin set');

@@ -8,14 +8,20 @@
 
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loggedLines } from "@/lib/log/testing";
 
 vi.mock("@/lib/storageRead", () => ({
   mintSignedUrls: async (urls: Array<string | null | undefined>) =>
     urls.map((u) => (u ? `signed:${u}` : null)),
 }));
 
-const { givingStewardsCanManage, loadDirectoryMemberOptions, loadFundFormData, signStewardAvatars } =
-  await import("@/lib/giving/server");
+const {
+  givingStewardsCanManage,
+  loadDirectoryMemberOptions,
+  loadFundFormData,
+  readStewardsCanManage,
+  signStewardAvatars,
+} = await import("@/lib/giving/server");
 
 interface Call {
   table: string;
@@ -74,6 +80,45 @@ describe("givingStewardsCanManage", () => {
   it("returns true for an explicit stewards row", async () => {
     const { client } = fakeClient({ site_settings: [{ value: "stewards" }] });
     expect(await givingStewardsCanManage(client, ORG)).toBe(true);
+  });
+});
+
+describe("readStewardsCanManage", () => {
+  const failing = {
+    from: () => {
+      const chain = {
+        select: () => chain,
+        eq: () => chain,
+        maybeSingle: async () => ({ data: null, error: { code: "XX000" } }),
+      };
+      return chain;
+    },
+  } as unknown as SupabaseClient;
+
+  it("reads the stored value scoped on the org and the key", async () => {
+    const { client, calls } = fakeClient({ site_settings: [{ value: "admins" }] });
+    expect(await readStewardsCanManage(client, ORG)).toBe(false);
+    expect(calls[0].table).toBe("site_settings");
+    expect(calls[0].filters).toEqual([
+      ["eq", "org_id", ORG],
+      ["eq", "key", "giving_manage_mode"],
+    ]);
+  });
+
+  it("tells a failed read from a church with no row", async () => {
+    const consoleError = vi.spyOn(console, "log").mockImplementation(() => {});
+    expect(await readStewardsCanManage(fakeClient().client, ORG)).toBe(true);
+    expect(await readStewardsCanManage(failing, ORG)).toBeNull();
+    expect(loggedLines(consoleError)).toEqual([
+      expect.objectContaining({ what: "Failed to load the giving setting", code: "XX000" }),
+    ]);
+    consoleError.mockRestore();
+  });
+
+  it("leaves the member-facing reader on the default when the read fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await givingStewardsCanManage(failing, ORG)).toBe(true);
+    consoleError.mockRestore();
   });
 });
 

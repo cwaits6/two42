@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,6 +22,16 @@ const request = (id: string, first: string) => ({
   group: { id: "g1", name: "Group C" },
 });
 
+/** Holds the list the way the Requests page does. */
+function Queue() {
+  const [requests, setRequests] = useState([request("r1", "Ada"), request("r2", "Ben")]);
+  return createElement(PendingJoinRequests, {
+    requests,
+    onRemove: (id: string) => setRequests((rows) => rows.filter((r) => r.id !== id)),
+    timeZone: "America/Chicago",
+  });
+}
+
 const QUESTION = "Decline Ada Test's request to join Group C?";
 
 let root: Root;
@@ -31,12 +41,7 @@ async function openDecline() {
   document.body.append(host);
   root = createRoot(host);
   await act(async () => {
-    root.render(
-      createElement(PendingJoinRequests, {
-        initialRequests: [request("r1", "Ada"), request("r2", "Ben")],
-        timeZone: "America/Chicago",
-      }),
-    );
+    root.render(createElement(Queue));
   });
   await click("Decline");
   expect(document.body.textContent).toContain(QUESTION);

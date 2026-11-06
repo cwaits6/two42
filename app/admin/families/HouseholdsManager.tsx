@@ -8,7 +8,7 @@ import { relObjectPath } from "@/lib/storagePaths";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
@@ -27,7 +27,7 @@ import {
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
-import { Camera, Home, Plus, Pencil, Search, Trash2, Users, X } from "lucide-react";
+import { Camera, Home, Plus, Pencil, Search, Trash2, X } from "lucide-react";
 import type { FamilyUnit, Profile, FamilyMember, FamilyMemberRelationship } from "@/lib/types";
 import { titleCaseName, formatPhone, formatPhoneAsYouType } from "@/lib/sanitize";
 import { displayName } from "@/lib/names";
@@ -545,7 +545,7 @@ export function HouseholdsManager() {
 
   if (status !== "ready") {
     return (
-      <PageContainer>
+      <PageContainer size="wide">
         {header}
         {status === "loading" ? (
           <LoadingState thing="households" />
@@ -567,7 +567,7 @@ export function HouseholdsManager() {
   );
 
   return (
-    <PageContainer>
+    <PageContainer size="wide">
       {header}
 
       {families.length === 0 ? (
@@ -602,11 +602,13 @@ export function HouseholdsManager() {
                 className="pl-10 text-base"
               />
             </div>
-            {query.trim() && (
-              <p role="status" className="text-base text-muted-foreground">
-                {shownFamilies.length} of {families.length} households
-              </p>
-            )}
+            <p role="status" className="text-base text-muted-foreground">
+              {query.trim()
+                ? `${shownFamilies.length} of ${families.length} households`
+                : families.length === 1
+                  ? "1 household"
+                  : `${families.length} households`}
+            </p>
           </div>
           {shownFamilies.length === 0 ? (
             <EmptyState
@@ -619,65 +621,79 @@ export function HouseholdsManager() {
               }
             />
           ) : (
-            <div className="space-y-3">
-              {shownFamilies.map((family) => (
-                <Card key={family.id}>
-                  <CardContent>
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xl font-semibold">{family.family_name}</p>
-                        {family.address_line1 && (
-                          <p className="text-base text-muted-foreground mt-1">
-                            {family.address_line1}
-                            {family.address_line2 && `, ${family.address_line2}`}
-                            {family.city && `, ${family.city}`}
-                            {family.state && `, ${family.state}`}
-                            {family.postal_code && ` ${family.postal_code}`}
-                          </p>
-                        )}
-                        {family.phone_home && (
-                          <p className="text-base text-muted-foreground">
-                            {formatPhone(family.phone_home)}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-1 mt-2 text-base text-muted-foreground">
-                          <Users className="h-5 w-5" aria-hidden="true" />
-                          <span>
-                            {family.members.length}{" "}
-                            {family.members.length === 1 ? "member" : "members"}
-                          </span>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Household</TableHead>
+                  <TableHead className="hidden md:table-cell">Address</TableHead>
+                  <TableHead className="hidden md:table-cell">Members</TableHead>
+                  <TableHead>
+                    <span className="sr-only">Edit</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {shownFamilies.map((family) => {
+                  const address = family.address_line1 && (
+                    <p>
+                      {family.address_line1}
+                      {family.address_line2 && `, ${family.address_line2}`}
+                      {family.city && `, ${family.city}`}
+                      {family.state && `, ${family.state}`}
+                      {family.postal_code && ` ${family.postal_code}`}
+                    </p>
+                  );
+                  const phone = family.phone_home && <p>{formatPhone(family.phone_home)}</p>;
+                  const members =
+                    family.members.length === 0 ? (
+                      <p className="text-muted-foreground">No members</p>
+                    ) : (
+                      <ul className="flex flex-wrap gap-x-4">
+                        {family.members.map((m) => (
+                          <li key={m.id}>
+                            <Link
+                              href={`/admin/members/${m.id}`}
+                              className="inline-flex min-h-11 items-center text-brand-primary-text underline underline-offset-4 hover:text-foreground"
+                            >
+                              {displayName(m)}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    );
+                  return (
+                    <TableRow key={family.id}>
+                      <TableCell className="py-2 align-top md:whitespace-nowrap">
+                        <p className="flex min-h-11 items-center font-semibold">{family.family_name}</p>
+                        {/* A phone has room for one column, so the other two sit under the name. */}
+                        <div className="text-muted-foreground md:hidden">
+                          {address}
+                          {phone}
                         </div>
-                        {family.members.length > 0 && (
-                          <ul className="mt-1 text-base">
-                            {family.members.map((m) => (
-                              <li key={m.id}>
-                                <Link
-                                  href={`/admin/members/${m.id}`}
-                                  className="inline-flex min-h-11 items-center text-brand-primary-text underline underline-offset-4 hover:text-foreground"
-                                >
-                                  {displayName(m)}
-                                </Link>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                      <div className="flex gap-2 shrink-0">
+                        <div className="md:hidden">{members}</div>
+                      </TableCell>
+                      <TableCell className="hidden py-2 align-top text-muted-foreground md:table-cell">
+                        <div className="flex min-h-11 flex-col justify-center">
+                          {address}
+                          {phone}
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden py-2 align-top md:table-cell">{members}</TableCell>
+                      <TableCell className="py-2 pl-0 align-top">
                         <Button
                           variant="outline"
-                          className="w-full sm:w-auto"
                           onClick={() => openEdit(family)}
                           aria-label={`Edit ${family.family_name}`}
                         >
                           <Pencil className="h-4 w-4" aria-hidden="true" />
                           Edit
                         </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           )}
         </>
       )}

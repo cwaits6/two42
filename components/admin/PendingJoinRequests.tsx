@@ -2,14 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Inbox } from "lucide-react";
 import { toast } from "sonner";
 import { ApprovalQueue } from "@/components/admin/ApprovalQueue";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { EmptyState } from "@/components/states/EmptyState";
+import { requestsWaiting } from "@/lib/admin/requestsWaiting";
 import { createClient } from "@/lib/supabase/client";
 import {
-  NO_PENDING_JOIN_REQUESTS_TEXT,
   groupPendingJoinRequests,
   requestedOn,
   type PendingJoinRequest,
@@ -17,23 +15,24 @@ import {
 import { reviewErrorMessage } from "@/lib/groups/joining";
 import { displayName } from "@/lib/names";
 
-/** Every group's pending join requests, reviewed from one page by an org admin. */
+/**
+ * Every group's pending join requests, reviewed from one page by a church
+ * admin. The list belongs to the caller, which is told when a request is
+ * decided and leaves it.
+ */
 export function PendingJoinRequests({
-  initialRequests,
+  requests,
+  onRemove,
   timeZone,
 }: {
-  initialRequests: PendingJoinRequest[];
+  requests: PendingJoinRequest[];
+  onRemove: (id: string) => void;
   timeZone: string;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
-  const [requests, setRequests] = useState(initialRequests);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [declining, setDeclining] = useState<PendingJoinRequest | null>(null);
-
-  function remove(id: string) {
-    setRequests((prev) => prev.filter((r) => r.id !== id));
-  }
 
   /** True once the request is decided, here or elsewhere, so nothing is left to retry. */
   async function review(request: PendingJoinRequest, approve: boolean): Promise<boolean> {
@@ -47,7 +46,7 @@ export function PendingJoinRequests({
         toast.error(reviewErrorMessage(error.code));
         // Decided elsewhere already: the row no longer belongs in the queue.
         if (error.code !== "GJ004") return false;
-        remove(request.id);
+        onRemove(request.id);
         return true;
       }
       toast.success(
@@ -55,8 +54,8 @@ export function PendingJoinRequests({
           ? `${displayName(request.requester)} joined ${request.group.name}.`
           : "Request declined.",
       );
-      remove(request.id);
-      // The member counts further down the page are server-rendered.
+      onRemove(request.id);
+      // Group member counts elsewhere in church admin are server-rendered.
       if (approve) router.refresh();
       return true;
     } finally {
@@ -72,9 +71,6 @@ export function PendingJoinRequests({
   const declineTitle = declining
     ? `Decline ${displayName(declining.requester)}'s request to join ${declining.group.name}?`
     : "";
-  if (sections.length === 0) {
-    return <EmptyState icon={Inbox} message={NO_PENDING_JOIN_REQUESTS_TEXT} />;
-  }
 
   return (
     <>
@@ -100,7 +96,7 @@ export function PendingJoinRequests({
               }}
               onDecline={(id) => setDeclining(byId(id) ?? null)}
               busyId={busyId}
-              emptyText={NO_PENDING_JOIN_REQUESTS_TEXT}
+              emptyText={requestsWaiting(0)}
             />
           </section>
         ))}
