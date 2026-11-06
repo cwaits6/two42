@@ -26,7 +26,7 @@ export const onRequestError: Instrumentation.onRequestError = (error, _request, 
     "error",
     "Request failed with an error nothing caught",
     error,
-    // The framework's route pattern; the request's own path is never read.
+    // The framework's name for the route; the request's own path is never read.
     { route: context.routePath, step: context.routeType },
     digestReference(error),
   );
