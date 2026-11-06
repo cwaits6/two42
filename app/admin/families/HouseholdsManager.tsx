@@ -38,6 +38,7 @@ import { ErrorState } from "@/components/states/ErrorState";
 import { LoadingState } from "@/components/states/LoadingState";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { AnniversaryFields } from "@/components/profile/AnniversaryFields";
+import { MonthSelect } from "@/components/profile/MonthSelect";
 import { birthdayErrors, birthdayErrorsWithoutYear, type BirthdayErrors } from "@/components/profile/birthday";
 import { ChildListingNotice, DirectoryNotice } from "@/components/profile/DirectoryNotice";
 import { useRelabelToChild } from "@/components/household/useRelabelToChild";
@@ -861,7 +862,7 @@ export function HouseholdsManager() {
                 month={form.anniversary_month}
                 day={form.anniversary_day}
                 year={form.anniversary_year}
-                onChange={(field, value) => setForm({ ...form, [field]: value })}
+                onChange={(changes) => setForm({ ...form, ...changes })}
                 errors={formErrors}
               />
               <p className="text-base text-muted-foreground">
@@ -1028,30 +1029,27 @@ export function HouseholdsManager() {
 
                       <div>
                         <Label>Birthday (optional)</Label>
+                        {editingMember?.claimed_profile_id && (
+                          <p className="text-base text-muted-foreground mt-1">
+                            The directory shows the birthday on {editingMember.first_name}&apos;s profile. Change that
+                            one in Edit member.
+                          </p>
+                        )}
                         <div className={`grid gap-2 mt-1 ${memberIsChildWithoutAccount ? "grid-cols-2" : "grid-cols-3"}`}>
-                          <Select
-                            items={MONTHS}
+                          <MonthSelect
+                            id="fm_birth_month"
+                            aria-label="Birthday month"
+                            className="w-full"
                             value={memberForm.birth_month}
-                            onValueChange={(v) =>
-                              setMemberForm({ ...memberForm, birth_month: v ?? "" })
+                            onChange={(month) =>
+                              setMemberForm({
+                                ...memberForm,
+                                birth_month: month,
+                                ...(month ? {} : { birth_day: "", birth_year: "" }),
+                              })
                             }
-                          >
-                            <SelectTrigger
-                              id="fm_birth_month"
-                              aria-label="Birthday month"
-                              className="w-full"
-                              {...invalidFieldProps("fm_birth_month", memberBirthErrors.birth_month)}
-                            >
-                              <SelectValue placeholder="Month" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {MONTHS.map((m) => (
-                                <SelectItem key={m.value} value={m.value}>
-                                  {m.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            error={memberBirthErrors.birth_month}
+                          />
                           <Input
                             type="number"
                             min="1"

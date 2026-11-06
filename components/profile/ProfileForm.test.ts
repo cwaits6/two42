@@ -2,23 +2,55 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Profile } from "@/lib/types";
+import type { FamilyUnit, Profile } from "@/lib/types";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const update = vi.fn();
+const claimedUpdate = vi.fn();
+const written = {
+  rows: [{ id: "p1" }] as { id: string }[] | null,
+  error: null as { code: string } | null,
+  claimedError: null as { code: string } | null,
+  // What the household record still holds after the clear: a policy can filter the write out.
+  claimedKept: [] as { id: string }[],
+  claimedReadError: null as { code: string } | null,
+};
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
-    from: () => ({
-      update: (values: unknown) => {
-        update(values);
-        return { eq: async () => ({ error: null }) };
-      },
-    }),
+    from: (table: string) =>
+      table === "family_members"
+        ? {
+            update: (values: unknown) => ({
+              eq: async (column: string, id: string) => {
+                claimedUpdate(values, column, id);
+                return { error: written.claimedError };
+              },
+            }),
+            select: () => ({
+              eq: (column: string, id: string) => ({
+                not: () => ({
+                  limit: async () =>
+                    column !== "claimed_profile_id" || id !== "p1"
+                      ? { data: [], error: null }
+                      : written.claimedReadError
+                        ? { data: null, error: written.claimedReadError }
+                        : { data: written.claimedKept, error: null },
+                }),
+              }),
+            }),
+          }
+        : {
+            update: (values: unknown) => {
+              update(values);
+              return { eq: () => ({ select: async () => ({ data: written.rows, error: written.error }) }) };
+            },
+          },
   }),
 }));
 vi.mock("@/lib/uploadImage", () => ({ mintSignedUrl: vi.fn(), uploadImage: vi.fn() }));
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
+vi.mock("sonner", () => ({ toast }));
 
 const { ProfileForm } = await import("./ProfileForm");
 
@@ -60,14 +92,24 @@ const profile: Profile = {
 
 let root: Root;
 
-beforeEach(() => update.mockClear());
+beforeEach(() => {
+  vi.clearAllMocks();
+  written.rows = [{ id: "p1" }];
+  written.error = null;
+  written.claimedError = null;
+  written.claimedKept = [];
+  written.claimedReadError = null;
+});
 
 afterEach(async () => {
   await act(async () => root.unmount());
   document.body.innerHTML = "";
 });
 
-async function mount(overrides: Partial<Profile> = {}, props: { isAdmin?: boolean; editingOther?: boolean } = {}) {
+async function mount(
+  overrides: Partial<Profile> = {},
+  props: { isAdmin?: boolean; editingOther?: boolean; family?: FamilyUnit; onSaved?: () => void } = {},
+) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -87,6 +129,12 @@ async function mount(overrides: Partial<Profile> = {}, props: { isAdmin?: boolea
     },
     async submit() {
       await act(async () => container.querySelector("form")!.requestSubmit());
+    },
+    async choose(id: string, option: string) {
+      await act(async () => field(id).click());
+      const found = [...document.querySelectorAll('[role="option"]')].find((o) => o.textContent === option);
+      if (!found) throw new Error(`No option ${option}`);
+      await act(async () => (found as HTMLElement).click());
     },
     async type(id: string, value: string) {
       const input = field(id) as HTMLInputElement;
@@ -130,6 +178,15 @@ describe("ProfileForm inline errors", () => {
     expect(form.message("birth_day")).toBe("Enter the day of the birthday.");
     expect(document.activeElement).toBe(form.field("birth_day"));
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it("takes the day's message away with the month for No date", async () => {
+    const form = await mount({ birth_month: 5, birth_day: null });
+    await form.submit();
+    await form.choose("birth_month", "No date");
+
+    expect(form.field("birth_day").getAttribute("aria-invalid")).toBeNull();
+    expect(form.message("birth_day")).toBeUndefined();
   });
 
   it("marks a malformed email and an out-of-range birth year", async () => {
@@ -262,5 +319,129 @@ describe("ProfileForm inline errors", () => {
 
     expect(document.querySelector('[aria-invalid="true"]')).toBeNull();
     expect(update).toHaveBeenCalledOnce();
+  });
+
+  it("says the save failed when no row was written", async () => {
+    written.rows = [];
+    const onSaved = vi.fn();
+    const form = await mount({}, { onSaved });
+    await form.submit();
+
+    expect(toast.error).toHaveBeenCalledWith("Couldn't save the profile. Try again.");
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it("says the save failed when the write errors", async () => {
+    written.rows = null;
+    written.error = { code: "XX000" };
+    const onSaved = vi.fn();
+    const form = await mount({ birth_month: 12, birth_day: 10 }, { onSaved });
+    await form.choose("birth_month", "No date");
+    await form.submit();
+
+    expect(toast.error).toHaveBeenCalledWith("Couldn't save the profile. Try again.");
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it("leaves the claimed household record alone when the profile had no birthday to clear", async () => {
+    const form = await mount({ birth_month: null, birth_day: null, birth_year: null });
+    await form.submit();
+
+    expect(toast.success).toHaveBeenCalledWith("Profile saved.");
+    expect(claimedUpdate).not.toHaveBeenCalled();
+  });
+
+  it("leaves the claimed household record alone when the birthday is kept", async () => {
+    const form = await mount();
+    await form.submit();
+
+    expect(toast.success).toHaveBeenCalledWith("Profile saved.");
+    expect(claimedUpdate).not.toHaveBeenCalled();
+  });
+
+  it("keeps the profile's birthday when the claimed household record's can't be cleared, so a later save retries", async () => {
+    written.claimedError = { code: "XX000" };
+    const onSaved = vi.fn();
+    const form = await mount({ birth_month: 12, birth_day: 10 }, { onSaved });
+    await form.choose("birth_month", "No date");
+    await form.submit();
+
+    expect(toast.error).toHaveBeenCalledWith("Couldn't save the profile. Try again.");
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("says the save failed when the claimed household record can't be read back", async () => {
+    written.claimedReadError = { code: "XX000" };
+    const form = await mount({ birth_month: 12, birth_day: 10 });
+    await form.choose("birth_month", "No date");
+    await form.submit();
+
+    expect(toast.error).toHaveBeenCalledWith("Couldn't save the profile. Try again.");
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("saves the profile and says the household still lists the birthday when the record's clear wrote nothing", async () => {
+    written.claimedKept = [{ id: "fm1" }];
+    const onSaved = vi.fn();
+    const form = await mount({ birth_month: 12, birth_day: 10 }, { onSaved });
+    await form.choose("birth_month", "No date");
+    await form.submit();
+
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ birth_month: null }));
+    expect(toast.info).toHaveBeenCalledWith(
+      "Profile saved. The household still lists this birthday. A church admin can remove it.",
+    );
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(onSaved).toHaveBeenCalledOnce();
+  });
+
+  it("clears the whole birthday for No date, on the profile and the household record it claimed", async () => {
+    const form = await mount({ birth_month: 12, birth_day: 10, birth_year: 1990 });
+    await form.choose("birth_month", "No date");
+
+    expect((form.field("birth_day") as HTMLInputElement).value).toBe("");
+    expect((form.field("birth_year") as HTMLInputElement).value).toBe("");
+    expect(form.field("birth_month").querySelector('[data-slot="select-value"]')?.textContent).toBe("Month");
+
+    await form.submit();
+    const cleared = { birth_month: null, birth_day: null, birth_year: null };
+    expect(update).toHaveBeenCalledWith(expect.objectContaining(cleared));
+    expect(claimedUpdate).toHaveBeenCalledWith(cleared, "claimed_profile_id", "p1");
+    expect(claimedUpdate.mock.invocationCallOrder[0]).toBeLessThan(update.mock.invocationCallOrder[0]);
+    expect(toast.success).toHaveBeenCalledWith("Profile saved.");
+  });
+});
+
+describe("ProfileForm copy about the person", () => {
+  const household = { family_name: "Lovelace family", address_line1: "1 Main St" } as FamilyUnit;
+  const own = [
+    "My last name is different from my household's (Lovelace)",
+    "My address is different from my household's",
+    "Sharing what you do helps people in your groups find help from someone they know.",
+  ];
+
+  it("speaks to a person on their own profile", async () => {
+    await mount({}, { family: household });
+    for (const copy of own) expect(document.body.textContent).toContain(copy);
+  });
+
+  it("speaks about the person to a household member editing them", async () => {
+    await mount({}, { editingOther: true });
+    for (const copy of own) expect(document.body.textContent).not.toContain(copy);
+    expect(document.body.textContent).toContain(
+      "Sharing what they do helps people in their groups find help from someone they know.",
+    );
+  });
+
+  it("speaks about the person to a church admin", async () => {
+    await mount({}, { isAdmin: true });
+    expect(document.body.textContent).toContain(
+      "Sharing what they do helps people in their groups find help from someone they know.",
+    );
+    expect(document.body.textContent).not.toMatch(/\b(you|your|my)\b/i);
   });
 });

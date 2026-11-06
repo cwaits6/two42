@@ -37,7 +37,9 @@ import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { Camera, Check } from "lucide-react";
 import { CheckRow } from "@/components/profile/CheckRow";
 import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
-import { MONTHS, birthdayColumns, birthdayErrors } from "@/components/profile/birthday";
+import { birthdayColumns, birthdayErrors } from "@/components/profile/birthday";
+import { MonthSelect } from "@/components/profile/MonthSelect";
+import { CLAIMED_BIRTHDAY_KEPT, clearClaimedBirthday, removesBirthday } from "@/components/profile/claimedBirthday";
 import { DirectoryNotice } from "@/components/profile/DirectoryNotice";
 import { retiredFlagResets } from "@/lib/members/retiredHideFlags";
 import {
@@ -346,21 +348,32 @@ export function ProfileForm({
       is_unlisted: state.is_unlisted,
     };
 
-    const { error } = await supabase
+    const claimed = removesBirthday(profile, updates) ? await clearClaimedBirthday(profile.id) : null;
+    if (claimed?.error) {
+      setSaving(false);
+      console.error("clearing the claimed birthday failed", claimed.error.code);
+      toast.error(failureMessage("save the profile"));
+      return;
+    }
+
+    // A write a policy filters out answers with no error and no row.
+    const { data: saved, error } = await supabase
       .from("profiles")
       .update({ ...updates, ...retiredFlagResets(profile, updates) })
-      .eq("id", profile.id);
+      .eq("id", profile.id)
+      .select("id");
 
     setSaving(false);
 
-    if (error) {
-      console.error(error);
+    if (error || saved.length === 0) {
+      if (error) console.error(error);
       toast.error(failureMessage("save the profile"));
       return;
     }
 
     if (isAdmin) setSavedFamilyId(state.family_id || null);
-    toast.success("Profile saved.");
+    if (claimed?.kept) toast.info(`Profile saved. ${CLAIMED_BIRTHDAY_KEPT}`);
+    else toast.success("Profile saved.");
     onSaved?.();
   };
 
@@ -569,27 +582,26 @@ export function ProfileForm({
               Birthday <Optional />
             </Label>
             <div className="grid grid-cols-[1.6fr_1fr_1fr] gap-3">
-              <Select
-                items={MONTHS}
+              <MonthSelect
+                id="birth_month"
+                aria-label="Month"
                 value={state.birth_month}
-                onValueChange={(v) => update("birth_month", v ?? "")}
-              >
-                <SelectTrigger
-                  id="birth_month"
-                  aria-label="Month"
-                  className="w-full py-5 text-base"
-                  {...invalidFieldProps("birth_month", errors.birth_month)}
-                >
-                  <SelectValue placeholder="Month" />
-                </SelectTrigger>
-                <SelectContent>
-                  {MONTHS.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>
-                      {m.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(month) => {
+                  update("birth_month", month);
+                  if (!month) {
+                    update("birth_day", "");
+                    update("birth_year", "");
+                    // An already-empty day or year is no change to `update`, so its message would stay.
+                    setErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.birth_day;
+                      delete next.birth_year;
+                      return next;
+                    });
+                  }
+                }}
+                error={errors.birth_month}
+              />
               <Input
                 id="birth_day"
                 type="number"
@@ -752,8 +764,9 @@ export function ProfileForm({
             </div>
           </div>
           <p className="text-base text-muted-foreground">
-            Sharing what you do helps people in your groups find help from
-            someone they know.
+            {someoneElse
+              ? "Sharing what they do helps people in their groups find help from someone they know."
+              : "Sharing what you do helps people in your groups find help from someone they know."}
           </p>
 
           <Separator />

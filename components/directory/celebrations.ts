@@ -78,9 +78,11 @@ export function isThisWeek(month: number, day: number, today: Date): boolean {
 }
 
 /**
- * A claimed spouse is named only when their profile is in `members`: the view
- * drops an unlisted or pending profile from there but keeps their family_members
- * row, and nothing in the row tells the two apart.
+ * The spouse a couple can be named with. A claimed spouse counts only when
+ * their profile is in `members`. The view keeps the claimed family_members row
+ * when the profile is missing, and nothing in the row says why: the spouse is
+ * unlisted, pending, moved out of the household, or listed but in none of the
+ * viewer's groups while the directory is limited to shared groups.
  */
 function nameableSpouse(family: FamilyDirectoryFull) {
   return (
@@ -91,6 +93,20 @@ function nameableSpouse(family: FamilyDirectoryFull) {
         (!fm.claimed_profile_id || family.members.some((m) => m.id === fm.claimed_profile_id)),
     )
   );
+}
+
+/**
+ * A household with a spouse on record shows as a couple when the viewer can
+ * see at least one of the two. A claimed spouse the viewer can't see still
+ * makes it a couple, since they may only be outside the viewer's groups; the
+ * row then names the visible person alone.
+ */
+function showsAsCouple(family: FamilyDirectoryFull): boolean {
+  const hasSpouse =
+    family.members.some((m) => m.relationship === "spouse") ||
+    family.family_members_list.some((fm) => fm.relationship === "spouse");
+  const primaryVisible = family.members.some((m) => m.relationship === "primary");
+  return hasSpouse && (primaryVisible || !!nameableSpouse(family));
 }
 
 /** "Frank & Susan Miller" — the couple's first names plus the family name */
@@ -156,13 +172,10 @@ export function anniversaryEntries(
   const result: AnniversaryEntry[] = [];
 
   for (const family of families) {
-    const hasSpouse =
-      family.members.some((m) => m.relationship === "spouse") ||
-      family.family_members_list.some((fm) => fm.relationship === "spouse");
     const month = family.anniversary_month;
     const day = family.anniversary_day;
     const year = family.anniversary_year;
-    if (!month || !day || !hasSpouse) continue;
+    if (!month || !day || !showsAsCouple(family)) continue;
 
     result.push({
       key: family.id,

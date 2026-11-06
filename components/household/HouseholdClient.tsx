@@ -38,7 +38,8 @@ import { Pencil, Plus, User, UserPlus, Users } from "lucide-react";
 import { DirectoryNotice } from "@/components/profile/DirectoryNotice";
 import { EmptyState } from "@/components/states/EmptyState";
 import { AnniversaryFields } from "@/components/profile/AnniversaryFields";
-import { anniversaryErrors, type AnniversaryErrors } from "@/components/profile/birthday";
+import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
+import { householdFieldErrors, type HouseholdFieldErrors } from "@/app/api/household/householdUpdates";
 import { relLabel } from "@/components/directory/utils";
 import {
   formatPhone,
@@ -153,7 +154,23 @@ export function HouseholdClient({
   const router = useRouter();
   const [info, setInfo] = useState<HouseholdInfo>(fromFamily(family));
   const [savingInfo, setSavingInfo] = useState(false);
-  const [anniversaryProblems, setAnniversaryProblems] = useState<AnniversaryErrors>({});
+  const [errors, setErrors] = useState<HouseholdFieldErrors>({});
+  // An object, so a second save with the same first error still refocuses.
+  const [focusTarget, setFocusTarget] = useState<{ id: string } | null>(null);
+
+  // Focus waits for the render that ties the message to the field, so a
+  // screen reader reads the message when focus lands.
+  useEffect(() => {
+    if (focusTarget) document.getElementById(focusTarget.id)?.focus();
+  }, [focusTarget]);
+
+  /** A person's edit, which clears the message on each field it changes. */
+  function edit(changes: Partial<HouseholdInfo>) {
+    setInfo({ ...info, ...changes });
+    setErrors((prev) =>
+      Object.fromEntries(Object.entries(prev).filter(([field]) => !(field in changes))),
+    );
+  }
 
   // "Add a member" dialog
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -205,45 +222,41 @@ export function HouseholdClient({
   async function handleSaveInfo(e: React.FormEvent) {
     e.preventDefault();
 
-    const found = anniversaryErrors({
-      month: info.anniversary_month,
-      day: info.anniversary_day,
-      year: info.anniversary_year,
-    });
-    setAnniversaryProblems(found);
+    const choice = info.phone_choice === SHARED_PHONE ? null : info.phone_choice;
+    const body = {
+      family_name: info.family_name,
+      address_line1: info.address_line1,
+      address_line2: info.address_line2,
+      city: info.city,
+      state: info.state,
+      postal_code: info.postal_code,
+      anniversary_month: info.anniversary_month,
+      anniversary_day: info.anniversary_day,
+      anniversary_year: info.anniversary_year,
+      ...(choice === null ? { phone_home: info.phone_home } : {}),
+      ...(choice !== family.phone_profile_id ? { phone_profile_id: choice } : {}),
+    };
+
+    // Each key is the id of its field, in the order the fields appear.
+    const found = householdFieldErrors(body);
+    setErrors(found);
     const firstInvalid = Object.keys(found)[0];
     if (firstInvalid) {
-      document.getElementById(firstInvalid)?.focus();
+      setFocusTarget({ id: firstInvalid });
       return;
     }
 
     setSavingInfo(true);
-
-    const choice = info.phone_choice === SHARED_PHONE ? null : info.phone_choice;
     const res = await fetch("/api/household", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        family_name: info.family_name,
-        address_line1: info.address_line1,
-        address_line2: info.address_line2,
-        city: info.city,
-        state: info.state,
-        postal_code: info.postal_code,
-        anniversary_month: info.anniversary_month,
-        anniversary_day: info.anniversary_day,
-        anniversary_year: info.anniversary_year,
-        ...(choice === null ? { phone_home: info.phone_home } : {}),
-        ...(choice !== family.phone_profile_id ? { phone_profile_id: choice } : {}),
-      }),
-    });
-
+      body: JSON.stringify(body),
+    }).catch(() => null);
     setSavingInfo(false);
 
-    if (!res.ok) {
+    if (!res?.ok) {
       toast.error(
-        failureMessage("save the household", res.status, {
-          400: "Couldn't save the household. Check the name, state, ZIP code, home phone and anniversary, then try again.",
+        failureMessage("save the household", res?.status ?? "network", {
           403: "Only that spouse can choose their own number. Choose a shared home phone, or ask them to.",
         }),
       );
@@ -345,7 +358,7 @@ export function HouseholdClient({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSaveInfo} className="space-y-4">
+          <form onSubmit={handleSaveInfo} noValidate className="space-y-4">
             <DirectoryNotice />
             <div className="space-y-2">
               <Label htmlFor="family_name" className="text-base">
@@ -354,13 +367,15 @@ export function HouseholdClient({
               <Input
                 id="family_name"
                 value={info.family_name}
-                onChange={(e) => setInfo({ ...info, family_name: e.target.value })}
+                onChange={(e) => edit({ family_name: e.target.value })}
                 onBlur={(e) =>
                   setInfo({ ...info, family_name: titleCaseName(e.target.value) || "" })
                 }
                 required
                 className="text-base py-5"
+                {...invalidFieldProps("family_name", errors.family_name)}
               />
+              <FieldError fieldId="family_name" message={errors.family_name} />
             </div>
 
             <Separator />
@@ -423,11 +438,13 @@ export function HouseholdClient({
                 <Input
                   id="state"
                   value={info.state}
-                  onChange={(e) => setInfo({ ...info, state: e.target.value.toUpperCase() })}
+                  onChange={(e) => edit({ state: e.target.value.toUpperCase() })}
                   maxLength={2}
                   placeholder="TX"
                   className="text-base py-5 uppercase"
+                  {...invalidFieldProps("state", errors.state)}
                 />
+                <FieldError fieldId="state" message={errors.state} />
               </div>
               <div className="sm:col-span-2 space-y-2">
                 <Label htmlFor="postal_code" className="text-base">
@@ -437,10 +454,12 @@ export function HouseholdClient({
                 <Input
                   id="postal_code"
                   value={info.postal_code}
-                  onChange={(e) => setInfo({ ...info, postal_code: e.target.value })}
+                  onChange={(e) => edit({ postal_code: e.target.value })}
                   placeholder="12345"
                   className="text-base py-5"
+                  {...invalidFieldProps("postal_code", errors.postal_code)}
                 />
+                <FieldError fieldId="postal_code" message={errors.postal_code} />
               </div>
             </div>
 
@@ -481,12 +500,12 @@ export function HouseholdClient({
                   type="tel"
                   inputMode="tel"
                   value={info.phone_home}
-                  onChange={(e) =>
-                    setInfo({ ...info, phone_home: formatPhoneAsYouType(e.target.value) })
-                  }
+                  onChange={(e) => edit({ phone_home: formatPhoneAsYouType(e.target.value) })}
                   placeholder="(555) 123-4567"
                   className="text-base py-5"
+                  {...invalidFieldProps("phone_home", errors.phone_home)}
                 />
+                <FieldError fieldId="phone_home" message={errors.phone_home} />
               </div>
             )}
 
@@ -499,11 +518,8 @@ export function HouseholdClient({
                 month={info.anniversary_month}
                 day={info.anniversary_day}
                 year={info.anniversary_year}
-                onChange={(field, value) => {
-                  setInfo({ ...info, [field]: value });
-                  setAnniversaryProblems((prev) => ({ ...prev, [field]: undefined }));
-                }}
-                errors={anniversaryProblems}
+                onChange={edit}
+                errors={errors}
               />
             </div>
 

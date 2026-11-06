@@ -246,3 +246,26 @@ describe("the year's validation error", () => {
     expect(document.body.textContent).toContain("Enter a day from 1 to 29.");
   });
 });
+
+describe("clearing a birthday", () => {
+  it("takes the day and year with the month, and saves no date", async () => {
+    await mount(ADULT);
+    await click("No date");
+
+    expect((document.getElementById("birth_day") as HTMLInputElement).value).toBe("");
+    expect((document.getElementById("birth_year") as HTMLInputElement).value).toBe("");
+
+    await click("Save changes");
+    expect(savedBody()).toMatchObject({ birth_month: null, birth_day: null, birth_year: null });
+  });
+
+  it("takes a date's message away with the date", async () => {
+    await mount({ ...ADULT, birth_day: null });
+    await click("Save changes");
+    expect(document.body.textContent).toContain("Enter the day of the birthday.");
+
+    await click("No date");
+    expect(document.getElementById("birth_day")!.hasAttribute("aria-invalid")).toBe(false);
+    expect(document.body.textContent).not.toContain("Enter the day of the birthday.");
+  });
+});
