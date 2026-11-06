@@ -63,7 +63,9 @@ Mockingham household, moves the household's anniversary to within two days of
 today in the church's time zone and unlists Henry and Chloe through the same
 container, because the seed has no claimed spouse record; it deletes the record
 and puts the seeded listing, anniversary and `directory_visibility` back in
-`beforeAll` and `afterAll`. `hidden-email.spec.ts` turns Chloe's email setting on through the same container in `beforeAll` and puts the seed default (off) back in `afterAll`.
+`beforeAll` and `afterAll`. `hidden-email.spec.ts` turns Chloe's email setting
+on through the same container in `beforeAll` and puts the seed default (off)
+back in `afterAll`.
 
 ## Personas
 
