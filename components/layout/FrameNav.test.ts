@@ -14,6 +14,7 @@ vi.mock("./useSidebarModel", () => ({
 }));
 
 const { FrameNav } = await import("./FrameNav");
+const { SidebarProvider } = await import("./SidebarContext");
 
 const name = { first_name: "Isaac", last_name: "Seedly", preferred_name: null };
 const base = { email: "isaac@example.test", isOperator: false, photoUrl: null };
@@ -22,10 +23,15 @@ const admin = buildAccount({ ...base, profile: { ...name, role: "admin" } });
 const pending = buildAccount({ ...base, profile: { ...name, role: "pending" } });
 const operator = buildAccount({ ...base, profile: null, isOperator: true });
 
-function render(account: Account, path: string) {
+function render(account: Account, path: string, waitingRequests: number | null = null) {
   pathname = path;
-  return renderToStaticMarkup(createElement(FrameNav, { account }));
+  const nav = createElement(FrameNav, { account });
+  return renderToStaticMarkup(
+    createElement(SidebarProvider, { account, hasServingAccess: false, orgName: "Test Church", waitingRequests, children: nav }),
+  );
 }
+
+const links = (html: string) => [...html.matchAll(/<a [^>]*href="(\/admin[^"]*)"/g)].map((m) => m[1]);
 
 const navs = (html: string) => [...html.matchAll(/<nav aria-label="([^"]+)"/g)].map((m) => m[1]);
 
@@ -41,6 +47,25 @@ describe("FrameNav", () => {
     expect(navs(html)).toEqual(["Admin navigation"]);
     expect(html).toContain("Back to Home");
     expect(navs(render(admin, "/dashboard"))).toEqual(["Main navigation"]);
+  });
+
+  it("lists the church admin pages with no Overview", () => {
+    expect(links(render(admin, "/admin/members"))).toEqual([
+      "/admin/members",
+      "/admin/families",
+      "/admin/groups",
+      "/admin/requests",
+      "/admin/settings",
+    ]);
+  });
+
+  it("shows the number waiting on Requests, and none at zero or when it couldn't be counted", () => {
+    const requests = (html: string) => html.match(/<a [^>]*href="\/admin\/requests"[^>]*>(.*?)<\/a>/)![1];
+    expect(requests(render(admin, "/admin/members", 3))).toContain(">3</span>");
+    expect(requests(render(admin, "/admin/members", 3))).toContain(", 3 waiting");
+    for (const none of [0, null]) {
+      expect(requests(render(admin, "/admin/members", none))).not.toMatch(/waiting|>\d+<\/span>/);
+    }
   });
 
   it("never gives a member the church admin or Platform pages, whatever the path", () => {

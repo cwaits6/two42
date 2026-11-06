@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { Inbox } from "lucide-react";
 import { PendingAccessRequests, type PendingAccessRequest } from "@/components/admin/PendingAccessRequests";
 import { PendingGroupRequests } from "@/components/admin/PendingGroupRequests";
@@ -26,7 +27,12 @@ export function RequestsBoard({ access, group, join, waiting, timeZone }: Reques
   // What was decided here since the server read. Kept apart from the lists so
   // a re-read after "Try again" still reaches the page.
   const [decided, setDecided] = useState<ReadonlySet<string>>(new Set());
-  const remove = (id: string) => setDecided((ids) => new Set(ids).add(id));
+  const router = useRouter();
+  // The re-read also re-counts the number on Requests in the menu.
+  const remove = (id: string) => {
+    setDecided((ids) => new Set(ids).add(id));
+    router.refresh();
+  };
   const undecided = <T extends { id: string }>(rows: T[] | null) =>
     rows && rows.filter((row) => !decided.has(row.id));
 

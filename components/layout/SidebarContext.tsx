@@ -8,6 +8,8 @@ interface SidebarContextValue {
   account: Account | null;
   hasServingAccess: boolean;
   orgName: string;
+  /** Requests waiting on a church admin; null for anyone else, or when they could not be counted. */
+  waitingRequests: number | null;
   collapsed: boolean;
   setCollapsed: (collapsed: boolean) => void;
 }
@@ -18,14 +20,21 @@ export function SidebarProvider({
   account,
   hasServingAccess,
   orgName,
+  waitingRequests = null,
   children,
-}: Pick<SidebarContextValue, "account" | "hasServingAccess" | "orgName"> & { children: React.ReactNode }) {
+}: Pick<SidebarContextValue, "account" | "hasServingAccess" | "orgName"> &
+  Partial<Pick<SidebarContextValue, "waitingRequests">> & { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
-    <SidebarContext.Provider value={{ account, hasServingAccess, orgName, collapsed, setCollapsed }}>
+    <SidebarContext.Provider value={{ account, hasServingAccess, orgName, waitingRequests, collapsed, setCollapsed }}>
       {children}
     </SidebarContext.Provider>
   );
+}
+
+/** The waiting count for the menu, or null outside the frame. */
+export function useWaitingRequests(): number | null {
+  return useContext(SidebarContext)?.waitingRequests ?? null;
 }
 
 export function useSidebar() {

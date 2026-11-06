@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }));
+const refresh = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 
 // Each queue lists its rows with a button that decides one, as approving or declining does.
 type QueueProps = { requests: { id: string }[]; onRemove: (id: string) => void };
@@ -97,6 +98,15 @@ describe("RequestsBoard", () => {
 
     await render([{ id: "a2" }], [], [{ id: "j1" }], 2);
     expect(status()).toBe("2 requests waiting.");
+  });
+
+  it("re-reads the page after each decision, so the menu's count follows", async () => {
+    refresh.mockClear();
+    await mount([{ id: "a1" }, { id: "a2" }], [], [], 2);
+    expect(refresh).not.toHaveBeenCalled();
+
+    await decide("a1");
+    expect(refresh).toHaveBeenCalledOnce();
   });
 
   it("claims nothing about the rest when no kind could be read", async () => {
