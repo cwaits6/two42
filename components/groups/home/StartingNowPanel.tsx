@@ -6,20 +6,15 @@ import { useJoinState } from "@/components/events/useJoinState";
 import { joinButtonLabel } from "@/lib/meetings";
 import type { StartingNowEvent } from "@/lib/groups/groupHome";
 
-const WHITE_BUTTON =
-  "flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 font-sans text-base font-semibold text-brand-primary-text transition-colors hover:bg-brand-warm";
+const LIGHT_BUTTON =
+  "flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-card px-4 py-3 font-sans text-base font-semibold text-brand-primary-text transition-colors hover:bg-brand-warm";
 
 /** Home's one big panel: Clay, from the join window opening until the ended grace period runs out. */
-export function StartingNowPanel({
-  event,
-  recordingsHref,
-}: {
-  event: StartingNowEvent;
-  /** Where "Watch the recording" points after the event ends; null hides it. */
-  recordingsHref: string | null;
-}) {
-  const { meetingUrl, meetingId, passcode, startTime, endTime, leadMinutes } = event;
+export function StartingNowPanel({ event }: { event: StartingNowEvent }) {
+  const { meetingUrl, meetingId, passcode, startTime, endTime, leadMinutes, recordingsHref } = event;
   const ended = useJoinState(startTime, endTime, leadMinutes) === "ended";
+  // An event can end while Home is open; with no recording to offer, the panel goes with it.
+  if (ended && !recordingsHref) return null;
   const details = [meetingId && `Meeting ID ${meetingId}`, passcode && `Passcode ${passcode}`]
     .filter(Boolean)
     .join(" · ");
@@ -36,16 +31,14 @@ export function StartingNowPanel({
           {event.title}
         </Link>
       </h2>
-      {ended ? (
-        recordingsHref && (
-          <>
-            <p className="mt-2 font-sans text-base">Missed it? The recording is posted to Lessons.</p>
-            <Link href={recordingsHref} className={`mt-3 ${WHITE_BUTTON}`}>
-              <Play className="h-5 w-5" aria-hidden="true" />
-              Watch the recording
-            </Link>
-          </>
-        )
+      {ended && recordingsHref ? (
+        <>
+          <p className="mt-2 font-sans text-base">Missed it? The recording is posted to Lessons.</p>
+          <Link href={recordingsHref} className={`mt-3 ${LIGHT_BUTTON}`}>
+            <Play className="h-5 w-5" aria-hidden="true" />
+            Watch the recording
+          </Link>
+        </>
       ) : (
         <>
           {meetingUrl ? (
@@ -53,7 +46,7 @@ export function StartingNowPanel({
               href={meetingUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className={`mt-3 ${WHITE_BUTTON}`}
+              className={`mt-3 ${LIGHT_BUTTON}`}
             >
               <Video className="h-5 w-5" aria-hidden="true" />
               {joinButtonLabel(meetingUrl)}

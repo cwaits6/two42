@@ -3,7 +3,11 @@ import Link from "next/link";
 import { PlayCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-/** Joins the parts that are present with " · ", so a missing part leaves no stray separator. */
+/**
+ * Joins the parts that are present with " · ", so a missing part leaves no
+ * stray separator. A line breaks between parts, never inside one, unless a
+ * single part is wider than the whole line.
+ */
 export function MetaLine({
   parts,
   className = "block text-base text-muted-foreground",
@@ -17,8 +21,12 @@ export function MetaLine({
     <span className={className}>
       {present.map((part, i) => (
         <Fragment key={i}>
-          {i > 0 && " · "}
-          {part}
+          {i > 0 && " "}
+          <span className="inline-block max-w-full">
+            {part}
+            {/* A no-break space, so a wrap inside the part takes its last word along with the dot. */}
+            {i < present.length - 1 && "\u00a0·"}
+          </span>
         </Fragment>
       ))}
     </span>

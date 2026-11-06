@@ -1,13 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { CalendarCheck, HandHelping } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { EmptyState } from "@/components/states/EmptyState";
 import { ErrorState } from "@/components/states/ErrorState";
 import { LoadingState } from "@/components/states/LoadingState";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Segmented } from "@/components/ui/segmented";
 import { statsRange, type StatsRange } from "@/lib/serving/dates";
@@ -41,12 +39,10 @@ const RANGES: { label: string; value: StatsRange }[] = [
 export function ServingStats({
   groupId,
   today,
-  teamsHref,
 }: {
   groupId: string;
   /** Today in the church's time zone, "YYYY-MM-DD" */
   today: string;
-  teamsHref: string;
 }) {
   const [range, setRange] = useState<StatsRange>("thisYear");
   const [teams, setTeams] = useState<Team[]>([]);
@@ -193,15 +189,7 @@ export function ServingStats({
       ) : failed ? (
         <ErrorState thing="serving history" onRetry={retry} />
       ) : teams.length === 0 ? (
-        <EmptyState
-          icon={HandHelping}
-          message="No teams let people sign up yet."
-          action={
-            <Button nativeButton={false} render={<Link href={teamsHref} />}>
-              Go to Teams
-            </Button>
-          }
-        />
+        <EmptyState icon={HandHelping} message="No teams let people sign up yet." />
       ) : rows.length === 0 ? (
         <EmptyState icon={CalendarCheck} message="No one has served in this period." />
       ) : (

@@ -73,6 +73,9 @@ export default async function LessonsPage({
     </Button>
   );
 
+  // The empty state carries Add lesson, so the header leaves it out then.
+  const showEmpty = lessons !== null && series !== null && lessons.length === 0;
+
   return (
     <PageContainer>
       <PageHeader
@@ -88,14 +91,14 @@ export default async function LessonsPage({
               >
                 Manage series
               </Button>
-              {addLesson}
+              {!showEmpty && addLesson}
             </>
           )
         }
       />
       {lessons === null || series === null ? (
         <ErrorState thing="lessons" />
-      ) : lessons.length === 0 ? (
+      ) : showEmpty ? (
         <EmptyState icon={BookOpen} message="No lessons yet." action={addLesson} />
       ) : (
         <Library

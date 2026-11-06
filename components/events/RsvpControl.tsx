@@ -27,7 +27,7 @@ const TONES = {
   },
   primary: {
     chosen: "border-brand-accent bg-brand-accent text-foreground",
-    open: "border-white/60 bg-transparent text-white hover:bg-white/15",
+    open: "border-white/60 bg-transparent text-white hover:bg-primary-foreground/15",
     error: "font-semibold text-white",
   },
   quiet: {

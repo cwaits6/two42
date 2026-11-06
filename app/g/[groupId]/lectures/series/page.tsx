@@ -47,6 +47,9 @@ export default async function ManageSeriesPage({
     </Button>
   );
 
+  // The empty state carries Add series, so the header leaves it out then.
+  const showEmpty = series !== null && series.length === 0;
+
   return (
     <PageContainer>
       <PageHeader
@@ -54,12 +57,12 @@ export default async function ManageSeriesPage({
         subtitle="Lessons grouped under one title and teacher."
         backHref={base}
         backLabel="Back to Lessons"
-        actions={addSeries}
+        actions={!showEmpty && addSeries}
       />
 
       {series === null ? (
         <ErrorState thing="series" />
-      ) : series.length === 0 ? (
+      ) : showEmpty ? (
         <EmptyState icon={Layers} message="No series yet." action={addSeries} />
       ) : (
         <ul className="divide-y divide-border rounded-2xl border border-border bg-card">

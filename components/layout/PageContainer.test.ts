@@ -2,8 +2,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { PageContainer } from "./PageContainer";
 
-function classesFor(size?: "reading" | "default" | "wide"): string[] {
-  const html = renderToStaticMarkup(PageContainer({ size, children: "content" }));
+function classesFor(size?: "reading" | "default" | "wide", centered?: boolean): string[] {
+  const html = renderToStaticMarkup(PageContainer({ size, centered, children: "content" }));
   return (html.match(/class="([^"]*)"/)?.[1] ?? "").split(" ");
 }
 
@@ -26,7 +26,21 @@ describe("PageContainer", () => {
     expect(frame("reading")).toEqual(frame("default"));
     expect(frame("wide")).toEqual(frame("default"));
     expect(frame("default")).toEqual(
-      expect.arrayContaining(["mx-auto", "px-4", "sm:px-6", "lg:px-8", "py-12"]),
+      expect.arrayContaining(["px-4", "sm:px-6", "lg:px-8", "py-12"]),
     );
   });
+
+  it.each(["reading", "default", "wide"] as const)(
+    "starts the %s width at the left of its frame",
+    (size) => {
+      expect(classesFor(size)).not.toContain("mx-auto");
+    },
+  );
+
+  it.each(["reading", "default", "wide"] as const)(
+    "centers the %s width when asked, changing nothing else",
+    (size) => {
+      expect(classesFor(size, true).sort()).toEqual([...classesFor(size), "mx-auto"].sort());
+    },
+  );
 });

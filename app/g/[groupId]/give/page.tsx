@@ -170,9 +170,18 @@ export default async function GivePage({
     </Button>
   );
 
+  // The empty state carries the button; every other branch, a failed read
+  // included, leaves it in the header.
+  const showEmpty =
+    fundRows !== null &&
+    methods !== null &&
+    views.length === 0 &&
+    hiddenFunds?.length === 0 &&
+    allMethods !== null;
+
   return (
     <PageContainer>
-      <PageHeader title="Give" actions={addFund} />
+      <PageHeader title="Give" actions={!showEmpty && addFund} />
 
       {fundRows === null || methods === null ? (
         <ErrorState thing="funds" />
@@ -181,10 +190,7 @@ export default async function GivePage({
           {views.length > 0 ? (
             <GiveList funds={views} groupId={group.id} />
           ) : (
-            hiddenFunds?.length === 0 &&
-            allMethods !== null && (
-              <EmptyState icon={HandCoins} message="No funds yet." action={addFund} />
-            )
+            showEmpty && <EmptyState icon={HandCoins} message="No funds yet." action={addFund} />
           )}
           {!hiddenFunds || allMethods === null ? (
             <ErrorState thing="hidden funds" className="mt-10" />

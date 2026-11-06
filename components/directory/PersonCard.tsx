@@ -51,7 +51,7 @@ function ContactLine({
 }
 
 const contactLink =
-  "text-brand-primary-text font-semibold underline underline-offset-4 hover:text-foreground";
+  "inline-flex min-h-11 items-center text-brand-primary-text font-semibold underline underline-offset-4 hover:text-foreground";
 const telLink = `${contactLink} whitespace-nowrap`;
 
 interface PersonCardProps {

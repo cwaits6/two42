@@ -499,13 +499,13 @@ describe("GroupDashboard", () => {
     reads.lectures = (filters) =>
       "eq:group_id" in filters ? { data: [], error: null, count: 2 } : { data: [], error: null };
 
-    const [panel] = propsOf<{ event: { title: string }; recordingsHref: string | null }>(
+    const [panel] = propsOf<{ event: { title: string; recordingsHref: string | null } }>(
       await render(),
       StartingNowPanel,
     );
 
     expect(panel.event.title).toBe("Prayer call");
-    expect(panel.recordingsHref).toBe("/g/b/lectures");
+    expect(panel.event.recordingsHref).toBe("/g/b/lectures");
   });
 });
 
