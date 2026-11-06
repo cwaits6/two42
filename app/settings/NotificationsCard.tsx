@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
+import { logError } from "@/lib/log";
 
 type Setting = "email_announcements" | "email_event_reminders";
 
@@ -37,7 +38,7 @@ export function NotificationsCard({ userId, initial }: NotificationsCardProps) {
       .eq("id", userId)
       .select("id");
     if (error || !data?.length) {
-      if (error) console.error(error);
+      if (error) logError("Failed to save the email setting", error, { route: "/settings" });
       setValues((v) => ({ ...v, [key]: !next }));
       toast.error(failureMessage("save your email setting"));
     }

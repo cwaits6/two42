@@ -10,6 +10,7 @@ import {
   resolveActiveGroup,
   type ActiveGroup,
 } from "@/lib/groups/active";
+import { logError } from "@/lib/log";
 
 /**
  * The viewer's groups for this request. Memoized with React cache() so the
@@ -29,7 +30,7 @@ export const getGroupMemberships = cache(async (): Promise<ActiveGroup[]> => {
     .eq("id", user.id)
     .maybeSingle();
   if (error) {
-    console.error("Failed to load the viewer's profile for group context:", error);
+    logError("Failed to load the viewer's profile for group context", error);
     throw new Error(`Failed to load the viewer's profile: ${error.message}`);
   }
   if (!profile || profile.role === "pending") return [];

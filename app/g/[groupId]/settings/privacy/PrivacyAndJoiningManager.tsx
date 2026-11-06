@@ -32,6 +32,7 @@ import {
 } from "@/lib/groups/joining";
 import { displayName } from "@/lib/names";
 import { formatInZone } from "@/lib/time/zone";
+import { logError } from "@/lib/log";
 
 /** Renders a helper sentence with its slot linked to the Invite links page. */
 function HelperText({ sentence, inviteHref }: { sentence: HelperSentence; inviteHref: string }) {
@@ -88,7 +89,7 @@ export function PrivacyAndJoiningManager({
   const loadRequests = useCallback(async () => {
     const { data, error } = await supabase.rpc("pending_group_join_requests", { _group_id: groupId });
     if (error) {
-      console.error("Failed to load pending join requests:", error);
+      logError("Failed to load pending join requests", error, { route: "/g/[groupId]/settings/privacy" });
       setRequestsFailed(true);
       return;
     }

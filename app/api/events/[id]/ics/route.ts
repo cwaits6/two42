@@ -10,6 +10,7 @@ import { isMemberRole } from "@/lib/roles";
 import { orgTimeZoneById } from "@/lib/time/orgZone";
 import { calendarSharingByGroup, keepOutFor } from "@/lib/calendar/keepOut";
 import type { SharingColumns } from "@/lib/calendar/sharing";
+import { logError } from "@/lib/log";
 
 export async function GET(
   request: Request,
@@ -39,7 +40,7 @@ export async function GET(
     .single();
 
   if (subError && subError.code !== "PGRST116") {
-    console.error("Event ICS token lookup failed:", subError);
+    logError("Event ICS token lookup failed", subError, { route: "/api/events/[id]/ics" });
   }
 
   if (!sub || new Date(sub.expires_at) < new Date()) {
@@ -64,7 +65,11 @@ export async function GET(
   // absent or non-member owner — 401 is terminal to a calendar client while
   // 500 is retryable, so the two must not collapse into the same response.
   if (ownerError && ownerError.code !== "PGRST116") {
-    console.error("Failed to look up token owner's profile:", ownerError);
+    logError(
+      "Failed to look up token owner's profile",
+      ownerError,
+      { route: "/api/events/[id]/ics" },
+    );
     return new Response("Something went wrong", { status: 500 });
   }
 
@@ -82,7 +87,11 @@ export async function GET(
     .eq("org_id", sub.org_id);
 
   if (expiryError) {
-    console.error("Failed to extend calendar subscription expiry:", expiryError);
+    logError(
+      "Failed to extend calendar subscription expiry",
+      expiryError,
+      { route: "/api/events/[id]/ics" },
+    );
   }
 
   // A cross-org event id falls out as "not found" — the 404 below is the
@@ -113,7 +122,11 @@ export async function GET(
     .eq("group_id", typedEvent.group_id)
     .maybeSingle();
   if (membershipError) {
-    console.error("Failed to check group membership for event ICS:", membershipError);
+    logError(
+      "Failed to check group membership for event ICS",
+      membershipError,
+      { route: "/api/events/[id]/ics" },
+    );
     return new Response("Something went wrong", { status: 500 });
   }
   if (!membership) {
@@ -134,7 +147,11 @@ export async function GET(
       .eq("group_id", typedEvent.group_id)
       .maybeSingle();
     if (anchorError) {
-      console.error("Failed to fetch series meeting for event ICS:", anchorError);
+      logError(
+        "Failed to fetch series meeting for event ICS",
+        anchorError,
+        { route: "/api/events/[id]/ics" },
+      );
       return new Response("Something went wrong", { status: 500 });
     }
     meeting = anchor;
@@ -152,7 +169,11 @@ export async function GET(
       .eq("org_id", sub.org_id)
       .eq("group_id", typedEvent.group_id);
     if (exceptionsError) {
-      console.error("Failed to fetch moved and deleted dates for event ICS:", exceptionsError);
+      logError(
+        "Failed to fetch moved and deleted dates for event ICS",
+        exceptionsError,
+        { route: "/api/events/[id]/ics" },
+      );
       return new Response("Something went wrong", { status: 500 });
     }
     const { start, end } = subscriptionWindow();
@@ -168,7 +189,11 @@ export async function GET(
   try {
     sharing = await calendarSharingByGroup(supabase, sub.org_id, [typedEvent.group_id]);
   } catch (err) {
-    console.error("Failed to load calendar subscription settings for event ICS:", err);
+    logError(
+      "Failed to load calendar subscription settings for event ICS",
+      err,
+      { route: "/api/events/[id]/ics" },
+    );
     return new Response("Something went wrong", { status: 500 });
   }
 
@@ -178,7 +203,10 @@ export async function GET(
       keepOutFor(sharing, event, sharingSource)
     );
   } catch (err) {
-    console.error("ICS generation failed:", err);
+    logError("ICS generation failed", err, {
+      route: "/api/events/[id]/ics",
+      ids: { org: sub.org_id, event: id },
+    });
     return new Response("Failed to generate calendar file", { status: 500 });
   }
 

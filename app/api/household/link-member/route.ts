@@ -1,6 +1,7 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { isMemberRole } from "@/lib/roles";
+import { logError } from "@/lib/log";
 
 /**
  * POST /api/household/link-member
@@ -79,13 +80,10 @@ export async function POST(request: Request) {
   // permissive policy. Reuse the not-found response: a distinguishing message
   // would be a cross-org existence oracle.
   if (target.org_id !== currentProfile.org_id) {
-    console.error(
-      "household/link-member: caller org %s does not match target org %s (user=%s, target=%s)",
-      currentProfile.org_id,
-      target.org_id,
-      user.id,
-      target.id,
-    );
+    logError("household/link-member: caller org does not match target org", undefined, {
+      route: "/api/household/link-member",
+      ids: { callerOrg: currentProfile.org_id, targetOrg: target.org_id, user: user.id, target: target.id },
+    });
     return NextResponse.json({ error: "Member not found." }, { status: 404 });
   }
 
@@ -120,7 +118,7 @@ export async function POST(request: Request) {
     .select("id");
 
   if (error) {
-    console.error("link-member error:", error);
+    logError("link-member error", error, { route: "/api/household/link-member" });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { titleCaseName } from "@/lib/sanitize";
 import { isMemberRole } from "@/lib/roles";
+import { logError } from "@/lib/log";
 
 async function getMemberContext(supabase: Awaited<ReturnType<typeof createClient>>) {
   const {
@@ -95,7 +96,7 @@ export async function POST(request: Request) {
     .single();
 
   if (error) {
-    console.error("household/members POST error:", error);
+    logError("household/members POST error", error, { route: "/api/household/members" });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

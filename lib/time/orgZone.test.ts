@@ -5,6 +5,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 import { createClient } from "@/lib/supabase/server";
 import { siteConfig } from "@/lib/config";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
+import { loggedLines } from "@/lib/log/testing";
 
 type Row = { data: { timezone: string } | null; error: { message: string } | null };
 
@@ -20,8 +21,7 @@ function mockOrganizationsRead(result: Row) {
 beforeEach(() => {
   vi.mocked(createClient).mockReset();
   maybeSingle.mockReset();
-  vi.spyOn(console, "error").mockImplementation(() => {});
-  vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -38,19 +38,21 @@ describe("getOrgTimeZone", () => {
   it("falls back to the configured default and logs when the read errors", async () => {
     mockOrganizationsRead({ data: null, error: { message: "boom" } });
     expect(await getOrgTimeZone()).toBe(siteConfig.timeZone);
-    expect(console.error).toHaveBeenCalled();
+    expect(loggedLines(vi.mocked(console.log)).map((l) => l.level)).toEqual(["error"]);
   });
 
   it("falls back and warns when no org row is visible", async () => {
     mockOrganizationsRead({ data: null, error: null });
     expect(await getOrgTimeZone()).toBe(siteConfig.timeZone);
-    expect(console.warn).toHaveBeenCalled();
+    expect(loggedLines(vi.mocked(console.log)).map((l) => l.level)).toEqual(["warn"]);
   });
 
   it("falls back when the stored zone is not one this runtime knows", async () => {
     mockOrganizationsRead({ data: { timezone: "Nowhere/Bogus" }, error: null });
     expect(await getOrgTimeZone()).toBe(siteConfig.timeZone);
-    expect(console.error).toHaveBeenCalled();
+    const lines = loggedLines(vi.mocked(console.log));
+    expect(lines.map((l) => l.level)).toEqual(["error"]);
+    expect(JSON.stringify(lines)).not.toContain("Bogus");
   });
 
   it("falls back when the client itself throws", async () => {

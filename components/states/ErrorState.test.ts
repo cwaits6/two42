@@ -39,6 +39,10 @@ describe("ErrorState", () => {
     await act(async () => root.unmount());
   });
 
+  it("shows no reference when no server log line carries one", () => {
+    expect(render()).not.toContain("Reference");
+  });
+
   it("never reads as an empty list", () => {
     expect(render()).not.toMatch(/\byet\b/i);
   });

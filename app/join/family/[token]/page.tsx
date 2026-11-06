@@ -6,6 +6,7 @@ import { pageTitle } from "@/lib/pageTitle";
 import { createServiceClient } from "@/lib/supabase/server";
 import { CHURCH_ADMIN_INVALID_HELP } from "@/lib/groups/invites";
 import { FamilyRequestForm } from "./FamilyRequestForm";
+import { logError } from "@/lib/log";
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -54,7 +55,7 @@ export default async function FamilyJoinPage({ params }: PageProps) {
   // A lookup failure carries no information about which tokens exist, so it
   // may say so and offer a retry; every dead-link state shares one message.
   if (inviteError) {
-    console.error("Family join page: invite lookup failed:", inviteError);
+    logError("Family join page: invite lookup failed", inviteError, { route: "/join/family/[token]" });
     return (
       <AuthShell eyebrow={EYEBROW} title={TITLE}>
         <ErrorState thing="this invite" />

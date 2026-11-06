@@ -8,6 +8,7 @@ import { requireGroupLeader } from "@/lib/groups/server";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { groupPageTitle } from "@/lib/pageTitle";
 import { AnnouncementForm } from "../../AnnouncementForm";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = groupPageTitle("Edit announcement");
 
@@ -30,7 +31,7 @@ export default async function EditAnnouncementPage({
   ]);
 
   if (error) {
-    console.error("Failed to load announcement %s: code=%s", id, error.code);
+    logError("Failed to load announcement", error, { route: "/g/[groupId]/announcements/[id]/edit", ids: { announcement: id } });
     return (
       <PageContainer size="reading">
         <PageHeader

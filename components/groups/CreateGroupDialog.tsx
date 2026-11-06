@@ -32,6 +32,7 @@ import {
   validateGroupDescription,
   validateGroupName,
 } from "@/lib/groups/creation";
+import { logError } from "@/lib/log";
 
 export interface CreatedGroup {
   id: string;
@@ -99,7 +100,7 @@ export function CreateGroupDialog({
       ]);
       if (cancelled) return;
       if (error) {
-        console.error(error);
+        logError("Failed to load the member list", error);
         toast.error("Couldn't load the member list.");
         return;
       }

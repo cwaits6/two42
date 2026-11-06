@@ -27,6 +27,7 @@ import { siteConfig } from "@/lib/config";
 import { groupPath } from "@/lib/groups/active";
 import type { GroupLabel } from "@/lib/types";
 import { labelFormErrors, type LabelFormErrors } from "./labelForm";
+import { logError } from "@/lib/log";
 
 const UNIQUE_VIOLATION = "23505";
 const DUPLICATE_NAME = "A label with that name already exists. Enter a different name.";
@@ -76,7 +77,7 @@ export function LabelsManager({ groupId, groupName }: LabelsManagerProps) {
       ),
     ]);
     if (labelRows.error || appliedRows.error) {
-      console.error("Failed to load labels:", labelRows.error ?? appliedRows.error);
+      logError("Failed to load labels", labelRows.error ?? appliedRows.error, { route: "/g/[groupId]/settings/labels" });
       setLoadFailed(true);
       setLoading(false);
       return;

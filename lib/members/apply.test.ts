@@ -7,7 +7,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { applyWrites, redactFailure } from "@/lib/members/apply";
+import { applyWrites } from "@/lib/members/apply";
 import type { Database } from "@/lib/supabase/database.types";
 import type { PlannedWrite } from "@/lib/members/import-plan";
 
@@ -322,7 +322,7 @@ describe("applyWrites — write routing", () => {
 });
 
 describe("applyWrites — failure accounting", () => {
-  // Four tests here spy on console.error to keep the suite output clean.
+  // Four tests here spy on console.log to keep the suite output clean.
   // Without this the spies stack across tests, so `spy.mock.calls[0]` in the
   // redaction test below can read a call recorded by an EARLIER test rather
   // than its own — a false pass that survives the assertion being wrong.
@@ -351,7 +351,7 @@ describe("applyWrites — failure accounting", () => {
   it("reports the CSV line and kind that failed, not just a write index", async () => {
     // `failedAt` alone indexes a write list the client never sees, and one
     // CSV row commonly produces 3–5 writes.
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
     const { client } = fakeClient({
       failures: { family_members: { code: "23503", message: "fk violation" } },
     });
@@ -367,7 +367,7 @@ describe("applyWrites — failure accounting", () => {
   it("lists only the lines whose EVERY write landed", async () => {
     // This is what makes a manual retry safe: the admin deletes these lines
     // and re-uploads. A half-written line must never appear here.
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
     const { client } = fakeClient({
       failures: { team_members: { code: "23505", message: "duplicate" } },
     });
@@ -387,7 +387,7 @@ describe("applyWrites — failure accounting", () => {
   });
 
   it("treats a thrown error as a failure instead of losing the accounting", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
     const client = {
       from() {
         throw new TypeError("fetch failed");
@@ -400,8 +400,8 @@ describe("applyWrites — failure accounting", () => {
     expect(result.ok === false && result.failedAtLine).toBe(7);
   });
 
-  it("logs the line, kind, and constraint identity — never the payload", async () => {
-    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("logs the line, kind, and error code — never the payload", async () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
     const { client } = fakeClient({
       failures: {
         profiles: {
@@ -421,6 +421,11 @@ describe("applyWrites — failure accounting", () => {
       },
     ]);
     const logged = spy.mock.calls[0].join(" ");
+    expect(JSON.parse(logged)).toMatchObject({
+      step: "update_profile",
+      code: "23505",
+      ids: { write: 1, writes: 1, line: 9 },
+    });
     expect(logged).not.toContain("ada@example.com");
     expect(logged).not.toContain("Springfield");
   });
@@ -461,7 +466,7 @@ describe("applyWrites — failure accounting", () => {
   it.each(zeroRowKinds)(
     "fails rather than reporting success when %o matches no row",
     async (write) => {
-      vi.spyOn(console, "error").mockImplementation(() => {});
+      vi.spyOn(console, "log").mockImplementation(() => {});
       const { client } = fakeClient({
         matchesNothing: ["profiles", "family_members", "team_members"],
       });
@@ -480,52 +485,5 @@ describe("applyWrites — failure accounting", () => {
     ]);
     expect(result.ok).toBe(true);
     expect(result.applied).toBe(1);
-  });
-});
-
-describe("redactFailure", () => {
-  it("drops details and hint for a Postgres error — they echo the row", () => {
-    const out = redactFailure({
-      code: "23505",
-      message: "duplicate key",
-      details: "Key (email, org_id)=(ada@example.com, org-1) already exists",
-      hint: "consider a different value",
-    });
-    expect(out).toContain("23505");
-    expect(out).toContain("duplicate key");
-    expect(out).not.toContain("ada@example.com");
-    expect(out).not.toContain("consider a different value");
-  });
-
-  it("KEEPS details for a client-side network error, which has no SQLSTATE", () => {
-    // postgrest-js synthesizes these with code: '' and the whole diagnostic
-    // in details. It has never seen a row value — and this is the failure
-    // mode most likely to hit production mid-apply.
-    const out = redactFailure({
-      code: "",
-      message: "TypeError: fetch failed",
-      details: "getaddrinfo ENOTFOUND db.example.supabase.co",
-      hint: "",
-    });
-    expect(out).toContain("ENOTFOUND");
-  });
-
-  it("KEEPS hint for a PGRST error, where it names the fix", () => {
-    const out = redactFailure({
-      code: "PGRST204",
-      message: "Column not found in the schema cache",
-      details: null,
-      hint: "Perhaps you meant 'first_name'",
-    });
-    expect(out).toContain("first_name");
-  });
-
-  it("falls back to the message for a plain Error", () => {
-    expect(redactFailure(new Error("boom"))).toBe("boom");
-  });
-
-  it("never throws on an unrecognised value", () => {
-    expect(redactFailure(null)).toBe("unknown error");
-    expect(redactFailure("a string")).toBe("unknown error");
   });
 });

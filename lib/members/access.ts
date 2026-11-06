@@ -14,6 +14,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { User, SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
+import { logError, stepOf } from "@/lib/log";
 
 export type OrgAdminGate =
   | { ok: true; user: User; supabase: SupabaseClient<Database>; orgId: string }
@@ -28,7 +29,7 @@ export async function verifiedUser(supabase: SupabaseClient<Database>, gate: str
   if (error) {
     // Without this, an auth-service outage is indistinguishable from "not
     // signed in" in the logs — a 401 storm with no recorded cause.
-    console.error("%s: auth lookup failed; denying:", gate, error);
+    logError("Auth lookup failed; denying", error, { step: stepOf(gate) });
     return null;
   }
   return user;
@@ -52,12 +53,7 @@ export async function requireOrgAdmin(): Promise<OrgAdminGate> {
     .eq("id", user.id)
     .single();
   if (error) {
-    // code/message only: a PostgrestError's details/hint echo row content.
-    console.error(
-      "Org admin check failed; denying: code=%s message=%s",
-      error.code,
-      error.message
-    );
+    logError("Org admin check failed; denying", error);
     return { ok: false, status: 403 };
   }
   return profile?.role === "admin"

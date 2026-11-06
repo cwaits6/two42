@@ -19,6 +19,7 @@ import {
   orgDisplayName,
   resolveBranding,
 } from "@/lib/branding";
+import { loggedLines } from "@/lib/log/testing";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -94,19 +95,19 @@ describe("resolveBranding", () => {
     });
 
     it("treats empty string as unset, with no warning", () => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const warn = vi.spyOn(console, "log").mockImplementation(() => {});
       expect(resolveBranding({ reply_to: "" }).reply_to).toBeNull();
       expect(warn).not.toHaveBeenCalled();
     });
 
     it("rejects a header-injection payload and warns", () => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const warn = vi.spyOn(console, "log").mockImplementation(() => {});
       expect(resolveBranding({ reply_to: "a@b.c\r\nBcc: x@y.z" }).reply_to).toBeNull();
       expect(warn).toHaveBeenCalledTimes(1);
     });
 
     it("rejects angle brackets, spaces, and dotless domains", () => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const warn = vi.spyOn(console, "log").mockImplementation(() => {});
       for (const reply_to of ["<a@b.c>", "a b@c.d", "a@b"]) {
         expect(resolveBranding({ reply_to }).reply_to).toBeNull();
       }
@@ -114,7 +115,7 @@ describe("resolveBranding", () => {
     });
 
     it("enforces the <= 254 length bound", () => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const warn = vi.spyOn(console, "log").mockImplementation(() => {});
       const at254 = "a".repeat(242) + "@example.com"; // 254 chars — kept
       const at255 = "a".repeat(243) + "@example.com"; // 255 chars — dropped
       expect(resolveBranding({ reply_to: at254 }).reply_to).toBe(at254);
@@ -199,12 +200,12 @@ describe("getOrgBranding", () => {
     const select = vi.fn().mockReturnValue({ maybeSingle });
     const from = vi.fn().mockReturnValue({ select });
     vi.mocked(createClient).mockResolvedValue({ from } as never);
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     const result = await getOrgBranding();
 
     expect(result).toEqual(BRANDING_DEFAULTS);
-    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(loggedLines(errorSpy).map((l) => l.level)).toEqual(["error"]);
   });
 
   it("falls back to defaults and warns when no organization row is visible", async () => {
@@ -212,22 +213,22 @@ describe("getOrgBranding", () => {
     const select = vi.fn().mockReturnValue({ maybeSingle });
     const from = vi.fn().mockReturnValue({ select });
     vi.mocked(createClient).mockResolvedValue({ from } as never);
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     const result = await getOrgBranding();
 
     expect(result).toEqual(BRANDING_DEFAULTS);
-    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(loggedLines(warnSpy).map((l) => l.level)).toEqual(["warn"]);
   });
 
   it("falls back to defaults and logs when createClient rejects", async () => {
     vi.mocked(createClient).mockRejectedValue(new Error("connection refused"));
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     const result = await getOrgBranding();
 
     expect(result).toEqual(BRANDING_DEFAULTS);
-    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(loggedLines(errorSpy).map((l) => l.level)).toEqual(["error"]);
   });
 });
 

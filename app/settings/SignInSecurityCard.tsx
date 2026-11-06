@@ -12,6 +12,7 @@ import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { failureMessage } from "@/lib/errorCopy";
 import { Check, KeyRound, Mail } from "lucide-react";
 import { toast } from "sonner";
+import { logError } from "@/lib/log";
 
 interface SignInSecurityCardProps {
   currentEmail: string;
@@ -128,7 +129,7 @@ export function SignInSecurityCard({ currentEmail }: SignInSecurityCardProps) {
     setBusy(false);
 
     if (error) {
-      console.error(error);
+      logError("Failed to change the password", error, { route: "/settings" });
       toast.error(failureMessage("change your password"));
       return;
     }
@@ -158,7 +159,7 @@ export function SignInSecurityCard({ currentEmail }: SignInSecurityCardProps) {
     setBusy(false);
 
     if (error) {
-      console.error(error);
+      logError("Failed to start the email change", error, { route: "/settings" });
       toast.error(failureMessage("start the email change"));
       return;
     }

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { fetchAll } from "@/lib/supabase/fetchAll";
 import type { RosterIndex } from "@/components/directory/rosterFilter";
 import type { GroupRole } from "@/lib/groups/active";
+import { logError } from "@/lib/log";
 
 export interface RosterMembership {
   id: string;
@@ -150,7 +151,7 @@ export function useGroupRoster(groupId: string | null): GroupRoster {
       ).find(([, err]) => err);
       if (failed) {
         const [source, err] = failed;
-        console.error("group roster load error:", { source, message: err?.message, code: err?.code });
+        logError("group roster load error", err, { step: source });
         setError(true);
         setLoading(false);
         return;

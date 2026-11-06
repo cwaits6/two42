@@ -14,6 +14,7 @@ import { landingFor, NO_ROW } from "@/lib/landing";
 import { pageTitle } from "@/lib/pageTitle";
 import { requirePlatformAdmin } from "@/lib/platform-access";
 import { SignOutButton } from "@/app/join/[token]/SignOutButton";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = () => pageTitle("Home");
 
@@ -39,7 +40,7 @@ export default async function DashboardPage() {
   );
 
   if (error && error.code !== NO_ROW) {
-    console.error("Failed to load the viewer's profile: code=%s message=%s", error.code, error.message);
+    logError("Failed to load the viewer's profile", error, { route: "/dashboard" });
     return failedRead;
   }
 

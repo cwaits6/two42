@@ -10,6 +10,7 @@ import { getOptionalUser } from "@/lib/supabase/current-user";
 import { siteConfig } from "@/lib/config";
 import { HEX } from "@/lib/contrast";
 import { EMAIL, EMAIL_MAX_LENGTH } from "@/lib/emailAddress";
+import { logError, logWarn } from "@/lib/log";
 
 // The contrast math and the write-path accent guard live in
 // lib/contrast.ts so the client-side branding form can share them; this
@@ -60,7 +61,7 @@ export function resolveBranding(raw: unknown): OrgBranding {
     // The one silent fallback worth a signal: a dropped Reply-To is far more
     // surprising than a dropped color, and the cause (a branding column) is
     // nowhere near the symptom (mail replying to noreply@).
-    console.warn("Ignoring malformed branding.reply_to; sending without a Reply-To header");
+    logWarn("Ignoring malformed branding.reply_to; sending without a Reply-To header");
   }
   return {
     display_name: name !== "" ? name : BRANDING_DEFAULTS.display_name,
@@ -104,7 +105,7 @@ export const getOrgBranding = cache(async (): Promise<OrgBranding> => {
       .select("branding")
       .maybeSingle();
     if (error) {
-      console.error("Failed to load org branding, using defaults:", error);
+      logError("Failed to load org branding, using defaults", error);
       return BRANDING_DEFAULTS;
     }
     if (!data) {
@@ -114,12 +115,12 @@ export const getOrgBranding = cache(async (): Promise<OrgBranding> => {
       // this directly, or the permissive SELECT policy regressed. The
       // defaults are byte-identical to org #1's backfilled branding, so
       // without this line a non-functional read path is invisible in the logs.
-      console.warn("No organization row visible for this request; using branding defaults");
+      logWarn("No organization row visible for this request; using branding defaults");
       return BRANDING_DEFAULTS;
     }
     return resolveBranding(data.branding);
   } catch (err) {
-    console.error("Failed to load org branding, using defaults:", err);
+    logError("Failed to load org branding, using defaults", err);
     return BRANDING_DEFAULTS;
   }
 });
@@ -147,7 +148,7 @@ export const getRequestBranding = cache(async (): Promise<OrgBranding> => {
   try {
     user = await getOptionalUser();
   } catch (err) {
-    console.error("Failed to resolve request user for branding, using defaults:", err);
+    logError("Failed to resolve request user for branding, using defaults", err);
     return BRANDING_DEFAULTS;
   }
   if (!user) {

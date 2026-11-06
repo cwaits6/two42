@@ -16,6 +16,7 @@ import { groupPageTitle } from "@/lib/pageTitle";
 import { readList } from "@/lib/supabase/readList";
 import { todayIn } from "@/lib/serving/dates";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = groupPageTitle("Edit fund");
 
@@ -58,7 +59,7 @@ export default async function EditFundPage({
     ]);
 
   if (fundError) {
-    console.error("Failed to load the fund: code=%s message=%s", fundError.code, fundError.message);
+    logError("Failed to load the fund", fundError, { route: "/g/[groupId]/give/[fundId]/edit" });
   }
   if (!fund && !fundError) notFound();
   const canManage =

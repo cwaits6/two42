@@ -11,6 +11,7 @@ import { getOptionalUser } from "@/lib/supabase/current-user";
 import { isMemberRole } from "@/lib/roles";
 import { pageTitle } from "@/lib/pageTitle";
 import { PROFILE_COLUMNS, type ProfileColumns } from "@/lib/profileColumns";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = () => pageTitle("My profile");
 
@@ -41,7 +42,7 @@ export default async function ProfilePage() {
   );
 
   if (emailError) {
-    console.error("Failed to load own email, code:", emailError.code);
+    logError("Failed to load own email", emailError, { route: "/profile" });
     return (
       <PageContainer>
         {header}
@@ -95,7 +96,7 @@ export default async function ProfilePage() {
     // Never render an empty household over a query error.
     const queryError = familyRes.error ?? othersRes.error ?? fmsRes.error;
     if (queryError) {
-      console.error("Failed to load household data:", queryError);
+      logError("Failed to load household data", queryError, { route: "/profile" });
       return (
         <PageContainer>
           {header}

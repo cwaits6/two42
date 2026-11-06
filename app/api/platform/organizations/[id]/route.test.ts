@@ -6,6 +6,7 @@
 // app/api/platform/organizations/[id]/email-cap/route.test.ts.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { loggedLines } from "@/lib/log/testing";
 
 const requirePlatformAdmin = vi.fn();
 vi.mock("@/lib/platform-access", () => ({
@@ -84,7 +85,7 @@ beforeEach(() => {
   requirePlatformAdmin.mockReset();
   createServiceClient.mockReset();
   requirePlatformAdmin.mockResolvedValue({ ok: true, user: { id: "admin-1" } });
-  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockClear().mockImplementation(() => {});
 });
 
 describe("PATCH /api/platform/organizations/[id]", () => {
@@ -267,6 +268,6 @@ describe("PATCH /api/platform/organizations/[id]", () => {
     );
 
     expect(res.status).toBe(500);
-    expect(console.error).toHaveBeenCalled();
+    expect(loggedLines(vi.mocked(console.log)).map((l) => l.what)).toEqual(["Organization update error"]);
   });
 });

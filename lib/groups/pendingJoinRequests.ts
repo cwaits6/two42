@@ -5,6 +5,7 @@ import {
   type PendingJoinRequest,
   type PendingJoinRequestRow,
 } from "@/lib/groups/joinQueue";
+import { logError } from "@/lib/log";
 
 /**
  * Every pending join request across the given groups: one
@@ -25,7 +26,7 @@ export async function getPendingJoinRequests(
         _group_id: group.id,
       });
       if (error) {
-        console.error("Failed to load pending join requests for group:", group.id, error);
+        logError("Failed to load pending join requests for group", error, { ids: { group: group.id } });
         return null;
       }
       const rows: PendingJoinRequestRow[] = data ?? [];

@@ -18,6 +18,7 @@ import {
   serializeMembers,
 } from "@/lib/members/format";
 import { loadOrgSnapshot } from "@/lib/members/snapshot";
+import { logError } from "@/lib/log";
 
 export async function GET() {
   const gate = await requireOrgAdmin();
@@ -33,7 +34,7 @@ export async function GET() {
   // An export without addresses is wrong, not degraded.
   const { data: addresses, error: addressError } = await gate.supabase.rpc("admin_member_emails");
   if (addressError) {
-    console.error("members export: address read failed: code=%s", addressError.code);
+    logError("members export: address read failed", addressError, { route: "/api/admin/members/export" });
     return new Response("Failed to build export", { status: 500 });
   }
   const emails = new Map(addresses.map((a) => [a.profile_id, a.email]));
@@ -43,7 +44,7 @@ export async function GET() {
     snapshot = await loadOrgSnapshot(gate.supabase, gate.orgId, emails);
   } catch (err) {
     // err carries a table name only (see loadOrgSnapshot) — never row data.
-    console.error("members export: snapshot load failed:", err);
+    logError("members export: snapshot load failed", err, { route: "/api/admin/members/export" });
     return new Response("Failed to build export", { status: 500 });
   }
 
@@ -52,10 +53,7 @@ export async function GET() {
     csv = serializeMembers(memberRowsFromSnapshot(snapshot));
   } catch (err) {
     // The projection holds full-roster PII — log the error TYPE only.
-    console.error(
-      "members export: serialization failed:",
-      err instanceof Error ? err.name : typeof err
-    );
+    logError("members export: serialization failed", err, { route: "/api/admin/members/export" });
     return new Response("Failed to build export", { status: 500 });
   }
 
@@ -72,10 +70,10 @@ export async function GET() {
     // Not a 500 — the CSV is correct and complete; only the filename degrades.
     // But two full-PII rosters from different orgs sharing "members-<date>"
     // is worth a log line rather than a silent collapse to an unnamed file.
-    console.error(
-      "members export: org name lookup failed; falling back to an unnamed file: code=%s message=%s",
-      orgError.code,
-      orgError.message
+    logError(
+      "members export: org name lookup failed; falling back to an unnamed file",
+      orgError,
+      { route: "/api/admin/members/export" },
     );
   }
   const orgLabel = org ? orgDisplayName(org.branding, org.name) : "";

@@ -33,8 +33,7 @@ describe("getPrayerRetention", () => {
     ["no visible row", { data: null, error: null }],
     ["a period that was never offered", { data: { prayer_request_retention_months: 7 }, error: null }],
   ])("is unknown, never off, on %s", async (_label, row) => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
     result.current = row;
     expect(await getPrayerRetention()).toBeNull();
   });

@@ -9,6 +9,7 @@ import { readList } from "@/lib/supabase/readList";
 import { AboutEditor } from "./AboutEditor";
 import type { AboutPage, ClassTeacherWithProfile } from "@/lib/types";
 import { groupPageTitle } from "@/lib/pageTitle";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = groupPageTitle("Edit About");
 
@@ -36,7 +37,7 @@ export default async function EditAboutPage({
   // Never open the editor on a failed read: its blanks would read as saved values.
   const teacherRows = readList<ClassTeacherWithProfile>(teachersRead, "the group's leadership");
   if (aboutRead.error) {
-    console.error("Failed to load the group's summary: code=%s", aboutRead.error.code);
+    logError("Failed to load the group's summary", aboutRead.error, { route: "/g/[groupId]/about/edit" });
   }
   if (!teacherRows || aboutRead.error) {
     return (

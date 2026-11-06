@@ -5,6 +5,7 @@ import { reserveEmailQuota } from "@/lib/email/quota";
 import { displayName } from "@/lib/names";
 import { NextResponse, after } from "next/server";
 import { isMemberRole } from "@/lib/roles";
+import { logError, logWarn } from "@/lib/log";
 
 // Per-user submission cap. Feedback is a low-volume form; this keeps a
 // stuck client or a hostile script from flooding the table and admin inboxes.
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
     .eq("org_id", profile.org_id)
     .gte("created_at", windowStart);
   if (countError) {
-    console.error("Failed to check feedback rate limit:", countError);
+    logError("Failed to check feedback rate limit", countError, { route: "/api/feedback" });
   } else if ((count ?? 0) >= RATE_LIMIT) {
     return NextResponse.json(
       { error: "Too many submissions — please try again later" },
@@ -73,7 +74,7 @@ export async function POST(request: Request) {
     .insert({ profile_id: user.id, type, message });
 
   if (insertError) {
-    console.error("Failed to store feedback:", insertError);
+    logError("Failed to store feedback", insertError, { route: "/api/feedback" });
     return NextResponse.json(
       { error: "Failed to save feedback" },
       { status: 500 },
@@ -105,10 +106,10 @@ export async function POST(request: Request) {
       // feedback row above is the record either way.
       const allowed = await reserveEmailQuota(profile.org_id, emails.length);
       if (!allowed) {
-        console.warn(
-          "Feedback admin notification skipped — org %s hit its daily email cap",
-          profile.org_id,
-        );
+        logWarn("Feedback admin notification skipped — org hit its daily email cap", undefined, {
+          route: "/api/feedback",
+          ids: { org: profile.org_id },
+        });
         return;
       }
 
@@ -123,7 +124,7 @@ export async function POST(request: Request) {
         await resolveEmailBranding(profile.org_id),
       );
     } catch (error) {
-      console.error("Failed to email feedback to admins:", error);
+      logError("Failed to email feedback to admins", error, { route: "/api/feedback" });
     }
   });
 

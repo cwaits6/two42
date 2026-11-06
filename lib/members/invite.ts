@@ -14,15 +14,9 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { resolveEmailBranding } from "@/lib/email/identity";
 import { sendMemberInviteEmail } from "@/lib/email/resend";
 import { siteConfig } from "@/lib/config";
+import { logError, stepOf } from "@/lib/log";
 
 const TOKEN_TTL_MS = 14 * 24 * 60 * 60 * 1000;
-
-/** A PostgrestError's details echo row values (the email), so log only these. */
-function errorSummary(err: unknown) {
-  if (!err || typeof err !== "object") return err;
-  const { name, code, message } = err as Record<string, unknown>;
-  return { name, code, message };
-}
 
 /**
  * access_requests stores emails as typed, so matching is case-insensitive.
@@ -94,15 +88,11 @@ export async function sendMemberInvite(invite: MemberInvite): Promise<boolean> {
   const undo: (() => PromiseLike<{ error: unknown }>)[] = [];
 
   const rollBack = async (stage: string, err: unknown) => {
-    console.error("member invite: %s failed (org=%s):", stage, orgId, errorSummary(err));
+    logError("member invite: stage failed", err, { step: stepOf(stage), ids: { org: orgId } });
     for (const step of undo.reverse()) {
       const { error } = await step();
       if (error) {
-        console.error(
-          "member invite: rollback step failed (org=%s):",
-          orgId,
-          errorSummary(error)
-        );
+        logError("member invite: rollback step failed", error, { ids: { org: orgId } });
       }
     }
     return false;

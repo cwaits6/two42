@@ -4,6 +4,7 @@
 // @/lib/supabase/server here — statically or via await import() — would pull
 // next/headers into the client graph and break `npm run build`.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { logError, stepOf } from "@/lib/log";
 
 /**
  * The single normalization point for a request host. Lowercases, strips a
@@ -33,11 +34,7 @@ export function isExpectedHost(
   } catch (err) {
     // A malformed value on the deployment's own host 404s the entire site;
     // without this log that happens with zero operator signal.
-    console.error(
-      "isExpectedHost: malformed NEXT_PUBLIC_SITE_URL %s:",
-      opts.siteUrl,
-      err
-    );
+    logError("isExpectedHost: malformed NEXT_PUBLIC_SITE_URL", err);
   }
   return false;
 }
@@ -64,11 +61,11 @@ export async function resolveRequestOrgId(
   // assertion.
   const orgId = typeof data === "string" ? data : null;
   if (error) {
-    console.error("%s: org resolution failed:", opts.label, error);
+    logError("Org resolution failed", error, { step: stepOf(opts.label) });
   } else if (!orgId) {
     // The RPC succeeded but returned NULL — no principal. `error` stays null
     // in this path, so without this log the failure is invisible.
-    console.error("%s: org resolution returned NULL", opts.label);
+    logError("Org resolution returned NULL", undefined, { step: stepOf(opts.label) });
   }
   return orgId;
 }

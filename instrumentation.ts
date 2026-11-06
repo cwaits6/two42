@@ -1,3 +1,6 @@
+import type { Instrumentation } from "next";
+import { digestReference, writeLog } from "./lib/log/core";
+
 // Next.js instrumentation entry point (loaded once at server boot).
 // https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
 //
@@ -15,3 +18,16 @@ export async function register() {
   if (!process.env.OTEL_EXPORTER_OTLP_ENDPOINT) return;
   await import("./instrumentation.node");
 }
+
+// An error nothing caught reaches app/error.tsx with only the framework's
+// digest, so that digest is the reference this line is written under.
+export const onRequestError: Instrumentation.onRequestError = (error, _request, context) => {
+  writeLog(
+    "error",
+    "Request failed with an error nothing caught",
+    error,
+    // The framework's name for the route; the request's own path is never read.
+    { route: context.routePath, step: context.routeType },
+    digestReference(error),
+  );
+};

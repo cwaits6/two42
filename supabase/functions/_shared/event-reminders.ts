@@ -26,6 +26,7 @@ import {
   summarize,
 } from "./orgs.ts";
 import type { SendOutcome } from "./serving-hourly.ts";
+import { logError, logWarn } from "./log.ts";
 
 type QueryError = { message: string } | null;
 
@@ -140,6 +141,7 @@ async function readEvents(
     const { data, error } = await filter(
       supabase.from("events").select(EVENT_SELECT).eq("org_id", orgId),
     ).order("id").range(from, from + PAGE - 1);
+    if (error) logError("events query failed", error, { ids: { org: orgId } });
     if (error) throw new Error(`events query (${what}) failed: ${error.message}`);
     rows.push(...(data ?? []));
     if ((data ?? []).length < PAGE) return rows;
@@ -197,6 +199,7 @@ export async function runEventReminders(
       .select("group_id")
       .eq("org_id", org.id)
       .eq("event_reminders_enabled", false);
+    if (error) logError("group_settings query failed", error, { ids: { org: org.id } });
     if (error) throw new Error(`group_settings query failed: ${error.message}`);
     const dates = dueDates({
       rows,
@@ -247,7 +250,7 @@ export async function runEventReminders(
         if (capReached || !(await reserveEmailQuota(supabase, org.id, 1))) {
           if (!capReached) {
             capReached = true;
-            console.warn("[org %s] daily email cap reached, event reminders past it are not sent", org.id);
+            logWarn("daily email cap reached, event reminders past it are not sent", undefined, { ids: { org: org.id } });
           }
           capped += queue.length - index;
           releasedIds.push(...queue.slice(index).map((rest) => rest.profile_id));

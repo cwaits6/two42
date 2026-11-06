@@ -22,6 +22,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { toUserRole } from "@/lib/roles";
+import { logError } from "@/lib/log";
 
 export interface SnapshotProfile {
   id: string;
@@ -150,11 +151,17 @@ export async function loadOrgSnapshot(
         .order("id"),
     ]);
 
+  if (profiles.error) logError("Member snapshot read failed", profiles.error, { step: "profiles", ids: { org: orgId } });
   if (profiles.error) throw new Error("Failed to load profiles");
+  if (families.error) logError("Member snapshot read failed", families.error, { step: "family_units", ids: { org: orgId } });
   if (families.error) throw new Error("Failed to load family_units");
+  if (familyMembers.error) logError("Member snapshot read failed", familyMembers.error, { step: "family_members", ids: { org: orgId } });
   if (familyMembers.error) throw new Error("Failed to load family_members");
+  if (groups.error) logError("Member snapshot read failed", groups.error, { step: "teams", ids: { org: orgId } });
   if (groups.error) throw new Error("Failed to load teams");
+  if (profileGroups.error) logError("Member snapshot read failed", profileGroups.error, { step: "team_members", ids: { org: orgId } });
   if (profileGroups.error) throw new Error("Failed to load team_members");
+  if (requests.error) logError("Member snapshot read failed", requests.error, { step: "access_requests", ids: { org: orgId } });
   if (requests.error) throw new Error("Failed to load access_requests");
   // The two reads are separate, so a person added between them has no entry. Treating that as
   // no address would drop it from an export and leave its login row unmatched on import.

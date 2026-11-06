@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { siteConfig } from "@/lib/config";
 import { isMemberRole } from "@/lib/roles";
 import { CHILD_INVITE_REFUSED } from "@/lib/household";
+import { logError } from "@/lib/log";
 
 /**
  * POST /api/family-invites
@@ -121,7 +122,7 @@ export async function POST(request: Request) {
   }
 
   if (insertError || !invite) {
-    console.error("family-invites insert error:", insertError);
+    logError("family-invites insert error", insertError, { route: "/api/family-invites" });
     return NextResponse.json(
       { error: "Failed to create invite" },
       { status: 500 },
@@ -156,7 +157,7 @@ export async function POST(request: Request) {
       await resolveEmailBranding(invite.org_id),
     );
   } catch (emailError) {
-    console.error("Failed to send family invite email:", emailError);
+    logError("Failed to send family invite email", emailError, { route: "/api/family-invites" });
     // Return success anyway — the invite row was created, they can resend
     return NextResponse.json({
       success: true,

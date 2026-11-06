@@ -9,6 +9,7 @@ import { requireGroupLeader } from "@/lib/groups/server";
 import { PrivacyAndJoiningManager } from "./PrivacyAndJoiningManager";
 import { groupPageTitle } from "@/lib/pageTitle";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = groupPageTitle("Privacy and joining");
 
@@ -29,7 +30,7 @@ export default async function GroupPrivacySettingsPage({
   // Never show the controls with guessed values: a leader who sees "not
   // private" for a private group may save the wrong state on top of it.
   if (error || !flags) {
-    console.error("Failed to load the group's privacy settings:", error ?? "no row");
+    logError("Failed to load the group's privacy settings", error ?? "no row", { route: "/g/[groupId]/settings/privacy" });
     return (
       <PageContainer>
         <PageHeader

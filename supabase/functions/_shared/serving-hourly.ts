@@ -21,6 +21,7 @@ import {
   type Org,
   type OrgRunCounts,
 } from "./orgs.ts";
+import { logError, logWarn } from "./log.ts";
 
 type QueryError = { message: string } | null;
 
@@ -152,6 +153,7 @@ export async function runHourly(
       .eq("enabled", true)
       .contains("reminder_days", [clock.weekday])
       .eq("teams.serving_reminder_passes.send_date", clock.date);
+    if (error) logError("serving_team_settings query failed", error, { ids: { org: org.id } });
     if (error) throw new OrgRunError(`serving_team_settings query failed: ${error.message}`, none);
 
     // The service date is the next one on the schedule, and a team is due
@@ -179,6 +181,7 @@ export async function runHourly(
       _service_date: serviceDate,
       _team_ids: pending.map((row) => row.team_id),
     });
+    if (claimError) logError("serving_reminder_claim failed", claimError, { ids: { org: org.id } });
     if (claimError) throw new OrgRunError(`serving_reminder_claim failed: ${claimError.message}`, none);
 
     const teams = new Map(pending.map((row) => [row.team_id, row.teams!]));
@@ -215,7 +218,7 @@ export async function runHourly(
       if (!(await reserveEmailQuota(supabase, org.id, 1))) {
         capReached = true;
         capped += queue.length + 1;
-        console.warn("[org %s] daily email cap reached, leaving %d reminder(s) for a later firing", org.id, queue.length + 1);
+        logWarn("daily email cap reached, leaving reminders for a later firing", undefined, { ids: { org: org.id, left: queue.length + 1 } });
         record(releasedIds, row);
         continue;
       }

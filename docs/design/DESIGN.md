@@ -170,7 +170,7 @@ A `loading.tsx` streams the response, so the HTTP status is sent before the page
 
 ![Announcements empty at 390 wide](page-states/empty-390.webp)
 
-**Failed** — `ErrorState` is for a read that failed: a solid card with a red alert icon, "Couldn't load {thing}." and a **Try again** button that re-runs the page's server reads. It is announced as an alert and never reuses the empty-state copy.
+**Failed** — `ErrorState` is for a read that failed: a solid card with a red alert icon, "Couldn't load {thing}." and a **Try again** button that re-runs the page's server reads. It is announced as an alert and never reuses the empty-state copy. When the page's server read logged the failure, a quiet `Reference: K7M29QXD` line sits under the button, the same value as the log line (`docs/security/logging.md`), so the person can quote it; a read made in the browser shows none.
 
 ![Announcements failed at 1280 wide](page-states/error-1280.webp)
 

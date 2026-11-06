@@ -16,6 +16,7 @@
  * supabase/functions/_shared/quota.ts.
  */
 import { createServiceClient } from "@/lib/supabase/server";
+import { logError } from "@/lib/log";
 
 /**
  * The platform default daily cap, for display when an org has no
@@ -36,11 +37,9 @@ export async function reserveEmailQuota(orgId: string, n: number): Promise<boole
   // A negative batch IS a caller bug: refuse rather than approve a send the
   // quota never accounted for (fail closed, same as an RPC error).
   if (n < 0) {
-    console.error(
-      "Email quota check got a negative batch for org %s (n=%d), refusing send",
-      orgId,
-      n,
-    );
+    logError("Email quota check got a negative batch for org, refusing send", undefined, {
+      ids: { org: orgId, n },
+    });
     return false;
   }
   try {
@@ -50,22 +49,16 @@ export async function reserveEmailQuota(orgId: string, n: number): Promise<boole
       _n: n,
     });
     if (error) {
-      console.error(
-        "Email quota check failed for org %s (n=%d), refusing send:",
-        orgId,
-        n,
-        error,
-      );
+      logError("Email quota check failed for org, refusing send", error, {
+        ids: { org: orgId, n },
+      });
       return false;
     }
     return data === true;
   } catch (err) {
-    console.error(
-      "Email quota check threw for org %s (n=%d), refusing send:",
-      orgId,
-      n,
-      err,
-    );
+    logError("Email quota check threw for org, refusing send", err, {
+      ids: { org: orgId, n },
+    });
     return false;
   }
 }

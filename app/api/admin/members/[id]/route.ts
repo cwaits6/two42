@@ -1,6 +1,7 @@
 import { deletePerson, deletionResponse, loadDeletionSummary } from "@/lib/account/deletion";
 import { isUuid } from "@/lib/groups/active";
 import { requireOrgAdmin } from "@/lib/members/access";
+import { logError } from "@/lib/log";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -21,7 +22,7 @@ export async function GET(_request: Request, { params }: Params) {
     const summary = await loadDeletionSummary(gate.orgId, id, "church_admin");
     return summary ? Response.json(summary) : notFound();
   } catch (err) {
-    console.error("Deletion summary failed:", err instanceof Error ? err.message : typeof err);
+    logError("Deletion summary failed", err, { route: "/api/admin/members/[id]" });
     return Response.json({ error: "Failed to load" }, { status: 500 });
   }
 }

@@ -90,7 +90,7 @@ const PINS = [
     file: "app/api/serving/link-action/route.ts",
     needles: [
       "profile.org_id !== group.org_id",
-      "Signed-link cross-org denial: profile org %s does not match group org %s",
+      "Signed-link cross-org denial: profile org does not match group org",
     ],
   },
   {
@@ -98,21 +98,21 @@ const PINS = [
     needles: [
       "profile.org_id !== group.org_id",
       // NB: contains an em-dash — files are read as UTF-8 above.
-      "Serving link page: cross-org denial — profile org %s does not match group org %s",
+      "Serving link page: cross-org denial — profile org does not match group org",
     ],
   },
   {
     file: "app/api/family-invites/claim/route.ts",
     needles: [
       "callerProfile.org_id !== invite.org_id",
-      "family-invites/claim: caller org %s does not match invite org %s (user=%s, invite=%s)",
+      "family-invites/claim: caller org does not match invite org",
     ],
   },
   {
     file: "app/api/household/link-member/route.ts",
     needles: [
       "target.org_id !== currentProfile.org_id",
-      "household/link-member: caller org %s does not match target org %s (user=%s, target=%s)",
+      "household/link-member: caller org does not match target org",
     ],
   },
 ];

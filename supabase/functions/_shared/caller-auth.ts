@@ -2,6 +2,8 @@
 // let through any valid project JWT or API key, which is not enough for a job
 // that deletes data or sends email.
 
+import { logError } from "./log.ts";
+
 const KEY_VARS = ["SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_ROLE_KEY"];
 
 /**
@@ -49,7 +51,7 @@ export function serviceKeyCallerOnly(
 ): (req: Request) => Response | Promise<Response> {
   return (req) => {
     if (isServiceKeyCaller(req)) return handler(req);
-    console.error("refused request: the bearer token is not a service key");
+    logError("refused request: the bearer token is not a service key");
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },

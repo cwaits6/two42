@@ -74,7 +74,7 @@ beforeEach(() => {
   getOptionalUser.mockResolvedValue({ id: "user-1" });
   loadGroupMemberships.mockReset();
   loadGroupMemberships.mockResolvedValue([A, B]);
-  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 describe("getGroupMemberships", () => {

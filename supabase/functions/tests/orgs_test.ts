@@ -2,6 +2,7 @@
 // database — the fake below satisfies OrgListClient structurally.
 
 import { assertEquals, assertRejects } from "jsr:@std/assert@1";
+import { logged } from "./logged.ts";
 import {
   forEachOrg,
   listActiveOrgs,
@@ -21,7 +22,7 @@ interface RecordedQuery {
 
 function makeFakeClient(result: {
   data: Org[] | null;
-  error: { message: string } | null;
+  error: { message: string; code?: string } | null;
 }): { client: OrgListClient; recorded: RecordedQuery } {
   const recorded: RecordedQuery = {};
   const client: OrgListClient = {
@@ -92,6 +93,14 @@ Deno.test("listActiveOrgs throws when the query errors", async () => {
     Error,
     "Failed to list organizations: boom",
   );
+});
+
+Deno.test("listActiveOrgs logs the database's code before it rethrows the failure as text", async () => {
+  const { client } = makeFakeClient({ data: null, error: { message: "boom", code: "42501" } });
+  const lines = await logged(() => listActiveOrgs(client));
+  assertEquals(lines.map(({ what, code }) => ({ what, code })), [
+    { what: "organizations query failed", code: "42501" },
+  ]);
 });
 
 Deno.test("listActiveOrgs returns [] when data is null and there is no error", async () => {

@@ -6,6 +6,8 @@
 // Deliberately free of any @supabase/supabase-js import so it can be unit
 // tested offline against the structural types below.
 
+import { logError } from "./log.ts";
+
 export interface Group {
   id: string;
   name: string;
@@ -42,6 +44,7 @@ export async function listGroups(supabase: GroupClient, orgId: string): Promise<
     .select("id, name")
     .eq("org_id", orgId)
     .order("name");
+  if (error) logError("groups query failed", error, { ids: { org: orgId } });
   if (error) throw new Error(`groups query failed: ${error.message}`);
   return data ?? [];
 }
@@ -65,6 +68,7 @@ export async function resolveGroupLinkMode(
     .eq("org_id", orgId)
     .eq("group_id", groupId)
     .maybeSingle();
+  if (error) logError("group_settings query failed", error, { ids: { org: orgId, group: groupId } });
   if (error) throw new Error(`group_settings query failed: ${error.message}`);
   return (data?.serving_link_mode ?? envDefault) === "login" ? "login" : "signed";
 }

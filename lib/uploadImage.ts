@@ -8,6 +8,7 @@ import {
   orgObjectPath,
   parseStoragePublicUrl,
 } from "@/lib/storagePaths";
+import { logError, logWarn, stepOf } from "@/lib/log";
 
 export type ImageUploadType = "avatar" | "event" | "family";
 
@@ -98,6 +99,7 @@ export async function uploadImage(
     });
 
   if (error) {
+    logError("uploadImage: upload failed", error, { step: stepOf(config.bucket) });
     throw new Error(`Upload failed: ${error.message}`);
   }
 
@@ -134,6 +136,7 @@ export async function deleteImage(
     .remove([fullPath]);
 
   if (error) {
+    logError("deleteImage: remove failed", error, { step: stepOf(config.bucket) });
     throw new Error(`Delete failed: ${error.message}`);
   }
 
@@ -143,9 +146,10 @@ export async function deleteImage(
     // click) or the restrictive floor filtered it — an org-prefix bug, a
     // wrong bucket, or a capability lost since page load. All three are
     // silent from the caller's side, so leave a trail.
-    console.warn(
-      `deleteImage: no object removed at ${config.bucket}/${fullPath} — ` +
-        "already absent (e.g. a legacy un-prefixed key), or filtered by storage RLS",
+    logWarn(
+      "deleteImage: no object removed — already absent (e.g. a legacy un-prefixed key), or filtered by storage RLS",
+      undefined,
+      { step: stepOf(config.bucket) },
     );
   }
   return { removed };
@@ -175,12 +179,9 @@ export async function mintSignedUrl(
   if (!url) return null;
   const parsed = parseStoragePublicUrl(url);
   if (!parsed) {
-    // Strip the query/fragment before logging: an accidentally re-signed
-    // *signed* URL is rejected here, and its query string carries a bearer
-    // token that must never reach logs.
-    console.warn(
-      `mintSignedUrl: unparseable storage URL ${url.split(/[?#]/)[0]}`,
-    );
+    // A signed URL's query string carries a bearer token, so the address is
+    // not logged.
+    logWarn("mintSignedUrl: unparseable storage URL");
     return null;
   }
   const supabase = createClient();
@@ -188,10 +189,7 @@ export async function mintSignedUrl(
     .from(parsed.bucket)
     .createSignedUrl(parsed.path, ttlSeconds);
   if (error || !data?.signedUrl) {
-    console.warn(
-      `mintSignedUrl: signing failed for ${parsed.bucket}/${parsed.path} — ` +
-        (error?.message ?? "no signed URL returned"),
-    );
+    logWarn("mintSignedUrl: signing failed", error ?? undefined, { step: stepOf(parsed.bucket) });
     return null;
   }
   return data.signedUrl;
@@ -217,19 +215,13 @@ export async function mintSignedUrls(
         .from(bucket)
         .createSignedUrls(paths, ttlSeconds);
       if (error || !data) {
-        console.warn(
-          `mintSignedUrls: batch signing failed for ${bucket} — ` +
-            (error?.message ?? "no data returned"),
-        );
+        logWarn("mintSignedUrls: batch signing failed", error ?? undefined, { step: stepOf(bucket) });
         return;
       }
       const byPath = new Map<string, string>();
       for (const entry of data) {
         if (entry.error || !entry.signedUrl) {
-          console.warn(
-            `mintSignedUrls: signing failed for ${bucket}/${entry.path} — ` +
-              (entry.error ?? "no signed URL returned"),
-          );
+          logWarn("mintSignedUrls: signing failed", entry.error ?? undefined, { step: stepOf(bucket) });
           continue;
         }
         if (entry.path) byPath.set(entry.path, entry.signedUrl);

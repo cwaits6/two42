@@ -9,6 +9,7 @@ import {
   notifyLeadersOfCancel,
   type NamedProfile,
 } from "@/lib/serving/server";
+import { logError } from "@/lib/log";
 
 // A function, not a constant: a Response body can be sent only once.
 const failed = () =>
@@ -37,10 +38,10 @@ async function withAddresses<T extends NamedProfile>(
       .select("id, email")
       .eq("org_id", orgId)
       .in("id", people.map((p) => p.id));
-    if (error) console.error("Serving confirmation address read failed: code=%s", error.code);
+    if (error) logError("Serving confirmation address read failed", error, { route: "/api/serving/signups" });
     for (const row of data ?? []) emailById.set(row.id, row.email);
   } catch {
-    console.error("Serving confirmation address read failed: no service client");
+    logError("Serving confirmation address read failed: no service client", undefined, { route: "/api/serving/signups" });
   }
   return people.map((p) => ({ ...p, email: emailById.get(p.id) ?? null }));
 }
@@ -106,12 +107,11 @@ export async function POST(request: Request) {
     ] as const
   ).find(([, e]) => e && e.code !== "PGRST116");
   if (lookupError) {
-    console.error(
-      "Serving signup %s lookup failed for group %s:",
-      lookupError[0],
-      groupId,
-      lookupError[1]
-    );
+    logError("Serving signup lookup failed for group", lookupError[1], {
+      route: "/api/serving/signups",
+      step: lookupError[0],
+      ids: { group: groupId },
+    });
     return failed();
   }
 
@@ -178,14 +178,10 @@ export async function POST(request: Request) {
       // signal (CLAUDE.md's app_request_org_id fail-closed rule requires the
       // NULL case be logged).
       if (rpcError?.code !== "SV001") {
-        console.error(
-          "Serving signup rpc failed for group %s on %s (user %s, data=%s):",
-          groupId,
-          date,
-          user.id,
-          rpc === null ? "null" : "present",
-          rpcError
-        );
+        logError("Serving signup rpc failed for group", rpcError, {
+          route: "/api/serving/signups",
+          ids: { group: groupId, user: user.id },
+        });
       }
       return { code: rpcError?.code ?? "failed" };
     }
@@ -253,7 +249,7 @@ export async function PATCH(request: Request) {
     .eq("id", signupId)
     .maybeSingle();
   if (signupError) {
-    console.error("Serving change lookup failed for %s:", signupId, signupError);
+    logError("Serving change lookup failed", signupError, { route: "/api/serving/signups", ids: { signup: signupId } });
     return failed();
   }
   if (!signup) {
@@ -267,7 +263,7 @@ export async function PATCH(request: Request) {
     .single<{ added: number; removed: number }>();
   if (rpcError || !rpc) {
     if (rpcError?.code !== "SV005") {
-      console.error("Serving change rpc failed for %s (user %s):", signupId, user.id, rpcError);
+      logError("Serving change rpc failed", rpcError, { route: "/api/serving/signups", ids: { signup: signupId, user: user.id } });
     }
     switch (rpcError?.code) {
       case "SV005":
@@ -336,7 +332,7 @@ export async function DELETE(request: Request) {
   // found" — the signup may still exist and the member would believe it
   // was cancelled.
   if (signupError) {
-    console.error("Serving signup lookup failed for %s:", signupId, signupError);
+    logError("Serving signup lookup failed", signupError, { route: "/api/serving/signups", ids: { signup: signupId } });
     return failed();
   }
   if (!signup) {
@@ -353,7 +349,7 @@ export async function DELETE(request: Request) {
     .select();
 
   if (error) {
-    console.error("Serving signup delete failed:", error);
+    logError("Serving signup delete failed", error, { route: "/api/serving/signups" });
     return NextResponse.json({ error: "Failed to cancel" }, { status: 500 });
   }
   if (!deleted || deleted.length === 0) {
@@ -364,7 +360,7 @@ export async function DELETE(request: Request) {
   // team embed there is no page to point at.
   const team = signup.teams as unknown as { name: string; group_id: string } | null;
   if (!team) {
-    console.error("Serving cancel notice skipped — no team for signup %s", signupId);
+    logError("Serving cancel notice skipped — no team for signup", undefined, { route: "/api/serving/signups", ids: { signup: signupId } });
     return NextResponse.json({ success: true });
   }
 
@@ -386,7 +382,7 @@ export async function DELETE(request: Request) {
       excludeProfileId: user.id,
     });
   } catch (err) {
-    console.error("Serving cancel notice failed:", err);
+    logError("Serving cancel notice failed", err, { route: "/api/serving/signups" });
   }
 
   return NextResponse.json({ success: true });

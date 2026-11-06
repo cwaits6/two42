@@ -4,6 +4,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import type { ActiveGroup } from "@/lib/groups/active";
 import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
 import { loadHomeCards } from "@/lib/groups/home";
+import { loggedLines } from "@/lib/log/testing";
 
 const A: ActiveGroup = { id: "a", name: "Grace", color: GROUP_DEFAULT_COLOR, role: "leader" };
 const B: ActiveGroup = { id: "b", name: "Hope", color: GROUP_DEFAULT_COLOR, role: "member" };
@@ -155,7 +156,7 @@ describe("loadHomeCards", () => {
   });
 
   it("reports a failed read as null instead of an empty week and zero counts", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
     const { client } = makeClient({
       events: { data: [event("soon", "2026-10-12T18:00:00Z")], error: null },
       announcements: { data: null, error: { message: "boom" } },
@@ -165,6 +166,8 @@ describe("loadHomeCards", () => {
     const result = await loadHomeCards(client, { orgId: "org-1", timeZone: "America/New_York", groups: [A] });
 
     expect(result).toBeNull();
-    expect(console.error).toHaveBeenCalledWith("Home %s read failed:", "announcements", { message: "boom" });
+    expect(loggedLines(vi.mocked(console.log))).toEqual([
+      expect.objectContaining({ what: "Home read failed", step: "announcements" }),
+    ]);
   });
 });

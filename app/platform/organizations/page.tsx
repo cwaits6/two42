@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { ErrorState } from "@/components/states/ErrorState";
 import { OrganizationsList, type PlatformOrg } from "./OrganizationsList";
 import { pageTitle } from "@/lib/pageTitle";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = () => pageTitle("Organizations");
 
@@ -28,7 +29,7 @@ export default async function PlatformOrganizationsPage() {
   // deployment: orgs is null and the list renders "No organizations yet."
   // Rendered here rather than thrown, so the page keeps its header.
   if (error) {
-    console.error("Platform organizations list read failed", error);
+    logError("Platform organizations list read failed", error, { route: "/platform/organizations" });
     return (
       <PageContainer size="wide">
         <PageHeader title="Organizations" />

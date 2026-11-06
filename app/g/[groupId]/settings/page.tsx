@@ -8,6 +8,7 @@ import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { groupPageTitle } from "@/lib/pageTitle";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = groupPageTitle("Group settings");
 
@@ -79,10 +80,10 @@ export default async function GroupSettingsPage({
       .eq("org_id", profile.org_id)
       .eq("group_id", group.id)
       .eq("status", "pending");
-    if (error) console.error("Failed to count pending join requests: code=%s", error.code);
+    if (error) logError("Failed to count pending join requests", error, { route: "/g/[groupId]/settings" });
     pendingRequests = count ?? 0;
   } else {
-    console.error("Failed to load the org for the pending request count:", profileError ?? "no row");
+    logError("Failed to load the org for the pending request count", profileError ?? "no row", { route: "/g/[groupId]/settings" });
   }
 
   return (

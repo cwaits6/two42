@@ -17,6 +17,7 @@ import {
   type ServingTeamRow,
 } from "@/lib/groups/groupHome";
 import type { DirectoryProfile, Event, FamilyDirectoryFull, Rsvp } from "@/lib/types";
+import { logError } from "@/lib/log";
 
 const PRAYER_WALL_COLUMNS =
   "id, group_id, body, is_anonymous, is_answered, created_at, mine, first_name, last_name, preferred_name, avatar_url, praying_count, i_am_praying";
@@ -137,7 +138,7 @@ export async function loadGroupHomeReads(
       .eq("group_id", groupId)
       .then(({ count, error, status }) => {
         // A head read has no body, so the status is the only detail an HTTP failure carries.
-        if (error) console.error("Failed to count lessons: code=%s status=%s", error.code, status);
+        if (error) logError("Failed to count lessons", error, { ids: { status } });
         return count ?? 0;
       }),
     // The Directory's reads and order, so Home's first names match its list.
@@ -188,7 +189,7 @@ export async function loadGroupHomeReads(
           .eq("group_id", groupId)
           .eq("status", "pending")
           .then(({ count, error }) => {
-            if (error) console.error("Failed to count join requests: code=%s", error.code);
+            if (error) logError("Failed to count join requests", error);
             return error ? null : (count ?? 0);
           })
       : Promise.resolve(0),

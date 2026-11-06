@@ -13,7 +13,7 @@ const afterResponse: (() => Promise<void>)[] = [];
 vi.mock("next/server", () => ({
   after: (task: () => Promise<void>) => afterResponse.push(task),
 }));
-const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+const consoleError = vi.spyOn(console, "log").mockImplementation(() => {});
 
 const { deletePerson, deletionResponse, loadDeletionSummary } = await import("./deletion");
 

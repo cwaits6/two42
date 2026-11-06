@@ -8,9 +8,10 @@ const from = vi.fn((bucket: string) => {
 vi.mock("@/lib/supabase/server", () => ({
   createServiceClient: async () => ({ storage: { from } }),
 }));
-vi.spyOn(console, "error").mockImplementation(() => {});
+const logged = vi.spyOn(console, "log").mockImplementation(() => {});
 
 const { removeAvatarObjects } = await import("./storageDelete");
+const { loggedLines } = await import("@/lib/log/testing");
 
 const ORG = "a0000000-0000-4000-8000-000000000001";
 const OTHER = "b0000000-0000-4000-8000-000000000002";
@@ -37,11 +38,31 @@ describe("removeAvatarObjects", () => {
     const ours = `${ORG}/profiles/${PERSON}/avatar.jpg`;
     expect(await removeAvatarObjects(ORG, [theirs, ours])).toEqual([theirs]);
     expect(remove).toHaveBeenCalledWith([ours]);
+    expect(loggedLines(logged)).toEqual([
+      expect.objectContaining({
+        what: "removeAvatarObjects: refused a key outside org",
+        step: "profiles",
+        ids: { org: ORG, keyOrg: OTHER, entity: PERSON },
+      }),
+    ]);
   });
 
   it("reports every key still stored when storage fails, without throwing", async () => {
-    remove.mockResolvedValue({ data: null, error: { message: "down" } });
+    remove.mockResolvedValue({ data: null, error: { message: "down", status: 503 } });
     expect(await removeAvatarObjects(ORG, [`${PERSON}/avatar.jpg`])).toEqual([`${PERSON}/avatar.jpg`]);
+    expect(loggedLines(logged)[0]).toMatchObject({ what: "removeAvatarObjects: remove failed", code: "503" });
+  });
+
+  it("logs each key left behind by its kind and row id, so its folder can be found", async () => {
+    remove.mockResolvedValue({ data: [], error: null });
+    const keys = [`${ORG}/family-members/${PERSON}/avatar.jpg`, `${PERSON}/avatar.jpg`];
+    await removeAvatarObjects(ORG, keys);
+    const lines = loggedLines(logged);
+    expect(lines.map(({ step, ids }) => ({ step, ids }))).toEqual([
+      { step: "family_members", ids: { org: ORG, keyOrg: ORG, entity: PERSON } },
+      { step: undefined, ids: { org: ORG, entity: PERSON } },
+    ]);
+    expect(JSON.stringify(lines)).not.toContain("avatar.jpg");
   });
 
   it("reports a key storage says nothing about", async () => {

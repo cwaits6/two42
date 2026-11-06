@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Segmented } from "@/components/ui/segmented";
 import { statsRange, type StatsRange } from "@/lib/serving/dates";
 import { personName } from "@/lib/serving/display";
+import { logError } from "@/lib/log";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -74,7 +75,7 @@ export function ServingStats({
 
       if (cancelled) return;
       if (teamsError) {
-        console.error("Failed to load serving teams: code=%s", teamsError.code);
+        logError("Failed to load serving teams", teamsError, { route: "/g/[groupId]/settings/serving" });
         setFailed(true);
         setLoading(false);
         return;
@@ -105,7 +106,7 @@ export function ServingStats({
       const { data: signups, error: signupsError } = await query;
       if (cancelled) return;
       if (signupsError) {
-        console.error("Failed to load serving history: code=%s", signupsError.code);
+        logError("Failed to load serving history", signupsError, { route: "/g/[groupId]/settings/serving" });
         setFailed(true);
         setLoading(false);
         return;

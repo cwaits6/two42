@@ -14,6 +14,7 @@ import {
   prayerCutoff,
   reminderCutoff,
 } from "./retention.ts";
+import { logError, logInfo, stepOf } from "./log.ts";
 
 /** Passes one call to a reminder prune function deletes at most. */
 export const DELETE_BATCH = 500;
@@ -88,6 +89,7 @@ async function liveInviteTokens(
     .eq("org_id", orgId)
     .eq("status", "pending")
     .not("invite_token", "is", null);
+  if (pending.error) logError("cleanup read failed", pending.error, { step: "access_requests_pending", ids: { org: orgId } });
   if (pending.error) throw new Error(pending.error.message);
   const approved = await supabase
     .from("access_requests")
@@ -96,6 +98,7 @@ async function liveInviteTokens(
     .eq("status", "approved")
     .not("invite_token", "is", null)
     .not("signup_token", "is", null);
+  if (approved.error) logError("cleanup read failed", approved.error, { step: "access_requests_approved", ids: { org: orgId } });
   if (approved.error) throw new Error(approved.error.message);
 
   const pendingRows = assertWholeRead("pending requests", pending.data, pending.count) as Array<
@@ -147,6 +150,7 @@ export async function cleanUpOrg(
   function remove(key: keyof RemovedCounts, step: string, chain: () => DeleteChain) {
     return attempt(step, async () => {
       const { count, error } = await chain();
+      if (error) logError("cleanup delete failed", error, { step: stepOf(step), ids: { org: orgId } });
       if (error) throw new Error(error.message);
       if (count === null) throw new Error("the delete returned no count");
       removed[key] += count;
@@ -233,6 +237,7 @@ export async function cleanUpOrg(
       .select("prayer_request_retention_months")
       .eq("id", orgId)
       .maybeSingle();
+    if (error) logError("cleanup read failed", error, { step: "organizations", ids: { org: orgId } });
     if (error) throw new Error(error.message);
     if (!data) throw new Error("the church's row was not returned");
     const cutoff = prayerCutoff(data.prayer_request_retention_months, now);
@@ -260,6 +265,7 @@ export async function cleanUpOrg(
           _before: reminderCutoff(now),
           _limit: DELETE_BATCH,
         });
+        if (error) logError("cleanup delete failed", error, { step: table, ids: { org: orgId } });
         if (error) throw new Error(error.message);
         if (data === null) throw new Error("the delete returned no count");
         removed[key] += data;
@@ -283,9 +289,9 @@ export async function cleanUpOrgs(
   const results: OrgCleanupResult[] = [];
   for (const orgId of orgIds) {
     const result = await cleanUpOrg(supabase, orgId, now);
-    console.log("[org %s] expired data removed: %s", orgId, JSON.stringify(result.removed));
+    logInfo("expired data removed", { ids: { org: orgId, ...result.removed } });
     for (const { step, error } of result.failures) {
-      console.error("[org %s] cleanup failed at %s: %s", orgId, step, error);
+      logError("cleanup failed", error, { step: stepOf(step), ids: { org: orgId } });
     }
     results.push(result);
   }

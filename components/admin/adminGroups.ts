@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { displayName } from "@/lib/names";
+import { logError } from "@/lib/log";
 
 export interface AdminGroupRow {
   id: string;
@@ -37,7 +38,7 @@ export async function listAdminGroups(
     .eq("leaders.role", "leader")
     .order("name", { ascending: true });
   if (error) {
-    console.error("Failed to load groups:", error);
+    logError("Failed to load groups", error);
     return null;
   }
   return data.map((g) => ({

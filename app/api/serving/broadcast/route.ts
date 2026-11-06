@@ -10,6 +10,7 @@ import { sendServingBroadcastEmail } from "@/lib/email/serving";
 import { reserveEmailQuota } from "@/lib/email/quota";
 import type { Profile } from "@/lib/types";
 import { siteConfig } from "@/lib/config";
+import { logError, logWarn } from "@/lib/log";
 
 /**
  * Leader "Email the team" broadcast: emails every team member the dates
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
     .eq("id", groupId)
     .single();
   if (groupError && groupError.code !== "PGRST116") {
-    console.error("Serving broadcast group lookup failed for group %s:", groupId, groupError);
+    logError("Serving broadcast group lookup failed for group", groupError, { route: "/api/serving/broadcast", ids: { group: groupId } });
     return NextResponse.json(
       { error: "Something went wrong — please try again" },
       { status: 500 }
@@ -100,12 +101,11 @@ export async function POST(request: Request) {
     ] as const
   ).find(([, e]) => e && e.code !== "PGRST116");
   if (lookupError) {
-    console.error(
-      "Serving broadcast %s lookup failed for group %s:",
-      lookupError[0],
-      groupId,
-      lookupError[1]
-    );
+    logError("Serving broadcast lookup failed for group", lookupError[1], {
+      route: "/api/serving/broadcast",
+      step: lookupError[0],
+      ids: { group: groupId },
+    });
     return NextResponse.json(
       { error: "Something went wrong — please try again" },
       { status: 500 }
@@ -143,11 +143,10 @@ export async function POST(request: Request) {
   // A failed read here would render every date as open and broadcast
   // signup links for dates that are already covered — fail the send instead.
   if (signupsError) {
-    console.error(
-      "Serving broadcast signups lookup failed for group %s:",
-      groupId,
-      signupsError
-    );
+    logError("Serving broadcast signups lookup failed for group", signupsError, {
+      route: "/api/serving/broadcast",
+      ids: { group: groupId },
+    });
     return NextResponse.json(
       { error: "Something went wrong — please try again" },
       { status: 500 }
@@ -187,12 +186,10 @@ export async function POST(request: Request) {
   // A failed read here would silently report the team as having no emails on
   // file — fail the send instead of blaming the team's data.
   if (memberRowsError) {
-    console.error(
-      "Serving broadcast recipient lookup failed for group %s (org=%s):",
-      groupId,
-      group.org_id,
-      memberRowsError
-    );
+    logError("Serving broadcast recipient lookup failed for group", memberRowsError, {
+      route: "/api/serving/broadcast",
+      ids: { group: groupId, org: group.org_id },
+    });
     return NextResponse.json(
       { error: "Something went wrong — please try again" },
       { status: 500 }
@@ -224,10 +221,10 @@ export async function POST(request: Request) {
   // cap-hit broadcast must not be logged as a 0-recipient broadcast row.
   const allowed = await reserveEmailQuota(group.org_id, members.length);
   if (!allowed) {
-    console.warn(
-      "Serving broadcast skipped — org %s hit its daily email cap",
-      group.org_id,
-    );
+    logWarn("Serving broadcast skipped — org hit its daily email cap", undefined, {
+      route: "/api/serving/broadcast",
+      ids: { org: group.org_id },
+    });
     return NextResponse.json(
       { error: "Your organization has reached its daily email limit. Try again tomorrow." },
       { status: 429 },
@@ -264,19 +261,19 @@ export async function POST(request: Request) {
       });
       sent++;
     } catch (err) {
-      console.error("Serving broadcast failed for member:", member.id, err);
+      logError("Serving broadcast failed for member", err, { route: "/api/serving/broadcast", ids: { member: member.id } });
     }
   }
 
-  const { error: logError } = await supabase.from("serving_broadcasts").insert({
+  const { error: recordError } = await supabase.from("serving_broadcasts").insert({
     team_id: groupId,
     sent_by: user.id,
     subject: `${group.name}: dates that still need someone`,
     open_dates: openDates,
     recipient_count: sent,
   });
-  if (logError) {
-    console.error("Failed to log serving broadcast:", logError);
+  if (recordError) {
+    logError("Failed to log serving broadcast", recordError, { route: "/api/serving/broadcast" });
   }
 
   return NextResponse.json({ sent, openDates });

@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { EMAIL, EMAIL_MAX_LENGTH } from "@/lib/emailAddress";
 import { NETWORK_ERROR, operatorMessage } from "@/lib/errorCopy";
 import type { Database } from "@/lib/supabase/database.types";
+import { logError } from "@/lib/log";
 
 export interface PlatformOrg {
   id: string;
@@ -110,7 +111,7 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
       }
       router.refresh();
     } catch (err) {
-      console.error(err);
+      logError("Platform organization add request failed", err, { route: "/platform/organizations" });
       toast.error(NETWORK_ERROR);
     } finally {
       setCreating(false);

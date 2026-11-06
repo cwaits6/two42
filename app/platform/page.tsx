@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { ErrorState } from "@/components/states/ErrorState";
 import { Card, CardContent } from "@/components/ui/card";
 import { pageTitle } from "@/lib/pageTitle";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = () => pageTitle("Platform overview");
 
@@ -40,7 +41,7 @@ export default async function PlatformOverviewPage() {
   // A failed read would otherwise render a confident "0 active, 0 suspended"
   // — wrong lifecycle data is worse here than an explicit failure.
   if (error) {
-    console.error("Platform overview organizations read failed", error);
+    logError("Platform overview organizations read failed", error, { route: "/platform" });
     return (
       <PageContainer>
         <PageHeader title="Overview" />

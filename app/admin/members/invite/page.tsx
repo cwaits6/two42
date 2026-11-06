@@ -3,6 +3,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { InvitePersonForm } from "./InvitePersonForm";
 import { pageTitle } from "@/lib/pageTitle";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = () => pageTitle("Invite member");
 
@@ -13,7 +14,7 @@ export default async function InvitePersonPage() {
     .select("id, family_name")
     .order("family_name", { ascending: true });
   if (error) {
-    console.error("Invite person: failed to load households:", error.code);
+    logError("Invite person: failed to load households", error, { route: "/admin/members/invite" });
   }
 
   return (

@@ -88,8 +88,7 @@ beforeEach(() => {
   reserveEmailQuota.mockReset().mockResolvedValue(true);
   sendServingConfirmationEmail.mockReset();
   sendServingCancelNoticeEmail.mockReset();
-  vi.spyOn(console, "error").mockImplementation(() => {});
-  vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 describe("sendSignupConfirmation", () => {
@@ -220,7 +219,7 @@ describe("notifyLeadersOfCancel", () => {
   });
 
   it("logs a failed send without a name or address, and sends the next", async () => {
-    const consoleError = vi.mocked(console.error);
+    const consoleError = vi.mocked(console.log);
     consoleError.mockClear();
     const service = stubClient({ team_members: { data: [leader, leader], error: null } });
     sendServingCancelNoticeEmail.mockRejectedValueOnce(new Error("Leah Doe <leah@example.com> bounced"));

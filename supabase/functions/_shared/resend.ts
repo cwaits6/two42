@@ -10,6 +10,7 @@
 // can be unit tested offline without a network.
 
 import type { SendOutcome } from "./serving-hourly.ts";
+import { logError } from "./log.ts";
 
 const RESEND_SEND_URL = "https://api.resend.com/emails";
 // Well under the hourly firing's budget, which is only checked between sends,
@@ -59,13 +60,11 @@ export async function sendThroughResend(
       body: JSON.stringify(send.payload),
     });
     if (res.ok) return "sent";
-    // The profile id, not the email address (PII) — the Resend error body
-    // is what's actionable here.
     const body = await res.text();
-    console.error("Resend error for profile", send.refId, res.status, body);
+    logError("Resend error for profile", { status: res.status }, { ids: { profile: send.refId } });
     return resendOutcome(res.status, body);
   } catch (err) {
-    console.error("Resend request failed for profile", send.refId, err);
+    logError("Resend request failed for profile", err, { ids: { profile: send.refId } });
     return "retry";
   }
 }

@@ -13,6 +13,7 @@ import { formatLessonDate, lessonThumbnail, partNumbers, safeHttpUrl } from "@/l
 import { pageTitle } from "@/lib/pageTitle";
 import { readList } from "@/lib/supabase/readList";
 import { LessonList, MetaLine } from "../LessonList";
+import { logError } from "@/lib/log";
 
 type Lesson = {
   id: string;
@@ -62,7 +63,7 @@ export default async function LessonPage({
     .maybeSingle();
 
   if (error) {
-    console.error("Failed to load lesson: code=%s message=%s", error.code, error.message);
+    logError("Failed to load lesson", error, { route: "/g/[groupId]/lectures/[id]" });
     return (
       <PageContainer>
         <PageHeader title="Lesson" backHref={libraryHref} backLabel="Back to Lessons" />
@@ -85,7 +86,7 @@ export default async function LessonPage({
           .maybeSingle()
           .then(({ data, error }) => {
             if (error) {
-              console.error("Failed to load lesson series: code=%s message=%s", error.code, error.message);
+              logError("Failed to load lesson series", error, { route: "/g/[groupId]/lectures/[id]" });
             }
             return data;
           }),

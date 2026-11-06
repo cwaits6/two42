@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { parseGroupCreationPolicy, type GroupCreationPolicy } from "@/lib/groups/creation";
+import { logError, logWarn } from "@/lib/log";
 
 /**
  * The caller's org's group_creation_policy, read through the cookie-bound
@@ -15,11 +16,11 @@ export async function getGroupCreationPolicy(): Promise<GroupCreationPolicy> {
     .select("group_creation_policy")
     .maybeSingle();
   if (error) {
-    console.error("Failed to load the group creation policy:", error);
+    logError("Failed to load the group creation policy", error);
     return "approval";
   }
   if (!data) {
-    console.warn("No organization row visible for this request; group creation policy unknown");
+    logWarn("No organization row visible for this request; group creation policy unknown");
     return "approval";
   }
   return parseGroupCreationPolicy(data.group_creation_policy);

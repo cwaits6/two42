@@ -39,6 +39,7 @@ import {
   type PersonDraft,
   type StepErrors,
 } from "./setupValidation";
+import { logError } from "@/lib/log";
 
 interface HouseholdMatch {
   id: string;
@@ -331,7 +332,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
       // The frame shows the signed-in person's own photo and name.
       router.refresh();
     } catch (err) {
-      console.error(err);
+      logError("Failed to upload the photo", err, { route: "/profile/setup" });
       toast.error(failureMessage("upload the photo"));
     } finally {
       setUploadingAvatar(false);
@@ -409,7 +410,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
       .single();
     setCreatingHousehold(false);
     if (error || !data) {
-      console.error(error);
+      logError("Failed to add the household", error, { route: "/profile/setup" });
       toast.error(failureMessage("add the household"));
       return;
     }
@@ -503,7 +504,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
       router.push("/directory");
       router.refresh();
     } catch (err) {
-      console.error(err);
+      logError("Failed to finish setting up the profile", err, { route: "/profile/setup" });
       toast.error(failureMessage("finish setting up your profile"));
     } finally {
       setSaving(false);

@@ -3,6 +3,7 @@
 // decide what goes out.
 
 import { assertEquals } from "jsr:@std/assert@1";
+import { logged } from "./logged.ts";
 import {
   type ClaimRow,
   type DueRow,
@@ -68,7 +69,7 @@ function fakeClient(options: FakeOptions = {}) {
       },
       then(resolve: (v: unknown) => unknown) {
         if (table === "serving_team_settings") {
-          if (options.failSettings) return resolve({ data: null, error: { message: "settings refused" } });
+          if (options.failSettings) return resolve({ data: null, error: { message: "settings refused", code: "42501" } });
           const org = recorded.filters.find((f) => f.startsWith("org_id="))!.slice("org_id=".length);
           return resolve({ data: options.rows?.[org] ?? [], error: null });
         }
@@ -405,6 +406,15 @@ Deno.test("a settings read that fails is that church's failure and the others st
   const { client } = fakeClient({ failSettings: true });
   const summary = await runHourly(client, [church("ny", "America/New_York")], deps().deps);
   assertEquals(summary.failed.map((f) => f.org), ["ny"]);
+});
+
+Deno.test("a settings read that fails logs the database's code before it becomes the church's failure text", async () => {
+  const { client } = fakeClient({ failSettings: true });
+  const lines = await logged(() => runHourly(client, [church("ny", "America/New_York")], deps().deps));
+  assertEquals(
+    lines.filter((line) => line.code === "42501").map((line) => line.what),
+    ["serving_team_settings query failed"],
+  );
 });
 
 Deno.test("a zone Intl rejects fails that church before any query", async () => {

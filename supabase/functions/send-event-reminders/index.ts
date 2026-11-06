@@ -63,6 +63,7 @@ import {
   type OrgListClient,
   type OrgRunCounts,
 } from "../_shared/orgs.ts";
+import { logError, logInfo, logWarn } from "../_shared/log.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -129,14 +130,12 @@ async function sendEmail(
       }),
     });
     if (!res.ok) {
-      // Log the profile id, not the email address (PII) — the Resend error
-      // body is what's actionable here.
-      console.error("Resend error for profile", opts.refId, await res.text());
+      logError("Resend error for profile", { status: res.status }, { route: "send-event-reminders", ids: { profile: opts.refId } });
       return false;
     }
     return true;
   } catch (err) {
-    console.error("Resend request failed for profile", opts.refId, err);
+    logError("Resend request failed for profile", err, { route: "send-event-reminders", ids: { profile: opts.refId } });
     return false;
   }
 }
@@ -234,6 +233,7 @@ async function runBeforeDates(
         .eq("is_cancelled", false)
         .gte("start_time", now.toISOString())
         .lte("start_time", tomorrow.toISOString());
+      if (eventsError) logError("events query failed", eventsError, { route: "send-event-reminders", ids: { org: org.id, group: group.id } });
       if (eventsError) throw new Error(`events query failed: ${eventsError.message}`);
       if (!events?.length) continue;
 
@@ -256,12 +256,10 @@ async function runBeforeDates(
         // never throws, so it adds no new failure surface to the loop.
         const allowed = await reserveEmailQuota(supabase, org.id, recipients.length);
         if (!allowed) {
-          console.warn(
-            "[org %s] event %s: daily email cap reached, skipping %d reminder(s)",
-            org.id,
-            event.id,
-            recipients.length,
-          );
+          logWarn("daily email cap reached, skipping reminders", undefined, {
+            route: "send-event-reminders",
+            ids: { org: org.id, event: event.id, skipped: recipients.length },
+          });
           continue;
         }
 
@@ -286,12 +284,10 @@ async function runBeforeDates(
     } catch (err) {
       // Keyed by group id, never the group name — names are org-defined free
       // text (tenant content) and fragile as diagnostic keys.
-      console.error(
-        "[org %s] group %s failed, continuing with remaining groups:",
-        org.id,
-        group.id,
-        err,
-      );
+      logError("group failed, continuing with remaining groups", err, {
+        route: "send-event-reminders",
+        ids: { org: org.id, group: group.id },
+      });
       itemFailures.push({
         item: group.id,
         error: err instanceof Error ? err.message : String(err),
@@ -307,7 +303,7 @@ async function runBeforeDates(
 Deno.serve(serviceKeyCallerOnly(async (req) => {
   const mode = reminderMode(await req.text());
   if (!mode) {
-    console.error("request body names no mode this job runs, nothing sent");
+    logError("request body names no mode this job runs, nothing sent", undefined, { route: "send-event-reminders" });
     return new Response(JSON.stringify({ error: "unrecognised body" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
@@ -326,17 +322,19 @@ Deno.serve(serviceKeyCallerOnly(async (req) => {
       const run = await runDatesMode(supabase, orgs);
       // One line at most, and none for a firing that did nothing.
       if (run.due > 0 || run.failed.length > 0 || run.failedItems.length > 0) {
-        console.log(
-          "dates run: %d date(s) due, %d sent, %d rejected, %d capped, %d org(s) failed, %d event(s) failed%s%s",
-          run.due,
-          run.emailsSent,
-          run.emailsFailed,
-          run.capped,
-          run.failed.length,
-          run.failedItems.length,
-          run.budgetExhausted ? ", stopped at the time budget" : "",
-          run.rateLimited ? ", stopped at Resend's rate limit" : "",
-        );
+        logInfo("dates run", {
+          route: "send-event-reminders",
+          ids: {
+            due: run.due,
+            sent: run.emailsSent,
+            rejected: run.emailsFailed,
+            capped: run.capped,
+            orgsFailed: run.failed.length,
+            eventsFailed: run.failedItems.length,
+            stoppedAtTimeBudget: Number(run.budgetExhausted),
+            stoppedAtRateLimit: Number(run.rateLimited),
+          },
+        });
       }
       // Running out of time or being rate limited is not a failure: the next
       // firing of the cycle picks up what is left through the sent record.
@@ -355,13 +353,15 @@ Deno.serve(serviceKeyCallerOnly(async (req) => {
         resolveEmailBranding(org.branding, BRANDING_DEFAULTS, org.id, org.org_email_domains[0] ?? null),
       )));
     if (summary.failed.length > 0 || summary.failedItems.length > 0 || summary.emailsFailed > 0) {
-      console.error(
-        "run completed with failures: %d/%d orgs failed, %d groups failed, %d emails rejected",
-        summary.failed.length,
-        summary.orgs,
-        summary.failedItems.length,
-        summary.emailsFailed,
-      );
+      logError("run completed with failures", undefined, {
+        route: "send-event-reminders",
+        ids: {
+          orgsFailed: summary.failed.length,
+          orgs: summary.orgs,
+          groupsFailed: summary.failedItems.length,
+          rejected: summary.emailsFailed,
+        },
+      });
     }
     // Status contract: see summarize() in _shared/orgs.ts — 500 when any org
     // OR any group failed (pg_net records it in net._http_response; nothing
@@ -377,7 +377,7 @@ Deno.serve(serviceKeyCallerOnly(async (req) => {
     // Total failure (e.g. listActiveOrgs threw) — no org ran. The body means
     // net._http_response carries a diagnosis instead of an empty 500; the
     // per-org-failure case above also returns 500 but with `failed[]` populated.
-    console.error("reminder run aborted before completion:", err);
+    logError("reminder run aborted before completion", err, { route: "send-event-reminders" });
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
       { status: 500, headers: { "Content-Type": "application/json" } },

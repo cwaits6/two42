@@ -130,7 +130,7 @@ describe("loadFundFormData", () => {
   });
 
   it("reports a failed read, so an empty picker is never taken for no members", async () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleError = vi.spyOn(console, "log").mockImplementation(() => {});
     const failing = {
       from: () => {
         const chain = {

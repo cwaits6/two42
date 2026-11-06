@@ -32,6 +32,7 @@ import { getOptionalUser } from "@/lib/supabase/current-user";
 import { readList } from "@/lib/supabase/readList";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { groupPageTitle } from "@/lib/pageTitle";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = groupPageTitle("Serving");
 
@@ -125,8 +126,8 @@ export default async function ServingSchedulePage({
   // A failed read would otherwise render as an empty roster or an empty
   // group, and the add mode's empty-state copy would state that as fact.
   const rosterUnavailable = !!(memberError || groupError);
-  if (memberError) console.error("team roster read failed:", memberError.message);
-  if (groupError) console.error("team roster group read failed:", groupError.message);
+  if (memberError) logError("team roster read failed", memberError, { route: "/g/[groupId]/serving/[teamId]" });
+  if (groupError) logError("team roster group read failed", groupError, { route: "/g/[groupId]/serving/[teamId]" });
 
   // How many people an email to the team reaches. Only the server knows who
   // has an address; null when it could not say, and the dialog then names no
@@ -136,7 +137,7 @@ export default async function ServingSchedulePage({
     const { data: reach, error: reachError } = await supabase.rpc("serving_team_email_count", {
       _team_id: teamId,
     });
-    if (reachError) console.error("team email count read failed, code:", reachError.code);
+    if (reachError) logError("team email count read failed", reachError, { route: "/g/[groupId]/serving/[teamId]" });
     else emailReach = reach;
   }
 

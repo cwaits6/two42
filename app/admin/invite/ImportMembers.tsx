@@ -13,6 +13,7 @@ import { Upload, Mail, AlertCircle, CheckCircle2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { detectEmailColumn, detectNameColumn, importCandidates, parseCSV, UnterminatedQuoteError } from "./csv";
+import { logError } from "@/lib/log";
 
 interface ParsedRow {
   name: string;
@@ -92,7 +93,7 @@ export function ImportMembers() {
     // Mark the people who have already joined.
     const { data: existingProfiles, error: existingError } = await supabase.rpc("admin_member_emails");
     if (existingError) {
-      console.error("Import members: failed to check existing members:", existingError.code);
+      logError("Import members: failed to check existing members", existingError, { route: "/admin/invite" });
       setDetectionError("Couldn't check who has already joined. Choose the file again.");
       return;
     }

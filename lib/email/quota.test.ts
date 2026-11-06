@@ -20,7 +20,7 @@ function serviceWithRpc(rpc: ReturnType<typeof vi.fn>) {
 
 beforeEach(() => {
   vi.restoreAllMocks();
-  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {});
   createServiceClient.mockReset();
 });
 
@@ -55,13 +55,13 @@ describe("reserveEmailQuota", () => {
       vi.fn().mockResolvedValue({ data: null, error: { message: "boom" } }),
     );
     await expect(reserveEmailQuota(ORG_ID, 5)).resolves.toBe(false);
-    expect(console.error).toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalled();
   });
 
   it("treats a thrown RPC as a refusal (fail closed), never rethrows", async () => {
     serviceWithRpc(vi.fn().mockRejectedValue(new Error("network down")));
     await expect(reserveEmailQuota(ORG_ID, 5)).resolves.toBe(false);
-    expect(console.error).toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalled();
   });
 
   it("treats a null data with no error as a refusal, not a grant", async () => {

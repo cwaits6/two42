@@ -6,6 +6,7 @@ import {
   subscriptionTokenExpiryDate,
 } from "@/lib/calendar/subscription-token";
 import { isMemberRole } from "@/lib/roles";
+import { logError } from "@/lib/log";
 
 export async function POST() {
   const supabase = await createClient();
@@ -41,7 +42,11 @@ export async function POST() {
     );
 
   if (error) {
-    console.error("Failed to create calendar subscription token:", error);
+    logError(
+      "Failed to create calendar subscription token",
+      error,
+      { route: "/api/calendar/subscription-token" },
+    );
     return NextResponse.json({ error: "Failed to create link" }, { status: 500 });
   }
 

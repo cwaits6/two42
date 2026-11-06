@@ -14,6 +14,7 @@ import type { Event } from "@/lib/types";
 import { isMemberRole } from "@/lib/roles";
 import { orgTimeZoneById } from "@/lib/time/orgZone";
 import { calendarSharingByGroup, keepOutFor } from "@/lib/calendar/keepOut";
+import { logError } from "@/lib/log";
 
 // Read a page at a time until every matching row is in: a capped read drops
 // a series or a moved date's row, and the dates it governs come back wrong.
@@ -57,7 +58,7 @@ export async function GET(request: Request) {
     .single();
 
   if (subError && subError.code !== "PGRST116") {
-    console.error("Calendar feed token lookup failed:", subError);
+    logError("Calendar feed token lookup failed", subError, { route: "/api/calendar/feed.ics" });
   }
 
   if (!sub || new Date(sub.expires_at) < new Date()) {
@@ -79,7 +80,11 @@ export async function GET(request: Request) {
   // absent or non-member owner — 401 is terminal to a calendar client while
   // 500 is retryable, so the two must not collapse into the same response.
   if (ownerError && ownerError.code !== "PGRST116") {
-    console.error("Failed to look up token owner's profile:", ownerError);
+    logError(
+      "Failed to look up token owner's profile",
+      ownerError,
+      { route: "/api/calendar/feed.ics" },
+    );
     return new Response("Something went wrong", { status: 500 });
   }
 
@@ -97,7 +102,11 @@ export async function GET(request: Request) {
     .eq("org_id", sub.org_id);
 
   if (expiryError) {
-    console.error("Failed to extend calendar subscription expiry:", expiryError);
+    logError(
+      "Failed to extend calendar subscription expiry",
+      expiryError,
+      { route: "/api/calendar/feed.ics" },
+    );
   }
 
   if (groupParam && !uuidRegex.test(groupParam)) {
@@ -113,7 +122,11 @@ export async function GET(request: Request) {
     .eq("org_id", sub.org_id)
     .eq("profile_id", sub.user_id);
   if (membershipsError) {
-    console.error("Failed to fetch group memberships for calendar feed:", membershipsError);
+    logError(
+      "Failed to fetch group memberships for calendar feed",
+      membershipsError,
+      { route: "/api/calendar/feed.ics" },
+    );
     return new Response("Something went wrong", { status: 500 });
   }
 
@@ -176,7 +189,11 @@ export async function GET(request: Request) {
     ]);
 
     if (eventsError) {
-      console.error("Failed to fetch events for calendar feed:", eventsError);
+      logError(
+        "Failed to fetch events for calendar feed",
+        eventsError,
+        { route: "/api/calendar/feed.ics" },
+      );
       return new Response("Failed to fetch events", { status: 500 });
     }
 
@@ -184,7 +201,11 @@ export async function GET(request: Request) {
     // half of the feed, but a silent discard means a member's serving Sundays
     // vanish behind a 200 + max-age=3600, so the client caches the gap.
     if (servingsError) {
-      console.error("Failed to fetch serving signups for calendar feed:", servingsError);
+      logError(
+        "Failed to fetch serving signups for calendar feed",
+        servingsError,
+        { route: "/api/calendar/feed.ics" },
+      );
     }
 
     typedEvents = (events ?? []) as Event[];
@@ -211,7 +232,11 @@ export async function GET(request: Request) {
   try {
     sharing = await calendarSharingByGroup(supabase, sub.org_id, groupIds);
   } catch (err) {
-    console.error("Failed to load calendar subscription settings for calendar feed:", err);
+    logError(
+      "Failed to load calendar subscription settings for calendar feed",
+      err,
+      { route: "/api/calendar/feed.ics" },
+    );
     return new Response("Something went wrong", { status: 500 });
   }
 
@@ -234,7 +259,10 @@ export async function GET(request: Request) {
   try {
     icsString = generateCombinedICS(feedEvents, servingSignups);
   } catch (err) {
-    console.error("ICS generation failed:", err);
+    logError("ICS generation failed", err, {
+      route: "/api/calendar/feed.ics",
+      ids: { org: sub.org_id, user: sub.user_id },
+    });
     return new Response("Failed to generate calendar feed", { status: 500 });
   }
 

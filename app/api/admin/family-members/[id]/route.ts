@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { logError } from "@/lib/log";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -66,7 +67,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     .single();
 
   if (error) {
-    console.error("family-members PATCH error:", error);
+    logError("family-members PATCH error", error, { route: "/api/admin/family-members/[id]" });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
@@ -102,7 +103,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     .eq("id", id);
 
   if (error) {
-    console.error("family-members DELETE error:", error);
+    logError("family-members DELETE error", error, { route: "/api/admin/family-members/[id]" });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

@@ -98,3 +98,23 @@ Deno.test("resolveGroupLinkMode throws when the query errors", async () => {
     "group_settings query failed: boom",
   );
 });
+
+Deno.test("a failed read logs the database's code before it is rethrown as text", async () => {
+  const lines: string[] = [];
+  const original = console.log;
+  console.log = (line: string) => void lines.push(line);
+  try {
+    const error = { message: "permission denied for table groups", code: "42501" };
+    await assertRejects(() => listGroups(makeFakeClient({ data: null, error }).client, ORG));
+    await assertRejects(() => resolveGroupLinkMode(makeFakeClient({ data: null, error }).client, ORG, GROUP, "signed"));
+  } finally {
+    console.log = original;
+  }
+  assertEquals(
+    lines.map((line) => JSON.parse(line)).map(({ what, code }) => ({ what, code })),
+    [
+      { what: "groups query failed", code: "42501" },
+      { what: "group_settings query failed", code: "42501" },
+    ],
+  );
+});

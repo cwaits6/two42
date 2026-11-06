@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { User } from "@supabase/supabase-js";
+import { logError } from "@/lib/log";
 
 export type PlatformAdminGate =
   | { ok: true; user: User }
@@ -30,7 +31,7 @@ export async function requirePlatformAdmin(): Promise<PlatformAdminGate> {
 
   const { data, error } = await supabase.rpc("is_platform_admin");
   if (error) {
-    console.error("Platform admin check failed; denying:", error);
+    logError("Platform admin check failed; denying", error);
     return { ok: false, status: 403, unavailable: true };
   }
   return data === true ? { ok: true, user } : { ok: false, status: 403 };

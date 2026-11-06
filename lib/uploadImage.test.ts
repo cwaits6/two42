@@ -13,7 +13,10 @@ vi.mock("@/lib/supabase/client", () => ({
   createClient: () => createClient(),
 }));
 
-const { mintSignedUrl, mintSignedUrls } = await import("@/lib/uploadImage");
+vi.mock("browser-image-compression", () => ({ default: async (file: File) => file }));
+
+const { deleteImage, mintSignedUrl, mintSignedUrls, uploadImage } = await import("@/lib/uploadImage");
+const { loggedLines } = await import("@/lib/log/testing");
 
 const BASE = "http://127.0.0.1:54321/storage/v1/object/public";
 const ORG = "11111111-1111-1111-1111-111111111111";
@@ -56,7 +59,7 @@ function stubStorage(handlers: {
 
 beforeEach(() => {
   createClient.mockReset();
-  vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 describe("mintSignedUrl", () => {
@@ -147,5 +150,36 @@ describe("mintSignedUrls", () => {
       createSignedUrls: () => ({ data: null, error: { message: "boom" } }),
     });
     expect(await mintSignedUrls([urlFor("a"), urlFor("b")])).toEqual([null, null]);
+  });
+});
+
+describe("a refused upload or delete", () => {
+  const refused = { message: `new row violates policy for ${keyFor("ada")}`, statusCode: "403", status: 403 };
+
+  function stubRefusal() {
+    createClient.mockReturnValue({
+      rpc: async () => ({ data: ORG, error: null }),
+      storage: {
+        from: () => ({
+          upload: async () => ({ data: null, error: refused }),
+          remove: async () => ({ data: null, error: refused }),
+        }),
+      },
+    });
+  }
+
+  // The thrown Error keeps only the message, so this line is where the status survives.
+  it.each([
+    ["uploadImage: upload failed", () => uploadImage(new File(["x"], "x.jpg"), "avatar", "profiles/ada/avatar")],
+    ["deleteImage: remove failed", () => deleteImage("avatar", "profiles/ada/avatar")],
+  ])("logs the storage status, and no path, for %s", async (what, run) => {
+    const logged = vi.spyOn(console, "log").mockImplementation(() => {});
+    stubRefusal();
+
+    await expect(run()).rejects.toThrow();
+
+    expect(loggedLines(logged)).toEqual([
+      { level: "error", what, step: "avatars", code: "403", ref: expect.any(String) },
+    ]);
   });
 });

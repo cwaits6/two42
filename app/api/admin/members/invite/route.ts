@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 import { requireOrgAdmin } from "@/lib/members/access";
 import { findExistingInvitees, sendMemberInvite } from "@/lib/members/invite";
 import { validateInvitePerson } from "@/lib/members/invite-form";
+import { logError } from "@/lib/log";
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 
@@ -41,10 +42,10 @@ export async function POST(request: Request) {
   try {
     existing = await findExistingInvitees(gate.orgId, [input.email]);
   } catch (err) {
-    console.error(
-      "members invite: existing-account check failed (org=%s):",
-      gate.orgId,
-      err instanceof Error ? err.name : typeof err
+    logError(
+      "members invite: existing-account check failed",
+      err,
+      { route: "/api/admin/members/invite", ids: { org: gate.orgId } },
     );
     return json({ error: "Couldn't send the invite. Try again." }, 500);
   }

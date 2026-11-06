@@ -141,7 +141,7 @@ described in [`scripts/README.md`](./scripts/README.md).
 | `NEXT_PUBLIC_TIME_ZONE` | no | Zone used when a church's own time zone cannot be read. Default `America/New_York` |
 | `NEXT_PUBLIC_APP_NAME`, `NEXT_PUBLIC_APP_DESCRIPTION`, `NEXT_PUBLIC_COLOR_PRIMARY`, `NEXT_PUBLIC_COLOR_PRIMARY_LIGHT`, `NEXT_PUBLIC_COLOR_ACCENT`, `NEXT_PUBLIC_COLOR_WARM`, `NEXT_PUBLIC_COLOR_BG_LIGHT`, `NEXT_PUBLIC_COLOR_BG_MUTED` | no | Fallbacks used when a church's branding row is empty. A church's name, logo and accent color are set per church by an operator |
 | `ORG_EMAIL_DOMAIN_CAP` | no | Platform-wide cap on claimed custom sending domains. Default 8 |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_SERVICE_NAME` | no | OpenTelemetry tracing to any OTLP/HTTP receiver. Unset turns tracing off |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_SERVICE_NAME` | no | OpenTelemetry tracing to any OTLP/HTTP receiver. Unset turns tracing off. Spans can hold invite tokens and query values: see [`docs/security/logging.md`](docs/security/logging.md) |
 
 ### Edge function secrets
 
@@ -295,7 +295,7 @@ A person can always keep what they typed instead of picking a suggestion.
 - `supabase/seed.sql` — local sample data and logins
 - `e2e/` — Playwright specs for what a signed-in member can see
 - `scripts/` — the tenancy guard, the scheduled-jobs check and the storage re-key, described in `scripts/README.md`
-- `docs/security/` — the tenancy model, the service-role inventory, hosts, and roles
+- `docs/security/` — the tenancy model, the service-role inventory, hosts, roles, and what is logged
 - `docs/design/DESIGN.md` — the design system; `CONTEXT.md` — the product's vocabulary
 - `CLAUDE.md` and `AGENTS.md` — the working rules for contributors and coding agents
 

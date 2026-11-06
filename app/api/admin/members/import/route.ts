@@ -27,6 +27,7 @@ import { applyWrites } from "@/lib/members/apply";
 import { parseMembers } from "@/lib/members/format";
 import { planImport } from "@/lib/members/import-plan";
 import { loadOrgSnapshot } from "@/lib/members/snapshot";
+import { logError } from "@/lib/log";
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 const MAX_ROWS = 5000;
@@ -139,7 +140,7 @@ export async function POST(request: Request) {
   // the import rather than planning every row as a new person.
   const { data: addresses, error: addressError } = await gate.supabase.rpc("admin_member_emails");
   if (addressError) {
-    console.error("members import: address read failed: code=%s", addressError.code);
+    logError("members import: address read failed", addressError, { route: "/api/admin/members/import" });
     return json({ error: "Failed to load member data" }, 500);
   }
   const emails = new Map(addresses.map((a) => [a.profile_id, a.email]));
@@ -148,7 +149,7 @@ export async function POST(request: Request) {
   try {
     snapshot = await loadOrgSnapshot(gate.supabase, gate.orgId, emails);
   } catch (err) {
-    console.error("members import: snapshot load failed:", err);
+    logError("members import: snapshot load failed", err, { route: "/api/admin/members/import" });
     return json({ error: "Failed to load member data" }, 500);
   }
 
@@ -157,10 +158,7 @@ export async function POST(request: Request) {
     plan = planImport(parsed.rows, snapshot);
   } catch (err) {
     // The planner is pure and sees member data, so log the error TYPE only.
-    console.error(
-      "members import: planner threw:",
-      err instanceof Error ? err.name : typeof err
-    );
+    logError("members import: planner threw", err, { route: "/api/admin/members/import" });
     return json({ error: "Failed to plan the import" }, 500);
   }
 

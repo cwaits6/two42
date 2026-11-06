@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { ErrorState } from "@/components/states/ErrorState";
 import { LoadingState } from "@/components/states/LoadingState";
 import type { Tables } from "@/lib/supabase/database.types";
+import { logError } from "@/lib/log";
 
 type EmailDomainRow = Tables<"org_email_domains">;
 
@@ -141,17 +142,14 @@ export function EmailDomainSettings() {
       if (!ok || typeof data?.enabled !== "boolean") {
         // Return early: a transient read failure must not clear an
         // already-displayed, already-claimed domain back to "unclaimed".
-        console.error(
-          "email-domain load: failed to load sending domain:",
-          data?.error,
-        );
+        logError("email-domain load: failed to load sending domain", undefined, { route: "/admin/settings/email" });
         toast.error(failureMessage("load the sending domain"));
         return;
       }
       setEnabled(data.enabled);
       setRow(data.data ?? null);
     } catch (err) {
-      console.error("email-domain load: request failed:", err);
+      logError("email-domain load: request failed", err, { route: "/admin/settings/email" });
       toast.error(NETWORK_ERROR);
     } finally {
       setLoading(false);
@@ -191,7 +189,7 @@ export function EmailDomainSettings() {
         await load();
       }
     } catch (err) {
-      console.error("email-domain claim: request failed:", err);
+      logError("email-domain claim: request failed", err, { route: "/admin/settings/email" });
       toast.error(NETWORK_ERROR);
     } finally {
       setBusy(false);
@@ -222,7 +220,7 @@ export function EmailDomainSettings() {
         await load();
       }
     } catch (err) {
-      console.error("email-domain verify: request failed:", err);
+      logError("email-domain verify: request failed", err, { route: "/admin/settings/email" });
       toast.error(NETWORK_ERROR);
     } finally {
       setBusy(false);
@@ -254,7 +252,7 @@ export function EmailDomainSettings() {
       setRow(null);
       setConfirmingRemove(false);
     } catch (err) {
-      console.error("email-domain remove: request failed:", err);
+      logError("email-domain remove: request failed", err, { route: "/admin/settings/email" });
       toast.error(NETWORK_ERROR);
       setConfirmingRemove(false);
     } finally {

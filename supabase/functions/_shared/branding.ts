@@ -18,6 +18,8 @@
 //     module stays supabase-js-free and offline-testable, matching the
 //     stated design of _shared/orgs.ts.
 
+import { logError, logWarn } from "./log.ts";
+
 /** What the reminder mail builders need from an org's branding row. */
 export interface EmailBranding {
   orgName: string;
@@ -111,9 +113,8 @@ function resolveFromAddress(
 ): string {
   if (status !== "verified" || !domain) return platformAddress;
   if (!SENDING_DOMAIN.test(domain)) {
-    console.error(
-      "resolveEmailBranding: verified sending domain failed SENDING_DOMAIN, falling back to platform address:",
-      domain,
+    logError(
+      "resolveEmailBranding: verified sending domain failed SENDING_DOMAIN, falling back to platform address",
     );
     return platformAddress;
   }
@@ -163,9 +164,10 @@ export function resolveEmailBranding(
     // The one silent fallback worth a signal: a dropped Reply-To is far more
     // surprising than a dropped color, and the cause (a branding column) is
     // nowhere near the symptom (mail replying to noreply@).
-    console.warn(
-      "[org %s] Ignoring malformed branding.reply_to; sending without a Reply-To header",
-      orgLabel ?? "unknown",
+    logWarn(
+      "Ignoring malformed branding.reply_to; sending without a Reply-To header",
+      undefined,
+      { ids: { org: orgLabel } },
     );
   }
   return {

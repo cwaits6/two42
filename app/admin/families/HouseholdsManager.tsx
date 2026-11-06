@@ -51,6 +51,7 @@ import {
   type HouseholdField,
   type HouseholdFormState,
 } from "./householdForm";
+import { logError } from "@/lib/log";
 
 const MONTHS = [
   { value: "1", label: "January" },
@@ -188,7 +189,7 @@ export function HouseholdsManager() {
     ]);
 
     if (familyErr || memberErr) {
-      console.error("Failed to load households:", familyErr ?? memberErr);
+      logError("Failed to load households", familyErr ?? memberErr, { route: "/admin/families" });
       if (loadedOnce.current) toast.error(failureMessage("load the latest households"));
       else setStatus("failed");
       return;
@@ -269,7 +270,7 @@ export function HouseholdsManager() {
           if (photoRequestRef.current === requestId) setPhotoUrl(url);
         })
         .catch((err) => {
-          console.error("openEdit: signing family photo failed", err);
+          logError("openEdit: signing family photo failed", err, { route: "/admin/families" });
         });
     }
     setFamilyMembers([]);
@@ -305,7 +306,7 @@ export function HouseholdsManager() {
     setSaving(false);
 
     if (error) {
-      console.error(error);
+      logError("Failed to save the household", error, { route: "/admin/families" });
       toast.error(failureMessage("save the household"));
       return;
     }
@@ -354,7 +355,7 @@ export function HouseholdsManager() {
       toast.success("Household photo updated.");
       loadFamilies();
     } catch (err) {
-      console.error(err);
+      logError("Failed to upload the household photo", err, { route: "/admin/families" });
       toast.error(failureMessage("upload the household photo"));
     } finally {
       setUploadingPhoto(false);

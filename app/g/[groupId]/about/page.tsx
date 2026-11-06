@@ -20,6 +20,7 @@ import { getOptionalUser } from "@/lib/supabase/current-user";
 import { readList } from "@/lib/supabase/readList";
 import { groupPath } from "@/lib/groups/active";
 import { groupPageTitle } from "@/lib/pageTitle";
+import { logError } from "@/lib/log";
 
 export const generateMetadata = groupPageTitle("About");
 
@@ -67,7 +68,7 @@ export default async function AboutGroupPage({
 
   const teacherRows = readList<ClassTeacherWithProfile>(teachersRead, "the group's leadership");
   if (aboutRead.error) {
-    console.error("Failed to load the group's summary: code=%s", aboutRead.error.code);
+    logError("Failed to load the group's summary", aboutRead.error, { route: "/g/[groupId]/about" });
   }
   if (!teacherRows || aboutRead.error) {
     return (

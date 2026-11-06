@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { contrastRatio, HEX } from "@/lib/contrast";
 import type { GroupSettings } from "@/lib/types";
+import { logError } from "@/lib/log";
 
 export type GroupSettingsValues = Pick<
   GroupSettings,
@@ -50,7 +51,7 @@ export async function getGroupSettings(
     .eq("group_id", groupId)
     .maybeSingle();
   if (error) {
-    console.error("Failed to load group settings for group %s:", groupId, error);
+    logError("Failed to load group settings for group", error, { ids: { group: groupId } });
     throw new Error(`Failed to load group settings: ${error.message}`);
   }
   if (!data) return GROUP_SETTINGS_DEFAULTS;

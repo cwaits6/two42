@@ -37,7 +37,7 @@ function stubRpc(results: Record<string, { data?: unknown; error?: { code: strin
 
 beforeEach(() => {
   createClient.mockReset();
-  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 describe("getPendingJoinRequests", () => {
@@ -60,7 +60,7 @@ describe("getPendingJoinRequests", () => {
   it("is null when any one group's call fails", async () => {
     stubRpc({ a: { data: [row("r1")] }, c: { error: { code: "PGRST301" } } });
     expect(await getPendingJoinRequests(GROUPS)).toBeNull();
-    expect(console.error).toHaveBeenCalledTimes(1);
+    expect(console.log).toHaveBeenCalledTimes(1);
   });
 
   it("reads nothing when there are no groups", async () => {

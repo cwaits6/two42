@@ -1,3 +1,5 @@
+import { logError, stepOf } from "@/lib/log";
+
 interface ListRead<T> {
   data: T[] | null;
   error: { code?: string; message: string } | null;
@@ -10,8 +12,7 @@ interface ListRead<T> {
  */
 export function readList<T>({ data, error }: ListRead<T>, what: string): T[] | null {
   if (error) {
-    // code/message only: a PostgrestError's details/hint echo row content.
-    console.error("Failed to load %s: code=%s message=%s", what, error.code, error.message);
+    logError("Failed to load", error, { step: stepOf(what) });
     return null;
   }
   return data ?? [];

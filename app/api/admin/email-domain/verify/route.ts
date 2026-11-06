@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { requireOrgAdmin } from "@/lib/members/access";
 import { CUSTOM_SENDING_DOMAINS_ENABLED } from "@/lib/email/sendingDomains";
+import { logError } from "@/lib/log";
 
 /**
  * POST /api/admin/email-domain/verify — ask Resend to re-check the org's
@@ -51,10 +52,10 @@ export async function POST() {
       .maybeSingle();
 
     if (rowError) {
-      console.error(
-        "email-domain verify: lookup error (org=%s):",
-        orgId,
+      logError(
+        "email-domain verify: lookup error",
         rowError,
+        { route: "/api/admin/email-domain/verify", ids: { org: orgId } },
       );
       return NextResponse.json(
         { error: "Failed to verify domain." },
@@ -73,10 +74,10 @@ export async function POST() {
       row.resend_domain_id,
     );
     if (verifyError) {
-      console.error(
-        "email-domain verify: Resend domains.verify error (org=%s):",
-        orgId,
+      logError(
+        "email-domain verify: Resend domains.verify error",
         verifyError,
+        { route: "/api/admin/email-domain/verify", ids: { org: orgId } },
       );
       return NextResponse.json(
         { error: "Failed to verify domain with email provider." },
@@ -88,10 +89,10 @@ export async function POST() {
       row.resend_domain_id,
     );
     if (getError || !fresh) {
-      console.error(
-        "email-domain verify: Resend domains.get error (org=%s):",
-        orgId,
+      logError(
+        "email-domain verify: Resend domains.get error",
         getError,
+        { route: "/api/admin/email-domain/verify", ids: { org: orgId } },
       );
       return NextResponse.json(
         { error: "Failed to read verification status." },
@@ -116,11 +117,10 @@ export async function POST() {
       .single();
 
     if (updateError || !saved) {
-      console.error(
-        "email-domain verify: scoped update failed (org=%s, id=%s):",
-        orgId,
-        row.id,
+      logError(
+        "email-domain verify: scoped update failed",
         updateError,
+        { route: "/api/admin/email-domain/verify", ids: { org: orgId, id: row.id } },
       );
       return NextResponse.json(
         { error: "Verified but failed to save status." },
@@ -132,10 +132,10 @@ export async function POST() {
   } catch (err) {
     // See app/api/admin/email-domain/route.ts's POST handler: the Resend
     // SDK throws on network-level failures instead of returning { error }.
-    console.error(
-      "email-domain verify: unexpected error (org=%s):",
-      orgId,
+    logError(
+      "email-domain verify: unexpected error",
       err,
+      { route: "/api/admin/email-domain/verify", ids: { org: orgId } },
     );
     return NextResponse.json(
       { error: "Failed to verify domain." },

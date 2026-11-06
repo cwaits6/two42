@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { digestReference, logError } from "@/lib/log";
 
 export default function ErrorPage({
   error,
@@ -13,8 +14,10 @@ export default function ErrorPage({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
+    logError("Page failed to render", error);
   }, [error]);
+
+  const reference = digestReference(error);
 
   return (
     <div className="container mx-auto px-4 py-20 max-w-lg text-center">
@@ -24,6 +27,11 @@ export default function ErrorPage({
           <p className="text-lg text-muted-foreground">
             This page could not be loaded. Try again, or go back to Home.
           </p>
+          {reference && (
+            <p className="mt-4 text-base text-muted-foreground">
+              Reference: <span className="font-mono">{reference}</span>
+            </p>
+          )}
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Button
               size="lg"

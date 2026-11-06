@@ -22,6 +22,7 @@ import {
   strong,
   viewSchedule,
 } from "@/supabase/functions/_shared/email-html";
+import { logError } from "@/lib/log";
 
 function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
@@ -61,7 +62,7 @@ ${cancelTurn(opts.cancelUrl, b.accent)}`,
   });
 
   if (error) {
-    console.error("Failed to send serving confirmation email:", error);
+    logError("Failed to send serving confirmation email", error);
     throw error;
   }
 }
@@ -92,8 +93,8 @@ ${button(opts.servingUrl, "View schedule", b.accent)}`,
   });
 
   if (error) {
-    // The name only: a provider's message can echo the address.
-    console.error("Failed to send serving cancel notice: %s", error.name);
+    // A provider's message can echo the address.
+    logError("Failed to send serving cancel notice", error);
     throw error;
   }
 }
@@ -129,7 +130,7 @@ ${viewSchedule(opts.scheduleUrl)}`,
   });
 
   if (error) {
-    console.error("Failed to send serving broadcast email:", error);
+    logError("Failed to send serving broadcast email", error);
     throw error;
   }
 }

@@ -73,8 +73,8 @@ Deno.test("empty and non-string map values never match", () => {
 
 Deno.test("a refused caller gets a 401, never reaches the handler, and the log names no token", async () => {
   const logged: unknown[][] = [];
-  const realError = console.error;
-  console.error = (...args: unknown[]) => void logged.push(args);
+  const realLog = console.log;
+  console.log = (...args: unknown[]) => void logged.push(args);
   let reached = 0;
   const guarded = serviceKeyCallerOnly(() => {
     reached++;
@@ -88,7 +88,7 @@ Deno.test("a refused caller gets a 401, never reaches the handler, and the log n
       }
     });
   } finally {
-    console.error = realError;
+    console.log = realLog;
   }
   for (const pending of responses) {
     const res = await pending;

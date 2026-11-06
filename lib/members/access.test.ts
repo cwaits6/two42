@@ -48,7 +48,7 @@ function stubClient(options: StubOptions) {
 
 beforeEach(() => {
   createClient.mockReset();
-  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 describe("requireOrgAdmin", () => {
@@ -60,7 +60,7 @@ describe("requireOrgAdmin", () => {
   it("401s AND logs when the auth lookup itself fails", async () => {
     // Without the log, an auth-service outage is indistinguishable from "not
     // signed in": a 401 storm with no recorded cause.
-    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
     stubClient({ user: null, authError: new Error("auth down") });
     expect(await requireOrgAdmin()).toEqual({ ok: false, status: 401 });
     expect(spy).toHaveBeenCalled();
@@ -74,8 +74,8 @@ describe("requireOrgAdmin", () => {
     expect(await requireOrgAdmin()).toEqual({ ok: false, status: 403 });
   });
 
-  it("logs only code and message on that error, never details or hint", async () => {
-    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("logs only the code of that error, never its message, details or hint", async () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
     stubClient({
       user: { id: "u1" },
       profileError: {
@@ -86,7 +86,8 @@ describe("requireOrgAdmin", () => {
       },
     });
     await requireOrgAdmin();
-    expect(spy.mock.calls[0].join(" ")).not.toContain("ada@example.com");
+    expect(spy.mock.calls[0].join(" ")).toContain("42501");
+    expect(spy.mock.calls[0].join(" ")).not.toMatch(/ada@example\.com|permission denied/);
   });
 
   it("403s for a member", async () => {

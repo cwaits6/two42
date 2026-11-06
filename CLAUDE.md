@@ -105,6 +105,10 @@ Full rationale, the helper inventory, and the deviations register: [`docs/securi
 - Base UI `Select` components must receive the `items` prop, or the trigger renders raw values.
 - Per-org branding (`organizations.branding`) is admin-supplied free text reaching CSS and RFC 5322 headers. `HEX` in `lib/contrast.ts`, the `CONTROL` control-character strip in `lib/branding.ts`, `PLAIN_NAME` in `lib/email/identity.ts`, and `SENDING_DOMAIN` in `lib/email/identity.ts` (the `org_email_domains.domain` gate on the `From:` address, verified-status-gated) are the injection boundary — not style choices. Do not relax them to support richer names or color formats; add a new validated key instead. `supabase/functions/_shared/branding.ts` mirrors all four byte-for-byte; a change lands on both sides. Emailed links are built on the one canonical host (`siteConfig.url`, or the `SITE_URL` secret in the edge functions), never on a per-org value — see [`docs/security/domains.md`](docs/security/domains.md).
 
+## Logging
+
+- Every log line in `app/`, `lib/`, `components/` and `supabase/functions/` goes through `lib/log` (`supabase/functions/_shared/log.ts` is its byte-for-byte copy); lint refuses a direct `console` call. The helper never writes an error's message, details or hint, but **no lint checks what a call site passes it**: `route` is a fixed pattern and never a path read from the request, an invite token never goes in `ids`, and nothing a person entered goes in `route`, `step` or `stepOf()`. What is logged and what never is: [`docs/security/logging.md`](docs/security/logging.md).
+
 ## Code comments
 
 - Code comments and test titles must not carry planning/tracking tags — `Phase N`, `PR N`, `CWA-NN`, `T42-NN`, `#NNN`, `decision Dn`, `§n` — keep the explanation, drop the tag. Tracking context belongs in commit messages and PR bodies, not in code that outlives the ticket.

@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { resolveEmailBranding } from "@/lib/email/identity";
 import { sendInviteEmail } from "@/lib/email/resend";
 import { siteConfig } from "@/lib/config";
+import { logError } from "@/lib/log";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -84,7 +85,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         .eq("org_id", id)
         .eq("email", ownerEmail)
         .eq("signup_token", signupToken);
-      console.error("Invite email send failed; token rolled back:", sendError);
+      logError("Invite email send failed; token rolled back", sendError, { route: "/api/platform/organizations/[id]/invite-owner" });
       return NextResponse.json(
         { error: "Failed to send invite email" },
         { status: 500 }
@@ -93,7 +94,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Invite owner error:", error);
+    logError("Invite owner error", error, { route: "/api/platform/organizations/[id]/invite-owner" });
     return NextResponse.json({ error: "Failed to send invite" }, { status: 500 });
   }
 }

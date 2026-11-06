@@ -13,6 +13,7 @@ import { InviteSignupForm } from "./InviteSignupForm";
 import { JoinGroupButton } from "./JoinGroupButton";
 import { SignOutButton } from "./SignOutButton";
 import { pageTitle } from "@/lib/pageTitle";
+import { logError } from "@/lib/log";
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -48,7 +49,7 @@ const loadInvite = cache(async (token: string): Promise<InviteLookup> => {
     .eq("token", token)
     .maybeSingle();
   if (error) {
-    console.error("Join page: invite lookup failed:", error);
+    logError("Join page: invite lookup failed", error, { route: "/join/[token]" });
     return { kind: "error" };
   }
   if (!row) return { kind: "invalid" };
@@ -59,7 +60,7 @@ const loadInvite = cache(async (token: string): Promise<InviteLookup> => {
     .eq("invite_id", row.id)
     .eq("org_id", row.org_id);
   if (countError) {
-    console.error("Join page: invite use count failed:", countError);
+    logError("Join page: invite use count failed", countError, { route: "/join/[token]" });
     return { kind: "error" };
   }
   if (inviteStatus(row, count ?? 0, new Date()) !== "active") return { kind: "invalid" };
@@ -134,7 +135,7 @@ export default async function JoinByInvitePage({ params }: PageProps) {
         .maybeSingle(),
     ]);
   if (profileError || membershipError) {
-    console.error("Join page: viewer lookup failed:", profileError ?? membershipError);
+    logError("Join page: viewer lookup failed", profileError ?? membershipError, { route: "/join/[token]" });
     return <LoadFailed />;
   }
 

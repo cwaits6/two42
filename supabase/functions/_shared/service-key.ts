@@ -7,6 +7,9 @@
 // arrives as the JSON map SUPABASE_SECRET_KEYS (keyed by key name, "default"
 // unless renamed); legacy projects and the local CLI stack inject
 // SUPABASE_SERVICE_ROLE_KEY instead.
+
+import { logError } from "./log.ts";
+
 export function resolveServiceKey(): string {
   const direct = Deno.env.get("SUPABASE_SECRET_KEY");
   if (direct) return direct;
@@ -19,9 +22,9 @@ export function resolveServiceKey(): string {
         const key = keys["default"] ?? Object.values(keys)[0];
         if (typeof key === "string" && key) return key;
       }
-      console.error("SUPABASE_SECRET_KEYS has no usable key; falling back");
+      logError("SUPABASE_SECRET_KEYS has no usable key; falling back");
     } catch {
-      console.error("SUPABASE_SECRET_KEYS is not valid JSON; falling back");
+      logError("SUPABASE_SECRET_KEYS is not valid JSON; falling back");
     }
   }
   const legacy = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");

@@ -3,6 +3,7 @@
 // Resend's answers decide what goes out.
 
 import { assertEquals } from "jsr:@std/assert@1";
+import { logged } from "./logged.ts";
 import type { ReminderEventRow } from "../_shared/event-reminder-due.ts";
 import {
   type EventClaimRow,
@@ -67,6 +68,7 @@ interface FakeOptions {
   /** Per event id, what each claim call returns in turn; an Error is a refused call. */
   claims?: Record<string, Array<EventClaimRow[] | Error>>;
   failEvents?: boolean;
+  failGroupSettings?: boolean;
   failSettle?: boolean;
   /** How many more reminders the church's daily email cap allows; unlimited when absent. */
   capLeft?: number;
@@ -102,7 +104,7 @@ function fakeClient(options: FakeOptions = {}) {
       then(resolve: (v: unknown) => unknown) {
         const org = recorded.filters.find((f) => f.startsWith("org_id="))?.slice("org_id=".length) ?? "";
         if (table === "events") {
-          if (options.failEvents) return resolve({ data: null, error: { message: "events refused" } });
+          if (options.failEvents) return resolve({ data: null, error: { message: "events refused", code: "42501" } });
           const ids = recorded.filters.find((f) => f.startsWith("id in "))?.slice("id in ".length);
           if (ids) {
             const wanted = JSON.parse(ids) as string[];
@@ -112,6 +114,7 @@ function fakeClient(options: FakeOptions = {}) {
           return resolve({ data: single ? options.events?.[org] ?? [] : [], error: null });
         }
         if (table === "group_settings") {
+          if (options.failGroupSettings) return resolve({ data: null, error: { message: "settings refused", code: "57014" } });
           return resolve({ data: (options.groupsOff?.[org] ?? []).map((group_id) => ({ group_id })), error: null });
         }
         return resolve({ error: options.failSettle ? { message: "settle refused" } : null });
@@ -359,6 +362,15 @@ Deno.test("a failed read fails that church and the next still runs", async () =>
   const summary = await runEventReminders(failing.client, [church("o"), church("p")], deps().deps);
   assertEquals(summary.failed.map((f) => f.org), ["o", "p"]);
   assertEquals(summary.failed[0].error, "events query (series) failed: events refused");
+});
+
+Deno.test("a failed read logs the database's code before it becomes the church's failure text", async () => {
+  const events = await logged(() => runEventReminders(fakeClient({ failEvents: true }).client, [church("o")], deps().deps));
+  assertEquals(events.filter((line) => line.code === "42501").map((line) => line.what), ["events query failed"]);
+
+  const settings = fakeClient({ events: { o: [event("e", 3)] }, failGroupSettings: true });
+  const lines = await logged(() => runEventReminders(settings.client, [church("o")], deps().deps));
+  assertEquals(lines.filter((line) => line.code === "57014").map((line) => line.what), ["group_settings query failed"]);
 });
 
 Deno.test("a settle that fails is reported, so the firing is not a clean 200", async () => {

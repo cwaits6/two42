@@ -4,6 +4,7 @@
 // by data, not by the fake's shape.
 
 import { assertEquals, assertRejects } from "jsr:@std/assert@1";
+import { logged } from "./logged.ts";
 import {
   resolveEventReminderRecipients,
   type EventRecipientClient,
@@ -29,7 +30,7 @@ function makeFakeClient(
   const chains: RecordedChain[] = [];
   const resolve = (chain: RecordedChain) => {
     if (errors[chain.from]) {
-      return Promise.resolve({ data: null, error: { message: errors[chain.from] } });
+      return Promise.resolve({ data: null, error: { message: errors[chain.from], code: "42501" } });
     }
     const [col, values] = chain.in!;
     const data = (tables[chain.from] ?? []).filter((row) => values.includes(row[col]));
@@ -124,20 +125,28 @@ Deno.test("resolves RSVPs through current group membership to approved profiles 
 });
 
 Deno.test("logs each skipped profile by id, never by address", async () => {
-  const { client } = makeFakeClient(TABLES);
-  const logged: unknown[][] = [];
-  const original = console.error;
-  console.error = (...args: unknown[]) => {
-    logged.push(args);
+  // The log line keeps an id only when it is a UUID.
+  const noEmail = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  const { client } = makeFakeClient({
+    rsvps: [{ user_id: noEmail, status: "yes" }],
+    group_members: [{ profile_id: noEmail }],
+    profiles: [{ id: noEmail, first_name: "Dee", preferred_name: null, email: null, role: "member" }],
+  });
+  const logged: string[] = [];
+  const original = console.log;
+  console.log = (line: string) => {
+    logged.push(line);
   };
   try {
     await resolveEventReminderRecipients(client, ORG, GROUP, EVENT);
   } finally {
-    console.error = original;
+    console.log = original;
   }
   assertEquals(logged.length, 1);
-  assertEquals(logged[0].includes("d"), true);
-  assertEquals(JSON.stringify(logged[0]).includes("@"), false);
+  const line = JSON.parse(logged[0]);
+  assertEquals(line.what, "skipping reminder: profile has no email");
+  assertEquals(line.ids, { org: ORG, profile: noEmail, event: EVENT });
+  assertEquals(logged[0].includes("@"), false);
 });
 
 Deno.test("no RSVPs short-circuits before touching group_members", async () => {
@@ -177,5 +186,13 @@ for (const table of ["rsvps", "group_members", "profiles"]) {
       Error,
       `${table} query failed: boom`,
     );
+  });
+
+  Deno.test(`a ${table} query error logs the database's code before it is rethrown as text`, async () => {
+    const { client } = makeFakeClient(TABLES, { [table]: "boom" });
+    const lines = await logged(() => resolveEventReminderRecipients(client, ORG, GROUP, EVENT));
+    assertEquals(lines.map(({ what, code }) => ({ what, code })), [
+      { what: `${table} query failed`, code: "42501" },
+    ]);
   });
 }

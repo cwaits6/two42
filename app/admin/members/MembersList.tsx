@@ -36,6 +36,7 @@ import { EmptyState } from "@/components/states/EmptyState";
 import { ErrorState } from "@/components/states/ErrorState";
 import { LoadingState } from "@/components/states/LoadingState";
 import { ROLE_OPTIONS, roleChangeCopy, roleLockReason } from "./memberRoles";
+import { logError } from "@/lib/log";
 
 // Raised by the profiles trigger when a change would leave the church with
 // no church admin.
@@ -86,8 +87,8 @@ export function MembersList({
       supabase.auth.getUser(),
     ]);
     if (requestsError || membersError || emailsError) {
-      if (emailsError) console.error("Failed to load member emails, code:", emailsError.code);
-      else console.error("Failed to load members:", requestsError ?? membersError);
+      if (emailsError) logError("Failed to load member emails", emailsError, { route: "/admin/members" });
+      else logError("Failed to load members", requestsError ?? membersError, { route: "/admin/members" });
       if (loadedOnce.current) toast.error(failureMessage("load the latest members"));
       else setStatus("failed");
       return;
@@ -155,7 +156,7 @@ export function MembersList({
         .eq("status", "pending")
         .select("id");
       if (error) {
-        console.error(error);
+        logError("Failed to decline the request", error, { route: "/admin/members" });
         toast.error(failureMessage("decline the request"));
         return;
       }

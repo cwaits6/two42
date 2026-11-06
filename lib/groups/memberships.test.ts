@@ -47,7 +47,7 @@ const rows = [
 ];
 
 beforeEach(() => {
-  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 describe("loadGroupMemberships", () => {
@@ -120,7 +120,7 @@ describe("loadGroupMemberships", () => {
     await expect(
       loadGroupMemberships(client, { profileId: "p1", orgId: "org-1" })
     ).rejects.toThrow("boom");
-    expect(console.error).toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalled();
   });
 
   it("throws on a calendar query error rather than painting every group Clay", async () => {

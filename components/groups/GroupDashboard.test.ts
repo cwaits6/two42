@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement, ReactNode } from "react";
 import type { ActiveGroup } from "@/lib/groups/active";
 import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
+import { loggedLines } from "@/lib/log/testing";
 
 type Read = { data: unknown; error: { code: string; message: string } | null; count?: number };
 
@@ -199,6 +200,18 @@ describe("GroupDashboard", () => {
 
     expect(failedSections(tree)).toEqual(["Home"]);
     expect(Object.keys(filtersByTable)).toEqual(["profiles"]);
+  });
+
+  // The failed state shows the request's reference, which exists only once a line is logged.
+  it("logs the failed viewer read with the database's code", async () => {
+    const logged = vi.spyOn(console, "log").mockImplementation(() => {});
+    reads.profiles = FAILED;
+
+    await render();
+
+    expect(loggedLines(logged)).toEqual([
+      { level: "error", what: "Failed to load the viewer for group Home", code: "57014", ref: expect.any(String) },
+    ]);
   });
 
   it("filters every read on the viewer's org", async () => {

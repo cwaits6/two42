@@ -5,6 +5,7 @@ import { requireOrgAdmin } from "@/lib/members/access";
 import { getOrgEmailDomainCap } from "@/lib/email/domainCap";
 import { CUSTOM_SENDING_DOMAINS_ENABLED } from "@/lib/email/sendingDomains";
 import { removeResendDomain } from "@/lib/email/resendDomains";
+import { logError } from "@/lib/log";
 
 /**
  * /api/admin/email-domain — the org's single sending domain.
@@ -94,12 +95,10 @@ async function rollbackInsert(
     .eq("id", id)
     .eq("org_id", orgId);
   if (error) {
-    console.error(
-      "email-domain create: rollback delete failed (%s) (org=%s, id=%s):",
-      context,
-      orgId,
-      id,
+    logError(
+      "email-domain create: rollback delete failed",
       error,
+      { route: "/api/admin/email-domain", step: context, ids: { org: orgId, id } },
     );
   }
 }
@@ -131,13 +130,14 @@ async function markCleanupPending(
       .eq("id", id)
       .eq("org_id", orgId);
     if (error) {
-      console.error(
-        "email-domain %s: failed to persist cleanup_pending (org=%s, id=%s, resend_domain_id=%s):",
-        context,
-        orgId,
-        id,
-        resendDomainId,
+      logError(
+        "email-domain: failed to persist cleanup_pending",
         error,
+        {
+          route: "/api/admin/email-domain",
+          step: context,
+          ids: { org: orgId, id, resend_domain: resendDomainId },
+        },
       );
     } else if (!count) {
       // Supabase/PostgREST reports error: null for an UPDATE...WHERE that
@@ -145,22 +145,25 @@ async function markCleanupPending(
       // affected count is checked. Most likely a concurrent request (a
       // double-submitted Remove, or a racing platform retry) already
       // resolved this row.
-      console.error(
-        "email-domain %s: cleanup_pending write matched no row — likely raced with a concurrent cleanup (org=%s, id=%s, resend_domain_id=%s)",
-        context,
-        orgId,
-        id,
-        resendDomainId,
+      logError(
+        "email-domain: cleanup_pending write matched no row — likely raced with a concurrent cleanup",
+        undefined,
+        {
+          route: "/api/admin/email-domain",
+          step: context,
+          ids: { org: orgId, id, resend_domain: resendDomainId },
+        },
       );
     }
   } catch (err) {
-    console.error(
-      "email-domain %s: persisting cleanup_pending threw (org=%s, id=%s, resend_domain_id=%s):",
-      context,
-      orgId,
-      id,
-      resendDomainId,
+    logError(
+      "email-domain: persisting cleanup_pending threw",
       err,
+      {
+        route: "/api/admin/email-domain",
+        step: context,
+        ids: { org: orgId, id, resend_domain: resendDomainId },
+      },
     );
   }
 }
@@ -185,7 +188,7 @@ async function finalizeFailedClaim(
   }
   const cleanedUp = await removeResendDomain(resendDomainId, {
     orgId,
-    context: `create ${context}`,
+    context: `create_${context}`,
   });
   if (cleanedUp) {
     await rollbackInsert(service, orgId, insertedId, context);
@@ -196,7 +199,7 @@ async function finalizeFailedClaim(
     orgId,
     insertedId,
     resendDomainId,
-    `create ${context}`,
+    `create_${context}`,
   );
 }
 
@@ -238,10 +241,10 @@ export async function GET() {
     .eq("id", orgId)
     .maybeSingle();
   if (orgError || !org) {
-    console.error(
-      "email-domain read: org flag lookup failed (org=%s):",
-      orgId,
+    logError(
+      "email-domain read: org flag lookup failed",
       orgError,
+      { route: "/api/admin/email-domain", ids: { org: orgId } },
     );
     return NextResponse.json(
       { error: "Failed to load sending domain." },
@@ -255,10 +258,10 @@ export async function GET() {
     .select(ROW_COLUMNS)
     .maybeSingle();
   if (rowError) {
-    console.error(
-      "email-domain read: row lookup failed (org=%s):",
-      orgId,
+    logError(
+      "email-domain read: row lookup failed",
       rowError,
+      { route: "/api/admin/email-domain", ids: { org: orgId } },
     );
     return NextResponse.json(
       { error: "Failed to load sending domain." },
@@ -300,10 +303,10 @@ export async function POST(request: Request) {
     .eq("id", orgId)
     .maybeSingle();
   if (orgFlagError || !org) {
-    console.error(
-      "email-domain create: org flag lookup failed (org=%s):",
-      orgId,
+    logError(
+      "email-domain create: org flag lookup failed",
       orgFlagError,
+      { route: "/api/admin/email-domain", ids: { org: orgId } },
     );
     return NextResponse.json(
       { error: "Failed to claim domain." },
@@ -330,10 +333,10 @@ export async function POST(request: Request) {
     .eq("org_id", orgId)
     .maybeSingle();
   if (existingError) {
-    console.error(
-      "email-domain create: existing row lookup failed (org=%s):",
-      orgId,
+    logError(
+      "email-domain create: existing row lookup failed",
       existingError,
+      { route: "/api/admin/email-domain", ids: { org: orgId } },
     );
     return NextResponse.json(
       { error: "Failed to claim domain." },
@@ -375,10 +378,10 @@ export async function POST(request: Request) {
           .eq("org_id", orgId)
           .maybeSingle();
         if (racedError) {
-          console.error(
-            "email-domain create: post-conflict status lookup failed (org=%s):",
-            orgId,
+          logError(
+            "email-domain create: post-conflict status lookup failed",
             racedError,
+            { route: "/api/admin/email-domain", ids: { org: orgId } },
           );
         }
         return conflictResponse(raced?.status);
@@ -401,10 +404,10 @@ export async function POST(request: Request) {
           { status: 403 },
         );
       }
-      console.error(
-        "email-domain create: claim error (org=%s):",
-        orgId,
+      logError(
+        "email-domain create: claim error",
         claimError,
+        { route: "/api/admin/email-domain", ids: { org: orgId } },
       );
       return NextResponse.json(
         { error: "Failed to claim domain." },
@@ -418,15 +421,14 @@ export async function POST(request: Request) {
     );
 
     if (resendError || !rd) {
-      console.error(
-        "email-domain create: Resend domains.create error (org=%s, domain=%s):",
-        orgId,
-        domain,
+      logError(
+        "email-domain create: Resend domains.create error",
         resendError,
+        { route: "/api/admin/email-domain", ids: { org: orgId } },
       );
       // Nothing exists on Resend's side yet: roll back the claim so a retry
       // isn't blocked by the unique index.
-      await rollbackInsert(service, orgId, inserted.id, "create failure");
+      await rollbackInsert(service, orgId, inserted.id, "create_failure");
       return NextResponse.json(
         { error: "Failed to create domain with email provider." },
         { status: 502 },
@@ -448,12 +450,13 @@ export async function POST(request: Request) {
       .single();
 
     if (updateError || !saved) {
-      console.error(
-        "email-domain create: scoped update failed (org=%s, id=%s, resend_domain_id=%s):",
-        orgId,
-        inserted.id,
-        rd.id,
+      logError(
+        "email-domain create: scoped update failed",
         updateError,
+        {
+          route: "/api/admin/email-domain",
+          ids: { org: orgId, id: inserted.id, resend_domain: rd.id },
+        },
       );
       // The Resend domain now exists but the DB write that records it
       // didn't: clean up both sides, keeping the row if Resend's side won't
@@ -463,7 +466,7 @@ export async function POST(request: Request) {
         orgId,
         inserted.id,
         rd.id,
-        "after failed update",
+        "after_failed_update",
       );
       return NextResponse.json(
         { error: "Failed to save domain. Please try again." },
@@ -479,10 +482,10 @@ export async function POST(request: Request) {
     // context as every other branch, and so an insert left in place by a
     // thrown domains.create() doesn't permanently block future claims via
     // the unique-per-org index.
-    console.error(
-      "email-domain create: unexpected error (org=%s):",
-      orgId,
+    logError(
+      "email-domain create: unexpected error",
       err,
+      { route: "/api/admin/email-domain", ids: { org: orgId } },
     );
     if (insertedId) {
       await finalizeFailedClaim(
@@ -490,7 +493,7 @@ export async function POST(request: Request) {
         orgId,
         insertedId,
         resendDomainId,
-        "after unexpected error",
+        "after_unexpected_error",
       );
     }
     return NextResponse.json(
@@ -519,7 +522,11 @@ export async function DELETE() {
     .eq("org_id", orgId)
     .maybeSingle();
   if (rowError) {
-    console.error("email-domain remove: lookup error (org=%s):", orgId, rowError);
+    logError(
+      "email-domain remove: lookup error",
+      rowError,
+      { route: "/api/admin/email-domain", ids: { org: orgId } },
+    );
     return NextResponse.json(
       { error: "Failed to remove domain." },
       { status: 500 },
@@ -561,7 +568,11 @@ export async function DELETE() {
     .eq("org_id", orgId);
 
   if (error) {
-    console.error("email-domain remove: delete error (org=%s):", orgId, error);
+    logError(
+      "email-domain remove: delete error",
+      error,
+      { route: "/api/admin/email-domain", ids: { org: orgId } },
+    );
     return NextResponse.json(
       { error: "Failed to remove domain." },
       { status: 500 },
