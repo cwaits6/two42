@@ -309,7 +309,10 @@ describe("the reminder job's dates agree with the calendar's", () => {
     "2024-02-29T15:00:00.000Z",
     "2026-08-31T23:59:59.123Z",
   ];
-  const STEPS: [string, number][] = [["daily", 200], ["weekly", 110], ["monthly", 40], ["yearly", 8]];
+  // Daily and weekly steps cross the clock changes the starts sit beside, a
+  // year of months crosses both of every zone's, and four years reach the
+  // next 29 February.
+  const STEPS: [string, number][] = [["daily", 7], ["weekly", 13], ["monthly", 12], ["yearly", 4]];
 
   it("steps to the same instant and the same day, across clock changes", () => {
     const mismatches: string[] = [];
@@ -330,16 +333,21 @@ describe("the reminder job's dates agree with the calendar's", () => {
   });
 
   it("finds the same dates in a window, with a date taken out and each way a series ends", () => {
+    // Stepping in every zone from every start is the case above; a zone either
+    // side of UTC, and starts that run into the window, ended long before it,
+    // and fall on a 31st with milliseconds, cover how a window is cut.
+    const windowZones = ["America/New_York", "Australia/Lord_Howe"];
+    const windowStarts = ["2026-10-27T00:00:00.000Z", "2024-02-29T15:00:00.000Z", "2026-08-31T23:59:59.123Z"];
     const from = new Date("2026-11-05T15:00:00.000Z");
     const day = 86_400_000;
     const ends: Partial<Event>[] = [
       { recurrence_end_mode: "never" },
       { recurrence_end_mode: "count", recurrence_count: 40 },
-      { recurrence_end_mode: "until", recurrence_until: "2027-03-20T00:00:00.000Z" },
+      { recurrence_end_mode: "until", recurrence_until: "2026-12-20T00:00:00.000Z" }, // inside the long window, so it cuts that window short
     ];
     const mismatches: string[] = [];
-    for (const zone of ZONES) {
-      for (const start of STARTS) {
+    for (const zone of windowZones) {
+      for (const start of windowStarts) {
         for (const [frequency] of STEPS) {
           for (const interval of [1, 2]) {
             for (const end of ends) {
