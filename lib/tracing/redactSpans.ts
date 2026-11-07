@@ -1,5 +1,6 @@
 import { SpanKind, type Attributes } from "@opentelemetry/api";
 import type { tracing } from "@opentelemetry/sdk-node";
+import { pagePattern } from "@/lib/analytics/pagePattern";
 
 type ReadableSpan = tracing.ReadableSpan;
 type SpanExporter = tracing.SpanExporter;
@@ -65,14 +66,35 @@ export function redactAddress(address: string): string {
   return url.origin + (DATABASE_OPERATION_PATH.test(url.pathname) ? url.pathname : "");
 }
 
-/** The framework names a fetch span after its full address; the name keeps only what redactAddress keeps. */
-export function redactSpanName(name: string): string {
-  return name.replace(/\S+:\/\/\S*/g, redactAddress).replace(/[?#].*$/, "");
+// A path is safe to name only when it is a route pattern: it has a dynamic
+// segment, or it is a page with none. Any other path can be a real address
+// holding a token or an id.
+function isRoutePattern(path: string, route: string | undefined): boolean {
+  return path === route || /\/\[[^/\]]+\](?=\/|$)/.test(path) || pagePattern(path) === path;
+}
+
+/**
+ * The framework names a fetch span after its full address and can name a
+ * request span after its real path; the name keeps only what redactAddress
+ * keeps, and a path that is not a route pattern becomes the span's route.
+ */
+export function redactSpanName(name: string, route?: string): string {
+  return name
+    .replace(/\S+:\/\/\S*/g, redactAddress)
+    .replace(/[?#].*$/, "")
+    .replace(/(^|\s)(\/\S*)/g, (_, lead: string, path: string) =>
+      lead + (isRoutePattern(path, route) ? path : (route ?? "[path]")),
+    );
+}
+
+function routeOf(attributes: Attributes | undefined): string | undefined {
+  const route = attributes?.["next.route"] ?? attributes?.["http.route"];
+  return typeof route === "string" ? route : undefined;
 }
 
 export function redactSpan(span: ReadableSpan): ReadableSpan {
   return {
-    name: redactSpanName(span.name),
+    name: redactSpanName(span.name, routeOf(span.attributes)),
     kind: span.kind,
     spanContext: () => span.spanContext(),
     parentSpanContext: span.parentSpanContext,
