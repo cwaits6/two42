@@ -51,7 +51,7 @@ Anything on a group's calendar, including the group's own regular meetings. The 
 _Avoid_: meeting, gathering, calendar item, session, occurrence (in copy)
 
 **Event reminder**:
-The email sent before a date of an event to the members who answered Yes or Maybe. An answer to a repeating event covers every date of it. The event chooses how far ahead it goes, the group sets the default or turns them off, and each person can stop getting them.
+The email sent before a date of an event to the members who answered Yes or Maybe for that date. An answer is for one date: answering one date of a repeating event says nothing about its other dates. The event chooses how far ahead it goes, the group sets the default or turns them off, and each person can stop getting them.
 _Avoid_: notification, alert, event email
 
 **Team**:

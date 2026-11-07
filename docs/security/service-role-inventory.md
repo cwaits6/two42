@@ -241,7 +241,8 @@ the grant, the bound and that another church's passes stay.
 ## Event reminder claim — service-key only, SECURITY INVOKER
 
 `event_reminder_claim(_org_id, _event_id, _occurrence_date, _reply_event_id)`
-(`20261117000000_event_reminder_choices.sql`) is what the
+(`20261117000000_event_reminder_choices.sql`; its recipients changed in
+`20261121000000_event_reply_dates_contract.sql`) is what the
 `send-event-reminders` job calls, once per date due, before it mails anyone.
 It starts the pass for that date when it has none, fixing who the reminder
 goes to, then claims every unsent reminder in the pass atomically and returns
@@ -252,8 +253,9 @@ lives in SQL, where the Tier A guard cannot see it (the guard pins the job's
 before any write; `_reply_event_id`, the row of a date edited on its own,
 must be a date of that event in the same org or the call raises `ER001`; and
 every table it joins (`profiles`, `rsvps`, `group_members`) is filtered on
-`_org_id`. Recipients: an answer of Yes or Maybe on the event, overridden per
-person by their answer on the edited date's own row; a current member of the
+`_org_id`. Recipients: an answer of Yes or Maybe for that date, the `rsvps`
+row on `(_event_id, _occurrence_date)`, which is where a date edited on its
+own keeps its replies too; a current member of the
 event's group; not pending; with an email; and `profiles.email_event_reminders`
 on. EXECUTE: `service_role` only. `SECURITY INVOKER`, for the same reason as
 the serving claim. The tables it writes, `event_reminder_passes` and
