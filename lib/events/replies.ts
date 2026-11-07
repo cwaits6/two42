@@ -16,7 +16,7 @@ type Placed = Pick<ReplyRow, "event_id" | "user_id" | "occurrence_date">;
 export interface ReplyKey {
   eventId: string;
   date: string;
-  /** The row of a date edited on its own, where its replies are saved. */
+  /** The row of a date edited on its own; its replies are on the series under `date`. */
   editedId: string | null;
 }
 
@@ -35,10 +35,11 @@ export function replyKey(
   return { eventId: shown.id, date: dayKey(shown.start_time, zone), editedId: null };
 }
 
-// Lower wins. A row saved before replies named a date (occurrence_date null)
-// covers every date of its event, so it shows only where nothing more exact
-// does; an edited date's own row overrides the series, as the reminder claim
-// reads it.
+// Lower wins. A row with no date covers every date of its event, so it shows
+// only where nothing more exact does; a row on an edited date's own id
+// overrides the series. Neither exists once rsvps.occurrence_date is NOT NULL
+// and every reply sits on its series: these two arms can go once no deployed
+// database predates that.
 function rank(row: Placed, key: ReplyKey): number | null {
   if (key.editedId && row.event_id === key.editedId) return 0;
   if (row.event_id !== key.eventId) return null;

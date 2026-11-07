@@ -91,9 +91,9 @@ end $$;
 -- ── 1. Cross-org references are FK violations ──────────────────────────────
 
 select throws_ok(
-  $$ insert into public.rsvps (org_id, event_id, user_id, status)
+  $$ insert into public.rsvps (org_id, event_id, user_id, status, occurrence_date)
      values (current_setting('fk.org_a')::uuid, current_setting('fk.event_b')::uuid,
-             current_setting('fk.owner_a')::uuid, 'yes') $$,
+             current_setting('fk.owner_a')::uuid, 'yes', current_date + 3) $$,
   '23503', null,
   'rsvps in org A cannot reference an org B event');
 

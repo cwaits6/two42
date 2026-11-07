@@ -228,15 +228,26 @@ BEGIN
   ON CONFLICT (id) DO NOTHING;
 
   -- RSVPs: the whole group is coming Tuesday; most of it to the potluck.
-  INSERT INTO public.rsvps (org_id, event_id, user_id, status)
-  SELECT _org, 'de3c0000-0000-0000-0000-00000000e001', gm.profile_id, 'yes'
+  -- A reply is for one date: the weekly meeting's is on its next Tuesday that
+  -- has not ended.
+  INSERT INTO public.rsvps (org_id, event_id, user_id, status, occurrence_date)
+  SELECT _org, 'de3c0000-0000-0000-0000-00000000e001', gm.profile_id, 'yes',
+         date_trunc('week', now() AT TIME ZONE _tz)::date + 1
+           + CASE WHEN now() AT TIME ZONE _tz >= (date_trunc('week', now() AT TIME ZONE _tz)::date + 1) + time '20:00'
+                  THEN 7 ELSE 0 END
   FROM public.group_members gm WHERE gm.group_id = _yf AND gm.org_id = _org
-  ON CONFLICT (event_id, user_id) DO NOTHING;
-  INSERT INTO public.rsvps (org_id, event_id, user_id, status)
-  SELECT _org, 'de3c0000-0000-0000-0000-00000000e003', gm.profile_id,
-         CASE WHEN row_number() OVER (ORDER BY gm.profile_id) <= 7 THEN 'yes' ELSE 'maybe' END
-  FROM public.group_members gm WHERE gm.group_id = _yf AND gm.org_id = _org
-  ON CONFLICT (event_id, user_id) DO NOTHING;
+    AND NOT EXISTS (SELECT 1 FROM public.rsvps r
+                    WHERE r.org_id = _org AND r.event_id = 'de3c0000-0000-0000-0000-00000000e001'
+                      AND r.user_id = gm.profile_id)
+  ON CONFLICT (event_id, user_id, occurrence_date) DO NOTHING;
+  INSERT INTO public.rsvps (org_id, event_id, user_id, status, occurrence_date)
+  SELECT _org, e.id, gm.profile_id,
+         CASE WHEN row_number() OVER (ORDER BY gm.profile_id) <= 7 THEN 'yes' ELSE 'maybe' END,
+         (e.start_time AT TIME ZONE _tz)::date
+  FROM public.group_members gm
+  JOIN public.events e ON e.id = 'de3c0000-0000-0000-0000-00000000e003' AND e.org_id = _org
+  WHERE gm.group_id = _yf AND gm.org_id = _org
+  ON CONFLICT (event_id, user_id, occurrence_date) DO NOTHING;
 
   -- Serving teams in Young Families, with most of the coming Sundays covered.
   INSERT INTO public.teams (id, org_id, group_id, name, description, color, icon, display_order, is_serving_role, created_by) VALUES

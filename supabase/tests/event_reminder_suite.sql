@@ -103,22 +103,29 @@ begin
   insert into public.events (org_id, group_id, title, start_time) values (org_b, grp_b, 'Org B event', '2031-03-07 09:00-06')
     returning id into event_b;
 
-  -- Replies to the series. gone replied Yes and then left the group.
-  insert into public.rsvps (org_id, event_id, user_id, status) values
-    (org_a, series, yes, 'yes'),
-    (org_a, series, maybe, 'maybe'),
-    (org_a, series, nope, 'no'),
-    (org_a, series, gone, 'yes'),
-    (org_a, series, pending, 'yes'),
-    (org_a, series, noemail, 'yes'),
-    (org_a, series, optout, 'yes'),
-    (org_a, series, quiet, 'yes');
-  -- Replies on the moved date: yes can't make it, nope can, silent might.
-  insert into public.rsvps (org_id, event_id, user_id, status) values
-    (org_a, moved, yes, 'no'),
-    (org_a, moved, nope, 'yes'),
-    (org_a, moved, silent, 'maybe');
-  insert into public.rsvps (org_id, event_id, user_id, status) values (org_b, event_b, owner_b, 'yes');
+  -- A reply is for one date, on the series and the date's day in the church's
+  -- zone. gone replied Yes and then left the group.
+  insert into public.rsvps (org_id, event_id, user_id, status, occurrence_date) values
+    (org_a, series, yes, 'yes', '2031-03-05'),
+    (org_a, series, maybe, 'maybe', '2031-03-05'),
+    (org_a, series, nope, 'no', '2031-03-05'),
+    (org_a, series, gone, 'yes', '2031-03-05'),
+    (org_a, series, pending, 'yes', '2031-03-05'),
+    (org_a, series, noemail, 'yes', '2031-03-05'),
+    (org_a, series, optout, 'yes', '2031-03-05'),
+    (org_a, series, quiet, 'yes', '2031-03-05'),
+    (org_a, series, yes, 'yes', '2031-03-19'),
+    (org_a, series, maybe, 'maybe', '2031-03-19'),
+    (org_a, series, quiet, 'yes', '2031-03-19');
+  -- The moved date's replies sit on the series and its series day: yes can't
+  -- make it, nope can, silent might. A row left on the moved date's own id is
+  -- not where a reply lives, and the claim does not read it.
+  insert into public.rsvps (org_id, event_id, user_id, status, occurrence_date) values
+    (org_a, series, yes, 'no', '2031-03-12'),
+    (org_a, series, nope, 'yes', '2031-03-12'),
+    (org_a, series, silent, 'maybe', '2031-03-12'),
+    (org_a, moved, maybe, 'yes', '2031-03-12');
+  insert into public.rsvps (org_id, event_id, user_id, status, occurrence_date) values (org_b, event_b, owner_b, 'yes', '2031-03-07');
 
   perform set_config('er.org_a', org_a::text, true);
   perform set_config('er.org_b', org_b::text, true);
@@ -345,19 +352,20 @@ select ok(
 
 -- ── Who a date's reminder goes to ───────────────────────────────────────────
 select is(pg_temp.claim('er.org_a', 'er.series', '2031-03-05'), 'maybe,quiet,yes',
-  'Yes and Maybe on the series, still in the group, not pending, with an email and the setting on; announcements off does not matter');
+  'Yes and Maybe for the date, still in the group, not pending, with an email and the setting on; announcements off does not matter');
 select is(pg_temp.sends('er.series', '2031-03-05'), 'maybe:claimed,quiet:claimed,yes:claimed',
   'No, no reply, left the group, pending, no email and the setting off have no send');
 
-select is(pg_temp.claim('er.org_a', 'er.series', '2031-03-12', 'er.moved'), 'maybe,nope,quiet,silent',
-  'a reply on a date edited on its own overrides the series reply for that person: a No drops a series Yes, a Yes or Maybe is enough on its own, and the rest keep their series reply');
+select is(pg_temp.claim('er.org_a', 'er.series', '2031-03-12', 'er.moved'), 'nope,silent',
+  'a date edited on its own goes to the Yes and Maybe for its series day, read from the series row: a reply for another date, or a row on the edited date''s own id, is not one');
 
 select is(pg_temp.claim('er.org_a', 'er.series', '2031-03-05'), '-',
   'a second claim right after returns nothing: the first firing holds them');
 
--- late replies Yes after the pass started.
-insert into public.rsvps (org_id, event_id, user_id, status)
-  values (current_setting('er.org_a')::uuid, current_setting('er.series')::uuid, current_setting('er.late')::uuid, 'yes');
+-- late replies Yes to two dates after the first date's pass started.
+insert into public.rsvps (org_id, event_id, user_id, status, occurrence_date)
+  select current_setting('er.org_a')::uuid, current_setting('er.series')::uuid, current_setting('er.late')::uuid, 'yes', d
+  from unnest(array['2031-03-05', '2031-03-19']::date[]) as d;
 
 -- yes's send settles; maybe's is released, as a refused send would be.
 update public.event_reminder_sends set sent_at = now()
@@ -372,7 +380,9 @@ select is(pg_temp.claim('er.org_a', 'er.series', '2031-03-05'), 'maybe',
 select is(pg_temp.sends('er.series', '2031-03-05'), 'maybe:claimed,quiet:claimed,yes:sent',
   'the sent one stays sent');
 select is(pg_temp.claim('er.org_a', 'er.series', '2031-03-19'), 'late,maybe,quiet,yes',
-  'the next date of the series has its own pass, and the late reply is in it');
+  'the next date of the series has its own pass, with its own replies and the late one');
+select is(pg_temp.claim('er.org_a', 'er.series', '2031-04-02'), '-',
+  'a date nobody answered goes to nobody, though people answered other dates');
 
 -- A claim a crashed firing never settled goes stale and is claimed again.
 update public.event_reminder_sends set claimed_at = now() - interval '9 minutes'
