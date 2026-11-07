@@ -30,6 +30,9 @@ export interface EventRecipientClient {
     select(columns: string): {
       eq(column: string, value: unknown): {
         eq(column: string, value: unknown): {
+          eq(column: string, value: unknown): {
+            in(column: string, values: unknown[]): PromiseLike<QueryResult<Record<string, unknown>>>;
+          };
           in(column: string, values: unknown[]): PromiseLike<QueryResult<Record<string, unknown>>>;
         };
         in(column: string, values: unknown[]): PromiseLike<QueryResult<Record<string, unknown>>>;
@@ -47,12 +50,15 @@ export async function resolveEventReminderRecipients(
   orgId: string,
   groupId: string,
   eventId: string,
+  occurrenceDate: string,
 ): Promise<EventRecipient[]> {
+  // A reply answers one date, so only the date being reminded counts.
   const { data: rsvps, error: rsvpsError } = await supabase
     .from("rsvps")
     .select("user_id")
     .eq("org_id", orgId)
     .eq("event_id", eventId)
+    .eq("occurrence_date", occurrenceDate)
     .in("status", ["yes", "maybe"]);
   if (rsvpsError) logError("rsvps query failed", rsvpsError, { ids: { org: orgId, event: eventId } });
   if (rsvpsError) throw new Error(`rsvps query failed: ${rsvpsError.message}`);
