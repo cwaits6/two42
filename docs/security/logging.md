@@ -150,7 +150,7 @@ A span holds:
 | Method and status | `http.method`, `http.status_code`, and the newer `http.request.method`, `http.response.status_code` |
 | The server it called, on a span for an outgoing request only | `server.address`, `server.port`, `net.peer.name`, `net.peer.port` |
 | The protocol | `url.scheme`, `network.protocol.version` |
-| The database operation | `url.path` on an outgoing request when it is a PostgREST table or function (`/rest/v1/profiles`, `/rest/v1/rpc/<name>`), and from a database driver `db.system`, `db.operation`, `db.collection.name`, `db.sql.table` and their newer names |
+| The database operation | `url.path` on an outgoing request when it is a PostgREST table or function (`/rest/v1/profiles`, `/rest/v1/rpc/<name>`), and from a database driver `db.system`, `db.system.name`, `db.operation`, `db.operation.name`, `db.collection.name` and `db.sql.table` |
 | The error's class | `error.type`, and on an exception event `exception.type` only |
 | The framework's labels | `next.span_type`, `next.span_category`, `next.segment`, `next.rsc`, `next.bubble`, `next.fetch.*`, `next.clientComponentLoadCount` |
 

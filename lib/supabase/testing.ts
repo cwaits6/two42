@@ -68,6 +68,8 @@ export async function expectSchemaHidden(
     expect.objectContaining({ level: "error", what: expected.what, route: expected.route, code: "42501" }),
   ]);
   const logged = JSON.stringify(lines);
+  const errorText = JSON.stringify(SCHEMA_REVEALING_ERROR);
+  for (const word of SCHEMA_WORDS) expect(errorText).toContain(word);
   for (const word of SCHEMA_WORDS) {
     expect(body).not.toContain(word);
     expect(logged).not.toContain(word);
