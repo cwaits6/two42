@@ -1227,14 +1227,14 @@ isOneToOne: false
                   ]
                 },"rsvps": {
                   Row: {
-                    "created_at": string,"event_id": string,"id": string,"org_id": string,"status": string,"user_id": string
+                    "created_at": string,"event_id": string,"id": string,"occurrence_date": string | null,"org_id": string,"status": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"event_id": string,"id"?: string,"org_id"?: string,"status": string,"user_id": string
+                    "created_at"?: string,"event_id": string,"id"?: string,"occurrence_date"?: string | null,"org_id"?: string,"status": string,"user_id": string
                   }
                   Update: {
-                    "created_at"?: string,"event_id"?: string,"id"?: string,"org_id"?: string,"status"?: string,"user_id"?: string
+                    "created_at"?: string,"event_id"?: string,"id"?: string,"occurrence_date"?: string | null,"org_id"?: string,"status"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -1715,6 +1715,9 @@ isOneToOne: false
 "event_reminder_passes_prune":
 { Args: { "_before": string,"_limit": number,"_org_id": string }; Returns: number
                            },
+"event_reply_day":
+{ Args: { "_at": string,"_event_id": string }; Returns: string
+                           },
 "family_anniversary_hidden":
 { Args: { "_family_id": string }; Returns: boolean
                            },
@@ -1839,6 +1842,9 @@ isOneToOne: false
                            },
 "review_group_join_request":
 { Args: { "_approve": boolean,"_request_id": string }; Returns: string
+                           },
+"rsvp_set":
+{ Args: { "_event_id": string,"_occurrence_date": string,"_status"?: string }; Returns: string
                            },
 "serving_reminder_claim":
 { Args: { "_org_id": string,"_send_date": string,"_service_date": string,"_team_ids": (string)[] }; Returns: {

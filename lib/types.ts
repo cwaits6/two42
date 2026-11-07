@@ -176,6 +176,8 @@ export interface Rsvp {
   event_id: string;
   user_id: string;
   status: RsvpStatus;
+  /** The date's calendar day in the church's zone; null covers every date. */
+  occurrence_date: string | null;
   created_at: string;
 }
 

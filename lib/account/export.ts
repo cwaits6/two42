@@ -53,7 +53,7 @@ export async function buildAccountExport(orgId: string, personId: string) {
       .eq("profile_id", personId),
     service
       .from("rsvps")
-      .select("status, created_at, events(title, start_time)")
+      .select("status, occurrence_date, created_at, events(title, start_time)")
       .eq("org_id", orgId)
       .eq("user_id", personId),
     service
@@ -125,11 +125,14 @@ export async function buildAccountExport(orgId: string, personId: string) {
     ).map((t) => ({ team: named(t.teams), is_team_lead: t.is_leader, joined_at: t.assigned_at })),
     rsvps: rowsOf<{
       status: string;
+      occurrence_date: string | null;
       created_at: string;
       events: { title: string; start_time: string } | null;
     }>(rsvps, "rsvps").map((r) => ({
       event: r.events?.title ?? null,
       event_starts_at: r.events?.start_time ?? null,
+      // The date answered; null on a reply saved before replies named one.
+      date: r.occurrence_date,
       status: r.status,
       answered_at: r.created_at,
     })),

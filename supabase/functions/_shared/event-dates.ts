@@ -3,6 +3,9 @@
 // Deno cannot import (Luxon and the app's path aliases); lib/recurrence.test.ts
 // compares the two over a matrix of zones and clock changes and fails when
 // they disagree, so a rule changed on one side has to change on the other.
+// public.event_reply_day() in the event_reply_dates migration is a third copy,
+// in SQL, guarded only by the literal days in event_reply_dates_suite.sql; a
+// rule change needs a new migration replacing it too.
 //
 // Import-free, on Intl alone, so the app's test runner can load it too.
 

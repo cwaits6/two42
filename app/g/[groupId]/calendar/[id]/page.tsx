@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { mintSignedUrls } from "@/lib/storageRead";
@@ -10,12 +10,15 @@ import { AttendeeStrip, type Attendee } from "./_components/AttendeeStrip";
 import { JoinMeetingBlock } from "@/components/events/JoinMeetingBlock";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ErrorState } from "@/components/states/ErrorState";
 import { hasMeeting, notesWithMeeting, type MeetingFields } from "@/lib/meetings";
 import { Button } from "@/components/ui/button";
 import { Pencil } from "lucide-react";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
-import type { Event, Rsvp } from "@/lib/types";
+import type { Event, RsvpStatus } from "@/lib/types";
+import { replyDateFilter, replyKey, replyOpen, repliesForDate } from "@/lib/events/replies";
+import { logError } from "@/lib/log";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { dayKey, formatEventTime, formatInZone } from "@/lib/time/zone";
@@ -99,45 +102,6 @@ export default async function EventDetailPage({
   // requireActiveGroup() admitted only an approved member of this group.
   const isLeader = group.role === "leader";
 
-  // Fetch current user's RSVP
-  let userRsvp: Rsvp | null = null;
-  if (user) {
-    const { data } = await supabase
-      .from("rsvps")
-      .select("*")
-      .eq("event_id", id)
-      .eq("user_id", user.id)
-      .maybeSingle();
-    userRsvp = data;
-  }
-
-  // Fetch attendees (yes + maybe) joined with profiles — only when RSVP is enabled
-  let attendees: Attendee[] = [];
-  if (event.is_rsvp_enabled) {
-    const { data: rsvpsRaw } = await supabase
-      .from("rsvps")
-      .select("user_id, status, profiles(id, first_name, last_name, preferred_name, avatar_url)")
-      .eq("event_id", id)
-      .in("status", ["yes", "maybe"]);
-
-    attendees = (rsvpsRaw ?? []).map((r) => {
-      const p = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles;
-      return {
-        id: p?.id ?? r.user_id,
-        first_name: p?.first_name ?? null,
-        last_name: p?.last_name ?? null,
-        preferred_name: p?.preferred_name ?? null,
-        avatar_url: p?.avatar_url ?? null,
-        status: r.status as Attendee["status"],
-      };
-    });
-
-    // Private buckets: exchange stored avatar URLs for signed URLs
-    // before they reach AttendeeStrip's renders.
-    const signedAvatars = await mintSignedUrls(attendees.map((a) => a.avatar_url));
-    attendees = attendees.map((a, i) => ({ ...a, avatar_url: signedAvatars[i] }));
-  }
-
   // Formatting helpers.
   // When viewing a specific occurrence of a recurring series, shift the displayed
   // start/end times to that occurrence's date while preserving the event duration.
@@ -159,6 +123,75 @@ export default async function EventDetailPage({
     } catch {
       // malformed percent-encoding — fall back to base event times
     }
+  }
+
+  // A failed read must not pass for nobody having replied.
+  let repliesFailed = false;
+
+  // A date edited on its own has its own row and page, which hold its times
+  // and replies. Matched by series day in the church's zone, and in
+  // rsvp_set()'s order, so it opens the row a reply is written to. A series
+  // link with no date shows the first date, which may be edited too.
+  if (event.recurrence_frequency && !event.series_id) {
+    const day = dayKey(displayStartTime, timeZone);
+    const { data: edited, error: editedError } = await supabase
+      .from("events")
+      .select("id, series_occurrence_date")
+      .eq("series_id", event.id)
+      .eq("group_id", group.id)
+      .eq("is_cancelled", false)
+      .order("created_at")
+      .order("id");
+    const match = (edited ?? []).find(
+      (e) => e.series_occurrence_date && dayKey(e.series_occurrence_date, timeZone) === day,
+    );
+    if (match) redirect(groupPath(group.id, `/calendar/${match.id}`));
+    if (editedError) {
+      logError("Failed to load the series' edited dates", editedError, { ids: { event: id } });
+      repliesFailed = event.is_rsvp_enabled;
+    }
+  }
+
+  // Replies and Who's coming are for the date shown. One read holds every
+  // row that can answer it; repliesForDate() keeps one per person.
+  const key = replyKey({ ...event, start_time: displayStartTime }, timeZone);
+  let userStatus: RsvpStatus | null = null;
+  let attendees: Attendee[] = [];
+  if (event.is_rsvp_enabled) {
+    const { data: rsvpsRaw, error: rsvpsError } = await supabase
+      .from("rsvps")
+      .select("event_id, user_id, status, occurrence_date")
+      .or(replyDateFilter(key));
+    if (rsvpsError) logError("Failed to load the event's replies", rsvpsError, { ids: { event: id } });
+
+    const forDate = repliesForDate(rsvpsRaw ?? [], key);
+    userStatus = user ? ((forDate.get(user.id)?.status as RsvpStatus | undefined) ?? null) : null;
+    const coming = [...forDate.values()].filter((r) => r.status === "yes" || r.status === "maybe");
+    const { data: people, error: peopleError } = coming.length
+      ? await supabase
+          .from("profiles")
+          .select("id, first_name, last_name, preferred_name, avatar_url")
+          .in("id", coming.map((r) => r.user_id))
+      : { data: [], error: null };
+    if (peopleError) logError("Failed to load who's coming", peopleError, { ids: { event: id } });
+    if (rsvpsError || peopleError) repliesFailed = true;
+    const byId = new Map((people ?? []).map((p) => [p.id, p]));
+    attendees = coming.map((r) => {
+      const p = byId.get(r.user_id);
+      return {
+        id: r.user_id,
+        first_name: p?.first_name ?? null,
+        last_name: p?.last_name ?? null,
+        preferred_name: p?.preferred_name ?? null,
+        avatar_url: p?.avatar_url ?? null,
+        status: r.status as Attendee["status"],
+      };
+    });
+
+    // Private buckets: exchange stored avatar URLs for signed URLs
+    // before they reach AttendeeStrip's renders.
+    const signedAvatars = await mintSignedUrls(attendees.map((a) => a.avatar_url));
+    attendees = attendees.map((a, i) => ({ ...a, avatar_url: signedAvatars[i] }));
   }
 
   // Meeting fields live on the series anchor; exception rows inherit them.
@@ -228,7 +261,8 @@ export default async function EventDetailPage({
       recordingsHref={recordingsHref}
     />
   );
-  const showRsvp = event.is_rsvp_enabled && !!user;
+  const showRsvp =
+    event.is_rsvp_enabled && !!user && !repliesFailed && replyOpen(new Date(), displayStartTime, displayEndTime);
 
   return (
     <PageContainer size="wide">
@@ -290,9 +324,10 @@ export default async function EventDetailPage({
                 <>
                   <h2 className="mb-4 font-serif text-2xl font-medium leading-snug">Are you going?</h2>
                   <RsvpControl
-                    eventId={event.id}
+                    eventId={key.eventId}
+                    occurrenceDate={key.date}
                     userId={user.id}
-                    currentStatus={userRsvp?.status ?? null}
+                    currentStatus={userStatus}
                     tone="primary"
                   />
                 </>
@@ -314,7 +349,9 @@ export default async function EventDetailPage({
             <SubscribeToEventButton eventId={event.id} />
           </div>
 
-          {event.is_rsvp_enabled && attendees.length > 0 && (
+          {repliesFailed && <ErrorState thing="the replies" className="py-8" />}
+
+          {event.is_rsvp_enabled && !repliesFailed && attendees.length > 0 && (
             <div className="rounded-2xl border border-border bg-card p-6">
               <AttendeeStrip attendees={attendees} />
             </div>

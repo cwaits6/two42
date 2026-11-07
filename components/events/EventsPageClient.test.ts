@@ -39,7 +39,7 @@ async function mount() {
       createElement(EventsPageClient, {
         groups: [{ id: "g1", name: "Group", color: "#b4532a", isLeader: false }],
         allEvents: [],
-        userRsvps: {},
+        replies: [],
         userId: "u1",
         timeZone: "America/Chicago",
       })

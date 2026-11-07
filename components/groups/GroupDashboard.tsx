@@ -404,6 +404,7 @@ function WeekListRow({ row, userId }: { row: WeekRow; userId: string }) {
         <div className="pb-3 pl-[3.75rem] pr-2">
           <RsvpControl
             eventId={row.reply.eventId}
+            occurrenceDate={row.reply.date}
             userId={userId}
             currentStatus={row.reply.status}
             tone="quiet"

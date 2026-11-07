@@ -31,7 +31,8 @@ function setup() {
       { org_id: ORG, profile_id: "ada", is_leader: false, assigned_at: "t", teams: { name: "Set-up" } },
     ],
     rsvps: [
-      { org_id: ORG, user_id: "ada", status: "yes", created_at: "t", events: { title: "Picnic", start_time: "s" } },
+      { org_id: ORG, user_id: "ada", status: "yes", occurrence_date: "2026-11-08", created_at: "t", events: { title: "Picnic", start_time: "s" } },
+      { org_id: ORG, user_id: "ada", status: "maybe", occurrence_date: "2026-11-15", created_at: "t", events: { title: "Picnic", start_time: "s" } },
       { org_id: ORG, user_id: "ben", status: "no", created_at: "t", events: { title: "Bens event", start_time: "s" } },
     ],
     serving_signup_attendees: [
@@ -83,7 +84,10 @@ describe("buildAccountExport", () => {
     const text = JSON.stringify(data);
     expect(data?.profile.first_name).toBe("Ada");
     expect(data?.groups).toEqual([{ group: "Grace", role: "leader", joined_at: "t" }]);
-    expect(data?.rsvps.map((r) => r.event)).toEqual(["Picnic"]);
+    expect(data?.rsvps.map((r) => [r.event, r.date, r.status])).toEqual([
+      ["Picnic", "2026-11-08", "yes"],
+      ["Picnic", "2026-11-15", "maybe"],
+    ]);
     expect(data?.serving_turns).toEqual([{ team: "Set-up", date: "2026-11-01" }]);
     for (const other of ["Ben", "Bens", "2026-12-01", "Other church"]) {
       expect(text).not.toContain(other);
