@@ -96,8 +96,8 @@ begin
   insert into public.events (org_id, group_id, title, start_time, calendar_id, created_by)
     values (_org, _group, _tag || ' event', now() + interval '7 days', _calendar, _owner)
     returning id into _event;
-  insert into public.rsvps (org_id, event_id, user_id, status)
-    values (_org, _event, _owner, 'yes');
+  insert into public.rsvps (org_id, event_id, user_id, status, occurrence_date)
+    values (_org, _event, _owner, 'yes', current_date + 7);
   insert into public.calendar_subscription_tokens (org_id, user_id, token_hash, expires_at)
     values (_org, _owner, _tag || '-token-hash', now() + interval '30 days');
 
@@ -586,43 +586,49 @@ begin
     select is(delete_b_count, 0, 'DELETE targeting org B rows affects 0 rows');
 end $$;
 
--- ── Replies by date: rsvp_set() and event_reply_day() ───────────────────────
--- Both are SECURITY INVOKER, so another church's event is invisible to them:
--- a save on it raises like the insert policy, and it has no day.
+-- ── Replies by date: rsvp_set() ─────────────────────────────────────────────
+-- SECURITY INVOKER, so another church's event is invisible to it: a save or
+-- a clear on it changes none of that church's replies.
 do $$
 declare
   org_b uuid := current_setting('leak_suite.org_b')::uuid;
   owner_a uuid := current_setting('leak_suite.owner_a')::uuid;
   event_b uuid;
+  day_b date;
   before_b int;
   set_err text := null;
-  day_b date := '1900-01-01';
+  clear_err text := null;
 begin
-  select id into event_b from public.events where org_id = org_b limit 1;
+  select e.id, (e.start_time at time zone o.timezone)::date into event_b, day_b
+  from public.events e join public.organizations o on o.id = e.org_id
+  where e.org_id = org_b limit 1;
   select count(*) into before_b from public.rsvps where org_id = org_b;
 
   set local role authenticated;
   perform set_config('request.jwt.claims', json_build_object('sub', owner_a)::text, true);
   perform set_config('request.headers', '{}', true);
   begin
-    perform public.rsvp_set(event_b, current_date, 'yes');
+    perform public.rsvp_set(event_b, day_b, 'yes');
   exception when others then
     set_err := sqlstate;
   end;
-  day_b := public.event_reply_day(event_b, now());
+  begin
+    perform public.rsvp_set(event_b, day_b);
+  exception when others then
+    clear_err := sqlstate;
+  end;
   reset role;
 
   insert into tenancy_leak_results
     select is(set_err, '42501', 'rsvp_set on an org B event is rejected (42501)');
   insert into tenancy_leak_results
+    select is(clear_err, '42501', 'and so is a clear of it (42501)');
+  insert into tenancy_leak_results
     select is((select count(*)::int from public.rsvps where org_id = org_b), before_b,
       'and org B''s replies are unchanged');
   insert into tenancy_leak_results
-    select is(day_b, null, 'event_reply_day has no day for an org B event');
-  insert into tenancy_leak_results
-    select ok(not has_function_privilege('anon', 'public.rsvp_set(uuid, date, text)', 'execute')
-              and not has_function_privilege('anon', 'public.event_reply_day(uuid, timestamptz)', 'execute'),
-      'anon cannot run rsvp_set or event_reply_day');
+    select ok(not has_function_privilege('anon', 'public.rsvp_set(uuid, date, text)', 'execute'),
+      'anon cannot run rsvp_set');
 end $$;
 
 -- ── Anon write isolation: no public write path remains ──────────────────────

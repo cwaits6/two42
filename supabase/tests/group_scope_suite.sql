@@ -86,8 +86,8 @@ begin
     values (org, grp_a, cal_a, 'A event', now() + interval '3 days', owner) returning id into event_a;
   insert into public.events (org_id, group_id, calendar_id, title, start_time, created_by)
     values (org, grp_b, cal_b, 'B event', now() + interval '3 days', leader_b) returning id into event_b;
-  insert into public.rsvps (org_id, event_id, user_id, status) values
-    (org, event_a, owner, 'yes'), (org, event_b, leader_b, 'yes');
+  insert into public.rsvps (org_id, event_id, user_id, status, occurrence_date) values
+    (org, event_a, owner, 'yes', current_date + 3), (org, event_b, leader_b, 'yes', current_date + 3);
 
   insert into public.announcements (org_id, group_id, title, content, is_published, author_id) values
     (org, grp_a, 'A news', 'body', true, owner),
@@ -374,14 +374,14 @@ begin
   set local role authenticated;
   perform set_config('request.jwt.claims', json_build_object('sub', member_a)::text, true);
   begin
-    insert into public.rsvps (org_id, event_id, user_id, status)
-    values (org, current_setting('gs.event_b')::uuid, member_a, 'yes');
+    insert into public.rsvps (org_id, event_id, user_id, status, occurrence_date)
+    values (org, current_setting('gs.event_b')::uuid, member_a, 'yes', current_date + 3);
   exception when others then
     err_b := sqlstate;
   end;
   begin
-    insert into public.rsvps (org_id, event_id, user_id, status)
-    values (org, current_setting('gs.event_a')::uuid, member_a, 'yes');
+    insert into public.rsvps (org_id, event_id, user_id, status, occurrence_date)
+    values (org, current_setting('gs.event_a')::uuid, member_a, 'yes', current_date + 3);
   exception when others then
     err_a := sqlstate;
   end;

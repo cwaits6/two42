@@ -394,7 +394,7 @@ with e as (
 insert into fx select 'reply_single', id from e;
 insert into public.rsvps (org_id, event_id, user_id, status, occurrence_date) values
   (pg_temp.fx('org'), pg_temp.fx('reply_series'), pg_temp.fx('spouse_a'), 'yes', current_date + 8),
-  (pg_temp.fx('org'), pg_temp.fx('reply_single'), pg_temp.fx('spouse_a'), 'maybe', default),
+  (pg_temp.fx('org'), pg_temp.fx('reply_single'), pg_temp.fx('spouse_a'), 'maybe', current_date + 2),
   (pg_temp.fx('org'), pg_temp.fx('reply_series'), pg_temp.fx('spouse_b'), 'no', current_date + 8);
 
 -- ── The delete itself ───────────────────────────────────────────────────────
