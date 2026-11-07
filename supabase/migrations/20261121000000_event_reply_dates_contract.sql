@@ -28,7 +28,7 @@ with placed as (
          r.user_id,
          coalesce(e.series_id, r.event_id) as event_id,
          case when e.series_id is null then r.occurrence_date
-              else (e.series_occurrence_date at time zone o.timezone)::date
+              else (coalesce(e.series_occurrence_date, e.start_time) at time zone o.timezone)::date
          end as occurrence_date,
          e.series_id is null as on_series,
          e.is_cancelled,
