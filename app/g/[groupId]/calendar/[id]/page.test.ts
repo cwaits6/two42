@@ -31,7 +31,7 @@ const EVENT = {
 
 // Rows by id, and the dates edited on their own that a series lookup returns.
 let events: Record<string, object>;
-let edited: object[];
+let edited: Result;
 let replyFilter: string | null;
 
 function from(table: string) {
@@ -49,7 +49,7 @@ function from(table: string) {
       return Promise.resolve(rsvps);
     },
     in: () => Promise.resolve(profiles),
-    then: (resolve: (r: Result) => unknown) => resolve({ data: edited, error: null }),
+    then: (resolve: (r: Result) => unknown) => resolve(edited),
   };
   return chain;
 }
@@ -140,7 +140,7 @@ const PERSON = { id: "u2", first_name: "Ruth", last_name: null, preferred_name: 
 
 beforeEach(() => {
   events = { e1: EVENT, s1: SERIES, x1: EDITED };
-  edited = [];
+  edited = { data: [], error: null };
   replyFilter = null;
   rsvps = { data: [GOING], error: null };
   profiles = { data: [PERSON], error: null };
@@ -179,13 +179,20 @@ describe("EventDetailPage reply date", () => {
   });
 
   it("sends a series date that was edited on its own to the edited date's page", async () => {
-    edited = [{ id: "x1", series_occurrence_date: SUNDAY }];
+    edited = { data: [{ id: "x1", series_occurrence_date: SUNDAY }], error: null };
     await expect(render("s1", SUNDAY)).rejects.toThrow("redirect /g/g1/calendar/x1");
   });
 
   it("answers a series date nobody edited through the series and that date's day", async () => {
-    edited = [{ id: "x1", series_occurrence_date: SERIES_START.toISOString() }];
+    edited = { data: [{ id: "x1", series_occurrence_date: SERIES_START.toISOString() }], error: null };
     expect(await replyProps("s1", SUNDAY)).toMatchObject({ eventId: "s1", occurrenceDate: SUNDAY_DAY });
     expect(replyFilter).not.toContain("x1");
+  });
+
+  it("shows the replies as unavailable when the series' edited dates can't be read", async () => {
+    edited = { data: null, error: FAILED };
+    const types = (await render("s1", SUNDAY)).map((e) => e.type);
+    expect(types).toContain(ErrorState);
+    expect(types).not.toContain(RsvpControl);
   });
 });

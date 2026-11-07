@@ -127,12 +127,15 @@ export default async function EventDetailPage({
     }
   }
 
+  // A failed read must not pass for nobody having replied.
+  let repliesFailed = false;
+
   // A date edited on its own has its own row and page, which hold its times
   // and replies. Matched by series day in the church's zone, as rsvp_set()
   // finds the row it writes.
   if (isOccurrence) {
     const day = dayKey(displayStartTime, timeZone);
-    const { data: edited } = await supabase
+    const { data: edited, error: editedError } = await supabase
       .from("events")
       .select("id, series_occurrence_date")
       .eq("series_id", event.id)
@@ -142,6 +145,10 @@ export default async function EventDetailPage({
       (e) => e.series_occurrence_date && dayKey(e.series_occurrence_date, timeZone) === day,
     );
     if (match) redirect(groupPath(group.id, `/calendar/${match.id}`));
+    if (editedError) {
+      logError("Failed to load the series' edited dates", editedError, { ids: { event: id } });
+      repliesFailed = true;
+    }
   }
 
   // Replies and Who's coming are for the date shown. One read holds every
@@ -149,8 +156,6 @@ export default async function EventDetailPage({
   const key = replyKey({ ...event, start_time: displayStartTime }, timeZone);
   let userStatus: RsvpStatus | null = null;
   let attendees: Attendee[] = [];
-  // A failed read must not pass for nobody having replied.
-  let repliesFailed = false;
   if (event.is_rsvp_enabled) {
     const { data: rsvpsRaw, error: rsvpsError } = await supabase
       .from("rsvps")
@@ -168,7 +173,7 @@ export default async function EventDetailPage({
           .in("id", coming.map((r) => r.user_id))
       : { data: [], error: null };
     if (peopleError) logError("Failed to load who's coming", peopleError, { ids: { event: id } });
-    repliesFailed = !!(rsvpsError || peopleError);
+    if (rsvpsError || peopleError) repliesFailed = true;
     const byId = new Map((people ?? []).map((p) => [p.id, p]));
     attendees = coming.map((r) => {
       const p = byId.get(r.user_id);
