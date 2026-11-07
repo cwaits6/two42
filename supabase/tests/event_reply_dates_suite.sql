@@ -294,7 +294,7 @@ select is(pg_temp.wrote('me', pg_temp.set_sql('moved', '2031-11-16', 'yes')), '2
   'an edited date''s own id is refused: a reply names the series');
 select is(pg_temp.wrote('me', format('select public.rsvp_set(%L, null, %L)', pg_temp.id('single'), 'yes')), '22023',
   'a reply with no date is refused');
-select is(pg_temp.wrote('me', pg_temp.set_sql('single', '2031-07-04', 'perhaps')), '22023',
+select is(pg_temp.wrote('me', pg_temp.set_sql('single', '2031-07-04', 'perhaps')), '23514',
   'a status other than yes, no or maybe is refused');
 select is(pg_temp.wrote(null, pg_temp.set_sql('single', '2031-07-04', 'yes')), '42501',
   'a caller with no signed-in person is refused');

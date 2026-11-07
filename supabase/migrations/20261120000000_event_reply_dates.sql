@@ -16,7 +16,8 @@ comment on column public.rsvps.occurrence_date is
 -- date. A date ends at its end time, or two hours after it starts when it has
 -- none, as meetingEndMs() in lib/meetings.ts has it: the app takes replies
 -- until that moment. Dates step in the church's wall clock from the first one,
--- as addRecurrenceInterval() in lib/recurrence.ts does, so a clock change or
+-- as addRecurrenceInterval() in lib/recurrence.ts and its Deno copy
+-- supabase/functions/_shared/event-dates.ts do, so a clock change or
 -- a late-evening start never moves a day, and a month too short for the
 -- first date's day takes its last day.
 --
@@ -167,9 +168,6 @@ begin
   end if;
   if _occurrence_date is null then
     raise exception 'a reply needs a date' using errcode = '22023';
-  end if;
-  if _status is not null and _status not in ('yes', 'no', 'maybe') then
-    raise exception 'a reply is yes, no or maybe' using errcode = '22023';
   end if;
 
   select e.series_id, e.org_id into _series, _org from public.events e where e.id = _event_id;
