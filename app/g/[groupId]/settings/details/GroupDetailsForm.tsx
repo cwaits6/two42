@@ -16,9 +16,9 @@ import { failureMessage } from "@/lib/errorCopy";
 import { groupPath } from "@/lib/groups/active";
 import { createClient } from "@/lib/supabase/client";
 import { hasChanges } from "../../about/edit/aboutChanges";
-import { colorError, detailsChanges, videoCallUrlError, type DetailsFields } from "./detailsChanges";
+import { colorError, detailsChanges, type DetailsFields } from "./detailsChanges";
 
-type FieldErrors = { name?: string; color?: string; videoCallUrl?: string };
+type FieldErrors = { name?: string; color?: string };
 
 export function GroupDetailsForm({
   groupId,
@@ -26,16 +26,12 @@ export function GroupDetailsForm({
   initialName,
   initialDescription,
   initialColor,
-  initialVideoCallUrl,
-  initialVideoCallTime,
 }: {
   groupId: string;
   cancelHref: string;
   initialName: string;
   initialDescription: string | null;
   initialColor: string;
-  initialVideoCallUrl: string;
-  initialVideoCallTime: string;
 }) {
   const router = useRouter();
   const [savedGroup, setSavedGroup] = useState({
@@ -44,11 +40,7 @@ export function GroupDetailsForm({
   });
   const [name, setName] = useState(initialName);
   const [description, setDescription] = useState(initialDescription ?? "");
-  const [saved, setSaved] = useState<DetailsFields>({
-    color: initialColor,
-    videoCallUrl: initialVideoCallUrl,
-    videoCallTime: initialVideoCallTime,
-  });
+  const [saved, setSaved] = useState<DetailsFields>({ color: initialColor });
   const [draft, setDraft] = useState(saved);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [saving, setSaving] = useState(false);
@@ -69,16 +61,13 @@ export function GroupDetailsForm({
     const found: FieldErrors = {
       name: trimmedName ? undefined : "Enter a group name.",
       color: colorError(draft.color),
-      videoCallUrl: videoCallUrlError(draft.videoCallUrl),
     };
     setErrors(found);
     const firstInvalid = found.name
       ? "group-name"
       : found.color
         ? "group-color"
-        : found.videoCallUrl
-          ? "weekly-zoom-url"
-          : null;
+        : null;
     if (firstInvalid) {
       document.getElementById(firstInvalid)?.focus();
       return;
@@ -120,11 +109,7 @@ export function GroupDetailsForm({
       }
       // Only the baseline moves: the fields stay live during the request, so
       // anything typed since it was sent must stay on screen and stay unsaved.
-      setSaved({
-        ...draft,
-        videoCallUrl: draft.videoCallUrl.trim(),
-        videoCallTime: draft.videoCallTime.trim(),
-      });
+      setSaved(draft);
     }
 
     setSaving(false);
@@ -195,49 +180,6 @@ export function GroupDetailsForm({
             />
             <FieldError fieldId="group-color" message={errors.color} />
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xl font-bold text-foreground">Weekly calls</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="weekly-zoom-url" className="text-base">Video call link</Label>
-              <Input
-                id="weekly-zoom-url"
-                type="url"
-                placeholder="https://…"
-                value={draft.videoCallUrl}
-                onChange={(e) => setField("videoCallUrl", e.target.value)}
-                className="text-base"
-                {...invalidFieldProps("weekly-zoom-url", errors.videoCallUrl)}
-              />
-              <FieldError fieldId="weekly-zoom-url" message={errors.videoCallUrl} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="zoom-meeting-time" className="text-base">Video call time</Label>
-              <Input
-                id="zoom-meeting-time"
-                placeholder="Thursdays at 7pm"
-                value={draft.videoCallTime}
-                onChange={(e) => setField("videoCallTime", e.target.value)}
-                className="text-base"
-              />
-            </div>
-          </div>
-          <p className="text-base text-muted-foreground">
-            The prayer call is set up on the{" "}
-            <Link
-              href={groupPath(groupId, "/prayer")}
-              className="inline-flex min-h-11 items-center font-semibold text-brand-primary-text underline underline-offset-4 hover:text-foreground"
-            >
-              Prayer page
-            </Link>
-            .
-          </p>
         </CardContent>
       </Card>
 

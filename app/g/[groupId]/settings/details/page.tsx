@@ -60,8 +60,6 @@ export default async function GroupDetailsSettingsPage({
             initialName={details.name}
             initialDescription={details.description}
             initialColor={calendar?.color ?? GROUP_DEFAULT_COLOR}
-            initialVideoCallUrl={settings.weekly_zoom_url ?? ""}
-            initialVideoCallTime={settings.zoom_meeting_time ?? ""}
           />
           <CalendarSubscriptionCard
             groupId={group.id}

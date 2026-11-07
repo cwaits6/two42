@@ -31,9 +31,8 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: (m: string) => toas
 
 const { GroupDetailsForm } = await import("./GroupDetailsForm");
 
-const TIME = "#zoom-meeting-time";
-const URL_FIELD = "#weekly-zoom-url";
 const NAME = "#group-name";
+const COLOR = "#group-color";
 
 let root: Root;
 let container: HTMLElement;
@@ -76,8 +75,6 @@ beforeEach(async () => {
         initialName: "Grace",
         initialDescription: null,
         initialColor: "#B85C38",
-        initialVideoCallUrl: "",
-        initialVideoCallTime: "",
       }),
     ),
   );
@@ -106,30 +103,30 @@ describe("GroupDetailsForm", () => {
     expect(showsUnsaved()).toBe(false);
   });
 
-  it("sends only the video call to the shared Save when only it changed", async () => {
-    await type(TIME, "Thursdays");
+  it("sends only the color to the shared Save when only it changed", async () => {
+    await type(COLOR, "#2a211a");
     await pressSave();
     expect(groupUpdate).not.toHaveBeenCalled();
     expect(urls[0]).toBe("/g/11111111-1111-4111-8111-111111111111/about/save");
-    expect(bodies[0]).toEqual({ videoCall: { url: "", time: "Thursdays" } });
+    expect(bodies[0]).toEqual({ color: "#2a211a" });
   });
 
-  it("keeps a field typed during the request on screen, unsaved, and in the next Save", async () => {
-    await type(TIME, "Thursdays");
+  it("keeps a field changed during the request on screen, unsaved, and in the next Save", async () => {
+    await type(COLOR, "#2a211a");
     await pressSave();
-    await type(TIME, "Fridays");
+    await type(COLOR, "#1f3a5f");
     await answerOk();
 
-    expect(container.querySelector<HTMLInputElement>(TIME)?.value).toBe("Fridays");
+    expect(container.querySelector<HTMLInputElement>(COLOR)?.value).toBe("#1f3a5f");
     expect(showsUnsaved()).toBe(true);
 
     await pressSave();
-    expect(bodies[1]).toEqual({ videoCall: { url: "", time: "Fridays" } });
+    expect(bodies[1]).toEqual({ color: "#1f3a5f" });
   });
 
   it.each([
     [NAME, "  ", "Enter a group name."],
-    [URL_FIELD, "http://example.test", "Enter a link that starts with https://"],
+    [COLOR, "#7d7d7d", "Choose a darker or lighter color"],
   ])("refuses an invalid %s without saving", async (selector, value, message) => {
     await type(selector, value);
     await pressSave();
@@ -139,7 +136,7 @@ describe("GroupDetailsForm", () => {
   });
 
   it("keeps the changes unsaved when the Save fails", async () => {
-    await type(TIME, "Thursdays");
+    await type(COLOR, "#2a211a");
     await pressSave();
     await act(async () => answers.shift()!({ ok: false, status: 500 }));
     expect(toastError).toHaveBeenCalled();
