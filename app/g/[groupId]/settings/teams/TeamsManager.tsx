@@ -92,8 +92,9 @@ export function TeamsManager({ groupId, groupName, children }: TeamsManagerProps
 
   const supabase = useMemo(() => createClient(), []);
 
+  // Only the first load shows the loading state: a reload that swapped the
+  // page out would unmount the serving settings passed in as children.
   const loadTeams = useCallback(async () => {
-    setLoading(true);
     const { data, error } = await supabase
       .from("teams")
       .select("*")
