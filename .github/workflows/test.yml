@@ -185,14 +185,26 @@ jobs:
           ls -l ~/.cache/playwright-apt
 
       # A hit installs the cached .deb files, so the apt mirror is reached only
-      # when the dry run still finds a package missing.
+      # when a package Chromium needs is still absent.
       - name: Install Chromium system dependencies
         if: steps.changes.outputs.run == 'true' && steps.browsers.outputs.cache-hit == 'true'
         run: |
           shopt -s nullglob
           debs=(~/.cache/playwright-apt/*.deb)
-          if { [ ${#debs[@]} -eq 0 ] || sudo dpkg --install --refuse-downgrade --skip-same-version "${debs[@]}"; } \
-            && npx playwright install-deps --dry-run chromium; then
+          covered() {
+            [ ${#debs[@]} -eq 0 ] || sudo dpkg --install --refuse-downgrade --skip-same-version "${debs[@]}" || return 1
+            local report status=0
+            report=$(npx playwright install-deps --dry-run chromium) || status=$?
+            echo "$report"
+            [ "$status" -eq 0 ] && return 0
+            grep -q '^Missing system dependencies' <<<"$report" || return 1
+            # The dry run also lists an installed package that has a newer
+            # candidate; Chromium needs it present, not upgraded.
+            for pkg in $(sed -n 's/^  //p' <<<"$report"); do
+              [ "$(dpkg-query -W -f='${db:Status-Status}' "$pkg" 2>/dev/null)" = installed ] || return 1
+            done
+          }
+          if covered; then
             exit 0
           fi
           echo "::warning::The cached packages did not cover Chromium's dependencies; installing from the apt mirror"
