@@ -68,7 +68,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
   if (error) {
     logError("family-members PATCH error", error, { route: "/api/admin/family-members/[id]" });
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Couldn't save their details. Try again." }, { status: 500 });
   }
 
   return NextResponse.json({ data });
@@ -104,7 +104,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
   if (error) {
     logError("family-members DELETE error", error, { route: "/api/admin/family-members/[id]" });
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Couldn't remove them from the household. Try again." }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });

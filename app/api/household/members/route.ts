@@ -40,7 +40,10 @@ export async function GET() {
     .eq("family_id", ctx.profile.family_id)
     .order("relationship");
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    logError("household/members GET error", error, { route: "/api/household/members" });
+    return NextResponse.json({ error: "Couldn't load your household. Try again." }, { status: 500 });
+  }
   return NextResponse.json({ data: data ?? [] });
 }
 
@@ -97,7 +100,7 @@ export async function POST(request: Request) {
 
   if (error) {
     logError("household/members POST error", error, { route: "/api/household/members" });
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Couldn't add them to your household. Try again." }, { status: 500 });
   }
 
   return NextResponse.json({ data }, { status: 201 });

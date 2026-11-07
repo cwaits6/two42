@@ -119,7 +119,7 @@ export async function POST(request: Request) {
 
   if (error) {
     logError("link-member error", error, { route: "/api/household/link-member" });
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Couldn't add them to your household. Try again." }, { status: 500 });
   }
 
   if (!updated || updated.length === 0) {

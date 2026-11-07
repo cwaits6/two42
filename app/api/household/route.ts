@@ -43,7 +43,10 @@ export async function GET() {
     .eq("id", ctx.profile.family_id)
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    logError("household GET error", error, { route: "/api/household" });
+    return NextResponse.json({ error: "Couldn't load your household. Try again." }, { status: 500 });
+  }
   return NextResponse.json({ data: family });
 }
 
@@ -87,7 +90,7 @@ export async function PATCH(request: Request) {
   }
   if (error) {
     logError("household PATCH error", error, { route: "/api/household" });
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Couldn't save the household. Try again." }, { status: 500 });
   }
 
   return NextResponse.json({ data });
