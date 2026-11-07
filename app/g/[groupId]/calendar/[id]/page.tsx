@@ -107,7 +107,6 @@ export default async function EventDetailPage({
   // start/end times to that occurrence's date while preserving the event duration.
   let displayStartTime = event.start_time;
   let displayEndTime = event.end_time;
-  let isOccurrence = false;
 
   if (occurrence && event.recurrence_frequency && !event.series_id) {
     try {
@@ -115,7 +114,6 @@ export default async function EventDetailPage({
       const parsedOccurrence = new Date(occurrenceISO);
       if (!isNaN(parsedOccurrence.getTime())) {
         displayStartTime = occurrenceISO;
-        isOccurrence = true;
         if (event.end_time) {
           const duration =
             new Date(event.end_time).getTime() - new Date(event.start_time).getTime();
@@ -132,8 +130,9 @@ export default async function EventDetailPage({
 
   // A date edited on its own has its own row and page, which hold its times
   // and replies. Matched by series day in the church's zone, and in
-  // rsvp_set()'s order, so it opens the row a reply is written to.
-  if (isOccurrence) {
+  // rsvp_set()'s order, so it opens the row a reply is written to. A series
+  // link with no date shows the first date, which may be edited too.
+  if (event.recurrence_frequency && !event.series_id) {
     const day = dayKey(displayStartTime, timeZone);
     const { data: edited, error: editedError } = await supabase
       .from("events")

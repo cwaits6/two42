@@ -190,6 +190,11 @@ describe("EventDetailPage reply date", () => {
     expect(editedOrder).toEqual(["created_at", "id"]);
   });
 
+  it("sends a series link with no date to the first date's edited page", async () => {
+    edited = { data: [{ id: "x1", series_occurrence_date: SERIES_START.toISOString() }], error: null };
+    await expect(render("s1")).rejects.toThrow("redirect /g/g1/calendar/x1");
+  });
+
   // 20:30 in New York is the next day in UTC, so only a match by the church's
   // day sends this date to its edited page and leaves the next day's alone.
   const LATE_EVENING = "2030-01-06T01:30:00.000Z";
