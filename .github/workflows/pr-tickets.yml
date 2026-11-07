@@ -1,0 +1,37 @@
+name: PR tickets
+
+# A squash merge closes a ticket only through a closing line in the PR body,
+# so a body that says "Refs" ships the work and leaves the ticket open.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions: {}
+
+jobs:
+  closing-lines:
+    name: PR closes its tickets
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    # Dependency and release PRs carry no ticket.
+    if: >-
+      github.event.pull_request.user.type != 'Bot' &&
+      !startsWith(github.event.pull_request.head.ref, 'release-please--') &&
+      !startsWith(github.event.pull_request.head.ref, 'renovate/')
+    steps:
+      - name: Check the closing lines
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          body=$(printf '%s\n' "$BODY" | tr -d '\r')
+          if printf '%s\n' "$body" | grep -Eiq '^[[:space:]]*refs[[:space:]]+(t42-[0-9]+|#[0-9]+)'; then
+            echo "::error::The body has a 'Refs' line. Use 'Closes T42-N' for each ticket this PR finishes, or 'Part of T42-N' for one it only advances."
+            exit 1
+          fi
+          if ! printf '%s\n' "$body" | grep -Eiq '^[[:space:]]*((closes|fixes|resolves)[[:space:]]+t42-[0-9]+|part of[[:space:]]+t42-[0-9]+|no ticket)'; then
+            echo "::error::The body names no ticket. Start it with 'Closes T42-N' (or 'Part of T42-N'), one line per ticket, or 'No ticket' for a change made without one."
+            exit 1
+          fi
+          echo "Closing lines:"
+          printf '%s\n' "$body" | grep -Ei '^[[:space:]]*((closes|fixes|resolves|part of)[[:space:]]+t42-[0-9]+|no ticket)'
