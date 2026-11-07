@@ -131,7 +131,17 @@ select is(
 -- ── Direct reads of the table ───────────────────────────────────────────────
 -- Column privileges are what close these: a row policy cannot hide one
 -- column, and filtering or ordering on it reads it as surely as selecting it.
-select todo_start('needs SELECT on profiles.email taken from client roles');
+-- A column added to profiles is unreadable to client roles until the grant
+-- names it, and the first assertion here fails until it does.
+select is(
+  (select coalesce(array_agg(a.attname::text order by a.attname), '{}')
+     from pg_attribute a
+    where a.attrelid = 'public.profiles'::regclass and a.attnum > 0 and not a.attisdropped
+      and not has_column_privilege(r, 'public.profiles', a.attname, 'select')),
+  case when r = 'service_role' then '{}'::text[] else array['email'] end,
+  r || ' reads every column of profiles' || case when r = 'service_role' then '' else ' but email' end)
+from unnest(array['anon', 'authenticated', 'service_role']) r;
+
 select is(
   pg_temp.val(reader.email, format(route.sql, pg_temp.uid('chloe.mockingham@example.test'))),
   '42501',
@@ -144,10 +154,40 @@ from (values
 cross join (values
   ('select the hidden email', 'select count(email) from public.profiles where id = %L'),
   ('select all columns', 'select count(*) from (select * from public.profiles where id = %L) p'),
+  ('a whole-row reference', 'select count(to_jsonb(p)) from public.profiles p where id = %L'),
   ('filter on the hidden email', $q$select count(*) from public.profiles where email = 'chloe.mockingham@example.test' -- %s$q$),
-  ('order by email', 'select count(*) from (select id from public.profiles order by email) p -- %s')
+  ('order by email', 'select count(*) from (select id from public.profiles order by email) p -- %s'),
+  ('an embedded read from another table', $q$
+    select count(x.email) from public.group_members gm
+      cross join lateral (select p.email from public.profiles p where p.id = gm.profile_id) x
+     where gm.profile_id = %L$q$),
+  ('a filter on the embedded email', $q$
+    select count(*) from public.group_members gm
+     where exists (select 1 from public.profiles p
+                    where p.id = gm.profile_id and p.email = 'chloe.mockingham@example.test') -- %s$q$)
 ) route(what, sql);
-select todo_end();
+
+-- The household primary passes the update policy on Chloe's row, so these would
+-- change a row if the column were readable; the others prove the refusal
+-- does not depend on the policy.
+select is(
+  pg_temp.attempt(reader.email, format(route.sql, pg_temp.uid('chloe.mockingham@example.test'))),
+  '42501',
+  reader.who || ' is refused: ' || route.what)
+from (values
+  ('isaac.seedly@example.test', 'a member'),
+  ('zoe.dummyfield@example.test', 'a group leader'),
+  ('henry.mockingham@example.test', 'the household primary')
+) reader(email, who)
+cross join (values
+  ('an update returning the email', 'update public.profiles set hide_email = true where id = %L returning email'),
+  ('an update returning all columns', 'update public.profiles set hide_email = true where id = %L returning *'),
+  ('an update filtered on the email', $q$update public.profiles set hide_email = true where email = 'chloe.mockingham@example.test' -- %s$q$)
+) route(what, sql);
+select is(
+  pg_temp.attempt('henry.mockingham@example.test', format(
+    'update public.profiles set hide_email = true where id = %L returning id', pg_temp.uid('chloe.mockingham@example.test'))),
+  'rows:1', 'non-vacuity: the household primary updates Chloe''s row when the email is not read');
 
 -- ── The directory view ──────────────────────────────────────────────────────
 select is(

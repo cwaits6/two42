@@ -506,21 +506,21 @@ select is(
 -- A foreign key names the constraint it trips, so without a guard the error
 -- from changing a person's id says whether that person has written a request.
 select is(
-  pg_temp.attempt_text('admin@local.dev', $q$update public.profiles set id = '11111111-1111-1111-1111-111111111111' where email = 'isaac.seedly@example.test'$q$),
-  pg_temp.attempt_text('admin@local.dev', $q$update public.profiles set id = '11111111-1111-1111-1111-111111111111' where email = 'ruth.fixtureton@example.test'$q$),
+  pg_temp.attempt_text('admin@local.dev', format($q$update public.profiles set id = '11111111-1111-1111-1111-111111111111' where id = %L$q$, pg_temp.uid('isaac.seedly@example.test'))),
+  pg_temp.attempt_text('admin@local.dev', format($q$update public.profiles set id = '11111111-1111-1111-1111-111111111111' where id = %L$q$, pg_temp.uid('ruth.fixtureton@example.test'))),
   'changing a person''s id fails identically whether or not they wrote a request');
 select unalike(
-  pg_temp.attempt_text('admin@local.dev', $q$update public.profiles set id = '11111111-1111-1111-1111-111111111111' where email = 'isaac.seedly@example.test'$q$),
+  pg_temp.attempt_text('admin@local.dev', format($q$update public.profiles set id = '11111111-1111-1111-1111-111111111111' where id = %L$q$, pg_temp.uid('isaac.seedly@example.test'))),
   '%prayer_requests%', 'the refusal does not mention prayer requests');
 select is(
-  pg_temp.attempt('admin@local.dev', $q$update public.profiles set id = id where email = 'isaac.seedly@example.test'$q$),
+  pg_temp.attempt('admin@local.dev', format($q$update public.profiles set id = id where id = %L$q$, pg_temp.uid('isaac.seedly@example.test'))),
   'rows:1', 'an edit that leaves the id unchanged goes through');
 select is(
-  pg_temp.attempt_text('admin@local.dev', format($q$update public.profiles set org_id = '%s' where email = 'isaac.seedly@example.test'$q$, current_setting('pa.other_org'))),
-  pg_temp.attempt_text('admin@local.dev', format($q$update public.profiles set org_id = '%s' where email = 'leo.loremsworth@example.test'$q$, current_setting('pa.other_org'))),
+  pg_temp.attempt_text('admin@local.dev', format($q$update public.profiles set org_id = %L where id = %L$q$, current_setting('pa.other_org'), pg_temp.uid('isaac.seedly@example.test'))),
+  pg_temp.attempt_text('admin@local.dev', format($q$update public.profiles set org_id = %L where id = %L$q$, current_setting('pa.other_org'), pg_temp.uid('leo.loremsworth@example.test'))),
   'moving a person to another church fails on row security, not on the foreign key');
 select is(
-  pg_temp.attempt('admin@local.dev', $q$delete from public.profiles where email = 'isaac.seedly@example.test'$q$),
+  pg_temp.attempt('admin@local.dev', format($q$delete from public.profiles where id = %L$q$, pg_temp.uid('isaac.seedly@example.test'))),
   'rows:0', 'a church admin cannot delete a person, so the cascade is not an oracle');
 select is(
   (select count(*)::int from public.prayer_requests where author_id = pg_temp.uid('isaac.seedly@example.test')) > 0,
