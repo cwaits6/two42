@@ -174,6 +174,10 @@ describe("redactSpanName", () => {
     expect(redactSpanName("middleware GET /join/SECRETTOKEN-1234?who=someone")).toBe("middleware GET [path]");
   });
 
+  it("replaces a path that mixes a pattern segment with a real one", () => {
+    expect(redactSpanName("GET /g/[groupId]/invite/SECRETTOKEN-1234")).toBe("GET [path]");
+  });
+
   it("keeps a page that has no dynamic segment", () => {
     expect(redactSpanName("GET /directory")).toBe("GET /directory");
   });
