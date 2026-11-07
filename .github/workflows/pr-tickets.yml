@@ -14,11 +14,9 @@ jobs:
     name: PR closes its tickets
     runs-on: ubuntu-latest
     timeout-minutes: 2
-    # Dependency and release PRs carry no ticket.
-    if: >-
-      github.event.pull_request.user.type != 'Bot' &&
-      !startsWith(github.event.pull_request.head.ref, 'release-please--') &&
-      !startsWith(github.event.pull_request.head.ref, 'renovate/')
+    # Dependency and release PRs carry no ticket. Their bot accounts are the
+    # exemption, never a branch name a person could choose.
+    if: github.event.pull_request.user.type != 'Bot'
     steps:
       - name: Check the closing lines
         env:
@@ -29,7 +27,7 @@ jobs:
             echo "::error::The body has a 'Refs' line. Use 'Closes T42-N' for each ticket this PR finishes, or 'Part of T42-N' for one it only advances."
             exit 1
           fi
-          if ! printf '%s\n' "$body" | grep -Eiq '^[[:space:]]*((closes|fixes|resolves)[[:space:]]+t42-[0-9]+|part of[[:space:]]+t42-[0-9]+|no ticket)'; then
+          if ! printf '%s\n' "$body" | grep -Eiq '^[[:space:]]*((closes|fixes|resolves)[[:space:]]+t42-[0-9]+|part of[[:space:]]+t42-[0-9]+)([^[:alnum:]]|$)|^[[:space:]]*no ticket([^[:alnum:]]|$)'; then
             echo "::error::The body names no ticket. Start it with 'Closes T42-N' (or 'Part of T42-N'), one line per ticket, or 'No ticket' for a change made without one."
             exit 1
           fi
