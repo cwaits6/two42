@@ -8,45 +8,38 @@ import { logError } from "@/lib/log";
 export const RSVP_SAVE_FAILED = "Couldn't save your reply. Try again.";
 
 interface UseRsvpArgs {
+  /** The series for any of its dates. */
   eventId: string;
+  /** The date's calendar day in the church's zone, from `replyKey()`. */
+  occurrenceDate: string;
   userId: string;
   initialStatus: RsvpStatus | null;
 }
 
 /**
- * Holds one member's reply to one event. Choosing the current reply again
- * clears it. The picked reply shows at once; a failed write puts the
- * previous reply back and sets `error`.
+ * Holds one member's reply to one date of an event. Choosing the current
+ * reply again clears it. The picked reply shows at once; a failed write puts
+ * the previous reply back and sets `error`.
  */
-export function useRsvp({ eventId, userId, initialStatus }: UseRsvpArgs) {
+export function useRsvp({ eventId, occurrenceDate, userId, initialStatus }: UseRsvpArgs) {
   const [status, setStatus] = useState<RsvpStatus | null>(initialStatus);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const supabase = createClient();
 
   const writeReply = async (next: RsvpStatus | null): Promise<boolean> => {
-    // A write the row policy refuses matches zero rows and reports no error,
-    // so the returned rows are the proof that the reply saved.
-    const { data, error } =
-      next === null
-        ? await supabase
-            .from("rsvps")
-            .delete()
-            .eq("event_id", eventId)
-            .eq("user_id", userId)
-            .select("user_id")
-        : await supabase
-            .from("rsvps")
-            .upsert(
-              { event_id: eventId, user_id: userId, status: next },
-              { onConflict: "event_id,user_id" },
-            )
-            .select("user_id");
+    // rsvp_set raises when the row policy refuses a save, and a clear names
+    // only the caller's own rows, so no error is the proof that it saved.
+    const { error } = await supabase.rpc("rsvp_set", {
+      _event_id: eventId,
+      _occurrence_date: occurrenceDate,
+      ...(next === null ? {} : { _status: next }),
+    });
     if (error) {
       logError("RSVP write failed", error, { ids: { event: eventId, member: userId } });
       return false;
     }
-    return (data?.length ?? 0) > 0;
+    return true;
   };
 
   const choose = async (picked: RsvpStatus) => {

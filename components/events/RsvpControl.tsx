@@ -12,7 +12,9 @@ export const RSVP_OPTIONS: { value: RsvpStatus; label: string }[] = [
 ];
 
 interface RsvpControlProps {
+  /** The series for any of its dates; see `replyKey()`. */
   eventId: string;
+  occurrenceDate: string;
   userId: string;
   currentStatus: RsvpStatus | null;
   /** `primary` sits on a Clay fill (the event card); `default` on a light card; `quiet` on a light card that keeps its Clay for something else. */
@@ -37,10 +39,11 @@ const TONES = {
   },
 } as const;
 
-/** The one reply control for an event. The chosen reply carries a check and aria-pressed, never color alone. */
-export function RsvpControl({ eventId, userId, currentStatus, tone = "default" }: RsvpControlProps) {
+/** The one reply control for a date of an event. The chosen reply carries a check and aria-pressed, never color alone. */
+export function RsvpControl({ eventId, occurrenceDate, userId, currentStatus, tone = "default" }: RsvpControlProps) {
   const { status, saving, error, choose } = useRsvp({
     eventId,
+    occurrenceDate,
     userId,
     initialStatus: currentStatus,
   });

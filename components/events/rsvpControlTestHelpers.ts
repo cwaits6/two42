@@ -1,49 +1,33 @@
-// Mounts an RSVP control in jsdom and stands in for the Supabase client its
-// write goes through. Used by RsvpControl.test.ts; not production code.
+// Mounts RSVP controls in jsdom and stands in for the Supabase client their
+// writes go through. Used by RsvpControl.test.ts; not production code.
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 export type WriteResult = {
-  data: { user_id: string }[] | null;
+  data: string | null;
   error: { message: string } | null;
 };
 
-export type RsvpWrite = { kind: "delete" } | { kind: "upsert"; row: unknown };
+export type RsvpWrite = { fn: string; args: Record<string, unknown> };
 
 export const writeFailed = (): WriteResult => ({
   data: null,
   error: { message: "permission denied for table rsvps" },
 });
-export const writeSaved = (): WriteResult => ({ data: [{ user_id: "user-1" }], error: null });
-export const writeTouchedNoRow = (): WriteResult => ({ data: [], error: null });
+export const writeSaved = (): WriteResult => ({ data: null, error: null });
 
-/**
- * Like supabase-js, the stub returns rows only when the chain ends in
- * `.select()`; a chain awaited directly resolves `data: null`, so a control
- * that drops `.select()` fails the success tests here as it would in use.
- */
+/** Records each `rpc()` call and answers it with `result()`. */
 export function stubRsvpClient(result: () => WriteResult) {
   const writes: RsvpWrite[] = [];
-  const chain = {
-    delete() {
-      writes.push({ kind: "delete" });
-      return chain;
-    },
-    upsert(row: unknown) {
-      writes.push({ kind: "upsert", row });
-      return chain;
-    },
-    eq() {
-      return chain;
-    },
-    select: async () => result(),
-    then<T>(onFulfilled: (value: WriteResult) => T) {
-      return Promise.resolve({ data: null, error: result().error }).then(onFulfilled);
+  const client = {
+    rpc: async (fn: string, args: Record<string, unknown>) => {
+      writes.push({ fn, args });
+      return result();
     },
   };
-  return { client: { from: () => chain }, writes };
+  return { client, writes };
 }
 
 export type RsvpClientStub = ReturnType<typeof stubRsvpClient>;
