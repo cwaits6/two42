@@ -126,22 +126,55 @@ browser's console, which stays on the person's own device.
   `logWarn` and `logInfo`, and any `route` written in the call, to be a
   fixed string.
 
+## Tracing
+
+Optional, and off unless a host sets `OTEL_EXPORTER_OTLP_ENDPOINT`. Off,
+`instrumentation.ts` returns before the tracing code is imported, so a
+request records nothing and pays nothing. On, it uses the standard
+OpenTelemetry SDK (`instrumentation.node.ts`) and names no vendor.
+
+Every span passes through `lib/tracing/redactSpans.ts` before it is
+exported, the framework's own spans included. It keeps an attribute only
+when its key is on an allow-list, so a key a new instrumentation adds is
+dropped until someone adds it there.
+
+A span holds:
+
+| Kept | Example |
+|---|---|
+| Its name, with any address cut to its origin and a database path | `GET /join/[token]`, `fetch GET http://127.0.0.1:54321/rest/v1/profiles` |
+| Start, end and duration | |
+| Trace, span and parent ids | |
+| Status code, without its message | `2` (error) |
+| The route pattern, never the real path | `next.route`, `http.route`, `next.page`: `/join/[token]` |
+| Method and status | `http.method`, `http.status_code`, and the newer `http.request.method`, `http.response.status_code` |
+| The server it called, on a span for an outgoing request only | `server.address`, `server.port`, `net.peer.name`, `net.peer.port` |
+| The protocol | `url.scheme`, `network.protocol.version` |
+| The database operation | `url.path` on an outgoing request when it is a PostgREST table or function (`/rest/v1/profiles`, `/rest/v1/rpc/<name>`), and from a database driver `db.system`, `db.operation`, `db.collection.name`, `db.sql.table` and their newer names |
+| The error's class | `error.type`, and on an exception event `exception.type` only |
+| The framework's labels | `next.span_type`, `next.span_category`, `next.segment`, `next.rsc`, `next.bubble`, `next.fetch.*`, `next.clientComponentLoadCount` |
+
+Dropped: the real path and query string (`http.target`, `http.url`,
+`url.full`, `url.query`, and any other `url.path`), the client's address
+and port, the user agent, request and response bodies and headers, a
+database statement, a status message, and an exception's message and
+stack. The resource, sent once per
+batch, describes the server process: host name, process id and command,
+service name and version.
+
 ## What this does not cover
 
-- **The framework's own output for an exception nothing caught.** It prints
-  the error's message and stack beside the digest, next to the helper's line
-  for the same failure. Code that can fail on people's data should catch the
-  failure and log it through the helper.
+- **The framework's own output for an exception nothing caught.** After
+  `onRequestError` returns, the framework's production server writes the
+  error itself, through its own logger, as `⨯ Error: <message>`, the stack,
+  and `{ digest: '<digest>' }`, beside the helper's line for the same
+  failure. The digest in both lines is the reference on the error page. The
+  only switch for that line is the `quiet` option of a custom server built
+  with `next()`, which `next start` and a managed host's runtime don't
+  offer. Stopping it otherwise means replacing `console.error` or rewriting
+  the error object inside `onRequestError` so the framework prints the
+  altered copy, and either depends on the framework's internals rather than
+  an interface it documents. So the line stays: code that can fail on
+  people's data should catch the failure and log it through the helper, so
+  the thrown error's message is fixed text.
 - **Request logs kept by the hosts.**
-- **Optional tracing** (`instrumentation.ts`, `instrumentation.node.ts`). It
-  is off unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set and names no vendor.
-  When on, a span for an incoming request records the real path, including
-  an invite token in `/join/<token>`, and its query string. A span for an
-  outgoing request records the full address with its query, which for a
-  database read holds the filter values, such as an email being looked up.
-  Request and response bodies are not recorded. Headers are not recorded,
-  except that a span for an incoming request holds the browser's user agent
-  and the client's address. A span that failed records the exception's
-  message and stack, which can quote row values. This is read from the
-  installed packages, not from a running collector. Point it only at a
-  collector you run or trust with that.
