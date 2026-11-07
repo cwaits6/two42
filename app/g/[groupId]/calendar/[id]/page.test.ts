@@ -33,6 +33,7 @@ const EVENT = {
 let events: Record<string, object>;
 let edited: Result;
 let replyFilter: string | null;
+let editedOrder: string[];
 
 function from(table: string) {
   let id: string | null = null;
@@ -40,6 +41,10 @@ function from(table: string) {
     select: () => chain,
     eq: (column: string, value: string) => {
       if (column === "id") id = value;
+      return chain;
+    },
+    order: (column: string) => {
+      editedOrder.push(column);
       return chain;
     },
     maybeSingle: () =>
@@ -142,6 +147,7 @@ beforeEach(() => {
   events = { e1: EVENT, s1: SERIES, x1: EDITED };
   edited = { data: [], error: null };
   replyFilter = null;
+  editedOrder = [];
   rsvps = { data: [GOING], error: null };
   profiles = { data: [PERSON], error: null };
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -181,6 +187,21 @@ describe("EventDetailPage reply date", () => {
   it("sends a series date that was edited on its own to the edited date's page", async () => {
     edited = { data: [{ id: "x1", series_occurrence_date: SUNDAY }], error: null };
     await expect(render("s1", SUNDAY)).rejects.toThrow("redirect /g/g1/calendar/x1");
+    expect(editedOrder).toEqual(["created_at", "id"]);
+  });
+
+  // 20:30 in New York is the next day in UTC, so only a match by the church's
+  // day sends this date to its edited page and leaves the next day's alone.
+  const LATE_EVENING = "2030-01-06T01:30:00.000Z";
+
+  it("matches an edited late-evening date by its day in the church's zone", async () => {
+    edited = { data: [{ id: "x1", series_occurrence_date: LATE_EVENING }], error: null };
+    await expect(render("s1", LATE_EVENING)).rejects.toThrow("redirect /g/g1/calendar/x1");
+  });
+
+  it("leaves a late-evening date alone when the edited row is on the next day in the church's zone", async () => {
+    edited = { data: [{ id: "x1", series_occurrence_date: "2030-01-06T15:00:00.000Z" }], error: null };
+    await expect(render("s1", LATE_EVENING)).resolves.toBeDefined();
   });
 
   it("answers a series date nobody edited through the series and that date's day", async () => {
@@ -193,6 +214,14 @@ describe("EventDetailPage reply date", () => {
     edited = { data: null, error: FAILED };
     const types = (await render("s1", SUNDAY)).map((e) => e.type);
     expect(types).toContain(ErrorState);
+    expect(types).not.toContain(RsvpControl);
+  });
+
+  it("shows no replies error when that read fails on a series that takes no replies", async () => {
+    events.s1 = { ...SERIES, is_rsvp_enabled: false };
+    edited = { data: null, error: FAILED };
+    const types = (await render("s1", SUNDAY)).map((e) => e.type);
+    expect(types).not.toContain(ErrorState);
     expect(types).not.toContain(RsvpControl);
   });
 });

@@ -131,8 +131,8 @@ export default async function EventDetailPage({
   let repliesFailed = false;
 
   // A date edited on its own has its own row and page, which hold its times
-  // and replies. Matched by series day in the church's zone, as rsvp_set()
-  // finds the row it writes.
+  // and replies. Matched by series day in the church's zone, and in
+  // rsvp_set()'s order, so it opens the row a reply is written to.
   if (isOccurrence) {
     const day = dayKey(displayStartTime, timeZone);
     const { data: edited, error: editedError } = await supabase
@@ -140,14 +140,16 @@ export default async function EventDetailPage({
       .select("id, series_occurrence_date")
       .eq("series_id", event.id)
       .eq("group_id", group.id)
-      .eq("is_cancelled", false);
+      .eq("is_cancelled", false)
+      .order("created_at")
+      .order("id");
     const match = (edited ?? []).find(
       (e) => e.series_occurrence_date && dayKey(e.series_occurrence_date, timeZone) === day,
     );
     if (match) redirect(groupPath(group.id, `/calendar/${match.id}`));
     if (editedError) {
       logError("Failed to load the series' edited dates", editedError, { ids: { event: id } });
-      repliesFailed = true;
+      repliesFailed = event.is_rsvp_enabled;
     }
   }
 
