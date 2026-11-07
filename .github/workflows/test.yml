@@ -190,15 +190,8 @@ jobs:
         if: steps.changes.outputs.run == 'true' && steps.browsers.outputs.cache-hit == 'true'
         run: |
           shopt -s nullglob
-          missing=()
-          for deb in ~/.cache/playwright-apt/*.deb; do
-            package=$(dpkg-deb --field "$deb" Package)
-            if [ "$(dpkg-query --show --showformat='${db:Status-Status}' "$package" 2>/dev/null)" != installed ]; then
-              missing+=("$deb")
-            fi
-          done
-          echo "Installing ${#missing[@]} cached package(s)"
-          if { [ ${#missing[@]} -eq 0 ] || sudo dpkg --install "${missing[@]}"; } \
+          debs=(~/.cache/playwright-apt/*.deb)
+          if { [ ${#debs[@]} -eq 0 ] || sudo dpkg --install --refuse-downgrade --skip-same-version "${debs[@]}"; } \
             && npx playwright install-deps --dry-run chromium; then
             exit 0
           fi
