@@ -92,6 +92,7 @@ begin
     from public.events x
     where x.series_id = _e.id
       and (x.series_occurrence_date at time zone _tz)::date = _day
+    order by x.is_cancelled, x.created_at, x.id
     limit 1;
 
     if found then
@@ -179,11 +180,14 @@ begin
   end if;
   select o.timezone into _tz from public.organizations o where o.id = _org;
 
+  -- Nothing stops two edited rows standing on one day; the event page picks
+  -- the same one by this order, so a saved reply is the one it reads.
   select x.id into _target
   from public.events x
   where x.series_id = _event_id
     and not x.is_cancelled
     and (x.series_occurrence_date at time zone _tz)::date = _occurrence_date
+  order by x.created_at, x.id
   limit 1;
   _target := coalesce(_target, _event_id);
 

@@ -290,6 +290,26 @@ select is(pg_temp.dates_of('me', 'late'), '',
 select is(pg_temp.wrote('me', pg_temp.set_sql('late', '2031-11-16')), '1', 'clearing the edited date succeeds');
 select is(pg_temp.dates_of('me', 'moved'), '', 'and removes its row');
 
+-- A second edited row for the same day, made first: the earlier row is the
+-- one rsvp_set() writes and the event page opens.
+do $$
+declare
+  dup uuid;
+begin
+  insert into public.events (org_id, group_id, title, start_time, series_id, series_occurrence_date, created_at)
+    select org_id, group_id, 'Late Sundays, moved again', '2031-11-15 23:30-06', series_id, series_occurrence_date,
+           created_at - interval '1 hour'
+    from public.events where id = pg_temp.id('moved')
+    returning id into dup;
+  perform set_config('rd.dup', dup::text, true);
+end $$;
+select is(pg_temp.wrote('me', pg_temp.set_sql('late', '2031-11-16', 'yes')), '1',
+  'rsvp_set saves a reply to a day edited twice');
+select is(pg_temp.dates_of('me', 'dup') || '|' || pg_temp.dates_of('me', 'moved'), '2031-11-16:yes|',
+  'on the edited row made first');
+delete from public.rsvps where event_id = pg_temp.id('dup');
+delete from public.events where id = pg_temp.id('dup');
+
 select is(pg_temp.wrote('me', pg_temp.set_sql('moved', '2031-11-16', 'yes')), '22023',
   'an edited date''s own id is refused: a reply names the series');
 select is(pg_temp.wrote('me', format('select public.rsvp_set(%L, null, %L)', pg_temp.id('single'), 'yes')), '22023',
