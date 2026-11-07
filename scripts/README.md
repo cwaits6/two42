@@ -183,15 +183,13 @@ The same command also enforces:
 
 ## `check-profile-email-reads.mjs` — no request-client read of a person's email
 
-The app does not read `profiles.email` on the request client. A hidden address
-read there reaches a member who should not see it, and once client roles hold
-no `SELECT` on the column, PostgREST refuses the whole request (`42501`) when
-any part of it touches the column: `select("*")` on `profiles` is such a
-request, and so is an embedded `profiles(*)` on another table. That grant is
-still in place (`docs/security/tenancy-model.md`, "Known limits"), so this
-check is what keeps the column unread until it goes. It runs second in
-`npm run guard:tenancy`, in the same blocking CI job, and fails on each of these
-through the request client in `app/`, `components/` and `lib/`:
+The app does not read `profiles.email` on the request client. Client roles
+hold no `SELECT` on the column, so PostgREST refuses the whole request
+(`42501`) when any part of it touches the column: `select("*")` on `profiles`
+is such a request, and so is an embedded `profiles(*)` on another table. This
+check keeps such a read out of the app before it fails at run time. It runs
+second in `npm run guard:tenancy`, in the same blocking CI job, and fails on
+each of these through the request client in `app/`, `components/` and `lib/`:
 
 - a `profiles` select of all columns: `"*"`, or a bare `.select()` after an
   insert, update, upsert or delete;

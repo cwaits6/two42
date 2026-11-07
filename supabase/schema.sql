@@ -7475,9 +7475,219 @@ GRANT ALL ON TABLE "public"."family_units" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."profiles" TO "anon";
-GRANT ALL ON TABLE "public"."profiles" TO "authenticated";
+GRANT INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."profiles" TO "anon";
+GRANT INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."profiles" TO "authenticated";
 GRANT ALL ON TABLE "public"."profiles" TO "service_role";
+
+
+
+GRANT SELECT("id") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("id") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("role") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("role") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("phone") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("phone") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("bio") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("bio") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("approved_at") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("approved_at") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("approved_by") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("approved_by") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("created_at") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("created_at") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("first_name") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("first_name") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("last_name") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("last_name") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("preferred_name") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("preferred_name") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("avatar_url") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("avatar_url") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("phone_mobile") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("phone_mobile") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("phone_home") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("phone_home") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("phone_work") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("phone_work") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("address_line1") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("address_line1") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("address_line2") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("address_line2") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("city") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("city") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("state") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("state") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("postal_code") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("postal_code") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("birth_month") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("birth_month") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("birth_day") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("birth_day") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("birth_year") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("birth_year") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("anniversary") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("anniversary") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("occupation") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("occupation") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("employer") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("employer") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("family_id") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("family_id") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("is_unlisted") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("is_unlisted") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("hide_phone_mobile") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("hide_phone_mobile") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("hide_phone_home") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("hide_phone_home") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("hide_phone_work") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("hide_phone_work") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("hide_email") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("hide_email") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("hide_address") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("hide_address") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("hide_birthday") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("hide_birthday") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("hide_anniversary") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("hide_anniversary") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("hide_occupation") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("hide_occupation") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("updated_at") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("updated_at") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("relationship") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("relationship") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("hide_birth_year") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("hide_birth_year") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("setup_completed") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("setup_completed") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("email_announcements") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("email_announcements") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("org_id") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("org_id") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("email_event_reminders") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("email_event_reminders") ON TABLE "public"."profiles" TO "authenticated";
 
 
 

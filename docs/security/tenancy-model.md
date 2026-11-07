@@ -914,8 +914,14 @@ code reads `profiles.email`; the address has three read paths:
 described in [`service-role-inventory.md`](service-role-inventory.md) ("Hidden
 email helpers").
 
-The database does not enforce the setting on the table itself, and one older
-function returns a hidden address inside a household: see "Known limits".
+The database enforces the setting on the table itself: `anon` and
+`authenticated` hold `SELECT` on every column of `profiles` except `email`, so
+a request that selects, filters, orders or returns the column, directly or
+through an embed, fails with `42501`. Insert and update grants are table-level
+and unchanged, and the policies may still reference `email`. A column added to
+`profiles` is unreadable to clients until a migration adds it to that grant.
+One older function still returns a hidden address inside a household: see
+"Known limits".
 
 Two pieces of this cross a boundary worth naming:
 
@@ -967,16 +973,6 @@ table's own FK.
 
 ## Known limits (accepted, tracked)
 
-- A hidden email is still readable from the table (T42-215 / #700).
-  `authenticated` holds a table-level `SELECT` on `profiles`, and a row policy
-  cannot hide one column, so a signed-in member who can see a person's row can
-  select `email` from `profiles` directly, or confirm an address by filtering
-  on it, whatever `hide_email` says. The app never does; a request written by
-  hand can. The fix is a column-level grant that leaves `email` out, the shape
-  `prayer_requests` has below. It ships as its own migration once no deployed
-  app code reads the column, because PostgREST refuses a whole request that
-  touches a column the role cannot read. `supabase/tests/hidden_email_suite.sql`
-  holds the assertions for it as TODO tests.
 - `get_profile_email(profile_id)` returns the address of anyone in the
   caller's household, hidden or not, to `authenticated`. The `profiles`
   update policy calls it in its `WITH CHECK` as the signed-in person, so the
