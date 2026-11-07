@@ -2,6 +2,9 @@ import { createClient } from "@/lib/supabase/server";
 import { mintSignedUrls } from "@/lib/storageRead";
 import { NextResponse } from "next/server";
 import { isMemberRole, STORED_MEMBER_ROLES } from "@/lib/roles";
+import { logError } from "@/lib/log";
+
+const SEARCH_FAILED = "Couldn't search for members. Try again.";
 
 /**
  * GET /api/household/search-members?q=name
@@ -57,7 +60,10 @@ export async function GET(request: Request) {
     .order("first_name")
     .limit(10);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    logError("household/search-members profiles read error", error, { route: "/api/household/search-members" });
+    return NextResponse.json({ error: SEARCH_FAILED }, { status: 500 });
+  }
 
   // Private buckets: the client renders these avatars directly, so
   // exchange stored URLs for signed URLs in the response.
@@ -70,7 +76,12 @@ export async function GET(request: Request) {
       .select("id, email")
       .in("id", rows.map((r) => r.id)),
   ]);
-  if (addressError) return NextResponse.json({ error: addressError.message }, { status: 500 });
+  if (addressError) {
+    logError("household/search-members addresses read error", addressError, {
+      route: "/api/household/search-members",
+    });
+    return NextResponse.json({ error: SEARCH_FAILED }, { status: 500 });
+  }
   const emailById = new Map(addresses.map((a) => [a.id, a.email]));
 
   const results = rows.map((row, i) => ({

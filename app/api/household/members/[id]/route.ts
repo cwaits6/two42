@@ -104,7 +104,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
   if (error) {
     logError("household/members PATCH error", error, { route: "/api/household/members/[id]" });
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Couldn't save their details. Try again." }, { status: 500 });
   }
 
   return NextResponse.json({ data });
@@ -139,7 +139,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
 
   if (error) {
     logError("household/members DELETE error", error, { route: "/api/household/members/[id]" });
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Couldn't remove them from your household. Try again." }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });
