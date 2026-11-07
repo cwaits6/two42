@@ -52,6 +52,7 @@ describe("content redirects", () => {
     `${G}/settings`,
     `${G}/settings/details`,
     `${G}/settings/privacy`,
+    `${G}/settings/requests`,
     `${G}/settings/invites`,
     `${G}/settings/serving`,
     `${G}/settings/teams`,

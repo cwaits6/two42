@@ -1,14 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ApprovalQueue } from "@/components/admin/ApprovalQueue";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { ErrorState } from "@/components/states/ErrorState";
-import { LoadingState } from "@/components/states/LoadingState";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -24,15 +21,10 @@ import {
   JOIN_POLICY_OPTIONS,
   PRIVATE_POLICY_HELPER,
   parseJoinPolicy,
-  pendingRequestsEmptyText,
   privacyHelper,
-  reviewErrorMessage,
   type HelperSentence,
   type JoinPolicy,
 } from "@/lib/groups/joining";
-import { displayName } from "@/lib/names";
-import { formatInZone } from "@/lib/time/zone";
-import { logError } from "@/lib/log";
 
 /** Renders a helper sentence with its slot linked to the Invite links page. */
 function HelperText({ sentence, inviteHref }: { sentence: HelperSentence; inviteHref: string }) {
@@ -49,22 +41,12 @@ function HelperText({ sentence, inviteHref }: { sentence: HelperSentence; invite
   );
 }
 
-interface PendingRequest {
-  id: string;
-  created_at: string;
-  first_name: string | null;
-  last_name: string | null;
-  preferred_name: string | null;
-  email: string | null;
-}
-
 interface PrivacyAndJoiningManagerProps {
   groupId: string;
   groupName: string;
   initialPrivate: boolean;
   initialPolicy: JoinPolicy;
   orgDiscoveryOn: boolean;
-  timeZone: string;
 }
 
 export function PrivacyAndJoiningManager({
@@ -73,7 +55,6 @@ export function PrivacyAndJoiningManager({
   initialPrivate,
   initialPolicy,
   orgDiscoveryOn,
-  timeZone,
 }: PrivacyAndJoiningManagerProps) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -82,25 +63,6 @@ export function PrivacyAndJoiningManager({
   const latestPrivate = useRef(0);
   const [policy, setPolicy] = useState(initialPolicy);
   const [savingPolicy, setSavingPolicy] = useState(false);
-  const [requests, setRequests] = useState<PendingRequest[] | null>(null);
-  const [requestsFailed, setRequestsFailed] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
-
-  const loadRequests = useCallback(async () => {
-    const { data, error } = await supabase.rpc("pending_group_join_requests", { _group_id: groupId });
-    if (error) {
-      logError("Failed to load pending join requests", error, { route: "/g/[groupId]/settings/privacy" });
-      setRequestsFailed(true);
-      return;
-    }
-    setRequests(data ?? []);
-    setRequestsFailed(false);
-  }, [supabase, groupId]);
-
-  useEffect(() => {
-    loadRequests();
-  }, [loadRequests]);
-
   async function togglePrivate(next: boolean) {
     const previous = isPrivate;
     const request = ++latestPrivate.current;
@@ -144,31 +106,6 @@ export function PrivacyAndJoiningManager({
     router.refresh();
   }
 
-  async function review(id: string, approve: boolean) {
-    const request = requests?.find((r) => r.id === id);
-    if (!request) return;
-    setBusyId(id);
-    try {
-      const { error } = await supabase.rpc("review_group_join_request", {
-        _request_id: id,
-        _approve: approve,
-      });
-      if (error) {
-        toast.error(reviewErrorMessage(error.code));
-        // Decided elsewhere already: the row no longer belongs in the list.
-        if (error.code === "GJ004") setRequests((prev) => prev && prev.filter((r) => r.id !== id));
-        return;
-      }
-      toast.success(
-        approve ? `${displayName(request)} joined ${groupName}.` : "Request declined.",
-      );
-      setRequests((prev) => prev && prev.filter((r) => r.id !== id));
-      if (approve) router.refresh();
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   const policyOption = JOIN_POLICY_OPTIONS.find((o) => o.value === policy);
   const inviteHref = groupPath(groupId, "/settings/invites");
 
@@ -177,8 +114,6 @@ export function PrivacyAndJoiningManager({
       <PageHeader
         title="Privacy and joining"
         subtitle={groupName}
-        backHref={groupPath(groupId, "/settings")}
-        backLabel="Back to Group settings"
       />
 
       <div className="space-y-6">
@@ -232,32 +167,6 @@ export function PrivacyAndJoiningManager({
               )}
             </p>
           </div>
-        </section>
-
-        <section>
-          <h2 className="mb-4 text-xl font-bold text-foreground">Pending join requests</h2>
-          {requestsFailed ? (
-            <ErrorState thing="the requests" onRetry={loadRequests} />
-          ) : requests === null ? (
-            <LoadingState thing="the requests" />
-          ) : (
-            <ApprovalQueue
-              rows={requests.map((r) => ({
-                id: r.id,
-                title: displayName(r),
-                subtitle: r.email ?? undefined,
-                meta: `Requested ${formatInZone(r.created_at, timeZone, {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })}`,
-              }))}
-              onApprove={(id) => review(id, true)}
-              onDecline={(id) => review(id, false)}
-              busyId={busyId}
-              emptyText={pendingRequestsEmptyText(policy)}
-            />
-          )}
         </section>
       </div>
     </PageContainer>

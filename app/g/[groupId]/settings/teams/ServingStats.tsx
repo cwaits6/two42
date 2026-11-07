@@ -75,7 +75,7 @@ export function ServingStats({
 
       if (cancelled) return;
       if (teamsError) {
-        logError("Failed to load serving teams", teamsError, { route: "/g/[groupId]/settings/serving" });
+        logError("Failed to load serving teams", teamsError, { route: "/g/[groupId]/settings/teams" });
         setFailed(true);
         setLoading(false);
         return;
@@ -106,7 +106,7 @@ export function ServingStats({
       const { data: signups, error: signupsError } = await query;
       if (cancelled) return;
       if (signupsError) {
-        logError("Failed to load serving history", signupsError, { route: "/g/[groupId]/settings/serving" });
+        logError("Failed to load serving history", signupsError, { route: "/g/[groupId]/settings/teams" });
         setFailed(true);
         setLoading(false);
         return;

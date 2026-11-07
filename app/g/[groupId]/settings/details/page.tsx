@@ -4,18 +4,16 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { ErrorState } from "@/components/states/ErrorState";
 import { groupPath } from "@/lib/groups/active";
 import { getGroupCalendar, GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
-import { requireGroupLeader } from "@/lib/groups/server";
+import { requireGroupSettingsLeader } from "@/lib/groups/server";
 import { getGroupSettings } from "@/lib/groups/settings";
 import { groupPageTitle } from "@/lib/pageTitle";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { groupReminders } from "@/lib/events/reminders";
-import { CalendarSubscriptionCard } from "./CalendarSubscriptionCard";
-import { EventRemindersCard } from "./EventRemindersCard";
 import { GroupDetailsForm } from "./GroupDetailsForm";
 import { logError } from "@/lib/log";
 
-export const generateMetadata = groupPageTitle("Group details");
+export const generateMetadata = groupPageTitle("Details");
 
 export default async function GroupDetailsSettingsPage({
   params,
@@ -23,8 +21,7 @@ export default async function GroupDetailsSettingsPage({
   params: Promise<{ groupId: string }>;
 }) {
   const { groupId } = await params;
-  const group = await requireGroupLeader(groupId);
-  const settingsHref = groupPath(group.id, "/settings");
+  const group = await requireGroupSettingsLeader(groupId);
 
   const supabase = await createClient();
   const user = await getOptionalUser();
@@ -46,31 +43,23 @@ export default async function GroupDetailsSettingsPage({
 
   return (
     <PageContainer size="reading">
-      <PageHeader
-        title="Group details"
-        subtitle={`Changes here apply to ${group.name} only.`}
-        backHref={settingsHref}
-        backLabel="Back to Group settings"
-      />
+      <PageHeader title="Details" subtitle={`Changes here apply to ${group.name} only.`} />
       {details ? (
-        <div className="space-y-8">
-          <GroupDetailsForm
-            groupId={group.id}
-            cancelHref={settingsHref}
-            initialName={details.name}
-            initialDescription={details.description}
-            initialColor={calendar?.color ?? GROUP_DEFAULT_COLOR}
-          />
-          <CalendarSubscriptionCard
-            groupId={group.id}
-            initial={{
+        <GroupDetailsForm
+          groupId={group.id}
+          cancelHref={groupPath(group.id, "/dashboard")}
+          initialName={details.name}
+          initialDescription={details.description}
+          initialFields={{
+            color: calendar?.color ?? GROUP_DEFAULT_COLOR,
+            calendar: {
               calendar_meeting_details: settings.calendar_meeting_details,
               calendar_event_notes: settings.calendar_event_notes,
               calendar_event_location: settings.calendar_event_location,
-            }}
-          />
-          <EventRemindersCard groupId={group.id} initial={groupReminders(settings)} />
-        </div>
+            },
+            reminders: groupReminders(settings),
+          }}
+        />
       ) : (
         <ErrorState thing="this group's details" />
       )}

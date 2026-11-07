@@ -6,7 +6,7 @@ import {
   useGroupMemberships,
 } from "@/components/groups/GroupProvider";
 import { buildSidebar, type SidebarItem } from "@/lib/groups/nav";
-import { useSidebar } from "./SidebarContext";
+import { useGroupWaitingRequests, useSidebar } from "./SidebarContext";
 
 /** The page list for the current viewer and path. */
 export function useSidebarModel(): SidebarItem[] {
@@ -14,11 +14,14 @@ export function useSidebarModel(): SidebarItem[] {
   const memberships = useGroupMemberships();
   const activeGroup = useActiveGroup();
   const discoveryOn = useDiscoveryOn();
+  const isLeader = activeGroup?.role === "leader";
+  const waitingRequests = useGroupWaitingRequests(isLeader ? activeGroup.id : null);
   return buildSidebar({
     memberships,
     activeGroup,
     discoveryOn,
-    isLeader: activeGroup?.role === "leader",
+    isLeader,
+    waitingRequests,
     hasServingAccess,
     orgName,
   });

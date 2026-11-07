@@ -15,23 +15,25 @@ import { Textarea } from "@/components/ui/textarea";
 import { failureMessage } from "@/lib/errorCopy";
 import { groupPath } from "@/lib/groups/active";
 import { createClient } from "@/lib/supabase/client";
-import { hasChanges } from "../../about/edit/aboutChanges";
+import { CalendarSubscriptionCard } from "./CalendarSubscriptionCard";
 import { colorError, detailsChanges, type DetailsFields } from "./detailsChanges";
+import { EventRemindersCard } from "./EventRemindersCard";
 
 type FieldErrors = { name?: string; color?: string };
 
+/** Every control on Details waits for the one Save, which writes each changed part in turn. */
 export function GroupDetailsForm({
   groupId,
   cancelHref,
   initialName,
   initialDescription,
-  initialColor,
+  initialFields,
 }: {
   groupId: string;
   cancelHref: string;
   initialName: string;
   initialDescription: string | null;
-  initialColor: string;
+  initialFields: DetailsFields;
 }) {
   const router = useRouter();
   const [savedGroup, setSavedGroup] = useState({
@@ -40,7 +42,7 @@ export function GroupDetailsForm({
   });
   const [name, setName] = useState(initialName);
   const [description, setDescription] = useState(initialDescription ?? "");
-  const [saved, setSaved] = useState<DetailsFields>({ color: initialColor });
+  const [saved, setSaved] = useState<DetailsFields>(initialFields);
   const [draft, setDraft] = useState(saved);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [saving, setSaving] = useState(false);
@@ -50,11 +52,16 @@ export function GroupDetailsForm({
   const groupChanged =
     trimmedName !== savedGroup.name || trimmedDescription !== savedGroup.description;
   const changes = detailsChanges(saved, draft);
-  const dirty = groupChanged || hasChanges(changes);
+  const dirty = groupChanged || Object.keys(changes).length > 0;
   const leaveGuard = useLeaveGuard(dirty);
 
   const setField = <K extends keyof DetailsFields>(key: K, value: DetailsFields[K]) =>
     setDraft((prev) => ({ ...prev, [key]: value }));
+
+  function fail(message: string) {
+    setSaving(false);
+    toast.error(message);
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -73,43 +80,56 @@ export function GroupDetailsForm({
       return;
     }
 
+    // Each part that lands moves only its own baseline, and the fields stay
+    // live during the requests: a failure keeps the rest unsaved for a retry,
+    // and anything changed since Save stays on screen and unsaved.
+    const sent = draft;
     setSaving(true);
+    const supabase = createClient();
     if (groupChanged) {
       // The "Leaders and admins can update groups" policy is the authority on
       // who may save; a non-leader's write matches zero rows.
-      const { data, error } = await createClient()
+      const { data, error } = await supabase
         .from("groups")
         .update({ name: trimmedName, description: trimmedDescription || null })
         .eq("id", groupId)
         .select("id");
-      if (error || !data?.length) {
-        setSaving(false);
-        toast.error("Couldn't save the group. Try again.");
-        return;
-      }
+      if (error || !data?.length) return fail("Couldn't save the group. Try again.");
       setSavedGroup({ name: trimmedName, description: trimmedDescription });
     }
 
-    if (hasChanges(changes)) {
+    if (changes.color) {
       let failure: number | "network" | null;
       try {
         const res = await fetch(groupPath(groupId, "/about/save"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(changes),
+          body: JSON.stringify({ color: changes.color }),
         });
         failure = res.ok ? null : res.status;
       } catch {
         failure = "network";
       }
-      if (failure !== null) {
-        setSaving(false);
-        toast.error(failureMessage("save the group", failure));
-        return;
-      }
-      // Only the baseline moves: the fields stay live during the request, so
-      // anything typed since it was sent must stay on screen and stay unsaved.
-      setSaved(draft);
+      if (failure !== null) return fail(failureMessage("save the group", failure));
+      setSaved((prev) => ({ ...prev, color: sent.color }));
+    }
+
+    if (changes.settings) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      // A write the RLS policy rejects matches zero rows without an error.
+      const { data, error } = await supabase
+        .from("group_settings")
+        .upsert({
+          group_id: groupId,
+          ...changes.settings,
+          updated_by: user?.id,
+          updated_at: new Date().toISOString(),
+        })
+        .select("group_id");
+      if (error || !data?.length) return fail(failureMessage("save the group"));
+      setSaved((prev) => ({ ...prev, calendar: sent.calendar, reminders: sent.reminders }));
     }
 
     setSaving(false);
@@ -182,6 +202,15 @@ export function GroupDetailsForm({
           </div>
         </CardContent>
       </Card>
+
+      <CalendarSubscriptionCard
+        values={draft.calendar}
+        onChange={(key, next) =>
+          setDraft((prev) => ({ ...prev, calendar: { ...prev.calendar, [key]: next } }))
+        }
+      />
+
+      <EventRemindersCard values={draft.reminders} onChange={(next) => setField("reminders", next)} />
 
       <div className="space-y-3">
         <p aria-live="polite" className="min-h-6 text-base text-muted-foreground">

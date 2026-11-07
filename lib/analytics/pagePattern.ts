@@ -58,6 +58,7 @@ export const PAGE_PATTERNS: readonly string[] = [
   "/g/[groupId]/settings/invites",
   "/g/[groupId]/settings/labels",
   "/g/[groupId]/settings/privacy",
+  "/g/[groupId]/settings/requests",
   "/g/[groupId]/settings/serving",
   "/g/[groupId]/settings/teams",
   "/household",

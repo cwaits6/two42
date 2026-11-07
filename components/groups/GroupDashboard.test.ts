@@ -449,7 +449,7 @@ describe("GroupDashboard", () => {
     expect(leaderText).toContain("2 people asked to join");
     expect(leaderText).toContain("1 announcement to publish");
     expect(linkHrefs(leader)).toEqual(
-      expect.arrayContaining(["/g/b/settings/privacy", "/g/b/announcements"]),
+      expect.arrayContaining(["/g/b/settings/requests", "/g/b/announcements"]),
     );
 
     expect(texts(await render(MEMBER)).join("")).not.toContain("To do");

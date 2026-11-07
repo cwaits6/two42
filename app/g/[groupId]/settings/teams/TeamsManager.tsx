@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { fetchAll } from "@/lib/supabase/fetchAll";
 import { Button } from "@/components/ui/button";
@@ -74,9 +74,11 @@ function memberCountText(n: number): string {
 interface TeamsManagerProps {
   groupId: string;
   groupName: string;
+  /** The group's serving settings, shown under its teams. */
+  children?: ReactNode;
 }
 
-export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
+export function TeamsManager({ groupId, groupName, children }: TeamsManagerProps) {
   const [teams, setTeams] = useState<MemberGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -521,6 +523,8 @@ export function TeamsManager({ groupId, groupName }: TeamsManagerProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {children}
     </PageContainer>
   );
 }
