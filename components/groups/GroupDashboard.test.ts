@@ -345,13 +345,19 @@ describe("GroupDashboard", () => {
 
   it("gives reply buttons to a one-time event with RSVPs on, and none to a weekly one", async () => {
     reads.events = { data: [weeklyEvent, oneTimeEvent], error: null };
-    reads.rsvps = { data: [{ event_id: "e2", status: "yes" }], error: null };
+    reads.rsvps = {
+      data: [{ event_id: "e2", user_id: "user-1", status: "yes", occurrence_date: "2026-11-07" }],
+      error: null,
+    };
 
     const tree = await render();
-    const replies = propsOf<{ eventId: string; currentStatus: string; tone: string }>(tree, RsvpControl);
+    const replies = propsOf<{ eventId: string; occurrenceDate: string; currentStatus: string; tone: string }>(
+      tree,
+      RsvpControl,
+    );
 
     expect(replies).toEqual([
-      expect.objectContaining({ eventId: "e2", currentStatus: "yes", tone: "quiet" }),
+      expect.objectContaining({ eventId: "e2", occurrenceDate: "2026-11-07", currentStatus: "yes", tone: "quiet" }),
     ]);
     expect(texts(tree).join("")).toContain("5:30 PM · The Okafors' home");
   });

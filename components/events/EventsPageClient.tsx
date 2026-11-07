@@ -28,7 +28,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import type { Event, Rsvp } from "@/lib/types";
+import type { Event } from "@/lib/types";
+import type { ReplyRow } from "@/lib/events/replies";
 
 export type CalendarGroup = {
   id: string;
@@ -41,13 +42,14 @@ interface EventsPageClientProps {
   /** The groups this page spans, in membership order. */
   groups: CalendarGroup[];
   allEvents: Event[];
-  userRsvps: Record<string, Rsvp>;
+  /** The viewer's replies, for every date the list can show. */
+  replies: ReplyRow[];
   userId: string;
   /** The org's zone, resolved by the server; every view formats in it. */
   timeZone: string;
 }
 
-export function EventsPageClient({ groups, allEvents, userRsvps, userId, timeZone }: EventsPageClientProps) {
+export function EventsPageClient({ groups, allEvents, replies, userId, timeZone }: EventsPageClientProps) {
   const router = useRouter();
   const [viewState, dispatch] = useReducer(
     calendarViewReducer,
@@ -274,7 +276,7 @@ export function EventsPageClient({ groups, allEvents, userRsvps, userId, timeZon
         <EventListView
           groups={groups}
           events={upcomingVisible}
-          userRsvps={userRsvps}
+          replies={replies}
           userId={userId}
           createHref={ledVisible.length === 1 ? newEventHref(ledVisible[0].id) : null}
           timeZone={timeZone}

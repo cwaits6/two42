@@ -5,7 +5,8 @@ import { EventsPageClient, type CalendarGroup } from "@/components/events/Events
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ErrorState } from "@/components/states/ErrorState";
-import type { Event, Rsvp } from "@/lib/types";
+import type { Event } from "@/lib/types";
+import type { ReplyRow } from "@/lib/events/replies";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { logError } from "@/lib/log";
@@ -39,7 +40,8 @@ export async function CalendarPage({ pinnedGroupId }: { pinnedGroupId?: string }
 
   // A bounded window: non-recurring events starting in it, plus recurring
   // anchors whose series overlaps it (the anchor may start years earlier).
-  const [{ data: allEventsRaw, error: allEventsError }, { data: rsvps, error: rsvpsError }, timeZone] = await Promise.all([
+  // The viewer's replies are one read that serves every date the list shows.
+  const [{ data: allEventsRaw, error: allEventsError }, { data: replies, error: rsvpsError }, timeZone] = await Promise.all([
     supabase
       .from("events")
       .select("*")
@@ -54,7 +56,7 @@ export async function CalendarPage({ pinnedGroupId }: { pinnedGroupId?: string }
       )
       .order("start_time", { ascending: true })
       .limit(500),
-    supabase.from("rsvps").select("*").eq("user_id", user.id),
+    supabase.from("rsvps").select("event_id, user_id, status, occurrence_date").eq("user_id", user.id),
     getOrgTimeZone(),
   ]);
   // A failed read must not pass for an empty calendar or for no replies.
@@ -68,16 +70,12 @@ export async function CalendarPage({ pinnedGroupId }: { pinnedGroupId?: string }
     );
   }
 
-  const userRsvps: Record<string, Rsvp> = Object.fromEntries(
-    ((rsvps ?? []) as Rsvp[]).map((r) => [r.event_id, r])
-  );
-
   return (
     <PageContainer size="wide">
       <EventsPageClient
         groups={groups}
         allEvents={(allEventsRaw ?? []) as Event[]}
-        userRsvps={userRsvps}
+        replies={(replies ?? []) as ReplyRow[]}
         userId={user.id}
         timeZone={timeZone}
       />

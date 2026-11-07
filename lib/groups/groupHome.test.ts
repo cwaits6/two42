@@ -356,16 +356,29 @@ describe("This week", () => {
         location: "The Okafors' home",
         recurrence_frequency: frequency,
       });
-      const rsvps = [{ event_id: "potluck", status: "maybe" }] as Rsvp[];
+      const rsvps = [{ event_id: "potluck", user_id: USER, status: "maybe", occurrence_date: "2026-11-07" }] as Rsvp[];
       const [row] = buildGroupHome(reads({ events: [e], rsvps }), ctx()).weekRows ?? [];
       expect(row).toMatchObject({
         weekday: "Sat",
         day: "7",
         time: "5:30 PM",
         place: "The Okafors' home",
-        reply: { eventId: "potluck", status: "maybe" },
+        reply: { eventId: "potluck", date: "2026-11-07", status: "maybe" },
       });
     }
+  });
+
+  it("shows the reply for this date of a monthly event, not one for another date", () => {
+    const monthly = event({ id: "supper", start_time: "2026-10-07T22:30:00Z", recurrence_frequency: "monthly" });
+    const reply = (occurrence_date: string | null, user_id = USER) =>
+      ({ event_id: "supper", user_id, status: "no", occurrence_date }) as Rsvp;
+    const status = (rsvps: Rsvp[]) =>
+      buildGroupHome(reads({ events: [monthly], rsvps }), ctx()).weekRows?.[0]?.reply;
+
+    expect(status([reply("2026-12-07")])).toEqual({ eventId: "supper", date: "2026-11-07", status: null });
+    expect(status([reply("2026-11-07", "someone-else")])?.status).toBeNull();
+    expect(status([reply("2026-11-07")])?.status).toBe("no");
+    expect(status([reply(null)])?.status).toBe("no");
   });
 
   it("asks nothing when RSVPs are off", () => {

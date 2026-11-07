@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,12 +14,17 @@ import { groupTextColor } from "@/lib/groups/settings";
 import { formatEventDate, formatEventRange, formatInZone } from "@/lib/time/zone";
 import { notesWithMeeting } from "@/lib/meetings";
 import type { CalendarGroup } from "@/components/events/EventsPageClient";
-import type { Event, Rsvp } from "@/lib/types";
+import { replyFor, replyKey, type ReplyRow } from "@/lib/events/replies";
+import type { Event } from "@/lib/types";
+
+/** How many dates the list shows at first, and how many more each press adds. */
+export const LIST_PAGE = 10;
 
 interface EventListViewProps {
   groups: CalendarGroup[];
   events: Event[];
-  userRsvps: Record<string, Rsvp>;
+  /** The viewer's replies; each date shows the one for that date. */
+  replies: ReplyRow[];
   userId: string;
   /** The create link for the empty state, when the viewer leads exactly one visible group. */
   createHref: string | null;
@@ -29,7 +36,7 @@ interface EventListViewProps {
 export function EventListView({
   groups,
   events,
-  userRsvps,
+  replies,
   userId,
   createHref,
   timeZone,
@@ -37,6 +44,16 @@ export function EventListView({
 }: EventListViewProps) {
   const byId = new Map(groups.map((g) => [g.id, g]));
   const showGroupName = groups.length >= 2;
+  const [shown, setShown] = useState(LIST_PAGE);
+  // After "Show more dates", focus moves to the first date it added, so a
+  // keyboard or screen reader lands on the new dates rather than the button.
+  const titleLinks = useRef<(HTMLAnchorElement | null)[]>([]);
+  const focusIndex = useRef<number | null>(null);
+  useEffect(() => {
+    if (focusIndex.current === null) return;
+    titleLinks.current[focusIndex.current]?.focus();
+    focusIndex.current = null;
+  }, [shown]);
 
   if (events.length === 0) {
     return (
@@ -62,7 +79,7 @@ export function EventListView({
     <div>
       <CalendarToolbar viewSwitch={viewSwitch} />
       <div className="space-y-4 overflow-visible">
-        {events.map((event, index) => {
+        {events.slice(0, shown).map((event, index) => {
           const group = byId.get(event.group_id);
           const color = group?.color ?? "var(--color-brand-primary)";
           const textColor = group ? groupTextColor(group.color) : "var(--primary-foreground)";
@@ -78,11 +95,13 @@ export function EventListView({
             ? `?occurrence=${encodeURIComponent(event.start_time)}`
             : "";
           const viewHref = groupPath(event.group_id, `/calendar/${event.id}${occurrenceParam}`);
+          const key = event.is_rsvp_enabled ? replyKey(event, timeZone) : null;
+          const reply = key && { key, status: replyFor(replies, key, userId)?.status ?? null };
           const editHref = groupPath(event.group_id, `/calendar/${event.id}/edit${occurrenceParam}`);
 
           return (
             <div
-              key={`${event.id}-${index}`}
+              key={`${event.id}-${event.start_time}`}
               className="relative overflow-visible rounded-2xl border border-border bg-card px-4 py-4 shadow-sm transition-all hover:border-brand-primary/30 hover:shadow-md"
             >
               <div
@@ -105,6 +124,9 @@ export function EventListView({
                       <div className="flex flex-wrap items-center gap-2">
                         <Link
                           href={viewHref}
+                          ref={(el) => {
+                            titleLinks.current[index] = el;
+                          }}
                           className="inline-flex min-h-11 min-w-11 items-center font-display text-xl font-bold leading-tight text-foreground hover:text-brand-primary-text"
                         >
                           {event.title}
@@ -182,12 +204,13 @@ export function EventListView({
                     </p>
                   )}
 
-                  {event.is_rsvp_enabled && (
+                  {reply && (
                     <div className="max-w-md border-t border-border pt-3">
                       <RsvpControl
-                        eventId={event.id}
+                        eventId={reply.key.eventId}
+                        occurrenceDate={reply.key.date}
                         userId={userId}
-                        currentStatus={userRsvps[event.id]?.status ?? null}
+                        currentStatus={reply.status}
                       />
                     </div>
                   )}
@@ -197,6 +220,19 @@ export function EventListView({
           );
         })}
       </div>
+      {shown < events.length && (
+        <div className="mt-6 flex justify-center">
+          <Button
+            variant="outline"
+            onClick={() => {
+              focusIndex.current = shown;
+              setShown(shown + LIST_PAGE);
+            }}
+          >
+            Show more dates
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

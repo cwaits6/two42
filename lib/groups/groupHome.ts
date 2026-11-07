@@ -18,6 +18,7 @@ import { ENDED_GRACE_MS, getJoinState, hasMeeting, meetingEndMs } from "@/lib/me
 import { displayName } from "@/lib/names";
 import { prayerAuthorLabel } from "@/lib/prayer";
 import { expandUpcomingEvents } from "@/lib/recurrence";
+import { replyFor, replyKey } from "@/lib/events/replies";
 import { dayKey, formatEventTime, formatInZone, zoned } from "@/lib/time/zone";
 import type {
   DirectoryProfile,
@@ -144,7 +145,7 @@ export type WeekRow = {
   serving: boolean;
   href: string;
   /** Set when the event asks for a reply here. */
-  reply: { eventId: string; status: RsvpStatus | null } | null;
+  reply: { eventId: string; date: string; status: RsvpStatus | null } | null;
 };
 
 export type CelebrationRow = {
@@ -367,6 +368,11 @@ function repeatsOften(event: Event, anchors: Map<string, Event>): boolean {
   return frequency === "daily" || frequency === "weekly";
 }
 
+function dateReply(o: Event, rsvps: Rsvp[], userId: string, zone: string): WeekRow["reply"] {
+  const key = replyKey(o, zone);
+  return { eventId: key.eventId, date: key.date, status: replyFor(rsvps, key, userId)?.status ?? null };
+}
+
 /**
  * This week's rows in date order. serving_signups has no link to events, so a
  * serving date matches on the calendar date in the church's zone, on that
@@ -383,7 +389,6 @@ export function weekRows(
 ): WeekRow[] {
   const { groupId, userId, timeZone: zone, now } = ctx;
   const today = todayIn(zone, now);
-  const status = new Map(rsvps.map((r) => [r.event_id, r.status]));
   const mine = signups.filter((s) =>
     s.serving_signup_attendees.some((a) => a.profile_id === userId),
   );
@@ -414,9 +419,7 @@ export function weekRows(
         serving: myDates.has(day) && earliestListed.get(day) === o,
         href: occurrenceHref(groupId, o),
         reply:
-          !quiet && o.is_rsvp_enabled
-            ? { eventId: o.id, status: status.get(o.id) ?? null }
-            : null,
+          !quiet && o.is_rsvp_enabled ? dateReply(o, rsvps, userId, zone) : null,
       },
     };
   });
