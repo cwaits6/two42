@@ -46,7 +46,7 @@ function ColorDot({ color }: { color: string }) {
 function BlockText({ block }: { block: GroupBlock }) {
   return (
     <span className="min-w-0 flex-1 text-left">
-      <span className="block truncate text-sm text-muted-foreground">{block.orgName}</span>
+      <span className="block break-words text-sm leading-snug text-muted-foreground">{block.orgName}</span>
       <span className="block truncate font-serif text-xl font-semibold leading-tight text-foreground">
         {block.group?.name ?? ALL_GROUPS}
       </span>
