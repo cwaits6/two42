@@ -10,7 +10,6 @@ vi.mock("next/link", () => ({
 }));
 vi.mock("@/lib/storageRead", () => ({ mintSignedUrls: async () => [] }));
 vi.mock("@/lib/supabase/current-user", () => ({ getOptionalUser: async () => ({ id: "user-1" }) }));
-vi.mock("@/lib/groups/settings", () => ({ getGroupSettings: async () => ({}) }));
 const requireActiveGroup = vi.fn();
 vi.mock("@/lib/groups/server", () => ({
   requireActiveGroup: (groupId: string) => requireActiveGroup(groupId),
@@ -22,7 +21,7 @@ vi.mock("@/lib/supabase/server", () => ({
         select: () => chain,
         eq: () => chain,
         order: () => chain,
-        single: async () => ({ data: { role: "member", org_id: "org-1" }, error: null }),
+        single: async () => ({ data: { role: "member" }, error: null }),
         maybeSingle: async () => ({ data: null, error: null }),
         then: (resolve: (value: unknown) => void) =>
           resolve(table === "class_teachers" ? teachersRead : { data: [], error: null }),
@@ -60,6 +59,11 @@ describe("AboutGroupPage", () => {
     const html = await render("member");
     expect(html).not.toContain("Edit page");
     expect(html).not.toContain(EDIT_HREF);
+  });
+
+  it("shows no weekly video call card", async () => {
+    expect(await render("member")).not.toMatch(/video call/i);
+    expect(await render("leader")).not.toMatch(/video call/i);
   });
 
   it("holds to the same rule when the page fails to load", async () => {

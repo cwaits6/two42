@@ -1,6 +1,8 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import type { ActiveGroup } from "@/lib/groups/active";
+import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
 import { buildAccount, type Account } from "./account";
 
 let pathname = "/";
@@ -14,7 +16,9 @@ vi.mock("./useSidebarModel", () => ({
 }));
 
 const { FrameNav } = await import("./FrameNav");
+const { areaFor } = await import("./AreaNav");
 const { SidebarProvider } = await import("./SidebarContext");
+const { GroupProvider } = await import("@/components/groups/GroupProvider");
 type ProviderProps = Parameters<typeof SidebarProvider>[0];
 
 const name = { first_name: "Isaac", last_name: "Seedly", preferred_name: null };
@@ -24,17 +28,49 @@ const admin = buildAccount({ ...base, profile: { ...name, role: "admin" } });
 const pending = buildAccount({ ...base, profile: { ...name, role: "pending" } });
 const operator = buildAccount({ ...base, profile: null, isOperator: true });
 
-function render(account: Account, path: string, waitingRequests: number | null = null) {
+function render(
+  account: Account,
+  path: string,
+  waitingRequests: number | null = null,
+  groups: { memberships?: ActiveGroup[]; groupWaitingRequests?: Record<string, number> } = {},
+) {
   pathname = path;
   const nav = createElement(FrameNav, { account });
   return renderToStaticMarkup(
     createElement(
-      SidebarProvider,
-      { account, hasServingAccess: false, orgName: "Test Church", waitingRequests } as ProviderProps,
-      nav,
+      GroupProvider,
+      {
+        memberships: groups.memberships ?? [],
+        discoveryOn: false,
+        creation: { policy: "approval", isOrgAdmin: false },
+      } as Parameters<typeof GroupProvider>[0],
+      createElement(
+        SidebarProvider,
+        {
+          account,
+          hasServingAccess: false,
+          orgName: "Test Church",
+          waitingRequests,
+          groupWaitingRequests: groups.groupWaitingRequests,
+        } as ProviderProps,
+        nav,
+      ),
     ),
   );
 }
+
+const GRACE = "11111111-1111-4111-8111-111111111111";
+const HOPE = "22222222-2222-4222-8222-222222222222";
+const grace: ActiveGroup = { id: GRACE, name: "Grace", color: GROUP_DEFAULT_COLOR, role: "leader" };
+const hope: ActiveGroup = { id: HOPE, name: "Hope", color: GROUP_DEFAULT_COLOR, role: "leader" };
+const graceAsMember: ActiveGroup = { ...grace, role: "member" };
+
+/** Every link in the rendered nav: its href and its text as a screen reader reads it. */
+const namedLinks = (html: string) =>
+  [...html.matchAll(/<a [^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/g)].map((m) => [
+    m[1],
+    m[2].replace(/<span aria-hidden="true"[^>]*>.*?<\/span>/g, "").replace(/<[^>]+>/g, ""),
+  ]);
 
 const links = (html: string) => [...html.matchAll(/<a [^>]*href="(\/admin[^"]*)"/g)].map((m) => m[1]);
 
@@ -93,5 +129,68 @@ describe("FrameNav", () => {
     expect(render(pending, "/dashboard")).toBe("");
     expect(render(pending, "/admin")).toBe("");
     expect(render(operator, "/dashboard")).toBe("");
+  });
+
+  it("gives a group's leader the Group settings sections under its settings, led by the way back to the group", () => {
+    for (const path of [`/g/${GRACE}/settings`, `/g/${GRACE}/settings/teams`]) {
+      const html = render(member, path, null, { memberships: [grace] });
+      expect(navs(html), path).toEqual(["Group settings navigation"]);
+      expect(namedLinks(html), path).toEqual([
+        [`/g/${GRACE}/dashboard`, "Back to Grace"],
+        [`/g/${GRACE}/settings/details`, "Details"],
+        [`/g/${GRACE}/settings/requests`, "Requests"],
+        [`/g/${GRACE}/settings/privacy`, "Privacy and joining"],
+        [`/g/${GRACE}/settings/invites`, "Invite links"],
+        [`/g/${GRACE}/settings/teams`, "Teams"],
+        [`/g/${GRACE}/settings/labels`, "Labels"],
+      ]);
+    }
+  });
+
+  it("shows the group's waiting count on Requests, and none at zero or when it couldn't be counted", () => {
+    const requests = (counts: Record<string, number>) =>
+      namedLinks(render(member, `/g/${GRACE}/settings/details`, null, { memberships: [grace], groupWaitingRequests: counts }))
+        .find(([href]) => href.endsWith("/settings/requests"))![1];
+    expect(requests({ [GRACE]: 3 })).toBe("Requests, 3 waiting");
+    expect(requests({ [GRACE]: 0 })).toBe("Requests");
+    expect(requests({})).toBe("Requests");
+  });
+
+  it("shows a leader of two groups the count of the group they are in", () => {
+    const counts = { [GRACE]: 1, [HOPE]: 4 };
+    const requestsIn = (id: string) =>
+      namedLinks(render(member, `/g/${id}/settings/requests`, 9, { memberships: [grace, hope], groupWaitingRequests: counts }))
+        .find(([href]) => href.endsWith("/settings/requests"))!;
+    expect(requestsIn(GRACE)).toEqual([`/g/${GRACE}/settings/requests`, "Requests, 1 waiting"]);
+    expect(requestsIn(HOPE)).toEqual([`/g/${HOPE}/settings/requests`, "Requests, 4 waiting"]);
+  });
+
+  it("never gives a member of the group, or someone outside it, the Group settings sections", () => {
+    for (const memberships of [[graceAsMember], [hope]]) {
+      const html = render(member, `/g/${GRACE}/settings/requests`, null, {
+        memberships,
+        groupWaitingRequests: { [GRACE]: 2 },
+      });
+      expect(navs(html)).toEqual(["Main navigation"]);
+      expect(html).not.toContain("/settings/requests");
+      expect(html).not.toContain("waiting");
+    }
+  });
+
+  it("gives a church admin who does not lead the group no Group settings sections", () => {
+    expect(navs(render(admin, `/g/${GRACE}/settings`, 3, { memberships: [] }))).toEqual(["Main navigation"]);
+  });
+});
+
+describe("areaFor", () => {
+  it.each([
+    ["/g/x/settings", "groupSettings"],
+    ["/g/x/settings/teams", "groupSettings"],
+    ["/g/x/settingsx", null],
+    ["/g/x/dashboard", null],
+    ["/settings", null],
+    ["/admin/requests", "admin"],
+  ])("%s is %s", (path, area) => {
+    expect(areaFor(path)).toBe(area);
   });
 });

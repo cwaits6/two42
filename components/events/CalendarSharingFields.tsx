@@ -43,7 +43,7 @@ export function CalendarSharingFields({
             Using the group&apos;s settings{groupSharing ? `: ${sharingSummary(groupSharing)}` : "."}
           </p>
           <p className="text-base text-muted-foreground">
-            The group&apos;s settings are under Group settings → Group details.
+            The group&apos;s settings are under Group settings → Details.
           </p>
           <Button
             type="button"

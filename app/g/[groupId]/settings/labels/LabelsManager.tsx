@@ -24,7 +24,6 @@ import { EmptyState } from "@/components/states/EmptyState";
 import { ErrorState } from "@/components/states/ErrorState";
 import { LoadingState } from "@/components/states/LoadingState";
 import { siteConfig } from "@/lib/config";
-import { groupPath } from "@/lib/groups/active";
 import type { GroupLabel } from "@/lib/types";
 import { labelFormErrors, type LabelFormErrors } from "./labelForm";
 import { logError } from "@/lib/log";
@@ -184,8 +183,6 @@ export function LabelsManager({ groupId, groupName }: LabelsManagerProps) {
       <PageHeader
         title="Labels"
         subtitle={`Ways to filter the members of ${groupName}: Men, Women, Tuesday table.`}
-        backHref={groupPath(groupId, "/settings")}
-        backLabel="Back to Group settings"
         actions={
           <Button size="lg" onClick={openCreate}>
             <Plus className="mr-2 h-5 w-5" />

@@ -12,9 +12,10 @@ const GROUP_PAGES = ["Home", "Calendar", "Announcements", "Prayer", "Lessons", "
 
 // The page a persona's frame is checked on, the page list they get there, and
 // every row of their account menu in order. Group settings is offered to the
-// leader alone, Church admin to the church admin alone and Platform to the
-// operator alone. The church admin and Platform page lists belong to those
-// areas' own specs, so only their landmark is checked here.
+// leader alone, and inside it the leader gets its own page list in place of
+// the group's. Church admin is offered to the church admin alone and Platform
+// to the operator alone. The church admin and Platform page lists belong to
+// those areas' own specs, so only their landmark is checked here.
 const CASES: { persona: PersonaKey; path: string; nav: string; pages?: string[]; rows: string[] }[] = [
   {
     persona: "oneGroup",
@@ -37,12 +38,19 @@ const CASES: { persona: PersonaKey; path: string; nav: string; pages?: string[];
     pages: [...GROUP_PAGES, "Group settings", "Find a group"],
     rows: [...OWN, ...INFO],
   },
+  {
+    persona: "leadsB",
+    path: `/g/${GROUP_B}/settings/details`,
+    nav: "Group settings navigation",
+    pages: ["Back to Group B", "Details", "Requests", "Privacy and joining", "Invite links", "Teams", "Labels"],
+    rows: [...OWN, ...INFO],
+  },
   { persona: "admin", path: "/admin", nav: "Admin navigation", rows: [...OWN, "Church admin", ...INFO] },
   { persona: "operator", path: "/platform", nav: "Platform navigation", rows: ["Platform", ...INFO] },
 ];
 
 for (const { persona, path, nav, pages, rows } of CASES) {
-  test.describe(`the frame for ${persona}, on a phone`, () => {
+  test.describe(`the frame for ${persona} on ${path}, on a phone`, () => {
     test.use({ persona, viewport: PHONE });
 
     // Where an operator lands after signing in is not the frame's to decide.
@@ -74,7 +82,7 @@ for (const { persona, path, nav, pages, rows } of CASES) {
     });
   });
 
-  test.describe(`the frame for ${persona}, on a computer`, () => {
+  test.describe(`the frame for ${persona} on ${path}, on a computer`, () => {
     test.use({ persona, viewport: DESKTOP });
 
     test("there is no Menu button; their pages and their account are on the page", async ({ page }) => {

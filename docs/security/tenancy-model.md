@@ -642,10 +642,11 @@ memoized only within the request by React `cache()`; nothing survives
 across requests. A malformed id 404s before any query runs. A signed-in
 viewer who is not a member of a real group gets the same 404, never a 403
 or a redirect, so the response does not confirm the group exists. For
-leader-only sub-pages, `requireGroupLeader()` 404s a member who does not
-lead the group; the settings index itself redirects such a member to the
-group dashboard instead, because a member of the group is not enumerating
-anything there.
+leader-only pages, `requireGroupLeader()` 404s a member who does not lead
+the group; every Group settings page instead gates through
+`requireGroupSettingsLeader()`, which redirects such a member to the
+group's Home, because a member of the group is not enumerating anything
+there.
 
 The `two42-group` cookie is a **preference, never an authority**. The
 middleware writes it on every `/g/<uuid>/…` response (server components
@@ -658,9 +659,8 @@ ignored and the first membership (by `joined_at`) applies. The client hook
 the URL and the membership list the root layout serialised.
 
 `loadGroupMemberships()`, `loadHomeCards()`, `getGroupCalendar()`,
-`ensureGroupCalendar()`, `getGroupSettings()`, `savePrayerCallSessions()`
-and `getServingLinkMode()` are tier C helpers under
-`scripts/check-service-role-org-scope.mjs`: they take a `SupabaseClient`
+`ensureGroupCalendar()`, `getGroupSettings()` and `getServingLinkMode()`
+are tier C helpers under `scripts/check-service-role-org-scope.mjs`: they take a `SupabaseClient`
 parameter, so every chain carries the caller's already-validated `org_id`
 (the viewer's own RLS-scoped `profiles.org_id`) and, where the row is
 group-owned, the verified active group's id. The membership loader throws
@@ -854,9 +854,9 @@ org admins — who already manage `profiles.role` within their org — can set
 it.
 
 Provisioning seeds **no teams, no group, and nothing group-owned**: a
-calendar, an about page and the call settings all belong to a group, and
-there is none at provisioning time; the group's calendar is created when
-its first event, prayer call or color is saved. Teams are defined per group:
+calendar and an about page both belong to a group, and there is none at
+provisioning time; the group's calendar is created when its first event or
+color is saved. Teams are defined per group:
 its leaders create them in Group settings › Teams
 (`/g/<groupId>/settings/teams`) and designate capabilities per team
 (`is_serving_role`) and leadership per membership

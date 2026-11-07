@@ -549,7 +549,7 @@ function todoRows(
       title:
         pendingJoinCount === 1 ? "1 person asked to join" : `${pendingJoinCount} people asked to join`,
       detail: "Approve or decline",
-      href: groupPath(groupId, "/settings/privacy"),
+      href: groupPath(groupId, "/settings/requests"),
     });
   }
   rows.push(...moreDatesRows(servingTeams, groupId, today));

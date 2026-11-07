@@ -2,9 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { mintSignedUrls } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Users, Video } from "lucide-react";
+import { Users } from "lucide-react";
 import { displayName, initials } from "@/lib/names";
-import { getGroupSettings } from "@/lib/groups/settings";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,12 +36,12 @@ export default async function AboutGroupPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, org_id")
+    .select("role")
     .eq("id", user.id)
     .single();
   if (!profile || profile.role === "pending") redirect("/dashboard");
 
-  const [aboutRead, teachersRead, settings] = await Promise.all([
+  const [aboutRead, teachersRead] = await Promise.all([
     supabase.from("about_page").select("*").eq("group_id", group.id).maybeSingle(),
     supabase
       .from("class_teachers")
@@ -52,7 +51,6 @@ export default async function AboutGroupPage({
       .eq("group_id", group.id)
       .order("sort_order")
       .order("created_at"),
-    getGroupSettings(supabase, profile.org_id, group.id),
   ]);
 
   const isLeader = group.role === "leader";
@@ -90,11 +88,6 @@ export default async function AboutGroupPage({
     profiles: t.profiles ? { ...t.profiles, avatar_url: signedAvatars[i] } : t.profiles,
   }));
 
-  // Only an https link reaches an anchor; Group details enforces the same rule.
-  const videoCallUrl = settings.weekly_zoom_url?.startsWith("https://")
-    ? settings.weekly_zoom_url
-    : null;
-
   return (
     <PageContainer>
       <PageHeader title={`About ${group.name}`} actions={editLink} />
@@ -105,34 +98,6 @@ export default async function AboutGroupPage({
         <p className="text-lg text-muted-foreground">
           The group summary hasn&apos;t been written yet.
         </p>
-      )}
-
-      {(videoCallUrl || settings.zoom_meeting_time) && (
-        <Card className="mt-10">
-          <CardContent className="py-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <h2 className="flex items-center gap-2 text-xl font-bold text-foreground">
-                  <Video className="h-6 w-6 text-brand-primary-text" aria-hidden="true" />
-                  Weekly video call
-                </h2>
-                {settings.zoom_meeting_time && (
-                  <p className="mt-1 text-lg text-foreground">{settings.zoom_meeting_time}</p>
-                )}
-              </div>
-              {videoCallUrl && (
-                <Button
-                  size="lg"
-                  nativeButton={false}
-                  render={<Link href={videoCallUrl} target="_blank" rel="noopener noreferrer" />}
-                  className="shrink-0"
-                >
-                  Join video call
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
       )}
 
       <section className="mt-10">

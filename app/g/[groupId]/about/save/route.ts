@@ -117,8 +117,7 @@ async function writeLeaders(
 }
 
 /**
- * The one Save behind the About editor and the color and video call fields of
- * Group details. Writes go through the cookie-bound client, so RLS still applies; this route adds the rule RLS does not express, that a
+ * The one Save behind the About editor and the color field of Group details. Writes go through the cookie-bound client, so RLS still applies; this route adds the rule RLS does not express, that a
  * leader can only list members of the group.
  */
 export async function POST(
@@ -184,20 +183,6 @@ export async function POST(
       .upsert({ org_id: orgId, group_id: groupId, body: changes.summary, ...stamp })
       .select("group_id");
     if (error || !data?.length) return failed("summary", error);
-  }
-
-  if (changes.videoCall) {
-    const { data, error } = await supabase
-      .from("group_settings")
-      .upsert({
-        org_id: orgId,
-        group_id: groupId,
-        weekly_zoom_url: changes.videoCall.url || null,
-        zoom_meeting_time: changes.videoCall.time || null,
-        ...stamp,
-      })
-      .select("group_id");
-    if (error || !data?.length) return failed("video call", error);
   }
 
   if (changes.color) {

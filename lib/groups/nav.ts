@@ -30,6 +30,8 @@ export type SidebarLink = {
   exact?: boolean;
   /** Set apart from the pages: smaller and muted. */
   quiet?: true;
+  /** Waiting on the viewer; never zero. */
+  count?: number;
 };
 
 export type SwitcherRow = {
@@ -65,6 +67,8 @@ export type SidebarInput = {
   discoveryOn: boolean;
   /** The viewer leads the active group. */
   isLeader: boolean;
+  /** Requests to join waiting on the active group, for its leader; null at zero or when not counted. */
+  waitingRequests?: number | null;
   hasServingAccess: boolean;
   orgName: string;
 };
@@ -111,7 +115,9 @@ function groupPages(group: ActiveGroup, churchBase: string, input: SidebarInput)
     link(groupBase, "/about", "About", "about")
   );
   if (input.isLeader) {
-    items.push({ kind: "separator" }, link(groupBase, "/settings", "Group settings", "group-settings"));
+    const settings = link(groupBase, "/settings", "Group settings", "group-settings");
+    if (input.waitingRequests) settings.count = input.waitingRequests;
+    items.push({ kind: "separator" }, settings);
   }
   return items;
 }

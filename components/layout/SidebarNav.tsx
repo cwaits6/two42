@@ -18,6 +18,7 @@ import {
 import { Fragment, type ComponentType } from "react";
 import type { IconName, SidebarItem, SidebarLink } from "@/lib/groups/nav";
 import { GroupSwitcher } from "./GroupSwitcher";
+import { WaitingCount } from "./WaitingCount";
 
 interface SidebarNavProps {
   items: SidebarItem[];
@@ -60,16 +61,18 @@ export function SidebarNav({ items, collapsed, onNavigate }: SidebarNavProps) {
   const renderLink = (item: SidebarLink) => {
     const active = isActive(item.href, item.exact);
     const Icon = ICONS[item.icon];
+    const named = item.count ? `${item.label}, ${item.count} waiting` : item.label;
     return (
       <Link
         href={item.href}
         className={linkClass(active, item.quiet === true)}
         aria-current={active ? "page" : undefined}
-        title={collapsed ? item.label : undefined}
+        title={collapsed ? named : undefined}
         onClick={onNavigate}
       >
         <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
         <span className={collapsed ? "sr-only" : undefined}>{item.label}</span>
+        {item.count ? <WaitingCount count={item.count} collapsed={collapsed} /> : null}
       </Link>
     );
   };

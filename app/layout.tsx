@@ -17,6 +17,7 @@ import { getDiscoveryOn } from "@/lib/groups/discovery";
 import { getGroupCreationPolicy } from "@/lib/groups/creationPolicy";
 import { getGroupMemberships } from "@/lib/groups/server";
 import { getWaitingRequestCount } from "@/lib/admin/requestCounts";
+import { getGroupWaitingRequestCounts } from "@/lib/groups/joinRequestCounts";
 import { PROFILE_COLUMNS, type ProfileColumns } from "@/lib/profileColumns";
 import { mintSignedUrl } from "@/lib/storageRead";
 import type { ActiveGroup } from "@/lib/groups/active";
@@ -79,6 +80,7 @@ export default async function RootLayout({
   let creationPolicy: GroupCreationPolicy = "approval";
   let photoUrl: string | null = null;
   let waitingRequests: number | null = null;
+  let groupWaitingRequests: Record<string, number> = {};
   if (user) {
     const supabase = await createClient();
     const [{ data, error }, { data: groupData, error: groupError }, { data: platformAdmin }] = await Promise.all([
@@ -116,14 +118,25 @@ export default async function RootLayout({
     // Only a church admin's count is the whole church's; anyone else's would be a partial one.
     const loadWaitingRequests = () =>
       data?.role === "admin" ? getWaitingRequestCount().catch(() => null) : Promise.resolve(null);
-    [hasServingAccess, memberships, discoveryOn, creationPolicy, photoUrl, waitingRequests] = await Promise.all([
+    const membershipsLoad = loadNavMemberships();
+    // Every group the viewer leads, not just the one in the address: the
+    // layout does not re-run on client navigation between groups.
+    const loadGroupWaitingRequests = () =>
+      membershipsLoad
+        .then((groups) => getGroupWaitingRequestCounts(groups.filter((g) => g.role === "leader").map((g) => g.id)))
+        .catch((e: unknown) => {
+          logError("Layout: failed to load group waiting request counts", e);
+          return {};
+        });
+    [hasServingAccess, memberships, discoveryOn, creationPolicy, photoUrl, waitingRequests, groupWaitingRequests] = await Promise.all([
       loadServingAccess(),
-      loadNavMemberships(),
+      membershipsLoad,
       getDiscoveryOn(),
       getGroupCreationPolicy(),
       // Fail-soft: null renders the person's initials.
       mintSignedUrl(profile?.avatar_url),
       loadWaitingRequests(),
+      loadGroupWaitingRequests(),
     ]);
   }
 
@@ -181,6 +194,7 @@ export default async function RootLayout({
             hasServingAccess={hasServingAccess}
             orgName={b.display_name}
             waitingRequests={waitingRequests}
+            groupWaitingRequests={groupWaitingRequests}
           >
             <Header />
             <AppShell>{children}</AppShell>

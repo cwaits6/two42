@@ -103,7 +103,7 @@ Every page is built from the same frame, so moving between sibling pages never m
 - **On a phone** a top bar (`components/layout/Header.tsx`) holds the wordmark on the left and one **Menu** button on the right, and stays visible whether the drawer is open or closed. The drawer holds the same page list with the same account block at the bottom.
 - **The account block** (`components/layout/AccountBlock.tsx`) shows the person's photo, or their initials, and their name; an operator, who has no profile in any church, is shown by their sign-in address. Its menu lists, in this order: **My profile**, **Settings**, **Church admin** (church admins only), **Platform** (operators only), then **Help**, **Privacy**, **Terms**, then **Sign out**, set apart as the last item. A row is listed only when it opens for that person, so a pending person gets Help, Privacy, Terms and Sign out, and an operator outside a church gets Platform and those same rows. The menu opens on click, tap, Enter or Space and closes with Escape. It never opens on hover.
 - **Sign out** appears once in the frame, in that menu. Signed in, there is no footer; Settings repeats Help, Privacy and Terms.
-- **Church admin and Platform pages** use the same frame with their own page list, led by the way back to Home.
+- **Church admin, Platform and Group settings pages** use the same frame with their own page list. Church admin and Platform are led by the way back to Home. Group settings, for the group's leaders only, is led by the way back to the group, named for it, and lists Details, Requests, Privacy and joining, Invite links, Teams and Labels, with the number of requests to join waiting on Requests. Group settings opens on Details.
 - **The wordmark** takes a member to the page that lists all of their groups. Its link is at least 44px tall in the sidebar, as the 42 mark, and in the phone bar.
 - **Signed out**, the header offers **Sign in** at every width and the page ends with the footer.
 
@@ -115,7 +115,7 @@ Who sees which row is decided on the server, from the signed-in person's own row
 2. Prayer, Lessons, Serving (Serving only for people on a serving team)
 3. Directory, Give, About
 
-Then, below a rule, **Group settings** for leaders only.
+Then, below a rule, **Group settings** for leaders only, showing the number of requests to join waiting on that group, and no number at zero.
 
 - **One Home at a time.** Inside a group, Home is that group's Home. No list ever shows two items with the same label.
 - **The group block** sits above the pages and, expanded, always names the group in text beside its color. For a member of one group it is a label. For a member of two or more it is the group switcher: its first row, **All groups**, opens the page that lists all of their groups, where the list is Home, Calendar and Directory.

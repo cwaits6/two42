@@ -12,8 +12,11 @@ vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children?: ReactNode }) =>
     createElement("a", { href }, children),
 }));
+let settingsAnswer: { data: unknown[] | null; error: unknown };
+const settingsUpsert = vi.fn();
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
+    auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) },
     from: () => ({
       update: (fields: unknown) => ({
         eq: () => ({
@@ -23,6 +26,12 @@ vi.mock("@/lib/supabase/client", () => ({
           },
         }),
       }),
+      upsert: (row: unknown) => ({
+        select: async () => {
+          settingsUpsert(row);
+          return settingsAnswer;
+        },
+      }),
     }),
   }),
 }));
@@ -31,9 +40,8 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: (m: string) => toas
 
 const { GroupDetailsForm } = await import("./GroupDetailsForm");
 
-const TIME = "#zoom-meeting-time";
-const URL_FIELD = "#weekly-zoom-url";
 const NAME = "#group-name";
+const COLOR = "#group-color";
 
 let root: Root;
 let container: HTMLElement;
@@ -47,6 +55,12 @@ function type(selector: string, value: string) {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, value);
   return act(async () => void input.dispatchEvent(new Event("input", { bubbles: true })));
 }
+const click = (selector: string) =>
+  act(async () => {
+    const control = container.querySelector<HTMLElement>(selector);
+    if (!control) throw new Error(`No control at ${selector}`);
+    control.click();
+  });
 const pressSave = () =>
   act(async () => {
     container.querySelector("form")?.requestSubmit();
@@ -59,6 +73,8 @@ beforeEach(async () => {
   bodies = [];
   urls = [];
   groupUpdate.mockReset();
+  settingsUpsert.mockReset();
+  settingsAnswer = { data: [{ group_id: "g" }], error: null };
   toastError.mockReset();
   vi.stubGlobal("fetch", (url: string, init: { body: string }) => {
     urls.push(url);
@@ -72,12 +88,14 @@ beforeEach(async () => {
     root.render(
       createElement(GroupDetailsForm, {
         groupId: "11111111-1111-4111-8111-111111111111",
-        cancelHref: "/g/11111111-1111-4111-8111-111111111111/settings",
+        cancelHref: "/g/11111111-1111-4111-8111-111111111111/dashboard",
         initialName: "Grace",
         initialDescription: null,
-        initialColor: "#B85C38",
-        initialVideoCallUrl: "",
-        initialVideoCallTime: "",
+        initialFields: {
+          color: "#B85C38",
+          calendar: { calendar_meeting_details: true, calendar_event_notes: true, calendar_event_location: true },
+          reminders: { enabled: true, defaultDays: 1 },
+        },
       }),
     ),
   );
@@ -106,30 +124,30 @@ describe("GroupDetailsForm", () => {
     expect(showsUnsaved()).toBe(false);
   });
 
-  it("sends only the video call to the shared Save when only it changed", async () => {
-    await type(TIME, "Thursdays");
+  it("sends only the color to the shared Save when only it changed", async () => {
+    await type(COLOR, "#2a211a");
     await pressSave();
     expect(groupUpdate).not.toHaveBeenCalled();
     expect(urls[0]).toBe("/g/11111111-1111-4111-8111-111111111111/about/save");
-    expect(bodies[0]).toEqual({ videoCall: { url: "", time: "Thursdays" } });
+    expect(bodies[0]).toEqual({ color: "#2a211a" });
   });
 
-  it("keeps a field typed during the request on screen, unsaved, and in the next Save", async () => {
-    await type(TIME, "Thursdays");
+  it("keeps a field changed during the request on screen, unsaved, and in the next Save", async () => {
+    await type(COLOR, "#2a211a");
     await pressSave();
-    await type(TIME, "Fridays");
+    await type(COLOR, "#1f3a5f");
     await answerOk();
 
-    expect(container.querySelector<HTMLInputElement>(TIME)?.value).toBe("Fridays");
+    expect(container.querySelector<HTMLInputElement>(COLOR)?.value).toBe("#1f3a5f");
     expect(showsUnsaved()).toBe(true);
 
     await pressSave();
-    expect(bodies[1]).toEqual({ videoCall: { url: "", time: "Fridays" } });
+    expect(bodies[1]).toEqual({ color: "#1f3a5f" });
   });
 
   it.each([
     [NAME, "  ", "Enter a group name."],
-    [URL_FIELD, "http://example.test", "Enter a link that starts with https://"],
+    [COLOR, "#7d7d7d", "Choose a darker or lighter color"],
   ])("refuses an invalid %s without saving", async (selector, value, message) => {
     await type(selector, value);
     await pressSave();
@@ -139,10 +157,44 @@ describe("GroupDetailsForm", () => {
   });
 
   it("keeps the changes unsaved when the Save fails", async () => {
-    await type(TIME, "Thursdays");
+    await type(COLOR, "#2a211a");
     await pressSave();
     await act(async () => answers.shift()!({ ok: false, status: 500 }));
     expect(toastError).toHaveBeenCalled();
+    expect(showsUnsaved()).toBe(true);
+  });
+
+  it("saves nothing when a calendar switch changes, then upserts only that column on Save", async () => {
+    await click("#calendar_event_notes");
+    expect(settingsUpsert).not.toHaveBeenCalled();
+    expect(showsUnsaved()).toBe(true);
+
+    await pressSave();
+    const row = settingsUpsert.mock.calls[0][0];
+    expect(row).toMatchObject({ group_id: "11111111-1111-4111-8111-111111111111", calendar_event_notes: false, updated_by: "u1" });
+    expect(Object.keys(row).sort()).toEqual(["calendar_event_notes", "group_id", "updated_at", "updated_by"]);
+    expect(bodies).toEqual([]);
+    expect(showsUnsaved()).toBe(false);
+  });
+
+  it("sends a reminder change and a name change out in one Save", async () => {
+    await type(NAME, "Hope");
+    await click("#event_reminders_enabled");
+    await pressSave();
+    expect(groupUpdate).toHaveBeenCalledWith({ name: "Hope", description: null });
+    expect(settingsUpsert.mock.calls[0][0]).toMatchObject({ event_reminders_enabled: false });
+    expect(settingsUpsert.mock.calls[0][0]).not.toHaveProperty("event_reminder_default_days");
+    expect(showsUnsaved()).toBe(false);
+  });
+
+  it.each([
+    ["fails", { data: null, error: { message: "denied" } }],
+    ["matches no row", { data: [], error: null }],
+  ])("keeps the setting unsaved and says so when the write %s", async (_name, answer) => {
+    settingsAnswer = answer;
+    await click("#calendar_meeting_details");
+    await pressSave();
+    expect(toastError).toHaveBeenCalledOnce();
     expect(showsUnsaved()).toBe(true);
   });
 });

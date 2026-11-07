@@ -2,13 +2,11 @@ import { createClient } from "@/lib/supabase/server";
 import { mintSignedUrl, mintSignedUrls } from "@/lib/storageRead";
 import { redirect } from "next/navigation";
 import { displayName, initials } from "@/lib/names";
-import { loadDirectoryMemberOptions } from "@/lib/giving/server";
-import { getGroupSettings } from "@/lib/groups/settings";
 import { PrayerBoard } from "@/components/prayer/PrayerBoard";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ErrorState } from "@/components/states/ErrorState";
-import { toCallSession, toWallRow } from "@/lib/prayer";
+import { toWallRow } from "@/lib/prayer";
 import { readList } from "@/lib/supabase/readList";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { requireActiveGroup } from "@/lib/groups/server";
@@ -30,28 +28,18 @@ export default async function PrayerPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, org_id, first_name, last_name, preferred_name, avatar_url")
+    .select("role, first_name, last_name, preferred_name, avatar_url")
     .eq("id", user.id)
     .single();
   if (!profile || profile.role === "pending") redirect("/dashboard");
 
-  const [requests, sessions, { members }, settings, timeZone] = await Promise.all([
+  const [requests, timeZone] = await Promise.all([
     supabase
       .from("prayer_wall")
       .select("*")
       .eq("group_id", group.id)
       .order("created_at", { ascending: false })
       .then((read) => readList(read, "prayer requests")),
-    supabase
-      .from("prayer_call_sessions")
-      .select("*")
-      .eq("group_id", group.id)
-      .order("display_order")
-      .order("created_at")
-      .then((read) => readList(read, "prayer call times")),
-    loadDirectoryMemberOptions(supabase, profile.org_id),
-    // getGroupSettings logs its own failure; the call card reports it.
-    getGroupSettings(supabase, profile.org_id, group.id).catch(() => null),
     getOrgTimeZone(),
   ]);
 
@@ -80,34 +68,18 @@ export default async function PrayerPage({
     avatar_url: signedWallAvatars[i],
   }));
 
-  // The call card is all or nothing: a leader editing it with half its data
-  // missing would save the gap over what is stored.
-  const prayerCall =
-    sessions === null || settings === null
-      ? null
-      : {
-          sessions: sessions.map(toCallSession),
-          url: settings.weekly_prayer_call_url?.startsWith("https://")
-            ? settings.weekly_prayer_call_url
-            : null,
-          time: settings.weekly_prayer_call_time,
-        };
-
   return (
     <PageContainer size="wide">
       {header}
       <PrayerBoard
         initialRequests={signedRequests}
-        prayerCall={prayerCall}
         me={{
           id: user.id,
           name: displayName(profile),
           initials: initials(profile),
           avatarUrl: myAvatarUrl,
         }}
-        group={{ id: group.id, name: group.name, isLeader: group.role === "leader" }}
-        members={members}
-        orgId={profile.org_id}
+        group={{ id: group.id, name: group.name }}
         timeZone={timeZone}
       />
     </PageContainer>
