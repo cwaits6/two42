@@ -15,27 +15,25 @@ import { Textarea } from "@/components/ui/textarea";
 import { failureMessage } from "@/lib/errorCopy";
 import { groupPath } from "@/lib/groups/active";
 import { createClient } from "@/lib/supabase/client";
-import { hasChanges } from "../../about/edit/aboutChanges";
-import { colorError, detailsChanges, videoCallUrlError, type DetailsFields } from "./detailsChanges";
+import { CalendarSubscriptionCard } from "./CalendarSubscriptionCard";
+import { colorError, detailsChanges, type DetailsFields } from "./detailsChanges";
+import { EventRemindersCard } from "./EventRemindersCard";
 
-type FieldErrors = { name?: string; color?: string; videoCallUrl?: string };
+type FieldErrors = { name?: string; color?: string };
 
+/** Every control on Details waits for the one Save, which writes each changed part in turn. */
 export function GroupDetailsForm({
   groupId,
   cancelHref,
   initialName,
   initialDescription,
-  initialColor,
-  initialVideoCallUrl,
-  initialVideoCallTime,
+  initialFields,
 }: {
   groupId: string;
   cancelHref: string;
   initialName: string;
   initialDescription: string | null;
-  initialColor: string;
-  initialVideoCallUrl: string;
-  initialVideoCallTime: string;
+  initialFields: DetailsFields;
 }) {
   const router = useRouter();
   const [savedGroup, setSavedGroup] = useState({
@@ -44,11 +42,7 @@ export function GroupDetailsForm({
   });
   const [name, setName] = useState(initialName);
   const [description, setDescription] = useState(initialDescription ?? "");
-  const [saved, setSaved] = useState<DetailsFields>({
-    color: initialColor,
-    videoCallUrl: initialVideoCallUrl,
-    videoCallTime: initialVideoCallTime,
-  });
+  const [saved, setSaved] = useState<DetailsFields>(initialFields);
   const [draft, setDraft] = useState(saved);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [saving, setSaving] = useState(false);
@@ -58,73 +52,84 @@ export function GroupDetailsForm({
   const groupChanged =
     trimmedName !== savedGroup.name || trimmedDescription !== savedGroup.description;
   const changes = detailsChanges(saved, draft);
-  const dirty = groupChanged || hasChanges(changes);
+  const dirty = groupChanged || Object.keys(changes).length > 0;
   const leaveGuard = useLeaveGuard(dirty);
 
   const setField = <K extends keyof DetailsFields>(key: K, value: DetailsFields[K]) =>
     setDraft((prev) => ({ ...prev, [key]: value }));
+
+  function fail(message: string) {
+    setSaving(false);
+    toast.error(message);
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const found: FieldErrors = {
       name: trimmedName ? undefined : "Enter a group name.",
       color: colorError(draft.color),
-      videoCallUrl: videoCallUrlError(draft.videoCallUrl),
     };
     setErrors(found);
     const firstInvalid = found.name
       ? "group-name"
       : found.color
         ? "group-color"
-        : found.videoCallUrl
-          ? "weekly-zoom-url"
-          : null;
+        : null;
     if (firstInvalid) {
       document.getElementById(firstInvalid)?.focus();
       return;
     }
 
+    // Each part that lands moves only its own baseline, and the fields stay
+    // live during the requests: a failure keeps the rest unsaved for a retry,
+    // and anything changed since Save stays on screen and unsaved.
+    const sent = draft;
     setSaving(true);
+    const supabase = createClient();
     if (groupChanged) {
       // The "Leaders and admins can update groups" policy is the authority on
       // who may save; a non-leader's write matches zero rows.
-      const { data, error } = await createClient()
+      const { data, error } = await supabase
         .from("groups")
         .update({ name: trimmedName, description: trimmedDescription || null })
         .eq("id", groupId)
         .select("id");
-      if (error || !data?.length) {
-        setSaving(false);
-        toast.error("Couldn't save the group. Try again.");
-        return;
-      }
+      if (error || !data?.length) return fail("Couldn't save the group. Try again.");
       setSavedGroup({ name: trimmedName, description: trimmedDescription });
     }
 
-    if (hasChanges(changes)) {
+    if (changes.color) {
       let failure: number | "network" | null;
       try {
         const res = await fetch(groupPath(groupId, "/about/save"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(changes),
+          body: JSON.stringify({ color: changes.color }),
         });
         failure = res.ok ? null : res.status;
       } catch {
         failure = "network";
       }
-      if (failure !== null) {
-        setSaving(false);
-        toast.error(failureMessage("save the group", failure));
-        return;
-      }
-      // Only the baseline moves: the fields stay live during the request, so
-      // anything typed since it was sent must stay on screen and stay unsaved.
-      setSaved({
-        ...draft,
-        videoCallUrl: draft.videoCallUrl.trim(),
-        videoCallTime: draft.videoCallTime.trim(),
-      });
+      if (failure !== null) return fail(failureMessage("save the group", failure));
+      setSaved((prev) => ({ ...prev, color: sent.color }));
+    }
+
+    if (changes.settings) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      // A write the RLS policy rejects matches zero rows without an error.
+      const { data, error } = await supabase
+        .from("group_settings")
+        .upsert({
+          group_id: groupId,
+          ...changes.settings,
+          updated_by: user?.id,
+          updated_at: new Date().toISOString(),
+        })
+        .select("group_id");
+      if (error || !data?.length) return fail(failureMessage("save the group"));
+      setSaved((prev) => ({ ...prev, calendar: sent.calendar, reminders: sent.reminders }));
     }
 
     setSaving(false);
@@ -198,48 +203,14 @@ export function GroupDetailsForm({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xl font-bold text-foreground">Weekly calls</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="weekly-zoom-url" className="text-base">Video call link</Label>
-              <Input
-                id="weekly-zoom-url"
-                type="url"
-                placeholder="https://…"
-                value={draft.videoCallUrl}
-                onChange={(e) => setField("videoCallUrl", e.target.value)}
-                className="text-base"
-                {...invalidFieldProps("weekly-zoom-url", errors.videoCallUrl)}
-              />
-              <FieldError fieldId="weekly-zoom-url" message={errors.videoCallUrl} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="zoom-meeting-time" className="text-base">Video call time</Label>
-              <Input
-                id="zoom-meeting-time"
-                placeholder="Thursdays at 7pm"
-                value={draft.videoCallTime}
-                onChange={(e) => setField("videoCallTime", e.target.value)}
-                className="text-base"
-              />
-            </div>
-          </div>
-          <p className="text-base text-muted-foreground">
-            The prayer call is set up on the{" "}
-            <Link
-              href={groupPath(groupId, "/prayer")}
-              className="inline-flex min-h-11 items-center font-semibold text-brand-primary-text underline underline-offset-4 hover:text-foreground"
-            >
-              Prayer page
-            </Link>
-            .
-          </p>
-        </CardContent>
-      </Card>
+      <CalendarSubscriptionCard
+        values={draft.calendar}
+        onChange={(key, next) =>
+          setDraft((prev) => ({ ...prev, calendar: { ...prev.calendar, [key]: next } }))
+        }
+      />
+
+      <EventRemindersCard values={draft.reminders} onChange={(next) => setField("reminders", next)} />
 
       <div className="space-y-3">
         <p aria-live="polite" className="min-h-6 text-base text-muted-foreground">

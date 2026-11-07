@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { detailsChanges } from "../../settings/details/detailsChanges";
 import { aboutChanges, hasChanges, parseAboutChanges } from "./aboutChanges";
 
 const A = "11111111-1111-4111-8111-111111111111";
@@ -8,11 +7,6 @@ const C = "33333333-3333-4333-8333-333333333333";
 const leaderA = { profile_id: A, title: "Coordinator", bio: "" };
 const leaderB = { profile_id: B, title: "", bio: "Hi" };
 const saved = [leaderA, leaderB];
-const savedDetails = {
-  color: "#B85C38",
-  videoCallUrl: "https://example.test/call",
-  videoCallTime: "Thursdays at 7pm",
-};
 
 describe("aboutChanges", () => {
   it("is empty when nothing changed, so the page is not dirty", () => {
@@ -63,7 +57,7 @@ describe("parseAboutChanges", () => {
   it("round-trips what aboutChanges builds", () => {
     const changes = {
       ...aboutChanges(saved, [leaderB], "[]"),
-      ...detailsChanges(savedDetails, { color: "#2A211A", videoCallUrl: "", videoCallTime: "" }),
+      color: "#2A211A",
     };
     expect(parseAboutChanges(JSON.parse(JSON.stringify(changes)))).toEqual(changes);
   });
@@ -87,7 +81,6 @@ describe("parseAboutChanges", () => {
     ["a summary that is not text", { summary: 1 }],
     ["a color that fails the hex check", { color: "url(x)" }],
     ["a color too pale for text", { color: "#7d7d7d" }],
-    ["a video call link that is not https", { videoCall: { url: "http://x", time: "" } }],
     ["a malformed leader id", { leaders: { added: [], edited: [{ profile_id: "x", title: "", bio: "" }], removed: [] } }],
     ["a malformed removed id", { leaders: { added: [], edited: [], removed: ["x"] } }],
     ["a malformed order id", { leaders: { added: [], edited: [], removed: [], order: ["x"] } }],

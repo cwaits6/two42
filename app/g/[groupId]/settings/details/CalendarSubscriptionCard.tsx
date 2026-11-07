@@ -1,88 +1,35 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { createClient } from "@/lib/supabase/client";
+import type { CalendarSetting } from "./detailsChanges";
 
-type Setting = "calendar_meeting_details" | "calendar_event_notes" | "calendar_event_location";
-
-const ROWS: {
-  key: Setting;
-  label: string;
-  description: string;
-  on: string;
-  off: string;
-}[] = [
+const ROWS: { key: CalendarSetting; label: string; description: string }[] = [
   {
     key: "calendar_meeting_details",
     label: "Join details",
     description: "The meeting link, ID and passcode of online events.",
-    on: "Join details now go to members' calendars.",
-    off: "Join details now stay on the event page.",
   },
   {
     key: "calendar_event_notes",
     label: "Notes",
     description: "Each event's description.",
-    on: "Notes now go to members' calendars.",
-    off: "Notes now stay on the event page.",
   },
   {
     key: "calendar_event_location",
     label: "Location",
     description: "Where each event is.",
-    on: "Locations now go to members' calendars.",
-    off: "Locations now stay on the event page.",
   },
 ];
 
 export function CalendarSubscriptionCard({
-  groupId,
-  initial,
+  values,
+  onChange,
 }: {
-  groupId: string;
-  initial: Record<Setting, boolean>;
+  values: Record<CalendarSetting, boolean>;
+  onChange: (key: CalendarSetting, next: boolean) => void;
 }) {
-  const supabase = useMemo(() => createClient(), []);
-  const [values, setValues] = useState(initial);
-  // Per switch, so one save finishing never re-enables another mid-save.
-  const [saving, setSaving] = useState<ReadonlySet<Setting>>(new Set());
-
-  // Each switch saves on its own: one left unsaved would read as "kept out"
-  // while subscriptions still carry it.
-  async function toggle(key: Setting, next: boolean) {
-    setValues((v) => ({ ...v, [key]: next }));
-    setSaving((pending) => new Set(pending).add(key));
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    // A write the RLS policy rejects matches zero rows without an error.
-    const { data, error } = await supabase
-      .from("group_settings")
-      .upsert({
-        group_id: groupId,
-        [key]: next,
-        updated_by: user?.id,
-        updated_at: new Date().toISOString(),
-      })
-      .select("group_id");
-    setSaving((pending) => {
-      const still = new Set(pending);
-      still.delete(key);
-      return still;
-    });
-    const row = ROWS.find((r) => r.key === key)!;
-    if (error || !data?.length) {
-      setValues((v) => ({ ...v, [key]: !next }));
-      toast.error("Couldn't save the calendar setting. Please try again.");
-      return;
-    }
-    toast.success(next ? row.on : row.off);
-  }
-
   return (
     <Card>
       <CardHeader>
@@ -90,8 +37,7 @@ export function CalendarSubscriptionCard({
         <CardDescription className="text-base">
           What members&apos; calendar apps get when they subscribe to this group&apos;s calendar.
           Anything turned off is replaced by a link to the event page, where signed-in members see
-          everything. An event can choose differently when it&apos;s added or edited. These switches
-          save as soon as you change them.
+          everything. An event can choose differently when it&apos;s added or edited.
         </CardDescription>
       </CardHeader>
       <CardContent className="divide-y divide-border">
@@ -113,8 +59,7 @@ export function CalendarSubscriptionCard({
               aria-describedby={`${row.key}-help`}
               className="mt-1 shrink-0"
               checked={values[row.key]}
-              disabled={saving.has(row.key)}
-              onCheckedChange={(next) => toggle(row.key, next)}
+              onCheckedChange={(next) => onChange(row.key, next)}
             />
           </div>
         ))}

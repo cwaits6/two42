@@ -130,30 +130,6 @@ export async function loadFundFormData(
   return { members: await toMemberOptions(rows), failed: false };
 }
 
-/**
- * Everyone the viewer's directory shows, for the prayer call card. A fund's
- * pickers use loadFundFormData, which is limited to the fund's group.
- */
-export async function loadDirectoryMemberOptions(
-  supabase: SupabaseClient,
-  orgId: string
-): Promise<{
-  members: MemberOption[];
-  failed: boolean;
-}> {
-  const rows = readList(
-    await supabase
-      .from("profiles_directory")
-      .select("id, first_name, last_name, preferred_name, avatar_url")
-      .eq("org_id", orgId)
-      .order("last_name")
-      .order("first_name"),
-    "directory members"
-  );
-  if (rows === null) return { members: [], failed: true };
-  return { members: await toMemberOptions(rows), failed: false };
-}
-
 // Private buckets: exchange stored avatar URLs for signed URLs before they reach
 // the pickers. Signing goes through lib/storageRead's own cookie-bound client,
 // never the caller's `supabase` parameter: a passed-in client is untyped as to

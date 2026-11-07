@@ -543,7 +543,7 @@ zero-row-checked in the UI.
 assertions in the function bodies are the tenant boundary; no lint sees
 them.** `schema_tenancy_lint.sql` check 4 only proves the bodies mention
 `org_id`. The browser-side `.rpc()` calls (`GroupJoinAction`,
-`useDiscoverableGroups`, `PrivacyAndJoiningManager`) and the server-side
+`useDiscoverableGroups`, `JoinRequestsManager`) and the server-side
 `getDiscoverableGroups()` run on the cookie-bound client and are not
 service-rooted, so the guard has nothing to check there; the grant matrix,
 the visibility rules, both join policies, who may review, the org switch

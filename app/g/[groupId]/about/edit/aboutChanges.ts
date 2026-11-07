@@ -29,14 +29,8 @@ export type LeaderChanges = {
 export type AboutChanges = {
   summary?: string;
   color?: string;
-  videoCall?: { url: string; time: string };
   leaders?: LeaderChanges;
 };
-
-/** The About page only links an https address, so nothing else may be saved. */
-export function isHttpsOrEmpty(value: string): boolean {
-  return value === "" || value.startsWith("https://");
-}
 
 function sameLeaders(a: LeaderEntry[], b: LeaderEntry[]): boolean {
   return (
@@ -156,13 +150,6 @@ export function parseAboutChanges(raw: unknown): AboutChanges | null {
     const check = validateGroupColor(raw.color);
     if (!check.ok) return null;
     changes.color = check.color;
-  }
-  if (raw.videoCall !== undefined) {
-    if (!isRecord(raw.videoCall)) return null;
-    const { url, time } = raw.videoCall;
-    if (typeof url !== "string" || typeof time !== "string") return null;
-    if (!isHttpsOrEmpty(url.trim())) return null;
-    changes.videoCall = { url: url.trim(), time: time.trim() };
   }
   if (raw.leaders !== undefined) {
     const leaders = parseLeaders(raw.leaders);

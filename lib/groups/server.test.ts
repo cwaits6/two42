@@ -38,7 +38,7 @@ vi.mock("@/lib/groups/memberships", () => ({
   loadGroupMemberships: (...args: unknown[]) => loadGroupMemberships(...args),
 }));
 
-const { getActiveGroup, getGroupMemberships, requireActiveGroup, requireGroupLeader } =
+const { getActiveGroup, getGroupMemberships, requireActiveGroup, requireGroupLeader, requireGroupSettingsLeader } =
   await import("@/lib/groups/server");
 
 const A_ID = "11111111-1111-4111-8111-111111111111";
@@ -162,5 +162,19 @@ describe("requireGroupLeader", () => {
 
   it("404s a member who does not lead the group", async () => {
     await expect(requireGroupLeader(B_ID)).rejects.toBeInstanceOf(NotFoundSentinel);
+  });
+});
+
+describe("requireGroupSettingsLeader", () => {
+  it("returns the group for its leader", async () => {
+    expect(await requireGroupSettingsLeader(A_ID)).toBe(A);
+  });
+
+  it("sends a member who does not lead the group to its Home", async () => {
+    await expect(requireGroupSettingsLeader(B_ID)).rejects.toMatchObject({ target: `/g/${B_ID}/dashboard` });
+  });
+
+  it("404s a signed-in viewer who is not in the group", async () => {
+    await expect(requireGroupSettingsLeader(Z_ID)).rejects.toBeInstanceOf(NotFoundSentinel);
   });
 });

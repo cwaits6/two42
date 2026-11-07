@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 type BackLink =
   | {
       backHref: string;
-      /** "Back to {parent page name}", e.g. "Back to Group settings" */
+      /** "Back to {parent page name}", e.g. "Back to Groups" */
       backLabel: string;
     }
   | { backHref?: undefined; backLabel?: undefined };

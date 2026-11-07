@@ -78,10 +78,6 @@ describe("getGroupSettings", () => {
   it("maps a saved row, normalizing the link mode", async () => {
     const { client } = makeClient({
       data: {
-        weekly_zoom_url: "https://example.test/zoom",
-        zoom_meeting_time: "Thursdays 7pm",
-        weekly_prayer_call_url: null,
-        weekly_prayer_call_time: null,
         serving_link_mode: "login",
         calendar_meeting_details: false,
         calendar_event_notes: false,
@@ -93,10 +89,6 @@ describe("getGroupSettings", () => {
     });
 
     expect(await getGroupSettings(client, "org-1", "grp-1")).toEqual({
-      weekly_zoom_url: "https://example.test/zoom",
-      zoom_meeting_time: "Thursdays 7pm",
-      weekly_prayer_call_url: null,
-      weekly_prayer_call_time: null,
       serving_link_mode: "login",
       calendar_meeting_details: false,
       calendar_event_notes: false,
@@ -109,10 +101,6 @@ describe("getGroupSettings", () => {
   it("leaves the link mode unset when the row never chose one", async () => {
     const { client } = makeClient({
       data: {
-        weekly_zoom_url: null,
-        zoom_meeting_time: null,
-        weekly_prayer_call_url: null,
-        weekly_prayer_call_time: null,
         serving_link_mode: null,
       },
       error: null,

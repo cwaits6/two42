@@ -425,26 +425,6 @@ export interface PrayerWallRow {
   i_am_praying: boolean;
 }
 
-/** One weekly prayer call session shown on the Prayer Call card */
-export interface PrayerCallSession {
-  id: string;
-  group_id: string;
-  /** 0 = Sunday … 6 = Saturday */
-  weekday: number;
-  /** "HH:MM:SS" from Postgres time */
-  start_time: string;
-  end_time: string | null;
-  leader_id: string | null;
-  dial_in: string | null;
-  pin: string | null;
-  join_url: string | null;
-  /** The synced weekly recurring calendar event, kept in step on save */
-  event_id: string | null;
-  display_order: number;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface SiteSetting {
   key: string;
   value: string | null;
@@ -470,10 +450,6 @@ export interface AboutPage {
  */
 export interface GroupSettings {
   group_id: string;
-  weekly_zoom_url: string | null;
-  zoom_meeting_time: string | null;
-  weekly_prayer_call_url: string | null;
-  weekly_prayer_call_time: string | null;
   serving_link_mode: "signed" | "login" | null;
   /** Calendar subscriptions carry meeting links, IDs and passcodes; off, they link to the event page. */
   calendar_meeting_details: boolean;

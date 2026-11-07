@@ -5,10 +5,6 @@ import { logError } from "@/lib/log";
 
 export type GroupSettingsValues = Pick<
   GroupSettings,
-  | "weekly_zoom_url"
-  | "zoom_meeting_time"
-  | "weekly_prayer_call_url"
-  | "weekly_prayer_call_time"
   | "serving_link_mode"
   | "calendar_meeting_details"
   | "calendar_event_notes"
@@ -18,10 +14,6 @@ export type GroupSettingsValues = Pick<
 >;
 
 export const GROUP_SETTINGS_DEFAULTS: GroupSettingsValues = {
-  weekly_zoom_url: null,
-  zoom_meeting_time: null,
-  weekly_prayer_call_url: null,
-  weekly_prayer_call_time: null,
   serving_link_mode: null,
   calendar_meeting_details: true,
   calendar_event_notes: true,
@@ -45,7 +37,7 @@ export async function getGroupSettings(
   const { data, error } = await supabase
     .from("group_settings")
     .select(
-      "weekly_zoom_url, zoom_meeting_time, weekly_prayer_call_url, weekly_prayer_call_time, serving_link_mode, calendar_meeting_details, calendar_event_notes, calendar_event_location, event_reminders_enabled, event_reminder_default_days"
+      "serving_link_mode, calendar_meeting_details, calendar_event_notes, calendar_event_location, event_reminders_enabled, event_reminder_default_days"
     )
     .eq("org_id", orgId)
     .eq("group_id", groupId)
@@ -56,10 +48,6 @@ export async function getGroupSettings(
   }
   if (!data) return GROUP_SETTINGS_DEFAULTS;
   return {
-    weekly_zoom_url: data.weekly_zoom_url ?? null,
-    zoom_meeting_time: data.zoom_meeting_time ?? null,
-    weekly_prayer_call_url: data.weekly_prayer_call_url ?? null,
-    weekly_prayer_call_time: data.weekly_prayer_call_time ?? null,
     serving_link_mode:
       data.serving_link_mode === "login" || data.serving_link_mode === "signed"
         ? data.serving_link_mode

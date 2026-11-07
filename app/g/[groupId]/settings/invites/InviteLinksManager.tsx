@@ -28,7 +28,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { siteConfig } from "@/lib/config";
-import { groupPath } from "@/lib/groups/active";
 import {
   DEFAULT_EXPIRY_PRESET,
   DEFAULT_USE_PRESET,
@@ -225,8 +224,6 @@ export function InviteLinksManager({ groupId, groupName, timeZone }: InviteLinks
       <PageHeader
         title="Invite links"
         subtitle={groupName}
-        backHref={groupPath(groupId, "/settings")}
-        backLabel="Back to Group settings"
         actions={
           <Button
             size="lg"

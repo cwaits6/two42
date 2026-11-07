@@ -241,11 +241,14 @@ describe("POST about/save", () => {
   });
 
   it("writes only the sections it was sent", async () => {
-    await save({ videoCall: { url: "", time: "" } });
-    expect(writes.map((w) => w.table)).toEqual(["group_settings"]);
-    expect(writes[0].rows).toMatchObject({ weekly_zoom_url: null, zoom_meeting_time: null });
-    expect(writes[0].rows).not.toHaveProperty("weekly_prayer_call_url");
-    expect(writes[0].rows).not.toHaveProperty("calendar_meeting_details");
+    await save({ summary: "[]" });
+    expect(writes.map((w) => w.table)).toEqual(["about_page"]);
+  });
+
+  it("answers ok and writes nothing for a video call section an older page still sends", async () => {
+    const res = await save({ videoCall: { url: "https://example.test", time: "Thursdays" } });
+    expect(res.status).toBe(200);
+    expect(writes).toEqual([]);
   });
 
   it("scopes the color write to the group's calendar and org", async () => {

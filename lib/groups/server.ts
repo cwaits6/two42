@@ -6,6 +6,7 @@ import { getOptionalUser } from "@/lib/supabase/current-user";
 import { loadGroupMemberships } from "@/lib/groups/memberships";
 import {
   GROUP_COOKIE,
+  groupPath,
   isUuid,
   resolveActiveGroup,
   type ActiveGroup,
@@ -72,5 +73,15 @@ export const requireActiveGroup = cache(async (groupId: string): Promise<ActiveG
 export async function requireGroupLeader(groupId: string): Promise<ActiveGroup> {
   const group = await requireActiveGroup(groupId);
   if (group.role !== "leader") notFound();
+  return group;
+}
+
+/**
+ * For Group settings pages: a member of the group who does not lead it is not
+ * enumerating anything, so they land on the group's Home rather than a 404.
+ */
+export async function requireGroupSettingsLeader(groupId: string): Promise<ActiveGroup> {
+  const group = await requireActiveGroup(groupId);
+  if (group.role !== "leader") redirect(groupPath(group.id, "/dashboard"));
   return group;
 }

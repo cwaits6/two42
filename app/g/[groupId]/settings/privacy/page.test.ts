@@ -4,11 +4,11 @@ import type { ActiveGroup } from "@/lib/groups/active";
 import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
 import { loggedLines } from "@/lib/log/testing";
 
-class NotFoundSentinel extends Error {}
+class GuardRefusal extends Error {}
 
-const requireGroupLeader = vi.fn();
+const requireGroupSettingsLeader = vi.fn();
 vi.mock("@/lib/groups/server", () => ({
-  requireGroupLeader: (groupId: string) => requireGroupLeader(groupId),
+  requireGroupSettingsLeader: (groupId: string) => requireGroupSettingsLeader(groupId),
 }));
 
 const getDiscoveryOn = vi.fn();
@@ -16,7 +16,6 @@ vi.mock("@/lib/groups/discovery", () => ({
   getDiscoveryOn: () => getDiscoveryOn(),
 }));
 
-vi.mock("@/lib/time/orgZone", () => ({ getOrgTimeZone: async () => "America/Chicago" }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }));
 
 const groupFlags = vi.fn();
@@ -61,7 +60,7 @@ function expectUnavailable(element: ReactElement) {
 }
 
 beforeEach(() => {
-  requireGroupLeader.mockReset();
+  requireGroupSettingsLeader.mockReset();
   getDiscoveryOn.mockReset();
   groupFlags.mockReset();
   vi.spyOn(console, "log").mockImplementation(() => {});
@@ -69,16 +68,16 @@ beforeEach(() => {
 
 describe("GroupPrivacySettingsPage", () => {
   it("does not render for a member who does not lead the group", async () => {
-    requireGroupLeader.mockRejectedValue(new NotFoundSentinel("not found"));
+    requireGroupSettingsLeader.mockRejectedValue(new GuardRefusal("sent to Home"));
 
     await expect(
       GroupPrivacySettingsPage({ params: Promise.resolve({ groupId: A_ID }) }),
-    ).rejects.toBeInstanceOf(NotFoundSentinel);
-    expect(requireGroupLeader).toHaveBeenCalledWith(A_ID);
+    ).rejects.toBeInstanceOf(GuardRefusal);
+    expect(requireGroupSettingsLeader).toHaveBeenCalledWith(A_ID);
   });
 
   it("renders the manager with the group's flags and the org switch when the viewer leads it", async () => {
-    requireGroupLeader.mockResolvedValue(leader);
+    requireGroupSettingsLeader.mockResolvedValue(leader);
     getDiscoveryOn.mockResolvedValue(true);
     groupFlags.mockReturnValue({ data: { is_private: true, join_policy: "open" }, error: null });
 
@@ -91,12 +90,11 @@ describe("GroupPrivacySettingsPage", () => {
       initialPrivate: true,
       initialPolicy: "open",
       orgDiscoveryOn: true,
-      timeZone: "America/Chicago",
     });
   });
 
   it("shows the unavailable notice, not the controls, when the flags read fails", async () => {
-    requireGroupLeader.mockResolvedValue(leader);
+    requireGroupSettingsLeader.mockResolvedValue(leader);
     getDiscoveryOn.mockResolvedValue(true);
     groupFlags.mockReturnValue({ data: null, error: { code: "57014", message: "canceled" } });
 
@@ -107,7 +105,7 @@ describe("GroupPrivacySettingsPage", () => {
   });
 
   it("shows the unavailable notice when the flags read returns no row", async () => {
-    requireGroupLeader.mockResolvedValue(leader);
+    requireGroupSettingsLeader.mockResolvedValue(leader);
     getDiscoveryOn.mockResolvedValue(false);
     groupFlags.mockReturnValue({ data: null, error: null });
 

@@ -17,7 +17,6 @@ vi.mock("@/lib/storageRead", () => ({
 
 const {
   givingStewardsCanManage,
-  loadDirectoryMemberOptions,
   loadFundFormData,
   readStewardsCanManage,
   signStewardAvatars,
@@ -119,18 +118,6 @@ describe("readStewardsCanManage", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(await givingStewardsCanManage(failing, ORG)).toBe(true);
     consoleError.mockRestore();
-  });
-});
-
-describe("loadDirectoryMemberOptions", () => {
-  it("reads the directory scoped on the org", async () => {
-    const { client, calls } = fakeClient({
-      profiles_directory: [{ id: "p1", first_name: "Ada", last_name: "L", preferred_name: null, avatar_url: "a.jpg" }],
-    });
-    const { members } = await loadDirectoryMemberOptions(client, ORG);
-    expect(calls[0].table).toBe("profiles_directory");
-    expect(calls[0].filters).toEqual([["eq", "org_id", ORG]]);
-    expect(members.map((m) => [m.id, m.avatarUrl])).toEqual([["p1", "signed:a.jpg"]]);
   });
 });
 

@@ -201,3 +201,28 @@ describe("buildSidebar: every state", () => {
     }
   });
 });
+
+describe("buildSidebar: the Group settings count", () => {
+  const settingsRow = (items: SidebarItem[]) =>
+    items.find((i) => i.kind === "link" && i.label === "Group settings") as
+      | Extract<SidebarItem, { kind: "link" }>
+      | undefined;
+
+  it("carries the waiting count on a leader's Group settings row", () => {
+    const items = buildSidebar(input({ memberships: [A, B], activeGroup: A, isLeader: true, waitingRequests: 2 }));
+    expect(settingsRow(items)?.count).toBe(2);
+  });
+
+  it("has no count at zero or when it couldn't be counted", () => {
+    for (const waitingRequests of [0, null, undefined]) {
+      const items = buildSidebar(input({ memberships: [A], activeGroup: A, isLeader: true, waitingRequests }));
+      expect(settingsRow(items)).toBeDefined();
+      expect(settingsRow(items)).not.toHaveProperty("count");
+    }
+  });
+
+  it("gives a member no Group settings row whatever the count", () => {
+    const items = buildSidebar(input({ memberships: [A, B], activeGroup: B, isLeader: false, waitingRequests: 4 }));
+    expect(settingsRow(items)).toBeUndefined();
+  });
+});

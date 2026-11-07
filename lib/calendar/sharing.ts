@@ -14,7 +14,7 @@ export type SharingColumns = Pick<
   "calendar_meeting_details" | "calendar_event_notes" | "calendar_event_location"
 >;
 
-type GroupSharingColumns = Pick<
+export type GroupSharingColumns = Pick<
   GroupSettings,
   "calendar_meeting_details" | "calendar_event_notes" | "calendar_event_location"
 >;

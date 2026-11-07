@@ -4,16 +4,24 @@ import type { ReactElement } from "react";
 
 type Read = { data: unknown[] | null; error: { code: string; message: string } | null };
 let reads: Record<string, Read>;
-let settings: Promise<unknown>;
+let calls: { table: string; method: string }[];
+let role: "leader" | "member";
 
 function query(table: string) {
-  const chain = {
-    select: () => chain,
-    eq: () => chain,
-    order: () => chain,
-    single: () => Promise.resolve({ data: { role: "member", org_id: "o1", first_name: "Ada" }, error: null }),
+  const record = (method: string) => calls.push({ table, method });
+  const chain: Record<string, unknown> = {
     then: (resolve: (r: Read) => unknown) => Promise.resolve(resolve(reads[table])),
+    single: () => {
+      record("single");
+      return Promise.resolve({ data: { role: "member", first_name: "Ada" }, error: null });
+    },
   };
+  for (const method of ["select", "eq", "order", "insert", "update", "upsert", "delete"]) {
+    chain[method] = () => {
+      record(method);
+      return chain;
+    };
+  }
   return chain;
 }
 
@@ -24,14 +32,18 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: () => {} }),
 }));
 vi.mock("@/lib/supabase/server", () => ({
-  createClient: async () => ({ from: (table: string) => query(table) }),
+  createClient: async () => ({
+    from: (table: string) => query(table),
+    rpc: (fn: string) => {
+      calls.push({ table: fn, method: "rpc" });
+      return Promise.resolve({ data: null, error: null });
+    },
+  }),
 }));
 vi.mock("@/lib/supabase/current-user", () => ({ getOptionalUser: async () => ({ id: "u1" }) }));
 vi.mock("@/lib/groups/server", () => ({
-  requireActiveGroup: async (id: string) => ({ id, name: "Grace", role: "member" }),
+  requireActiveGroup: async (id: string) => ({ id, name: "Grace", role }),
 }));
-vi.mock("@/lib/groups/settings", () => ({ getGroupSettings: () => settings }));
-vi.mock("@/lib/giving/server", () => ({ loadDirectoryMemberOptions: async () => ({ members: [] }) }));
 vi.mock("@/lib/storageRead", () => ({
   mintSignedUrl: async () => null,
   mintSignedUrls: async (urls: unknown[]) => urls.map(() => null),
@@ -64,14 +76,27 @@ const goodRow = {
 
 beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
-  settings = Promise.resolve({ weekly_prayer_call_url: null, weekly_prayer_call_time: "Tuesdays at 7am" });
-  reads = {
-    prayer_wall: { data: [goodRow], error: null },
-    prayer_call_sessions: { data: [], error: null },
-  };
+  calls = [];
+  role = "member";
+  reads = { prayer_wall: { data: [goodRow], error: null } };
 });
 
 describe("PrayerPage", () => {
+  it.each(["member", "leader"] as const)("renders the wall with no prayer call card, for a %s", async (who) => {
+    role = who;
+    const html = await render();
+    expect(html).toContain("Pray for a steady week.");
+    expect(html).not.toMatch(/prayer call/i);
+  });
+
+  it("reads only the wall and the viewer's profile, and writes nothing, so no event is deleted", async () => {
+    role = "leader";
+    await render();
+    expect(new Set(calls.map((c) => c.table))).toEqual(new Set(["profiles", "prayer_wall"]));
+    const writes = calls.filter((c) => ["insert", "update", "upsert", "delete", "rpc"].includes(c.method));
+    expect(writes).toEqual([]);
+  });
+
   it("renders a row with unexpected values next to a good one", async () => {
     reads.prayer_wall.data = [
       goodRow,
@@ -86,11 +111,9 @@ describe("PrayerPage", () => {
         category: "Health",
       },
     ];
-    reads.prayer_call_sessions.data = [{ id: "s1", weekday: 12, start_time: null, end_time: "late" }];
     const html = await render();
     expect(html).toContain("Pray for a steady week.");
     expect(html).toContain("2 shown");
-    expect(html).toContain("The prayer call");
   });
 
   it("shows the error state, not a crash, when the requests can't be read", async () => {
@@ -98,19 +121,5 @@ describe("PrayerPage", () => {
     const html = await render();
     expect(html).toContain("Couldn&#x27;t load prayer requests.");
     expect(html).not.toContain("Share a request");
-  });
-
-  it("keeps the wall and reports the call when the call times can't be read", async () => {
-    reads.prayer_call_sessions = { data: null, error: { code: "57014", message: "canceling statement" } };
-    const html = await render();
-    expect(html).toContain("Pray for a steady week.");
-    expect(html).toContain("Couldn&#x27;t load the prayer call.");
-  });
-
-  it("reports the call when the group settings can't be read", async () => {
-    settings = Promise.reject(new Error("boom"));
-    const html = await render();
-    expect(html).toContain("Pray for a steady week.");
-    expect(html).toContain("Couldn&#x27;t load the prayer call.");
   });
 });

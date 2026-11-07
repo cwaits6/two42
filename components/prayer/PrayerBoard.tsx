@@ -9,12 +9,9 @@ import { prayerAuthorLabel } from "@/lib/prayer";
 import { PrayerCard } from "@/components/prayer/PrayerCard";
 import { savePrayerResponse } from "@/components/prayer/savePrayerResponse";
 import { PrayerComposer } from "@/components/prayer/PrayerComposer";
-import { PrayerCallCard, type PrayerCall } from "@/components/prayer/PrayerCallCard";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EmptyState } from "@/components/states/EmptyState";
-import { ErrorState } from "@/components/states/ErrorState";
 import { Segmented } from "@/components/ui/segmented";
-import type { MemberOption } from "@/components/giving/FundForm";
 import type { PrayerWallRow } from "@/lib/types";
 
 export interface Me {
@@ -28,27 +25,19 @@ const STATUS_FILTERS = ["All", "My requests", "Answered"] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
 const STATUS_OPTIONS = STATUS_FILTERS.map((f) => ({ value: f, label: f }));
 
-export type PrayerGroup = { id: string; name: string; isLeader: boolean };
+export type PrayerGroup = { id: string; name: string };
 
 export function PrayerBoard({
   initialRequests,
-  prayerCall,
   me,
   group,
-  members,
-  orgId,
   timeZone,
 }: {
   initialRequests: PrayerWallRow[];
-  /** The call's times and standing details; null when they couldn't be loaded. */
-  prayerCall: PrayerCall | null;
   me: Me;
   /** The verified active group; every write names it. */
   group: PrayerGroup;
-  members: MemberOption[];
-  /** Resolved server-side from the caller's own profile; scopes the session writes. */
-  orgId: string;
-  /** The church's zone; the call times are its wall clock. */
+  /** The church's zone, for each request's date. */
   timeZone: string;
 }) {
   const [requests, setRequests] = useState(initialRequests);
@@ -229,18 +218,6 @@ export function PrayerBoard({
       <div className="order-2 lg:order-1">{wall}</div>
       <div className="order-1 space-y-6 lg:sticky lg:top-6 lg:order-2">
         <PrayerComposer me={me} groupName={group.name} onPost={handlePost} />
-        {prayerCall ? (
-          <PrayerCallCard
-            initial={prayerCall}
-            group={group}
-            members={members}
-            orgId={orgId}
-            userId={me.id}
-            timeZone={timeZone}
-          />
-        ) : (
-          <ErrorState thing="the prayer call" />
-        )}
       </div>
       <ConfirmDialog
         open={deleting !== null}
