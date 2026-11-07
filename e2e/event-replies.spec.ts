@@ -167,17 +167,25 @@ test.describe("a member choosing their reply again", () => {
   });
 });
 
-test.describe("a member answering a second date on the calendar list", () => {
+test.describe("a member answering two dates on the calendar list", () => {
   test.use({ persona: "oneGroup", viewport: PHONE });
 
-  // While a person holds one reply per event, the second answer moves the
-  // first; the list must show that without a reload.
-  test("sees the first date's control follow the save", async ({ page }) => {
+  test("one person answering two dates keeps both", async ({ page }) => {
     await page.goto(CALENDAR);
     await answer(page, replyGroups(page).nth(0), "Going");
     await expect(chosen(page, 0)).toHaveText("Going");
     await answer(page, replyGroups(page).nth(1), "Can't go");
     await expect(chosen(page, 1)).toHaveText("Can't go");
-    await expect(chosen(page, 0)).toHaveCount(0);
+    await expect(chosen(page, 0)).toHaveText("Going");
+
+    await page.reload();
+    await expect(chosen(page, 0)).toHaveText("Going");
+    await expect(chosen(page, 1)).toHaveText("Can't go");
+
+    const [first, second] = await firstTwoDates(page);
+    await page.goto(first);
+    expect(await whosComing(page)).toEqual([oneGroup.name]);
+    await page.goto(second);
+    expect(await whosComing(page)).toEqual([leadsB.name]);
   });
 });
