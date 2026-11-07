@@ -335,9 +335,15 @@ describe("the reminder job's dates agree with the calendar's", () => {
   it("finds the same dates in a window, with a date taken out and each way a series ends", () => {
     // Stepping in every zone from every start is the case above; a zone either
     // side of UTC, and starts that run into the window, ended long before it,
-    // and fall on a 31st with milliseconds, cover how a window is cut.
+    // fall on a 31st with milliseconds, and recur yearly inside the long
+    // window, cover how a window is cut.
     const windowZones = ["America/New_York", "Australia/Lord_Howe"];
-    const windowStarts = ["2026-10-27T00:00:00.000Z", "2024-02-29T15:00:00.000Z", "2026-08-31T23:59:59.123Z"];
+    const windowStarts = [
+      "2026-10-27T00:00:00.000Z",
+      "2024-02-29T15:00:00.000Z",
+      "2026-08-31T23:59:59.123Z",
+      "2026-01-31T18:00:00.000Z",
+    ];
     const from = new Date("2026-11-05T15:00:00.000Z");
     const day = 86_400_000;
     const ends: Partial<Event>[] = [
