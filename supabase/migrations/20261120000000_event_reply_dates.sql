@@ -12,8 +12,10 @@ comment on column public.rsvps.occurrence_date is
 
 -- The day a reply to _event_id made at _at answers: a one-time event's own
 -- day, an edited date's series day, or a series' first date that is not
--- cancelled and starts at or after _at. A series with no such date answers
--- its last date. Dates step in the church's wall clock from the first one,
+-- cancelled and ends after _at. A series with no such date answers its last
+-- date. A date ends at its end time, or two hours after it starts when it has
+-- none, as meetingEndMs() in lib/meetings.ts has it: the app takes replies
+-- until that moment. Dates step in the church's wall clock from the first one,
 -- as addRecurrenceInterval() in lib/recurrence.ts does, so a clock change or
 -- a late-evening start never moves a day, and a month too short for the
 -- first date's day takes its last day.
@@ -30,6 +32,7 @@ declare
   _first timestamp;
   _step interval;
   _longest interval;
+  _length interval;
   _bound timestamptz;
   _n integer;
   _walked integer := 0;
@@ -37,7 +40,7 @@ declare
   _day date;
   _starts timestamptz;
   _edited_cancelled boolean;
-  _edited_start timestamptz;
+  _edited_ends timestamptz;
   _last date;
 begin
   select * into _e from public.events e where e.id = _event_id;
@@ -66,11 +69,12 @@ begin
     when 'monthly' then interval '31 days'
     else interval '366 days'
   end * _e.recurrence_interval;
+  _length := coalesce(_e.end_time - _e.start_time, interval '2 hours');
   _bound := case when _e.recurrence_end_mode = 'until' then least(_at, _e.recurrence_until) else _at end;
 
   -- No step is longer than _longest, so this index is at or before the first
-  -- date at or after _at, and at or before the series' last date.
-  _n := greatest(0, floor(extract(epoch from (_bound - _e.start_time)) / extract(epoch from _longest))::integer - 1);
+  -- date that ends after _at, and at or before the series' last date.
+  _n := greatest(0, floor(extract(epoch from (_bound - _length - _e.start_time)) / extract(epoch from _longest))::integer - 1);
   if _e.recurrence_end_mode = 'count' then
     _n := least(_n, greatest(coalesce(_e.recurrence_count, 1) - 1, 0));
   end if;
@@ -82,7 +86,8 @@ begin
     exit when _e.recurrence_end_mode = 'until' and _starts > _e.recurrence_until;
     _day := _local::date;
 
-    select x.is_cancelled, x.start_time into _edited_cancelled, _edited_start
+    select x.is_cancelled, coalesce(x.end_time, x.start_time + interval '2 hours')
+      into _edited_cancelled, _edited_ends
     from public.events x
     where x.series_id = _e.id
       and (x.series_occurrence_date at time zone _tz)::date = _day
@@ -90,13 +95,13 @@ begin
 
     if found then
       if not _edited_cancelled then
-        if _edited_start >= _at then
+        if _edited_ends > _at then
           return _day;
         end if;
         _last := _day;
       end if;
     else
-      if _starts >= _at then
+      if _starts + _length > _at then
         return _day;
       end if;
       _last := _day;
@@ -115,7 +120,7 @@ revoke execute on function public.event_reply_day(uuid, timestamptz) from public
 grant execute on function public.event_reply_day(uuid, timestamptz) to authenticated, service_role;
 
 comment on function public.event_reply_day(uuid, timestamptz) is
-  'The calendar day, in the church''s zone, that a reply to the event made at _at answers: a series'' next date that is not cancelled, else its last date. SECURITY INVOKER: reads the event under the caller''s row security, so an event the caller cannot see is NULL; the zone is the event''s own org''s.';
+  'The calendar day, in the church''s zone, that a reply to the event made at _at answers: a series'' first date that is not cancelled and has not ended, else its last date. SECURITY INVOKER: reads the event under the caller''s row security, so an event the caller cannot see is NULL; the zone is the event''s own org''s.';
 
 -- ── Dating a save that names no date ────────────────────────────────────────
 -- Drop this trigger and its function with the contract step's NOT NULL, once

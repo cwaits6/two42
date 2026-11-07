@@ -28,6 +28,7 @@ declare
   grp_b uuid;
   late uuid;
   evening uuid;
+  long_evening uuid;
   month_end uuid;
   counted uuid;
   until_ended uuid;
@@ -76,6 +77,10 @@ begin
   -- last on Mar 21, 2032.
   insert into public.events (org_id, group_id, title, start_time, recurrence_frequency, recurrence_end_mode, recurrence_count)
     values (org_a, grp, 'Evening Sundays', '2031-10-26 19:00-05', 'weekly', 'count', 22) returning id into evening;
+  -- 18:00 to 21:00 on Wednesdays.
+  insert into public.events (org_id, group_id, title, start_time, end_time, recurrence_frequency, recurrence_end_mode)
+    values (org_a, grp, 'Long Wednesdays', '2031-10-01 18:00-05', '2031-10-01 21:00-05', 'weekly', 'never')
+    returning id into long_evening;
   insert into public.events (org_id, group_id, title, start_time, recurrence_frequency, recurrence_end_mode)
     values (org_a, grp, 'Month end', '2031-01-31 10:00-06', 'monthly', 'never') returning id into month_end;
   insert into public.events (org_id, group_id, title, start_time, recurrence_frequency, recurrence_end_mode, recurrence_count)
@@ -110,6 +115,7 @@ begin
   perform set_config('rd.late', late::text, true);
   perform set_config('rd.moved', moved::text, true);
   perform set_config('rd.evening', evening::text, true);
+  perform set_config('rd.long_evening', long_evening::text, true);
   perform set_config('rd.month_end', month_end::text, true);
   perform set_config('rd.counted', counted::text, true);
   perform set_config('rd.until_ended', until_ended::text, true);
@@ -173,16 +179,24 @@ $$;
 -- ── The day a save with no date answers ─────────────────────────────────────
 select is(public.event_reply_day(pg_temp.id('late'), '2031-11-01 12:00-05'), '2031-11-02'::date,
   'a date starting at 23:30 answers its own day in the church''s zone, not the UTC day');
-select is(public.event_reply_day(pg_temp.id('late'), '2031-11-03 00:00-06'), '2031-11-16'::date,
+select is(public.event_reply_day(pg_temp.id('late'), '2031-11-03 02:00-06'), '2031-11-16'::date,
   'a cancelled next date is skipped, and an edited date answers the day it stood on in the series');
-select is(public.event_reply_day(pg_temp.id('late'), '2031-11-15 00:00-06'), '2031-11-23'::date,
-  'an edited date whose own start has passed is skipped');
+select is(public.event_reply_day(pg_temp.id('late'), '2031-11-15 00:00-06'), '2031-11-16'::date,
+  'an edited date that has started but not ended by its own times is still answered');
+select is(public.event_reply_day(pg_temp.id('late'), '2031-11-15 01:30-06'), '2031-11-23'::date,
+  'an edited date two hours past its own start, with no end time, has ended and is skipped');
 select is(public.event_reply_day(pg_temp.id('evening'), '2031-11-03 12:00-06'), '2031-11-09'::date,
   'the first date after the clocks go back keeps its weekday');
 select is(public.event_reply_day(pg_temp.id('evening'), '2032-03-14 18:00-05'), '2032-03-14'::date,
   'the first date after the clocks go forward keeps its weekday');
-select is(public.event_reply_day(pg_temp.id('evening'), '2032-03-14 19:30-05'), '2032-03-21'::date,
-  'once a date has started the next one is answered');
+select is(public.event_reply_day(pg_temp.id('evening'), '2032-03-14 19:30-05'), '2032-03-14'::date,
+  'a date that has started is answered until it ends');
+select is(public.event_reply_day(pg_temp.id('evening'), '2032-03-14 21:00-05'), '2032-03-21'::date,
+  'a date with no end time ends two hours after it starts, and the next one is answered');
+select is(public.event_reply_day(pg_temp.id('long_evening'), '2031-10-08 20:30-05'), '2031-10-08'::date,
+  'a date with an end time is answered until that end, past the two-hour default');
+select is(public.event_reply_day(pg_temp.id('long_evening'), '2031-10-08 21:00-05'), '2031-10-15'::date,
+  'at its end time a date has ended, and the next one is answered');
 select is(public.event_reply_day(pg_temp.id('evening'), '2032-06-01 00:00-05'), '2032-03-21'::date,
   'a series that has used up its count answers its last date');
 select is(public.event_reply_day(pg_temp.id('until_ended'), '2031-04-01 00:00-05'), '2031-03-16'::date,
