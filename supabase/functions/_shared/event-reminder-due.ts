@@ -55,7 +55,7 @@ export interface DueDate {
   recordEventId: string;
   /** The date's calendar day in the church's zone, the rest of the record's key. */
   occurrenceDate: string;
-  /** The row of a date edited on its own, whose replies override the series'. */
+  /** The row of a date edited on its own. The claim checks it is a date of the series; replies are read from the record's key. */
   replyEventId: string | null;
   /** Path under the group, with the date for a date of a series. */
   linkPath: string;
