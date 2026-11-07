@@ -4,7 +4,7 @@
  *
  * The app reads a person's address through three paths that apply their
  * hide_email setting, never from the table on the request client. Client
- * roles are also to hold no SELECT on the column, and PostgREST answers 42501
+ * roles hold no SELECT on the column, and PostgREST answers 42501
  * for the whole request when any part of it touches a column the role cannot
  * read. That includes `select("*")`, a bare `.select()` after a write,
  * a filter or ordering on the column, on the table or through an embed, and

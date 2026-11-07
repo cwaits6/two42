@@ -740,9 +740,9 @@ or not. It stays executable by `authenticated` because the `profiles` update
 policy, which applies to that role only, calls it in its `WITH CHECK` as the
 signed-in person. `public` and `anon` hold no execute on it.
 
-These functions are how the app reads an address; they do not stop a direct
-read of `profiles.email`, which client roles can still make
-([`tenancy-model.md`](tenancy-model.md), "Known limits").
+These functions are how the app reads an address. A direct read of
+`profiles.email` is stopped by the column grant: `anon` and `authenticated`
+hold `SELECT` on every other column of `profiles`, and not on `email`.
 
 ## Household anniversary gate — a definer-function bypass surface (`family_anniversary_hidden`)
 
