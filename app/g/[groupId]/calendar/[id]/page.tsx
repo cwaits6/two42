@@ -10,6 +10,7 @@ import { AttendeeStrip, type Attendee } from "./_components/AttendeeStrip";
 import { JoinMeetingBlock } from "@/components/events/JoinMeetingBlock";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ErrorState } from "@/components/states/ErrorState";
 import { hasMeeting, notesWithMeeting, type MeetingFields } from "@/lib/meetings";
 import { Button } from "@/components/ui/button";
 import { Pencil } from "lucide-react";
@@ -129,6 +130,8 @@ export default async function EventDetailPage({
   const key = replyKey({ ...event, start_time: displayStartTime }, timeZone);
   let userStatus: RsvpStatus | null = null;
   let attendees: Attendee[] = [];
+  // A failed read must not pass for nobody having replied.
+  let repliesFailed = false;
   if (event.is_rsvp_enabled) {
     const { data: rsvpsRaw, error: rsvpsError } = await supabase
       .from("rsvps")
@@ -146,6 +149,7 @@ export default async function EventDetailPage({
           .in("id", coming.map((r) => r.user_id))
       : { data: [], error: null };
     if (peopleError) logError("Failed to load who's coming", peopleError, { ids: { event: id } });
+    repliesFailed = !!(rsvpsError || peopleError);
     const byId = new Map((people ?? []).map((p) => [p.id, p]));
     attendees = coming.map((r) => {
       const p = byId.get(r.user_id);
@@ -232,7 +236,8 @@ export default async function EventDetailPage({
       recordingsHref={recordingsHref}
     />
   );
-  const showRsvp = event.is_rsvp_enabled && !!user && replyOpen(new Date(), displayStartTime, displayEndTime);
+  const showRsvp =
+    event.is_rsvp_enabled && !!user && !repliesFailed && replyOpen(new Date(), displayStartTime, displayEndTime);
 
   return (
     <PageContainer size="wide">
@@ -319,7 +324,9 @@ export default async function EventDetailPage({
             <SubscribeToEventButton eventId={event.id} />
           </div>
 
-          {event.is_rsvp_enabled && attendees.length > 0 && (
+          {repliesFailed && <ErrorState thing="the replies" className="py-8" />}
+
+          {event.is_rsvp_enabled && !repliesFailed && attendees.length > 0 && (
             <div className="rounded-2xl border border-border bg-card p-6">
               <AttendeeStrip attendees={attendees} />
             </div>
