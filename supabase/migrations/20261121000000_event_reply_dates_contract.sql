@@ -10,9 +10,9 @@ drop function public.rsvps_fill_occurrence_date();
 alter table public.rsvps drop constraint rsvps_event_id_user_id_key;
 
 -- ── Every reply gets its date ───────────────────────────────────────────────
--- A reply saved before replies named a date answers the date a save made now
--- would: a series' next date that has not ended, else its last date; a
--- one-time event's own day; an edited date's series day.
+-- A reply saved before replies named a date answers the date a save made as
+-- this runs would: a series' next date that has not ended, else its last
+-- date; a one-time event's own day; an edited date's series day.
 update public.rsvps r
    set occurrence_date = public.event_reply_day(r.event_id, pg_catalog.now())
  where r.occurrence_date is null;
