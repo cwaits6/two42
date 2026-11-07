@@ -16,7 +16,7 @@ type Placed = Pick<ReplyRow, "event_id" | "user_id" | "occurrence_date">;
 export interface ReplyKey {
   eventId: string;
   date: string;
-  /** The row of a date edited on its own, where its replies are saved. */
+  /** The row of a date edited on its own; its replies are on the series under `date`. */
   editedId: string | null;
 }
 

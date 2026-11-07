@@ -128,10 +128,11 @@ export default async function EventDetailPage({
   // A failed read must not pass for nobody having replied.
   let repliesFailed = false;
 
-  // A date edited on its own has its own row and page, which hold its times
-  // and replies. Matched by series day in the church's zone, and in
-  // rsvp_set()'s order, so it opens the row a reply is written to. A series
-  // link with no date shows the first date, which may be edited too.
+  // A date edited on its own has its own row and page, which hold its times;
+  // its replies stay on the series under its series day. Matched by series
+  // day in the church's zone; the order only picks which of two edited rows
+  // on one day opens. A series link with no date shows the first date, which
+  // may be edited too.
   if (event.recurrence_frequency && !event.series_id) {
     const day = dayKey(displayStartTime, timeZone);
     const { data: edited, error: editedError } = await supabase
