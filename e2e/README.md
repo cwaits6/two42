@@ -67,8 +67,8 @@ and puts the seeded listing, anniversary and `directory_visibility` back in
 on through the same container in `beforeAll` and puts the seed default (off)
 back in `afterAll`. `group-settings.spec.ts` makes Zoe a leader of Group C and
 inserts Amelia's request to join Group B and Isaac's to join Group C through
-the same container in `beforeAll`, and deletes those rows and the Group C
-membership its approval gives Isaac in `beforeAll` and `afterAll`.
+the same container in `beforeAll`, and deletes those rows, Zoe's Group C leadership and the Group C membership
+its approval gives Isaac in `beforeAll` and `afterAll`.
 
 ## Personas
 

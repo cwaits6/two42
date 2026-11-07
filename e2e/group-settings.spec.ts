@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./fixtures/auth";
 import { GROUP_B, GROUP_C, PERSONAS } from "./fixtures/personas";
+import { PAGE_PATTERNS } from "../lib/analytics/pagePattern";
 
 // Zoe leads Group B; for these tests she also leads Group C, so one person
 // leads two groups. Amelia asks to join Group B and Isaac asks to join Group
@@ -54,8 +55,10 @@ const SECTIONS = ["Details", "Requests", "Privacy and joining", "Invite links", 
 
 const settingsNav = (page: Page) => page.getByRole("navigation", { name: "Group settings navigation" });
 
-/** A row's name as a screen reader reads it, with its waiting count when there is one. */
-const waiting = (label: string, count: number) => new RegExp(`^${label} ?, ${count} waiting$`);
+const SETTINGS_ROOT = "/g/[groupId]/settings";
+const SETTINGS_PATHS = PAGE_PATTERNS.filter((p) => p === SETTINGS_ROOT || p.startsWith(`${SETTINGS_ROOT}/`)).map((p) =>
+  p.slice(SETTINGS_ROOT.length),
+);
 
 async function expectLinkNames(links: Locator, names: (string | RegExp)[]) {
   await expect(links).toHaveCount(names.length);
@@ -68,13 +71,13 @@ test.describe("a leader of two groups", () => {
   test("sees Group B's waiting count on its Group settings row, and its sections one click from there", async ({ page }) => {
     await page.goto(`/g/${GROUP_B}/dashboard`);
     const row = page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: /^Group settings/ });
-    await expect(row).toHaveAccessibleName(waiting("Group settings", 1));
+    await expect(row).toHaveAccessibleName(/^Group settings ?, 1 waiting$/);
     await row.click();
     await page.waitForURL(`/g/${GROUP_B}/settings/details`);
     await expectLinkNames(settingsNav(page).getByRole("link"), [
       "Back to Group B",
       "Details",
-      waiting("Requests", 1),
+      /^Requests ?, 1 waiting$/,
       ...SECTIONS.slice(2),
     ]);
   });
@@ -88,7 +91,7 @@ test.describe("a leader of two groups", () => {
     await expect(page.getByText(ISAAC.name)).toBeVisible();
     await expect(page.getByText(AMELIA.name)).toHaveCount(0);
     await expect(settingsNav(page).getByRole("link", { name: /^Back to/ })).toHaveAccessibleName("Back to Group C");
-    await expect(settingsNav(page).getByRole("link", { name: /^Requests/ })).toHaveAccessibleName(waiting("Requests", 1));
+    await expect(settingsNav(page).getByRole("link", { name: /^Requests/ })).toHaveAccessibleName(/^Requests ?, 1 waiting$/);
   });
 
   test("opens Group settings on Details, and the old serving settings address on Teams", async ({ page }) => {
@@ -104,7 +107,7 @@ test.describe("a member of Group B who does not lead it", () => {
   test.use({ persona: "oneGroup" });
 
   test("lands on the group's Home from every Group settings address, with no row and no request", async ({ page }) => {
-    for (const path of ["", "/details", "/requests", "/privacy", "/invites", "/teams", "/labels", "/serving"]) {
+    for (const path of SETTINGS_PATHS) {
       await page.goto(`/g/${GROUP_B}/settings${path}`);
       await page.waitForURL(`/g/${GROUP_B}/dashboard`);
       await expect(page.getByRole("link", { name: /^Group settings/ }), path).toHaveCount(0);
