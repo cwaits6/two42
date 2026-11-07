@@ -29,17 +29,39 @@ const EVENT = {
   meeting_lead_minutes: null,
 };
 
+// Rows by id, and the dates edited on their own that a series lookup returns.
+let events: Record<string, object>;
+let edited: object[];
+let replyFilter: string | null;
+
 function from(table: string) {
+  let id: string | null = null;
   const chain = {
     select: () => chain,
-    eq: () => chain,
-    maybeSingle: () => Promise.resolve({ data: table === "events" ? EVENT : null, error: null }),
-    or: () => Promise.resolve(rsvps),
+    eq: (column: string, value: string) => {
+      if (column === "id") id = value;
+      return chain;
+    },
+    maybeSingle: () =>
+      Promise.resolve({ data: table === "events" && id ? (events[id] ?? null) : null, error: null }),
+    or: (filter: string) => {
+      replyFilter = filter;
+      return Promise.resolve(rsvps);
+    },
     in: () => Promise.resolve(profiles),
+    then: (resolve: (r: Result) => unknown) => resolve({ data: edited, error: null }),
   };
   return chain;
 }
 
+vi.mock("next/navigation", () => ({
+  notFound: () => {
+    throw new Error("not found");
+  },
+  redirect: (path: string) => {
+    throw new Error(`redirect ${path}`);
+  },
+}));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from }) }));
 vi.mock("@/lib/groups/server", () => ({
   requireActiveGroup: async (id: string) => ({ id, name: "Grace", role: "member" }),
@@ -52,13 +74,14 @@ vi.mock("@/lib/storageRead", () => ({
   mintSignedUrls: async (urls: (string | null)[]) => urls,
 }));
 vi.mock("@/components/states/ErrorState", () => ({ ErrorState: () => null }));
-vi.mock("@/components/events/RsvpControl", () => ({ RsvpControl: () => null }));
+vi.mock("@/components/events/RsvpControl", () => ({ RsvpControl: function RsvpControl() { return null; } }));
 vi.mock("./_components/AttendeeStrip", () => ({ AttendeeStrip: () => null }));
 vi.mock("@/components/events/AddToCalendarButton", () => ({ AddToCalendarButton: () => null }));
 vi.mock("@/components/events/EventMap", () => ({ EventMap: () => null }));
 vi.mock("@/components/events/SubscribeToEventButton", () => ({ SubscribeToEventButton: () => null }));
 vi.mock("@/components/events/JoinMeetingBlock", () => ({ JoinMeetingBlock: () => null }));
 
+const { dayKey } = await import("@/lib/time/zone");
 const { ErrorState } = await import("@/components/states/ErrorState");
 const { RsvpControl } = await import("@/components/events/RsvpControl");
 const { AttendeeStrip } = await import("./_components/AttendeeStrip");
@@ -76,18 +99,49 @@ function flatten(node: ReactNode, out: ReactElement[] = []): ReactElement[] {
   return out;
 }
 
-async function renderedTypes() {
+async function render(id = "e1", occurrence?: string) {
   const element = await EventDetailPage({
-    params: Promise.resolve({ groupId: "g1", id: "e1" }),
-    searchParams: Promise.resolve({}),
+    params: Promise.resolve({ groupId: "g1", id }),
+    searchParams: Promise.resolve(occurrence ? { occurrence } : {}),
   });
-  return flatten(element).map((e) => e.type);
+  return flatten(element);
 }
+
+async function renderedTypes() {
+  return (await render()).map((e) => e.type);
+}
+
+async function replyProps(id: string, occurrence?: string) {
+  const control = (await render(id, occurrence)).find((e) => e.type === RsvpControl);
+  return control?.props as { eventId: string; occurrenceDate: string } | undefined;
+}
+
+// A weekly series of Sunday mornings in New York, with the 8 days-out Sunday
+// moved to Monday evening on its own.
+const SERIES_START = new Date(Date.now() + 86400000);
+const SUNDAY = new Date(SERIES_START.getTime() + 7 * 86400000).toISOString();
+const SERIES = {
+  ...EVENT,
+  id: "s1",
+  start_time: SERIES_START.toISOString(),
+  recurrence_frequency: "weekly",
+};
+const EDITED = {
+  ...EVENT,
+  id: "x1",
+  start_time: new Date(Date.parse(SUNDAY) + 34 * 3600000).toISOString(),
+  series_id: "s1",
+  series_occurrence_date: SUNDAY,
+};
+const SUNDAY_DAY = dayKey(SUNDAY, "America/New_York");
 
 const GOING = { event_id: "e1", user_id: "u2", status: "yes", occurrence_date: null };
 const PERSON = { id: "u2", first_name: "Ruth", last_name: null, preferred_name: null, avatar_url: null };
 
 beforeEach(() => {
+  events = { e1: EVENT, s1: SERIES, x1: EDITED };
+  edited = [];
+  replyFilter = null;
   rsvps = { data: [GOING], error: null };
   profiles = { data: [PERSON], error: null };
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -115,5 +169,23 @@ describe("EventDetailPage replies", () => {
     expect(types).toContain(ErrorState);
     expect(types).not.toContain(RsvpControl);
     expect(types).not.toContain(AttendeeStrip);
+  });
+});
+
+describe("EventDetailPage reply date", () => {
+  it("answers a date edited on its own through its series and its series day", async () => {
+    expect(await replyProps("x1")).toMatchObject({ eventId: "s1", occurrenceDate: SUNDAY_DAY });
+    expect(replyFilter).toContain("event_id.eq.x1");
+  });
+
+  it("sends a series date that was edited on its own to the edited date's page", async () => {
+    edited = [{ id: "x1", series_occurrence_date: SUNDAY }];
+    await expect(render("s1", SUNDAY)).rejects.toThrow("redirect /g/g1/calendar/x1");
+  });
+
+  it("answers a series date nobody edited through the series and that date's day", async () => {
+    edited = [{ id: "x1", series_occurrence_date: SERIES_START.toISOString() }];
+    expect(await replyProps("s1", SUNDAY)).toMatchObject({ eventId: "s1", occurrenceDate: SUNDAY_DAY });
+    expect(replyFilter).not.toContain("x1");
   });
 });

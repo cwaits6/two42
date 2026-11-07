@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { mintSignedUrls } from "@/lib/storageRead";
@@ -107,6 +107,7 @@ export default async function EventDetailPage({
   // start/end times to that occurrence's date while preserving the event duration.
   let displayStartTime = event.start_time;
   let displayEndTime = event.end_time;
+  let isOccurrence = false;
 
   if (occurrence && event.recurrence_frequency && !event.series_id) {
     try {
@@ -114,6 +115,7 @@ export default async function EventDetailPage({
       const parsedOccurrence = new Date(occurrenceISO);
       if (!isNaN(parsedOccurrence.getTime())) {
         displayStartTime = occurrenceISO;
+        isOccurrence = true;
         if (event.end_time) {
           const duration =
             new Date(event.end_time).getTime() - new Date(event.start_time).getTime();
@@ -123,6 +125,23 @@ export default async function EventDetailPage({
     } catch {
       // malformed percent-encoding — fall back to base event times
     }
+  }
+
+  // A date edited on its own has its own row and page, which hold its times
+  // and replies. Matched by series day in the church's zone, as rsvp_set()
+  // finds the row it writes.
+  if (isOccurrence) {
+    const day = dayKey(displayStartTime, timeZone);
+    const { data: edited } = await supabase
+      .from("events")
+      .select("id, series_occurrence_date")
+      .eq("series_id", event.id)
+      .eq("group_id", group.id)
+      .eq("is_cancelled", false);
+    const match = (edited ?? []).find(
+      (e) => e.series_occurrence_date && dayKey(e.series_occurrence_date, timeZone) === day,
+    );
+    if (match) redirect(groupPath(group.id, `/calendar/${match.id}`));
   }
 
   // Replies and Who's coming are for the date shown. One read holds every
