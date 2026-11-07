@@ -187,7 +187,7 @@ begin
   if _status is null then
     delete from public.rsvps r
     where r.user_id = _me
-      and (r.event_id = _target
+      and ((_target <> _event_id and r.event_id = _target)
         or (r.event_id = _event_id and (r.occurrence_date = _occurrence_date or r.occurrence_date is null)));
     return null;
   end if;

@@ -380,8 +380,29 @@ select is((select count(*) from public.profiles where id = pg_temp.fx('outsider'
 select is(pg_temp.delete_person('outsider', pg_temp.fx('other_org')), 'CA001',
   'and the only admin of that church is refused in the same way');
 
+-- Replies on a series date and on a one-time event, the second dated by the
+-- trigger, as a build that sends no date saves it.
+with e as (
+  insert into public.events (org_id, group_id, title, start_time, recurrence_frequency, recurrence_end_mode)
+  values (pg_temp.fx('org'), pg_temp.fx('group'), 'Weekly', now() + interval '1 day', 'weekly', 'never')
+  returning id)
+insert into fx select 'reply_series', id from e;
+with e as (
+  insert into public.events (org_id, group_id, title, start_time)
+  values (pg_temp.fx('org'), pg_temp.fx('group'), 'Once', now() + interval '2 days')
+  returning id)
+insert into fx select 'reply_single', id from e;
+insert into public.rsvps (org_id, event_id, user_id, status, occurrence_date) values
+  (pg_temp.fx('org'), pg_temp.fx('reply_series'), pg_temp.fx('spouse_a'), 'yes', current_date + 8),
+  (pg_temp.fx('org'), pg_temp.fx('reply_single'), pg_temp.fx('spouse_a'), 'maybe', default),
+  (pg_temp.fx('org'), pg_temp.fx('reply_series'), pg_temp.fx('spouse_b'), 'no', current_date + 8);
+
 -- ── The delete itself ───────────────────────────────────────────────────────
 select is(pg_temp.delete_person('spouse_a', pg_temp.fx('org')), 'deleted', 'one spouse is deleted');
+select is((select count(*) from public.rsvps where user_id = pg_temp.fx('spouse_a')), 0::bigint,
+  'their replies go, for every date');
+select is((select count(*) from public.rsvps where user_id = pg_temp.fx('spouse_b')), 1::bigint,
+  'and the other spouse''s reply stays');
 
 select is((select count(*) from auth.users where id = pg_temp.fx('spouse_a')), 0::bigint, 'their login is gone');
 select is((select count(*) from auth.identities where user_id = pg_temp.fx('spouse_a')), 0::bigint, 'with its identity');
