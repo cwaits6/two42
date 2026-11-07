@@ -15,6 +15,7 @@ import {
 } from "@opentelemetry/semantic-conventions";
 import { name as serviceName, version as serviceVersion } from "./package.json";
 import { logError } from "./lib/log/core";
+import { redactingExporter } from "./lib/tracing/redactSpans";
 
 const sdk = new NodeSDK({
   resource: resourceFromAttributes({
@@ -23,7 +24,9 @@ const sdk = new NodeSDK({
     [ATTR_SERVICE_NAME]: process.env.OTEL_SERVICE_NAME ?? serviceName,
     [ATTR_SERVICE_VERSION]: serviceVersion,
   }),
-  traceExporter: new OTLPTraceExporter(),
+  // Spans are redacted in the exporter, not by instrumentation options, so
+  // what the framework's own spans record is covered too.
+  traceExporter: redactingExporter(new OTLPTraceExporter()),
   instrumentations: [
     getNodeAutoInstrumentations({
       // fs instrumentation is extremely noisy under Next.js (every module
