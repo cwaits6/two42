@@ -158,26 +158,54 @@ jobs:
           test "$(grep -c '^NEXT_PUBLIC_SUPABASE_' "$GITHUB_ENV")" -eq 2
           test "$(grep -c '^SUPABASE_SECRET_KEY=' "$GITHUB_ENV")" -eq 1
 
-      - name: Resolve the Playwright version
+      # The .deb files the cache carries are built for one OS release.
+      - name: Resolve the Playwright cache key
         if: steps.changes.outputs.run == 'true'
         id: playwright
-        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+          echo "os=$(. /etc/os-release && echo "$ID$VERSION_ID")" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: steps.changes.outputs.run == 'true'
         id: browsers
         with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+          path: |
+            ~/.cache/ms-playwright
+            ~/.cache/playwright-apt
+          key: playwright-chromium-${{ runner.os }}-${{ steps.playwright.outputs.os }}-${{ steps.playwright.outputs.version }}
 
+      # Keeps the .deb files apt fetched so a cache hit installs them from disk.
       - name: Install Chromium
         if: steps.changes.outputs.run == 'true' && steps.browsers.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
+        run: |
+          npx playwright install --with-deps chromium
+          mkdir -p ~/.cache/playwright-apt
+          find /var/cache/apt/archives -maxdepth 1 -name '*.deb' -exec cp -t ~/.cache/playwright-apt {} +
+          ls -l ~/.cache/playwright-apt
 
-      # The cache holds the browser, not the apt packages it needs.
+      # A hit installs the cached .deb files, so the apt mirror is reached only
+      # when the dry run still finds a package missing.
       - name: Install Chromium system dependencies
         if: steps.changes.outputs.run == 'true' && steps.browsers.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
+        run: |
+          shopt -s nullglob
+          missing=()
+          for deb in ~/.cache/playwright-apt/*.deb; do
+            package=$(dpkg-deb --field "$deb" Package)
+            if [ "$(dpkg-query --show --showformat='${db:Status-Status}' "$package" 2>/dev/null)" != installed ]; then
+              missing+=("$deb")
+            fi
+          done
+          echo "Installing ${#missing[@]} cached package(s)"
+          if { [ ${#missing[@]} -eq 0 ] || sudo dpkg --install "${missing[@]}"; } \
+            && npx playwright install-deps --dry-run chromium; then
+            exit 0
+          fi
+          echo "::warning::The cached packages did not cover Chromium's dependencies; installing from the apt mirror"
+          sudo apt-get update
+          sudo apt-get --fix-broken install -y
+          npx playwright install-deps chromium
 
       - name: Run the suite
         if: steps.changes.outputs.run == 'true'
