@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./fixtures/auth";
 import { GROUP_B, PERSONAS } from "./fixtures/personas";
 
@@ -63,14 +63,21 @@ test.afterAll(() => {
 const replyGroups = (page: Page) => page.getByRole("group", { name: "Your reply" });
 const chosen = (page: Page, index: number) =>
   replyGroups(page).nth(index).locator('button[aria-pressed="true"]');
+/** Picks a reply and waits for the save, which the control shows before it lands. */
+async function answer(page: Page, group: Locator, reply: string) {
+  const saved = page.waitForResponse((r) => r.url().includes("/rpc/rsvp_set"));
+  await group.getByRole("button", { name: reply }).click();
+  expect((await saved).ok()).toBe(true);
+}
 const dateLinks = (page: Page) => page.getByRole("link", { name: "Sunday Class", exact: true });
 
 /** The names under Who's coming, or none when nobody has said they are. */
 async function whosComing(page: Page): Promise<string[]> {
   const heading = page.getByRole("heading", { name: "Who's coming" });
   if ((await heading.count()) === 0) return [];
-  const strip = page.locator("div").filter({ has: heading }).last();
-  return (await strip.getByRole("listitem").allTextContents()).map((t) => t.replace(/Maybe$/, "").trim());
+  const strip = page.locator("div").filter({ has: heading }).filter({ has: page.getByRole("listitem") }).last();
+  // Each row is the person's initials, hidden from assistive tech, then their name.
+  return strip.locator("li > span:first-of-type").allTextContents();
 }
 
 /** The first two Sunday Class dates' pages, from the list. */
@@ -88,7 +95,7 @@ test.describe("a member of Group B on the calendar list", () => {
   test("answers one date, and the next date stays unanswered", async ({ page }) => {
     await page.goto(CALENDAR);
     await expect(replyGroups(page)).toHaveCount(10);
-    await replyGroups(page).nth(0).getByRole("button", { name: "Going" }).click();
+    await answer(page, replyGroups(page).nth(0), "Going");
     await expect(chosen(page, 0)).toHaveText("Going");
 
     await page.reload();
@@ -114,7 +121,7 @@ test.describe("the leader of Group B on a date's page", () => {
   test("answers the second date, and each date lists only its own people", async ({ page }) => {
     const [first, second] = await firstTwoDates(page);
     await page.goto(second);
-    await page.getByRole("group", { name: "Your reply" }).getByRole("button", { name: "Going" }).click();
+    await answer(page, page.getByRole("group", { name: "Your reply" }), "Going");
     await expect(page.getByRole("group", { name: "Your reply" }).locator('[aria-pressed="true"]')).toHaveText("Going");
 
     await page.reload();
@@ -147,9 +154,10 @@ test.describe("a member choosing their reply again", () => {
   test("clears it for that date only", async ({ page }) => {
     const [first, second] = await firstTwoDates(page);
     await page.goto(first);
-    const going = page.getByRole("group", { name: "Your reply" }).getByRole("button", { name: "Going" });
+    const reply = page.getByRole("group", { name: "Your reply" });
+    const going = reply.getByRole("button", { name: "Going" });
     await expect(going).toHaveAttribute("aria-pressed", "true");
-    await going.click();
+    await answer(page, reply, "Going");
     await expect(going).toHaveAttribute("aria-pressed", "false");
 
     await page.reload();
