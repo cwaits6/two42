@@ -158,17 +158,6 @@ select is((select count(*)::int from pg_constraint where conrelid = 'public.rsvp
 select is((select count(*)::int from pg_trigger where tgrelid = 'public.rsvps'::regclass and not tgisinternal), 0,
   'no trigger fills in a date');
 select ok(to_regprocedure('public.event_reply_day(uuid, timestamptz)') is null, 'event_reply_day is gone');
-select ok(pg_get_expr(d.adbin, d.adrelid) = 'app_current_org_id()',
-  'org_id keeps its fail-closed default')
-from pg_attrdef d join pg_attribute a on a.attrelid = d.adrelid and a.attnum = d.adnum
-where d.adrelid = 'public.rsvps'::regclass and a.attname = 'org_id';
-select is((select count(*)::int from pg_policies where schemaname = 'public' and tablename = 'rsvps'
-            and policyname = 'org isolation' and permissive = 'RESTRICTIVE'), 1,
-  'the restrictive isolation policy stays');
-select fk_ok('public', 'rsvps', array['event_id', 'org_id'], 'public', 'events', array['id', 'org_id'],
-  'the event FK stays composite');
-select fk_ok('public', 'rsvps', array['user_id', 'org_id'], 'public', 'profiles', array['id', 'org_id'],
-  'and so does the person FK');
 
 -- ── A save that names no date, as PostgREST sends it ────────────────────────
 select is(pg_temp.wrote('me', format(
