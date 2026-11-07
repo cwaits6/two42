@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { DEFAULT_EVENT_DURATION_MS } from "@/lib/meetings";
 import { expandOccurrences } from "@/lib/recurrence";
 import type { Event } from "@/lib/types";
 import { replyDateFilter, replyFor, replyKey, replyOpen, repliesForDate, type ReplyRow } from "./replies";
@@ -149,5 +151,14 @@ describe("replyOpen", () => {
   it("ends a date with no end time after the default length", () => {
     expect(replyOpen(new Date("2031-11-09T16:59:00Z"), start, null)).toBe(true);
     expect(replyOpen(new Date("2031-11-09T17:00:00Z"), start, null)).toBe(false);
+  });
+});
+
+describe("event_reply_day()", () => {
+  it("ends a date with no end time where the app does", () => {
+    const migration = readFileSync("supabase/migrations/20261120000000_event_reply_dates.sql", "utf8");
+    const hours = [...migration.matchAll(/interval '(\d+) hours'/g)].map(([, n]) => Number(n));
+    expect(hours).toHaveLength(2);
+    expect(hours.map((n) => n * 3600000)).toEqual([DEFAULT_EVENT_DURATION_MS, DEFAULT_EVENT_DURATION_MS]);
   });
 });
