@@ -12,6 +12,8 @@ import {
 
 let stub: RsvpClientStub;
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => stub.client }));
+const refresh = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 
 const { RsvpControl } = await import("./RsvpControl");
 const { RSVP_SAVE_FAILED } = await import("./useRsvp");
@@ -32,6 +34,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await unmountControls();
+  refresh.mockClear();
   vi.restoreAllMocks();
 });
 
@@ -86,7 +89,7 @@ describe("RsvpControl when the write saves", () => {
 });
 
 describe("RsvpControl on two dates of one event", () => {
-  it("keeps each date's reply, and a failure, to that date", async () => {
+  it("keeps a failure to that date", async () => {
     let result = writeSaved;
     stub = stubRsvpClient(() => result());
     const first = await mountControl(createElement(RsvpControl, { ...ids, currentStatus: "yes" }));
@@ -97,10 +100,30 @@ describe("RsvpControl on two dates of one event", () => {
     result = writeFailed;
     await first.click("Maybe");
     expect(stub.writes).toEqual([save("no", "2031-11-09"), save("maybe")]);
-    expect(first.pressed()).toEqual(["Going"]);
     expect(first.text()).toContain(RSVP_SAVE_FAILED);
     expect(second.pressed()).toEqual(["Can't go"]);
     expect(second.text()).not.toContain(RSVP_SAVE_FAILED);
+  });
+
+  it("re-reads the page after a save, and each date shows what the read returns", async () => {
+    stub = stubRsvpClient(writeSaved);
+    const first = await mountControl(createElement(RsvpControl, { ...ids, currentStatus: "yes" }));
+    const second = await mountControl(
+      createElement(RsvpControl, { ...ids, occurrenceDate: "2031-11-09", currentStatus: null }),
+    );
+    await second.click("Can't go");
+    expect(refresh).toHaveBeenCalledTimes(1);
+    await first.rerender(createElement(RsvpControl, { ...ids, currentStatus: null }));
+    await second.rerender(createElement(RsvpControl, { ...ids, occurrenceDate: "2031-11-09", currentStatus: "no" }));
+    expect(first.pressed()).toEqual([]);
+    expect(second.pressed()).toEqual(["Can't go"]);
+  });
+
+  it("does not re-read the page after a failed save", async () => {
+    stub = stubRsvpClient(writeFailed);
+    const view = await mountControl(createElement(RsvpControl, { ...ids, currentStatus: null }));
+    await view.click("Going");
+    expect(refresh).not.toHaveBeenCalled();
   });
 });
 

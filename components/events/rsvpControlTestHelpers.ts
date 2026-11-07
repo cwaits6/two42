@@ -44,6 +44,12 @@ export async function mountControl(element: ReactElement) {
   });
   const buttons = () => Array.from(container.querySelectorAll("button"));
   return {
+    /** Renders `next` in place, as a re-read of the page hands the control new props. */
+    async rerender(next: ReactElement) {
+      await act(async () => {
+        root.render(next);
+      });
+    },
     text: () => container.textContent ?? "",
     labels: () => buttons().map((b) => b.textContent?.trim()),
     checked: () =>

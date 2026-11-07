@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { RsvpStatus } from "@/lib/types";
 import { logError } from "@/lib/log";
@@ -19,10 +20,17 @@ interface UseRsvpArgs {
 /**
  * Holds one member's reply to one date of an event. Choosing the current
  * reply again clears it. The picked reply shows at once; a failed write puts
- * the previous reply back and sets `error`.
+ * the previous reply back and sets `error`. A saved write re-reads the page,
+ * and the reply follows what the read returns.
  */
 export function useRsvp({ eventId, occurrenceDate, userId, initialStatus }: UseRsvpArgs) {
   const [status, setStatus] = useState<RsvpStatus | null>(initialStatus);
+  const [readStatus, setReadStatus] = useState<RsvpStatus | null>(initialStatus);
+  if (readStatus !== initialStatus) {
+    setReadStatus(initialStatus);
+    setStatus(initialStatus);
+  }
+  const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const supabase = createClient();
@@ -50,7 +58,11 @@ export function useRsvp({ eventId, occurrenceDate, userId, initialStatus }: UseR
     setError(null);
     setStatus(next);
     try {
-      if (!(await writeReply(next))) {
+      if (await writeReply(next)) {
+        // A save can move or clear the reply another date's control on this
+        // page shows, and changes Who's coming.
+        router.refresh();
+      } else {
         setStatus(previous);
         setError(RSVP_SAVE_FAILED);
       }
