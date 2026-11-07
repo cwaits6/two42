@@ -7,19 +7,11 @@ import { ApprovalQueue } from "@/components/admin/ApprovalQueue";
 import { ErrorState } from "@/components/states/ErrorState";
 import { LoadingState } from "@/components/states/LoadingState";
 import { reviewErrorMessage } from "@/lib/groups/joining";
+import type { PendingJoinRequestRow } from "@/lib/groups/joinQueue";
 import { displayName } from "@/lib/names";
 import { createClient } from "@/lib/supabase/client";
 import { formatInZone } from "@/lib/time/zone";
 import { logError } from "@/lib/log";
-
-interface PendingRequest {
-  id: string;
-  created_at: string;
-  first_name: string | null;
-  last_name: string | null;
-  preferred_name: string | null;
-  email: string | null;
-}
 
 export function JoinRequestsManager({
   groupId,
@@ -34,7 +26,7 @@ export function JoinRequestsManager({
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
-  const [requests, setRequests] = useState<PendingRequest[] | null>(null);
+  const [requests, setRequests] = useState<PendingJoinRequestRow[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
