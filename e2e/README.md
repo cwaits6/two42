@@ -27,7 +27,9 @@ touches `app/`, `components/`, `lib/`, `supabase/migrations/`,
 `package-lock.json`, `next.config.ts`, `proxy.ts`, `instrumentation.ts`,
 `supabase/config.toml`, `scripts/start-supabase-stack.sh`, or the workflow file
 itself. The job reserves the stack's ports as its first step, and that script
-retries the start once if it fails on a port bind.
+retries the start once if it fails on a port bind. The browser cache also carries
+the .deb files of Chromium's system packages, so a cache hit installs them from
+disk and reaches the apt mirror only if they fall short.
 
 On a shared local stack the specs assume the seed defaults for
 `directory_visibility`, `group_creation_policy` (`approval`) and
