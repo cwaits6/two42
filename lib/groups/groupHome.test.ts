@@ -381,6 +381,20 @@ describe("This week", () => {
     expect(status([reply(null)])?.status).toBe("no");
   });
 
+  it("saves a moved date of a monthly event against its series and its series day", () => {
+    const monthly = event({ id: "supper", start_time: "2026-10-07T22:30:00Z", recurrence_frequency: "monthly" });
+    const exception = event({
+      id: "moved-supper",
+      title: "supper",
+      start_time: "2026-11-08T23:00:00Z",
+      series_id: "supper",
+      series_occurrence_date: "2026-11-07T23:30:00.000Z",
+    });
+    const rsvps = [{ event_id: "moved-supper", user_id: USER, status: "yes", occurrence_date: "2026-11-07" }] as Rsvp[];
+    const rows = buildGroupHome(reads({ events: [monthly, exception], rsvps }), ctx()).weekRows ?? [];
+    expect(rows.map((r) => r.reply)).toEqual([{ eventId: "supper", date: "2026-11-07", status: "yes" }]);
+  });
+
   it("asks nothing when RSVPs are off", () => {
     const e = event({ id: "x", start_time: "2026-11-07T22:30:00Z", is_rsvp_enabled: false });
     const [row] = buildGroupHome(reads({ events: [e] }), ctx()).weekRows ?? [];

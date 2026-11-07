@@ -15,8 +15,15 @@ vi.mock("next/link", () => ({
 vi.mock("@/components/events/AddToCalendarButton", () => ({ AddToCalendarButton: () => null }));
 vi.mock("@/components/events/CalendarToolbar", () => ({ CalendarToolbar: () => null }));
 vi.mock("@/components/events/RsvpControl", () => ({
-  RsvpControl: ({ occurrenceDate, currentStatus }: { occurrenceDate: string; currentStatus: string | null }) =>
-    createElement("output", { "data-date": occurrenceDate }, currentStatus ?? "none"),
+  RsvpControl: ({
+    eventId,
+    occurrenceDate,
+    currentStatus,
+  }: {
+    eventId: string;
+    occurrenceDate: string;
+    currentStatus: string | null;
+  }) => createElement("output", { "data-event": eventId, "data-date": occurrenceDate }, currentStatus ?? "none"),
 }));
 
 const { EventListView, LIST_PAGE } = await import("./EventListView");
@@ -73,6 +80,7 @@ async function mount(replies: ReplyRow[] = [], events: Event[] = dates) {
     container,
     cards,
     replies: () => cards().map((c) => [c.getAttribute("data-date"), c.textContent]),
+    controls: () => cards().map((c) => [c.getAttribute("data-event"), c.getAttribute("data-date"), c.textContent]),
     more,
     async showMore() {
       await act(async () => {
@@ -122,6 +130,33 @@ describe("EventListView", () => {
       ["2031-11-09", "none"],
       ["2031-11-16", "yes"],
       ["2031-11-23", "none"],
+    ]);
+  });
+
+  it("saves a date edited on its own against its series and its series day", async () => {
+    // Moved from Sunday morning to Monday evening: its own id and start differ from the series'.
+    const moved = {
+      ...SUNDAYS,
+      id: "moved-sunday",
+      start_time: "2031-11-10T23:00:00Z",
+      end_time: "2031-11-11T00:00:00Z",
+      recurrence_frequency: null,
+      recurrence_end_mode: null,
+      recurrence_count: null,
+      series_id: "sunday-class",
+      series_occurrence_date: "2031-11-09T14:30:00Z",
+    } as Event;
+    const view = await mount(
+      [
+        { event_id: "moved-sunday", user_id: "me", status: "maybe", occurrence_date: "2031-11-09" },
+        { event_id: "sunday-class", user_id: "me", status: "no", occurrence_date: "2031-11-09" },
+      ],
+      [dates[0], moved, dates[2]],
+    );
+    expect(view.controls()).toEqual([
+      ["sunday-class", "2031-11-02", "none"],
+      ["sunday-class", "2031-11-09", "maybe"],
+      ["sunday-class", "2031-11-16", "none"],
     ]);
   });
 
