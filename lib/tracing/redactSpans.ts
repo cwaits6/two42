@@ -1,6 +1,6 @@
 import { SpanKind, type Attributes } from "@opentelemetry/api";
 import type { tracing } from "@opentelemetry/sdk-node";
-import { pagePattern } from "@/lib/analytics/pagePattern";
+import { PAGE_PATTERNS } from "@/lib/analytics/pagePattern";
 
 type ReadableSpan = tracing.ReadableSpan;
 type SpanExporter = tracing.SpanExporter;
@@ -66,11 +66,10 @@ export function redactAddress(address: string): string {
   return url.origin + (DATABASE_OPERATION_PATH.test(url.pathname) ? url.pathname : "");
 }
 
-// A path is safe to name only when it is a route pattern: it has a dynamic
-// segment, or it is a page with none. Any other path can be a real address
-// holding a token or an id.
+// A path is safe to name only when the whole of it is a known route pattern.
+// Any other path can be a real address holding a token or an id.
 function isRoutePattern(path: string, route: string | undefined): boolean {
-  return path === route || /\/\[[^/\]]+\](?=\/|$)/.test(path) || pagePattern(path) === path;
+  return path === route || PAGE_PATTERNS.includes(path);
 }
 
 /**
