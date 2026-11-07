@@ -132,27 +132,32 @@ export default async function EventDetailPage({
   if (event.is_rsvp_enabled) {
     const { data: rsvpsRaw, error: rsvpsError } = await supabase
       .from("rsvps")
-      .select(
-        "event_id, user_id, status, occurrence_date, profiles(id, first_name, last_name, preferred_name, avatar_url)"
-      )
+      .select("event_id, user_id, status, occurrence_date")
       .or(replyDateFilter(key));
     if (rsvpsError) logError("Failed to load the event's replies", rsvpsError, { ids: { event: id } });
 
     const forDate = repliesForDate(rsvpsRaw ?? [], key);
     userStatus = user ? ((forDate.get(user.id)?.status as RsvpStatus | undefined) ?? null) : null;
-    attendees = [...forDate.values()]
-      .filter((r) => r.status === "yes" || r.status === "maybe")
-      .map((r) => {
-        const p = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles;
-        return {
-          id: p?.id ?? r.user_id,
-          first_name: p?.first_name ?? null,
-          last_name: p?.last_name ?? null,
-          preferred_name: p?.preferred_name ?? null,
-          avatar_url: p?.avatar_url ?? null,
-          status: r.status as Attendee["status"],
-        };
-      });
+    const coming = [...forDate.values()].filter((r) => r.status === "yes" || r.status === "maybe");
+    const { data: people, error: peopleError } = coming.length
+      ? await supabase
+          .from("profiles")
+          .select("id, first_name, last_name, preferred_name, avatar_url")
+          .in("id", coming.map((r) => r.user_id))
+      : { data: [], error: null };
+    if (peopleError) logError("Failed to load who's coming", peopleError, { ids: { event: id } });
+    const byId = new Map((people ?? []).map((p) => [p.id, p]));
+    attendees = coming.map((r) => {
+      const p = byId.get(r.user_id);
+      return {
+        id: r.user_id,
+        first_name: p?.first_name ?? null,
+        last_name: p?.last_name ?? null,
+        preferred_name: p?.preferred_name ?? null,
+        avatar_url: p?.avatar_url ?? null,
+        status: r.status as Attendee["status"],
+      };
+    });
 
     // Private buckets: exchange stored avatar URLs for signed URLs
     // before they reach AttendeeStrip's renders.
