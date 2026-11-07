@@ -166,7 +166,24 @@ describe("redactSpanName", () => {
   });
 
   it("drops a query written straight into a name", () => {
-    expect(redactSpanName("GET /join/x?who=someone")).toBe("GET /join/x");
+    expect(redactSpanName("GET /join/[token]?who=someone")).toBe("GET /join/[token]");
+  });
+
+  it("names a real path by the span's route, so a token in it never leaves", () => {
+    expect(redactSpanName("GET /join/SECRETTOKEN-1234", "/join/[token]")).toBe("GET /join/[token]");
+    expect(redactSpanName("middleware GET /join/SECRETTOKEN-1234?who=someone")).toBe("middleware GET [path]");
+  });
+
+  it("keeps a page that has no dynamic segment", () => {
+    expect(redactSpanName("GET /directory")).toBe("GET /directory");
+  });
+});
+
+describe("redactSpan name", () => {
+  it("takes the route from the span when its name holds the real path", () => {
+    const out = redactSpan(span({ name: "GET /join/SECRETTOKEN-1234", attributes: { "next.route": "/join/[token]" } }));
+    expect(out.name).toBe("GET /join/[token]");
+    expectNoSecrets(out);
   });
 });
 

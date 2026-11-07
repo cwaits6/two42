@@ -142,7 +142,7 @@ A span holds:
 
 | Kept | Example |
 |---|---|
-| Its name, with any address cut to its origin and a database path | `GET /join/[token]`, `fetch GET http://127.0.0.1:54321/rest/v1/profiles` |
+| Its name, with any address cut to its origin and a database path, and a real path replaced by the span's route (or `[path]` when it has none) | `GET /join/[token]`, `fetch GET http://127.0.0.1:54321/rest/v1/profiles` |
 | Start, end and duration | |
 | Trace, span and parent ids | |
 | Status code, without its message | `2` (error) |
