@@ -124,7 +124,10 @@ export default async function RootLayout({
     const loadGroupWaitingRequests = () =>
       membershipsLoad
         .then((groups) => getGroupWaitingRequestCounts(groups.filter((g) => g.role === "leader").map((g) => g.id)))
-        .catch(() => ({}));
+        .catch((e: unknown) => {
+          logError("Layout: failed to load group waiting request counts", e);
+          return {};
+        });
     [hasServingAccess, memberships, discoveryOn, creationPolicy, photoUrl, waitingRequests, groupWaitingRequests] = await Promise.all([
       loadServingAccess(),
       membershipsLoad,
