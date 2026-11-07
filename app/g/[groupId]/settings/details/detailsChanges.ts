@@ -1,7 +1,8 @@
+import type { GroupSharingColumns } from "@/lib/calendar/sharing";
 import type { GroupReminders } from "@/lib/events/reminders";
 import { validateGroupColor, type GroupSettingsValues } from "@/lib/groups/settings";
 
-export type CalendarSetting = "calendar_meeting_details" | "calendar_event_notes" | "calendar_event_location";
+export type CalendarSetting = keyof GroupSharingColumns;
 
 export type DetailsFields = {
   color: string;
