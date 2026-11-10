@@ -174,9 +174,14 @@ service name and version.
   offer. Stopping it otherwise means replacing `console.error` or rewriting
   the error object inside `onRequestError` so the framework prints the
   altered copy, and either depends on the framework's internals rather than
-  an interface it documents. So the line stays, as an accepted limit: every
-  message app code on the server throws is fixed text, so the line carries
-  nothing from a person's data. A helper whose read fails logs the failure
-  through the helper, with its code, and then throws a fixed message, never
-  the error's message, details or hint, nor the error as a `cause`.
+  an interface it documents. So the line stays, as an accepted limit, which
+  holds only while every error app code on the server lets reach the
+  framework carries a message with nothing from a database or library
+  error: fixed text, optionally followed by the error's code. A helper whose
+  read fails logs the failure through the helper, with its code, and then
+  throws such a message, never the error's message, details or hint, nor the
+  error as a `cause`. A library error rethrown as-is, such as a failed email
+  send, must be caught in the same route, logged through the helper and
+  answered with fixed text, so it never reaches the framework; removing that
+  `catch` puts the library's text on this line.
 - **Request logs kept by the hosts.**
