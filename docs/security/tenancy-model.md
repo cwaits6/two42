@@ -920,8 +920,16 @@ a request that selects, filters, orders or returns the column, directly or
 through an embed, fails with `42501`. Insert and update grants are table-level
 and unchanged, and the policies may still reference `email`. A column added to
 `profiles` is unreadable to clients until a migration adds it to that grant.
-One older function still returns a hidden address inside a household: see
-"Known limits".
+
+No client role reads a hidden address through a write either. A household
+primary or spouse edits someone in their household, including their hide
+setting, but an update that names `email` on another person's row is refused by
+the `profiles_email_by_owner_or_admin` trigger unless the caller is a church
+admin. It fires on the column being named, not on its value, so a right guess
+and a wrong guess get the same `42501`; the policy itself never compares the
+address. A person naming their own `email` is held to its stored value by the
+policy, and the sign-in trigger `handle_auth_user_email_change` and the service
+role are not client roles, so the trigger lets them through.
 
 Two pieces of this cross a boundary worth naming:
 
@@ -973,10 +981,6 @@ table's own FK.
 
 ## Known limits (accepted, tracked)
 
-- `get_profile_email(profile_id)` returns the address of anyone in the
-  caller's household, hidden or not, to `authenticated`. The `profiles`
-  update policy calls it in its `WITH CHECK` as the signed-in person, so the
-  grant cannot go until that policy arm is rewritten.
 - `feedback` and the two giving keys in `site_settings` stay org-level by
   decision: product feedback is about the app and read by org admins, and
   the giving toggles are org policy. Storage event-image keys stay
