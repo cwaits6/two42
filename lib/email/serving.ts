@@ -31,7 +31,7 @@ function getResend() {
 
 export async function sendServingConfirmationEmail(opts: {
   to: string;
-  name: string;
+  name: string | null;
   teamName: string;
   serviceDate: string;
   attendeesLabel: string;
@@ -71,7 +71,7 @@ ${cancelTurn(opts.cancelUrl, b.accent)}`,
 /** Quiet heads-up to a team leader when a signup is cancelled. */
 export async function sendServingCancelNoticeEmail(opts: {
   to: string;
-  leaderName: string;
+  leaderName: string | null;
   memberLabel: string;
   teamName: string;
   serviceDate: string;

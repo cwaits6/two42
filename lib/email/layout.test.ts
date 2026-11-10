@@ -134,6 +134,23 @@ async function renderAll(date: string): Promise<Record<string, Rendered>> {
         openDates: [{ date, url: GO }],
         scheduleUrl: SCHEDULE,
       })),
+    "serving-confirmation-no-name": await appEmail(() =>
+      serving.sendServingConfirmationEmail({
+        ...person,
+        name: null,
+        serviceDate: date,
+        attendeesLabel: "Ava Sampleton",
+        cancelUrl: GO,
+        icsContent: "BEGIN:VCALENDAR",
+      })),
+    "serving-cancel-notice-no-name": await appEmail(() =>
+      serving.sendServingCancelNoticeEmail({
+        ...person,
+        leaderName: null,
+        memberLabel: "Ava Sampleton",
+        serviceDate: date,
+        servingUrl: SCHEDULE,
+      })),
     "reminder-serving-no-name": servingReminderEmail({
       orgName: ORG,
       accent: ACCENT,

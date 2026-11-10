@@ -4,7 +4,7 @@
  * must never undo a successful signup or cancel.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { displayName } from "@/lib/names";
+import { greetingName } from "@/supabase/functions/_shared/email-html";
 import { generateServingICS } from "@/lib/ics-utils";
 import { getServingLinkMode } from "@/lib/serving/config";
 import { signupDisplayName } from "@/lib/serving/display";
@@ -84,7 +84,7 @@ export async function sendSignupConfirmation(
     teamName: string;
     serviceDate: string;
     attendees: NamedProfile[];
-    recipient: { id: string; email: string; name: string };
+    recipient: { id: string; email: string; name: string | null };
   }
 ) {
   const attendeesLabel = signupDisplayName(opts.attendees);
@@ -191,7 +191,7 @@ export async function notifyLeadersOfCancel(
       try {
         await sendServingCancelNoticeEmail({
           to: leader.email,
-          leaderName: displayName(leader),
+          leaderName: greetingName(leader.preferred_name, leader.first_name),
           memberLabel: opts.memberLabel,
           teamName: opts.teamName,
           serviceDate,
