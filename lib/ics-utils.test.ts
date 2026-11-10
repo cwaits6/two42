@@ -207,7 +207,15 @@ describe("an event the calendar library refuses", () => {
     const logged = vi.spyOn(console, "log").mockImplementation(() => {});
     const refused = { ...event, meeting_url: "https://zoom.us/j/1 2" } as Event;
 
-    expect(() => generateCombinedICS([{ event: refused, meeting: refused }], [])).toThrow("Failed to generate ICS");
+    let thrown: unknown;
+    try {
+      generateCombinedICS([{ event: refused, meeting: refused }], []);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toBe("Failed to generate ICS");
+    expect((thrown as Error).message).not.toContain("zoom.us");
 
     expect(loggedLines(logged)).toEqual([
       { level: "error", what: "ICS generation failed", code: "ValidationError", ref: expect.any(String) },
