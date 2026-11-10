@@ -34,7 +34,7 @@ import {
   type EmailBranding,
 } from "../_shared/branding.ts";
 import { resolveGroupLinkMode, type GroupClient } from "../_shared/groups.ts";
-import { openDatesEmail, servingReminderEmail } from "../_shared/email-html.ts";
+import { greetingName, openDatesEmail, servingReminderEmail } from "../_shared/email-html.ts";
 import {
   formatServiceDateWithYear,
   reminderRun,
@@ -339,7 +339,7 @@ async function runDaily(
           ...servingReminderEmail({
             orgName: branding.orgName,
             accent: branding.accent,
-            name: p.preferred_name || p.first_name || "Friend",
+            name: greetingName(p.preferred_name, p.first_name),
             teamName,
             dateLabel: formatServiceDateWithYear(serviceDate),
             cancelUrl,
@@ -516,7 +516,7 @@ async function runMonthly(
           ...openDatesEmail({
             orgName: branding.orgName,
             accent: branding.accent,
-            name: m.preferred_name || m.first_name || "Friend",
+            name: greetingName(m.preferred_name, m.first_name),
             teamName,
             dates,
             scheduleUrl,
@@ -605,7 +605,7 @@ async function runHourlyMode(supabase: ServiceClient, orgs: Org[]) {
           ...servingReminderEmail({
             orgName: branding.orgName,
             accent: branding.accent,
-            name: r.preferredName || r.firstName || "Friend",
+            name: greetingName(r.preferredName, r.firstName),
             teamName: r.teamName,
             dateLabel: formatServiceDateWithYear(r.serviceDate),
             cancelUrl,

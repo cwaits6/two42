@@ -126,6 +126,31 @@ async function renderAll(date: string): Promise<Record<string, Rendered>> {
       ],
       scheduleUrl: SCHEDULE,
     }),
+    "serving-broadcast-no-name": await appEmail(() =>
+      serving.sendServingBroadcastEmail({
+        ...person,
+        name: null,
+        fromName: "Walter Nullington",
+        openDates: [{ date, url: GO }],
+        scheduleUrl: SCHEDULE,
+      })),
+    "reminder-serving-no-name": servingReminderEmail({
+      orgName: ORG,
+      accent: ACCENT,
+      name: null,
+      teamName: "Hospitality",
+      dateLabel,
+      cancelUrl: GO,
+    }),
+    "reminder-event-no-name": eventReminderEmail({
+      orgName: ORG,
+      accent: ACCENT,
+      name: null,
+      title: "Fall potluck",
+      dateLabel: "Tuesday, November 10 at 7:00 PM",
+      location: null,
+      eventUrl: "https://two42.example/g/group-id/calendar/event-id",
+    }),
     "reminder-event": eventReminderEmail({
       orgName: ORG,
       accent: ACCENT,

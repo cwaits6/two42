@@ -7,6 +7,7 @@ import { createServingToken } from "@/lib/serving/links";
 import { teamServiceDates, todayIn } from "@/lib/serving/dates";
 import { orgTimeZoneById } from "@/lib/time/orgZone";
 import { sendServingBroadcastEmail } from "@/lib/email/serving";
+import { greetingName } from "@/supabase/functions/_shared/email-html";
 import { reserveEmailQuota } from "@/lib/email/quota";
 import type { Profile } from "@/lib/types";
 import { siteConfig } from "@/lib/config";
@@ -251,7 +252,7 @@ export async function POST(request: Request) {
     try {
       await sendServingBroadcastEmail({
         to: member.email!,
-        name: member.preferred_name || member.first_name || "Friend",
+        name: greetingName(member.preferred_name, member.first_name),
         teamName: group.name,
         fromName,
         message,
