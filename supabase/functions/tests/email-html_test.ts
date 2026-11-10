@@ -113,7 +113,7 @@ Deno.test("a greeting with no name leaves no dangling comma or double space", ()
   ]) {
     assertStringIncludes(html, ">Hi, ");
     assert(!html.includes("Hi ,"));
-    assert(!html.includes("Friend"));
+    assert(!/Friend/.test(html));
     assert(!/Hi,\s{2}/.test(html));
   }
 });
