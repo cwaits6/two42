@@ -174,7 +174,9 @@ service name and version.
   offer. Stopping it otherwise means replacing `console.error` or rewriting
   the error object inside `onRequestError` so the framework prints the
   altered copy, and either depends on the framework's internals rather than
-  an interface it documents. So the line stays: code that can fail on
-  people's data should catch the failure and log it through the helper, so
-  the thrown error's message is fixed text.
+  an interface it documents. So the line stays, as an accepted limit: every
+  message app code on the server throws is fixed text, so the line carries
+  nothing from a person's data. A helper whose read fails logs the failure
+  through the helper, with its code, and then throws a fixed message, never
+  the error's message, details or hint, nor the error as a `cause`.
 - **Request logs kept by the hosts.**
