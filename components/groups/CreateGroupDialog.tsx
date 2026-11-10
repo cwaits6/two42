@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { failureMessage } from "@/lib/errorCopy";
 import { Button } from "@/components/ui/button";
 import {
   Combobox,
@@ -182,7 +183,7 @@ export function CreateGroupDialog({
           return;
         }
         if (error || !data?.length) {
-          toast.error("Couldn't send the request. Please try again.");
+          toast.error(failureMessage("send the request"));
           return;
         }
         toast.success("Request sent. A church admin will review it.");

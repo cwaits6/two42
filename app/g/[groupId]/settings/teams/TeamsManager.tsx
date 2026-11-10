@@ -17,6 +17,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { failureMessage } from "@/lib/errorCopy";
 import { Switch } from "@/components/ui/switch";
 import {
   Plus,
@@ -102,7 +103,7 @@ export function TeamsManager({ groupId, groupName, children }: TeamsManagerProps
       .order("display_order");
 
     if (error) {
-      toast.error("Failed to load teams.");
+      toast.error(failureMessage("load teams"));
       setLoading(false);
       return;
     }
@@ -137,7 +138,7 @@ export function TeamsManager({ groupId, groupName, children }: TeamsManagerProps
     // Keep the previous counts rather than showing every team as empty, which
     // would also silence the member warning on delete.
     if (countsError) {
-      toast.error("Failed to load team members.");
+      toast.error(failureMessage("load team members"));
       setLoading(false);
       return;
     }
@@ -148,7 +149,7 @@ export function TeamsManager({ groupId, groupName, children }: TeamsManagerProps
     setMemberCounts(countMap);
 
     if (settingsError) {
-      toast.error("Failed to load serving settings.");
+      toast.error(failureMessage("load serving settings"));
       setLoading(false);
       return;
     }
@@ -201,7 +202,7 @@ export function TeamsManager({ groupId, groupName, children }: TeamsManagerProps
         .select("id");
       setSaving(false);
       if (error || !data?.length) {
-        toast.error("Failed to update team.");
+        toast.error(failureMessage("save the team"));
         return;
       }
       toast.success("Team updated.");
@@ -215,10 +216,10 @@ export function TeamsManager({ groupId, groupName, children }: TeamsManagerProps
         .insert({ ...payload, group_id: groupId, display_order: nextOrder });
       setSaving(false);
       if (error) {
-        toast.error("Failed to create team.");
+        toast.error(failureMessage("add the team"));
         return;
       }
-      toast.success("Team created.");
+      toast.success("Team added.");
     }
 
     setDialogOpen(false);
@@ -247,7 +248,7 @@ export function TeamsManager({ groupId, groupName, children }: TeamsManagerProps
       .select("id");
 
     if (error || !data?.length) {
-      toast.error("Failed to remove team.");
+      toast.error(failureMessage("remove the team"));
       return;
     }
     toast.success("Team removed.");
@@ -281,7 +282,7 @@ export function TeamsManager({ groupId, groupName, children }: TeamsManagerProps
     ]);
 
     if (r1.error || r2.error || !r1.data?.length || !r2.data?.length) {
-      toast.error("Failed to reorder.");
+      toast.error(failureMessage("reorder teams"));
       return;
     }
     loadTeams();

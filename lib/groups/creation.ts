@@ -3,6 +3,8 @@
 // without I/O. The database enforces the same rules (group_create() and the
 // group_requests INSERT policy); these only decide what the UI offers.
 
+import { failureMessage } from "@/lib/errorCopy";
+
 export const GROUP_CREATION_POLICIES = ["open", "approval", "admins"] as const;
 export type GroupCreationPolicy = (typeof GROUP_CREATION_POLICIES)[number];
 
@@ -53,8 +55,8 @@ export function validateGroupDescription(raw: string): Validated<string | null> 
 }
 
 const ERROR_MESSAGES: Record<string, string> = {
-  GC001: "Your church does not let members create groups.",
-  GC002: "Your account cannot create groups yet.",
+  GC001: "Your church does not let members add groups.",
+  GC002: "Your account cannot add groups yet.",
   GC003: "That person is not an approved member of your church.",
   GC004: "That request is no longer waiting for approval.",
   GC005: "Only a church admin can do that.",
@@ -64,5 +66,5 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 /** Member-facing copy for a group_create() / group_request_approve() error code. */
 export function groupCreationErrorMessage(code: string | undefined): string {
-  return (code && ERROR_MESSAGES[code]) || "Couldn't create the group. Please try again.";
+  return (code && ERROR_MESSAGES[code]) || failureMessage("add the group");
 }

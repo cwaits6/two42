@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { failureMessage } from "@/lib/errorCopy";
 import { ArrowLeft, Plus, Search, Star, X } from "lucide-react";
 import { setGroupMembership } from "@/lib/memberGroups";
 import { displayName, initials } from "@/lib/names";
@@ -91,7 +92,7 @@ export function TeamRosterDialog({
 
         if (cancelled) return;
         if (mErr || rErr) {
-          toast.error("Failed to load roster.");
+          toast.error(failureMessage("load the roster"));
           return;
         }
         const memberRows = (rows || []) as { profile_id: string; is_leader: boolean }[];
@@ -117,7 +118,7 @@ export function TeamRosterDialog({
       } catch (err) {
         if (cancelled) return;
         logError("TeamRosterDialog load failed", err, { route: "/g/[groupId]/settings/teams" });
-        toast.error("Failed to load roster.");
+        toast.error(failureMessage("load the roster"));
       }
     }
 
@@ -195,7 +196,7 @@ export function TeamRosterDialog({
       .select("profile_id");
 
     if (error || !data?.length) {
-      toast.error("Failed to update team lead.");
+      toast.error(failureMessage("change the team lead"));
       setBusy(null);
       return;
     }
