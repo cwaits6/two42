@@ -49,8 +49,7 @@ export async function removeAvatarObjects(orgId: string, keys: string[]): Promis
     // org-anchor: storage.objects has no org_id; the keys were checked against orgId above
     const { data, error } = await service.storage.from("avatars").remove(allowed);
     if (error) logError("removeAvatarObjects: remove failed", error, { ids: { org: orgId, keys: allowed.length } });
-    if (error) throw new Error(error.message);
-    removed = new Set((data ?? []).map((object) => object.name));
+    else removed = new Set((data ?? []).map((object) => object.name));
   } catch (err) {
     logError("removeAvatarObjects", err);
   }
