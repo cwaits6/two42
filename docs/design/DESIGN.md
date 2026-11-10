@@ -104,8 +104,8 @@ Every page is built from the same frame, so moving between sibling pages never m
 - **The account block** (`components/layout/AccountBlock.tsx`) shows the person's photo, or their initials, and their name; an operator, who has no profile in any church, is shown by their sign-in address. Its menu lists, in this order: **My profile**, **Settings**, **Church admin** (church admins only), **Platform** (operators only), then **Help**, **Privacy**, **Terms**, then **Sign out**, set apart as the last item. A row is listed only when it opens for that person, so a pending person gets Help, Privacy, Terms and Sign out, and an operator outside a church gets Platform and those same rows. The menu opens on click, tap, Enter or Space and closes with Escape. It never opens on hover.
 - **Sign out** appears once in the frame, in that menu. Signed in, there is no footer; Settings repeats Help, Privacy and Terms.
 - **Church admin, Platform and Group settings pages** use the same frame with their own page list. Church admin and Platform are led by the way back to Home. Group settings, for the group's leaders only, is led by the way back to the group, named for it, and lists Details, Requests, Privacy and joining, Invite links, Teams and Labels, with the number of requests to join waiting on Requests. Group settings opens on Details.
-- **The wordmark** takes a member to the page that lists all of their groups. Its link is at least 44px tall in the sidebar, as the 42 mark, and in the phone bar.
-- **Signed out**, the header offers **Sign in** at every width and the page ends with the footer.
+- **The wordmark** takes a member to Home (`/dashboard`): the page that lists all of their groups, or for a member of one group, that group's Home. Its link is at least 44px tall in the sidebar, as the 42 mark, and in the phone bar.
+- **Signed out**, the header offers **Sign in** at every width, except on the sign-in page itself, and the page ends with the footer.
 
 Who sees which row is decided on the server, from the signed-in person's own row (`components/layout/account.ts`, built in `app/layout.tsx`).
 
@@ -145,7 +145,7 @@ Why this order:
 
 - **Title** — espresso Fraunces, the page's only `h1`.
 - **Subtitle** — optional, one line of plain copy.
-- **Back link** — optional, above the title, labelled `Back to {parent page name}` ("Back to Group settings", "Back to Calendar"), at a 44px target. A back link always names its parent page; there is no bare "Back".
+- **Back link** — optional, above the title, labelled `Back to {parent page name}` ("Back to Lessons", "Back to Calendar"), at a 44px target. A back link always names its parent page; there is no bare "Back".
 - **Primary action** — optional, right of the title on desktop and full width below the subtitle on phone.
 
 **Form pages** take their title from `PageHeader`, never from a `CardTitle`, and end with Save + Cancel: the primary Save first, Cancel returning to the back link's page.
