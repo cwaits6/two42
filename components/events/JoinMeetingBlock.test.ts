@@ -40,8 +40,14 @@ const fills = (tag: string): Fill[] =>
   }));
 
 const css = readFileSync(joinPath(process.cwd(), "app/globals.css"), "utf8");
-const hexToken = (name: string): string => {
-  const match = css.match(new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6});`));
+const TOKENS = {
+  "--primary": /--primary:\s*(#[0-9a-fA-F]{6});/,
+  "--primary-foreground": /--primary-foreground:\s*(#[0-9a-fA-F]{6});/,
+  "--foreground": /--foreground:\s*(#[0-9a-fA-F]{6});/,
+  "--color-brand-accent": /--color-brand-accent:\s*(#[0-9a-fA-F]{6});/,
+} as const;
+const hexToken = (name: keyof typeof TOKENS): string => {
+  const match = css.match(TOKENS[name]);
   if (!match) throw new Error(`${name} is not declared as a 6-digit hex in app/globals.css`);
   return match[1];
 };
@@ -94,5 +100,17 @@ describe("JoinMeetingBlock", () => {
     for (const fill of surfaces(render(state, url)).flatMap(fills)) {
       expect(contrastRatio(composite(espresso, clay, fill.alpha), white)).toBeGreaterThanOrEqual(4.5);
     }
+  });
+
+  it("keeps the live Join button's text at 4.5:1 when hovered", () => {
+    const join = buttons(render("live", "https://zoom.us/j/1")).find((tag) => tag.includes("bg-brand-accent"));
+    expect(join).toBeDefined();
+    const opacity = Number(join!.match(/hover:opacity-(\d+)\b/)?.[1] ?? 100) / 100;
+    // The live panel is --primary-hover: Clay mixed 90% with black. Opacity fades the
+    // button's text along with its fill, so both are composited onto the panel.
+    const panel = composite("#000000", hexToken("--primary"), 0.1);
+    const fill = composite(hexToken("--color-brand-accent"), panel, opacity);
+    const text = composite(hexToken("--foreground"), panel, opacity);
+    expect(contrastRatio(fill, text)).toBeGreaterThanOrEqual(4.5);
   });
 });
