@@ -13,6 +13,7 @@ import { useDirectory } from "@/components/directory/DirectoryContext";
 import {
   birthdayEntries,
   celebrationHref,
+  INCLUDE_NON_ATTENDEES,
   parseIncludeNonAttendees,
 } from "@/components/directory/celebrations";
 import {
@@ -79,7 +80,7 @@ function BirthdaysTabInner() {
                 `${basePath}/birthdays`,
                 searchParams.toString(),
                 "household",
-                checked ? "all" : null,
+                checked ? INCLUDE_NON_ATTENDEES : null,
               ),
             )
           }

@@ -20,7 +20,15 @@ export function parseWhen(value: string | null): CelebrationWhen {
 }
 
 /** The celebration tabs a household or person link can lead back to. */
-export type CelebrationTab = "birthdays" | "anniversaries";
+const CELEBRATION_TABS = ["birthdays", "anniversaries"] as const;
+export type CelebrationTab = (typeof CELEBRATION_TABS)[number];
+
+function isCelebrationTab(value: string | null): value is CelebrationTab {
+  return (CELEBRATION_TABS as readonly (string | null)[]).includes(value);
+}
+
+/** The `household` value that shows household members who don't attend a group. */
+export const INCLUDE_NON_ATTENDEES = "all";
 
 /**
  * A link from a celebration tab into Households, carrying the tab, its filter
@@ -37,7 +45,7 @@ export function fromCelebration(path: string, tab: CelebrationTab, search: URLSe
  */
 export function celebrationBackHref(basePath: string, search: URLSearchParams): string | null {
   const from = search.get("from");
-  if (from !== "birthdays" && from !== "anniversaries") return null;
+  if (!isCelebrationTab(from)) return null;
   const query = new URLSearchParams(listState(search)).toString();
   return query ? `${basePath}/${from}?${query}` : `${basePath}/${from}`;
 }
@@ -47,13 +55,13 @@ function listState(search: URLSearchParams): Record<string, string> {
   const state: Record<string, string> = {};
   const when = parseWhen(search.get("when"));
   if (when !== "all") state.when = when;
-  if (parseIncludeNonAttendees(search.get("household"))) state.household = "all";
+  if (parseIncludeNonAttendees(search.get("household"))) state.household = INCLUDE_NON_ATTENDEES;
   return state;
 }
 
 /** Whether the URL has the Birthdays tab showing household members who don't attend a group. */
 export function parseIncludeNonAttendees(value: string | null): boolean {
-  return value === "all";
+  return value === INCLUDE_NON_ATTENDEES;
 }
 
 /**
