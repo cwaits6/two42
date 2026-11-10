@@ -6,6 +6,9 @@ import {
   groupTextColor,
   validateGroupColor,
 } from "@/lib/groups/settings";
+import { loggedLines } from "@/lib/log/testing";
+
+const MARKER = "ada.lovelace@example.test";
 
 describe("validateGroupColor", () => {
   it("accepts Clay, which carries white text", () => {
@@ -109,12 +112,18 @@ describe("getGroupSettings", () => {
     expect((await getGroupSettings(client, "org-1", "grp-1")).serving_link_mode).toBeNull();
   });
 
-  it("throws when the read fails instead of reporting the defaults", async () => {
-    const { client } = makeClient({ data: null, error: { message: "boom" } });
+  it("throws fixed text when the read fails instead of reporting the defaults", async () => {
+    const logged = vi.mocked(console.log);
+    logged.mockClear();
+    const { client } = makeClient({ data: null, error: { code: "PGRST301", message: MARKER } });
 
-    await expect(getGroupSettings(client, "org-1", "grp-1")).rejects.toThrow(
-      /Failed to load group settings/
-    );
-    expect(console.log).toHaveBeenCalled();
+    const thrown = await getGroupSettings(client, "org-1", "grp-1").catch((e: Error) => e);
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toBe("Failed to load group settings");
+    expect((thrown as Error).message).not.toContain(MARKER);
+    expect(loggedLines(logged)).toEqual([
+      expect.objectContaining({ what: "Failed to load group settings for group", code: "PGRST301" }),
+    ]);
   });
 });

@@ -3,6 +3,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
 import { loadGroupMemberships } from "@/lib/groups/memberships";
+import { loggedLines } from "@/lib/log/testing";
+
+const MARKER = "ada.lovelace@example.test";
 
 type Result = { data: unknown[] | null; error: unknown };
 
@@ -114,23 +117,39 @@ describe("loadGroupMemberships", () => {
     expect(row.role).toBe("member");
   });
 
-  it("throws on a membership query error so a failed read never reads as no memberships", async () => {
-    const { client } = makeClient({ group_members: { data: null, error: { message: "boom" } } });
-
-    await expect(
-      loadGroupMemberships(client, { profileId: "p1", orgId: "org-1" })
-    ).rejects.toThrow("boom");
-    expect(console.log).toHaveBeenCalled();
-  });
-
-  it("throws on a calendar query error rather than painting every group Clay", async () => {
+  it("throws fixed text on a membership query error so a failed read never reads as no memberships", async () => {
+    const logged = vi.mocked(console.log);
+    logged.mockClear();
     const { client } = makeClient({
-      group_members: { data: rows, error: null },
-      event_calendars: { data: null, error: { message: "cal boom" } },
+      group_members: { data: null, error: { code: "PGRST301", message: MARKER } },
     });
 
-    await expect(
-      loadGroupMemberships(client, { profileId: "p1", orgId: "org-1" })
-    ).rejects.toThrow("cal boom");
+    const thrown = await loadGroupMemberships(client, { profileId: "p1", orgId: "org-1" }).catch((e: Error) => e);
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toBe("Failed to load group memberships");
+    expect((thrown as Error).message).not.toContain(MARKER);
+    expect(loggedLines(logged)).toEqual([
+      expect.objectContaining({ what: "Failed to load group memberships", code: "PGRST301" }),
+    ]);
+    expect(JSON.stringify(loggedLines(logged))).not.toContain(MARKER);
+  });
+
+  it("throws fixed text on a calendar query error rather than painting every group Clay", async () => {
+    const logged = vi.mocked(console.log);
+    logged.mockClear();
+    const { client } = makeClient({
+      group_members: { data: rows, error: null },
+      event_calendars: { data: null, error: { code: "PGRST301", message: MARKER } },
+    });
+
+    const thrown = await loadGroupMemberships(client, { profileId: "p1", orgId: "org-1" }).catch((e: Error) => e);
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toBe("Failed to load group calendars");
+    expect((thrown as Error).message).not.toContain(MARKER);
+    expect(loggedLines(logged)).toEqual([
+      expect.objectContaining({ what: "Failed to load group calendars", code: "PGRST301" }),
+    ]);
   });
 });
