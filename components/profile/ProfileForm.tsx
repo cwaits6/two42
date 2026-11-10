@@ -333,7 +333,8 @@ export function ProfileForm({
       last_name: lastName,
       preferred_name: preferredName,
       // The email field is disabled for non-admins (changed via Settings),
-      // and RLS pins profiles.email on non-admin updates — don't send it.
+      // and the database refuses profiles.email on non-admin updates (RLS pins
+      // your own, a trigger refuses anyone else's) — don't send it.
       ...(isAdmin ? { email: normalizeEmail(state.email) } : {}),
       phone_mobile: phoneMobile,
       phone_home: phoneHome,
