@@ -17,6 +17,7 @@ on:
         ".github/workflows/supabase.yml",
         "package.json",
         "package-lock.json",
+        "deno.lock",
       ]
 
 jobs:
@@ -149,6 +150,11 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+    env:
+      # The edge functions import nothing from package.json. Left on, Deno
+      # copies its dependency list into deno.lock, and every npm bump would
+      # then fail the frozen checks below until the lock was refreshed by hand.
+      DENO_NO_PACKAGE_JSON: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -160,19 +166,19 @@ jobs:
 
       # Every deno step runs --frozen: an unfrozen one silently rewrites an
       # outdated deno.lock in the runner, and every step after it would then
-      # check the rewritten lock instead of the committed one. Deno mirrors
-      # package.json into the lock, so an npm bump that skips deno.lock fails here.
+      # check the rewritten lock instead of the committed one. The lock is
+      # named explicitly because DENO_NO_PACKAGE_JSON turns off the automatic one.
       - name: Type-check shared edge function modules
-        run: deno check --frozen supabase/functions/_shared/*.ts
+        run: deno check --lock=deno.lock --frozen supabase/functions/_shared/*.ts
 
       - name: Run edge function unit tests
-        run: deno test --frozen --allow-env supabase/functions/tests/
+        run: deno test --lock=deno.lock --frozen --allow-env supabase/functions/tests/
 
       # Blocking: the import is pinned, so a failure here is our
       # code (or an esm.sh outage) — see the note above the job.
       - name: Type-check edge function entry points
         run: |
-          deno check --frozen supabase/functions/send-event-reminders/index.ts \
+          deno check --lock=deno.lock --frozen supabase/functions/send-event-reminders/index.ts \
                               supabase/functions/send-serving-reminders/index.ts \
                               supabase/functions/clean-up-expired-data/index.ts
 
