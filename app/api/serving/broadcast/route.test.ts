@@ -32,6 +32,15 @@ vi.mock("@/lib/email/identity", () => ({
   resolveEmailBranding: (...args: unknown[]) => resolveEmailBranding(...args),
 }));
 
+const sendServingBroadcastEmail = vi.fn();
+vi.mock("@/lib/email/serving", () => ({
+  sendServingBroadcastEmail: (...args: unknown[]) => sendServingBroadcastEmail(...args),
+}));
+
+vi.mock("@/lib/serving/config", () => ({
+  getServingLinkMode: async () => "login",
+}));
+
 const { POST } = await import("@/app/api/serving/broadcast/route");
 
 // A chainable query-builder stub: .eq()/.gte()/.lte()/.select() all return
@@ -104,6 +113,7 @@ beforeEach(() => {
   createClient.mockReset();
   createServiceClient.mockReset();
   reserveEmailQuota.mockReset();
+  sendServingBroadcastEmail.mockReset().mockResolvedValue(undefined);
   resolveEmailBranding.mockReset().mockResolvedValue({
     orgName: "Grace Fellowship",
     fromAddress: "noreply@grace.church",
@@ -170,5 +180,28 @@ describe("POST /api/serving/broadcast — email branding", () => {
     // teams in makeCookieClient's stub carries org_id: "org-1" — the
     // anchor this call must be threaded from, not a sibling row's id.
     expect(resolveEmailBranding).toHaveBeenCalledWith("org-1");
+  });
+});
+
+describe("POST /api/serving/broadcast — greeting", () => {
+  it("greets each member by preferred or first name, and by no name when both are missing", async () => {
+    const insertSpy = vi.fn(() => ({ data: null, error: null }));
+    createClient.mockResolvedValue(makeCookieClient(insertSpy));
+    const member = { last_name: "Lee", role: "member", email_announcements: true };
+    createServiceClient.mockResolvedValue(
+      makeServiceClient([
+        { ...member, id: "member-1", first_name: "Sam", preferred_name: "Sammy", email: "sam@example.com" },
+        { ...member, id: "member-2", first_name: null, preferred_name: null, email: "anon@example.com" },
+      ])
+    );
+    reserveEmailQuota.mockResolvedValue(true);
+
+    const res = await POST(broadcastRequest());
+
+    expect(res.status).toBe(200);
+    expect(sendServingBroadcastEmail.mock.calls.map(([o]) => (o as { name: unknown }).name)).toEqual([
+      "Sammy",
+      null,
+    ]);
   });
 });
