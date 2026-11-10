@@ -59,8 +59,8 @@ begin
   insert into public.events (org_id, group_id, title, start_time, calendar_id, created_by)
     values (_org, _group, _tag || ' event', now() + interval '7 days', _calendar, _owner)
     returning id into _event;
-  insert into public.rsvps (org_id, event_id, user_id, status)
-    values (_org, _event, _owner, 'yes');
+  insert into public.rsvps (org_id, event_id, user_id, status, occurrence_date)
+    values (_org, _event, _owner, 'yes', current_date + 7);
   insert into public.calendar_subscription_tokens (org_id, user_id, token_hash, expires_at)
     values (_org, _owner, _tag || '-token-hash', now() + interval '30 days');
 
@@ -313,8 +313,8 @@ begin
   -- (23503); had it been tagged org A instead, the restrictive floor's
   -- WITH CHECK would fire first (42501).
   begin
-    insert into public.rsvps (org_id, event_id, user_id, status)
-    values (org_b, current_setting('idor.event_a')::uuid, owner_b, 'yes');
+    insert into public.rsvps (org_id, event_id, user_id, status, occurrence_date)
+    values (org_b, current_setting('idor.event_a')::uuid, owner_b, 'yes', current_date + 7);
   exception when others then
     rsvp_insert_err := sqlstate;
   end;

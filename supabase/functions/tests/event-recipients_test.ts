@@ -13,6 +13,7 @@ import {
 const ORG = "11111111-2222-3333-4444-555555555555";
 const GROUP = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 const EVENT = "99999999-8888-7777-6666-555555555555";
+const DATE = "2026-11-15";
 
 interface RecordedChain {
   from: string;
@@ -33,7 +34,9 @@ function makeFakeClient(
       return Promise.resolve({ data: null, error: { message: errors[chain.from], code: "42501" } });
     }
     const [col, values] = chain.in!;
-    const data = (tables[chain.from] ?? []).filter((row) => values.includes(row[col]));
+    const data = (tables[chain.from] ?? []).filter((row) =>
+      values.includes(row[col]) && chain.eq.every(([c, v]) => !(c in row) || row[c] === v)
+    );
     return Promise.resolve({ data, error: null });
   };
   const client = {
@@ -101,7 +104,7 @@ function withSilencedConsoleError<T>(fn: () => Promise<T>): Promise<T> {
 Deno.test("resolves RSVPs through current group membership to approved profiles with an email", async () => {
   const { client, chains } = makeFakeClient(TABLES);
   const recipients = await withSilencedConsoleError(() =>
-    resolveEventReminderRecipients(client, ORG, GROUP, EVENT)
+    resolveEventReminderRecipients(client, ORG, GROUP, EVENT, DATE)
   );
   assertEquals(recipients, [
     { id: "a", first_name: "Ann", preferred_name: null, email: "a@example.com" },
@@ -114,7 +117,7 @@ Deno.test("resolves RSVPs through current group membership to approved profiles 
   }
   const [rsvps, members, profiles] = chains;
   assertEquals(rsvps.select, "user_id");
-  assertEquals(rsvps.eq, [["org_id", ORG], ["event_id", EVENT]]);
+  assertEquals(rsvps.eq, [["org_id", ORG], ["event_id", EVENT], ["occurrence_date", DATE]]);
   assertEquals(rsvps.in, ["status", ["yes", "maybe"]]);
   assertEquals(members.select, "profile_id");
   assertEquals(members.eq, [["org_id", ORG], ["group_id", GROUP]]);
@@ -122,6 +125,20 @@ Deno.test("resolves RSVPs through current group membership to approved profiles 
   assertEquals(profiles.select, "id, first_name, preferred_name, email, role");
   assertEquals(profiles.eq, [["org_id", ORG]]);
   assertEquals(profiles.in, ["id", ["a", "b", "d", "e"]]);
+});
+
+Deno.test("a reply to another date of the event is not reminded", async () => {
+  const { client } = makeFakeClient({
+    ...TABLES,
+    rsvps: [
+      { user_id: "a", status: "yes", occurrence_date: DATE },
+      { user_id: "b", status: "yes", occurrence_date: "2026-11-22" },
+    ],
+  });
+  const recipients = await withSilencedConsoleError(() =>
+    resolveEventReminderRecipients(client, ORG, GROUP, EVENT, DATE)
+  );
+  assertEquals(recipients.map((r) => r.id), ["a"]);
 });
 
 Deno.test("logs each skipped profile by id, never by address", async () => {
@@ -138,7 +155,7 @@ Deno.test("logs each skipped profile by id, never by address", async () => {
     logged.push(line);
   };
   try {
-    await resolveEventReminderRecipients(client, ORG, GROUP, EVENT);
+    await resolveEventReminderRecipients(client, ORG, GROUP, EVENT, DATE);
   } finally {
     console.log = original;
   }
@@ -151,13 +168,13 @@ Deno.test("logs each skipped profile by id, never by address", async () => {
 
 Deno.test("no RSVPs short-circuits before touching group_members", async () => {
   const { client, chains } = makeFakeClient({ ...TABLES, rsvps: [] });
-  assertEquals(await resolveEventReminderRecipients(client, ORG, GROUP, EVENT), []);
+  assertEquals(await resolveEventReminderRecipients(client, ORG, GROUP, EVENT, DATE), []);
   assertEquals(chains.map((c) => c.from), ["rsvps"]);
 });
 
 Deno.test("no remaining members short-circuits before touching profiles", async () => {
   const { client, chains } = makeFakeClient({ ...TABLES, group_members: [] });
-  assertEquals(await resolveEventReminderRecipients(client, ORG, GROUP, EVENT), []);
+  assertEquals(await resolveEventReminderRecipients(client, ORG, GROUP, EVENT, DATE), []);
   assertEquals(chains.map((c) => c.from), ["rsvps", "group_members"]);
 });
 
@@ -168,7 +185,7 @@ Deno.test("chunks id lists so no single .in() exceeds 200 values", async () => {
     group_members: ids.map((id) => ({ profile_id: id })),
     profiles: ids.map((id) => ({ id, first_name: null, preferred_name: null, email: `${id}@example.com`, role: "member" })),
   });
-  const recipients = await resolveEventReminderRecipients(client, ORG, GROUP, EVENT);
+  const recipients = await resolveEventReminderRecipients(client, ORG, GROUP, EVENT, DATE);
   assertEquals(recipients.length, 450);
   assertEquals(chains.filter((c) => c.from === "group_members").length, 3);
   assertEquals(chains.filter((c) => c.from === "profiles").length, 3);
@@ -182,7 +199,7 @@ for (const table of ["rsvps", "group_members", "profiles"]) {
   Deno.test(`a ${table} query error rejects`, async () => {
     const { client } = makeFakeClient(TABLES, { [table]: "boom" });
     await assertRejects(
-      () => resolveEventReminderRecipients(client, ORG, GROUP, EVENT),
+      () => resolveEventReminderRecipients(client, ORG, GROUP, EVENT, DATE),
       Error,
       `${table} query failed: boom`,
     );
@@ -190,7 +207,7 @@ for (const table of ["rsvps", "group_members", "profiles"]) {
 
   Deno.test(`a ${table} query error logs the database's code before it is rethrown as text`, async () => {
     const { client } = makeFakeClient(TABLES, { [table]: "boom" });
-    const lines = await logged(() => resolveEventReminderRecipients(client, ORG, GROUP, EVENT));
+    const lines = await logged(() => resolveEventReminderRecipients(client, ORG, GROUP, EVENT, DATE));
     assertEquals(lines.map(({ what, code }) => ({ what, code })), [
       { what: `${table} query failed`, code: "42501" },
     ]);

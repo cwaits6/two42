@@ -47,6 +47,7 @@ import {
   reminderMode,
   runEventReminders,
 } from "../_shared/event-reminders.ts";
+import { localDay } from "../_shared/event-dates.ts";
 import { formatReminderDate } from "../_shared/event-time.ts";
 import { listGroups, type GroupClient } from "../_shared/groups.ts";
 import { eventReminderEmail } from "../_shared/email-html.ts";
@@ -247,6 +248,7 @@ async function runBeforeDates(
           org.id,
           group.id,
           event.id,
+          localDay(event.start_time, org.timezone),
         );
 
         // Reserve once per event batch against the org's daily cap,

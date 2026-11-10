@@ -406,19 +406,21 @@ ON CONFLICT (id) DO UPDATE
       calendar_id = excluded.calendar_id
   WHERE events.org_id = excluded.org_id;
 
-INSERT INTO public.rsvps (org_id, event_id, user_id, status)
-SELECT org_id, 'e0000000-0000-0000-0000-000000000003', id,
-       CASE WHEN row_number() OVER (ORDER BY id) <= 3 THEN 'yes' ELSE 'maybe' END
+INSERT INTO public.rsvps (org_id, event_id, user_id, status, occurrence_date)
+SELECT p.org_id, e.id, p.id,
+       CASE WHEN row_number() OVER (ORDER BY p.id) <= 3 THEN 'yes' ELSE 'maybe' END,
+       (e.start_time AT TIME ZONE o.timezone)::date
 FROM public.profiles p
+JOIN public.events e ON e.id = 'e0000000-0000-0000-0000-000000000003' AND e.org_id = p.org_id
+JOIN public.organizations o ON o.id = e.org_id
 WHERE p.org_id = '00000000-0000-0000-0000-000000000001'
   AND p.email LIKE '%@example.test'
   AND p.relationship = 'primary'
   AND EXISTS (
     SELECT 1 FROM public.group_members gm
-    JOIN public.events e ON e.group_id = gm.group_id AND e.org_id = gm.org_id
-    WHERE gm.profile_id = p.id AND e.id = 'e0000000-0000-0000-0000-000000000003'
+    WHERE gm.profile_id = p.id AND gm.group_id = e.group_id AND gm.org_id = e.org_id
   )
-ON CONFLICT (event_id, user_id) DO NOTHING;
+ON CONFLICT (event_id, user_id, occurrence_date) DO NOTHING;
 
 INSERT INTO public.announcements (id, org_id, group_id, author_id, title, content, is_published, published_at)
 SELECT a.id, g.org_id, g.id, 'a0000000-0000-0000-0000-000000000001', a.title, a.content, true, a.published_at

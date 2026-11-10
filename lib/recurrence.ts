@@ -86,10 +86,7 @@ function fastForwardIndex(
  *
  * The reminder job steps dates with its own copy of these rules,
  * supabase/functions/_shared/event-dates.ts; a change here needs the same
- * change there, and recurrence.test.ts fails when they disagree. A third copy,
- * public.event_reply_day() in the event_reply_dates migration, dates replies in
- * SQL; it needs the same change in a new migration, and only the literal days
- * in event_reply_dates_suite.sql guard it.
+ * change there, and recurrence.test.ts fails when they disagree.
  */
 export function expandOccurrences(
   event: Event & { calendar?: EventCalendar | null },

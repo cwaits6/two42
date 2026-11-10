@@ -125,13 +125,12 @@ export async function buildAccountExport(orgId: string, personId: string) {
     ).map((t) => ({ team: named(t.teams), is_team_lead: t.is_leader, joined_at: t.assigned_at })),
     rsvps: rowsOf<{
       status: string;
-      occurrence_date: string | null;
+      occurrence_date: string;
       created_at: string;
       events: { title: string; start_time: string } | null;
     }>(rsvps, "rsvps").map((r) => ({
       event: r.events?.title ?? null,
       event_starts_at: r.events?.start_time ?? null,
-      // The date answered; null on a reply saved before replies named one.
       date: r.occurrence_date,
       status: r.status,
       answered_at: r.created_at,
