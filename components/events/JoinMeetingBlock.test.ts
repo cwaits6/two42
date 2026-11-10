@@ -103,11 +103,13 @@ describe("JoinMeetingBlock", () => {
   });
 
   it("keeps the live Join button's text at 4.5:1 when hovered", () => {
-    const join = buttons(render("live", "https://zoom.us/j/1")).find((tag) => tag.includes("bg-brand-accent"));
+    const html = render("live", "https://zoom.us/j/1");
+    expect(surfaces(html)[0]).toMatch(/\bbg-brand-primary-hover\b/);
+    const join = buttons(html).find((tag) => tag.includes("bg-brand-accent"));
     expect(join).toBeDefined();
     const opacity = Number(join!.match(/hover:opacity-(\d+)\b/)?.[1] ?? 100) / 100;
-    // The live panel is --primary-hover: Clay mixed 90% with black. Opacity fades the
-    // button's text along with its fill, so both are composited onto the panel.
+    // --primary-hover mixes Clay with black. Opacity fades the button's text along with
+    // its fill, so both are composited onto the panel.
     const panel = composite("#000000", hexToken("--primary"), 0.1);
     const fill = composite(hexToken("--color-brand-accent"), panel, opacity);
     const text = composite(hexToken("--foreground"), panel, opacity);
