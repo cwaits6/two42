@@ -597,15 +597,16 @@ begin
     insert into public.event_reminder_sends (org_id, event_id, occurrence_date, profile_id)
     select _org_id, _event_id, _occurrence_date, p.id
     from public.profiles p
-    left join public.rsvps own
-      on own.org_id = _org_id and own.event_id = _reply_event_id and own.user_id = p.id
-    left join public.rsvps series
-      on series.org_id = _org_id and series.event_id = _event_id and series.user_id = p.id
+    join public.rsvps r
+      on r.org_id = _org_id
+     and r.event_id = _event_id
+     and r.occurrence_date = _occurrence_date
+     and r.user_id = p.id
+     and r.status in ('yes', 'maybe')
     where p.org_id = _org_id
       and p.email is not null
       and p.role <> 'pending'
       and p.email_event_reminders
-      and coalesce(own.status, series.status) in ('yes', 'maybe')
       and exists (
         select 1 from public.group_members gm
         where gm.org_id = _org_id and gm.group_id = _group and gm.profile_id = p.id
@@ -635,7 +636,7 @@ $$;
 ALTER FUNCTION "public"."event_reminder_claim"("_org_id" "uuid", "_event_id" "uuid", "_occurrence_date" "date", "_reply_event_id" "uuid") OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."event_reminder_claim"("_org_id" "uuid", "_event_id" "uuid", "_occurrence_date" "date", "_reply_event_id" "uuid") IS 'Starts the reminder pass for one date of an event when it has none, fixing its recipients, then claims every unsent reminder in the pass and returns the people to mail. Tenant anchor: the event''s own org_id, compared with _org_id; a mismatch raises ER001. service_role only.';
+COMMENT ON FUNCTION "public"."event_reminder_claim"("_org_id" "uuid", "_event_id" "uuid", "_occurrence_date" "date", "_reply_event_id" "uuid") IS 'Starts the reminder pass for one date of an event when it has none, fixing its recipients (Yes or Maybe for that date), then claims every unsent reminder in the pass and returns the people to mail. Tenant anchor: the event''s own org_id, compared with _org_id; a mismatch raises ER001. service_role only.';
 
 
 
@@ -664,109 +665,6 @@ ALTER FUNCTION "public"."event_reminder_passes_prune"("_org_id" "uuid", "_before
 
 
 COMMENT ON FUNCTION "public"."event_reminder_passes_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) IS 'Deletes at most _limit of one church''s event reminder passes with an occurrence_date before _before, oldest first, and returns how many went. Tenant anchor: the _org_id predicate on every row it reads and deletes. service_role only.';
-
-
-
-CREATE OR REPLACE FUNCTION "public"."event_reply_day"("_event_id" "uuid", "_at" timestamp with time zone) RETURNS "date"
-    LANGUAGE "plpgsql" STABLE
-    SET "search_path" TO ''
-    AS $$
-declare
-  _e public.events%rowtype;
-  _tz text;
-  _first timestamp;
-  _step interval;
-  _longest interval;
-  _length interval;
-  _bound timestamptz;
-  _n integer;
-  _walked integer := 0;
-  _local timestamp;
-  _day date;
-  _starts timestamptz;
-  _edited_cancelled boolean;
-  _edited_ends timestamptz;
-  _last date;
-begin
-  select * into _e from public.events e where e.id = _event_id;
-  if not found then
-    return null;
-  end if;
-  select o.timezone into _tz from public.organizations o where o.id = _e.org_id;
-  if _tz is null then
-    return null;
-  end if;
-
-  if _e.series_id is not null or _e.recurrence_frequency is null or _e.recurrence_interval < 1 then
-    return (coalesce(_e.series_occurrence_date, _e.start_time) at time zone _tz)::date;
-  end if;
-
-  _first := _e.start_time at time zone _tz;
-  _step := case _e.recurrence_frequency
-    when 'daily' then interval '1 day'
-    when 'weekly' then interval '7 days'
-    when 'monthly' then interval '1 month'
-    else interval '1 year'
-  end * _e.recurrence_interval;
-  _longest := case _e.recurrence_frequency
-    when 'daily' then interval '1 day'
-    when 'weekly' then interval '7 days'
-    when 'monthly' then interval '31 days'
-    else interval '366 days'
-  end * _e.recurrence_interval;
-  _length := coalesce(_e.end_time - _e.start_time, interval '2 hours');
-  _bound := case when _e.recurrence_end_mode = 'until' then least(_at, _e.recurrence_until) else _at end;
-
-  -- No step is longer than _longest, so this index is at or before the first
-  -- date that ends after _at, and at or before the series' last date.
-  _n := greatest(0, floor(extract(epoch from (_bound - _length - _e.start_time)) / extract(epoch from _longest))::integer - 1);
-  if _e.recurrence_end_mode = 'count' then
-    _n := least(_n, greatest(coalesce(_e.recurrence_count, 1) - 1, 0));
-  end if;
-
-  loop
-    exit when _e.recurrence_end_mode = 'count' and _n >= coalesce(_e.recurrence_count, 1);
-    _local := _first + _step * _n;
-    _starts := _local at time zone _tz;
-    exit when _e.recurrence_end_mode = 'until' and _starts > _e.recurrence_until;
-    _day := _local::date;
-
-    select x.is_cancelled, coalesce(x.end_time, x.start_time + interval '2 hours')
-      into _edited_cancelled, _edited_ends
-    from public.events x
-    where x.series_id = _e.id
-      and (x.series_occurrence_date at time zone _tz)::date = _day
-    order by x.is_cancelled, x.created_at, x.id
-    limit 1;
-
-    if found then
-      if not _edited_cancelled then
-        if _edited_ends > _at then
-          return _day;
-        end if;
-        _last := _day;
-      end if;
-    else
-      if _starts + _length > _at then
-        return _day;
-      end if;
-      _last := _day;
-    end if;
-
-    _n := _n + 1;
-    _walked := _walked + 1;
-    exit when _walked >= 10000;
-  end loop;
-
-  return coalesce(_last, (_e.start_time at time zone _tz)::date);
-end;
-$$;
-
-
-ALTER FUNCTION "public"."event_reply_day"("_event_id" "uuid", "_at" timestamp with time zone) OWNER TO "postgres";
-
-
-COMMENT ON FUNCTION "public"."event_reply_day"("_event_id" "uuid", "_at" timestamp with time zone) IS 'The calendar day, in the church''s zone, that a reply to the event made at _at answers: a series'' first date that is not cancelled and has not ended, else its last date. SECURITY INVOKER: reads the event under the caller''s row security, so an event the caller cannot see is NULL; the zone is the event''s own org''s.';
 
 
 
@@ -2871,9 +2769,6 @@ CREATE OR REPLACE FUNCTION "public"."rsvp_set"("_event_id" "uuid", "_occurrence_
 declare
   _me uuid := auth.uid();
   _series uuid;
-  _org uuid;
-  _tz text;
-  _target uuid;
 begin
   if _me is null then
     raise exception 'a reply needs a signed-in person' using errcode = '42501';
@@ -2882,43 +2777,23 @@ begin
     raise exception 'a reply needs a date' using errcode = '22023';
   end if;
 
-  select e.series_id, e.org_id into _series, _org from public.events e where e.id = _event_id;
+  select e.series_id into _series from public.events e where e.id = _event_id;
   if not found then
     raise exception 'event % not found', _event_id using errcode = '42501';
   end if;
   if _series is not null then
     raise exception 'a reply names the series, not a date edited on its own' using errcode = '22023';
   end if;
-  select o.timezone into _tz from public.organizations o where o.id = _org;
-
-  -- Nothing stops two edited rows standing on one day; the event page picks
-  -- the same one by this order, so a saved reply is the one it reads.
-  select x.id into _target
-  from public.events x
-  where x.series_id = _event_id
-    and not x.is_cancelled
-    and (x.series_occurrence_date at time zone _tz)::date = _occurrence_date
-  order by x.created_at, x.id
-  limit 1;
-  _target := coalesce(_target, _event_id);
 
   if _status is null then
     delete from public.rsvps r
-    where r.user_id = _me
-      and ((_target <> _event_id and r.event_id = _target)
-        or (r.event_id = _event_id and (r.occurrence_date = _occurrence_date or r.occurrence_date is null)));
+    where r.user_id = _me and r.event_id = _event_id and r.occurrence_date = _occurrence_date;
     return null;
   end if;
 
-  if _target <> _event_id then
-    delete from public.rsvps r
-    where r.user_id = _me and r.event_id = _event_id and r.occurrence_date = _occurrence_date;
-  end if;
-
   insert into public.rsvps (event_id, user_id, status, occurrence_date)
-  values (_target, _me, _status, _occurrence_date)
-  on conflict (event_id, user_id) do update
-    set status = excluded.status, occurrence_date = excluded.occurrence_date;
+  values (_event_id, _me, _status, _occurrence_date)
+  on conflict (event_id, user_id, occurrence_date) do update set status = excluded.status;
   return _status;
 end;
 $$;
@@ -2929,20 +2804,6 @@ ALTER FUNCTION "public"."rsvp_set"("_event_id" "uuid", "_occurrence_date" "date"
 
 COMMENT ON FUNCTION "public"."rsvp_set"("_event_id" "uuid", "_occurrence_date" "date", "_status" "text") IS 'Sets the signed-in person''s reply to one date of an event, or clears it when _status is null or left out. SECURITY INVOKER: tenant anchor is auth.uid() under the rsvps policies and their restrictive org isolation; an event the caller cannot see raises 42501.';
 
-
-
-CREATE OR REPLACE FUNCTION "public"."rsvps_fill_occurrence_date"() RETURNS "trigger"
-    LANGUAGE "plpgsql"
-    SET "search_path" TO ''
-    AS $$
-begin
-  new.occurrence_date := public.event_reply_day(new.event_id, pg_catalog.now());
-  return new;
-end;
-$$;
-
-
-ALTER FUNCTION "public"."rsvps_fill_occurrence_date"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."serving_reminder_claim"("_org_id" "uuid", "_send_date" "date", "_service_date" "date", "_team_ids" "uuid"[]) RETURNS TABLE("team_id" "uuid", "profile_id" "uuid", "email" "text", "first_name" "text", "preferred_name" "text")
@@ -4540,7 +4401,7 @@ CREATE TABLE IF NOT EXISTS "public"."rsvps" (
     "status" "text" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
-    "occurrence_date" "date",
+    "occurrence_date" "date" NOT NULL,
     CONSTRAINT "rsvps_status_check" CHECK (("status" = ANY (ARRAY['yes'::"text", 'no'::"text", 'maybe'::"text"])))
 );
 
@@ -4548,7 +4409,7 @@ CREATE TABLE IF NOT EXISTS "public"."rsvps" (
 ALTER TABLE "public"."rsvps" OWNER TO "postgres";
 
 
-COMMENT ON COLUMN "public"."rsvps"."occurrence_date" IS 'The calendar day, in the church''s zone, of the date this reply answers; for a date edited on its own, the day it stood on in the series. Keyed like event_reminder_passes. NULL on a reply saved before replies named a date: it covers every date of its event.';
+COMMENT ON COLUMN "public"."rsvps"."occurrence_date" IS 'The calendar day, in the church''s zone, of the date this reply answers; for a date edited on its own, the day it stood on in the series, on the series'' event_id. Keyed like event_reminder_passes.';
 
 
 
@@ -5070,7 +4931,7 @@ ALTER TABLE ONLY "public"."profiles"
 
 
 ALTER TABLE ONLY "public"."rsvps"
-    ADD CONSTRAINT "rsvps_event_id_user_id_key" UNIQUE ("event_id", "user_id");
+    ADD CONSTRAINT "rsvps_event_id_user_id_occurrence_date_key" UNIQUE ("event_id", "user_id", "occurrence_date");
 
 
 
@@ -5631,10 +5492,6 @@ CREATE OR REPLACE TRIGGER "profiles_own_event_reminders" BEFORE UPDATE OF "email
 
 
 CREATE OR REPLACE TRIGGER "profiles_touch_updated_at" BEFORE UPDATE ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."touch_updated_at"();
-
-
-
-CREATE OR REPLACE TRIGGER "rsvps_fill_occurrence_date" BEFORE INSERT ON "public"."rsvps" FOR EACH ROW WHEN (("new"."occurrence_date" IS NULL)) EXECUTE FUNCTION "public"."rsvps_fill_occurrence_date"();
 
 
 
@@ -7260,12 +7117,6 @@ GRANT ALL ON FUNCTION "public"."event_reminder_passes_prune"("_org_id" "uuid", "
 
 
 
-REVOKE ALL ON FUNCTION "public"."event_reply_day"("_event_id" "uuid", "_at" timestamp with time zone) FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."event_reply_day"("_event_id" "uuid", "_at" timestamp with time zone) TO "authenticated";
-GRANT ALL ON FUNCTION "public"."event_reply_day"("_event_id" "uuid", "_at" timestamp with time zone) TO "service_role";
-
-
-
 REVOKE ALL ON FUNCTION "public"."family_anniversary_hidden"("_family_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."family_anniversary_hidden"("_family_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."family_anniversary_hidden"("_family_id" "uuid") TO "service_role";
@@ -7561,12 +7412,6 @@ GRANT ALL ON FUNCTION "public"."rls_auto_enable"() TO "service_role";
 REVOKE ALL ON FUNCTION "public"."rsvp_set"("_event_id" "uuid", "_occurrence_date" "date", "_status" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."rsvp_set"("_event_id" "uuid", "_occurrence_date" "date", "_status" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."rsvp_set"("_event_id" "uuid", "_occurrence_date" "date", "_status" "text") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."rsvps_fill_occurrence_date"() TO "anon";
-GRANT ALL ON FUNCTION "public"."rsvps_fill_occurrence_date"() TO "authenticated";
-GRANT ALL ON FUNCTION "public"."rsvps_fill_occurrence_date"() TO "service_role";
 
 
 
