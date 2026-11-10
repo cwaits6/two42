@@ -38,12 +38,14 @@ describe("buildAccount", () => {
       initials: "P",
       isMember: false,
       isChurchAdmin: false,
+      hasChurch: false,
     });
   });
 
   it("puts Church admin before Platform for a church admin who is also an operator", () => {
     const a = account({ profile: { ...isaac, role: "admin" }, isOperator: true });
     expect(labels(a)).toEqual(["My profile", "Settings", "Church admin", "Platform", ...INFO]);
+    expect(a.hasChurch).toBe(true);
   });
 
   it("offers a pending person only Help, Privacy and Terms, under their own name", () => {

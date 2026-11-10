@@ -27,6 +27,7 @@ const member = buildAccount({ ...base, profile: { ...name, role: "member" } });
 const admin = buildAccount({ ...base, profile: { ...name, role: "admin" } });
 const pending = buildAccount({ ...base, profile: { ...name, role: "pending" } });
 const operator = buildAccount({ ...base, profile: null, isOperator: true });
+const operatorInChurch = buildAccount({ ...base, profile: { ...name, role: "member" }, isOperator: true });
 
 function render(
   account: Account,
@@ -123,6 +124,18 @@ describe("FrameNav", () => {
     expect(navs(html)).toEqual(["Platform navigation"]);
     expect(html).toContain('href="/platform/organizations"');
     expect(navs(render(operator, "/admin"))).toEqual([]);
+  });
+
+  it("offers an operator with no church no way back to Home, since Home sends them back to Platform", () => {
+    for (const path of ["/platform", "/platform/organizations"]) {
+      const html = render(operator, path);
+      expect(html, path).not.toContain("Back to Home");
+      expect(html, path).not.toContain('href="/dashboard"');
+    }
+  });
+
+  it("leads an operator who belongs to a church back to their Home", () => {
+    expect(namedLinks(render(operatorInChurch, "/platform"))[0]).toEqual(["/dashboard", "Back to Home"]);
   });
 
   it("gives a pending person and an operator outside Platform no pages", () => {

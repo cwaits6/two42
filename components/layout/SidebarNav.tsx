@@ -46,7 +46,7 @@ export function SidebarNav({ items, collapsed, onNavigate }: SidebarNavProps) {
   const isActive = (href: string, exact = false) =>
     exact ? pathname === href : pathname === href || pathname.startsWith(href + "/");
 
-  // Soft-blue active state with a primary left bar, per the design system
+  // Warm active state with a primary left bar, per the design system
   const linkClass = (active: boolean, quiet: boolean) =>
     `flex min-h-11 items-center gap-3 px-3 py-2.5 rounded-lg border-l-4 transition-colors ${
       quiet ? "text-sm" : "text-base"

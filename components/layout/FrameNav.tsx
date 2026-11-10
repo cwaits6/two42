@@ -28,7 +28,7 @@ export function FrameNav({
     return <AreaNav area="admin" collapsed={collapsed} onNavigate={onNavigate} />;
   }
   if (area === "platform" && account.isOperator) {
-    return <AreaNav area="platform" collapsed={collapsed} onNavigate={onNavigate} />;
+    return <AreaNav area="platform" hasChurch={account.hasChurch} collapsed={collapsed} onNavigate={onNavigate} />;
   }
   if (!account.isMember) return null;
   if (area === "groupSettings" && group?.role === "leader") {

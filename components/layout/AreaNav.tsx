@@ -20,8 +20,8 @@ type AreaLink = {
 
 type Area = {
   label: string;
-  /** The way out of the area, above its pages. */
-  back: { href: string; label: string };
+  /** The way out of the area, above its pages; null when it would lead back here. */
+  back: { href: string; label: string } | null;
   sections: { label?: string; items: AreaLink[] }[];
   /** The one page that carries the waiting count. */
   counted?: string;
@@ -68,7 +68,8 @@ export function areaFor(pathname: string): AreaKey | null {
 /** An area's destinations, led by the way back out of it. */
 export function AreaNav(
   props: (
-    | { area: Exclude<AreaKey, "groupSettings"> }
+    | { area: "admin" }
+    | { area: "platform"; hasChurch: boolean }
     | { area: "groupSettings"; group: AreaGroup }
   ) & {
     /** The collapsed sidebar: icons alone, each still named for a screen reader. */
@@ -79,7 +80,12 @@ export function AreaNav(
   const { collapsed = false, onNavigate } = props;
   const pathname = usePathname();
   const group = props.area === "groupSettings" ? props.group : null;
-  const area = props.area === "groupSettings" ? groupSettingsArea(props.group) : AREAS[props.area];
+  const area =
+    props.area === "groupSettings"
+      ? groupSettingsArea(props.group)
+      : props.area === "platform" && !props.hasChurch
+        ? { ...AREAS.platform, back: null }
+        : AREAS[props.area];
   const churchWaiting = useWaitingRequests();
   const groupWaiting = useGroupWaitingRequests(group?.id);
   const waiting = group ? groupWaiting : churchWaiting;
@@ -90,16 +96,20 @@ export function AreaNav(
 
   return (
     <nav aria-label={area.label} className="flex flex-col space-y-1">
-      <Link
-        href={area.back.href}
-        onClick={onNavigate}
-        title={collapsed ? area.back.label : undefined}
-        className="inline-flex min-h-11 items-center gap-2 px-3 text-base font-semibold text-brand-primary-text underline underline-offset-4 hover:text-foreground"
-      >
-        <ArrowLeft className="h-5 w-5 shrink-0" aria-hidden="true" />
-        <span className={collapsed ? "sr-only" : undefined}>{area.back.label}</span>
-      </Link>
-      <div className="border-t border-border my-2" role="separator" />
+      {area.back && (
+        <>
+          <Link
+            href={area.back.href}
+            onClick={onNavigate}
+            title={collapsed ? area.back.label : undefined}
+            className="inline-flex min-h-11 items-center gap-2 px-3 text-base font-semibold text-brand-primary-text underline underline-offset-4 hover:text-foreground"
+          >
+            <ArrowLeft className="h-5 w-5 shrink-0" aria-hidden="true" />
+            <span className={collapsed ? "sr-only" : undefined}>{area.back.label}</span>
+          </Link>
+          <div className="border-t border-border my-2" role="separator" />
+        </>
+      )}
       {area.sections.map((section, i) => (
         <Fragment key={section.label ?? i}>
           {section.label && !collapsed && (
