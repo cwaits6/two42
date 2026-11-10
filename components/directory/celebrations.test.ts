@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   anniversaryEntries,
   birthdayEntries,
+  celebrationBackHref,
   celebrationHref,
   celebrationSections,
   celebrationsThisWeek,
   coupleName,
+  fromCelebration,
   isThisWeek,
   parseIncludeNonAttendees,
   parseWhen,
@@ -391,5 +393,31 @@ describe("parseIncludeNonAttendees", () => {
     expect(parseIncludeNonAttendees("all")).toBe(true);
     expect(parseIncludeNonAttendees(null)).toBe(false);
     expect(parseIncludeNonAttendees("true")).toBe(false);
+  });
+});
+
+describe("the way back from a household to a celebration list", () => {
+  const back = (query: string) => celebrationBackHref("/directory", new URLSearchParams(query));
+
+  it("carries the tab, and the filter unless it is all", () => {
+    expect(fromCelebration("/directory/families?family=f", "birthdays", "week")).toBe(
+      "/directory/families?family=f&from=birthdays&when=week",
+    );
+    expect(fromCelebration("/directory/families?family=f", "anniversaries", "all")).toBe(
+      "/directory/families?family=f&from=anniversaries",
+    );
+  });
+
+  it("leads back to the tab and filter the link carried", () => {
+    expect(back("family=f&from=birthdays&when=week")).toBe("/directory/birthdays?when=week");
+    expect(back("family=f&from=anniversaries&when=month")).toBe("/directory/anniversaries?when=month");
+    expect(back("family=f&from=birthdays")).toBe("/directory/birthdays");
+  });
+
+  it("stays on Households without a known tab, and drops an unknown filter", () => {
+    expect(back("family=f")).toBeNull();
+    expect(back("family=f&from=members")).toBeNull();
+    expect(back("family=f&from=https://example.test")).toBeNull();
+    expect(back("family=f&from=birthdays&when=//example.test")).toBe("/directory/birthdays");
   });
 });

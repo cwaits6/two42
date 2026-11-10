@@ -17,14 +17,14 @@ function AnniversariesTabInner() {
 
   return (
     <CelebrationList
-      path="/anniversaries"
+      tab="anniversaries"
       noun="anniversaries"
       icon={Heart}
       entries={entries}
-      renderRow={(entry, soon) => (
+      renderRow={(entry, soon, href) => (
         <DirRow
           key={entry.key}
-          href={`${basePath}${entry.path}`}
+          href={href(entry.path)}
           highlight={soon}
           stackTrailing
           avatar={

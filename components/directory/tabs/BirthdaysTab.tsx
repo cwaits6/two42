@@ -34,14 +34,14 @@ function BirthdaysTabInner() {
   return (
     <>
       <CelebrationList
-        path="/birthdays"
+        tab="birthdays"
         noun="birthdays"
         icon={Cake}
         entries={entries}
-        renderRow={(entry, soon) => (
+        renderRow={(entry, soon, href) => (
           <DirRow
             key={entry.key}
-            href={`${basePath}${entry.path}`}
+            href={href(entry.path)}
             highlight={soon}
             stackTrailing
             avatar={

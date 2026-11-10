@@ -19,6 +19,27 @@ export function parseWhen(value: string | null): CelebrationWhen {
   return value === "week" || value === "month" ? value : "all";
 }
 
+/** The celebration tabs a household or person link can lead back to. */
+export type CelebrationTab = "birthdays" | "anniversaries";
+
+/** A link from a celebration tab into Households, carrying the tab and filter so its panel can lead back. */
+export function fromCelebration(path: string, tab: CelebrationTab, when: CelebrationWhen): string {
+  const query = new URLSearchParams({ from: tab });
+  if (when !== "all") query.set("when", when);
+  return `${path}${path.includes("?") ? "&" : "?"}${query}`;
+}
+
+/**
+ * The celebration list a Households panel was opened from, or null to stay on
+ * Households. The values come from the address bar, so only known ones count.
+ */
+export function celebrationBackHref(basePath: string, search: URLSearchParams): string | null {
+  const from = search.get("from");
+  if (from !== "birthdays" && from !== "anniversaries") return null;
+  const when = parseWhen(search.get("when"));
+  return celebrationHref(`${basePath}/${from}`, "", "when", when === "all" ? null : when);
+}
+
 /** Whether the URL has the Birthdays tab showing household members who don't attend a group. */
 export function parseIncludeNonAttendees(value: string | null): boolean {
   return value === "all";
