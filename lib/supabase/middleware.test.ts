@@ -317,6 +317,34 @@ describe("cookie scope regression", () => {
 });
 
 describe("content security policy", () => {
+  it("names no speed measurement host, and every other source is as before", async () => {
+    const req = new NextRequest("https://two42.io/", {
+      headers: { host: "two42.io" },
+    });
+    const res = await updateSession(req);
+    const directives = res.headers
+      .get("Content-Security-Policy")
+      ?.replace(/'nonce-[^']+'/, "'nonce-N'")
+      .split(";")
+      .map((d) => d.trim());
+    expect(directives?.find((d) => d.startsWith("connect-src "))).not.toContain("vitals.vercel-insights.com");
+    expect(directives).toEqual([
+      "default-src 'self'",
+      "script-src 'self' 'nonce-N' https://va.vercel-scripts.com https://maps.googleapis.com https://maps.gstatic.com blob:",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "img-src 'self' data: blob: https://maps.gstatic.com https://maps.googleapis.com https://img.youtube.com http://127.0.0.1:54321",
+      "font-src 'self' data: https://fonts.gstatic.com",
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co http://127.0.0.1:54321 ws://127.0.0.1:54321 https://maps.googleapis.com https://places.googleapis.com https://maps.gstatic.com blob:",
+      "frame-src 'self' https://www.google.com",
+      "frame-ancestors 'none'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "worker-src blob:",
+      "manifest-src 'self'",
+    ]);
+  });
+
   it("lets the browser reach the configured Supabase origin, local stacks included", async () => {
     const req = new NextRequest("https://two42.io/", {
       headers: { host: "two42.io" },

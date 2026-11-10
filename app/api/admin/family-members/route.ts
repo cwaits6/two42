@@ -62,7 +62,7 @@ export async function POST(request: Request) {
 
   if (error) {
     logError("family-members POST error", error, { route: "/api/admin/family-members" });
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Couldn't add them to the household. Try again." }, { status: 500 });
   }
 
   return NextResponse.json({ data }, { status: 201 });
