@@ -2,7 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { FamilyDirectoryFull } from "@/lib/types";
+import type { DirectoryProfile, FamilyDirectoryFull } from "@/lib/types";
 
 const search = vi.hoisted(() => ({ query: "" }));
 vi.mock("next/navigation", () => ({
@@ -21,12 +21,15 @@ const family = {
   family_members_list: [],
 } as unknown as FamilyDirectoryFull;
 
+const solo = { id: "solo", first_name: "Ava", last_name: "Sampleton", family_id: null } as unknown as DirectoryProfile;
+const inMiller = { id: "in-miller", first_name: "Ben", last_name: "Miller", family_id: "miller" } as unknown as DirectoryProfile;
+
 // One value across renders, as the provider gives: the deep-link effect re-runs on a new map.
 const directory = {
   members: [],
   families: [family],
   memberships: [{ id: "g" }],
-  profileMap: {},
+  profileMap: { [solo.id]: solo, [inMiller.id]: inMiller },
   familyMap: { [family.id]: family },
   basePath: "/directory",
   loading: false,
@@ -35,6 +38,7 @@ const directory = {
 };
 vi.mock("@/components/directory/DirectoryContext", () => ({ useDirectory: () => directory }));
 vi.mock("@/components/directory/FamilyCard", () => ({ FamilyCard: () => null }));
+vi.mock("@/components/directory/PersonCard", () => ({ PersonCard: () => null }));
 
 const { FamiliesTab } = await import("./FamiliesTab");
 
@@ -85,5 +89,16 @@ describe("FamiliesTab's way back to the list", () => {
     const row = [...host.querySelectorAll("button")].find((el) => el.textContent?.includes("Miller"))!;
     await act(async () => row.click());
     expect(backToList().tagName).toBe("BUTTON");
+  });
+
+  it("leads a person with no household, opened from Birthdays, back to that list", async () => {
+    await open("person=solo&from=birthdays&when=week");
+    expect(backToList().getAttribute("href")).toBe("/directory/birthdays?when=week");
+  });
+
+  it("leads a person in a household back to the household, not the list", async () => {
+    await open("person=in-miller&from=birthdays&when=week");
+    const back = [...host.querySelectorAll("a, button")].find((el) => el.textContent === "Back to Miller")!;
+    expect(back.tagName).toBe("BUTTON");
   });
 });
