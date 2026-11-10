@@ -44,7 +44,7 @@ export async function getGroupSettings(
     .maybeSingle();
   if (error) {
     logError("Failed to load group settings for group", error, { ids: { group: groupId } });
-    throw new Error(`Failed to load group settings: ${error.message}`);
+    throw new Error("Failed to load group settings");
   }
   if (!data) return GROUP_SETTINGS_DEFAULTS;
   return {

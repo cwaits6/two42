@@ -50,7 +50,10 @@ describe("removeAvatarObjects", () => {
   it("reports every key still stored when storage fails, without throwing", async () => {
     remove.mockResolvedValue({ data: null, error: { message: "down", status: 503 } });
     expect(await removeAvatarObjects(ORG, [`${PERSON}/avatar.jpg`])).toEqual([`${PERSON}/avatar.jpg`]);
-    expect(loggedLines(logged)[0]).toMatchObject({ what: "removeAvatarObjects: remove failed", code: "503" });
+    expect(loggedLines(logged).map(({ what, code }) => ({ what, code }))).toEqual([
+      { what: "removeAvatarObjects: remove failed", code: "503" },
+      { what: "removeAvatarObjects: still stored in org", code: undefined },
+    ]);
   });
 
   it("logs each key left behind by its kind and row id, so its folder can be found", async () => {

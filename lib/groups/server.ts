@@ -32,7 +32,7 @@ export const getGroupMemberships = cache(async (): Promise<ActiveGroup[]> => {
     .maybeSingle();
   if (error) {
     logError("Failed to load the viewer's profile for group context", error);
-    throw new Error(`Failed to load the viewer's profile: ${error.message}`);
+    throw new Error("Failed to load the viewer's profile");
   }
   if (!profile || profile.role === "pending") return [];
 

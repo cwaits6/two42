@@ -46,7 +46,7 @@ export async function loadGroupMemberships(
 
   if (error) {
     logError("Failed to load group memberships", error);
-    throw new Error(`Failed to load group memberships: ${error.message}`);
+    throw new Error("Failed to load group memberships");
   }
 
   const rows = (data ?? []) as MembershipRow[];
@@ -65,7 +65,7 @@ export async function loadGroupMemberships(
 
   if (calendarError) {
     logError("Failed to load group calendars", calendarError);
-    throw new Error(`Failed to load group calendars: ${calendarError.message}`);
+    throw new Error("Failed to load group calendars");
   }
 
   const colors = new Map<string, string>();
