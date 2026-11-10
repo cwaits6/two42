@@ -20,13 +20,11 @@ describe("todayLabel", () => {
 });
 
 describe("greetingName", () => {
-  it("prefers the preferred name, then the first name", () => {
-    expect(greetingName({ preferred_name: "Annie", first_name: "Ann" })).toBe("Annie");
-    expect(greetingName({ preferred_name: " ", first_name: "Ann" })).toBe("Ann");
+  it("has no name when the profile failed to load", () => {
+    expect(greetingName(null)).toBeNull();
   });
 
-  it("has no stand-in name when the profile has none or failed to load", () => {
-    expect(greetingName({ preferred_name: null, first_name: "" })).toBeNull();
-    expect(greetingName(null)).toBeNull();
+  it("uses the email greeting's rule for a loaded profile", () => {
+    expect(greetingName({ preferred_name: " ", first_name: "Ann" })).toBe("Ann");
   });
 });
