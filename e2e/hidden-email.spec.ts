@@ -22,9 +22,14 @@ function psql(sql: string) {
   );
 }
 
-test.beforeAll(() => psql(`update public.profiles set hide_email = true where id = '${CHLOE}';`));
+// The seed's mobile number fails the form's phone check, so a save needs a
+// valid one; afterAll puts the seed's back.
+test.beforeAll(() =>
+  psql(`update public.profiles set hide_email = true, phone_mobile = '+15125550112' where id = '${CHLOE}';`),
+);
 test.afterAll(() =>
-  psql(`update public.profiles set hide_email = false, occupation = null where id = '${CHLOE}';`),
+  psql(`update public.profiles set hide_email = false, occupation = null, phone_mobile = '555-0112'
+        where id = '${CHLOE}';`),
 );
 
 test.describe("another member", () => {
