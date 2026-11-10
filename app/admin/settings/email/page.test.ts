@@ -27,6 +27,7 @@ vi.mock("@/lib/pageTitle", () => ({ pageTitle: async (page: string) => ({ title:
 const { default: EmailDomainSettingsPage, generateMetadata } = await import(
   "@/app/admin/settings/email/page"
 );
+const { generateMetadata: notFoundMetadata } = await import("@/app/not-found");
 const {
   EmailDomainSettings,
   selectEmailDomainCardState,
@@ -48,9 +49,9 @@ describe("EmailDomainSettingsPage", () => {
     expect(() => EmailDomainSettingsPage()).toThrow(NotFoundSentinel);
   });
 
-  it("titles the tab Page not found while custom sending domains are off", async () => {
+  it("titles the tab as the app's 404 while custom sending domains are off", async () => {
     sendingDomains.CUSTOM_SENDING_DOMAINS_ENABLED = false;
-    expect(await generateMetadata()).toEqual({ title: "Page not found" });
+    expect(await generateMetadata()).toEqual(await notFoundMetadata());
     sendingDomains.CUSTOM_SENDING_DOMAINS_ENABLED = true;
     expect(await generateMetadata()).toEqual({ title: "Email domain" });
   });
