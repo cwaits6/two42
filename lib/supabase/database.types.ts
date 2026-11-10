@@ -1730,9 +1730,6 @@ isOneToOne: false
 "get_own_role":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
-"get_profile_email":
-{ Args: { "profile_id": string }; Returns: string
-                           },
 "get_profile_role":
 { Args: { "profile_id": string }; Returns: string
                            },

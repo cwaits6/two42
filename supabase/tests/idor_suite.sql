@@ -373,7 +373,7 @@ begin
   perform set_config('request.headers', '{}', true);
 
   role_a := public.get_profile_role(current_setting('idor.owner_a')::uuid);
-  email_a := public.get_profile_email(current_setting('idor.owner_a')::uuid);
+  email_a := public.profile_directory_email(current_setting('idor.owner_a')::uuid);
   leader_a := public.is_team_lead(current_setting('idor.group_a')::uuid);
   grp_member_a := public.is_group_member(current_setting('idor.grp_a')::uuid);
   grp_leader_a := public.is_group_leader(current_setting('idor.grp_a')::uuid);
@@ -384,7 +384,7 @@ begin
   insert into idor_results
     select ok(role_a is null, 'get_profile_role(org-A profile) is NULL for an org-B member');
   insert into idor_results
-    select ok(email_a is null, 'get_profile_email(org-A profile) is NULL for an org-B member');
+    select ok(email_a is null, 'profile_directory_email(org-A profile) is NULL for an org-B member');
   insert into idor_results
     select ok(not leader_a, 'is_team_lead(org-A team) is false for an org-B member');
   insert into idor_results

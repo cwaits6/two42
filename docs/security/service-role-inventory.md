@@ -736,11 +736,19 @@ cases are pinned by `supabase/tests/hidden_email_suite.sql`, and all three are
 called as a church admin of another church in
 `supabase/tests/tenancy_leak_suite.sql`.
 
-`get_profile_email(profile_id)` predates these and is not one of the read
-paths: it returns the address of someone in the caller's own household, hidden
-or not. It stays executable by `authenticated` because the `profiles` update
-policy, which applies to that role only, calls it in its `WITH CHECK` as the
-signed-in person. `public` and `anon` hold no execute on it.
+No function returns a household member's address: `get_profile_email()`,
+which did, was dropped in `20261122000000_household_hidden_email.sql`. The same
+migration added `profiles_email_by_owner_or_admin`, a plain (not definer)
+`BEFORE UPDATE OF email` trigger on `profiles`. When the caller is `anon` or
+`authenticated`, it refuses with `42501` any update that names `email` on
+someone else's row unless `is_admin()`. It gates on `current_user`, which
+PostgREST sets with `SET ROLE` and no request can change, so the service role
+and the definer sign-in trigger `handle_auth_user_email_change` pass and no
+session setting lets a client role through. It has no `WHEN` clause: it fires
+on the column being named, so a right guess and a wrong guess are refused the
+same. Execute is revoked from `public`, `anon` and `authenticated`, since a
+trigger function is never called directly. `hidden_email_suite.sql` pins all
+of it.
 
 These functions are how the app reads an address. A direct read of
 `profiles.email` is stopped by the column grant: `anon` and `authenticated`
