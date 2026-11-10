@@ -1010,21 +1010,6 @@ $$;
 ALTER FUNCTION "public"."get_own_role"() OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."get_profile_email"("profile_id" "uuid") RETURNS "text"
-    LANGUAGE "sql" STABLE SECURITY DEFINER
-    SET "search_path" TO ''
-    AS $$
-  select email
-  from public.profiles
-  where id = profile_id
-    and family_id = public.current_family_id()
-    and org_id = public.app_current_org_id();
-$$;
-
-
-ALTER FUNCTION "public"."get_profile_email"("profile_id" "uuid") OWNER TO "postgres";
-
-
 CREATE OR REPLACE FUNCTION "public"."get_profile_role"("profile_id" "uuid") RETURNS "text"
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO ''
@@ -2498,6 +2483,25 @@ ALTER FUNCTION "public"."profile_directory_email"("_profile_id" "uuid") OWNER TO
 
 COMMENT ON FUNCTION "public"."profile_directory_email"("_profile_id" "uuid") IS 'A person''s address as the directory shows it: null when hide_email, and null wherever the profiles read policy hides the person from the caller. Tenant anchor: the caller''s own org, never a parameter. Mirrors the profiles read policy and must change with it.';
 
+
+
+CREATE OR REPLACE FUNCTION "public"."profiles_email_by_owner_or_admin"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  if current_user in ('anon', 'authenticated')
+     and (select auth.uid()) is distinct from old.id
+     and not (select public.is_admin()) then
+    raise exception 'only a church admin can change another person''s email'
+      using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."profiles_email_by_owner_or_admin"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."profiles_keep_id"() RETURNS "trigger"
@@ -5479,6 +5483,10 @@ CREATE OR REPLACE TRIGGER "prayer_requests_touch_updated_at" BEFORE UPDATE ON "p
 
 
 
+CREATE OR REPLACE TRIGGER "profiles_email_by_owner_or_admin" BEFORE UPDATE OF "email" ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."profiles_email_by_owner_or_admin"();
+
+
+
 CREATE OR REPLACE TRIGGER "profiles_keep_id" BEFORE UPDATE OF "id" ON "public"."profiles" FOR EACH ROW WHEN (("old"."id" IS DISTINCT FROM "new"."id")) EXECUTE FUNCTION "public"."profiles_keep_id"();
 
 
@@ -6678,7 +6686,7 @@ CREATE POLICY "Posters and group leaders can update prayer requests" ON "public"
 
 
 
-CREATE POLICY "Profiles are updatable per access rules" ON "public"."profiles" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ((( SELECT "auth"."uid"() AS "uid") = "id") OR ( SELECT "public"."is_admin"() AS "is_admin") OR ((( SELECT "auth"."uid"() AS "uid") <> "id") AND ("family_id" IS NOT NULL) AND ("family_id" = ( SELECT "public"."current_family_id"() AS "current_family_id")) AND ( SELECT "public"."is_household_manager"() AS "is_household_manager"))))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (((( SELECT "auth"."uid"() AS "uid") = "id") AND ("role" = ( SELECT "public"."get_own_role"() AS "get_own_role")) AND (NOT ("email" IS DISTINCT FROM ( SELECT "public"."get_own_email"() AS "get_own_email")))) OR ( SELECT "public"."is_admin"() AS "is_admin") OR (("family_id" = ( SELECT "public"."current_family_id"() AS "current_family_id")) AND ("role" = "public"."get_profile_role"("id")) AND (NOT ("email" IS DISTINCT FROM "public"."get_profile_email"("id")))))));
+CREATE POLICY "Profiles are updatable per access rules" ON "public"."profiles" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ((( SELECT "auth"."uid"() AS "uid") = "id") OR ( SELECT "public"."is_admin"() AS "is_admin") OR ((( SELECT "auth"."uid"() AS "uid") <> "id") AND ("family_id" IS NOT NULL) AND ("family_id" = ( SELECT "public"."current_family_id"() AS "current_family_id")) AND ( SELECT "public"."is_household_manager"() AS "is_household_manager"))))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (((( SELECT "auth"."uid"() AS "uid") = "id") AND ("role" = ( SELECT "public"."get_own_role"() AS "get_own_role")) AND (NOT ("email" IS DISTINCT FROM ( SELECT "public"."get_own_email"() AS "get_own_email")))) OR ( SELECT "public"."is_admin"() AS "is_admin") OR ((( SELECT "auth"."uid"() AS "uid") <> "id") AND ("family_id" = ( SELECT "public"."current_family_id"() AS "current_family_id")) AND ("role" = "public"."get_profile_role"("id"))))));
 
 
 
@@ -7169,12 +7177,6 @@ GRANT ALL ON FUNCTION "public"."get_own_role"() TO "service_role";
 
 
 
-REVOKE ALL ON FUNCTION "public"."get_profile_email"("profile_id" "uuid") FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."get_profile_email"("profile_id" "uuid") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."get_profile_email"("profile_id" "uuid") TO "service_role";
-
-
-
 GRANT ALL ON FUNCTION "public"."get_profile_role"("profile_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."get_profile_role"("profile_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_profile_role"("profile_id" "uuid") TO "service_role";
@@ -7372,6 +7374,11 @@ GRANT ALL ON FUNCTION "public"."prayer_requests_author_sets_anonymity"() TO "ser
 
 REVOKE ALL ON FUNCTION "public"."profile_directory_email"("_profile_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."profile_directory_email"("_profile_id" "uuid") TO "authenticated";
+
+
+
+REVOKE ALL ON FUNCTION "public"."profiles_email_by_owner_or_admin"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."profiles_email_by_owner_or_admin"() TO "service_role";
 
 
 

@@ -369,13 +369,161 @@ update public.profiles set role = 'member'
 update public.organizations set directory_visibility = 'shared_groups'
  where id = (select org_id from public.profiles where email = 'isaac.seedly@example.test');
 
--- ── The household's own read path ───────────────────────────────────────────
--- The profiles update policy calls get_profile_email() as the signed-in
--- person, so that grant stays. Nothing calls it without a session.
+-- ── The household's update path ─────────────────────────────────────────────
+-- A household primary or spouse edits a household member's row, but naming
+-- email in that update is refused before the value is looked at, so the
+-- result never tells them whether a guessed address was right.
+select hasnt_function('public', 'get_profile_email', array['uuid'],
+  'no function returns a household member''s address');
 select is(
-  has_function_privilege(r, 'public.get_profile_email(uuid)', 'execute'),
-  r = 'authenticated', r || ': execute on get_profile_email')
+  pg_temp.attempt('henry.mockingham@example.test', format(
+    'select public.get_profile_email(%L)', pg_temp.uid('chloe.mockingham@example.test'))),
+  '42883', 'the household primary gets no address for a household member by function');
+select is(
+  (select bool_or(has_function_privilege(r, p.oid, 'execute')) from pg_proc p
+    where p.proname = 'profiles_email_by_owner_or_admin'),
+  false, r || ' cannot call the email trigger function directly')
 from unnest(array['public', 'anon', 'authenticated']) r;
+select is(
+  (select tgqual is null from pg_trigger
+    where tgrelid = 'public.profiles'::regclass and tgname = 'profiles_email_by_owner_or_admin'),
+  true, 'the email trigger fires on the column being named, whatever its value');
+
+-- The SQLSTATE and message on failure, so a refusal is compared word for word.
+create function pg_temp.attempt_msg(_email text, _sql text) returns text language plpgsql as $$
+declare n bigint; r text;
+begin
+  perform pg_temp.enter(_email);
+  begin
+    execute _sql;
+    get diagnostics n = row_count;
+    r := 'rows:' || n;
+  exception when others then
+    r := sqlstate || ' ' || sqlerrm;
+  end;
+  set local role none;
+  return r;
+end $$;
+
+update public.profiles set hide_email = true where email = 'henry.mockingham@example.test';
+select is(
+  (select count(*)::int from public.profiles
+    where email in ('chloe.mockingham@example.test', 'henry.mockingham@example.test') and hide_email),
+  2, 'non-vacuity: Chloe and Henry both hide their email');
+
+select is(
+  pg_temp.attempt_msg(actor.email, format(
+    'update public.profiles set email = %s where id = %L', guess.val, pg_temp.uid(actor.target))),
+  actor.want,
+  actor.who || ' naming the email gets the same answer for ' || guess.what)
+from (values
+  ('henry.mockingham@example.test', 'chloe.mockingham@example.test', 'the household primary',
+   '42501 only a church admin can change another person''s email'),
+  ('chloe.mockingham@example.test', 'henry.mockingham@example.test', 'the spouse',
+   '42501 only a church admin can change another person''s email'),
+  ('isaac.seedly@example.test', 'chloe.mockingham@example.test', 'a member outside the household',
+   'rows:0')
+) actor(email, target, who, want)
+cross join lateral (values
+  (quote_literal(actor.target), 'the right address'),
+  (quote_literal('wrong@example.test'), 'a wrong address'),
+  (quote_literal(initcap(actor.target)), 'the right address in another case'),
+  ('null', 'null')
+) guess(val, what);
+
+select is(
+  pg_temp.attempt(actor.email, format(
+    'update public.profiles set email = %L where id = %L returning email', actor.target, pg_temp.uid(actor.target))),
+  '42501', actor.who || ' gets nothing back from an update returning the email')
+from (values
+  ('henry.mockingham@example.test', 'chloe.mockingham@example.test', 'the household primary'),
+  ('chloe.mockingham@example.test', 'henry.mockingham@example.test', 'the spouse')
+) actor(email, target, who);
+
+select is(
+  pg_temp.attempt(edit.email, format(edit.sql, pg_temp.uid(edit.target))),
+  edit.want, edit.what)
+from (values
+  ('henry.mockingham@example.test', 'chloe.mockingham@example.test',
+   'update public.profiles set hide_email = false where id = %L', 'rows:1',
+   'the household primary shows a household member''s email'),
+  ('henry.mockingham@example.test', 'chloe.mockingham@example.test',
+   'update public.profiles set hide_email = true where id = %L', 'rows:1',
+   'the household primary hides it again'),
+  ('henry.mockingham@example.test', 'chloe.mockingham@example.test',
+   $q$update public.profiles set relationship = 'spouse' where id = %L$q$, 'rows:1',
+   'the household primary changes a household member''s relationship'),
+  ('henry.mockingham@example.test', 'chloe.mockingham@example.test',
+   $q$update public.profiles set occupation = 'Teacher', first_name = first_name where id = %L$q$, 'rows:1',
+   'the household primary saves a household member''s profile'),
+  ('chloe.mockingham@example.test', 'henry.mockingham@example.test',
+   'update public.profiles set hide_email = false where id = %L', 'rows:1',
+   'the spouse shows the primary''s email'),
+  ('chloe.mockingham@example.test', 'henry.mockingham@example.test',
+   'update public.profiles set hide_email = true where id = %L', 'rows:1',
+   'the spouse hides it again'),
+  ('henry.mockingham@example.test', 'chloe.mockingham@example.test',
+   $q$update public.profiles set role = 'admin' where id = %L$q$, '42501',
+   'the household primary cannot change a household member''s role'),
+  ('chloe.mockingham@example.test', 'henry.mockingham@example.test',
+   $q$update public.profiles set role = 'admin' where id = %L$q$, '42501',
+   'the spouse cannot change the primary''s role')
+) edit(email, target, sql, want, what);
+
+update public.profiles set relationship = 'child' where email = 'chloe.mockingham@example.test';
+select is(
+  pg_temp.attempt('chloe.mockingham@example.test', format(
+    'update public.profiles set hide_email = false where id = %L', pg_temp.uid('henry.mockingham@example.test'))),
+  'rows:0', 'someone in the household who is not a household manager cannot edit it');
+update public.profiles set relationship = 'spouse' where email = 'chloe.mockingham@example.test';
+
+select is(
+  (select array_agg(email || '/' || hide_email || '/' || role order by email) from public.profiles
+    where email in ('chloe.mockingham@example.test', 'henry.mockingham@example.test')),
+  array['chloe.mockingham@example.test/true/member', 'henry.mockingham@example.test/true/member'],
+  'the household''s addresses and roles are unchanged and both are still hidden');
+
+-- A person naming their own email is held to its stored value by the policy.
+select is(
+  pg_temp.attempt('henry.mockingham@example.test', format(
+    'update public.profiles set email = %L where id = auth.uid()', guess)),
+  want, 'a person naming their own email: ' || what)
+from (values
+  ('henry.mockingham@example.test', 'rows:1', 'unchanged is accepted'),
+  ('x@example.test', '42501', 'changed is refused'),
+  ('Henry.Mockingham@example.test', '42501', 'in another case is refused')
+) v(guess, want, what);
+
+select is(
+  pg_temp.attempt('admin@local.dev', format(edit.sql, pg_temp.uid(edit.target))),
+  edit.want, edit.what)
+from (values
+  ('chloe.mockingham@example.test',
+   $q$update public.profiles set email = 'chloe.mockingham@example.test', first_name = first_name where id = %L$q$,
+   'rows:1', 'a church admin saves a member with the email unchanged'),
+  ('chloe.mockingham@example.test',
+   $q$update public.profiles set email = 'chloe.changed@example.test' where id = %L$q$,
+   'rows:1', 'a church admin changes a member''s email'),
+  ('owner@hidden-other.example.test',
+   $q$update public.profiles set first_name = first_name where id = %L$q$,
+   'rows:0', 'a church admin cannot edit a member of another church'),
+  ('owner@hidden-other.example.test',
+   $q$update public.profiles set email = 'taken@example.test' where id = %L$q$,
+   'rows:0', 'a church admin cannot change the email of a member of another church')
+) edit(target, sql, want, what);
+select is(
+  (select count(*)::int from public.profiles where email = 'chloe.changed@example.test'),
+  1, 'the church admin''s change reached the profile');
+update public.profiles set email = 'chloe.mockingham@example.test' where email = 'chloe.changed@example.test';
+
+-- The definer trigger on auth.users carries a sign-in email change to the
+-- profile, past the email trigger.
+update auth.users set email = 'henry.changed@example.test' where email = 'henry.mockingham@example.test';
+select is(
+  (select email from public.profiles where id = (select id from auth.users where email = 'henry.changed@example.test')),
+  'henry.changed@example.test', 'an email change through the sign-in service reaches the profile');
+update auth.users set email = 'henry.mockingham@example.test' where email = 'henry.changed@example.test';
+update public.profiles set hide_email = false where email = 'henry.mockingham@example.test';
 
 -- ── The owner ───────────────────────────────────────────────────────────────
 select is(

@@ -13,18 +13,24 @@ const { spouse, householdPrimary } = PERSONAS;
 
 const card = (id: string) => `/directory/families?person=${id}`;
 
-function setHidden(hidden: boolean) {
+function psql(sql: string) {
   execFileSync(
     "docker",
     ["exec", "-i", DB_CONTAINER, "psql", "-U", "postgres", "-d", "postgres",
-      "-v", "ON_ERROR_STOP=1", "-q", "-c",
-      `update public.profiles set hide_email = ${hidden} where id = '${CHLOE}';`],
+      "-v", "ON_ERROR_STOP=1", "-q", "-c", sql],
     { stdio: ["ignore", "ignore", "inherit"] },
   );
 }
 
-test.beforeAll(() => setHidden(true));
-test.afterAll(() => setHidden(false));
+// The seed's mobile number fails the form's phone check, so a save needs a
+// valid one; afterAll puts the seed's back.
+test.beforeAll(() =>
+  psql(`update public.profiles set hide_email = true, phone_mobile = '+15125550112' where id = '${CHLOE}';`),
+);
+test.afterAll(() =>
+  psql(`update public.profiles set hide_email = false, occupation = null, phone_mobile = '555-0112'
+        where id = '${CHLOE}';`),
+);
 
 test.describe("another member", () => {
   test.use({ persona: "oneGroup" });
@@ -74,5 +80,36 @@ test.describe("a church admin", () => {
   test("opens the person's edit page with the hidden email in its Email field", async ({ page }) => {
     await page.goto(`/admin/members/${CHLOE}`);
     await expect(page.getByLabel("Email", { exact: true })).toHaveValue(spouse.email);
+  });
+});
+
+// Last, so every test above sees Chloe's email hidden.
+test.describe("the household primary, editing", () => {
+  test.use({ persona: "householdPrimary" });
+
+  test("still saves their spouse's profile and hide setting", async ({ page }) => {
+    const hide = page.getByRole("checkbox", { name: "Hide email from the directory" });
+    const openSpouse = async () => {
+      await page.goto("/profile?tab=household");
+      await page.getByRole("button", { name: `Edit ${spouse.name}` }).click();
+    };
+    const save = async () => {
+      await page.getByRole("button", { name: "Save changes" }).click();
+      await expect(page.getByText("Profile saved.")).toBeVisible();
+    };
+
+    await openSpouse();
+    await page.getByLabel(/^Occupation/).fill("Teacher");
+    await hide.uncheck();
+    await save();
+
+    await openSpouse();
+    await expect(page.getByLabel(/^Occupation/)).toHaveValue("Teacher");
+    await expect(hide).not.toBeChecked();
+    await hide.check();
+    await save();
+
+    await openSpouse();
+    await expect(hide).toBeChecked();
   });
 });
