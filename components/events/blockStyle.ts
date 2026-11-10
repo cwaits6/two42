@@ -10,7 +10,7 @@ const MIN_TEXT_RATIO = 4.5;
  * instead, carrying the group colour as a left border so its identity stays.
  */
 export function blockStyle(color: string): CSSProperties {
-  if (!HEX.test(color)) return { backgroundColor: color, color: "#FFFFFF" };
+  if (!HEX.test(color)) return { backgroundColor: color, color: "var(--primary-foreground)" };
   const text = groupTextColor(color);
   if (contrastRatio(color, text) >= MIN_TEXT_RATIO) {
     return { backgroundColor: color, color: text };
