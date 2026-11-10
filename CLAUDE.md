@@ -55,14 +55,14 @@ Full rationale, the helper inventory, and the deviations register: [`docs/securi
 - Source lives in `supabase/functions/`; shared, unit-testable modules in `supabase/functions/_shared/`. Run the checks locally before pushing:
 
   ```bash
-  deno check supabase/functions/_shared/*.ts
-  deno test --allow-env supabase/functions/tests/
-  deno check supabase/functions/send-event-reminders/index.ts \
+  deno check --frozen supabase/functions/_shared/*.ts
+  deno test --frozen --allow-env supabase/functions/tests/
+  deno check --frozen supabase/functions/send-event-reminders/index.ts \
              supabase/functions/send-serving-reminders/index.ts \
              supabase/functions/clean-up-expired-data/index.ts
   ```
 
-- **Every `index.ts` entry point is type-checked on every PR** (CWA-45 / #311). Their esm.sh import is pinned to an exact version (`@supabase/supabase-js@2.110.9`) with a `deno.lock` integrity entry, and the `deno-test` job in `.github/workflows/supabase.yml` runs `deno check --frozen` on all of them as a failing step (no `continue-on-error`). That job is **not** in `main`'s branch protection, so it reports rather than mechanically blocks a merge. Post-merge, `supabase functions deploy` compiles them again — and it runs *before* `supabase db push` in the same job, so a broken entry point that reached `main` would block every migration behind it. Run `deno check` on all of them yourself before pushing.
+- **Every `index.ts` entry point is type-checked on every PR** (CWA-45 / #311). Their esm.sh import is pinned to an exact version (`@supabase/supabase-js@2.110.9`) with a `deno.lock` integrity entry, and the `deno-test` job in `.github/workflows/supabase.yml` runs `deno check --frozen` on all of them as a failing step (no `continue-on-error`). Every deno step in that job runs `--frozen`, so a stale `deno.lock` fails it instead of being rewritten in the runner. Deno mirrors `package.json` into the lock, so any change to `package.json` dependencies needs `deno.lock` refreshed in the same PR (`deno check --frozen=false` on the entry points); Renovate does not do it, because its deno manager defers to the npm manager when `package-lock.json` is present. That job is **not** in `main`'s branch protection, so it reports rather than mechanically blocks a merge. Post-merge, `supabase functions deploy` compiles them again — and it runs *before* `supabase db push` in the same job, so a broken entry point that reached `main` would block every migration behind it. Run `deno check` on all of them yourself before pushing.
 - Keep logic that can be unit tested in `_shared/`: the entry points execute `Deno.env.get(...)`, `resolveServiceKey()`, and `Deno.serve()` at module top level, so nothing in them is importable from a test.
 
 ### Testing

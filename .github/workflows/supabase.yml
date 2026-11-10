@@ -158,17 +158,18 @@ jobs:
         with:
           deno-version: v2.x
 
+      # Every deno step runs --frozen: an unfrozen one silently rewrites an
+      # outdated deno.lock in the runner, and every step after it would then
+      # check the rewritten lock instead of the committed one. Deno mirrors
+      # package.json into the lock, so an npm bump that skips deno.lock fails here.
       - name: Type-check shared edge function modules
-        run: deno check supabase/functions/_shared/*.ts
+        run: deno check --frozen supabase/functions/_shared/*.ts
 
       - name: Run edge function unit tests
-        run: deno test --allow-env supabase/functions/tests/
+        run: deno test --frozen --allow-env supabase/functions/tests/
 
       # Blocking: the import is pinned, so a failure here is our
       # code (or an esm.sh outage) — see the note above the job.
-      # --frozen makes the pin load-bearing: without it Deno silently rewrites
-      # an outdated deno.lock in CI, so the committed integrity entry would
-      # never actually be enforced.
       - name: Type-check edge function entry points
         run: |
           deno check --frozen supabase/functions/send-event-reminders/index.ts \
