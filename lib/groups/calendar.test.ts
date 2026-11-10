@@ -5,6 +5,9 @@ import {
   getGroupCalendar,
   GROUP_DEFAULT_COLOR,
 } from "@/lib/groups/calendar";
+import { loggedLines } from "@/lib/log/testing";
+
+const MARKER = "ada.lovelace@example.test";
 
 type Result = { data: unknown; error: unknown };
 
@@ -54,13 +57,19 @@ describe("getGroupCalendar", () => {
     expect(await getGroupCalendar(client, "org-1", "grp-1")).toBeNull();
   });
 
-  it("throws when the read fails instead of reporting no calendar", async () => {
-    const { client } = makeClient({ data: null, error: { message: "boom" } });
+  it("throws fixed text when the read fails instead of reporting no calendar", async () => {
+    const logged = vi.mocked(console.log);
+    logged.mockClear();
+    const { client } = makeClient({ data: null, error: { code: "PGRST301", message: MARKER } });
 
-    await expect(getGroupCalendar(client, "org-1", "grp-1")).rejects.toThrow(
-      /Failed to load the group calendar/
-    );
-    expect(console.log).toHaveBeenCalled();
+    const thrown = await getGroupCalendar(client, "org-1", "grp-1").catch((e: Error) => e);
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toBe("Failed to load the group calendar");
+    expect((thrown as Error).message).not.toContain(MARKER);
+    expect(loggedLines(logged)).toEqual([
+      expect.objectContaining({ what: "Failed to load the group calendar for group", code: "PGRST301" }),
+    ]);
   });
 });
 

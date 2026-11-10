@@ -31,7 +31,7 @@ export async function getGroupCalendar(
     .maybeSingle();
   if (error) {
     logError("Failed to load the group calendar for group", error, { ids: { group: groupId } });
-    throw new Error(`Failed to load the group calendar: ${error.message}`);
+    throw new Error("Failed to load the group calendar");
   }
   return data as GroupCalendar | null;
 }

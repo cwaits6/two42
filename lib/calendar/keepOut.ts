@@ -26,7 +26,7 @@ export async function calendarSharingByGroup(
     .in("group_id", groupIds);
   if (error) {
     logError("Failed to load calendar sharing settings", error, { step: "group_settings", ids: { org: orgId } });
-    throw new Error(`Failed to load calendar sharing settings: ${error.message}`);
+    throw new Error("Failed to load calendar sharing settings");
   }
   return new Map(
     (data ?? []).map((row) => [

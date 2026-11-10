@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActiveGroup } from "@/lib/groups/active";
 import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
+import { loggedLines } from "@/lib/log/testing";
+
+const MARKER = "ada.lovelace@example.test";
 
 const cookieGet = vi.fn<(name: string) => { value: string } | undefined>();
 vi.mock("next/headers", () => ({
@@ -95,10 +98,19 @@ describe("getGroupMemberships", () => {
     expect(createClient).not.toHaveBeenCalled();
   });
 
-  it("throws when the profile read fails instead of reporting no groups", async () => {
-    profileResult.mockResolvedValue({ data: null, error: { message: "boom" } });
+  it("throws fixed text when the profile read fails instead of reporting no groups", async () => {
+    const logged = vi.mocked(console.log);
+    logged.mockClear();
+    profileResult.mockResolvedValue({ data: null, error: { code: "PGRST301", message: MARKER } });
 
-    await expect(getGroupMemberships()).rejects.toThrow("boom");
+    const thrown = await getGroupMemberships().catch((e: Error) => e);
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toBe("Failed to load the viewer's profile");
+    expect((thrown as Error).message).not.toContain(MARKER);
+    expect(loggedLines(logged)).toEqual([
+      expect.objectContaining({ what: "Failed to load the viewer's profile for group context", code: "PGRST301" }),
+    ]);
     expect(loadGroupMemberships).not.toHaveBeenCalled();
   });
 

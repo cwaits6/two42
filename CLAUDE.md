@@ -55,14 +55,15 @@ Full rationale, the helper inventory, and the deviations register: [`docs/securi
 - Source lives in `supabase/functions/`; shared, unit-testable modules in `supabase/functions/_shared/`. Run the checks locally before pushing:
 
   ```bash
-  deno check supabase/functions/_shared/*.ts
-  deno test --allow-env supabase/functions/tests/
-  deno check supabase/functions/send-event-reminders/index.ts \
+  export DENO_NO_PACKAGE_JSON=1
+  deno check --lock=deno.lock --frozen supabase/functions/_shared/*.ts
+  deno test --lock=deno.lock --frozen --allow-env supabase/functions/tests/
+  deno check --lock=deno.lock --frozen supabase/functions/send-event-reminders/index.ts \
              supabase/functions/send-serving-reminders/index.ts \
              supabase/functions/clean-up-expired-data/index.ts
   ```
 
-- **Every `index.ts` entry point is type-checked on every PR** (CWA-45 / #311). Their esm.sh import is pinned to an exact version (`@supabase/supabase-js@2.110.9`) with a `deno.lock` integrity entry, and the `deno-test` job in `.github/workflows/supabase.yml` runs `deno check --frozen` on all of them as a failing step (no `continue-on-error`). That job is **not** in `main`'s branch protection, so it reports rather than mechanically blocks a merge. Post-merge, `supabase functions deploy` compiles them again — and it runs *before* `supabase db push` in the same job, so a broken entry point that reached `main` would block every migration behind it. Run `deno check` on all of them yourself before pushing.
+- **Every `index.ts` entry point is type-checked on every PR** (CWA-45 / #311). Their esm.sh import is pinned to an exact version (`@supabase/supabase-js@2.110.9`) with a `deno.lock` integrity entry, and the `deno-test` job in `.github/workflows/supabase.yml` runs `deno check --frozen` on all of them as a failing step (no `continue-on-error`). Every deno step in that job runs `--frozen`, so a stale `deno.lock` fails it instead of being rewritten in the runner. `deno.lock` covers only what the edge functions import: the job sets `DENO_NO_PACKAGE_JSON=1`, because otherwise Deno copies `package.json`'s dependency list into the lock and every npm bump would fail the job until the lock was refreshed by hand. With that set Deno has no automatic lockfile, so each command names it with `--lock=deno.lock`. Run the commands exactly as above: without the variable, Deno writes the `package.json` list back into the lock and the job fails on it. To refresh the lock after changing an edge-function import, run them once with `--frozen=false`. That job is **not** in `main`'s branch protection, so it reports rather than mechanically blocks a merge. Post-merge, `supabase functions deploy` compiles them again — and it runs *before* `supabase db push` in the same job, so a broken entry point that reached `main` would block every migration behind it. Run `deno check` on all of them yourself before pushing.
 - Keep logic that can be unit tested in `_shared/`: the entry points execute `Deno.env.get(...)`, `resolveServiceKey()`, and `Deno.serve()` at module top level, so nothing in them is importable from a test.
 
 ### Testing
@@ -81,7 +82,7 @@ Full rationale, the helper inventory, and the deviations register: [`docs/securi
   - **Where in the inventory matters.** `npm run guard:tenancy` parses the `## App routes and pages` and `## Lib helpers` sections and cross-checks every row against an actual `createServiceClient()` call site *and* the site count in the heading — a row there naming anything else fails the build twice over. `## Edge Functions` and `## Operator scripts` are not parsed; document those there, or in prose, and do not "fix" a guard failure by editing the script's exclusion lists.
 - A change that moves a tenancy or visibility boundary a signed-in member can see — RLS on people or content, the group frame, the directory scope — needs a Playwright spec in `e2e/` asserting the rendered consequence (names, options, counts; never layout), alongside its pgTAP proof. Existing boundaries are listed in `e2e/README.md`; the suite asserts boundaries only.
 - The `e2e` job in `.github/workflows/test.yml` runs the suite with `npx supabase start` on an ephemeral stack, and that is the only sanctioned way to run it in CI. Locally, `npm run test:e2e` runs against the shared stack with no reset — the seed is already applied there, and the one spec that mutates state forces the setting back to the seed default (off) in its `beforeAll` and `afterAll`.
-- `npm run lint` runs on every PR (the `Lint` job in `.github/workflows/test.yml`) with `--max-warnings=0`, so a warning fails the job. The job is **not** yet in `main`'s branch protection, so a red `Lint` does not physically block a merge — run it locally before pushing. It was broken repo-wide by a brace-expansion/minimatch conflict (#299) until #309 scoped the override by major; any older instruction to skip lint is stale.
+- `npm run lint` runs on every PR (the `Lint` job in `.github/workflows/test.yml`) with `--max-warnings=0`, so a warning fails the job. The job is a required check in `main`'s branch protection, so a red `Lint` blocks the merge — run it locally before pushing. It was broken repo-wide by a brace-expansion/minimatch conflict (#299) until #309 scoped the override by major; any older instruction to skip lint is stale.
 
 ## Git & PRs
 
