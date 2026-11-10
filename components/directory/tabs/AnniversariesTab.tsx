@@ -11,7 +11,7 @@ import { anniversaryEntries } from "@/components/directory/celebrations";
 import { formatOccurrence } from "@/components/directory/utils";
 
 function AnniversariesTabInner() {
-  const { families, basePath, today } = useDirectory();
+  const { families, today } = useDirectory();
 
   const entries = useMemo(() => anniversaryEntries(families, today), [families, today]);
 

@@ -50,10 +50,9 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
 
   // The form saves its Email field and household picker as they open, so it
   // must not open blank over a read that failed.
-  const route = "/admin/members/[id]";
-  if (person.error) logError("Failed to load the member", person.error, { route });
-  if (address.error) logError("Failed to load the member's email", address.error, { route });
-  if (families.error) logError("Failed to load households", families.error, { route });
+  if (person.error) logError("Failed to load the member", person.error, { route: "/admin/members/[id]" });
+  if (address.error) logError("Failed to load the member's email", address.error, { route: "/admin/members/[id]" });
+  if (families.error) logError("Failed to load households", families.error, { route: "/admin/members/[id]" });
   if (person.error || address.error || families.error) {
     return (
       <PageContainer size="reading">
