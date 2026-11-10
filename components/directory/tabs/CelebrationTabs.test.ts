@@ -172,6 +172,12 @@ describe("BirthdaysTab", () => {
       provide([], [nonAttendee]);
     });
 
+    it("carries the switch into the household link, so its panel leads back to this list", () => {
+      expect(renderQuery("when=week&household=all")).toContain(
+        'href="/g/group/directory/families?family=household&amp;from=birthdays&amp;when=week&amp;household=all"',
+      );
+    });
+
     it("shows a household member who doesn't attend only while the URL asks for it", () => {
       expect(renderQuery("household=all")).toContain("Theo Miller");
       expect(renderQuery("")).not.toContain("Theo Miller");

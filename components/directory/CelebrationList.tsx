@@ -48,7 +48,7 @@ export function CelebrationList<T extends { key: string; month: number; day: num
   entries: readonly T[];
   /**
    * `soon` is true only where a row itself has to say a date is close: the headings of the other filters already do.
-   * `href` turns an entry's path into a link whose panel leads back to this tab and filter.
+   * `href` turns an entry's path into a link whose panel leads back to this list as it is shown.
    */
   renderRow: (entry: T, soon: boolean, href: (path: string) => string) => ReactNode;
 }) {
@@ -63,7 +63,7 @@ export function CelebrationList<T extends { key: string; month: number; day: num
       filter === "all" ? null : filter,
     );
   const rowHref = (entryPath: string) =>
-    fromCelebration(`${basePath}${entryPath}`, tab, when);
+    fromCelebration(`${basePath}${entryPath}`, tab, searchParams);
   const sections = celebrationSections(entries, when, today);
   const emptyLink = EMPTY_LINK[when];
 

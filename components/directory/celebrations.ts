@@ -22,10 +22,12 @@ export function parseWhen(value: string | null): CelebrationWhen {
 /** The celebration tabs a household or person link can lead back to. */
 export type CelebrationTab = "birthdays" | "anniversaries";
 
-/** A link from a celebration tab into Households, carrying the tab and filter so its panel can lead back. */
-export function fromCelebration(path: string, tab: CelebrationTab, when: CelebrationWhen): string {
-  const query = new URLSearchParams({ from: tab });
-  if (when !== "all") query.set("when", when);
+/**
+ * A link from a celebration tab into Households, carrying the tab, its filter
+ * and its household switch so the panel can lead back to the same list.
+ */
+export function fromCelebration(path: string, tab: CelebrationTab, search: URLSearchParams): string {
+  const query = new URLSearchParams({ from: tab, ...listState(search) });
   return `${path}${path.includes("?") ? "&" : "?"}${query}`;
 }
 
@@ -36,8 +38,17 @@ export function fromCelebration(path: string, tab: CelebrationTab, when: Celebra
 export function celebrationBackHref(basePath: string, search: URLSearchParams): string | null {
   const from = search.get("from");
   if (from !== "birthdays" && from !== "anniversaries") return null;
+  const query = new URLSearchParams(listState(search)).toString();
+  return query ? `${basePath}/${from}?${query}` : `${basePath}/${from}`;
+}
+
+/** A celebration list's filter and household switch, each only when it is set to a known value. */
+function listState(search: URLSearchParams): Record<string, string> {
+  const state: Record<string, string> = {};
   const when = parseWhen(search.get("when"));
-  return celebrationHref(`${basePath}/${from}`, "", "when", when === "all" ? null : when);
+  if (when !== "all") state.when = when;
+  if (parseIncludeNonAttendees(search.get("household"))) state.household = "all";
+  return state;
 }
 
 /** Whether the URL has the Birthdays tab showing household members who don't attend a group. */
