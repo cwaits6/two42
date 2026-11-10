@@ -11,13 +11,16 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
-const VIEWER = "viewer-1";
+const VIEWER = "11111111-1111-4111-8111-111111111111";
+const SOMEONE_ELSE = "22222222-2222-4222-8222-222222222222";
 vi.mock("@/lib/supabase/current-user", () => ({
   getOptionalUser: async () => ({ id: VIEWER, email: undefined }),
 }));
 
 const { MemberRole } = vi.hoisted(() => ({ MemberRole: () => null }));
 vi.mock("./MemberRole", () => ({ MemberRole }));
+const { ErrorState } = vi.hoisted(() => ({ ErrorState: () => null }));
+vi.mock("@/components/states/ErrorState", () => ({ ErrorState }));
 vi.mock("@/components/profile/ProfileForm", () => ({ ProfileForm: () => null }));
 
 type CountRead = { count: number | null; error: { message: string } | null; status: number };
@@ -25,7 +28,12 @@ const db = vi.hoisted(() => ({
   admins: 1,
   everyone: 5,
   failedCount: null as CountRead | null,
+  failed: null as "person" | "email" | "households" | null,
+  /** A member RLS hides, such as one in another church. */
+  hidden: false,
 }));
+
+const READ_FAILED = { data: null, error: { message: "boom", code: "08006" } };
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
@@ -46,8 +54,13 @@ vi.mock("@/lib/supabase/server", () => ({
         single: async () => ({
           data: { id: filters.id, role: "admin", family_id: null, relationship: null, first_name: "Ada", last_name: "Test" },
         }),
+        maybeSingle: async () => {
+          if (db.failed === "person") return READ_FAILED;
+          if (db.hidden) return { data: null, error: null };
+          return { data: { id: filters.id, role: "member", first_name: "Ada", last_name: "Test" }, error: null };
+        },
         then: (resolve: (value: unknown) => void) => {
-          if (table !== "profiles") return resolve({ data: [], error: null });
+          if (table !== "profiles") return resolve(db.failed === "households" ? READ_FAILED : { data: [], error: null });
           if (db.failedCount) return resolve(db.failedCount);
           // A count that loses its role filter counts everyone in the church.
           const count = filters.role === "admin" ? db.admins : db.everyone;
@@ -57,7 +70,10 @@ vi.mock("@/lib/supabase/server", () => ({
       return chain;
     },
     rpc: () => ({
-      eq: () => ({ maybeSingle: async () => ({ data: { email: "ada@example.test" }, error: null }) }),
+      eq: () => ({
+        maybeSingle: async () =>
+          db.failed === "email" ? READ_FAILED : { data: db.hidden ? null : { email: "ada@example.test" }, error: null },
+      }),
     }),
   }),
 }));
@@ -91,6 +107,8 @@ const ASK_ANOTHER = "Another church admin can change your role.";
 beforeEach(() => {
   db.admins = 1;
   db.failedCount = null;
+  db.failed = null;
+  db.hidden = false;
 });
 
 afterEach(() => {
@@ -108,7 +126,7 @@ describe("Edit member's role lock", () => {
   });
 
   it("leaves someone else's role open", async () => {
-    expect(await lockReasonFor("someone-else")).toBeNull();
+    expect(await lockReasonFor(SOMEONE_ELSE)).toBeNull();
   });
 
   it.each([
@@ -127,5 +145,32 @@ describe("Edit member's role lock", () => {
         ids: { status: read.status },
       }),
     ]);
+  });
+});
+
+const renderFor = (memberId: string) => EditMemberPage({ params: Promise.resolve({ id: memberId }) });
+
+describe("Edit member's reads", () => {
+  it.each([
+    ["person", "Failed to load the member"],
+    ["email", "Failed to load the member's email"],
+    ["households", "Failed to load households"],
+  ] as const)("shows the failed state, not the form, when the %s read fails", async (read, what) => {
+    const logged = vi.spyOn(console, "log").mockImplementation(() => {});
+    db.failed = read;
+
+    const page = await renderFor(SOMEONE_ELSE);
+    expect(find(page, ErrorState)?.props.thing).toBe("this member");
+    expect(find(page, MemberRole)).toBeNull();
+    expect(loggedLines(logged)).toEqual([expect.objectContaining({ what, route: "/admin/members/[id]" })]);
+  });
+
+  it("says Page not found for a member the viewer's church does not have", async () => {
+    db.hidden = true;
+    await expect(renderFor(SOMEONE_ELSE)).rejects.toThrow("notFound");
+  });
+
+  it("says Page not found for an id that is not a member id", async () => {
+    await expect(renderFor("not-an-id")).rejects.toThrow("notFound");
   });
 });

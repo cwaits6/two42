@@ -22,7 +22,9 @@ const sendingDomains = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/email/sendingDomains", () => sendingDomains);
 
-const { default: EmailDomainSettingsPage } = await import(
+vi.mock("@/lib/pageTitle", () => ({ pageTitle: async (page: string) => ({ title: page }) }));
+
+const { default: EmailDomainSettingsPage, generateMetadata } = await import(
   "@/app/admin/settings/email/page"
 );
 const {
@@ -44,6 +46,13 @@ describe("EmailDomainSettingsPage", () => {
     sendingDomains.CUSTOM_SENDING_DOMAINS_ENABLED = false;
 
     expect(() => EmailDomainSettingsPage()).toThrow(NotFoundSentinel);
+  });
+
+  it("titles the tab Page not found while custom sending domains are off", async () => {
+    sendingDomains.CUSTOM_SENDING_DOMAINS_ENABLED = false;
+    expect(await generateMetadata()).toEqual({ title: "Page not found" });
+    sendingDomains.CUSTOM_SENDING_DOMAINS_ENABLED = true;
+    expect(await generateMetadata()).toEqual({ title: "Email domain" });
   });
 
   it("renders the settings once the flag is on", () => {
