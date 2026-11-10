@@ -1,9 +1,8 @@
--- A hidden email is read only by its owner and a church admin. The household
--- arm of the profiles update policy compared the submitted email against the
--- stored one through get_profile_email(), so a household primary or spouse
--- could confirm a guessed address. The policy no longer reads the address; a
--- trigger refuses any statement that names email on another person's row
--- unless the caller is a church admin.
+-- A hidden email is read only by its owner and a church admin, so the profiles
+-- update policy must not compare a submitted address with the stored one: that
+-- comparison tells a household manager whether a guess was right. Instead a
+-- trigger refuses any update naming email on another person's row unless the
+-- caller is a church admin.
 
 create function public.profiles_email_by_owner_or_admin()
   returns trigger language plpgsql set search_path = ''
