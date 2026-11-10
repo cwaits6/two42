@@ -14,8 +14,8 @@ import { Wordmark } from "./Wordmark";
 
 /**
  * The top bar. Signed out it offers Sign in at every width, except on the
- * sign-in page itself. Signed in it is the phone frame only: the wordmark and one Menu button, with the sidebar
- * taking over from md up.
+ * sign-in page itself. Signed in it is the phone frame only: the wordmark and
+ * one Menu button, with the sidebar taking over from md up.
  */
 export function Header() {
   const { account } = useSidebar();
