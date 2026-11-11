@@ -1,0 +1,72 @@
+{
+  "announcements": {
+    "desktop": {
+      "width": 1880,
+      "height": 1634
+    },
+    "phone": {
+      "width": 780,
+      "height": 1408
+    }
+  },
+  "calendar": {
+    "desktop": {
+      "width": 1880,
+      "height": 1528
+    },
+    "phone": {
+      "width": 780,
+      "height": 1608
+    }
+  },
+  "directory": {
+    "desktop": {
+      "width": 1880,
+      "height": 1570
+    },
+    "phone": {
+      "width": 780,
+      "height": 1428
+    }
+  },
+  "giving": {
+    "desktop": {
+      "width": 1880,
+      "height": 1224
+    },
+    "phone": {
+      "width": 780,
+      "height": 1670
+    }
+  },
+  "lessons": {
+    "desktop": {
+      "width": 1880,
+      "height": 1984
+    },
+    "phone": {
+      "width": 780,
+      "height": 1660
+    }
+  },
+  "prayer": {
+    "desktop": {
+      "width": 1880,
+      "height": 1518
+    },
+    "phone": {
+      "width": 780,
+      "height": 1460
+    }
+  },
+  "serving": {
+    "desktop": {
+      "width": 1880,
+      "height": 1478
+    },
+    "phone": {
+      "width": 780,
+      "height": 1156
+    }
+  }
+}

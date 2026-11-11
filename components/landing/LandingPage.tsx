@@ -4,47 +4,48 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { HeroWindow } from "./HeroWindow";
 import { CONTACT_EMAIL, SELF_HOST_URL } from "./sections";
+import SHOTS from "./shots.json";
 
 const WRAP = "mx-auto w-full max-w-[78rem] px-5 md:px-8";
 const DISPLAY = "font-serif font-medium tracking-[-0.02em] text-balance";
 const PANEL = "relative overflow-hidden rounded-[1.75rem]";
 const LINK = "font-semibold text-foreground underline decoration-brand-accent decoration-2 underline-offset-4 hover:text-brand-primary-text";
 
-const DESKTOP = { width: 1880, height: 1400 };
-const PHONE = { width: 780, height: 1280 };
 const PHONE_SIZES = "(min-width: 420px) 360px, 90vw";
+
+type ShotName = keyof typeof SHOTS;
 
 /**
  * A screenshot in a browser frame, taken at phone width below md and at
  * desktop width above it, so its text stays readable on a phone instead of
- * shrinking a desktop page.
+ * shrinking a desktop page. Each capture ends under a whole tile, so the frame
+ * shows all of it; shots.json holds the sizes the capture scripts recorded.
  */
 function Screenshot({
-  src,
-  phoneSrc,
+  name,
   alt,
   sizes,
   dark = false,
   className,
 }: {
-  src: string;
-  phoneSrc: string;
+  name: ShotName;
   alt: string;
   sizes: string;
   /** On a dark panel the frame's bar lightens so its edge stays visible. */
   dark?: boolean;
   className?: string;
 }) {
+  const { desktop, phone } = SHOTS[name];
   const {
     props: { srcSet: desktopSrcSet, width: desktopWidth, height: desktopHeight },
-  } = getImageProps({ alt, ...DESKTOP, src, sizes });
+  } = getImageProps({ alt, ...desktop, src: `/landing/${name}.png`, sizes });
   const {
     props: { srcSet: phoneSrcSet, ...img },
-  } = getImageProps({ alt, ...PHONE, src: phoneSrc, sizes: PHONE_SIZES });
+  } = getImageProps({ alt, ...phone, src: `/landing/${name}-phone.png`, sizes: PHONE_SIZES });
   return (
     <div
       className={cn(
-        "mx-auto w-full max-w-[360px] overflow-hidden rounded-t-[14px] shadow-[0_30px_70px_-10px_rgb(42_33_26/0.4)] md:max-w-none",
+        "mx-auto w-full max-w-[360px] overflow-hidden rounded-[14px] shadow-[0_30px_70px_-10px_rgb(42_33_26/0.4)] md:max-w-none",
         className,
       )}
     >
@@ -80,19 +81,16 @@ function Screenshot({
   );
 }
 
-const SHOT_CROP = "max-h-[29rem] md:max-h-[30rem]";
-const TILE_CROP = "mt-auto max-h-[29rem] md:max-h-[22rem]";
+type Feature = { title: string; text: string; name: ShotName; alt: string; tone: string };
 
-type Feature = { title: string; text: string; src: string; phoneSrc: string; alt: string; tone: string };
-
-/** A full-width panel: words on one side, the screenshot running off the bottom on the other. */
+/** A full-width panel: words on one side, the screenshot on the other. */
 function Panel(f: Feature & { dark: boolean; textFirst: boolean }) {
   return (
     <div
       className={cn(
         PANEL,
         f.tone,
-        "grid gap-8 px-6 pt-10 md:gap-14 md:px-16 md:pt-16",
+        "grid items-center gap-8 px-6 py-10 md:gap-14 md:p-16",
         f.textFirst
           ? "md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]"
           : "md:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]",
@@ -103,12 +101,10 @@ function Panel(f: Feature & { dark: boolean; textFirst: boolean }) {
         <p className="max-w-[26rem] text-xl leading-[1.45]">{f.text}</p>
       </div>
       <Screenshot
-        src={f.src}
-        phoneSrc={f.phoneSrc}
+        name={f.name}
         alt={f.alt}
         dark={f.dark}
         sizes="(min-width: 1280px) 640px, 55vw"
-        className={SHOT_CROP}
       />
     </div>
   );
@@ -119,17 +115,16 @@ function Tiles({ items }: { items: Feature[] }) {
   return (
     <div className="grid gap-5 md:grid-cols-2 md:gap-6">
       {items.map((f) => (
-        <div key={f.title} className={cn(PANEL, f.tone, "flex flex-col gap-8 px-6 pt-10 md:px-12 md:pt-12")}>
+        <div key={f.title} className={cn(PANEL, f.tone, "flex flex-col gap-8 px-6 py-10 md:p-12")}>
           <div className="flex flex-col gap-3">
             <h3 className={`${DISPLAY} text-[clamp(1.875rem,3.2vw,2.5rem)] leading-[1.08]`}>{f.title}</h3>
             <p className="text-xl leading-[1.45] text-foreground/85">{f.text}</p>
           </div>
           <Screenshot
-            src={f.src}
-            phoneSrc={f.phoneSrc}
+            name={f.name}
             alt={f.alt}
             sizes="(min-width: 1280px) 520px, 45vw"
-            className={TILE_CROP}
+            className="my-auto"
           />
         </div>
       ))}
@@ -137,12 +132,11 @@ function Tiles({ items }: { items: Feature[] }) {
   );
 }
 
-const LARGE = [
+const LARGE: (Feature & { dark: boolean; textFirst: boolean })[] = [
   {
     title: "Serving schedule",
     text: "Each team’s coming dates in one list. Members pick the ones they can take, and leaders see what’s still uncovered at a glance.",
-    src: "/landing/serving.png",
-    phoneSrc: "/landing/serving-phone.png",
+    name: "serving",
     alt: "The Serving page: teams with how many of the coming dates are covered and who is on each",
     tone: "bg-brand-primary text-white",
     dark: false,
@@ -151,8 +145,7 @@ const LARGE = [
   {
     title: "Events and calendar",
     text: "Events that repeat, RSVP, a link to join online, reminders before each one, and a feed that subscribes into Apple or Google Calendar.",
-    src: "/landing/calendar.png",
-    phoneSrc: "/landing/calendar-phone.png",
+    name: "calendar",
     alt: "The Calendar in list view: each event with its time and place, RSVP buttons and Add to Calendar",
     tone: "bg-foreground text-background",
     dark: true,
@@ -160,49 +153,44 @@ const LARGE = [
   },
 ];
 
-const PAIR = [
+const PAIR: Feature[] = [
   {
     title: "Directory",
     text: "People and households, birthdays and anniversaries, all searchable by name.",
-    src: "/landing/directory.png",
-    phoneSrc: "/landing/directory-phone.png",
+    name: "directory",
     alt: "The Directory: members, households, birthdays and anniversaries, with search",
     tone: "bg-white ring-1 ring-inset ring-border",
   },
   {
     title: "Prayer requests",
     text: "Share a request with your group, by name or anonymously, and let people know you’re praying for theirs.",
-    src: "/landing/prayer.png",
-    phoneSrc: "/landing/prayer-phone.png",
+    name: "prayer",
     alt: "The Prayer page: requests from the group, each with a You’re praying button, and a form to share one by name or anonymously",
     tone: "bg-[color-mix(in_srgb,var(--color-brand-accent)_48%,var(--background))]",
   },
 ];
 
-const PAIR_TWO = [
+const PAIR_TWO: Feature[] = [
   {
     title: "Lessons",
     text: "Series with recordings and summaries, part by part, so a missed week is easy to catch up on.",
-    src: "/landing/lessons.png",
-    phoneSrc: "/landing/lessons-phone.png",
+    name: "lessons",
     alt: "The Lessons page: the most recent lesson with its recording and summary, and the series it belongs to",
     tone: "bg-secondary",
   },
   {
     title: "Announcements",
     text: "News for the whole group, kept in one list that anyone can look back through.",
-    src: "/landing/announcements.png",
-    phoneSrc: "/landing/announcements-phone.png",
+    name: "announcements",
     alt: "The Announcements page: the group’s announcements, newest first, each with its date",
     tone: "bg-white ring-1 ring-inset ring-border",
   },
 ];
 
-const GIVING = {
+const GIVING: Feature & { dark: boolean; textFirst: boolean } = {
   title: "Giving",
   text: "A group sets up a fund for a person or cause, and members send gifts straight to whoever it goes to.",
-  src: "/landing/giving.png",
-  phoneSrc: "/landing/giving-phone.png",
+  name: "giving",
   alt: "The Give page: a fund, who it goes to, and the ways to send a gift",
   tone: "bg-brand-primary-text text-white",
   dark: false,
