@@ -1,4 +1,4 @@
-/** Longest edge of a saved profile photo; matches the avatar compression size in uploadImage. */
+/** Longest edge of a saved profile photo, and uploadImage's avatar compression size. */
 export const AVATAR_EDGE = 400;
 /** On-screen edge of the square crop frame, in CSS pixels. */
 export const VIEWPORT = 288;

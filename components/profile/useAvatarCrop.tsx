@@ -1,15 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
-import dynamic from "next/dynamic";
 import { toast } from "sonner";
+import { AvatarCropStep } from "@/components/profile/AvatarCropStep";
 import { failureMessage } from "@/lib/errorCopy";
-
-// The crop step's code is fetched only when a photo is picked.
-const AvatarCropStep = dynamic(
-  () => import("@/components/profile/AvatarCropStep").then((m) => m.AvatarCropStep),
-  { ssr: false },
-);
 
 /**
  * Puts the crop step between a profile photo picker and its upload: the

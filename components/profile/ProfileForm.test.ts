@@ -2,6 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AvatarCropStepProps } from "@/components/profile/AvatarCropStep";
 import type { FamilyUnit, Profile } from "@/lib/types";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -59,13 +60,7 @@ const cropped = new File(["square"], "avatar.jpg", { type: "image/jpeg" });
 vi.mock("@/components/profile/AvatarCropStep", async () => {
   const { createElement: h } = await import("react");
   return {
-    AvatarCropStep: ({
-      onSave,
-      onClosed,
-    }: {
-      onSave: (file: File) => Promise<void>;
-      onClosed: () => void;
-    }) =>
+    AvatarCropStep: ({ onSave, onClosed }: Pick<AvatarCropStepProps, "onSave" | "onClosed">) =>
       h(
         "div",
         { role: "dialog" },
