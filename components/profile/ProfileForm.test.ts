@@ -2,6 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AvatarCropStepProps } from "@/components/profile/AvatarCropStep";
 import type { FamilyUnit, Profile } from "@/lib/types";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -53,6 +54,21 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("@/lib/uploadImage", () => ({ mintSignedUrl: vi.fn(), uploadImage: vi.fn() }));
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
 vi.mock("sonner", () => ({ toast }));
+// Canvas and image decoding do not run in jsdom; the stand-in hands back a
+// different file so a test can tell the cropped square from the picked one.
+const cropped = new File(["square"], "avatar.jpg", { type: "image/jpeg" });
+vi.mock("@/components/profile/AvatarCropStep", async () => {
+  const { createElement: h } = await import("react");
+  return {
+    AvatarCropStep: ({ onSave, onClosed }: Pick<AvatarCropStepProps, "onSave" | "onClosed">) =>
+      h(
+        "div",
+        { role: "dialog" },
+        h("button", { type: "button", onClick: () => onClosed() }, "Cancel"),
+        h("button", { type: "button", onClick: () => void onSave(cropped).then(onClosed) }, "Save photo"),
+      ),
+  };
+});
 
 const { ProfileForm } = await import("./ProfileForm");
 const { uploadImage } = await import("@/lib/uploadImage");
@@ -351,19 +367,49 @@ describe("ProfileForm inline errors", () => {
     expect(refresh).toHaveBeenCalledOnce();
   });
 
+  async function pickPhoto() {
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [new File(["x"], "face.png", { type: "image/png" })],
+    });
+    await act(async () => void input.dispatchEvent(new Event("change", { bubbles: true })));
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).not.toBeNull());
+  }
+  // Resolves once the crop step has closed, so the upload behind Save has settled.
+  async function press(label: "Cancel" | "Save photo") {
+    await act(async () => {
+      [...document.querySelectorAll("button")].find((b) => b.textContent === label)!.click();
+    });
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+  }
+
+  it("uploads nothing until the crop step saves, and nothing on cancel", async () => {
+    await mount();
+    await pickPhoto();
+    expect(uploadImage).not.toHaveBeenCalled();
+
+    await press("Cancel");
+    expect(uploadImage).not.toHaveBeenCalled();
+
+    vi.mocked(uploadImage).mockResolvedValueOnce("org/profiles/p1/avatar.jpg");
+    await pickPhoto();
+    await press("Save photo");
+    expect(uploadImage).toHaveBeenCalledExactlyOnceWith(cropped, "avatar", "profiles/p1/avatar");
+  });
+
   it("reloads the frame after a photo upload, and not after a failed one", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     await mount();
-    const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
-    Object.defineProperty(input, "files", { value: [new File(["x"], "face.png", { type: "image/png" })] });
-    const choose = () => act(async () => void input.dispatchEvent(new Event("change", { bubbles: true })));
 
     vi.mocked(uploadImage).mockRejectedValueOnce(new Error("refused"));
-    await choose();
+    await pickPhoto();
+    await press("Save photo");
     expect(refresh).not.toHaveBeenCalled();
 
     vi.mocked(uploadImage).mockResolvedValueOnce("org/profiles/p1/avatar.png");
-    await choose();
+    await pickPhoto();
+    await press("Save photo");
     expect(refresh).toHaveBeenCalledOnce();
   });
 

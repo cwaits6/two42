@@ -1,6 +1,7 @@
 import imageCompression from "browser-image-compression";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { AVATAR_EDGE } from "@/lib/avatarCrop";
 import { resolveRequestOrgId } from "@/lib/org";
 import {
   SIGNED_URL_TTL_SECONDS,
@@ -25,7 +26,7 @@ interface UploadConfig {
 const CONFIG: Record<ImageUploadType, UploadConfig> = {
   avatar: {
     bucket: "avatars",
-    maxWidthOrHeight: 400,
+    maxWidthOrHeight: AVATAR_EDGE,
     maxSizeMB: 0.5,
   },
   event: {

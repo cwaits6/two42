@@ -26,6 +26,7 @@ import { retiredFlagResets } from "@/lib/members/retiredHideFlags";
 import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
 import { anniversaryColumns, birthdayColumns } from "@/components/profile/birthday";
 import { MonthSelect } from "@/components/profile/MonthSelect";
+import { useAvatarCrop } from "@/components/profile/useAvatarCrop";
 import { CLAIMED_BIRTHDAY_KEPT, clearClaimedBirthday, removesBirthday } from "@/components/profile/claimedBirthday";
 import { relLabel } from "@/components/directory/utils";
 import { toast } from "sonner";
@@ -314,9 +315,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
       return next;
     });
 
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const uploadAvatar = async (file: File) => {
     setUploadingAvatar(true);
     try {
       const url = await uploadImage(file, "avatar", relObjectPath("profiles", profile.id, "avatar"));
@@ -336,9 +335,13 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
       toast.error(failureMessage("upload the photo"));
     } finally {
       setUploadingAvatar(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
+  const {
+    onPick: pickAvatar,
+    triggerRef: avatarButtonRef,
+    cropStep: avatarCropStep,
+  } = useAvatarCrop(uploadAvatar);
 
   const openAddForm = (relationship: FamilyMemberRelationship) => {
     setAdding(relationship);
@@ -581,6 +584,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
                 </Avatar>
                 <div className="space-y-2">
                   <Button
+                    ref={avatarButtonRef}
                     type="button"
                     variant="outline"
                     onClick={() => fileInputRef.current?.click()}
@@ -595,9 +599,10 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
                   ref={fileInputRef}
                   type="file"
                   accept="image/*"
-                  onChange={handleAvatarUpload}
+                  onChange={pickAvatar}
                   className="hidden"
                 />
+                {avatarCropStep}
               </div>
 
               <Separator />
