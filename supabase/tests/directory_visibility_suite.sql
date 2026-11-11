@@ -329,7 +329,7 @@ begin
     (a4, 'a4@directory-visibility.example.test');
 
   -- A family-invite signup: no access request, so handle_new_user() lands
-  -- the profile as pending and the claim route promotes it later.
+  -- the profile as pending.
   insert into public.family_units (org_id, family_name) values (org_b, 'Household B') returning id into fam_b;
   insert into public.family_members (org_id, family_id, first_name, relationship)
     values (org_b, fam_b, 'Invitee', 'spouse') returning id into fm_b;
@@ -469,7 +469,7 @@ begin
   insert into public.family_invites (org_id, family_member_id, family_id, invite_email)
     values (org_a, fm, fam1, 'pending-a@directory-visibility.example.test');
   insert into auth.users (id, email) values (pending_a, 'pending-a@directory-visibility.example.test');
-  -- What the claim route does, and what a leader could do later.
+  -- Link the household and enrol, as a leader could.
   update public.profiles set family_id = fam1 where id = pending_a;
   insert into public.group_members (org_id, group_id, profile_id, role)
     values (org_a, current_setting('dv.grp_1')::uuid, pending_a, 'member');

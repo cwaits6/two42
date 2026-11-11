@@ -1,12 +1,22 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { logError } from "@/lib/log";
+import {
+  INVALID_LINK,
+  SETUP_LINK_STATUS,
+  classifySetupRow,
+  deadLinkResponse,
+  readSetupToken,
+} from "../setup-link";
+import type { VerifyTokenResponse } from "../setup-response";
+
+const logAccountLookup = (error: unknown) =>
+  logError("Setup link: account lookup failed", error, { route: "/api/auth/verify-token" });
 
 export async function POST(request: Request) {
-  const { token } = await request.json();
-
+  const token = readSetupToken(await request.json().catch(() => null));
   if (!token) {
-    return NextResponse.json({ error: "Missing token" }, { status: 400 });
+    return NextResponse.json(INVALID_LINK, { status: 404 });
   }
 
   const supabase = await createServiceClient();
@@ -21,28 +31,20 @@ export async function POST(request: Request) {
   // "reads the same row".
   const { data, error } = await supabase
     .from("access_requests")
-    .select("name, email, status, token_expires_at, invite_token, org_id")
+    .select("name, email, status, token_expires_at, org_id")
     .eq("signup_token", token)
-    .eq("status", "approved")
-    .single();
+    .eq("status", SETUP_LINK_STATUS)
+    .maybeSingle();
 
-  if (error && error.code !== "PGRST116") {
+  if (error) {
     logError("Signup token lookup failed", error, { route: "/api/auth/verify-token" });
+    return NextResponse.json(INVALID_LINK, { status: 404 });
   }
 
-  // org_id is NOT NULL in the schema, so a falsy value is an invariant
-  // violation, not expected control flow — fail closed as an invalid token.
-  if (error || !data || !data.org_id) {
-    return NextResponse.json({ error: "Invalid or expired token" }, { status: 404 });
+  const link = classifySetupRow(data);
+  if (link.state !== "live") {
+    return deadLinkResponse(supabase.auth.admin, token, link.state === "expired", logAccountLookup);
   }
 
-  if (data.token_expires_at && new Date(data.token_expires_at) < new Date()) {
-    return NextResponse.json({ error: "Token has expired" }, { status: 410 });
-  }
-
-  return NextResponse.json({
-    name: data.name,
-    email: data.email,
-    invite_token: data.invite_token ?? null,
-  });
+  return NextResponse.json<VerifyTokenResponse>({ name: link.row.name, email: link.row.email });
 }

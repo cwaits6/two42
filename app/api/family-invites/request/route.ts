@@ -10,7 +10,8 @@ const MAX_MESSAGE_LENGTH = 2000;
  * POST /api/family-invites/request — a household invitee asks an admin for
  * access. Anonymous: the invite token is the only thing that names the org,
  * and the pending access_requests row it files carries that org and the
- * token, which is what handle_new_user() and the claim route later match on.
+ * token, which is what handle_new_user() and /api/auth/setup-account later
+ * match on.
  */
 export async function POST(request: Request) {
   let body: { token?: unknown; name?: unknown; message?: unknown };

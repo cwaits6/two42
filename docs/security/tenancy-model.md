@@ -357,8 +357,9 @@ is true for every pair of approved members and the directory arm reduces
 to the old one. To keep that true for members approved later,
 `handle_new_user()` enrols a non-pending signup into the org's group when
 the org has exactly one (`role = 'member'`); with zero or several groups it
-enrols nobody. A family-invite signup lands as `pending` and is promoted by
-the claim route, which does not enrol.
+enrols nobody. A household-invite signup comes through an approved access
+request, so it is enrolled like any other; `/api/auth/setup-account` then
+links the household, which does not enrol.
 
 **Consequences stated on purpose.** A household visible through a shared
 group lists only the profiles the viewer may read, so a spouse who is in

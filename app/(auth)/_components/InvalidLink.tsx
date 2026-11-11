@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { INVITE_INVALID_TITLE } from "@/lib/groups/invites";
@@ -7,7 +8,7 @@ import { AuthShell } from "./AuthShell";
  * The one dead-link card for invite and signup links. It reads the same
  * whatever made the link dead; `help` names who to ask for a new one.
  */
-export function InvalidLink({ eyebrow, help }: { eyebrow?: string; help: string }) {
+export function InvalidLink({ eyebrow, help }: { eyebrow?: string; help: ReactNode }) {
   return (
     <AuthShell
       eyebrow={eyebrow}

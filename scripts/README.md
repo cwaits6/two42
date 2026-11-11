@@ -173,10 +173,10 @@ The same command also enforces:
 
 - **Cross-org assertion pins** — the two signed-link surfaces read the
   profile row unscoped *on purpose* so a cross-org pairing is rejected
-  explicitly, and the family-invite claim and household link-member routes
-  compare the caller's org to the target row's as defence in depth; the guard
-  pins each rejection (and its distinctive denial log) to exactly one
-  occurrence per file, so deleting one fails CI.
+  explicitly, and the household link-member route compares the caller's org
+  to the target row's as defence in depth; the guard pins each rejection (and
+  its distinctive denial log) to exactly one occurrence per file, so deleting
+  one fails CI.
 - **Seeded-UUID sweep** — no tracked file outside a named, commented
   exclusion list may hardcode the retired default-org UUID. The default is
   in-scope: new files are swept unless the list says why not.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,46 +8,54 @@ import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
 import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { ErrorState } from "@/components/states/ErrorState";
 import { AccountAgeNotice } from "../_components/AccountAgeNotice";
 import { AuthShell } from "../_components/AuthShell";
 import { AuthFormLoading } from "../_components/AuthFormLoading";
 import { InvalidLink } from "../_components/InvalidLink";
-import { CHURCH_ADMIN_INVALID_HELP } from "@/lib/groups/invites";
 import { NewPasswordFields } from "../_components/NewPasswordFields";
-import {
-  PASSWORD_AUTH_ERRORS,
-  passwordFieldErrors,
-  type PasswordFieldErrors,
-} from "../_components/passwordRules";
+import { passwordFieldErrors, type PasswordFieldErrors } from "../_components/passwordRules";
 import { useFieldFocus } from "../_components/useFieldFocus";
+import { sanitizeNext } from "@/app/api/auth/callback/sanitize-next";
+import {
+  SETUP_STATUS,
+  type SetupAccountResponse,
+  type SetupLink,
+} from "@/app/api/auth/setup-response";
 import { logError, logWarn } from "@/lib/log";
-
-const SIGN_UP_ERRORS: Record<string, string> = {
-  ...PASSWORD_AUTH_ERRORS,
-  user_already_exists: "An account already uses this email. Sign in instead.",
-};
 
 const TITLE = "Set up your account";
 
-interface SignupLink {
-  name: string;
-  email: string;
-  invite_token: string | null;
-}
+const LINK_CLASS =
+  "font-semibold text-brand-primary-text underline underline-offset-4 hover:text-foreground";
+
+// One wording for every dead link: a used link whose account was not created
+// under the link's derived id looks the same as an unknown one.
+const INVALID_HELP = (
+  <>
+    If you already set up your account,{" "}
+    <Link href="/login" className={LINK_CLASS}>
+      sign in
+    </Link>
+    . Otherwise ask your church admin for a new link.
+  </>
+);
 
 type View =
   | { kind: "verifying" }
   | { kind: "invalid" }
   | { kind: "failed" }
-  | { kind: "ready"; link: SignupLink };
+  | { kind: "set_up" }
+  | { kind: "signed_up"; redirect: string }
+  | { kind: "ready"; link: SetupLink };
 
 export function SetupAccountForm() {
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<View>({ kind: "verifying" });
   const [attempt, setAttempt] = useState(0);
   const [errors, setErrors] = useState<PasswordFieldErrors>({});
-  const [formError, setFormError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<ReactNode>(null);
   const focusField = useFieldFocus();
   const supabase = useMemo(() => createClient(), []);
   const searchParams = useSearchParams();
@@ -68,24 +76,25 @@ export function SetupAccountForm() {
       });
 
       if (!res.ok) {
-        // A link that has been used set up an account; if that account is
-        // signed in here, Home is where it belongs.
-        if (res.status === 404) {
+        // A used link set up an account; if that account is signed in here,
+        // Home is where it belongs.
+        if (res.status === 404 || res.status === 409) {
           const { data } = await supabase.auth.getSession();
           if (data.session) {
             router.replace("/dashboard");
             return;
           }
         }
-        setView({ kind: res.status === 404 || res.status === 410 ? "invalid" : "failed" });
+        setView(
+          res.status === 409
+            ? { kind: "set_up" }
+            : { kind: res.status === 404 || res.status === 410 ? "invalid" : "failed" },
+        );
         return;
       }
 
-      const data = await res.json();
-      setView({
-        kind: "ready",
-        link: { name: data.name, email: data.email, invite_token: data.invite_token ?? null },
-      });
+      const link: SetupLink = await res.json();
+      setView({ kind: "ready", link: { name: link.name, email: link.email } });
     }
     verifyToken().catch((err) => {
       logError("Failed to verify the account setup link", err, { route: "/setup-account" });
@@ -96,7 +105,7 @@ export function SetupAccountForm() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (view.kind !== "ready") return;
-    const tokenData = view.link;
+    const link = view.link;
     setFormError(null);
 
     const formData = new FormData(e.currentTarget);
@@ -110,53 +119,60 @@ export function SetupAccountForm() {
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email: tokenData.email,
-      password,
-      options: {
-        data: { full_name: tokenData.name },
-      },
-    });
-
-    if (error) {
+    let res: Response;
+    let body: SetupAccountResponse | Record<string, never>;
+    try {
+      res = await fetch("/api/auth/setup-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password }),
+      });
+      body = await res.json().catch(() => ({}));
+    } catch (err) {
       setLoading(false);
-      logError("Failed to create the account", error, { route: "/setup-account" });
-      setFormError(
-        SIGN_UP_ERRORS[error.code ?? ""] ?? failureMessage("create your account", error.status),
-      );
+      logError("Failed to create the account", err, { route: "/setup-account" });
+      setFormError(failureMessage("create your account", "network"));
       return;
     }
 
-    // Invalidate the signup token so it cannot be reused
-    await fetch("/api/auth/consume-token", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token }),
-    });
-
-    // If this signup came from a family invite link, claim the invite now
-    // so the new profile is linked to the household automatically.
-    if (tokenData.invite_token) {
-      try {
-        const claimRes = await fetch("/api/family-invites/claim", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ invite_token: tokenData.invite_token }),
-        });
-        if (!claimRes.ok) {
-          logWarn("Failed to claim family invite after signup", undefined, {
-            route: "/setup-account",
-            ids: { status: claimRes.status },
-          });
-        }
-      } catch {
-        // Non-fatal — the account is created; an admin can link the family manually
-        logWarn("Failed to claim family invite after signup", undefined, { route: "/setup-account" });
+    if (!res.ok) {
+      setLoading(false);
+      if (res.status === 400 && "field" in body && body.field === "password") {
+        setErrors({ password: body.error });
+        focusField("password");
+      } else if (res.status === 409 && "status" in body && body.status === SETUP_STATUS.setUp) {
+        setView({ kind: "set_up" });
+      } else if (res.status === 409 && "status" in body && body.status === SETUP_STATUS.accountExists) {
+        setFormError(
+          <>
+            An account already uses this email.{" "}
+            <Link href="/login" className={LINK_CLASS}>
+              Sign in
+            </Link>
+          </>,
+        );
+      } else if (res.status === 404 || res.status === 410) {
+        setView({ kind: "invalid" });
+      } else {
+        setFormError(failureMessage("create your account", res.status));
       }
+      return;
+    }
+
+    const destination = sanitizeNext("redirect" in body ? body.redirect : null);
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: link.email,
+      password,
+    });
+    if (signInError) {
+      setLoading(false);
+      logWarn("Account created but sign-in failed", signInError, { route: "/setup-account" });
+      setView({ kind: "signed_up", redirect: destination });
+      return;
     }
 
     toast.success("Account created.");
-    router.replace("/dashboard");
+    router.replace(destination);
     router.refresh();
   };
 
@@ -183,7 +199,33 @@ export function SetupAccountForm() {
   }
 
   if (view.kind === "invalid") {
-    return <InvalidLink help={CHURCH_ADMIN_INVALID_HELP} />;
+    return <InvalidLink help={INVALID_HELP} />;
+  }
+
+  if (view.kind === "set_up" || view.kind === "signed_up") {
+    const signIn =
+      view.kind === "signed_up"
+        ? `/login?redirect=${encodeURIComponent(view.redirect)}`
+        : "/login";
+    return (
+      <AuthShell
+        title={view.kind === "set_up" ? "Your account is already set up" : "Your account is set up"}
+        kicker={
+          view.kind === "set_up"
+            ? "Sign in with your email and password."
+            : "Sign in to continue."
+        }
+      >
+        <Button
+          size="lg"
+          className="w-full font-semibold"
+          nativeButton={false}
+          render={<Link href={signIn} />}
+        >
+          Sign in
+        </Button>
+      </AuthShell>
+    );
   }
 
   return (

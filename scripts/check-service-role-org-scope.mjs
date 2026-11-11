@@ -81,8 +81,8 @@ const INVENTORY = "docs/security/service-role-inventory.md";
 
 // The hand-written cross-org assertions. The two signed-link surfaces read
 // the profile row unscoped ON PURPOSE so a cross-org pairing can be rejected
-// explicitly; the invite-claim and household-link routes compare the
-// caller's org to the target row's as defence in depth. Each only stays safe
+// explicitly; the household-link route compares the caller's org to the
+// target row's as defence in depth. Each only stays safe
 // while the explicit rejection exists — pin it, and its distinctive denial
 // log, to exactly one occurrence.
 const PINS = [
@@ -99,13 +99,6 @@ const PINS = [
       "profile.org_id !== group.org_id",
       // NB: contains an em-dash — files are read as UTF-8 above.
       "Serving link page: cross-org denial — profile org does not match group org",
-    ],
-  },
-  {
-    file: "app/api/family-invites/claim/route.ts",
-    needles: [
-      "callerProfile.org_id !== invite.org_id",
-      "family-invites/claim: caller org does not match invite org",
     ],
   },
   {
