@@ -206,7 +206,9 @@ function PersonAddForm({
             onChange={(e) => setDraft((d) => ({ ...d, last_name: e.target.value }))}
             placeholder={titleCaseName(lastNameFallback) ?? ""}
             className="py-5 text-base"
+            {...invalidFieldProps("add_last_name", errors.add_last_name)}
           />
+          <FieldError fieldId="add_last_name" message={errors.add_last_name} />
         </div>
       </div>
       <div className="space-y-2">
@@ -424,7 +426,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
   };
 
   const stepErrors = (): StepErrors => {
-    if (step === 1) return aboutYouErrors({ firstName, lastName, birthMonth, birthDay, birthYear });
+    if (step === 1) return aboutYouErrors({ firstName, lastName, preferredName, birthMonth, birthDay, birthYear });
     if (step === 2) {
       return contactErrors({ phoneMobile, phoneHome, phoneWork });
     }
@@ -653,10 +655,15 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
                 <Input
                   id="preferred_name"
                   value={preferredName}
-                  onChange={(e) => setPreferredName(e.target.value)}
+                  onChange={(e) => {
+                    setPreferredName(e.target.value);
+                    clearError("preferred_name");
+                  }}
                   onBlur={(e) => setPreferredName(titleCaseName(e.target.value) ?? "")}
                   className="py-5 text-base"
+                  {...invalidFieldProps("preferred_name", errors.preferred_name)}
                 />
+                <FieldError fieldId="preferred_name" message={errors.preferred_name} />
                 <p className="text-base text-muted-foreground">
                   The name people call you, if it isn&apos;t your first name.
                 </p>

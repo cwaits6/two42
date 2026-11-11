@@ -35,6 +35,7 @@ import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
 import { initials } from "@/lib/names";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
+import { nameFieldError } from "@/lib/nameField";
 import { Camera, Check } from "lucide-react";
 import { CheckRow } from "@/components/profile/CheckRow";
 import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
@@ -138,6 +139,7 @@ type FieldErrors = Partial<
   Record<
     | "first_name"
     | "last_name"
+    | "preferred_name"
     | "email"
     | "phone_mobile"
     | "phone_home"
@@ -290,8 +292,12 @@ export function ProfileForm({
     // Collected in the order the fields appear, so the first key is the
     // field focus moves to.
     const found: FieldErrors = {};
-    if (!firstName) found.first_name = "Enter a first name.";
-    if (!lastName) found.last_name = "Enter a last name.";
+    const firstNameError = nameFieldError(firstName, "first name", true);
+    if (firstNameError) found.first_name = firstNameError;
+    const lastNameError = nameFieldError(lastName, "last name", true);
+    if (lastNameError) found.last_name = lastNameError;
+    const preferredNameError = nameFieldError(preferredName, "preferred name", false);
+    if (preferredNameError) found.preferred_name = preferredNameError;
     // Only admins can edit the email; a member's own is managed in Settings.
     const email = state.email.trim();
     if (isAdmin && !email) {
@@ -500,7 +506,9 @@ export function ProfileForm({
                 update("preferred_name", titleCaseName(e.target.value) || "")
               }
               className="py-5 text-base"
+              {...invalidFieldProps("preferred_name", errors.preferred_name)}
             />
+            <FieldError fieldId="preferred_name" message={errors.preferred_name} />
           </div>
 
           <Separator />

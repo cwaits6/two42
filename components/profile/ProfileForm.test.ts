@@ -179,6 +179,16 @@ describe("ProfileForm inline errors", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it("refuses a name over 100 characters on its field, without saving", async () => {
+    const form = await mount({ last_name: "a".repeat(101), preferred_name: "b".repeat(101) });
+    await form.submit();
+
+    expect(form.message("last_name")).toBe("Use 100 characters or fewer.");
+    expect(form.message("preferred_name")).toBe("Use 100 characters or fewer.");
+    expect(document.activeElement).toBe(form.field("last_name"));
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it("saves without a birthday", async () => {
     const form = await mount({ birth_month: null, birth_day: null });
     await form.submit();

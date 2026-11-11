@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { aboutYouErrors, contactErrors, householdErrors, personErrors } from "./setupValidation";
 
-const aboutYou = { firstName: "Ada", lastName: "Lovelace", birthMonth: "", birthDay: "", birthYear: "" };
+const aboutYou = { firstName: "Ada", lastName: "Lovelace", preferredName: "", birthMonth: "", birthDay: "", birthYear: "" };
 const contact = { phoneMobile: "", phoneHome: "", phoneWork: "" };
 
 describe("aboutYouErrors", () => {
@@ -15,6 +15,14 @@ describe("aboutYouErrors", () => {
       "last_name",
       "birth_day",
     ]);
+  });
+
+  it("refuses a name over 100 characters, the optional preferred name included", () => {
+    const long = "a".repeat(101);
+    expect(aboutYouErrors({ ...aboutYou, lastName: long, preferredName: long })).toEqual({
+      last_name: "Use 100 characters or fewer.",
+      preferred_name: "Use 100 characters or fewer.",
+    });
   });
 });
 
@@ -47,6 +55,14 @@ describe("householdErrors", () => {
 describe("personErrors", () => {
   it("needs only a first name", () => {
     expect(personErrors({ first_name: "Lily", last_name: "", birth_month: "", birth_day: "", birth_year: "" })).toEqual({});
+  });
+
+  it("refuses an added person's name over 100 characters on its field", () => {
+    const long = "a".repeat(101);
+    expect(personErrors({ first_name: long, last_name: long, birth_month: "", birth_day: "", birth_year: "" })).toEqual({
+      add_first_name: "Use 100 characters or fewer.",
+      add_last_name: "Use 100 characters or fewer.",
+    });
   });
 
   it("marks the add form's own fields", () => {
