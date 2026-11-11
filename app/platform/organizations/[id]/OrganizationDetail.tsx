@@ -347,7 +347,7 @@ export function OrganizationDetail({
                       . Sending again invalidates the previous link.
                     </>
                   ) : (
-                    <>No invite has been sent yet.</>
+                    <>The invite hasn&apos;t been sent.</>
                   )}
                 </p>
               </div>

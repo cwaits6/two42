@@ -24,6 +24,7 @@ import { EMAIL, EMAIL_MAX_LENGTH } from "@/lib/emailAddress";
 import { NETWORK_ERROR, operatorMessage } from "@/lib/errorCopy";
 import type { Database } from "@/lib/supabase/database.types";
 import { logError } from "@/lib/log";
+import { normalizeEmail } from "@/lib/sanitize";
 
 export interface PlatformOrg {
   id: string;
@@ -61,6 +62,9 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
   // Bumped each time the dialog opens. An answer can arrive after the dialog
   // was closed and opened again; it must not mark or close the new one.
   const opening = useRef(0);
+  // Set before the first await: `disabled={creating}` only lands on the next
+  // render, so a fast double click would otherwise post twice.
+  const inFlight = useRef(false);
 
   function openDialog(open: boolean) {
     if (open) opening.current += 1;
@@ -74,8 +78,9 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
   }
 
   async function handleCreate() {
+    if (inFlight.current) return;
     const name = form.name.trim();
-    const ownerEmail = form.ownerEmail.trim();
+    const ownerEmail = normalizeEmail(form.ownerEmail) ?? "";
     const found = addOrganizationErrors(name, ownerEmail);
     setErrors(found);
     const first = (Object.keys(found) as Field[])[0];
@@ -84,6 +89,7 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
       return;
     }
 
+    inFlight.current = true;
     setCreating(true);
     const sentFrom = opening.current;
     try {
@@ -104,16 +110,25 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
         toast.error(message);
         return;
       }
-      toast.success(`${name} added.`);
+      const data: { orgId?: string; inviteSent?: boolean } = await res.json().catch(() => ({}));
       if (opening.current === sentFrom) {
         setDialogOpen(false);
         setForm({ name: "", ownerEmail: "" });
       }
-      router.refresh();
+      if (data.inviteSent) {
+        toast.success(`${name} added. Invite sent to ${ownerEmail}.`);
+        router.refresh();
+      } else {
+        toast.error(`${name} added. The invite wasn't sent.`);
+        // The church page says so and offers Send invite.
+        if (data.orgId) router.push(`/platform/organizations/${data.orgId}`);
+        else router.refresh();
+      }
     } catch (err) {
       logError("Platform organization add request failed", err, { route: "/platform/organizations" });
       toast.error(NETWORK_ERROR);
     } finally {
+      inFlight.current = false;
       setCreating(false);
     }
   }
@@ -208,8 +223,8 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
               />
               <FieldError fieldId="org-owner-email" message={errors["org-owner-email"]} />
               <p className="text-sm text-muted-foreground">
-                They become its church admin. Send their invite from the
-                organization page once it is added.
+                They become its church admin. Their invite is sent when you
+                add the organization.
               </p>
             </div>
           </div>

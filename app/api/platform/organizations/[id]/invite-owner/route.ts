@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
-import crypto from "crypto";
 import { requirePlatformAdmin } from "@/lib/platform-access";
-import { createServiceClient } from "@/lib/supabase/server";
-import { resolveEmailBranding } from "@/lib/email/identity";
-import { sendInviteEmail } from "@/lib/email/resend";
-import { siteConfig } from "@/lib/config";
-import { logError } from "@/lib/log";
+import { sendFirstAdminInvite } from "../../firstAdminInvite";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
+/**
+ * POST /api/platform/organizations/[id]/invite-owner — send or resend the
+ * first admin's invite. Re-sending re-mints the token, which invalidates the
+ * previous link; the church page says so.
+ */
 export async function POST(request: Request, { params }: RouteParams) {
   const gate = await requirePlatformAdmin();
   if (!gate.ok) {
@@ -19,7 +19,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       { status: gate.status }
     );
   }
-  const user = gate.user;
 
   const { id } = await params;
 
@@ -31,70 +30,32 @@ export async function POST(request: Request, { params }: RouteParams) {
   }
   const ownerEmail = typeof body.ownerEmail === "string" ? body.ownerEmail.trim() : "";
   if (!ownerEmail) {
-    return NextResponse.json({ error: "Missing owner email" }, { status: 400 });
+    return NextResponse.json({ error: "Enter the first admin's email." }, { status: 400 });
   }
 
-  try {
-    // Mint a fresh signup token (7-day expiry, same shape as
-    // /api/admin/approve). Re-sending re-mints, which invalidates any
-    // previous link — the UI says so.
-    const signupToken = crypto.randomBytes(32).toString("hex");
-    const tokenExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const result = await sendFirstAdminInvite({
+    orgId: id,
+    email: ownerEmail,
+    operatorId: gate.user.id,
+  });
+  if (result.sent) return NextResponse.json({ success: true });
 
-    // access_requests is org-owned and this is a BYPASSRLS client, so the
-    // .eq("org_id", id) below IS the tenant boundary — the org id comes from
-    // the route param, authorized by the platform-admin gate above. See
-    // docs/security/service-role-inventory.md.
-    const service = await createServiceClient();
-    const { data: updated, error: updateError } = await service
-      .from("access_requests")
-      .update({
-        status: "approved",
-        reviewed_by: user.id,
-        reviewed_at: new Date().toISOString(),
-        signup_token: signupToken,
-        token_expires_at: tokenExpiresAt,
-      })
-      .eq("org_id", id)
-      .eq("approved_role", "admin")
-      .eq("email", ownerEmail)
-      .select("name, email");
-
-    if (updateError) throw updateError;
-    if (!updated || updated.length === 0) {
+  switch (result.reason) {
+    case "not_found":
       return NextResponse.json(
-        { error: "No founding-admin request found for this organization" },
+        { error: "No first admin found for this organization." },
         { status: 404 }
       );
-    }
-
-    const signupLink = `${siteConfig.url}/setup-account?token=${signupToken}`;
-    try {
-      await sendInviteEmail(
-        ownerEmail,
-        updated[0].name,
-        signupLink,
-        await resolveEmailBranding(id)
-      );
-    } catch (sendError) {
-      // Null the token back out so the operator can retry cleanly (mirrors
-      // /api/admin/invite-bulk's rollback-on-send-failure).
-      await service
-        .from("access_requests")
-        .update({ signup_token: null, token_expires_at: null })
-        .eq("org_id", id)
-        .eq("email", ownerEmail)
-        .eq("signup_token", signupToken);
-      logError("Invite email send failed; token rolled back", sendError, { route: "/api/platform/organizations/[id]/invite-owner" });
+    case "limit":
+      // 409 so the church page shows this text rather than a generic failure.
       return NextResponse.json(
-        { error: "Failed to send invite email" },
-        { status: 500 }
+        {
+          error:
+            "This organization has reached today's email limit. Raise the limit on this page or send the invite tomorrow.",
+        },
+        { status: 409 }
       );
-    }
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    logError("Invite owner error", error, { route: "/api/platform/organizations/[id]/invite-owner" });
-    return NextResponse.json({ error: "Failed to send invite" }, { status: 500 });
+    case "failed":
+      return NextResponse.json({ error: "Couldn't send the invite. Try again." }, { status: 500 });
   }
 }
