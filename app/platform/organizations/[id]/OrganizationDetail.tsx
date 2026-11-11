@@ -328,7 +328,7 @@ export function OrganizationDetail({
           {owner ? (
             <>
               <div>
-                <p className="text-xl font-semibold">{owner.email}</p>
+                <p className="text-xl font-semibold break-all">{owner.email}</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {owner.inviteOutstanding ? (
                     <>
