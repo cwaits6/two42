@@ -5,8 +5,8 @@
 -- an org admin outside both groups reads nothing (their power is over
 -- people); that the structural pins hold (NOT NULL, composite FK, the
 -- about_page key, the serving rename, the calendar color boundary); that
--- group_settings and prayer_wall follow the same rule; that the calendar
--- fold is idempotent; and that the signup RPC admits a group leader. Every
+-- group_settings and prayer_wall follow the same rule; and that the signup
+-- RPC admits a group leader. Every
 -- "cannot" assertion has a paired positive control.
 --
 -- Run locally (rollback-safe, never mutates the shared local stack):
@@ -113,8 +113,6 @@ begin
     values (org, grp_b, leader_b, 'B prayer') returning id into request_b;
   insert into public.prayer_responses (org_id, group_id, request_id, profile_id) values
     (org, grp_a, request_a, owner), (org, grp_b, request_b, leader_b);
-  insert into public.prayer_call_sessions (org_id, group_id, weekday, start_time, event_id) values
-    (org, grp_a, 2, '07:00', event_a), (org, grp_b, 3, '07:00', event_b);
 
   insert into public.giving_funds (org_id, group_id, name, steward_id, created_by)
     values (org, grp_a, 'A fund', owner, owner) returning id into fund_a;
@@ -123,8 +121,8 @@ begin
   insert into public.giving_fund_methods (org_id, group_id, fund_id, method, custom_handle) values
     (org, grp_a, fund_a, 'zelle', 'a-zelle'), (org, grp_b, fund_b, 'zelle', 'b-zelle');
 
-  insert into public.group_settings (org_id, group_id, weekly_zoom_url) values
-    (org, grp_a, 'https://a.example.test/zoom'), (org, grp_b, 'https://b.example.test/zoom');
+  insert into public.group_settings (org_id, group_id, serving_link_mode) values
+    (org, grp_a, 'login'), (org, grp_b, 'login');
 
   perform set_config('gs.org', org::text, true);
   perform set_config('gs.owner', owner::text, true);
@@ -162,7 +160,7 @@ declare
   own_tables text[] := array[
     'events', 'event_calendars', 'announcements', 'lectures', 'lecture_series',
     'about_page', 'class_teachers', 'prayer_requests', 'prayer_responses',
-    'prayer_call_sessions', 'giving_funds', 'giving_fund_methods', 'group_settings'];
+    'giving_funds', 'giving_fund_methods', 'group_settings'];
   team_tables text[] := array['serving_signups', 'serving_broadcasts', 'serving_team_settings'];
   t text;
   own_c bigint; cross_c bigint; admin_a bigint; admin_b bigint;
@@ -197,14 +195,14 @@ select ok(split_part(current_setting('gs.r_' || t), '|', 1)::int >= 1,
 from unnest(array[
   'events', 'event_calendars', 'announcements', 'lectures', 'lecture_series',
   'about_page', 'class_teachers', 'prayer_requests', 'prayer_responses',
-  'prayer_call_sessions', 'giving_funds', 'giving_fund_methods', 'group_settings',
+  'giving_funds', 'giving_fund_methods', 'group_settings',
   'serving_signups', 'serving_team_settings']) as t;
 select is(split_part(current_setting('gs.r_' || t), '|', 2)::int, 0,
   format('a member of A reads no %s of B', t))
 from unnest(array[
   'events', 'event_calendars', 'announcements', 'lectures', 'lecture_series',
   'about_page', 'class_teachers', 'prayer_requests', 'prayer_responses',
-  'prayer_call_sessions', 'giving_funds', 'giving_fund_methods', 'group_settings',
+  'giving_funds', 'giving_fund_methods', 'group_settings',
   'serving_signups', 'serving_broadcasts', 'serving_team_settings']) as t;
 select is(split_part(current_setting('gs.r_' || t), '|', 3)::int
           + split_part(current_setting('gs.r_' || t), '|', 4)::int, 0,
@@ -212,7 +210,7 @@ select is(split_part(current_setting('gs.r_' || t), '|', 3)::int
 from unnest(array[
   'events', 'event_calendars', 'announcements', 'lectures', 'lecture_series',
   'about_page', 'class_teachers', 'prayer_requests', 'prayer_responses',
-  'prayer_call_sessions', 'giving_funds', 'giving_fund_methods', 'group_settings',
+  'giving_funds', 'giving_fund_methods', 'group_settings',
   'serving_signups', 'serving_broadcasts', 'serving_team_settings']) as t;
 select is(split_part(current_setting('gs.r_serving_broadcasts'), '|', 1)::int, 0,
   'a plain team member (not a lead) reads no serving broadcasts even in their own group');
@@ -284,11 +282,10 @@ declare
     format('insert into public.lectures (org_id, group_id, title, video_url) values (%L, %L, ''x'', ''https://example.test/x'')', org, grp_a),
     format('insert into public.lecture_series (org_id, group_id, name) values (%L, %L, ''x'')', org, grp_a),
     format('insert into public.giving_funds (org_id, group_id, name, steward_id, created_by) values (%L, %L, ''x'', %L, $1)', org, grp_a, current_setting('gs.member_a')),
-    format('insert into public.prayer_call_sessions (org_id, group_id, weekday, start_time) values (%L, %L, 1, ''07:00'')', org, grp_a),
     format('insert into public.class_teachers (org_id, group_id, profile_id) values (%L, %L, $1)', org, grp_a),
-    format('insert into public.group_settings (org_id, group_id, zoom_meeting_time) values (%L, %L, ''x'') on conflict (group_id) do update set zoom_meeting_time = ''x''', org, grp_a)];
+    format('insert into public.group_settings (org_id, group_id, serving_link_mode) values (%L, %L, ''signed'') on conflict (group_id) do update set serving_link_mode = ''signed''', org, grp_a)];
   names text[] := array['announcements', 'events', 'lectures', 'lecture_series', 'giving_funds',
-    'prayer_call_sessions', 'class_teachers', 'group_settings'];
+    'class_teachers', 'group_settings'];
   s text; i int; err text; ok_err text;
 begin
   for i in 1 .. array_length(stmts, 1) loop
@@ -328,10 +325,10 @@ end $$;
 
 select is(current_setting('gs.w_' || t), '42501', format('a leader of B cannot insert a %s row into A', t))
 from unnest(array['announcements', 'events', 'lectures', 'lecture_series', 'giving_funds',
-  'prayer_call_sessions', 'class_teachers', 'group_settings']) as t;
+  'class_teachers', 'group_settings']) as t;
 select is(current_setting('gs.ok_' || t), 'ok', format('positive control: the A leader inserts a %s row into A', t))
 from unnest(array['announcements', 'events', 'lectures', 'lecture_series', 'giving_funds',
-  'prayer_call_sessions', 'class_teachers', 'group_settings']) as t;
+  'class_teachers', 'group_settings']) as t;
 
 -- A member cannot update their group's announcement (0 rows); the author
 -- updates their own prayer request (1 row); group_settings are leader-only.
@@ -348,10 +345,10 @@ begin
   get diagnostics n_ann = row_count;
   update public.prayer_requests set is_answered = true where id = current_setting('gs.request_a')::uuid;
   get diagnostics n_prayer = row_count;
-  update public.group_settings set zoom_meeting_time = 'x' where group_id = grp_a;
+  update public.group_settings set serving_link_mode = 'signed' where group_id = grp_a;
   get diagnostics n_settings_member = row_count;
   perform set_config('request.jwt.claims', json_build_object('sub', owner)::text, true);
-  update public.group_settings set zoom_meeting_time = 'Thursdays 7pm' where group_id = grp_a;
+  update public.group_settings set serving_link_mode = 'signed' where group_id = grp_a;
   get diagnostics n_settings_leader = row_count;
   reset role;
   perform set_config('gs.u_ann', n_ann::text, true);
@@ -605,7 +602,7 @@ select is(
   (select count(*)::int from unnest(array[
     'events', 'event_calendars', 'announcements', 'lectures', 'lecture_series',
     'about_page', 'class_teachers', 'prayer_requests', 'prayer_responses',
-    'prayer_call_sessions', 'giving_funds', 'giving_fund_methods', 'group_settings']) as t(name)
+    'giving_funds', 'giving_fund_methods', 'group_settings']) as t(name)
    where exists (
      select 1 from pg_constraint con
      where con.conrelid = ('public.' || t.name)::regclass
@@ -615,7 +612,7 @@ select is(
             from unnest(con.conkey) k(attnum)
             join pg_attribute a on a.attrelid = con.conrelid and a.attnum = k.attnum)
            = array['group_id', 'org_id'])),
-  13, 'every content table has a composite (group_id, org_id) FK into groups');
+  12, 'every content table has a composite (group_id, org_id) FK into groups');
 
 select col_is_pk('public', 'about_page', array['group_id'], 'about_page is keyed by group_id');
 select hasnt_column('public', 'about_page', 'id', 'about_page lost its singleton id');
@@ -645,7 +642,7 @@ select is(
       and tablename in (
         'events', 'event_calendars', 'announcements', 'lectures', 'lecture_series',
         'about_page', 'class_teachers', 'prayer_requests', 'prayer_responses',
-        'prayer_call_sessions', 'giving_funds', 'giving_fund_methods', 'group_settings',
+        'giving_funds', 'giving_fund_methods', 'group_settings',
         'rsvps', 'serving_signups', 'serving_signup_attendees', 'serving_broadcasts',
         'serving_team_settings')
       and (coalesce(qual, '') ~ 'is_(admin|content_editor)\('
@@ -665,89 +662,13 @@ select is(
 -- Provisioning seeds nothing group-owned any more.
 select is(
   (select count(*)::int from public.site_settings where org_id = current_setting('gs.org')::uuid),
-  2, 'provisioning seeds only the two giving keys');
+  1, 'provisioning seeds only the giving manage-mode key');
 select is(
   (select count(*)::int from public.event_calendars
     where org_id = current_setting('gs.org')::uuid and group_id not in (current_setting('gs.grp_a')::uuid, current_setting('gs.grp_b')::uuid)),
   0, 'provisioning seeds no calendar');
 
--- ── 4. The calendar fold is per group and idempotent ────────────────────────
-do $$
-declare
-  org uuid := current_setting('gs.org')::uuid;
-  grp_a uuid := current_setting('gs.grp_a')::uuid;
-  grp_b uuid := current_setting('gs.grp_b')::uuid;
-  cal_a uuid := current_setting('gs.cal_a')::uuid;
-  extra1 uuid; extra2 uuid;
-  events_before bigint;
-  cal_b_name text;
-begin
-  select name into cal_b_name from public.event_calendars where group_id = grp_b;
-  -- now() is the transaction's start for every row here, so the extras get
-  -- an explicit later created_at to make the fixture calendar the oldest.
-  insert into public.event_calendars (org_id, group_id, name, color, created_at)
-    values (org, grp_a, 'A extra 1', '#111111', now() + interval '1 minute') returning id into extra1;
-  insert into public.event_calendars (org_id, group_id, name, color, created_at)
-    values (org, grp_a, 'A extra 2', '#222222', now() + interval '2 minutes') returning id into extra2;
-  insert into public.events (org_id, group_id, calendar_id, title, start_time) values
-    (org, grp_a, extra1, 'on extra 1', now()),
-    (org, grp_a, extra2, 'on extra 2', now());
-  update public.event_calendars set name = 'renamed', color = '#333333' where id = cal_a;
-  select count(*) into events_before from public.events where group_id = grp_a;
-
-  perform public.group_content_backfill();
-
-  perform set_config('gs.fold_cals', (select count(*) from public.event_calendars where group_id = grp_a)::text, true);
-  perform set_config('gs.fold_survivor', (select id from public.event_calendars where group_id = grp_a)::text, true);
-  perform set_config('gs.fold_name', (select name from public.event_calendars where group_id = grp_a), true);
-  perform set_config('gs.fold_color', (select color from public.event_calendars where group_id = grp_a), true);
-  perform set_config('gs.fold_strays', (select count(*) from public.events where group_id = grp_a and calendar_id is distinct from cal_a)::text, true);
-  perform set_config('gs.fold_events', (select count(*) from public.events where group_id = grp_a)::text, true);
-  perform set_config('gs.fold_events_before', events_before::text, true);
-  perform set_config('gs.fold_b_name', (select name from public.event_calendars where group_id = grp_b), true);
-  perform set_config('gs.fold_b_name_before', cal_b_name, true);
-
-  perform public.group_content_backfill();
-  perform set_config('gs.fold_again_cals', (select count(*) from public.event_calendars where org_id = org)::text, true);
-  perform set_config('gs.fold_again_name', (select name from public.event_calendars where group_id = grp_a), true);
-end $$;
-select is(current_setting('gs.fold_cals')::int, 1, 'the fold leaves group A exactly one calendar');
-select is(current_setting('gs.fold_survivor'), current_setting('gs.cal_a'), 'the oldest calendar survives');
-select is(current_setting('gs.fold_name'), 'Group A', 'the survivor is named after the group');
-select is(current_setting('gs.fold_color'), '#B85C38', 'the survivor is recolored Clay');
-select is(current_setting('gs.fold_strays')::int, 0, 'every event of group A points at the survivor');
-select is(current_setting('gs.fold_events'), current_setting('gs.fold_events_before'), 'the fold keeps every event');
-select is(current_setting('gs.fold_b_name'), current_setting('gs.fold_b_name_before'), 'group B''s calendar is untouched');
-select is(current_setting('gs.fold_again_cals')::int, 2, 'a second call changes nothing');
-select is(current_setting('gs.fold_again_name'), 'Group A', 'a second call leaves the survivor''s name alone');
-
--- ── 4b. The backfill gives a group-less org a group before adopting content ─
-do $$
-declare
-  org uuid; cal uuid; n int; err text := 'ok';
-begin
-  insert into public.organizations (name, branding, status)
-    values ('Groupless', '{}'::jsonb, 'active')
-    returning id into org;
-  alter table public.event_calendars alter column group_id drop not null;
-  insert into public.event_calendars (org_id, name, color) values (org, 'Prayer Calls', '#2F6BA8');
-  begin
-    perform public.group_model_backfill();
-    perform public.group_content_backfill();
-  exception when others then err := sqlstate || ' ' || sqlerrm; end;
-  alter table public.event_calendars alter column group_id set not null;
-  perform set_config('gs.bf_err', err, true);
-  select count(*) into n from public.groups where org_id = org;
-  perform set_config('gs.bf_groups', n::text, true);
-  select count(*) into n from public.event_calendars c
-    join public.groups g on g.id = c.group_id where g.org_id = org;
-  perform set_config('gs.bf_cals', n::text, true);
-end $$;
-select is(current_setting('gs.bf_err'), 'ok', 'an org with a calendar but no group does not abort the backfill');
-select is(current_setting('gs.bf_groups'), '1', 'the group-model backfill gave it one group');
-select is(current_setting('gs.bf_cals'), '1', 'the calendar was adopted by that group');
-
--- ── 5. The signup RPC admits a group leader, and only for their group ───────
+-- ── 4. The signup RPC admits a group leader, and only for their group ───────
 do $$
 declare
   owner uuid := current_setting('gs.owner')::uuid;

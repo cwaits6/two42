@@ -813,14 +813,14 @@ isOneToOne: false
                   ]
                 },"group_settings": {
                   Row: {
-                    "calendar_event_location": boolean,"calendar_event_notes": boolean,"calendar_meeting_details": boolean,"event_reminder_default_days": number,"event_reminders_enabled": boolean,"group_id": string,"org_id": string,"serving_link_mode": string | null,"updated_at": string,"updated_by": string | null,"weekly_prayer_call_time": string | null,"weekly_prayer_call_url": string | null,"weekly_zoom_url": string | null,"zoom_meeting_time": string | null
+                    "calendar_event_location": boolean,"calendar_event_notes": boolean,"calendar_meeting_details": boolean,"event_reminder_default_days": number,"event_reminders_enabled": boolean,"group_id": string,"org_id": string,"serving_link_mode": string | null,"updated_at": string,"updated_by": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "calendar_event_location"?: boolean,"calendar_event_notes"?: boolean,"calendar_meeting_details"?: boolean,"event_reminder_default_days"?: number,"event_reminders_enabled"?: boolean,"group_id": string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null,"weekly_prayer_call_time"?: string | null,"weekly_prayer_call_url"?: string | null,"weekly_zoom_url"?: string | null,"zoom_meeting_time"?: string | null
+                    "calendar_event_location"?: boolean,"calendar_event_notes"?: boolean,"calendar_meeting_details"?: boolean,"event_reminder_default_days"?: number,"event_reminders_enabled"?: boolean,"group_id": string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null
                   }
                   Update: {
-                    "calendar_event_location"?: boolean,"calendar_event_notes"?: boolean,"calendar_meeting_details"?: boolean,"event_reminder_default_days"?: number,"event_reminders_enabled"?: boolean,"group_id"?: string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null,"weekly_prayer_call_time"?: string | null,"weekly_prayer_call_url"?: string | null,"weekly_zoom_url"?: string | null,"zoom_meeting_time"?: string | null
+                    "calendar_event_location"?: boolean,"calendar_event_notes"?: boolean,"calendar_meeting_details"?: boolean,"event_reminder_default_days"?: number,"event_reminders_enabled"?: boolean,"group_id"?: string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null
                   }
                   Relationships: [
                     {
@@ -885,14 +885,14 @@ isOneToOne: false
                   ]
                 },"lectures": {
                   Row: {
-                    "created_at": string,"created_by": string | null,"description": string | null,"group_id": string,"id": string,"lecture_date": string | null,"org_id": string,"scripture_reference": string | null,"series_id": string | null,"summary": string | null,"thumbnail_url": string | null,"title": string,"video_url": string,"week_number": number | null
+                    "created_at": string,"created_by": string | null,"description": string | null,"group_id": string,"id": string,"lecture_date": string | null,"org_id": string,"scripture_reference": string | null,"series_id": string | null,"summary": string | null,"title": string,"video_url": string,"week_number": number | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"created_by"?: string | null,"description"?: string | null,"group_id": string,"id"?: string,"lecture_date"?: string | null,"org_id"?: string,"scripture_reference"?: string | null,"series_id"?: string | null,"summary"?: string | null,"thumbnail_url"?: string | null,"title": string,"video_url": string,"week_number"?: number | null
+                    "created_at"?: string,"created_by"?: string | null,"description"?: string | null,"group_id": string,"id"?: string,"lecture_date"?: string | null,"org_id"?: string,"scripture_reference"?: string | null,"series_id"?: string | null,"summary"?: string | null,"title": string,"video_url": string,"week_number"?: number | null
                   }
                   Update: {
-                    "created_at"?: string,"created_by"?: string | null,"description"?: string | null,"group_id"?: string,"id"?: string,"lecture_date"?: string | null,"org_id"?: string,"scripture_reference"?: string | null,"series_id"?: string | null,"summary"?: string | null,"thumbnail_url"?: string | null,"title"?: string,"video_url"?: string,"week_number"?: number | null
+                    "created_at"?: string,"created_by"?: string | null,"description"?: string | null,"group_id"?: string,"id"?: string,"lecture_date"?: string | null,"org_id"?: string,"scripture_reference"?: string | null,"series_id"?: string | null,"summary"?: string | null,"title"?: string,"video_url"?: string,"week_number"?: number | null
                   }
                   Relationships: [
                     {
@@ -1054,50 +1054,6 @@ isOneToOne: false
                   }
                   Relationships: [
                     
-                  ]
-                },"prayer_call_sessions": {
-                  Row: {
-                    "created_at": string,"dial_in": string | null,"display_order": number,"end_time": string | null,"event_id": string | null,"group_id": string,"id": string,"join_url": string | null,"leader_id": string | null,"org_id": string,"pin": string | null,"start_time": string,"updated_at": string,"weekday": number
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "created_at"?: string,"dial_in"?: string | null,"display_order"?: number,"end_time"?: string | null,"event_id"?: string | null,"group_id": string,"id"?: string,"join_url"?: string | null,"leader_id"?: string | null,"org_id"?: string,"pin"?: string | null,"start_time": string,"updated_at"?: string,"weekday": number
-                  }
-                  Update: {
-                    "created_at"?: string,"dial_in"?: string | null,"display_order"?: number,"end_time"?: string | null,"event_id"?: string | null,"group_id"?: string,"id"?: string,"join_url"?: string | null,"leader_id"?: string | null,"org_id"?: string,"pin"?: string | null,"start_time"?: string,"updated_at"?: string,"weekday"?: number
-                  }
-                  Relationships: [
-                    {
-      foreignKeyName: "prayer_call_sessions_event_id_fkey"
-      columns: ["event_id","org_id","group_id"]
-isOneToOne: false
-      referencedRelation: "events"
-      referencedColumns: ["id","org_id","group_id"]
-    },{
-      foreignKeyName: "prayer_call_sessions_group_id_fkey"
-      columns: ["group_id","org_id"]
-isOneToOne: false
-      referencedRelation: "groups"
-      referencedColumns: ["id","org_id"]
-    },{
-      foreignKeyName: "prayer_call_sessions_leader_id_fkey"
-      columns: ["leader_id","org_id"]
-isOneToOne: false
-      referencedRelation: "profiles"
-      referencedColumns: ["id","org_id"]
-    },{
-      foreignKeyName: "prayer_call_sessions_leader_id_fkey"
-      columns: ["leader_id","org_id"]
-isOneToOne: false
-      referencedRelation: "profiles_directory"
-      referencedColumns: ["id","org_id"]
-    },{
-      foreignKeyName: "prayer_call_sessions_org_id_fkey"
-      columns: ["org_id"]
-isOneToOne: false
-      referencedRelation: "organizations"
-      referencedColumns: ["id"]
-    }
                   ]
                 },"prayer_requests": {
                   Row: {
@@ -1701,7 +1657,7 @@ isOneToOne: false
                            },
 "discoverable_groups":
 { Args: Record<PropertyKey, never>; Returns: {
-              "description": string,"id": string,"is_private": boolean,"join_policy": string,"member_count": number,"name": string,"request_status": string,"viewer_role": string
+              "color": string,"description": string,"id": string,"is_private": boolean,"join_policy": string,"member_count": number,"name": string,"request_status": string,"viewer_role": string
             }[]
                            },
 "email_quota_consume":
@@ -1741,9 +1697,6 @@ isOneToOne: false
                            },
 "giving_stewards_can_manage":
 { Args: Record<PropertyKey, never>; Returns: boolean
-                           },
-"group_content_backfill":
-{ Args: Record<PropertyKey, never>; Returns: undefined
                            },
 "group_create":
 { Args: { "_description"?: string,"_leader_id"?: string,"_name": string }; Returns: string

@@ -134,7 +134,7 @@ The org exists to hold people; everything members do together belongs to a
 
 | Layer | Table(s) | Holds | Role |
 |---|---|---|---|
-| Org | `organizations`, `profiles`, households | people, membership approval, branding, the two giving settings | org admin |
+| Org | `organizations`, `profiles`, households | people, membership approval, branding, the giving setting | org admin |
 | Group (a class or small group) | `groups`, `group_members`, `group_settings` and every content table | the content layer: calendar, announcements, lectures, about, prayer, giving, serving, roster | leader (`group_members.role = 'leader'`) |
 | Team (inside one group) | `teams`, `team_members` | serving signups, reminders, `serving_team_settings` | team lead (`team_members.is_leader`) |
 | Label (inside one group) | `group_labels`, `group_member_labels` | a filter tag on a group membership | none — labels are attributes |
@@ -190,8 +190,8 @@ Every content table carries `group_id uuid not null` with a composite
 `(group_id, org_id)` FK into `groups`: `events`, `event_calendars`,
 `announcements`, `lectures`, `lecture_series`, `about_page` (keyed by
 `group_id`, one row per group), `class_teachers`, `prayer_requests`,
-`prayer_responses`, `prayer_call_sessions`, `giving_funds`,
-`giving_fund_methods` and `group_settings`. The column has **no DEFAULT**:
+`prayer_responses`, `giving_funds`, `giving_fund_methods` and
+`group_settings`. The column has **no DEFAULT**:
 there is no fail-closed group resolver the way `app_current_org_id()` is one
 for the org, so NOT NULL is the guard — a write path that forgets the group
 fails with `23502` rather than landing in a wrong group.
@@ -258,8 +258,7 @@ applies it to any delete that reads a column, and `safeupdate` on the
 
 Where both sides of a parent→child FK carry `group_id`, the FK is
 three-column — `events.calendar_id`, `events.series_id`,
-`lectures.series_id`, `prayer_call_sessions.event_id`,
-`prayer_responses.request_id`, `giving_fund_methods.fund_id` — so a member
+`lectures.series_id`, `prayer_responses.request_id`, `giving_fund_methods.fund_id` — so a member
 of two groups cannot file a child under group B for a group A parent; the
 `on delete set null (<col>)` column-list form keeps `org_id` and `group_id`
 intact on a parent delete. `about_page` is keyed by `group_id` and
@@ -277,21 +276,21 @@ default Clay `#B85C38`), re-checked by `HEX` in the membership loader before
 it reaches CSS, and validated on the write path by `validateGroupColor()`
 for 4.5:1 against white or Espresso text — the chip text color follows.
 
-**`group_settings`** holds the per-group video call, prayer call and serving
-link mode (one row per group, created on first save). The org-level
-`site_settings` keys they replace, plus `prayer_calendar_id` and
-`directory_app_url`, were deleted; `site_settings` keeps only the two
-giving keys. The anonymous read arms on `lectures`, `lecture_series`,
+**`group_settings`** holds the per-group serving link mode, what a shared
+calendar event shows, and event reminders (one row per group, created on
+first save). The org-level `site_settings` keys it replaced, plus
+`prayer_calendar_id` and `directory_app_url`, were deleted; `site_settings`
+keeps only the `giving_manage_mode` key. The anonymous read arms on `lectures`, `lecture_series`,
 `event_calendars` and published `announcements` are gone: `is_group_member()`
 is false for anon by construction, and the middleware already sends those
 paths to login.
 
-The backfill lives in `group_content_backfill()` (plain `plpgsql`,
-idempotent, no client grant), mirroring `group_model_backfill()`, so
-`supabase/tests/group_scope_suite.sql` proves the calendar fold and the
-boundary against fixture groups in CI. Ungrouped rows go to the org's oldest
-group: production has exactly one group per org, and a local stack seeded
-with several keeps its pre-existing content under the first one.
+The backfill ran once, as `group_content_backfill()` (plain `plpgsql`, no
+client grant), inside that migration; the function was later dropped with
+the call fields it moved. `supabase/tests/group_scope_suite.sql` proves the
+boundary against fixture groups in CI. Ungrouped rows went to the org's
+oldest group: production had exactly one group per org, and a local stack
+seeded with several kept its pre-existing content under the first one.
 
 **The one-group backfill.** The migration gives every existing org one
 group named from `branding.display_name` (fallback: the org name), enrols
@@ -458,7 +457,7 @@ NULL for anyone without one, so every comparison fails closed.
 `groups` with `on delete set null (group_id)`) holds a pending request
 rather than a `status` column on `groups`, so nothing that treats a
 `groups` row as a live group — the one-group signup enrolment in
-`handle_new_user()`, `group_content_backfill()`, the directory helpers, the
+`handle_new_user()`, the directory helpers, the
 one-calendar-per-group invariant — needs a new predicate. Its permissive
 policies compose on the floor as `ORG AND (arms)`:
 
@@ -556,8 +555,8 @@ Directory › Groups. Tenant anchor: the caller's own `profiles` row
 (`auth.uid()`, not pending); it returns the caller's own groups always,
 every other non-private group while the org switch is on, and private
 groups additionally for an org admin, with only the columns the row shows
-(name, meeting time, member count, the two flags, the viewer's role and
-their pending-request state). With the switch off an org admin sees no
+(name, meeting time, member count, the two flags, the viewer's role, their
+pending-request state, and the group's color from its oldest calendar). With the switch off an org admin sees no
 more than a member: they manage groups on Admin › Groups.
 
 **Join requests are rows of their own.** `group_join_requests` (`org_id`
@@ -828,9 +827,8 @@ household, and a claim links its accepter to the person named.
 `provision_organization(name, owner_email)` builds a complete org in one
 transaction: the org row — its `branding` jsonb seeded with the full
 tenant-overridable contract (`display_name`, `accent`, `reply_to`; see
-[`DESIGN.md`](../design/DESIGN.md), plus a `logo_url` key it seeds as null
-and nothing reads) — the two org-level
-giving settings, and an **approved access request for the owner** — so self-serve
+[`DESIGN.md`](../design/DESIGN.md)) — the org-level `giving_manage_mode`
+setting, and an **approved access request for the owner** — so self-serve
 onboarding is org-first: provision, then create the auth user, and the
 fail-closed trigger needs no special case. Phase 4 must NOT solve
 onboarding by adding a fallback branch to `handle_new_user()`. Nothing
@@ -981,9 +979,9 @@ table's own FK.
 
 ## Known limits (accepted, tracked)
 
-- `feedback` and the two giving keys in `site_settings` stay org-level by
+- `feedback` and the giving key in `site_settings` stay org-level by
   decision: product feedback is about the app and read by org admins, and
-  the giving toggles are org policy. Storage event-image keys stay
+  the giving setting is org policy. Storage event-image keys stay
   `<org_id>/events/<event_id>/…` — the event id resolves the group, and the
   three event-image policies gate on `is_group_leader(e.group_id)` through
   it.

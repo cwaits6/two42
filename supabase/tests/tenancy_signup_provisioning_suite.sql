@@ -54,8 +54,8 @@ select is(
     where org_id = current_setting('su.org_a')::uuid),
   0, 'provisioning seeds no group — the founding admin has no profile to enrol yet');
 
--- Calendars, about pages and the call / link-mode settings are group-owned
--- now, and there is no group at provisioning time to own them.
+-- Calendars, about pages and the link-mode setting are group-owned, and
+-- there is no group at provisioning time to own them.
 select is(
   (select count(*)::int from public.event_calendars
     where org_id = current_setting('su.org_a')::uuid),
@@ -64,15 +64,21 @@ select is(
 select is(
   (select count(*)::int from public.site_settings
     where org_id = current_setting('su.org_a')::uuid),
-  2, 'provisioning seeds only the two org-level giving keys');
+  1, 'provisioning seeds only the giving manage-mode key');
 
 select is(
   (select count(*)::int from public.site_settings
     where org_id = current_setting('su.org_a')::uuid
       and key in ('weekly_zoom_url', 'zoom_meeting_time', 'weekly_prayer_call_url',
                   'weekly_prayer_call_time', 'serving_link_mode', 'prayer_calendar_id',
-                  'directory_app_url')),
+                  'directory_app_url', 'giving_dashboard_tile')),
   0, 'provisioning seeds none of the retired org-level keys');
+
+select is(
+  (select array_agg(k order by k) from public.organizations o, jsonb_object_keys(o.branding) k
+    where o.id = current_setting('su.org_a')::uuid),
+  array['accent', 'display_name', 'reply_to'],
+  'a new church''s branding carries display_name, accent and reply_to, and no logo_url');
 
 -- site_name was the only is_public seed and nothing read it (the public
 -- name is organizations.branding.display_name); its absence is asserted so

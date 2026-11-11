@@ -18,6 +18,7 @@ const group: DiscoverableGroup = {
   join_policy: "approval",
   viewer_role: null,
   request_status: null,
+  color: null,
 };
 
 function mount(element: ReturnType<typeof createElement>) {
@@ -44,6 +45,11 @@ describe("DiscoveryRow layout", () => {
     expect(inside).toContain("Group B");
     for (const label of labels) expect(inside).toContain(label);
     expect(root.firstElementChild).toBe(card(root));
+  });
+
+  it("shows the group's own color for a group the viewer is not in", () => {
+    const root = mount(createElement(DiscoveryRow, { row: { ...group, color: "#5B4B8A" }, onChanged: () => {} }));
+    expect(root.innerHTML).toContain("background-color:#5B4B8A");
   });
 
   it("shows membership as a label, not a button", () => {

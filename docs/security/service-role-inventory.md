@@ -396,15 +396,12 @@ the same logic the migration ran against fixture orgs. It is idempotent
 and asserts its own enrolment and leader counts. Grants, org checks and the
 within-org boundary are pinned by that suite and by `idor_suite.sql`.
 
-`group_content_backfill()` (`20261017000000_group_scoped_content.sql`) is
+`group_content_backfill()` (`20261017000000_group_scoped_content.sql`) was
 its content-layer twin, with the same shape: plain `plpgsql`, no client
-grant, idempotent. It gives every ungrouped content row to its org's oldest
-group, folds each group's calendars into one (events re-pointed, extras
-deleted, counts asserted), creates a calendar for a group without one, and
-moves the org-level call and link-mode settings onto `group_settings`.
-`supabase/tests/group_scope_suite.sql` runs it against fixture groups and
-pins the fold, the NOT NULL and composite FKs, the policy shapes and the
-member / leader / org-admin read and write matrix.
+grant. It ran once inside that migration and was dropped by
+`20261123000000_database_tidy_up.sql` with the call fields it moved.
+`supabase/tests/group_scope_suite.sql` pins the NOT NULL and composite FKs,
+the policy shapes and the member / leader / org-admin read and write matrix.
 
 The content policies themselves gate on `is_group_member(group_id)` /
 `is_group_leader(group_id)` — see "Group visibility" in
@@ -496,8 +493,9 @@ policy (members and admins only) cannot express without widening every
   Directory › Groups. Tenant anchor: the caller's own `profiles` row
   (`auth.uid()`, not pending), no parameter. Returns the caller's own
   groups always, other non-private groups while `organizations.group_discovery`
-  is on, and private groups additionally for an org admin; every join in
-  the body carries the group's `org_id`. Read-only. EXECUTE:
+  is on, and private groups additionally for an org admin, each with its
+  oldest calendar's color; every join and the color lookup carry the
+  group's `org_id`. Read-only. EXECUTE:
   `authenticated` only.
 - `join_group(_group_id)` — the member-facing gate. Tenant anchor: the
   caller's own `profiles` row; the group is looked up by id **and** that

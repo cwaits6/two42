@@ -282,6 +282,34 @@ select is(current_setting('gd.s2_a3_for_owner'), 'A3:-:true',
 select is(current_setting('gd.s2_owner_list'), 'A1,A2,A3',
   'the org admin lists every group in the org and nothing from org B');
 
+-- ── 2b. Each row carries its group's own color ──────────────────────────────
+-- The color is the group's oldest calendar's, the one the group frame shows
+-- its members; a group with no calendar returns NULL. B1's calendar is set so
+-- a leak across the church filter would show in the list.
+do $$
+declare
+  org_a uuid := current_setting('gd.org_a')::uuid;
+  org_b uuid := current_setting('gd.org_b')::uuid;
+  lurker_a uuid := current_setting('gd.lurker_a')::uuid;
+  colors text;
+begin
+  insert into public.event_calendars (org_id, group_id, name, color, created_at) values
+    (org_a, current_setting('gd.grp_a1')::uuid, 'A1', '#2F6F4F', now() - interval '1 day'),
+    (org_a, current_setting('gd.grp_a1')::uuid, 'A1 later', '#111111', now()),
+    (org_b, current_setting('gd.grp_b1')::uuid, 'B1', '#5B4B8A', now());
+
+  set local role authenticated;
+  perform set_config('request.headers', '{}', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', lurker_a)::text, true);
+  select string_agg(name || ':' || coalesce(color, '-'), ',' order by name)
+    into colors from public.discoverable_groups();
+  reset role;
+  perform set_config('gd.s2b_colors', colors, true);
+end $$;
+
+select is(current_setting('gd.s2b_colors'), 'A1:#2F6F4F,A2:-',
+  'a non-member sees each public group''s own color from its oldest calendar, NULL for a group with none, and nothing from org B');
+
 -- ── 3. Open joins at once; approval files one pending request ───────────────
 do $$
 declare

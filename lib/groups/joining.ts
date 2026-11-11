@@ -27,6 +27,8 @@ export interface DiscoverableGroup {
   join_policy: JoinPolicy;
   viewer_role: ViewerRole;
   request_status: "pending" | null;
+  /** The group's calendar color, unchecked; render it through `groupColor()`. */
+  color: string | null;
 }
 
 /**
@@ -42,6 +44,7 @@ export function toDiscoverableGroup(raw: {
   join_policy: string;
   viewer_role: string | null;
   request_status: string | null;
+  color: string | null;
 }): DiscoverableGroup {
   return {
     id: raw.id,
@@ -52,6 +55,7 @@ export function toDiscoverableGroup(raw: {
     join_policy: parseJoinPolicy(raw.join_policy),
     viewer_role: raw.viewer_role === "leader" || raw.viewer_role === "member" ? raw.viewer_role : null,
     request_status: raw.request_status === "pending" ? "pending" : null,
+    color: raw.color,
   };
 }
 

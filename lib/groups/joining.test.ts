@@ -25,6 +25,7 @@ const base: DiscoverableGroup = {
   join_policy: "approval",
   viewer_role: null,
   request_status: null,
+  color: null,
 };
 
 describe("parseJoinPolicy", () => {
@@ -49,6 +50,7 @@ describe("toDiscoverableGroup", () => {
         join_policy: "open",
         viewer_role: "leader",
         request_status: "pending",
+        color: "#2F6F4F",
       }),
     ).toEqual({
       id: "g1",
@@ -59,6 +61,7 @@ describe("toDiscoverableGroup", () => {
       join_policy: "open",
       viewer_role: "leader",
       request_status: "pending",
+      color: "#2F6F4F",
     });
   });
 

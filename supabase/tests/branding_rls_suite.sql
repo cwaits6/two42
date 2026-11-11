@@ -16,14 +16,21 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select * from no_plan();
 
--- Shape contract: the backfilled org carries all four canonical keys.
+-- Shape contract: the backfilled org carries the three canonical keys. It
+-- is set up by a migration earlier than the one that removed logo_url, so
+-- this is also the check that existing churches lost the key.
 select ok(
   (
-    select branding ?& array['display_name', 'logo_url', 'accent', 'reply_to']
+    select branding ?& array['display_name', 'accent', 'reply_to']
     from public.organizations
     where id = '00000000-0000-0000-0000-000000000001'
   ),
-  'org #1 branding carries display_name, logo_url, accent, reply_to'
+  'org #1 branding carries display_name, accent, reply_to'
+);
+select is(
+  (select count(*)::int from public.organizations where branding ? 'logo_url'),
+  0,
+  'no church carries a logo_url branding key, org #1 included'
 );
 
 -- accent must survive resolveBranding()'s strict hex guard, or the app
@@ -39,7 +46,7 @@ select matches(
 );
 
 -- The other producer of branding rows: provision_organization() emits the
--- same four keys for every future org. Without this, a future edit that drops
+-- same three keys for every future org. Without this, a future edit that drops
 -- reply_to (the body is copied verbatim between migrations — this migration
 -- does exactly that) fails SILENTLY: resolveBranding() coerces the missing
 -- key to null and every new org quietly loses its Reply-To.
@@ -57,11 +64,19 @@ end $$;
 
 select ok(
   (
-    select branding ?& array['display_name', 'logo_url', 'accent', 'reply_to']
+    select branding ?& array['display_name', 'accent', 'reply_to']
     from public.organizations
     where id = current_setting('branding_suite.org_id')::uuid
   ),
-  'provision_organization() emits display_name, logo_url, accent, reply_to'
+  'provision_organization() emits display_name, accent, reply_to'
+);
+select ok(
+  (
+    select not (branding ? 'logo_url')
+    from public.organizations
+    where id = current_setting('branding_suite.org_id')::uuid
+  ),
+  'provision_organization() emits no logo_url'
 );
 
 -- Pin the new permissive policy by name. The behavioral assertions below
