@@ -7,6 +7,8 @@ import {
   emailLayout,
   escapeHtml,
   eventReminderEmail,
+  greeting,
+  greetingName,
   openDatesEmail,
   servingReminderEmail,
 } from "../_shared/email-html.ts";
@@ -91,4 +93,27 @@ Deno.test("the layout signs off with the church's name alone", () => {
   const html = emailLayout("Grace Fellowship", "");
   assertStringIncludes(html, ">Grace Fellowship</p>");
   assert(!html.includes("Team"));
+});
+
+Deno.test("a greeting uses the preferred name, then the first name, and no name otherwise", () => {
+  assertEquals(greetingName("Bea", "Beatrice"), "Bea");
+  assertEquals(greetingName(null, "Beatrice"), "Beatrice");
+  assertEquals(greetingName("  ", " Beatrice "), "Beatrice");
+  assertEquals(greetingName(null, null), null);
+  assertEquals(greetingName("", "   "), null);
+});
+
+Deno.test("a greeting with no name leaves no dangling comma or double space", () => {
+  assertEquals(greeting("Ava <i>S</i>"), "Hi Ava &lt;i&gt;S&lt;/i&gt;,");
+  assertEquals(greeting(null), "Hi,");
+  for (const { html } of [
+    servingReminderEmail({ ...BASE, name: null, teamName: "Hospitality", dateLabel: "Monday", cancelUrl: "https://x" }),
+    openDatesEmail({ ...BASE, name: null, teamName: "Hospitality", dates: [], scheduleUrl: "https://x" }),
+    eventReminderEmail({ ...BASE, name: null, title: "Potluck", dateLabel: "Monday", location: null, eventUrl: "https://x" }),
+  ]) {
+    assertStringIncludes(html, ">Hi, ");
+    assert(!html.includes("Hi ,"));
+    assert(!/Friend/.test(html));
+    assert(!/Hi,\s{2}/.test(html));
+  }
 });

@@ -81,6 +81,14 @@ describe("sendBookingConfirmations", () => {
     await sendBookingConfirmations({} as SupabaseClient, { ...base, attendees: [{ ...david, email: null }] });
     expect(sendSignupConfirmation).not.toHaveBeenCalled();
   });
+
+  it("greets by preferred or first name, and by no name when there is none", async () => {
+    await sendBookingConfirmations({} as SupabaseClient, {
+      ...base,
+      attendees: [{ ...david, preferred_name: "Dave" }, lena, { ...lena, id: "nameless", first_name: null }],
+    });
+    expect(sendSignupConfirmation.mock.calls.map(([, opts]) => opts.recipient.name)).toEqual(["Dave", "Lena", null]);
+  });
 });
 
 describe("bookingMessage", () => {

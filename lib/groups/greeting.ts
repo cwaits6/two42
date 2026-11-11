@@ -1,4 +1,5 @@
 import { formatInZone } from "@/lib/time/zone";
+import { greetingName as nameFor } from "@/supabase/functions/_shared/email-html";
 
 /** "Good morning" / "Good afternoon" / "Good evening" on the org's wall clock. */
 export function greeting(timeZone: string, now: Date = new Date()): string {
@@ -17,5 +18,5 @@ export function todayLabel(timeZone: string, now: Date = new Date()): string {
 export function greetingName(
   profile: { preferred_name?: string | null; first_name?: string | null } | null
 ): string | null {
-  return profile?.preferred_name?.trim() || profile?.first_name?.trim() || null;
+  return profile ? nameFor(profile.preferred_name, profile.first_name) : null;
 }

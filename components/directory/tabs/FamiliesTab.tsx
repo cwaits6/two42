@@ -10,6 +10,7 @@ import { BackLink } from "@/components/directory/BackLink";
 import { DirRow, DirSection, PhoneText } from "@/components/directory/DirRow";
 import { DirectoryLoadState } from "@/components/directory/DirectoryLoadState";
 import { useDirectory } from "@/components/directory/DirectoryContext";
+import { celebrationBackHref } from "@/components/directory/celebrations";
 import { FamilyCard } from "@/components/directory/FamilyCard";
 import { PersonCard } from "@/components/directory/PersonCard";
 import { TwoPane, scrollToPanel } from "@/components/directory/TwoPane";
@@ -38,15 +39,20 @@ function adultNames(family: FamilyDirectoryFull): string {
 }
 
 function FamiliesTabInner() {
-  const { members, families, memberships, profileMap, familyMap } = useDirectory();
+  const { members, families, memberships, profileMap, familyMap, basePath } = useDirectory();
   const [query, setQuery] = useState("");
   const [panel, setPanel] = useState<Panel | null>(null);
   const searchParams = useSearchParams();
+  // Where "Back to the list" leads from a deep-linked panel; a panel opened
+  // from this list leads back to it.
+  const [listHref, setListHref] = useState<string | null>(null);
 
   // Deep links: ?family=<id> opens a household, ?person=<id> opens a person
   const familyParam = searchParams.get("family");
   const personParam = searchParams.get("person");
+  const celebrationList = celebrationBackHref(basePath, searchParams);
   useEffect(() => {
+    setListHref(celebrationList);
     if (personParam && profileMap[personParam]) {
       const profile = profileMap[personParam];
       setPanel({
@@ -57,7 +63,7 @@ function FamiliesTabInner() {
     } else if (familyParam && familyMap[familyParam]) {
       setPanel({ kind: "family", family: familyMap[familyParam] });
     }
-  }, [familyParam, personParam, profileMap, familyMap]);
+  }, [familyParam, personParam, profileMap, familyMap, celebrationList]);
 
   // Households plus members without a family, within the scope, filtered by search
   const entries = useMemo<ListEntry[]>(() => {
@@ -121,6 +127,11 @@ function FamiliesTabInner() {
     scrollToPanel();
   }
 
+  function openFromList(next: Panel) {
+    setListHref(null);
+    openPanel(next);
+  }
+
   const selectedFamilyId =
     panel?.kind === "family"
       ? panel.family.id
@@ -164,7 +175,7 @@ function FamiliesTabInner() {
                   entry.kind === "family" ? (
                     <DirRow
                       key={`fam-${entry.family.id}`}
-                      onClick={() => openPanel({ kind: "family", family: entry.family })}
+                      onClick={() => openFromList({ kind: "family", family: entry.family })}
                       selected={entry.family.id === selectedFamilyId}
                       avatar={
                         <Avatar className="h-12 w-12">
@@ -186,7 +197,7 @@ function FamiliesTabInner() {
                     <DirRow
                       key={`solo-${entry.member.id}`}
                       onClick={() =>
-                        openPanel({ kind: "person", profile: entry.member, fromFamily: null })
+                        openFromList({ kind: "person", profile: entry.member, fromFamily: null })
                       }
                       selected={panel?.kind === "person" && panel.profile.id === entry.member.id}
                       avatar={
@@ -219,7 +230,11 @@ function FamiliesTabInner() {
         panel ? (
           panel.kind === "family" ? (
             <>
-              <BackLink onClick={() => setPanel(null)} className="mb-4">
+              <BackLink
+                href={listHref ?? undefined}
+                onClick={() => setPanel(null)}
+                className="mb-4"
+              >
                 Back to the list
               </BackLink>
               <FamilyCard
@@ -233,6 +248,7 @@ function FamiliesTabInner() {
           ) : (
             <>
               <BackLink
+                href={panel.fromFamily ? undefined : (listHref ?? undefined)}
                 onClick={() =>
                   setPanel(
                     panel.fromFamily ? { kind: "family", family: panel.fromFamily } : null,

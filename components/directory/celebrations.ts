@@ -19,9 +19,49 @@ export function parseWhen(value: string | null): CelebrationWhen {
   return value === "week" || value === "month" ? value : "all";
 }
 
+/** The celebration tabs a household or person link can lead back to. */
+const CELEBRATION_TABS = ["birthdays", "anniversaries"] as const;
+export type CelebrationTab = (typeof CELEBRATION_TABS)[number];
+
+function isCelebrationTab(value: string | null): value is CelebrationTab {
+  return (CELEBRATION_TABS as readonly (string | null)[]).includes(value);
+}
+
+/** The `household` value that shows household members who don't attend a group. */
+export const INCLUDE_NON_ATTENDEES = "all";
+
+/**
+ * A link from a celebration tab into Households, carrying the tab, its filter
+ * and its household switch so the panel can lead back to the same list.
+ */
+export function fromCelebration(path: string, tab: CelebrationTab, search: URLSearchParams): string {
+  const query = new URLSearchParams({ from: tab, ...listState(search) });
+  return `${path}${path.includes("?") ? "&" : "?"}${query}`;
+}
+
+/**
+ * The celebration list a Households panel was opened from, or null to stay on
+ * Households. The values come from the address bar, so only known ones count.
+ */
+export function celebrationBackHref(basePath: string, search: URLSearchParams): string | null {
+  const from = search.get("from");
+  if (!isCelebrationTab(from)) return null;
+  const query = new URLSearchParams(listState(search)).toString();
+  return query ? `${basePath}/${from}?${query}` : `${basePath}/${from}`;
+}
+
+/** A celebration list's filter and household switch, each only when it is set to a known value. */
+function listState(search: URLSearchParams): Record<string, string> {
+  const state: Record<string, string> = {};
+  const when = parseWhen(search.get("when"));
+  if (when !== "all") state.when = when;
+  if (parseIncludeNonAttendees(search.get("household"))) state.household = INCLUDE_NON_ATTENDEES;
+  return state;
+}
+
 /** Whether the URL has the Birthdays tab showing household members who don't attend a group. */
 export function parseIncludeNonAttendees(value: string | null): boolean {
-  return value === "all";
+  return value === INCLUDE_NON_ATTENDEES;
 }
 
 /**

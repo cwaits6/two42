@@ -5,7 +5,7 @@
  * turns out to be taken.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { displayName } from "@/lib/names";
+import { greetingName } from "@/supabase/functions/_shared/email-html";
 import type { BookedDate, BookingOutcome } from "@/lib/serving/bookingOutcome";
 import { sendSignupConfirmation, type NamedProfile } from "@/lib/serving/server";
 import { logError } from "@/lib/log";
@@ -67,7 +67,7 @@ export async function sendBookingConfirmations(
           teamName: opts.teamName,
           serviceDate: date,
           attendees: opts.attendees,
-          recipient: { id: attendee.id, email: attendee.email, name: displayName(attendee) },
+          recipient: { id: attendee.id, email: attendee.email, name: greetingName(attendee.preferred_name, attendee.first_name) },
         });
       } catch (err) {
         logError("Serving confirmation email failed", err, { ids: { attendee: attendee.id } });

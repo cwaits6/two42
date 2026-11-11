@@ -18,6 +18,19 @@ export function escapeHtml(str: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/** The name an email greets someone by: preferred, then first; null when they gave neither. */
+export function greetingName(
+  preferredName: string | null | undefined,
+  firstName: string | null | undefined,
+): string | null {
+  return preferredName?.trim() || firstName?.trim() || null;
+}
+
+/** "Hi Ava," — or "Hi," for someone with no name on record, never "Hi ,". */
+export function greeting(name: string | null): string {
+  return name ? `Hi ${escapeHtml(name)},` : "Hi,";
+}
+
 export const EMAIL_COLORS = {
   page: "#F4EEE2",
   card: "#FBF7F0",
@@ -132,7 +145,7 @@ export interface RenderedEmail {
 export function servingReminderEmail(opts: {
   orgName: string;
   accent: string;
-  name: string;
+  name: string | null;
   teamName: string;
   dateLabel: string;
   cancelUrl: string;
@@ -142,7 +155,7 @@ export function servingReminderEmail(opts: {
     html: emailLayout(
       opts.orgName,
       `${heading("Serving reminder")}
-${paragraph(`Hi ${escapeHtml(opts.name)}, you&#39;re signed up to serve with ${strong(opts.teamName)}.`)}
+${paragraph(`${greeting(opts.name)} you&#39;re signed up to serve with ${strong(opts.teamName)}.`)}
 ${panel(factLines([["When", opts.dateLabel]]))}
 ${cancelTurn(opts.cancelUrl, opts.accent)}`,
     ),
@@ -152,7 +165,7 @@ ${cancelTurn(opts.cancelUrl, opts.accent)}`,
 export function openDatesEmail(opts: {
   orgName: string;
   accent: string;
-  name: string;
+  name: string | null;
   teamName: string;
   dates: { dateLabel: string; url: string }[];
   scheduleUrl: string;
@@ -162,7 +175,7 @@ export function openDatesEmail(opts: {
     html: emailLayout(
       opts.orgName,
       `${heading("Can you take one of these dates?")}
-${paragraph(`Hi ${escapeHtml(opts.name)}, these dates for ${strong(opts.teamName)} still need someone. Choose a date to sign up.`)}
+${paragraph(`${greeting(opts.name)} these dates for ${strong(opts.teamName)} still need someone. Choose a date to sign up.`)}
 ${openDateRows(opts.dates, opts.accent)}
 ${viewSchedule(opts.scheduleUrl)}`,
     ),
@@ -172,7 +185,7 @@ ${viewSchedule(opts.scheduleUrl)}`,
 export function eventReminderEmail(opts: {
   orgName: string;
   accent: string;
-  name: string;
+  name: string | null;
   title: string;
   dateLabel: string;
   location: string | null;
@@ -185,7 +198,7 @@ export function eventReminderEmail(opts: {
     html: emailLayout(
       opts.orgName,
       `${heading("Event reminder")}
-${paragraph(`Hi ${escapeHtml(opts.name)}, ${strong(opts.title)} is coming up.`)}
+${paragraph(`${greeting(opts.name)} ${strong(opts.title)} is coming up.`)}
 ${panel(factLines(facts))}
 ${button(opts.eventUrl, "View event", opts.accent)}`,
     ),

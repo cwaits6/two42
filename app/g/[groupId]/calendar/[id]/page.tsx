@@ -287,7 +287,7 @@ export default async function EventDetailPage({
           {upcomingLabel && (
             <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-brand-bg-light px-3 py-1.5">
               <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-accent" />
-              <span className="font-sans text-base font-bold uppercase tracking-[1.5px] text-brand-accent-text">
+              <span className="font-sans text-base font-bold text-brand-accent-text">
                 {diffDays <= 1 ? upcomingLabel : `This week · ${upcomingLabel.toLowerCase()}`}
               </span>
             </div>

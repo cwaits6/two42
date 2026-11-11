@@ -41,6 +41,14 @@ export function meetingFieldErrors(
   return {};
 }
 
+/** Names Home only while the switch puts the Join button there. */
+export function meetingIntro(isRecurring: boolean, showOnHome: boolean): string {
+  if (isRecurring) return "One meeting for every date of this event.";
+  return showOnHome
+    ? "Members get a Join button on Home and the event page when it is time."
+    : "Members get a Join button on the event page when it is time.";
+}
+
 interface MeetingFieldsSectionProps {
   meetingUrl: string;
   onMeetingUrlChange: (v: string) => void;
@@ -75,9 +83,7 @@ export function MeetingFieldsSection({
       <div>
         <h2 className="font-sans text-lg font-medium text-foreground">Online meeting</h2>
         <p className="text-base text-muted-foreground">
-          {isRecurring
-            ? "One meeting for every date of this event."
-            : "Members get a Join button on the group dashboard and the event page when it is time."}
+          {meetingIntro(isRecurring, showOnDashboard)}
         </p>
       </div>
 
@@ -130,7 +136,7 @@ export function MeetingFieldsSection({
               onCheckedChange={onShowOnDashboardChange}
             />
             <Label htmlFor="meeting_show_on_dashboard" className="text-lg">
-              Show join button on dashboard
+              Show the Join button on Home
             </Label>
           </div>
 

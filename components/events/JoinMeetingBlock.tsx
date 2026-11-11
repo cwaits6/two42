@@ -40,15 +40,10 @@ function CopyField({ label, value }: { label: string; value: string }) {
   };
 
   return (
-    <div
-      className="flex flex-1 min-w-0 items-center gap-2 rounded-[10px] py-2 pl-3 pr-2"
-      style={{ background: "rgba(0,0,0,0.20)", border: "1px solid rgba(255,255,255,0.22)" }}
-    >
+    <div className="flex flex-1 min-w-0 items-center gap-2 rounded-[10px] border border-primary-foreground/25 bg-foreground/20 py-2 pl-3 pr-2">
       <div className="flex-1 min-w-0">
-        <div className="font-sans text-base font-bold uppercase tracking-[1.2px] text-white/80">
-          {label}
-        </div>
-        <div className="font-mono text-xl text-white mt-0.5 tracking-[0.4px] whitespace-nowrap overflow-hidden text-ellipsis">
+        <div className="font-sans text-base font-bold text-primary-foreground">{label}</div>
+        <div className="font-mono text-xl text-primary-foreground mt-0.5 tracking-[0.4px] whitespace-nowrap overflow-hidden text-ellipsis">
           {value}
         </div>
       </div>
@@ -56,14 +51,9 @@ function CopyField({ label, value }: { label: string; value: string }) {
         type="button"
         onClick={handleCopy}
         aria-label={`Copy ${label.toLowerCase()}`}
-        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-primary-foreground/20"
-        style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.22)" }}
+        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-primary-foreground/25 bg-foreground/10 text-primary-foreground transition-colors hover:bg-foreground/30"
       >
-        {copied ? (
-          <Check className="h-3.5 w-3.5 text-white" />
-        ) : (
-          <Copy className="h-3.5 w-3.5 text-white/78" />
-        )}
+        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       </button>
     </div>
   );
@@ -98,33 +88,28 @@ export function JoinMeetingBlock({
     </div>
   );
 
+  // Every fill darkens the panel it sits on, so white text never drops below
+  // the 4.5:1 the panel's own color is held to.
+  const blockClass = "rounded-[14px] border border-primary-foreground/25 p-4";
   const outlineButtonClass =
-    "flex w-full items-center justify-center gap-2 mt-3 rounded-xl py-3 font-sans text-base font-semibold text-white transition-colors hover:bg-primary-foreground/20";
-  const outlineButtonStyle = {
-    background: "rgba(255,255,255,0.10)",
-    border: "1px solid rgba(255,255,255,0.4)",
-  };
+    "flex w-full items-center justify-center gap-2 mt-3 rounded-xl border border-primary-foreground/40 bg-foreground/10 py-3 font-sans text-base font-semibold text-primary-foreground transition-colors hover:bg-foreground/25";
 
-  const statusRowClass =
-    "flex items-center gap-2 font-sans text-lg font-bold uppercase tracking-[1.6px]";
+  const statusRowClass = "flex items-center gap-2 font-sans text-lg font-bold";
 
   // ── ENDED ──────────────────────────────────────────────
   if (state === "ended") {
     return (
-      <div
-        className="rounded-[14px] p-4"
-        style={{ background: "rgba(255,255,255,0.09)", border: "1px solid rgba(255,255,255,0.22)" }}
-      >
+      <div className={`${blockClass} bg-foreground/10`}>
         <div className={statusRowClass}>
           <span aria-hidden="true" className="h-2 w-2 rounded-full bg-primary-foreground/80" />
-          <span className="text-white/90">This event has ended</span>
+          <span className="text-primary-foreground">This event has ended</span>
         </div>
         {recordingsHref && (
           <>
-            <p className="font-sans text-base text-white/90 leading-relaxed mt-2.5">
+            <p className="font-sans text-base text-primary-foreground leading-relaxed mt-2.5">
               Missed it? The recording is posted to Lessons.
             </p>
-            <a href={recordingsHref} className={outlineButtonClass} style={outlineButtonStyle}>
+            <a href={recordingsHref} className={outlineButtonClass}>
               <Play className="h-4 w-4" /> Watch the recording
             </a>
           </>
@@ -136,20 +121,17 @@ export function JoinMeetingBlock({
   // ── UPCOMING ───────────────────────────────────────────
   if (state === "upcoming") {
     return (
-      <div
-        className="rounded-[14px] p-4"
-        style={{ background: "rgba(255,255,255,0.09)", border: "1px solid rgba(255,255,255,0.22)" }}
-      >
+      <div className={`${blockClass} bg-foreground/10`}>
         <div className={statusRowClass}>
-          <Video className="h-4 w-4" style={{ color: "var(--color-brand-accent)" }} />
-          <span className="text-white">
+          <Video className="h-4 w-4 text-brand-accent" />
+          <span className="text-primary-foreground">
             Join online{provider ? ` · ${provider}` : ""}
           </span>
         </div>
         {meetingUrl ? (
           <>
-            <p className="font-sans text-base text-white/90 leading-relaxed mt-2">
-              One-tap join opens at <strong className="text-white">{opensAt}</strong>,{" "}
+            <p className="font-sans text-base text-primary-foreground leading-relaxed mt-2">
+              One-tap join opens at <strong>{opensAt}</strong>,{" "}
               {leadMinutes} minutes before start.
             </p>
             <a
@@ -157,15 +139,14 @@ export function JoinMeetingBlock({
               target="_blank"
               rel="noopener noreferrer"
               className={outlineButtonClass}
-              style={outlineButtonStyle}
             >
               <Video className="h-4 w-4" /> {buttonLabel}
             </a>
           </>
         ) : (
           <>
-            <p className="font-sans text-base text-white/90 leading-relaxed mt-2">
-              At <strong className="text-white">{opensAt}</strong>, open your meeting app and
+            <p className="font-sans text-base text-primary-foreground leading-relaxed mt-2">
+              At <strong>{opensAt}</strong>, open your meeting app and
               enter {whatToEnter}.
             </p>
             {creds}
@@ -177,33 +158,22 @@ export function JoinMeetingBlock({
 
   // ── LIVE ───────────────────────────────────────────────
   return (
-    <div
-      className="rounded-[14px] p-4"
-      style={{ background: "var(--primary-hover)", border: "1px solid rgba(255,255,255,0.22)" }}
-    >
+    <div className={`${blockClass} bg-brand-primary-hover`}>
       <div className={statusRowClass}>
-        <span
-          className="inline-block h-[9px] w-[9px] rounded-full"
-          style={{ background: "var(--color-brand-accent)" }}
-        />
-        <span style={{ color: "var(--primary-foreground)" }}>Live now</span>
+        <span aria-hidden="true" className="inline-block h-[9px] w-[9px] rounded-full bg-brand-accent" />
+        <span className="text-primary-foreground">Live now</span>
       </div>
       {meetingUrl ? (
         <a
           href={meetingUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex w-full items-center justify-center gap-2.5 mt-3 rounded-xl py-[15px] font-sans text-base font-bold transition-opacity hover:opacity-90"
-          style={{
-            background: "var(--color-brand-accent)",
-            color: "var(--foreground)",
-            boxShadow: "0 8px 22px rgba(0,0,0,0.22)",
-          }}
+          className="flex w-full items-center justify-center gap-2.5 mt-3 rounded-xl bg-brand-accent py-[15px] font-sans text-base font-bold text-foreground shadow-lg transition-opacity hover:opacity-85"
         >
           <Video className="h-5 w-5" /> {buttonLabel}
         </a>
       ) : (
-        <p className="font-sans text-base text-white/90 leading-relaxed mt-2">
+        <p className="font-sans text-base text-primary-foreground leading-relaxed mt-2">
           Open your meeting app and enter {whatToEnter}.
         </p>
       )}

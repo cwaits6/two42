@@ -153,7 +153,7 @@ describe("joinErrorMessage", () => {
   });
 
   it.each([undefined, "", "PGRST301", "GC001"])("falls back for %p", (code) => {
-    expect(joinErrorMessage(code)).toBe("Couldn't update your membership. Please try again.");
+    expect(joinErrorMessage(code)).toBe("Couldn't update your membership. Try again.");
   });
 });
 
@@ -166,6 +166,6 @@ describe("reviewErrorMessage", () => {
   });
 
   it.each([undefined, "", "GJ001", "PGRST301", "22004"])("falls back for %p", (code) => {
-    expect(reviewErrorMessage(code)).toBe("Couldn't update the request. Please try again.");
+    expect(reviewErrorMessage(code)).toBe("Couldn't update the request. Try again.");
   });
 });

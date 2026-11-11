@@ -21,7 +21,7 @@ describe("blockStyle", () => {
   it("passes a non-hex colour through with white text", () => {
     expect(blockStyle("var(--color-brand-primary)")).toEqual({
       backgroundColor: "var(--color-brand-primary)",
-      color: "#FFFFFF",
+      color: "var(--primary-foreground)",
     });
   });
 });

@@ -17,6 +17,8 @@ export type Account = {
   isMember: boolean;
   isChurchAdmin: boolean;
   isOperator: boolean;
+  /** Has a profile in a church. Must agree with landingFor(), which sends an operator with no profile to Platform. */
+  hasChurch: boolean;
   /** The account menu in order; Sign out is an action that follows these. */
   rows: AccountRow[];
 };
@@ -56,6 +58,7 @@ export function buildAccount(input: {
     isMember,
     isChurchAdmin,
     isOperator,
+    hasChurch: !!profile,
     rows,
   };
 }

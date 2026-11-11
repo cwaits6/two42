@@ -218,6 +218,15 @@ describe("notifyLeadersOfCancel", () => {
     ]);
   });
 
+  it("greets a leader by first name, and by no name when there is none", async () => {
+    const nameless = { profiles: { ...leader.profiles, id: "leader-2", first_name: null } };
+    await notifyLeadersOfCancel(
+      stubClient({ team_members: { data: [leader, nameless], error: null } }),
+      baseOpts,
+    );
+    expect(sendServingCancelNoticeEmail.mock.calls.map(([call]) => call.leaderName)).toEqual(["Leah", null]);
+  });
+
   it("logs a failed send without a name or address, and sends the next", async () => {
     const consoleError = vi.mocked(console.log);
     consoleError.mockClear();

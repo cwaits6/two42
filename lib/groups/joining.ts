@@ -4,6 +4,8 @@
 // (discoverable_groups() and join_group()); these only decide what the UI
 // offers and says.
 
+import { failureMessage } from "@/lib/errorCopy";
+
 export const JOIN_POLICIES = ["open", "approval"] as const;
 export type JoinPolicy = (typeof JOIN_POLICIES)[number];
 
@@ -153,7 +155,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 /** Member-facing copy for a join_group() error code. */
 export function joinErrorMessage(code: string | undefined): string {
-  return (code && ERROR_MESSAGES[code]) || "Couldn't update your membership. Please try again.";
+  return (code && ERROR_MESSAGES[code]) || failureMessage("update your membership");
 }
 
 const REVIEW_ERROR_MESSAGES: Record<string, string> = {
@@ -163,5 +165,5 @@ const REVIEW_ERROR_MESSAGES: Record<string, string> = {
 
 /** Leader-facing copy for a review_group_join_request() error code. */
 export function reviewErrorMessage(code: string | undefined): string {
-  return (code && REVIEW_ERROR_MESSAGES[code]) || "Couldn't update the request. Please try again.";
+  return (code && REVIEW_ERROR_MESSAGES[code]) || failureMessage("update the request");
 }

@@ -137,7 +137,10 @@ describe("BirthdaysTab", () => {
       ],
     );
     expect(render(null, BirthdaysTab)).toContain(
-      'href="/g/group/directory/families?family=household"',
+      'href="/g/group/directory/families?family=household&amp;from=birthdays"',
+    );
+    expect(render("week", BirthdaysTab)).toContain(
+      'href="/g/group/directory/families?family=household&amp;from=birthdays&amp;when=week"',
     );
   });
 
@@ -167,6 +170,12 @@ describe("BirthdaysTab", () => {
 
     beforeEach(() => {
       provide([], [nonAttendee]);
+    });
+
+    it("carries the switch into the household link, so its panel leads back to this list", () => {
+      expect(renderQuery("when=week&household=all")).toContain(
+        'href="/g/group/directory/families?family=household&amp;from=birthdays&amp;when=week&amp;household=all"',
+      );
     });
 
     it("shows a household member who doesn't attend only while the URL asks for it", () => {
@@ -236,6 +245,12 @@ describe("AnniversariesTab", () => {
     expect(html).toContain("Married 2004");
     expect(html).not.toContain("· married");
     expect(html).toContain("22 years");
+  });
+
+  it("links a couple to their household, carrying the tab and filter back", () => {
+    expect(render("month", AnniversariesTab)).toContain(
+      'href="/g/group/directory/families?family=soon&amp;from=anniversaries&amp;when=month"',
+    );
   });
 
   it("leaves out Married and the count for a couple with no year", () => {

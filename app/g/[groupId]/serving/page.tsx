@@ -34,7 +34,7 @@ const SECTION_HEADING = "text-base font-bold uppercase tracking-widest text-mute
 
 function TeamLeadBadge() {
   return (
-    <span className="text-sm font-semibold uppercase tracking-wider text-brand-accent-text border border-brand-accent/40 rounded px-1.5 py-0.5">
+    <span className="text-sm font-semibold text-brand-accent-text border border-brand-accent/40 rounded px-1.5 py-0.5">
       Team lead
     </span>
   );

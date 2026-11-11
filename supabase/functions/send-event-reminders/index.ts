@@ -50,7 +50,7 @@ import {
 import { localDay } from "../_shared/event-dates.ts";
 import { formatReminderDate } from "../_shared/event-time.ts";
 import { listGroups, type GroupClient } from "../_shared/groups.ts";
-import { eventReminderEmail } from "../_shared/email-html.ts";
+import { eventReminderEmail, greetingName } from "../_shared/email-html.ts";
 import { resolveServiceKey } from "../_shared/service-key.ts";
 import { reserveEmailQuota } from "../_shared/quota.ts";
 import { eventReminderIdempotencyKey, sendThroughResend } from "../_shared/resend.ts";
@@ -161,7 +161,7 @@ async function runDatesMode(supabase: ServiceClient, orgs: Org[]) {
         const email = eventReminderEmail({
           orgName: branding.orgName,
           accent: branding.accent,
-          name: r.preferredName || r.firstName || "Friend",
+          name: greetingName(r.preferredName, r.firstName),
           title: r.date.title,
           dateLabel: formatReminderDate(r.date.startIso, org.timezone),
           location: r.date.location,
@@ -273,7 +273,7 @@ async function runBeforeDates(
             ...eventReminderEmail({
               orgName: branding.orgName,
               accent: branding.accent,
-              name: profile.preferred_name || profile.first_name || "Friend",
+              name: greetingName(profile.preferred_name, profile.first_name),
               title: event.title,
               dateLabel: eventDate,
               location: event.location,

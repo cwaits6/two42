@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   anniversaryEntries,
   birthdayEntries,
+  celebrationBackHref,
   celebrationHref,
   celebrationSections,
   celebrationsThisWeek,
   coupleName,
+  fromCelebration,
   isThisWeek,
   parseIncludeNonAttendees,
   parseWhen,
@@ -391,5 +393,37 @@ describe("parseIncludeNonAttendees", () => {
     expect(parseIncludeNonAttendees("all")).toBe(true);
     expect(parseIncludeNonAttendees(null)).toBe(false);
     expect(parseIncludeNonAttendees("true")).toBe(false);
+  });
+});
+
+describe("the way back from a household to a celebration list", () => {
+  const back = (query: string) => celebrationBackHref("/directory", new URLSearchParams(query));
+  const from = (tab: "birthdays" | "anniversaries", query: string) =>
+    fromCelebration("/directory/families?family=f", tab, new URLSearchParams(query));
+
+  it("carries the tab, the filter unless it is all, and the household switch", () => {
+    expect(from("birthdays", "when=week")).toBe("/directory/families?family=f&from=birthdays&when=week");
+    expect(from("birthdays", "when=week&household=all")).toBe(
+      "/directory/families?family=f&from=birthdays&when=week&household=all",
+    );
+    expect(from("anniversaries", "")).toBe("/directory/families?family=f&from=anniversaries");
+  });
+
+  it("leads back to the list the link carried", () => {
+    expect(back("family=f&from=birthdays&when=week")).toBe("/directory/birthdays?when=week");
+    expect(back("family=f&from=birthdays&when=week&household=all")).toBe(
+      "/directory/birthdays?when=week&household=all",
+    );
+    expect(back("family=f&from=anniversaries&when=month")).toBe("/directory/anniversaries?when=month");
+    expect(back("family=f&from=birthdays")).toBe("/directory/birthdays");
+  });
+
+  it("stays on Households without a known tab, and drops values it does not know", () => {
+    expect(back("family=f")).toBeNull();
+    expect(back("family=f&from=members")).toBeNull();
+    expect(back("family=f&from=https://example.test")).toBeNull();
+    expect(back("family=f&from=birthdays&when=//example.test&household=x&next=/admin")).toBe(
+      "/directory/birthdays",
+    );
   });
 });

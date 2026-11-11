@@ -139,7 +139,7 @@ export function LandingPage() {
           <Screenshot
             src="/landing/dashboard.png"
             phoneSrc="/landing/dashboard-phone.png"
-            alt="The group dashboard: a greeting and the next event, with RSVP and a button to join online"
+            alt="A group's Home: a greeting and the next event, with RSVP and a button to join online"
             desktop={{ width: 2360, height: 1640 }}
             sizes="(min-width: 1024px) 600px, 100vw"
             priority

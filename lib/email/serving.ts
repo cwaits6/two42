@@ -15,6 +15,7 @@ import {
   emailLayout,
   escapeHtml,
   factLines,
+  greeting,
   heading,
   openDateRows,
   panel,
@@ -30,7 +31,7 @@ function getResend() {
 
 export async function sendServingConfirmationEmail(opts: {
   to: string;
-  name: string;
+  name: string | null;
   teamName: string;
   serviceDate: string;
   attendeesLabel: string;
@@ -48,7 +49,7 @@ export async function sendServingConfirmationEmail(opts: {
     html: emailLayout(
       b.orgName,
       `${heading("You're signed up")}
-${paragraph(`Hi ${escapeHtml(opts.name)}, thank you for serving with ${strong(opts.teamName)}.`)}
+${paragraph(`${greeting(opts.name)} thank you for serving with ${strong(opts.teamName)}.`)}
 ${panel(factLines([["When", dateLabel], ["Who", opts.attendeesLabel]]))}
 ${paragraph("A calendar file is attached so you can add this date to your calendar.")}
 ${cancelTurn(opts.cancelUrl, b.accent)}`,
@@ -70,7 +71,7 @@ ${cancelTurn(opts.cancelUrl, b.accent)}`,
 /** Quiet heads-up to a team leader when a signup is cancelled. */
 export async function sendServingCancelNoticeEmail(opts: {
   to: string;
-  leaderName: string;
+  leaderName: string | null;
   memberLabel: string;
   teamName: string;
   serviceDate: string;
@@ -87,7 +88,7 @@ export async function sendServingCancelNoticeEmail(opts: {
     html: emailLayout(
       b.orgName,
       `${heading("A date opened up")}
-${paragraph(`Hi ${escapeHtml(opts.leaderName)}, ${strong(opts.memberLabel)} can no longer serve with ${strong(opts.teamName)} on ${strong(dateLabel)}, so that date is open again.`)}
+${paragraph(`${greeting(opts.leaderName)} ${strong(opts.memberLabel)} can no longer serve with ${strong(opts.teamName)} on ${strong(dateLabel)}, so that date is open again.`)}
 ${button(opts.servingUrl, "View schedule", b.accent)}`,
     ),
   });
@@ -102,7 +103,7 @@ ${button(opts.servingUrl, "View schedule", b.accent)}`,
 /** Leader broadcast listing the open dates, each with its own action link. */
 export async function sendServingBroadcastEmail(opts: {
   to: string;
-  name: string;
+  name: string | null;
   teamName: string;
   fromName: string;
   message?: string;
@@ -119,7 +120,7 @@ export async function sendServingBroadcastEmail(opts: {
     html: emailLayout(
       b.orgName,
       `${heading("Can you take one of these dates?")}
-${paragraph(`Hi ${escapeHtml(opts.name)}, ${escapeHtml(opts.fromName)} is looking for someone from ${strong(opts.teamName)} to take the dates below. Choose a date to sign up.`)}
+${paragraph(`${greeting(opts.name)} ${escapeHtml(opts.fromName)} is looking for someone from ${strong(opts.teamName)} to take the dates below. Choose a date to sign up.`)}
 ${opts.message ? paragraph(escapeHtml(opts.message)) : ""}
 ${openDateRows(
   opts.openDates.map(({ date, url }) => ({ dateLabel: formatServiceDateWithYear(date), url })),

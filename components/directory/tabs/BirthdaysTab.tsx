@@ -13,6 +13,7 @@ import { useDirectory } from "@/components/directory/DirectoryContext";
 import {
   birthdayEntries,
   celebrationHref,
+  INCLUDE_NON_ATTENDEES,
   parseIncludeNonAttendees,
 } from "@/components/directory/celebrations";
 import {
@@ -34,14 +35,14 @@ function BirthdaysTabInner() {
   return (
     <>
       <CelebrationList
-        path="/birthdays"
+        tab="birthdays"
         noun="birthdays"
         icon={Cake}
         entries={entries}
-        renderRow={(entry, soon) => (
+        renderRow={(entry, soon, href) => (
           <DirRow
             key={entry.key}
-            href={`${basePath}${entry.path}`}
+            href={href(entry.path)}
             highlight={soon}
             stackTrailing
             avatar={
@@ -79,7 +80,7 @@ function BirthdaysTabInner() {
                 `${basePath}/birthdays`,
                 searchParams.toString(),
                 "household",
-                checked ? "all" : null,
+                checked ? INCLUDE_NON_ATTENDEES : null,
               ),
             )
           }
