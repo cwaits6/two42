@@ -141,6 +141,48 @@ describe("AnnouncementsPage", () => {
     expect(await emptyStateAction()).toBeFalsy();
   });
 
+  async function addButtons() {
+    const html = renderToStaticMarkup(
+      await AnnouncementsPage({ params: Promise.resolve({ groupId: "g1" }) }),
+    );
+    return html.split("Add announcement").length - 1;
+  }
+
+  it("shows a leader with no announcements and no drafts one add action, in the empty state", async () => {
+    result = { data: [], error: null };
+    expect(await addButtons()).toBe(1);
+    expect(await emptyStateAction()).toBeTruthy();
+    expect(await headerAction()).toBeFalsy();
+  });
+
+  it("keeps the add action in the header, once, when a leader has only drafts", async () => {
+    result = { data: [], error: null };
+    leaderResult = { data: [DRAFT, SCHEDULED], error: null };
+    expect(await addButtons()).toBe(1);
+    expect(await headerAction()).toBeTruthy();
+  });
+
+  it("keeps the add action in the header, once, when there are announcements", async () => {
+    result = { data: [PUBLISHED], error: null };
+    expect(await addButtons()).toBe(1);
+    expect(await headerAction()).toBeTruthy();
+  });
+
+  it("shows a member the empty message and no add action", async () => {
+    role = "member";
+    result = { data: [], error: null };
+    const html = renderToStaticMarkup(
+      await AnnouncementsPage({ params: Promise.resolve({ groupId: "g1" }) }),
+    );
+    expect(html).toContain("No announcements yet.");
+    expect(html).not.toContain("Add announcement");
+  });
+
+  it("keeps the add action in the header when the announcements read fails", async () => {
+    result = { data: null, error: { code: "57014", message: "canceling statement" } };
+    expect(await headerAction()).toBeTruthy();
+  });
+
   it("offers a leader the action to add an announcement when there are some", async () => {
     result = { data: [{ id: "a1" }], error: null };
     expect(await headerAction()).toBeTruthy();
