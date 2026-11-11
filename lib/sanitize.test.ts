@@ -17,6 +17,17 @@ describe("titleCaseName", () => {
     expect(titleCaseName("")).toBeNull();
     expect(titleCaseName("   ")).toBeNull();
   });
+
+  // Forms check a name's length after title-casing it, and the server title-cases
+  // what they send before checking again; the two verdicts agree only if a second
+  // pass keeps the length.
+  it.each(["ßmith", "ﬁnn o'ﬂaherty", "john MCDONALD", "ǆenan"])(
+    "keeps the length of %j on a second pass",
+    (raw) => {
+      const once = titleCaseName(raw)!;
+      expect(titleCaseName(once)!.length).toBe(once.length);
+    },
+  );
 });
 
 describe("normalizeEmail", () => {

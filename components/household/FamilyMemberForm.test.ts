@@ -291,20 +291,4 @@ describe("name checks", () => {
     expect(document.body.textContent).toContain("Use 100 characters or fewer.");
     expect(fetchMock).not.toHaveBeenCalled();
   });
-
-  it("puts the server's name message on its field instead of a toast", async () => {
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ fieldErrors: { first_name: "Enter a first name." } }), {
-        status: 400,
-      }),
-    );
-    await mount({ ...ADULT, birth_year: null });
-    await click("Save changes");
-
-    const field = document.getElementById("first_name")!;
-    expect(field.getAttribute("aria-invalid")).toBe("true");
-    expect(document.body.textContent).toContain("Enter a first name.");
-    expect(toast.error).not.toHaveBeenCalled();
-    expect(onSaved).not.toHaveBeenCalled();
-  });
 });

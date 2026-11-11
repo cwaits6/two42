@@ -37,7 +37,7 @@ import { EmptyState } from "@/components/states/EmptyState";
 import { ErrorState } from "@/components/states/ErrorState";
 import { LoadingState } from "@/components/states/LoadingState";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
-import { nameFieldError, type MemberNameErrors } from "@/lib/nameField";
+import { nameFieldError } from "@/lib/nameField";
 import { AnniversaryFields } from "@/components/profile/AnniversaryFields";
 import { MonthSelect } from "@/components/profile/MonthSelect";
 import { birthdayErrors, birthdayErrorsWithoutYear, type BirthdayErrors } from "@/components/profile/birthday";
@@ -469,17 +469,6 @@ export function HouseholdsManager() {
     await relabel.submit();
   }
 
-  /** Puts a server 400's name messages on their fields; false when it had none. */
-  async function showServerNameErrors(res: Response | null): Promise<boolean> {
-    if (res?.status !== 400) return false;
-    const data: { fieldErrors?: MemberNameErrors } | null = await res.json().catch(() => null);
-    const fieldErrors = data?.fieldErrors ?? {};
-    if (!fieldErrors.first_name && !fieldErrors.last_name) return false;
-    setMemberNameErrors({ first: fieldErrors.first_name, last: fieldErrors.last_name });
-    document.getElementById(fieldErrors.first_name ? "fm_first" : "fm_last")?.focus();
-    return true;
-  }
-
   async function saveMember(): Promise<boolean> {
     if (!editing) return false;
     const firstName = titleCaseName(memberForm.first_name);
@@ -502,9 +491,7 @@ export function HouseholdsManager() {
         body: JSON.stringify(payload),
       }).catch(() => null);
       if (!res?.ok) {
-        if (!(await showServerNameErrors(res))) {
-          toast.error(failureMessage(`save ${firstName}`, res ? res.status : "network"));
-        }
+        toast.error(failureMessage(`save ${firstName}`, res ? res.status : "network"));
         setSavingMember(false);
         return false;
       }
@@ -516,9 +503,7 @@ export function HouseholdsManager() {
         body: JSON.stringify(payload),
       }).catch(() => null);
       if (!res?.ok) {
-        if (!(await showServerNameErrors(res))) {
-          toast.error(failureMessage(`add ${firstName}`, res ? res.status : "network"));
-        }
+        toast.error(failureMessage(`add ${firstName}`, res ? res.status : "network"));
         setSavingMember(false);
         return false;
       }

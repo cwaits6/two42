@@ -190,23 +190,6 @@ describe("HouseholdsManager", () => {
     });
   });
 
-  it("puts the server's name message on its field instead of a toast", async () => {
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ fieldErrors: { last_name: "Use 100 characters or fewer." } }), {
-        status: 400,
-      }),
-    );
-    state.members = [{ ...LIAM, birth_year: null }];
-    await mount();
-    await click("Edit Test");
-    await click("Edit Liam");
-    await click("Save");
-
-    expect(document.getElementById("fm_last")?.getAttribute("aria-invalid")).toBe("true");
-    expect(document.body.textContent).toContain("Use 100 characters or fewer.");
-    expect(toast.error).not.toHaveBeenCalled();
-  });
-
   describe("choosing No date", () => {
     it("clears a household's whole anniversary", async () => {
       await mount();

@@ -217,10 +217,6 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
     setSaving(false);
 
     if (!res.ok) {
-      if (res.status === 400) {
-        const data: { fieldErrors?: MemberNameErrors } | null = await res.json().catch(() => null);
-        if (data?.fieldErrors && showErrors(data.fieldErrors)) return false;
-      }
       toast.error(failureMessage(`save ${first}`, res.status));
       return false;
     }
