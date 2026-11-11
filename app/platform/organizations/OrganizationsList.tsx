@@ -121,9 +121,13 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
         router.refresh();
       } else {
         toast.error(`${name} added. The invite wasn't sent.`);
-        // The church page says so and offers Send invite.
-        if (data.orgId) router.push(`/platform/organizations/${data.orgId}`);
-        else router.refresh();
+        // The church page says so and offers Send invite. Not when the dialog
+        // was opened again meanwhile: leaving would lose what is typed there.
+        if (data.orgId && opening.current === sentFrom) {
+          router.push(`/platform/organizations/${data.orgId}`);
+        } else {
+          router.refresh();
+        }
       }
     } catch (err) {
       logError("Platform organization add request failed", err, { route: "/platform/organizations" });

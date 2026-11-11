@@ -233,6 +233,26 @@ describe("Add organization dialog", () => {
     expect(push).toHaveBeenCalledWith("/platform/organizations/org-9");
   });
 
+  it("stays on a reopened dialog when an earlier church was added but its invite wasn't sent", async () => {
+    let respond!: (response: Response) => void;
+    fetchSpy.mockReturnValue(new Promise<Response>((resolve) => (respond = resolve)));
+    await type("org-name", "Grace Chapel");
+    await type("org-owner-email", "admin@gracechapel.org");
+    await submit();
+    await click("Cancel");
+
+    await click("Add organization");
+    await type("org-name", "Hope Fellowship");
+    await act(async () =>
+      respond(Response.json({ success: true, orgId: "org-9", inviteSent: false }, { status: 200 })),
+    );
+
+    expect(toast.error).toHaveBeenCalledWith("Grace Chapel added. The invite wasn't sent.");
+    expect(push).not.toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalled();
+    expect(field("org-name").value).toBe("Hope Fellowship");
+  });
+
   it("posts once when Add organization is pressed twice before the answer", async () => {
     let respond!: (response: Response) => void;
     fetchSpy.mockReturnValue(new Promise<Response>((resolve) => (respond = resolve)));
