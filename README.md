@@ -228,11 +228,12 @@ that commits the schema dump; a fork can set the same secrets.
 
 **Auth settings.** Under Authentication in the dashboard: set the Site URL to
 your origin, add `https://your.domain/api/auth/callback` to the redirect
-URLs, turn off "Confirm email" (the setup link has already verified the
-address, and the form signs the person in as soon as the account exists), and
-configure a [custom SMTP sender](https://supabase.com/docs/guides/auth/auth-smtp)
+URLs, and configure a [custom SMTP sender](https://supabase.com/docs/guides/auth/auth-smtp)
 for password-reset emails; Supabase's built-in sender is rate-limited and
-meant for testing.
+meant for testing. Accounts are created on the server, already confirmed,
+from the setup link, so setup signs the person in whatever "Confirm email" is
+set to; turning it off is still recommended, so no other path sends a second
+confirmation message.
 
 **The app.** Import the repository at [vercel.com/new](https://vercel.com/new),
 or any Next.js host, set the app variables from the table above with
