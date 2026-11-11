@@ -30,8 +30,9 @@ const isUpper = (c: string) => c !== c.toLowerCase();
 const isLower = (c: string) => c !== c.toUpperCase();
 
 /**
- * Upper-case the first character, keeping one character where the capital is
- * longer ("ß" → "S", "ﬁ" → "F"), so a second pass leaves the word alone.
+ * Upper-case the first character. Where its capital is longer than one letter
+ * only the first is kept upper-case ("ß" → "Ss", "ﬁ" → "Fi"), so a second pass
+ * leaves the word alone.
  */
 function capitalize(word: string): string {
   const upper = word.charAt(0).toUpperCase();
