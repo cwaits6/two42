@@ -29,7 +29,7 @@ afterEach(() => {
   }
 });
 
-async function mount() {
+async function mount({ isLeader = false } = {}) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -37,7 +37,7 @@ async function mount() {
   await act(async () =>
     root.render(
       createElement(EventsPageClient, {
-        groups: [{ id: "g1", name: "Group", color: "#b4532a", isLeader: false }],
+        groups: [{ id: "g1", name: "Group", color: "#b4532a", isLeader }],
         allEvents: [],
         replies: [],
         userId: "u1",
@@ -71,5 +71,17 @@ describe("EventsPageClient view switch", () => {
   it("leaves focus alone on first render", async () => {
     await mount();
     expect(document.activeElement).toBe(document.body);
+  });
+});
+
+describe("EventsPageClient Add event", () => {
+  const addEvents = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll("a")).filter((a) => a.textContent === "Add event");
+
+  it("drops the header Add event in an empty list view, where the empty state offers it", async () => {
+    const { container, radio } = await mount({ isLeader: true });
+    expect(addEvents(container)).toHaveLength(1);
+    await act(async () => radio("List").click());
+    expect(addEvents(container)).toHaveLength(0);
   });
 });

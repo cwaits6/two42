@@ -201,6 +201,10 @@ export function EventsPageClient({ groups, allEvents, replies, userId, timeZone 
         </DropdownMenuContent>
       </DropdownMenu>
     ) : null;
+  // The list's empty state carries the single-group Add event link, so the
+  // header leaves it out then.
+  const listEmptyCarriesAdd =
+    view === "list" && upcomingVisible.length === 0 && ledVisible.length === 1;
 
   return (
     <div>
@@ -209,7 +213,7 @@ export function EventsPageClient({ groups, allEvents, replies, userId, timeZone 
         actions={
           <>
             {subscribeMenu}
-            {addEventAction}
+            {!listEmptyCarriesAdd && addEventAction}
           </>
         }
       />

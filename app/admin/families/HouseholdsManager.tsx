@@ -535,10 +535,14 @@ export function HouseholdsManager() {
       title="Households"
       subtitle="People who live together share an address and home phone in the directory."
       actions={
-        <Button size="lg" onClick={openCreate}>
-          <Plus className="mr-2 h-5 w-5" aria-hidden="true" />
-          Add household
-        </Button>
+        // An empty list's empty state carries Add household; holding it back
+        // while loading keeps it from flashing in the header first.
+        (status === "failed" || families.length > 0) && (
+          <Button size="lg" onClick={openCreate}>
+            <Plus className="mr-2 h-5 w-5" aria-hidden="true" />
+            Add household
+          </Button>
+        )
       }
     />
   );
