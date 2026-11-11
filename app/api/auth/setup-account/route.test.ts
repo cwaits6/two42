@@ -55,6 +55,7 @@ type Call = {
   op: "select" | "update";
   payload?: unknown;
   eqs: [string, unknown][];
+  ors?: string[];
 };
 type Result = { data: unknown; error: unknown };
 type AuthError = { status?: number; code?: string; message: string };
@@ -115,6 +116,10 @@ function fakeService(opts: {
         },
         eq(col: string, val: unknown) {
           call.eqs.push([col, val]);
+          return builder;
+        },
+        or(filter: string) {
+          (call.ors ??= []).push(filter);
           return builder;
         },
         maybeSingle() {
@@ -224,6 +229,7 @@ describe("POST /api/auth/setup-account — each invite kind", () => {
       ["id", "member-1"],
       ["org_id", ORG],
     ]);
+    expect(writes[1].ors).toEqual([`claimed_profile_id.is.null,claimed_profile_id.eq.${USER_ID}`]);
     expect(writes[2].payload).toEqual({ accepted_at: expect.any(String) });
     expect(writes[2].eqs).toEqual([
       ["id", INVITE],
@@ -421,6 +427,54 @@ describe("POST /api/auth/setup-account — partial failure and retry", () => {
     const retry = await post({ token: TOKEN, password: PASSWORD });
     expect(retry.status).toBe(200);
     expect(admin.createUser).toHaveBeenCalledTimes(1);
+    expect(consumeCalls(calls)).toHaveLength(1);
+  });
+
+  it.each([["family_members"], ["family_invites"]])(
+    "does not consume the link when the %s write errors, and a retry finishes",
+    async (table) => {
+      let fail = true;
+      const { calls } = fakeService({
+        row: { ...BASE_ROW, invite_token: INVITE_TOKEN },
+        invite: {
+          id: INVITE,
+          family_id: "family-1",
+          family_member_id: "member-1",
+          invite_email: "ada@example.com",
+          accepted_at: null,
+        },
+        respond: (call) =>
+          call.table === table && call.op === "update" && fail
+            ? { data: null, error: { message: "boom" } }
+            : undefined,
+      });
+
+      const first = await post({ token: TOKEN, password: PASSWORD });
+      expect(first.status).toBe(500);
+      expect(consumeCalls(calls)).toEqual([]);
+
+      fail = false;
+      const retry = await post({ token: TOKEN, password: PASSWORD });
+      expect(retry.status).toBe(200);
+      expect(consumeCalls(calls)).toHaveLength(1);
+    },
+  );
+
+  it("finishes setup when the member is already claimed by another account", async () => {
+    const { calls } = fakeService({
+      row: { ...BASE_ROW, invite_token: INVITE_TOKEN },
+      invite: {
+        id: INVITE,
+        family_id: "family-1",
+        family_member_id: "member-1",
+        invite_email: "ada@example.com",
+        accepted_at: null,
+      },
+      respond: (call) =>
+        call.table === "family_members" && call.op === "update" ? { data: [], error: null } : undefined,
+    });
+    const res = await post({ token: TOKEN, password: PASSWORD });
+    expect(res.status).toBe(200);
     expect(consumeCalls(calls)).toHaveLength(1);
   });
 

@@ -91,9 +91,9 @@ export async function POST(request: Request) {
     return true;
   }
 
-  // Links the new profile to the household the link's invite was for. Only a
-  // failure that a retry can repair is fatal; an invite that is gone, already
-  // accepted or for another address is skipped.
+  // Links the new profile to the household the link's invite was for. A write
+  // error is fatal so a retry can repair it (each write is idempotent); an
+  // invite or member that is gone, taken or for another address is skipped.
   async function linkHousehold(inviteToken: string): Promise<boolean> {
     const { data: invite, error: inviteError } = await service
       .from("family_invites")
@@ -128,14 +128,23 @@ export async function POST(request: Request) {
       return false;
     }
 
+    // Never take over a member another account already claimed.
     const { data: claimed, error: memberError } = await service
       .from("family_members")
       .update({ claimed_profile_id: userId })
       .eq("id", invite.family_member_id)
       .eq("org_id", orgId)
+      .or(`claimed_profile_id.is.null,claimed_profile_id.eq.${userId}`)
       .select("id");
-    if (memberError || !claimed || claimed.length === 0) {
-      logWarn("Setup account: marking the household member claimed failed", memberError, {
+    if (memberError) {
+      logError("Setup account: marking the household member claimed failed", memberError, {
+        route: "/api/auth/setup-account",
+        ids: { ...ids, invite: invite.id },
+      });
+      return false;
+    }
+    if (!claimed || claimed.length === 0) {
+      logWarn("Setup account: household member gone or claimed by another account", undefined, {
         route: "/api/auth/setup-account",
         ids: { ...ids, invite: invite.id },
       });
@@ -147,8 +156,15 @@ export async function POST(request: Request) {
       .eq("id", invite.id)
       .eq("org_id", orgId)
       .select("id");
-    if (acceptError || !accepted || accepted.length === 0) {
-      logWarn("Setup account: marking the household invite accepted failed", acceptError, {
+    if (acceptError) {
+      logError("Setup account: marking the household invite accepted failed", acceptError, {
+        route: "/api/auth/setup-account",
+        ids: { ...ids, invite: invite.id },
+      });
+      return false;
+    }
+    if (!accepted || accepted.length === 0) {
+      logWarn("Setup account: household invite gone before it was accepted", undefined, {
         route: "/api/auth/setup-account",
         ids: { ...ids, invite: invite.id },
       });
