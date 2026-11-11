@@ -118,6 +118,7 @@ describe("POST /api/platform/organizations", () => {
     expect(mint.filters).toEqual([
       ["id", ADMIN_ROW.id],
       ["org_id", ORG],
+      ["status.neq", "denied"],
     ]);
   });
 

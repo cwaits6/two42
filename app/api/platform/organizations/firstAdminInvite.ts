@@ -33,7 +33,7 @@ type ServiceClient = Awaited<ReturnType<typeof createServiceClient>>;
 export function foundingRequestQuery(service: ServiceClient, orgId: string) {
   return service
     .from("access_requests")
-    .select("id, name, email, signup_token, token_expires_at")
+    .select("id, name, email, status, signup_token, token_expires_at")
     .eq("org_id", orgId)
     .eq("approved_role", "admin")
     .order("created_at", { ascending: true })
@@ -65,7 +65,9 @@ export async function sendFirstAdminInvite(opts: {
     // lowercased on save can hold the address in mixed case.
     const row = rows?.[0];
     const email = row ? normalizeEmail(row.email) : null;
-    if (!row || !email || email !== normalizeEmail(opts.email)) {
+    // A church admin can deny the request and leave its admin role in place;
+    // sending must not approve it again.
+    if (!row || row.status === "denied" || !email || email !== normalizeEmail(opts.email)) {
       return { sent: false, reason: "not_found" };
     }
 
@@ -85,6 +87,7 @@ export async function sendFirstAdminInvite(opts: {
       })
       .eq("id", row.id)
       .eq("org_id", orgId)
+      .neq("status", "denied")
       .select("id");
     if (updateError) return fail("token update", updateError);
     if (!updated || updated.length === 0) return fail("token update", undefined);

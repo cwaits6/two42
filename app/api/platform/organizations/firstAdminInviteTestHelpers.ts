@@ -13,7 +13,7 @@ export interface FakeServiceOptions {
   /** What provision_organization answers. */
   rpc?: () => { data: unknown; error: unknown };
   /** The founding requests the read returns. */
-  rows?: { id: string; email: string }[];
+  rows?: { id: string; email: string; status?: string }[];
   /** Rows the token update reports as written. */
   updated?: number;
 }
@@ -25,6 +25,10 @@ export function fakeFirstAdminService(options: FakeServiceOptions = {}) {
     const builder = {
       eq(column: string, value: unknown) {
         call.filters.push([column, value]);
+        return builder;
+      },
+      neq(column: string, value: unknown) {
+        call.filters.push([`${column}.neq`, value]);
         return builder;
       },
       order: () => builder,

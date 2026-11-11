@@ -92,6 +92,20 @@ describe("POST /api/platform/organizations/[id]/invite-owner", () => {
     expect(send.mock.calls[0][0].to).toBe("admin@hillside.example");
   });
 
+  it("answers 404 for a first admin request a church admin denied, and approves nothing", async () => {
+    const fake = fakeFirstAdminService({
+      rows: [{ id: "ar-1", email: "admin@hillside.example", status: "denied" }],
+    });
+    createServiceClient.mockResolvedValue(fake.client);
+
+    const res = await sendInvite("admin@hillside.example");
+
+    expect(res.status).toBe(404);
+    expect(fake.calls.filter((c) => c.op === "update")).toEqual([]);
+    expect(reserveEmailQuota).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it("answers 404 when the church's first admin has another email", async () => {
     const fake = fakeFirstAdminService({ rows: [{ id: "ar-1", email: "someone@else.example" }] });
     createServiceClient.mockResolvedValue(fake.client);

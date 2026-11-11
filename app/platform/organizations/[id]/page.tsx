@@ -147,6 +147,9 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
         name: ownerRow.name,
         email: ownerRow.email,
         inviteOutstanding: ownerRow.signup_token !== null,
+        // Setting an account up clears the token and keeps its expiry; a
+        // link never sent, or rolled back after a failed send, has neither.
+        inviteUsed: ownerRow.signup_token === null && ownerRow.token_expires_at !== null,
         tokenExpiresAt: ownerRow.token_expires_at,
       }
     : null;

@@ -994,9 +994,10 @@ export function HouseholdsManager() {
                           <Input
                             id="fm_first"
                             value={memberForm.first_name}
-                            onChange={(e) =>
-                              setMemberForm({ ...memberForm, first_name: e.target.value })
-                            }
+                            onChange={(e) => {
+                              setMemberForm({ ...memberForm, first_name: e.target.value });
+                              setMemberNameErrors((errors) => ({ ...errors, first: undefined }));
+                            }}
                             {...invalidFieldProps("fm_first", memberNameErrors.first)}
                           />
                           <FieldError fieldId="fm_first" message={memberNameErrors.first} />
@@ -1008,9 +1009,10 @@ export function HouseholdsManager() {
                           <Input
                             id="fm_last"
                             value={memberForm.last_name}
-                            onChange={(e) =>
-                              setMemberForm({ ...memberForm, last_name: e.target.value })
-                            }
+                            onChange={(e) => {
+                              setMemberForm({ ...memberForm, last_name: e.target.value });
+                              setMemberNameErrors((errors) => ({ ...errors, last: undefined }));
+                            }}
                             {...invalidFieldProps("fm_last", memberNameErrors.last)}
                           />
                           <FieldError fieldId="fm_last" message={memberNameErrors.last} />

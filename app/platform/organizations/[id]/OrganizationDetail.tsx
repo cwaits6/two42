@@ -42,6 +42,7 @@ export interface OwnerRequest {
   name: string;
   email: string;
   inviteOutstanding: boolean;
+  inviteUsed: boolean;
   tokenExpiresAt: string | null;
 }
 
@@ -346,6 +347,8 @@ export function OrganizationDetail({
                         : ""}
                       . Sending again invalidates the previous link.
                     </>
+                  ) : owner.inviteUsed ? (
+                    <>The invite link was used.</>
                   ) : (
                     <>The invite hasn&apos;t been sent.</>
                   )}
