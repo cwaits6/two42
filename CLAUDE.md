@@ -8,11 +8,11 @@ Next.js + Supabase app for a church small group, deployed on Vercel. Open source
 
 ## Database — hard rules
 
-- **Never touch the remote Supabase project.** No `supabase db push`, no `supabase migration repair` without `--db-url` pointing at local, no direct remote connections. The CI/CD pipeline is the sole owner of remote schema state.
+- **Never touch the remote Supabase project.** No `supabase db push`, no `supabase functions deploy`, no `--remote` on any `supabase` command (nor the older `--linked`, `--project-ref`, or a `--db-url` that is not local), no direct remote connections. Run the CLI as `npx supabase`, the version pinned in `package.json`: it targets the local stack unless told otherwise, and a globally installed older CLI does not. The CI/CD pipeline is the sole owner of remote schema state.
 - **Never run `supabase db reset`.** It wipes local test data. To apply pending migrations locally:
 
   ```bash
-  supabase migration up --db-url postgresql://postgres:postgres@127.0.0.1:54322/postgres
+  npx supabase migration up
   ```
 
 - The local Supabase stack (API `:54321`, Postgres `:54322`, Studio `:54323`) is a **single shared instance** used by every worktree and parallel agent session. Never stop, restart, or reset it.
