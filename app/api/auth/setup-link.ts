@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import type { AccessRequestStatus } from "@/lib/types";
 import { SETUP_STATUS, type SetupAccountResponse } from "./setup-response";
 
 const MAX_TOKEN_LENGTH = 512;
@@ -47,6 +48,30 @@ export async function findSetupAccount(
       : { kind: "error", error };
   }
   return data.user ? { kind: "found", email: data.user.email ?? null } : { kind: "none" };
+}
+
+/** The only status a setup link's access request may have for the link to work. */
+export const SETUP_LINK_STATUS = "approved" satisfies AccessRequestStatus;
+
+type SetupRowFields = { org_id: string | null; token_expires_at: string | null };
+
+export type SetupRowState<T> =
+  | { state: "live"; row: T & { org_id: string } }
+  | { state: "unknown" }
+  | { state: "expired" };
+
+/**
+ * Whether the row a setup link resolved to still works. The form check and the
+ * account creation both decide through this, so a link the form shows can
+ * always be set up and one it calls dead never can.
+ */
+export function classifySetupRow<T extends SetupRowFields>(
+  row: T | null,
+  now: Date = new Date(),
+): SetupRowState<T> {
+  if (!row || !row.org_id) return { state: "unknown" };
+  if (row.token_expires_at && new Date(row.token_expires_at) < now) return { state: "expired" };
+  return { state: "live", row: { ...row, org_id: row.org_id } };
 }
 
 export const INVALID_LINK = { error: "Invalid or expired token" } as const;

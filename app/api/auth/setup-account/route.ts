@@ -8,7 +8,9 @@ import {
 } from "@/app/(auth)/_components/passwordRules";
 import {
   INVALID_LINK,
+  SETUP_LINK_STATUS,
   accountExistsResponse,
+  classifySetupRow,
   deadLinkResponse,
   findSetupAccount,
   readSetupToken,
@@ -56,23 +58,21 @@ export async function POST(request: Request) {
     .from("access_requests")
     .select("id, org_id, name, email, token_expires_at, invite_token, group_id")
     .eq("signup_token", token)
-    .eq("status", "approved")
+    .eq("status", SETUP_LINK_STATUS)
     .maybeSingle();
 
   if (lookupError) {
     logError("Setup account: token lookup failed", lookupError, { route: "/api/auth/setup-account" });
     return invalid();
   }
-  if (!row || !row.org_id) {
-    return deadLinkResponse(service.auth.admin, token, false, logAccountLookup);
-  }
-  if (row.token_expires_at && new Date(row.token_expires_at) < new Date()) {
-    return deadLinkResponse(service.auth.admin, token, true, logAccountLookup);
+  const link = classifySetupRow(row);
+  if (link.state !== "live") {
+    return deadLinkResponse(service.auth.admin, token, link.state === "expired", logAccountLookup);
   }
 
-  const orgId: string = row.org_id;
-  const requestId: string = row.id;
-  const email: string = row.email;
+  const orgId = link.row.org_id;
+  const requestId = link.row.id;
+  const email = link.row.email;
   const userId = setupUserId(token);
   const ids = { user: userId, accessRequest: requestId, org: orgId };
 
@@ -168,7 +168,7 @@ export async function POST(request: Request) {
       email,
       password,
       email_confirm: true,
-      user_metadata: { full_name: row.name },
+      user_metadata: { full_name: link.row.name },
       app_metadata: { org_id: orgId },
     });
     if (createError) {
@@ -209,7 +209,7 @@ export async function POST(request: Request) {
     }
   }
 
-  if (row.invite_token && !(await linkHousehold(row.invite_token))) {
+  if (link.row.invite_token && !(await linkHousehold(link.row.invite_token))) {
     return failed();
   }
   if (!(await consumeLink())) {
@@ -217,6 +217,6 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json<SetupAccountResponse>({
-    redirect: row.group_id ? groupPath(row.group_id, "/dashboard") : "/dashboard",
+    redirect: link.row.group_id ? groupPath(link.row.group_id, "/dashboard") : "/dashboard",
   });
 }

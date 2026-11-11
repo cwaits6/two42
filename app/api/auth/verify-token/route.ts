@@ -1,7 +1,13 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { logError } from "@/lib/log";
-import { INVALID_LINK, deadLinkResponse, readSetupToken } from "../setup-link";
+import {
+  INVALID_LINK,
+  SETUP_LINK_STATUS,
+  classifySetupRow,
+  deadLinkResponse,
+  readSetupToken,
+} from "../setup-link";
 import type { VerifyTokenResponse } from "../setup-response";
 
 const logAccountLookup = (error: unknown) =>
@@ -27,7 +33,7 @@ export async function POST(request: Request) {
     .from("access_requests")
     .select("name, email, status, token_expires_at, org_id")
     .eq("signup_token", token)
-    .eq("status", "approved")
+    .eq("status", SETUP_LINK_STATUS)
     .maybeSingle();
 
   if (error) {
@@ -35,15 +41,10 @@ export async function POST(request: Request) {
     return NextResponse.json(INVALID_LINK, { status: 404 });
   }
 
-  // org_id is NOT NULL in the schema, so a falsy value is an invariant
-  // violation, not expected control flow — fail closed as an invalid token.
-  if (!data || !data.org_id) {
-    return deadLinkResponse(supabase.auth.admin, token, false, logAccountLookup);
+  const link = classifySetupRow(data);
+  if (link.state !== "live") {
+    return deadLinkResponse(supabase.auth.admin, token, link.state === "expired", logAccountLookup);
   }
 
-  if (data.token_expires_at && new Date(data.token_expires_at) < new Date()) {
-    return deadLinkResponse(supabase.auth.admin, token, true, logAccountLookup);
-  }
-
-  return NextResponse.json<VerifyTokenResponse>({ name: data.name, email: data.email });
+  return NextResponse.json<VerifyTokenResponse>({ name: link.row.name, email: link.row.email });
 }
