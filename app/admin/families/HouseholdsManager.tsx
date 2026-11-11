@@ -469,6 +469,17 @@ export function HouseholdsManager() {
     await relabel.submit();
   }
 
+  /** Puts a server 400's name messages on their fields; false when it had none. */
+  async function showServerNameErrors(res: Response | null): Promise<boolean> {
+    if (res?.status !== 400) return false;
+    const data = await res.json().catch(() => null);
+    const fieldErrors: { first_name?: string; last_name?: string } = data?.fieldErrors ?? {};
+    if (!fieldErrors.first_name && !fieldErrors.last_name) return false;
+    setMemberNameErrors({ first: fieldErrors.first_name, last: fieldErrors.last_name });
+    document.getElementById(fieldErrors.first_name ? "fm_first" : "fm_last")?.focus();
+    return true;
+  }
+
   async function saveMember(): Promise<boolean> {
     if (!editing) return false;
     const firstName = titleCaseName(memberForm.first_name);
@@ -491,7 +502,9 @@ export function HouseholdsManager() {
         body: JSON.stringify(payload),
       }).catch(() => null);
       if (!res?.ok) {
-        toast.error(failureMessage(`save ${firstName}`, res ? res.status : "network"));
+        if (!(await showServerNameErrors(res))) {
+          toast.error(failureMessage(`save ${firstName}`, res ? res.status : "network"));
+        }
         setSavingMember(false);
         return false;
       }
@@ -503,7 +516,9 @@ export function HouseholdsManager() {
         body: JSON.stringify(payload),
       }).catch(() => null);
       if (!res?.ok) {
-        toast.error(failureMessage(`add ${firstName}`, res ? res.status : "network"));
+        if (!(await showServerNameErrors(res))) {
+          toast.error(failureMessage(`add ${firstName}`, res ? res.status : "network"));
+        }
         setSavingMember(false);
         return false;
       }

@@ -89,8 +89,8 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isNew = member === null;
-  const effectiveLastName =
-    familySurname && !differentLastName ? familySurname : lastName;
+  const usesFamilySurname = !!familySurname && !differentLastName;
+  const effectiveLastName = usesFamilySurname ? familySurname : lastName;
   const displayFirst = preferredName || firstName || "Member";
   const displayLast = effectiveLastName;
   const initials =
@@ -166,10 +166,11 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
     e.preventDefault();
 
     const first = nameFieldError(titleCaseName(firstName), "first name", true);
-    const last =
-      familySurname && !differentLastName
-        ? undefined
-        : nameFieldError(titleCaseName(lastName), "last name", false);
+    const last = nameFieldError(
+      titleCaseName(usesFamilySurname ? familySurname : lastName),
+      "last name",
+      false,
+    );
     const preferred = nameFieldError(titleCaseName(preferredName), "preferred name", false);
     const found: FieldErrors = {
       ...(first ? { first_name: first } : {}),
@@ -177,22 +178,27 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
       ...(preferred ? { preferred_name: preferred } : {}),
       ...birthdayErrors(birthday),
     };
-    setErrors(found);
-    const firstInvalid = Object.keys(found)[0];
-    if (firstInvalid) {
-      setFocusTarget({ id: firstInvalid });
-      return;
-    }
+    if (showErrors(found)) return;
 
     await relabel.submit();
+  }
+
+  /** Shows the messages and focuses the first field; false when there are none. */
+  function showErrors(found: FieldErrors): boolean {
+    setErrors(found);
+    const firstInvalid = Object.keys(found)[0];
+    if (!firstInvalid) return false;
+    setFocusTarget({
+      id: firstInvalid === "last_name" && usesFamilySurname ? "different_last_name" : firstInvalid,
+    });
+    return true;
   }
 
   async function save(): Promise<boolean> {
     setSaving(true);
 
     const first = titleCaseName(firstName);
-    const last =
-      familySurname && !differentLastName ? familySurname : titleCaseName(lastName);
+    const last = usesFamilySurname ? familySurname : titleCaseName(lastName);
 
     const payload = {
       first_name: first,
@@ -215,6 +221,10 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
     setSaving(false);
 
     if (!res.ok) {
+      if (res.status === 400) {
+        const data = await res.json().catch(() => null);
+        if (data?.fieldErrors && showErrors(data.fieldErrors)) return false;
+      }
       toast.error(failureMessage(`save ${first}`, res.status));
       return false;
     }
@@ -294,7 +304,11 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
                 id="different_last_name"
                 label={`Last name is different from the household's (${familySurname})`}
                 checked={differentLastName}
-                onChange={setDifferentLastName}
+                onChange={(checked) => {
+                  setDifferentLastName(checked);
+                  clearError("last_name");
+                }}
+                error={usesFamilySurname ? errors.last_name : undefined}
               />
             )}
             {(!familySurname || differentLastName) && (

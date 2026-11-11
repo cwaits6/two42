@@ -79,12 +79,12 @@ let root: Root;
 const onSaved = vi.fn();
 const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
 
-async function mount(member: FamilyMember) {
+async function mount(member: FamilyMember, family: FamilyUnit = FAMILY) {
   const host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
   await act(async () => {
-    root.render(createElement(FamilyMemberForm, { member, family: FAMILY, onSaved }));
+    root.render(createElement(FamilyMemberForm, { member, family, onSaved }));
   });
 }
 
@@ -279,5 +279,32 @@ describe("name checks", () => {
     expect(field.getAttribute("aria-invalid")).toBe("true");
     expect(document.body.textContent).toContain("Use 100 characters or fewer.");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses an over-long household surname on the surname choice and saves nothing", async () => {
+    const surname = "Mock".repeat(26);
+    await mount({ ...ADULT, last_name: surname }, { ...FAMILY, family_name: surname });
+    await click("Save changes");
+
+    const choice = document.getElementById("different_last_name")!;
+    expect(choice.getAttribute("aria-invalid")).toBe("true");
+    expect(document.body.textContent).toContain("Use 100 characters or fewer.");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("puts the server's name message on its field instead of a toast", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ fieldErrors: { first_name: "Enter a first name." } }), {
+        status: 400,
+      }),
+    );
+    await mount({ ...ADULT, birth_year: null });
+    await click("Save changes");
+
+    const field = document.getElementById("first_name")!;
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+    expect(document.body.textContent).toContain("Enter a first name.");
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
   });
 });
