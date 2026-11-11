@@ -113,6 +113,7 @@ export function AvatarCropStep({
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (saving) return;
     const previous = pointers.current.get(e.pointerId);
     if (!previous) return;
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -131,6 +132,7 @@ export function AvatarCropStep({
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (saving) return;
     const step = e.shiftKey ? MOVE_STEP_LARGE : MOVE_STEP;
     switch (e.key) {
       case "ArrowLeft":
@@ -190,7 +192,8 @@ export function AvatarCropStep({
       <DialogContent
         finalFocus={returnFocusRef}
         showCloseButton={!saving}
-        className="motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none"
+        // Below 352px the default margin and padding leave less room than the fixed crop frame.
+        className="max-[351px]:max-w-[calc(100%-1rem)] max-[351px]:p-2 motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none"
       >
         <DialogHeader>
           <DialogTitle>Crop photo</DialogTitle>
