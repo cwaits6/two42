@@ -103,7 +103,7 @@ describe("POST /api/platform/organizations/[id]/invite-owner", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("refuses with a message when the church is at its daily email limit", async () => {
+  it("refuses without claiming the limit was reached, since a failed quota check answers the same", async () => {
     const fake = fakeFirstAdminService({ rows: [{ id: "ar-1", email: "admin@hillside.example" }] });
     createServiceClient.mockResolvedValue(fake.client);
     reserveEmailQuota.mockResolvedValue(false);
@@ -111,7 +111,9 @@ describe("POST /api/platform/organizations/[id]/invite-owner", () => {
     const res = await sendInvite("admin@hillside.example");
 
     expect(res.status).toBe(409);
-    expect((await res.json()).error).toMatch(/reached today's email limit/);
+    expect((await res.json()).error).toBe(
+      "The invite wasn't sent. This organization may have reached today's email limit. Try again later, or raise the limit on this page.",
+    );
     expect(fake.calls.some((c) => c.op === "update")).toBe(false);
     expect(send).not.toHaveBeenCalled();
   });

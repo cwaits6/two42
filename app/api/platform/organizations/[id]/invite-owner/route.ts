@@ -48,10 +48,11 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     case "limit":
       // 409 so the church page shows this text rather than a generic failure.
+      // Hedged: the quota check refuses the same way when it errors.
       return NextResponse.json(
         {
           error:
-            "This organization has reached today's email limit. Raise the limit on this page or send the invite tomorrow.",
+            "The invite wasn't sent. This organization may have reached today's email limit. Try again later, or raise the limit on this page.",
         },
         { status: 409 }
       );
