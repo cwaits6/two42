@@ -1,12 +1,18 @@
+import { nameFieldError } from "@/lib/nameField";
 import { normalizePhone, titleCaseName } from "@/lib/sanitize";
 import { anniversaryErrors, birthdayErrors, type DateParts } from "@/components/profile/birthday";
 
 /** Messages keyed by the id of the field they belong to, in the order the fields appear. */
 export type StepErrors = Record<string, string>;
 
+function addNameError(found: StepErrors, field: string, message: string | undefined) {
+  if (message) found[field] = message;
+}
+
 export interface AboutYouFields {
   firstName: string;
   lastName: string;
+  preferredName: string;
   birthMonth: string;
   birthDay: string;
   birthYear: string;
@@ -14,8 +20,13 @@ export interface AboutYouFields {
 
 export function aboutYouErrors(v: AboutYouFields): StepErrors {
   const found: StepErrors = {};
-  if (!titleCaseName(v.firstName)) found.first_name = "Enter a first name.";
-  if (!titleCaseName(v.lastName)) found.last_name = "Enter a last name.";
+  addNameError(found, "first_name", nameFieldError(titleCaseName(v.firstName), "first name", true));
+  addNameError(found, "last_name", nameFieldError(titleCaseName(v.lastName), "last name", true));
+  addNameError(
+    found,
+    "preferred_name",
+    nameFieldError(titleCaseName(v.preferredName), "preferred name", false),
+  );
   return {
     ...found,
     ...birthdayErrors({ month: v.birthMonth, day: v.birthDay, year: v.birthYear }),
@@ -55,7 +66,8 @@ export interface PersonDraft {
 /** Errors for the add-a-person form, keyed by its `add_`-prefixed field ids. */
 export function personErrors(draft: PersonDraft): StepErrors {
   const found: StepErrors = {};
-  if (!titleCaseName(draft.first_name)) found.add_first_name = "Enter a first name.";
+  addNameError(found, "add_first_name", nameFieldError(titleCaseName(draft.first_name), "first name", true));
+  addNameError(found, "add_last_name", nameFieldError(titleCaseName(draft.last_name), "last name", false));
   const birthday = birthdayErrors({
     month: draft.birth_month,
     day: draft.birth_day,

@@ -470,6 +470,25 @@ describe("planImport error codes", () => {
     expect(plan.rows[0].errors[0].code).toBe("INVALID_EMAIL");
   });
 
+  it("refuses a name over 100 characters on its field, with the profile form's message", () => {
+    const long = "A".repeat(101);
+    const plan = planImport(
+      [
+        makeRow({ household_name: "X", last_name: long }),
+        makeRow({ line: 2, household_name: "Y", preferred_name: long, first_name: long }),
+        makeRow({ line: 3, household_name: "Z", last_name: "B".repeat(100) }),
+      ],
+      emptySnapshot
+    );
+    expect(plan.rows[0].action).toBe("error");
+    expect(plan.rows[0].errors).toEqual([
+      { code: "NAME_TOO_LONG", field: "last_name", message: "Use 100 characters or fewer." },
+    ]);
+    expect(plan.rows[1].errors.map((e) => e.field)).toEqual(["first_name", "preferred_name"]);
+    expect(plan.rows[2].errors).toEqual([]);
+    expect(plan.writes.filter((w) => "line" in w && w.line !== 3)).toEqual([]);
+  });
+
   it("reports INVALID_DATE for an impossible anniversary", () => {
     const plan = planImport(
       [makeRow({ household_name: "X", anniversary: "2020-02-30" })],
@@ -1318,6 +1337,30 @@ describe("planImport semantics", () => {
       },
     ]);
     expect(plan.summary.groupAssignments).toBe(1);
+  });
+
+  it("keeps a preferred name the import capitalized when the same file is imported again", () => {
+    const snapshot = makeFixtureSnapshot();
+    snapshot.familyMembers = snapshot.familyMembers.map((m) =>
+      m.id === "m1" ? { ...m, preferred_name: "Kiddo" } : m
+    );
+    const plan = planImport(
+      [
+        makeRow({
+          first_name: "kid",
+          last_name: "alpha",
+          birth_month: 3,
+          birth_day: 3,
+          birth_year: 2015,
+          household_name: "Alpha",
+          relationship: "child",
+          preferred_name: "kiddo",
+        }),
+      ],
+      snapshot
+    );
+    expect(plan.rows[0].action).toBe("no_change");
+    expect(plan.writes).toEqual([]);
   });
 
   it("updates a matched family member's changed fields only", () => {

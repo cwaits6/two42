@@ -37,6 +37,7 @@ import { EmptyState } from "@/components/states/EmptyState";
 import { ErrorState } from "@/components/states/ErrorState";
 import { LoadingState } from "@/components/states/LoadingState";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
+import { nameFieldError } from "@/lib/nameField";
 import { AnniversaryFields } from "@/components/profile/AnniversaryFields";
 import { MonthSelect } from "@/components/profile/MonthSelect";
 import { birthdayErrors, birthdayErrorsWithoutYear, type BirthdayErrors } from "@/components/profile/birthday";
@@ -148,7 +149,7 @@ export function HouseholdsManager() {
   const [removingMember, setRemovingMember] = useState<FamilyMember | null>(null);
   const [form, setForm] = useState<HouseholdFormState>(EMPTY_FORM);
   const [formErrors, setFormErrors] = useState<HouseholdErrors>({});
-  const [memberNameError, setMemberNameError] = useState<string | undefined>();
+  const [memberNameErrors, setMemberNameErrors] = useState<{ first?: string; last?: string }>({});
   const [memberBirthErrors, setMemberBirthErrors] = useState<BirthdayErrors>({});
   const [saving, setSaving] = useState(false);
 
@@ -402,11 +403,11 @@ export function HouseholdsManager() {
     setShowMemberForm(false);
     setEditingMember(null);
     setMemberForm(EMPTY_MEMBER_FORM);
-    setMemberNameError(undefined);
+    setMemberNameErrors({});
   }
 
   function startAddMember() {
-    setMemberNameError(undefined);
+    setMemberNameErrors({});
     setMemberBirthErrors({});
     setEditingMember(null);
     setMemberForm(EMPTY_MEMBER_FORM);
@@ -414,7 +415,7 @@ export function HouseholdsManager() {
   }
 
   function startEditMember(fm: FamilyMember) {
-    setMemberNameError(undefined);
+    setMemberNameErrors({});
     setMemberBirthErrors({});
     setEditingMember(fm);
     setMemberForm({
@@ -449,10 +450,14 @@ export function HouseholdsManager() {
       day: memberForm.birth_day,
       year: birthYear,
     });
-    setMemberNameError(firstName ? undefined : "Enter a first name.");
+    const nameErrors = {
+      first: nameFieldError(firstName, "first name", true),
+      last: nameFieldError(titleCaseName(memberForm.last_name), "last name", false),
+    };
+    setMemberNameErrors(nameErrors);
     setMemberBirthErrors(birthErrors);
-    if (!firstName) {
-      document.getElementById("fm_first")?.focus();
+    if (nameErrors.first || nameErrors.last) {
+      document.getElementById(nameErrors.first ? "fm_first" : "fm_last")?.focus();
       return;
     }
     const firstBirthError = Object.keys(birthErrors)[0];
@@ -989,12 +994,13 @@ export function HouseholdsManager() {
                           <Input
                             id="fm_first"
                             value={memberForm.first_name}
-                            onChange={(e) =>
-                              setMemberForm({ ...memberForm, first_name: e.target.value })
-                            }
-                            {...invalidFieldProps("fm_first", memberNameError)}
+                            onChange={(e) => {
+                              setMemberForm({ ...memberForm, first_name: e.target.value });
+                              setMemberNameErrors((errors) => ({ ...errors, first: undefined }));
+                            }}
+                            {...invalidFieldProps("fm_first", memberNameErrors.first)}
                           />
-                          <FieldError fieldId="fm_first" message={memberNameError} />
+                          <FieldError fieldId="fm_first" message={memberNameErrors.first} />
                         </div>
                         <div className="space-y-1">
                           <Label htmlFor="fm_last">
@@ -1003,10 +1009,13 @@ export function HouseholdsManager() {
                           <Input
                             id="fm_last"
                             value={memberForm.last_name}
-                            onChange={(e) =>
-                              setMemberForm({ ...memberForm, last_name: e.target.value })
-                            }
+                            onChange={(e) => {
+                              setMemberForm({ ...memberForm, last_name: e.target.value });
+                              setMemberNameErrors((errors) => ({ ...errors, last: undefined }));
+                            }}
+                            {...invalidFieldProps("fm_last", memberNameErrors.last)}
                           />
+                          <FieldError fieldId="fm_last" message={memberNameErrors.last} />
                         </div>
                       </div>
 

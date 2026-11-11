@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { logError } from "@/lib/log";
+import { memberNames } from "@/lib/nameField";
 
 /** POST /api/admin/family-members — create a new family member record */
 export async function POST(request: Request) {
@@ -27,9 +28,6 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const {
     family_id,
-    first_name,
-    last_name,
-    preferred_name,
     relationship,
     birth_month,
     birth_day,
@@ -37,20 +35,24 @@ export async function POST(request: Request) {
     is_class_member,
   } = body;
 
-  if (!family_id || !first_name || !relationship) {
+  if (!family_id || !relationship) {
     return NextResponse.json(
-      { error: "family_id, first_name, and relationship are required" },
+      { error: "family_id and relationship are required" },
       { status: 400 },
     );
+  }
+  const { names, fieldErrors } = memberNames(body, "create");
+  if (Object.keys(fieldErrors).length > 0) {
+    return NextResponse.json({ fieldErrors }, { status: 400 });
   }
 
   const { data, error } = await supabase
     .from("family_members")
     .insert({
       family_id,
-      first_name,
-      last_name: last_name || null,
-      preferred_name: preferred_name || null,
+      first_name: names.first_name ?? "",
+      last_name: names.last_name ?? null,
+      preferred_name: names.preferred_name ?? null,
       relationship,
       birth_month: birth_month ? Number(birth_month) : null,
       birth_day: birth_day ? Number(birth_day) : null,

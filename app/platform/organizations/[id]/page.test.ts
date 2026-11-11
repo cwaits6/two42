@@ -34,7 +34,7 @@ const { default: PlatformOrganizationPage } = await import("./page");
 
 type Element = {
   type?: unknown;
-  props: { children?: unknown; emailCap?: unknown; emailDomain?: unknown; thing?: string };
+  props: { children?: unknown; emailCap?: unknown; emailDomain?: unknown; owner?: unknown; thing?: string };
 };
 
 async function renderedChildren(): Promise<Element[]> {
@@ -88,6 +88,18 @@ describe("PlatformOrganizationPage", () => {
     const loaded = await renderedDetail();
 
     expect(loaded.props.emailCap).toEqual({ dailyCap: 200, hasOverride: true, usedToday: 3 });
+  });
+
+  it("tells a used invite link from one never sent and one still outstanding", async () => {
+    const row = { id: "ar-1", name: "Ada", email: "ada@example.test", status: "approved" };
+    const ownerFor = async (signup_token: string | null, token_expires_at: string | null) => {
+      results.access_requests = { data: [{ ...row, signup_token, token_expires_at }], error: null };
+      return (await renderedDetail()).props.owner;
+    };
+
+    expect(await ownerFor(null, null)).toMatchObject({ inviteOutstanding: false, inviteUsed: false });
+    expect(await ownerFor("t", "2026-11-18T00:00:00Z")).toMatchObject({ inviteOutstanding: true, inviteUsed: false });
+    expect(await ownerFor(null, "2026-11-18T00:00:00Z")).toMatchObject({ inviteOutstanding: false, inviteUsed: true });
   });
 
   it("shows a failed read of the organization, not the list as if it were missing", async () => {

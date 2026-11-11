@@ -30,6 +30,7 @@ import {
 import { useRelabelToChild } from "@/components/household/useRelabelToChild";
 import { isChildWithoutAccount } from "@/lib/household";
 import { titleCaseName } from "@/lib/sanitize";
+import { nameFieldError, type MemberNameErrors } from "@/lib/nameField";
 import { mintSignedUrl, uploadImage } from "@/lib/uploadImage";
 import { relObjectPath } from "@/lib/storagePaths";
 import type { FamilyMember, FamilyMemberRelationship, FamilyUnit } from "@/lib/types";
@@ -43,7 +44,7 @@ const RELATIONSHIPS: { value: FamilyMemberRelationship; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-type FieldErrors = BirthdayErrors & { first_name?: string };
+type FieldErrors = BirthdayErrors & MemberNameErrors;
 
 interface Props {
   /** null = creating new member */
@@ -84,8 +85,8 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isNew = member === null;
-  const effectiveLastName =
-    familySurname && !differentLastName ? familySurname : lastName;
+  const usesFamilySurname = !!familySurname && !differentLastName;
+  const effectiveLastName = usesFamilySurname ? familySurname : lastName;
   const displayFirst = preferredName || firstName || "Member";
   const displayLast = effectiveLastName;
   const initials =
@@ -160,27 +161,40 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    const first = titleCaseName(firstName);
+    const first = nameFieldError(titleCaseName(firstName), "first name", true);
+    const last = nameFieldError(
+      titleCaseName(usesFamilySurname ? familySurname : lastName),
+      "last name",
+      false,
+    );
+    const preferred = nameFieldError(titleCaseName(preferredName), "preferred name", false);
     const found: FieldErrors = {
-      ...(first ? {} : { first_name: "Enter a first name." }),
+      ...(first ? { first_name: first } : {}),
+      ...(last ? { last_name: last } : {}),
+      ...(preferred ? { preferred_name: preferred } : {}),
       ...birthdayErrors(birthday),
     };
-    setErrors(found);
-    const firstInvalid = Object.keys(found)[0];
-    if (firstInvalid) {
-      setFocusTarget({ id: firstInvalid });
-      return;
-    }
+    if (showErrors(found)) return;
 
     await relabel.submit();
+  }
+
+  /** Shows the messages and focuses the first field; false when there are none. */
+  function showErrors(found: FieldErrors): boolean {
+    setErrors(found);
+    const firstInvalid = Object.keys(found)[0];
+    if (!firstInvalid) return false;
+    setFocusTarget({
+      id: firstInvalid === "last_name" && usesFamilySurname ? "different_last_name" : firstInvalid,
+    });
+    return true;
   }
 
   async function save(): Promise<boolean> {
     setSaving(true);
 
     const first = titleCaseName(firstName);
-    const last =
-      familySurname && !differentLastName ? familySurname : titleCaseName(lastName);
+    const last = usesFamilySurname ? familySurname : titleCaseName(lastName);
 
     const payload = {
       first_name: first,
@@ -282,7 +296,11 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
                 id="different_last_name"
                 label={`Last name is different from the household's (${familySurname})`}
                 checked={differentLastName}
-                onChange={setDifferentLastName}
+                onChange={(checked) => {
+                  setDifferentLastName(checked);
+                  clearError("last_name");
+                }}
+                error={usesFamilySurname ? errors.last_name : undefined}
               />
             )}
             {(!familySurname || differentLastName) && (
@@ -293,10 +311,15 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
                 <Input
                   id="last_name"
                   value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
+                  onChange={(e) => {
+                    setLastName(e.target.value);
+                    clearError("last_name");
+                  }}
                   onBlur={(e) => setLastName(titleCaseName(e.target.value) || "")}
                   className="text-base py-5"
+                  {...invalidFieldProps("last_name", errors.last_name)}
                 />
+                <FieldError fieldId="last_name" message={errors.last_name} />
               </div>
             )}
           </div>
@@ -309,10 +332,15 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
             <Input
               id="preferred_name"
               value={preferredName}
-              onChange={(e) => setPreferredName(e.target.value)}
+              onChange={(e) => {
+                setPreferredName(e.target.value);
+                clearError("preferred_name");
+              }}
               onBlur={(e) => setPreferredName(titleCaseName(e.target.value) || "")}
               className="text-base py-5"
+              {...invalidFieldProps("preferred_name", errors.preferred_name)}
             />
+            <FieldError fieldId="preferred_name" message={errors.preferred_name} />
           </div>
 
           <div className="space-y-2">

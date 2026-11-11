@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { titleCaseName } from "@/lib/sanitize";
+import { memberNames } from "@/lib/nameField";
 import { isMemberRole } from "@/lib/roles";
 import { logError } from "@/lib/log";
 
@@ -64,26 +64,13 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const {
-    first_name,
-    last_name,
-    preferred_name,
-    relationship,
-    birth_month,
-    birth_day,
-    birth_year,
-    is_class_member,
-    avatar_url,
-  } = body;
+  const { relationship, birth_month, birth_day, birth_year, is_class_member, avatar_url } = body;
 
-  const updates: Record<string, unknown> = {};
-  if (first_name !== undefined) {
-    const name = titleCaseName(String(first_name));
-    if (!name) return NextResponse.json({ error: "first_name cannot be empty" }, { status: 400 });
-    updates.first_name = name;
+  const { names, fieldErrors } = memberNames(body, "update");
+  if (Object.keys(fieldErrors).length > 0) {
+    return NextResponse.json({ fieldErrors }, { status: 400 });
   }
-  if (last_name !== undefined) updates.last_name = titleCaseName(String(last_name ?? "")) || null;
-  if (preferred_name !== undefined) updates.preferred_name = titleCaseName(String(preferred_name ?? "")) || null;
+  const updates: Record<string, unknown> = { ...names };
   if (relationship !== undefined) updates.relationship = relationship;
   if (birth_month !== undefined) updates.birth_month = birth_month ? Number(birth_month) : null;
   if (birth_day !== undefined) updates.birth_day = birth_day ? Number(birth_day) : null;

@@ -12,6 +12,7 @@ import {
   type OrgDetail,
   type OwnerRequest,
 } from "./OrganizationDetail";
+import { foundingRequestQuery } from "@/app/api/platform/organizations/firstAdminInvite";
 import { pageTitle } from "@/lib/pageTitle";
 import { logError } from "@/lib/log";
 
@@ -63,13 +64,7 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
 
   if (!org) redirect("/platform/organizations");
 
-  const { data: ownerRequests, error: ownerError } = await service
-    .from("access_requests")
-    .select("name, email, signup_token, token_expires_at")
-    .eq("org_id", id)
-    .eq("approved_role", "admin")
-    .order("created_at", { ascending: true })
-    .limit(1);
+  const { data: ownerRequests, error: ownerError } = await foundingRequestQuery(service, org.id);
 
   // A failed read here would render "No founding-admin request exists",
   // which could lead an operator to provision a second owner.
@@ -152,6 +147,9 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
         name: ownerRow.name,
         email: ownerRow.email,
         inviteOutstanding: ownerRow.signup_token !== null,
+        // Setting an account up clears the token and keeps its expiry; a
+        // link never sent, or rolled back after a failed send, has neither.
+        inviteUsed: ownerRow.signup_token === null && ownerRow.token_expires_at !== null,
         tokenExpiresAt: ownerRow.token_expires_at,
       }
     : null;

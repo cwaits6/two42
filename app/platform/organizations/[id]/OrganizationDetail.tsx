@@ -42,6 +42,7 @@ export interface OwnerRequest {
   name: string;
   email: string;
   inviteOutstanding: boolean;
+  inviteUsed: boolean;
   tokenExpiresAt: string | null;
 }
 
@@ -328,7 +329,7 @@ export function OrganizationDetail({
           {owner ? (
             <>
               <div>
-                <p className="text-xl font-semibold">{owner.email}</p>
+                <p className="text-xl font-semibold break-all">{owner.email}</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {owner.inviteOutstanding ? (
                     <>
@@ -346,8 +347,10 @@ export function OrganizationDetail({
                         : ""}
                       . Sending again invalidates the previous link.
                     </>
+                  ) : owner.inviteUsed ? (
+                    <>The invite link was used.</>
                   ) : (
-                    <>No invite has been sent yet.</>
+                    <>The invite hasn&apos;t been sent.</>
                   )}
                 </p>
               </div>
@@ -386,9 +389,10 @@ export function OrganizationDetail({
                 {emailCap.hasOverride ? "" : " (platform default)"}
               </p>
               <p className="text-sm text-muted-foreground">
-                The most reminder, broadcast and notification emails this
-                organization can send in a day. Invite and approval emails are
-                not counted. Set 0 to stop the counted emails.
+                The most emails this organization can send in a day. Invites a
+                church admin or a household member sends, approval emails, and
+                the confirmation sent when someone signs up to serve are not
+                counted. Set 0 to stop the counted emails.
               </p>
               <div className="space-y-2">
                 <Label htmlFor="email-daily-cap">Emails per day</Label>

@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { titleCaseName } from "@/lib/sanitize";
+import { memberNames } from "@/lib/nameField";
 import { isMemberRole } from "@/lib/roles";
 import { logError } from "@/lib/log";
 
@@ -67,28 +67,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const {
-    first_name,
-    last_name,
-    preferred_name,
-    relationship,
-    birth_month,
-    birth_day,
-    birth_year,
-    is_class_member,
-  } = body;
+  const { relationship, birth_month, birth_day, birth_year, is_class_member } = body;
 
-  const firstName = titleCaseName(String(first_name ?? ""));
-  if (!firstName) return NextResponse.json({ error: "first_name is required" }, { status: 400 });
+  const { names, fieldErrors } = memberNames(body, "create");
+  if (Object.keys(fieldErrors).length > 0) {
+    return NextResponse.json({ fieldErrors }, { status: 400 });
+  }
   if (!relationship) return NextResponse.json({ error: "relationship is required" }, { status: 400 });
 
   const { data, error } = await supabase
     .from("family_members")
     .insert({
       family_id: ctx.profile.family_id,
-      first_name: firstName,
-      last_name: titleCaseName(String(last_name ?? "")) || null,
-      preferred_name: titleCaseName(String(preferred_name ?? "")) || null,
+      first_name: names.first_name ?? "",
+      last_name: names.last_name ?? null,
+      preferred_name: names.preferred_name ?? null,
       relationship,
       birth_month: birth_month ? Number(birth_month) : null,
       birth_day: birth_day ? Number(birth_day) : null,

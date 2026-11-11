@@ -128,6 +128,25 @@ describe("POST /api/admin/members/invite", () => {
     expect(inserts[2].payload?.invite_token).toBe("family_invites-token");
   });
 
+  it("saves the names capitalized and the email lowercased, whatever was typed", async () => {
+    const fake = fakeServiceClient();
+    createServiceClient.mockResolvedValue(fake.client);
+    const householdId = "6f1c2b9e-3a4d-4c5e-8f60-718293a4b5c6";
+
+    const res = await POST(
+      inviteRequest({ email: "Name@Example.COM", firstName: "john", lastName: "MCDONALD", householdId })
+    );
+
+    expect(res.status).toBe(200);
+    const inserts = fake.calls.filter((c) => c.op === "insert");
+    expect(inserts[0].payload).toMatchObject({ first_name: "John", last_name: "McDonald" });
+    expect(inserts[2].payload).toMatchObject({
+      email: "name@example.com",
+      name: "John McDonald",
+    });
+    expect(send.mock.calls[0][0].to).toBe("name@example.com");
+  });
+
   it("reports an email that already has an account and sends nothing", async () => {
     const fake = fakeServiceClient({
       existing: { profiles: [{ email: "ana@example.com" }] },

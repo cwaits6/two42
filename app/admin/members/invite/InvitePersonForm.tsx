@@ -18,6 +18,7 @@ import {
   type InvitePersonErrors,
   type InvitePersonField,
 } from "@/lib/members/invite-form";
+import { titleCaseName } from "@/lib/sanitize";
 
 interface HouseholdOption {
   value: string;
@@ -130,6 +131,7 @@ export function InvitePersonForm({
         value={form.firstName}
         error={errors.firstName}
         onChange={(v) => update("firstName", v)}
+        onBlur={(v) => setForm((prev) => ({ ...prev, firstName: titleCaseName(v) ?? "" }))}
       />
       <TextField
         id="invite-last-name"
@@ -138,6 +140,7 @@ export function InvitePersonForm({
         value={form.lastName}
         error={errors.lastName}
         onChange={(v) => update("lastName", v)}
+        onBlur={(v) => setForm((prev) => ({ ...prev, lastName: titleCaseName(v) ?? "" }))}
       />
 
       <div className="space-y-2">
@@ -193,6 +196,7 @@ function TextField({
   value,
   error,
   onChange,
+  onBlur,
   type = "text",
   autoComplete,
 }: {
@@ -201,6 +205,7 @@ function TextField({
   value: string;
   error?: string;
   onChange: (value: string) => void;
+  onBlur?: (value: string) => void;
   type?: string;
   autoComplete?: string;
 }) {
@@ -215,6 +220,7 @@ function TextField({
         autoComplete={autoComplete}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur ? (e) => onBlur(e.target.value) : undefined}
         {...invalidFieldProps(id, error)}
         className="text-lg"
       />

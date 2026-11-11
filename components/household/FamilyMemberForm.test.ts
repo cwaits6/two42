@@ -79,12 +79,12 @@ let root: Root;
 const onSaved = vi.fn();
 const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
 
-async function mount(member: FamilyMember) {
+async function mount(member: FamilyMember, family: FamilyUnit = FAMILY) {
   const host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
   await act(async () => {
-    root.render(createElement(FamilyMemberForm, { member, family: FAMILY, onSaved }));
+    root.render(createElement(FamilyMemberForm, { member, family, onSaved }));
   });
 }
 
@@ -267,5 +267,28 @@ describe("clearing a birthday", () => {
     await click("No date");
     expect(document.getElementById("birth_day")!.hasAttribute("aria-invalid")).toBe(false);
     expect(document.body.textContent).not.toContain("Enter the day of the birthday.");
+  });
+});
+
+describe("name checks", () => {
+  it("refuses an over-long preferred name on its field and saves nothing", async () => {
+    await mount({ ...ADULT, preferred_name: "x".repeat(101) });
+    await click("Save changes");
+
+    const field = document.getElementById("preferred_name")!;
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+    expect(document.body.textContent).toContain("Use 100 characters or fewer.");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses an over-long household surname on the surname choice and saves nothing", async () => {
+    const surname = "Mock".repeat(26);
+    await mount({ ...ADULT, last_name: surname }, { ...FAMILY, family_name: surname });
+    await click("Save changes");
+
+    const choice = document.getElementById("different_last_name")!;
+    expect(choice.getAttribute("aria-invalid")).toBe("true");
+    expect(document.body.textContent).toContain("Use 100 characters or fewer.");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
