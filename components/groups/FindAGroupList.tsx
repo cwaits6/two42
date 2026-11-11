@@ -4,10 +4,10 @@ import { Users } from "lucide-react";
 import { DirRow } from "@/components/directory/DirRow";
 import { GroupAvatar } from "@/components/directory/GroupAvatar";
 import { ErrorState } from "@/components/states/ErrorState";
-import { groupColor } from "@/components/directory/groupColor";
 import { GroupJoinAction } from "@/components/groups/GroupJoinAction";
 import { useDiscoverableGroups } from "@/components/groups/useDiscoverableGroups";
 import { EmptyState } from "@/components/states/EmptyState";
+import { groupColor } from "@/lib/groups/calendar";
 import { discoveryRowSubtitle, type DiscoverableGroup } from "@/lib/groups/joining";
 
 export const NO_GROUPS_TEXT = "No groups are open to join yet.";

@@ -1,7 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { HEX } from "@/lib/contrast";
 import { logError } from "@/lib/log";
 
 export const GROUP_DEFAULT_COLOR = "#B85C38";
+
+/** A calendar color as it may reach CSS: the color when it passes HEX, otherwise the default. */
+export function groupColor(color: string | null): string {
+  return color !== null && HEX.test(color) ? color : GROUP_DEFAULT_COLOR;
+}
 
 export type GroupCalendar = { id: string; name: string; color: string | null };
 

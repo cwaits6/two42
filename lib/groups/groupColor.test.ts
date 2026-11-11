@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupColor } from "@/components/directory/groupColor";
-import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
+import { GROUP_DEFAULT_COLOR, groupColor } from "@/lib/groups/calendar";
 
 describe("groupColor", () => {
   it("uses the group's own color", () => {

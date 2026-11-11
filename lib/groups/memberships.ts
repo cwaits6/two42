@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import { HEX } from "@/lib/contrast";
-import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
+import { GROUP_DEFAULT_COLOR, groupColor } from "@/lib/groups/calendar";
 import type { ActiveGroup, GroupRole } from "@/lib/groups/active";
 import { logError } from "@/lib/log";
 
@@ -27,8 +26,8 @@ function groupName(row: MembershipRow): string {
  * The viewer's groups, ordered by joined_at so "first membership" is
  * deterministic. A group's color is its calendar's color (the first
  * calendar by created_at), Clay when the group has none. The value reaches
- * CSS, so it passes HEX here. The client is a parameter and so untyped as
- * to privilege; `orgId` must be the caller's already-validated org and the
+ * CSS, so it goes through groupColor(). The client is a parameter and so
+ * untyped as to privilege; `orgId` must be the caller's already-validated org and the
  * predicate is mandatory. A query error is thrown rather than reported as
  * an empty list, so a database failure cannot read as "not a member".
  */
@@ -71,10 +70,7 @@ export async function loadGroupMemberships(
   const colors = new Map<string, string>();
   for (const calendar of (calendars ?? []) as CalendarRow[]) {
     if (colors.has(calendar.group_id)) continue;
-    colors.set(
-      calendar.group_id,
-      calendar.color && HEX.test(calendar.color) ? calendar.color : GROUP_DEFAULT_COLOR
-    );
+    colors.set(calendar.group_id, groupColor(calendar.color));
   }
 
   return rows.map((row) => ({
