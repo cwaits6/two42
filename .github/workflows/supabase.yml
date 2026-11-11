@@ -48,7 +48,22 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Lint migrations
-        run: npx supabase db lint --linked
+        run: npx supabase db lint --remote
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      # Read-only: lists what the migrate job will push after merge.
+      - name: List migrations a merge would push
+        run: npx supabase db push --remote --dry-run
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      # One-off proof of the migrate job's dump step on the bumped CLI;
+      # remove once it has passed.
+      - name: Dump schema (discarded)
+        run: npx supabase db dump --remote --schema public -f "$RUNNER_TEMP/schema.sql" && test -s "$RUNNER_TEMP/schema.sql"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
@@ -85,7 +100,7 @@ jobs:
       # supabase/tests/site_settings_rls.sql predates pgTAP (plain SQL, no
       # TAP output) and would fail pg_prove; every other supabase/tests/*.sql
       # is discovered automatically so new suites can't be silently skipped.
-      - name: Run pgTAP suite (local only — never --linked)
+      - name: Run pgTAP suite (local only — never --remote)
         run: |
           files=()
           while IFS= read -r -d '' f; do files+=("$f"); done \
@@ -219,18 +234,18 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Deploy edge functions
-        run: npx supabase functions deploy send-event-reminders send-serving-reminders clean-up-expired-data
+        run: npx supabase functions deploy send-event-reminders send-serving-reminders clean-up-expired-data --yes
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Push migrations
-        run: npx supabase db push
+        run: npx supabase db push --remote --yes
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Dump schema
-        run: npx supabase db dump --schema public -f supabase/schema.sql
+        run: npx supabase db dump --remote --schema public -f supabase/schema.sql
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}

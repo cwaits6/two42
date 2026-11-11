@@ -6,6 +6,13 @@
   "lockFileMaintenance": {
     "automergeSchedule": ["at any time"]
   },
+  // npm-12-guard: watched by .github/workflows/npm-12-watch.yml.
+  // npm 12 refuses the registry tarball of a package that declares
+  // bundleDependencies (@tailwindcss/oxide-wasm32-wasi) during a lockfile-only
+  // install, so the lockfile step fails with EALLOWREMOTE
+  // (https://github.com/npm/cli/issues/9800). npm 11 is also what Node 26
+  // ships to CI. To lift: delete this constraint and the npm rule below.
+  "constraints": { "npm": "^11" },
   // The pgtap job commits regenerated types to Renovate branches as the App
   // bot; an unlisted author makes Renovate treat the branch as hand-edited.
   "gitIgnoredAuthors": ["269082166+cwaits6-release-bot[bot]@users.noreply.github.com"],
@@ -60,6 +67,13 @@
       "matchPackageNames": ["node", "@types/node"],
       "allowedVersions": "<27.0.0",
       "groupName": "node runtime"
+    },
+    // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age
+    // minimumReleaseAge is inherited from local>cwaits6/renovate-config.
+    {
+      "description": "Keep Renovate from raising its own npm constraint (npm-12-guard)",
+      "matchPackageNames": ["npm"],
+      "allowedVersions": "<12.0.0"
     },
     // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age
     // minimumReleaseAge is inherited from local>cwaits6/renovate-config.
