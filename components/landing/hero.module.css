@@ -1,0 +1,502 @@
+/* The hero's browser window. Every rule outside the motion query describes
+   the finished window, so it is what shows when the animation never runs. */
+
+.stage {
+  container-type: inline-size;
+  position: relative;
+  width: 100%;
+  max-width: 65rem;
+  margin-inline: auto;
+}
+
+.win {
+  border-radius: 16px;
+  background: var(--background);
+  box-shadow:
+    0 0 0 1px rgb(42 33 26 / 0.14),
+    0 18px 36px -12px rgb(42 33 26 / 0.22),
+    0 44px 90px -20px rgb(42 33 26 / 0.34);
+}
+
+.chrome {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 16px 16px 0 0;
+  background: var(--foreground);
+}
+
+/* A phone's browser has no window buttons: below md the bar is the address alone. */
+.dot {
+  display: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #5b4c3f;
+}
+
+.dot:nth-child(1) {
+  background: #ec6a5e;
+}
+
+.dot:nth-child(2) {
+  background: #f4bf4f;
+}
+
+.dot:nth-child(3) {
+  background: #61c554;
+}
+
+.url {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  justify-content: center;
+  height: 27px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: #40342b;
+  color: var(--background);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.url svg {
+  width: 13px;
+  height: 13px;
+  opacity: 0.7;
+}
+
+/* The signed-in phone frame: the wordmark and one Menu button. */
+.appbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 52px;
+  padding: 0 14px 0 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+}
+
+.appbar img {
+  display: block;
+  height: 22px;
+  width: auto;
+}
+
+.menu {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--foreground);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.menu svg {
+  width: 20px;
+  height: 20px;
+}
+
+.body {
+  position: relative;
+  min-height: 24.5rem;
+}
+
+/* On a phone the menu is a drawer over the page. At rest it is closed, so
+   Home shows; the animation opens it for the rows to land in, then closes it.
+   No overflow clip on the window: the rows start outside it. */
+.side {
+  position: absolute;
+  inset: 0 0 0 auto;
+  z-index: 2;
+  width: 78%;
+  padding: 12px 12px 14px;
+  border-left: 1px solid var(--border);
+  border-radius: 0 0 16px 0;
+  background: #fff;
+  box-shadow: -18px 0 40px rgb(42 33 26 / 0.16);
+  clip-path: inset(0 0 0 100%);
+}
+
+.side > img {
+  display: none;
+  height: 24px;
+  width: auto;
+  margin: 0 0 12px 10px;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gap {
+  height: 10px;
+}
+
+.row + .row {
+  margin-top: 2px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  height: 40px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border-left: 4px solid transparent;
+  background: #fff;
+  color: var(--muted-foreground);
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.row svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+
+.home {
+  border-left-color: var(--color-brand-primary);
+  background: var(--color-brand-warm);
+  color: var(--color-brand-primary-text);
+  font-weight: 700;
+}
+
+.detail {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  opacity: 0;
+}
+
+.main {
+  min-width: 0;
+  padding: 20px 18px 22px;
+  border-radius: 0 0 16px 16px;
+}
+
+.greeting {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  font-size: clamp(1.75rem, 4.8cqw, 3.125rem);
+  line-height: 1.05;
+  color: var(--foreground);
+}
+
+.greeting span {
+  color: var(--color-brand-primary-text);
+}
+
+.today {
+  margin-top: 6px;
+  font-size: 15px;
+  color: var(--muted-foreground);
+}
+
+.event {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 16px;
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 18px;
+  background: var(--color-brand-primary);
+  color: #fff;
+}
+
+.date {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 66px;
+  height: 74px;
+  border-radius: 12px;
+  background: var(--background);
+  color: var(--color-brand-primary-text);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.date b {
+  font-family: var(--font-serif);
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0;
+  color: var(--foreground);
+}
+
+.eventTitle {
+  font-family: var(--font-serif);
+  font-size: clamp(1.375rem, 2.9cqw, 1.875rem);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+}
+
+.eventMeta {
+  margin-top: 4px;
+  font-size: 15px;
+}
+
+.reply {
+  display: flex;
+  flex: 1 1 100%;
+  padding: 4px;
+  border-radius: 11px;
+  background: rgb(42 33 26 / 0.24);
+}
+
+.reply span {
+  flex: 1;
+  padding: 8px 0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.reply span:first-child {
+  background: var(--color-brand-accent);
+  color: var(--foreground);
+}
+
+.pair {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.mini {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #fff;
+}
+
+.mini:last-child {
+  display: none;
+}
+
+.mini small {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-brand-accent-text);
+}
+
+.mini b {
+  display: block;
+  margin-top: 5px;
+  font-family: var(--font-serif);
+  font-size: clamp(1.125rem, 2.3cqw, 1.5rem);
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+}
+
+@media (min-width: 768px) {
+  .dot {
+    display: block;
+  }
+
+  .url {
+    justify-content: flex-start;
+    max-width: 420px;
+    margin-left: 10px;
+  }
+
+  .appbar {
+    display: none;
+  }
+
+  .body {
+    display: grid;
+    grid-template-columns: clamp(208px, 24cqw, 252px) minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .side {
+    position: relative;
+    inset: auto;
+    width: auto;
+    padding: 16px 12px 20px;
+    border-right: 1px solid var(--border);
+    border-left: 0;
+    border-radius: 0 0 0 16px;
+    box-shadow: none;
+    clip-path: none;
+  }
+
+  .side > img {
+    display: block;
+  }
+
+  .row {
+    font-size: 15.5px;
+  }
+
+  .main {
+    padding: clamp(20px, 3cqw, 30px) clamp(20px, 3.5cqw, 36px) clamp(22px, 3.2cqw, 34px);
+    border-radius: 0 0 16px 0;
+  }
+
+  .today {
+    font-size: 16px;
+  }
+
+  .event {
+    flex-wrap: nowrap;
+    padding: 20px 22px;
+  }
+
+  .date {
+    width: 78px;
+    height: 84px;
+    font-size: 12px;
+  }
+
+  .date b {
+    font-size: 36px;
+  }
+
+  .reply {
+    flex: 0 1 250px;
+    margin-left: auto;
+  }
+
+  .reply span {
+    font-size: 15px;
+  }
+
+  .pair {
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-top: 14px;
+  }
+
+  .mini:last-child {
+    display: block;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tool {
+    position: relative;
+    z-index: 3;
+    animation: gather 1.2s cubic-bezier(0.7, 0, 0.15, 1) var(--d) both;
+  }
+
+  .detail {
+    animation: leave 0.35s ease-out var(--d) both;
+  }
+
+  .home {
+    animation: appear 0.5s cubic-bezier(0.16, 1, 0.3, 1) 1.75s both;
+  }
+
+  .main {
+    animation: settle 0.8s cubic-bezier(0.16, 1, 0.3, 1) 1.95s both;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) and (max-width: 767.98px) {
+  .side {
+    animation: stow 3.5s linear both;
+  }
+
+  .main {
+    animation-delay: 3s;
+  }
+}
+
+/* Open with nothing clipped while the rows fly in, then wipe shut to the right. */
+@keyframes stow {
+  0%,
+  82% {
+    clip-path: inset(-100vmax);
+  }
+  82.01% {
+    clip-path: inset(0 0 0 0);
+    animation-timing-function: cubic-bezier(0.5, 0, 0.75, 0);
+  }
+  100% {
+    clip-path: inset(0 0 0 100%);
+  }
+}
+
+.stage[data-held] * {
+  animation-play-state: paused;
+}
+
+@keyframes gather {
+  from {
+    transform: translate(var(--px), var(--py)) rotate(var(--r)) scale(0.94);
+    border-radius: 14px;
+    color: var(--foreground);
+    box-shadow: 0 14px 30px rgb(42 33 26 / 0.2);
+  }
+  to {
+    transform: none;
+    box-shadow: 0 0 0 rgb(42 33 26 / 0);
+  }
+}
+
+@media (min-width: 768px) {
+  @keyframes gather {
+    from {
+      transform: translate(var(--dx), var(--dy)) rotate(var(--r)) scale(1.25);
+      border-radius: 14px;
+      color: var(--foreground);
+      box-shadow: 0 14px 30px rgb(42 33 26 / 0.2);
+    }
+    to {
+      transform: none;
+      box-shadow: 0 0 0 rgb(42 33 26 / 0);
+    }
+  }
+}
+
+@keyframes leave {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes appear {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes settle {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+    transform: translateY(10px);
+  }
+}

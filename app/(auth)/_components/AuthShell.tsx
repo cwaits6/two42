@@ -12,6 +12,8 @@ export interface AuthShellProps {
   altPrompt?: string;
   altLabel?: string;
   altHref?: string;
+  /** Shown when `altLabel` is opened, in place of going to `altHref`. */
+  altNote?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -34,6 +36,7 @@ export function AuthShell({
   altPrompt,
   altLabel,
   altHref,
+  altNote,
   children,
 }: AuthShellProps) {
   return (
@@ -85,6 +88,19 @@ export function AuthShell({
           />
 
           <div className="mt-6 md:mt-8">{children}</div>
+
+          {altPrompt && altLabel && altNote && (
+            // A disclosure, not a hover hint: it opens by tap and by keyboard too.
+            <details className="group mt-6 border-t border-border pt-4 font-sans text-lg text-muted-foreground md:mt-8 md:pt-6">
+              <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center gap-x-1.5 rounded-lg [&::-webkit-details-marker]:hidden">
+                {altPrompt}
+                <span className="font-semibold text-brand-primary-text underline underline-offset-4 group-open:no-underline">
+                  {altLabel}
+                </span>
+              </summary>
+              <p className="mt-2 text-base leading-relaxed">{altNote}</p>
+            </details>
+          )}
 
           {altPrompt && altLabel && altHref && (
             <div className="mt-6 border-t border-border pt-4 md:mt-8 md:pt-6">
