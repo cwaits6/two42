@@ -387,8 +387,9 @@ export function OrganizationDetail({
               </p>
               <p className="text-sm text-muted-foreground">
                 The most emails this organization can send in a day. Invites a
-                church admin or a household member sends, and approval emails,
-                are not counted. Set 0 to stop the counted emails.
+                church admin or a household member sends, approval emails, and
+                the confirmation sent when someone signs up to serve are not
+                counted. Set 0 to stop the counted emails.
               </p>
               <div className="space-y-2">
                 <Label htmlFor="email-daily-cap">Emails per day</Label>
