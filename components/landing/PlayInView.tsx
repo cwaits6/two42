@@ -19,7 +19,7 @@ export function PlayInView({ children, className }: { children: React.ReactNode;
         delete el.dataset.held;
         observer.disconnect();
       },
-      { threshold: 0.3 },
+      { threshold: 0.6 },
     );
     observer.observe(el);
     return () => {

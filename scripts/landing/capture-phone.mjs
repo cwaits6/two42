@@ -14,8 +14,8 @@ import { GROUP, HIDE, PAGES, serveThumbnails, signIn } from "./shared.mjs";
 
 const base = process.env.BASE ?? "http://localhost:3486";
 const out = process.env.OUT ?? "public/landing";
-// The signed-in page below the header, one phone screen tall.
-const CONTENT = { x: 0, y: 72, width: 390, height: 640 };
+// The signed-in page as a phone shows it, top bar included.
+const CONTENT = { x: 0, y: 0, width: 390, height: 640 };
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
@@ -23,9 +23,10 @@ await serveThumbnails(ctx);
 const page = await ctx.newPage();
 await signIn(page, base);
 
-for (const { name, path, prepare } of PAGES) {
+for (const { name, path, prepare, preparePhone } of PAGES) {
   await page.goto(`${base}/g/${GROUP}/${path}`, { waitUntil: "networkidle" });
   await prepare?.(page);
+  await preparePhone?.(page);
   await page.addStyleTag({ content: HIDE });
   await page.waitForTimeout(700);
   await page.screenshot({ path: `${out}/${name}-phone.png`, clip: CONTENT });

@@ -50,11 +50,20 @@ function Screenshot({
     >
       <div
         aria-hidden="true"
-        className={cn("flex h-7 items-center gap-1.5 px-3", dark ? "bg-[#40342b]" : "bg-foreground")}
+        className={cn("flex h-8 items-center gap-1.5 px-3 md:h-7", dark ? "bg-[#40342b]" : "bg-foreground")}
       >
-        <i className="size-2 rounded-full bg-[#5b4c3f]" />
-        <i className="size-2 rounded-full bg-[#5b4c3f]" />
-        <i className="size-2 rounded-full bg-[#5b4c3f]" />
+        {/* A phone's browser has no window buttons: below md the bar is the address alone. */}
+        <i className="hidden size-2 rounded-full bg-[#ec6a5e] md:block" />
+        <i className="hidden size-2 rounded-full bg-[#f4bf4f] md:block" />
+        <i className="hidden size-2 rounded-full bg-[#61c554] md:block" />
+        <span
+          className={cn(
+            "flex h-5 flex-1 items-center justify-center rounded-md text-xs font-medium md:hidden",
+            dark ? "bg-foreground text-background" : "bg-[#40342b] text-background",
+          )}
+        >
+          two42.io
+        </span>
       </div>
       <picture>
         <source
@@ -71,8 +80,8 @@ function Screenshot({
   );
 }
 
-const SHOT_CROP = "max-h-[25rem] md:max-h-[30rem]";
-const TILE_CROP = "mt-auto max-h-[25rem] md:max-h-[22rem]";
+const SHOT_CROP = "max-h-[29rem] md:max-h-[30rem]";
+const TILE_CROP = "mt-auto max-h-[29rem] md:max-h-[22rem]";
 
 type Feature = { title: string; text: string; src: string; phoneSrc: string; alt: string; tone: string };
 
@@ -279,8 +288,8 @@ export function LandingPage() {
               Acts 2:42
             </span>
             <span className="mx-auto max-w-[40rem] text-xl leading-[1.45] text-background/80">
-              That verse is where the name comes from. two42 is for groups that learn together,
-              pray together, share a table and keep up with one another through the week.
+              two42 is for groups that learn together, pray together, share a table and keep up
+              with one another through the week.
             </span>
           </figcaption>
         </figure>

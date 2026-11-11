@@ -14,7 +14,16 @@ export const PAGES = [
     prepare: (page) => page.getByText("List", { exact: true }).first().click(),
   },
   { name: "directory", path: "directory" },
-  { name: "prayer", path: "prayer" },
+  {
+    name: "prayer",
+    path: "prayer",
+    // On a phone the form comes first; the screenshot is of the requests.
+    preparePhone: (page) =>
+      page
+        .getByText("surgery is Thursday")
+        .first()
+        .evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 186)),
+  },
   { name: "lessons", path: "lectures" },
   { name: "announcements", path: "announcements" },
   { name: "giving", path: "give" },

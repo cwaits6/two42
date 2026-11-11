@@ -7,6 +7,7 @@ import {
   Home,
   Lock,
   Megaphone,
+  Menu,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -29,13 +30,64 @@ type Tool = {
 // Labels, icons, order and spacing follow the signed-in menu (lib/groups/nav.ts
 // and components/layout/SidebarNav.tsx); a change there lands here too.
 const TOOLS: Tool[] = [
-  { label: "Calendar", detail: "Tue 6:30 PM", icon: Calendar, from: [-12, -9], fromPhone: [-40, 44], tilt: -4 },
-  { label: "Announcements", detail: "2 new", icon: Megaphone, from: [55, -3], fromPhone: [34, 66], tilt: -2.5, gapAfter: true },
-  { label: "Prayer", detail: "3 new", icon: HeartHandshake, from: [76, 5], fromPhone: [-22, 24], tilt: 3 },
-  { label: "Lessons", detail: "Part 3 is up", icon: BookOpen, from: [7, -11], fromPhone: [42, 78], tilt: 3 },
-  { label: "Serving", detail: "Nov 8", icon: HandHelping, from: [34, -29], fromPhone: [-46, 54], tilt: 3, gapAfter: true },
-  { label: "Directory", detail: "52 households", icon: Users, from: [74, -31], fromPhone: [12, 36], tilt: -3 },
-  { label: "Give", detail: "Goes to Carlos", icon: HandCoins, from: [30, -11], fromPhone: [-32, 70], tilt: -3 },
+  {
+    label: "Calendar",
+    detail: "Tue 6:30 PM",
+    icon: Calendar,
+    from: [-12, -9],
+    fromPhone: [-24, -34],
+    tilt: -4,
+  },
+  {
+    label: "Announcements",
+    detail: "2 new",
+    icon: Megaphone,
+    from: [55, -3],
+    fromPhone: [8, -20],
+    tilt: -2.5,
+    gapAfter: true,
+  },
+  {
+    label: "Prayer",
+    detail: "3 new",
+    icon: HeartHandshake,
+    from: [76, 5],
+    fromPhone: [-30, -4],
+    tilt: 3,
+  },
+  {
+    label: "Lessons",
+    detail: "Part 3 is up",
+    icon: BookOpen,
+    from: [7, -11],
+    fromPhone: [10, 12],
+    tilt: 3,
+  },
+  {
+    label: "Serving",
+    detail: "Nov 8",
+    icon: HandHelping,
+    from: [34, -29],
+    fromPhone: [-22, 18],
+    tilt: 3,
+    gapAfter: true,
+  },
+  {
+    label: "Directory",
+    detail: "52 households",
+    icon: Users,
+    from: [74, -31],
+    fromPhone: [6, 36],
+    tilt: -3,
+  },
+  {
+    label: "Give",
+    detail: "Goes to Carlos",
+    icon: HandCoins,
+    from: [30, -11],
+    fromPhone: [-28, 42],
+    tilt: -3,
+  },
 ];
 
 const ALT = `A browser window open at two42.io. The menu lists Home, ${TOOLS.map((t) => t.label).join(", ")}. Home greets David and shows the next event with a reply of Going.`;
@@ -55,47 +107,63 @@ export function HeroWindow() {
           </span>
         </div>
 
-        <div className={styles.side}>
+        <div className={styles.appbar}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/two42-wordmark.svg" alt="" width={93} height={24} />
-          <ul className={styles.rows}>
-            <li className={`${styles.row} ${styles.home}`}>
-              <Home />
-              Home
-            </li>
-            {TOOLS.map((tool, i) => (
-              <Row key={tool.label} tool={tool} index={i} />
-            ))}
-          </ul>
+          <img src="/brand/two42-wordmark.svg" alt="" width={85} height={22} />
+          <span className={styles.menu}>
+            <Menu />
+            Menu
+          </span>
         </div>
 
-        <div className={styles.main}>
-          <p className={styles.greeting}>
-            Good evening, <span>David</span>.
-          </p>
-          <p className={styles.today}>Tuesday, October 27</p>
-          <div className={styles.event}>
-            <div className={styles.date}>
-              Tue<b>27</b>Oct
-            </div>
-            <div>
-              <p className={styles.eventTitle}>Dinner and study</p>
-              <p className={styles.eventMeta}>6:30 PM &middot; 10 going</p>
-            </div>
-            <div className={styles.reply}>
-              <span>Going</span>
-              <span>Maybe</span>
-              <span>Can&rsquo;t go</span>
-            </div>
+        <div className={styles.body}>
+          <div className={styles.side}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/brand/two42-wordmark.svg"
+              alt=""
+              width={93}
+              height={24}
+            />
+            <ul className={styles.rows}>
+              <li className={`${styles.row} ${styles.home}`}>
+                <Home />
+                Home
+              </li>
+              {TOOLS.map((tool, i) => (
+                <Row key={tool.label} tool={tool} index={i} />
+              ))}
+            </ul>
           </div>
-          <div className={styles.pair}>
-            <div className={styles.mini}>
-              <small>Serving</small>
-              <b>You&rsquo;re greeting on Nov 8</b>
+
+          <div className={styles.main}>
+            <p className={styles.greeting}>
+              Good evening, <span>David</span>.
+            </p>
+            <p className={styles.today}>Tuesday, October 27</p>
+            <div className={styles.event}>
+              <div className={styles.date}>
+                Tue<b>27</b>Oct
+              </div>
+              <div>
+                <p className={styles.eventTitle}>Dinner and study</p>
+                <p className={styles.eventMeta}>6:30 PM &middot; 10 going</p>
+              </div>
+              <div className={styles.reply}>
+                <span>Going</span>
+                <span>Maybe</span>
+                <span>Can&rsquo;t go</span>
+              </div>
             </div>
-            <div className={styles.mini}>
-              <small>Lesson</small>
-              <b>The Book of Acts, part 3</b>
+            <div className={styles.pair}>
+              <div className={styles.mini}>
+                <small>Serving</small>
+                <b>You&rsquo;re greeting on Nov 8</b>
+              </div>
+              <div className={styles.mini}>
+                <small>Lesson</small>
+                <b>The Book of Acts, part 3</b>
+              </div>
             </div>
           </div>
         </div>
