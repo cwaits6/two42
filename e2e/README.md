@@ -105,6 +105,7 @@ not covered here.
 | Spec                                 | Boundary                                                                                   |
 | ------------------------------------ | ------------------------------------------------------------------------------------------ |
 | `directory-scope.spec.ts`            | Scope control absent for a one-group member; options, roster, tab carry-over, search       |
+| `directory-edit-mode.spec.ts`        | A member of the group who isn't a leader sees no Edit members control and no Edit or Remove on any row; the group's leader sees no row Edit or Remove until Edit members is pressed, then Edit and Remove on each row with Remove off on their own, and none again once it is pressed off |
 | `directory-visibility-toggle.spec.ts`| The org-wide switch adds and removes "Everyone in …"; outsiders marked; left off in afterAll   |
 | `household-boundary.spec.ts`         | Only households sharing a group are listed; a deep link to another's opens nothing         |
 | `group-frame.spec.ts`                | Switcher lists own groups only; a foreign `/g/<id>/…` is a 404, while Admin › Groups opens that group's page for the church admin with its leader and members; content stays in its group |

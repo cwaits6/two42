@@ -46,7 +46,9 @@ function matchesQuery(m: DirectoryProfile, q: string): boolean {
     .includes(q);
 }
 
-type Mode = "list" | "add" | "select";
+// One mode at a time, so Label members leaves Edit members. Edit only shows
+// the row controls; RLS on the writes behind them decides who may change a member.
+type Mode = "list" | "add" | "select" | "edit";
 
 const NO_LABELS: ReadonlySet<string> = new Set();
 
@@ -218,18 +220,22 @@ function MembersTabInner() {
       {roster.error && (
         <p className="text-base text-muted-foreground">Could not load teams and labels.</p>
       )}
-      {isLeader && mode === "list" && (
-        <div className="ml-auto flex gap-2">
+      {isLeader && (mode === "list" || mode === "edit") && (
+        <div className="ml-auto flex flex-wrap gap-2">
           {roster.labels.length > 0 && (
             <Button variant="outline" onClick={() => setMode("select")}>
               Label members
             </Button>
           )}
           <Button
-            onClick={() => setMode("add")}
+            variant={mode === "edit" ? "secondary" : "outline"}
+            aria-pressed={mode === "edit"}
+            onClick={() => setMode(mode === "edit" ? "list" : "edit")}
           >
-            Add member
+            <Pencil aria-hidden="true" />
+            Edit members
           </Button>
+          <Button onClick={() => setMode("add")}>Add member</Button>
         </div>
       )}
     </div>
@@ -289,7 +295,7 @@ function MembersTabInner() {
                     const name = displayName(m);
                     const selecting = mode === "select";
                     const isSelf = m.id === currentUserId;
-                    const managing = isLeader && mode === "list";
+                    const managing = isLeader && mode === "edit";
                     const selfNoteId = `remove-self-${m.id}`;
                     return (
                       <DirRow
@@ -373,7 +379,7 @@ function MembersTabInner() {
           </>
         }
         panel={
-          selected && mode === "list" ? (
+          selected && mode !== "select" ? (
             <>
               <BackLink onClick={() => setSelected(null)} className="mb-4">
                 Back to the list

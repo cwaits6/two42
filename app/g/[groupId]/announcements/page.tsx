@@ -66,13 +66,16 @@ export default async function AnnouncementsPage({
       Add announcement
     </Button>
   );
+  // The empty state carries Add announcement, so the header leaves it out then.
+  // A draft or a scheduled row keeps the page from being empty.
+  const showEmpty = announcements?.length === 0 && unpublished?.length === 0;
 
   return (
     <PageContainer>
       <PageHeader
         title="Announcements"
         subtitle={`News and updates for ${group.name}.`}
-        actions={addAnnouncement}
+        actions={!showEmpty && addAnnouncement}
       />
 
       {announcements === null ? (
@@ -125,7 +128,7 @@ export default async function AnnouncementsPage({
               ))}
             </div>
           ) : (
-            unpublished?.length === 0 && (
+            showEmpty && (
               <EmptyState icon={Megaphone} message="No announcements yet." action={addAnnouncement} />
             )
           )}

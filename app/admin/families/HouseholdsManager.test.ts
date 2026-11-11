@@ -274,4 +274,21 @@ describe("HouseholdsManager", () => {
     expect(host.textContent).toContain("Couldn't load");
     expect(toast.error).not.toHaveBeenCalled();
   });
+
+  it("offers Add household once: in the empty state with none, in the header with some", async () => {
+    const addButtons = () =>
+      [...host.querySelectorAll("button")].filter((b) => b.textContent?.trim() === "Add household");
+    state.families = [];
+    await mount();
+    const inHeader = (b: Element) => b.closest('[data-slot="page-header-actions"]') !== null;
+    expect(host.textContent).toContain("No households yet.");
+    expect(addButtons()).toHaveLength(1);
+    expect(inHeader(addButtons()[0])).toBe(false);
+    await act(async () => root.unmount());
+
+    state.families = [FAMILY];
+    await mount();
+    expect(addButtons()).toHaveLength(1);
+    expect(inHeader(addButtons()[0])).toBe(true);
+  });
 });

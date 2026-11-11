@@ -55,7 +55,7 @@ const groups = [{ id: "b", name: "Group B", color: "#B5532E", isLeader: false }]
 
 let mounted: { root: Root; container: HTMLElement } | null = null;
 
-async function mount(replies: ReplyRow[] = [], events: Event[] = dates) {
+async function mount(replies: ReplyRow[] = [], events: Event[] = dates, createHref: string | null = null) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -67,7 +67,7 @@ async function mount(replies: ReplyRow[] = [], events: Event[] = dates) {
         events,
         replies,
         userId: "me",
-        createHref: null,
+        createHref,
         timeZone: ZONE,
         viewSwitch: null,
       }),
@@ -99,6 +99,12 @@ afterEach(async () => {
 });
 
 describe("EventListView", () => {
+  it("offers Add event in the empty state when given a link", async () => {
+    const view = await mount([], [], "/g/b/events/new");
+    const links = Array.from(view.container.querySelectorAll("a")).filter((a) => a.textContent === "Add event");
+    expect(links.map((a) => a.getAttribute("href"))).toEqual(["/g/b/events/new"]);
+  });
+
   it("shows a page of dates and adds a page each time Show more dates is pressed", async () => {
     const view = await mount();
     expect(view.cards()).toHaveLength(LIST_PAGE);
