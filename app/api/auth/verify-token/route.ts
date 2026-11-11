@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { logError } from "@/lib/log";
 import { INVALID_LINK, deadLinkResponse, readSetupToken } from "../setup-link";
+import type { VerifyTokenResponse } from "../setup-response";
 
 const logAccountLookup = (error: unknown) =>
   logError("Setup link: account lookup failed", error, { route: "/api/auth/verify-token" });
@@ -44,5 +45,5 @@ export async function POST(request: Request) {
     return deadLinkResponse(supabase.auth.admin, token, true, logAccountLookup);
   }
 
-  return NextResponse.json({ name: data.name, email: data.email });
+  return NextResponse.json<VerifyTokenResponse>({ name: data.name, email: data.email });
 }

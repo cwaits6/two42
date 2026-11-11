@@ -4,7 +4,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setupUserId } from "../setup-link";
-import { SETUP_STATUS } from "../setup-response";
+import { SETUP_STATUS, type SetupLink } from "../setup-response";
 
 const createServiceClient = vi.fn();
 vi.mock("@/lib/supabase/server", () => ({
@@ -69,7 +69,7 @@ describe("POST /api/auth/verify-token", () => {
     fakeService({ row: LIVE });
     const res = await post({ token: TOKEN });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ name: LIVE.name, email: LIVE.email });
+    expect(await res.json()).toEqual({ name: LIVE.name, email: LIVE.email } satisfies SetupLink);
   });
 
   it("answers an unknown link as invalid", async () => {

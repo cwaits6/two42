@@ -16,3 +16,8 @@ export type SetupAccountResponse =
   | { status: SetupStatus }
   | { field: "password"; error: string }
   | { error: string };
+
+/** The person a live setup link was issued to. */
+export type SetupLink = { name: string; email: string };
+
+export type VerifyTokenResponse = SetupLink | { status: SetupStatus } | { error: string };

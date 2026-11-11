@@ -18,7 +18,11 @@ import { NewPasswordFields } from "../_components/NewPasswordFields";
 import { passwordFieldErrors, type PasswordFieldErrors } from "../_components/passwordRules";
 import { useFieldFocus } from "../_components/useFieldFocus";
 import { sanitizeNext } from "@/app/api/auth/callback/sanitize-next";
-import { SETUP_STATUS, type SetupAccountResponse } from "@/app/api/auth/setup-response";
+import {
+  SETUP_STATUS,
+  type SetupAccountResponse,
+  type SetupLink,
+} from "@/app/api/auth/setup-response";
 import { logError, logWarn } from "@/lib/log";
 
 const TITLE = "Set up your account";
@@ -38,18 +42,13 @@ const INVALID_HELP = (
   </>
 );
 
-interface SignupLink {
-  name: string;
-  email: string;
-}
-
 type View =
   | { kind: "verifying" }
   | { kind: "invalid" }
   | { kind: "failed" }
   | { kind: "set_up" }
   | { kind: "signed_up"; redirect: string }
-  | { kind: "ready"; link: SignupLink };
+  | { kind: "ready"; link: SetupLink };
 
 export function SetupAccountForm() {
   const [loading, setLoading] = useState(false);
@@ -95,8 +94,8 @@ export function SetupAccountForm() {
         return;
       }
 
-      const data = await res.json();
-      setView({ kind: "ready", link: { name: data.name, email: data.email } });
+      const link: SetupLink = await res.json();
+      setView({ kind: "ready", link: { name: link.name, email: link.email } });
     }
     verifyToken().catch((err) => {
       logError("Failed to verify the account setup link", err, { route: "/setup-account" });

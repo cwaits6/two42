@@ -2,6 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { SetupLink } from "@/app/api/auth/setup-response";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -55,7 +56,7 @@ describe("SetupAccountForm verification", () => {
       .fn()
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValueOnce(
-        Response.json({ name: "Ada", email: "ada@example.com" }),
+        Response.json({ name: "Ada", email: "ada@example.com" } satisfies SetupLink),
       );
     vi.stubGlobal("fetch", fetchMock);
     await act(async () => root.render(createElement(SetupAccountForm)));
@@ -89,7 +90,7 @@ describe("SetupAccountForm verification", () => {
   });
 });
 
-const LINK = Response.json({ name: "Ada", email: "ada@example.com" });
+const LINK = Response.json({ name: "Ada", email: "ada@example.com" } satisfies SetupLink);
 const PASSWORD = "correct horse battery";
 
 async function submitWith(answer: Response) {
