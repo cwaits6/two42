@@ -6,7 +6,6 @@ import { GroupAvatar } from "@/components/directory/GroupAvatar";
 import { ErrorState } from "@/components/states/ErrorState";
 import { groupColor } from "@/components/directory/groupColor";
 import { GroupJoinAction } from "@/components/groups/GroupJoinAction";
-import { useGroupMemberships } from "@/components/groups/GroupProvider";
 import { useDiscoverableGroups } from "@/components/groups/useDiscoverableGroups";
 import { EmptyState } from "@/components/states/EmptyState";
 import { discoveryRowSubtitle, type DiscoverableGroup } from "@/lib/groups/joining";
@@ -15,10 +14,9 @@ export const NO_GROUPS_TEXT = "No groups are open to join yet.";
 
 /** One discovery row: name, member count and meeting time, then the viewer's standing or action. */
 export function DiscoveryRow({ row, onChanged }: { row: DiscoverableGroup; onChanged: () => void }) {
-  const memberships = useGroupMemberships();
   return (
     <DirRow
-      avatar={<GroupAvatar name={row.name} color={groupColor(row.id, memberships)} />}
+      avatar={<GroupAvatar name={row.name} color={groupColor(row.color)} />}
       title={row.name}
       subtitle={discoveryRowSubtitle(row)}
       trailing={<GroupJoinAction row={row} onChanged={onChanged} />}

@@ -33,6 +33,7 @@ const row: DiscoverableGroup = {
   join_policy: "approval",
   viewer_role: null,
   request_status: null,
+  color: null,
 };
 
 function flatten(node: ReactNode, out: ReactElement[] = []): ReactElement[] {

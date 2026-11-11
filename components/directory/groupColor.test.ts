@@ -2,18 +2,13 @@ import { describe, expect, it } from "vitest";
 import { groupColor } from "@/components/directory/groupColor";
 import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
 
-const memberships = [
-  { id: "a", color: "#2F6F4F" },
-  { id: "b", color: "#5B4B8A" },
-];
-
 describe("groupColor", () => {
-  it("uses the color of a group the viewer is in", () => {
-    expect(groupColor("b", memberships)).toBe("#5B4B8A");
+  it("uses the group's own color", () => {
+    expect(groupColor("#5B4B8A")).toBe("#5B4B8A");
   });
 
-  it("falls back to the default color for a group the viewer is not in", () => {
-    expect(groupColor("z", memberships)).toBe(GROUP_DEFAULT_COLOR);
-    expect(groupColor("a", [])).toBe(GROUP_DEFAULT_COLOR);
+  it("falls back to the default color when the group has none or it is not a hex color", () => {
+    expect(groupColor(null)).toBe(GROUP_DEFAULT_COLOR);
+    expect(groupColor("red; background: url(x)")).toBe(GROUP_DEFAULT_COLOR);
   });
 });
