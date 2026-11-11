@@ -30,6 +30,8 @@ jobs:
       - name: Notify when the latest npm no longer fails
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The script leaves the checkout, so gh cannot infer the repository.
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
