@@ -215,8 +215,20 @@ describe("POST /api/auth/setup-account — each invite kind", () => {
     const writes = householdWrites(calls);
     expect(writes.map((c) => c.table)).toEqual(["profiles", "family_members", "family_invites"]);
     expect(writes[0].payload).toEqual({ family_id: "family-1" });
-    expect(writes[0].eqs).toContainEqual(["id", USER_ID]);
-    for (const write of writes) expect(write.eqs).toContainEqual(["org_id", ORG]);
+    expect(writes[0].eqs).toEqual([
+      ["id", USER_ID],
+      ["org_id", ORG],
+    ]);
+    expect(writes[1].payload).toEqual({ claimed_profile_id: USER_ID });
+    expect(writes[1].eqs).toEqual([
+      ["id", "member-1"],
+      ["org_id", ORG],
+    ]);
+    expect(writes[2].payload).toEqual({ accepted_at: expect.any(String) });
+    expect(writes[2].eqs).toEqual([
+      ["id", INVITE],
+      ["org_id", ORG],
+    ]);
     // The link is consumed only after the household is linked.
     expect(calls.indexOf(consumeCalls(calls)[0])).toBeGreaterThan(calls.indexOf(writes[0]));
   });
