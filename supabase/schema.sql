@@ -472,7 +472,7 @@ COMMENT ON FUNCTION "public"."directory_retire_hidden_values"() IS 'Deletes valu
 
 
 
-CREATE OR REPLACE FUNCTION "public"."discoverable_groups"() RETURNS TABLE("id" "uuid", "name" "text", "description" "text", "member_count" integer, "is_private" boolean, "join_policy" "text", "viewer_role" "text", "request_status" "text")
+CREATE OR REPLACE FUNCTION "public"."discoverable_groups"() RETURNS TABLE("id" "uuid", "name" "text", "description" "text", "member_count" integer, "is_private" boolean, "join_policy" "text", "viewer_role" "text", "request_status" "text", "color" "text")
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO ''
     AS $$
@@ -493,7 +493,11 @@ CREATE OR REPLACE FUNCTION "public"."discoverable_groups"() RETURNS TABLE("id" "
     g.is_private,
     g.join_policy,
     gm.role,
-    r.status
+    r.status,
+    (select cal.color from public.event_calendars cal
+      where cal.group_id = g.id and cal.org_id = g.org_id
+      order by cal.created_at, cal.id
+      limit 1)
   from public.groups g
   cross join me
   cross join org
@@ -511,7 +515,7 @@ $$;
 ALTER FUNCTION "public"."discoverable_groups"() OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."discoverable_groups"() IS 'The groups a member may see on Find a group and Directory › Groups: their own always; others while the org switch is on and the group is not private; private groups additionally for org admins. Tenant anchor: the caller''s own profiles row (auth.uid(), not pending); no parameter. Returns only the columns the discovery row shows.';
+COMMENT ON FUNCTION "public"."discoverable_groups"() IS 'The groups a member may see on Find a group and Directory › Groups: their own always; others while the org switch is on and the group is not private; private groups additionally for org admins. Tenant anchor: the caller''s own profiles row (auth.uid(), not pending); no parameter. Returns only the columns the discovery row shows, including the group''s calendar color.';
 
 
 
@@ -1157,205 +1161,6 @@ $$;
 
 
 ALTER FUNCTION "public"."giving_stewards_can_manage"() OWNER TO "postgres";
-
-
-CREATE OR REPLACE FUNCTION "public"."group_content_backfill"() RETURNS "void"
-    LANGUAGE "plpgsql"
-    SET "search_path" TO ''
-    AS $_$
-declare
-  _org record;
-  _grp uuid;
-  _grp_name text;
-  _g record;
-  _survivor uuid;
-  _cals int;
-  _adopted_cals int;
-  _events_before bigint;
-  _events_after bigint;
-  _bad_events bigint;
-  _t text;
-  _before bigint;
-  _after bigint;
-  _nulls bigint;
-  _content_tables constant text[] := array[
-    'announcements', 'lecture_series', 'giving_funds', 'prayer_requests',
-    'about_page', 'class_teachers', 'lectures', 'giving_fund_methods',
-    'prayer_responses', 'prayer_call_sessions'];
-begin
-  lock table public.groups in share mode;
-  lock table public.events in share mode;
-  lock table public.event_calendars in share mode;
-
-  for _org in
-    select o.id from public.organizations o order by o.created_at, o.id
-  loop
-    select g.id, g.name into _grp, _grp_name
-    from public.groups g
-    where g.org_id = _org.id
-    order by g.created_at, g.id
-    limit 1;
-
-    if _grp is null then
-      if exists (select 1 from public.events where org_id = _org.id)
-         or exists (select 1 from public.event_calendars where org_id = _org.id)
-         or exists (select 1 from public.announcements where org_id = _org.id)
-         or exists (select 1 from public.lecture_series where org_id = _org.id)
-         or exists (select 1 from public.lectures where org_id = _org.id)
-         or exists (select 1 from public.about_page where org_id = _org.id)
-         or exists (select 1 from public.class_teachers where org_id = _org.id)
-         or exists (select 1 from public.prayer_requests where org_id = _org.id)
-         or exists (select 1 from public.prayer_call_sessions where org_id = _org.id)
-         or exists (select 1 from public.giving_funds where org_id = _org.id)
-      then
-        raise exception 'group content backfill for org %: content rows but no group to own them', _org.id;
-      end if;
-      continue;
-    end if;
-
-    select count(*) into _events_before from public.events where org_id = _org.id;
-
-    -- Calendars: adopt the ungrouped ones, then events inherit their
-    -- calendar's group; whatever is left goes to the oldest group.
-    update public.event_calendars
-    set group_id = _grp
-    where org_id = _org.id and group_id is null;
-    get diagnostics _adopted_cals = row_count;
-
-    update public.events e
-    set group_id = c.group_id
-    from public.event_calendars c
-    where c.id = e.calendar_id and c.org_id = e.org_id
-      and e.org_id = _org.id and e.group_id is null;
-    update public.events
-    set group_id = _grp
-    where org_id = _org.id and group_id is null;
-
-    -- One calendar per group: the oldest survives, carries the group's
-    -- name and the Clay default, and every event of the group points at it.
-    for _g in
-      select g.id, g.name from public.groups g where g.org_id = _org.id order by g.created_at, g.id
-    loop
-      select count(*) into _cals from public.event_calendars
-      where org_id = _org.id and group_id = _g.id;
-
-      if _cals = 0 then
-        insert into public.event_calendars (org_id, group_id, name, color)
-        values (_org.id, _g.id, _g.name, '#B85C38')
-        returning id into _survivor;
-      else
-        select id into _survivor from public.event_calendars
-        where org_id = _org.id and group_id = _g.id
-        order by created_at, id
-        limit 1;
-        if _cals > 1 or (_g.id = _grp and _adopted_cals > 0) then
-          update public.event_calendars
-          set name = _g.name, color = '#B85C38'
-          where id = _survivor;
-        end if;
-      end if;
-
-      update public.events
-      set calendar_id = _survivor
-      where org_id = _org.id and group_id = _g.id
-        and calendar_id is distinct from _survivor;
-
-      delete from public.event_calendars
-      where org_id = _org.id and group_id = _g.id and id <> _survivor;
-    end loop;
-
-    select count(*) into _events_after from public.events where org_id = _org.id;
-    if _events_after <> _events_before then
-      raise exception 'group content backfill for org %: % events after the fold, % before',
-        _org.id, _events_after, _events_before;
-    end if;
-    select count(*) into _bad_events
-    from public.events e
-    left join public.event_calendars c on c.id = e.calendar_id
-    where e.org_id = _org.id and (c.id is null or c.group_id <> e.group_id);
-    if _bad_events > 0 then
-      raise exception 'group content backfill for org %: % event(s) outside their group''s calendar',
-        _org.id, _bad_events;
-    end if;
-    if exists (
-      select 1 from public.groups g
-      where g.org_id = _org.id
-        and (select count(*) from public.event_calendars c where c.group_id = g.id) <> 1
-    ) then
-      raise exception 'group content backfill for org %: a group does not have exactly one calendar', _org.id;
-    end if;
-
-    -- The other content tables. Children inherit their parent's group
-    -- first so the three-column FKs below hold; the rest go to the oldest
-    -- group. Counts are asserted per table.
-    foreach _t in array _content_tables loop
-      execute format('select count(*) from public.%I where org_id = $1', _t)
-        into _before using _org.id;
-
-      case _t
-        when 'lectures' then
-          update public.lectures l set group_id = s.group_id
-          from public.lecture_series s
-          where s.id = l.series_id and s.org_id = l.org_id
-            and l.org_id = _org.id and l.group_id is null;
-        when 'giving_fund_methods' then
-          update public.giving_fund_methods m set group_id = f.group_id
-          from public.giving_funds f
-          where f.id = m.fund_id and f.org_id = m.org_id
-            and m.org_id = _org.id and m.group_id is null;
-        when 'prayer_responses' then
-          update public.prayer_responses pr set group_id = r.group_id
-          from public.prayer_requests r
-          where r.id = pr.request_id and r.org_id = pr.org_id
-            and pr.org_id = _org.id and pr.group_id is null;
-        when 'prayer_call_sessions' then
-          update public.prayer_call_sessions s set group_id = e.group_id
-          from public.events e
-          where e.id = s.event_id and e.org_id = s.org_id
-            and s.org_id = _org.id and s.group_id is null;
-        else
-          null;
-      end case;
-
-      execute format('update public.%I set group_id = $1 where org_id = $2 and group_id is null', _t)
-        using _grp, _org.id;
-
-      execute format('select count(*), count(*) filter (where group_id is null) from public.%I where org_id = $1', _t)
-        into _after, _nulls using _org.id;
-      if _after <> _before or _nulls > 0 then
-        raise exception 'group content backfill for org %: % has % rows after (% before), % without a group',
-          _org.id, _t, _after, _before, _nulls;
-      end if;
-    end loop;
-
-    -- The org-level call and link-mode settings become the oldest group's.
-    insert into public.group_settings (
-      org_id, group_id, weekly_zoom_url, zoom_meeting_time,
-      weekly_prayer_call_url, weekly_prayer_call_time, serving_link_mode)
-    select
-      _org.id, _grp,
-      nullif(max(value) filter (where key = 'weekly_zoom_url' and value ~ '^https://'), ''),
-      nullif(max(value) filter (where key = 'zoom_meeting_time'), ''),
-      nullif(max(value) filter (where key = 'weekly_prayer_call_url' and value ~ '^https://'), ''),
-      nullif(max(value) filter (where key = 'weekly_prayer_call_time'), ''),
-      case max(value) filter (where key = 'serving_link_mode')
-           when 'login' then 'login' when 'signed' then 'signed' end
-    from public.site_settings
-    where org_id = _org.id
-      and key in ('weekly_zoom_url', 'zoom_meeting_time', 'weekly_prayer_call_url',
-                  'weekly_prayer_call_time', 'serving_link_mode')
-    having count(*) > 0
-    on conflict (group_id) do nothing;
-  end loop;
-end;
-$_$;
-
-
-ALTER FUNCTION "public"."group_content_backfill"() OWNER TO "postgres";
-
-
-COMMENT ON FUNCTION "public"."group_content_backfill"() IS 'Gives every ungrouped content row to its org''s oldest group, folds each group''s calendars into one (events re-pointed, extras deleted, counts asserted), creates a calendar for a group without one, and moves the org-level call and link-mode settings onto the oldest group. Idempotent. Callable only by the migration runner and the pgTAP harness.';
-
 
 
 CREATE OR REPLACE FUNCTION "public"."group_create"("_name" "text", "_description" "text" DEFAULT NULL::"text", "_leader_id" "uuid" DEFAULT NULL::"uuid") RETURNS "uuid"
@@ -2590,12 +2395,11 @@ declare
   _org_id uuid;
 begin
   -- 1. The org itself. branding carries only the tenant-overridable keys
-  -- from docs/design/DESIGN.md: display_name, logo_url, accent,
-  -- reply_to.
+  -- from docs/design/DESIGN.md: display_name, accent, reply_to.
   insert into public.organizations (name, branding, status)
   values (
     _name,
-    jsonb_build_object('display_name', _name, 'logo_url', null, 'accent', null, 'reply_to', null),
+    jsonb_build_object('display_name', _name, 'accent', null, 'reply_to', null),
     'active'
   )
   returning id into _org_id;
@@ -2605,8 +2409,7 @@ begin
   -- organizations.branding.display_name.
   insert into public.site_settings (org_id, key, value, is_public)
   values
-    (_org_id, 'giving_manage_mode',      'stewards',    false),
-    (_org_id, 'giving_dashboard_tile',   'on',          false);
+    (_org_id, 'giving_manage_mode',      'stewards',    false);
 
   -- 3. Approved access request for the owner, so their signup resolves
   -- under handle_new_user()'s fail-closed rules. approved_role = 'admin'
@@ -2668,7 +2471,7 @@ $$;
 ALTER FUNCTION "public"."provision_organization"("_name" "text", "_owner_email" "text") OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."provision_organization"("_name" "text", "_owner_email" "text") IS 'Builds a complete org in one transaction: the organizations row, the two org-level giving settings and the approved owner access request (approved_role = admin). TN004 when the owner email already has a profile, TN005 when it is approved or invited in another org. service_role only.';
+COMMENT ON FUNCTION "public"."provision_organization"("_name" "text", "_owner_email" "text") IS 'Builds a complete org in one transaction: the organizations row, the org-level giving setting and the approved owner access request (approved_role = admin). TN004 when the owner email already has a profile, TN005 when it is approved or invited in another org. service_role only.';
 
 
 
@@ -4056,10 +3859,6 @@ COMMENT ON TABLE "public"."group_requests" IS 'A member''s request for a new gro
 CREATE TABLE IF NOT EXISTS "public"."group_settings" (
     "group_id" "uuid" NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
-    "weekly_zoom_url" "text",
-    "zoom_meeting_time" "text",
-    "weekly_prayer_call_url" "text",
-    "weekly_prayer_call_time" "text",
     "serving_link_mode" "text",
     "updated_by" "uuid",
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
@@ -4069,16 +3868,14 @@ CREATE TABLE IF NOT EXISTS "public"."group_settings" (
     "event_reminders_enabled" boolean DEFAULT true NOT NULL,
     "event_reminder_default_days" smallint DEFAULT 1 NOT NULL,
     CONSTRAINT "group_settings_event_reminder_default_days_check" CHECK (("event_reminder_default_days" = ANY (ARRAY[1, 2, 7]))),
-    CONSTRAINT "group_settings_serving_link_mode_check" CHECK (("serving_link_mode" = ANY (ARRAY['signed'::"text", 'login'::"text"]))),
-    CONSTRAINT "group_settings_weekly_prayer_call_url_check" CHECK ((("weekly_prayer_call_url" IS NULL) OR ("weekly_prayer_call_url" ~ '^https://'::"text"))),
-    CONSTRAINT "group_settings_weekly_zoom_url_check" CHECK ((("weekly_zoom_url" IS NULL) OR ("weekly_zoom_url" ~ '^https://'::"text")))
+    CONSTRAINT "group_settings_serving_link_mode_check" CHECK (("serving_link_mode" = ANY (ARRAY['signed'::"text", 'login'::"text"])))
 );
 
 
 ALTER TABLE "public"."group_settings" OWNER TO "postgres";
 
 
-COMMENT ON TABLE "public"."group_settings" IS 'Per-group settings: the weekly video call, the weekly prayer call and the serving email link mode. One row per group, created on first save; an absent row means the defaults.';
+COMMENT ON TABLE "public"."group_settings" IS 'Per-group settings: the serving email link mode, what a calendar event shows, and event reminders. One row per group, created on first save; an absent row means the defaults.';
 
 
 
@@ -4151,7 +3948,6 @@ CREATE TABLE IF NOT EXISTS "public"."lectures" (
     "title" "text" NOT NULL,
     "description" "text",
     "video_url" "text" NOT NULL,
-    "thumbnail_url" "text",
     "lecture_date" "date",
     "created_by" "uuid",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
@@ -4279,31 +4075,6 @@ CREATE TABLE IF NOT EXISTS "public"."platform_admins" (
 
 
 ALTER TABLE "public"."platform_admins" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."prayer_call_sessions" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "weekday" integer NOT NULL,
-    "start_time" time without time zone NOT NULL,
-    "end_time" time without time zone,
-    "leader_id" "uuid",
-    "dial_in" "text",
-    "pin" "text",
-    "join_url" "text",
-    "event_id" "uuid",
-    "display_order" integer DEFAULT 0 NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
-    "group_id" "uuid" NOT NULL,
-    CONSTRAINT "prayer_call_sessions_dial_in_check" CHECK ((("dial_in" IS NULL) OR ("char_length"("dial_in") <= 40))),
-    CONSTRAINT "prayer_call_sessions_join_url_check" CHECK ((("join_url" IS NULL) OR ("char_length"("join_url") <= 500))),
-    CONSTRAINT "prayer_call_sessions_pin_check" CHECK ((("pin" IS NULL) OR ("char_length"("pin") <= 20))),
-    CONSTRAINT "prayer_call_sessions_weekday_check" CHECK ((("weekday" >= 0) AND ("weekday" <= 6)))
-);
-
-
-ALTER TABLE "public"."prayer_call_sessions" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."prayer_requests" (
@@ -4899,11 +4670,6 @@ ALTER TABLE ONLY "public"."platform_admins"
 
 
 
-ALTER TABLE ONLY "public"."prayer_call_sessions"
-    ADD CONSTRAINT "prayer_call_sessions_pkey" PRIMARY KEY ("id");
-
-
-
 ALTER TABLE ONLY "public"."prayer_requests"
     ADD CONSTRAINT "prayer_requests_id_org_group_unique" UNIQUE ("id", "org_id", "group_id");
 
@@ -5237,14 +5003,6 @@ CREATE UNIQUE INDEX "org_email_domains_org_key" ON "public"."org_email_domains" 
 
 
 
-CREATE INDEX "prayer_call_sessions_group_id_idx" ON "public"."prayer_call_sessions" USING "btree" ("group_id");
-
-
-
-CREATE INDEX "prayer_call_sessions_org_id_idx" ON "public"."prayer_call_sessions" USING "btree" ("org_id");
-
-
-
 CREATE INDEX "prayer_requests_author_id_idx" ON "public"."prayer_requests" USING "btree" ("author_id");
 
 
@@ -5468,10 +5226,6 @@ CREATE OR REPLACE TRIGGER "groups_touch_updated_at" BEFORE UPDATE ON "public"."g
 
 
 CREATE OR REPLACE TRIGGER "organizations_timezone_check" BEFORE INSERT OR UPDATE OF "timezone" ON "public"."organizations" FOR EACH ROW EXECUTE FUNCTION "public"."organizations_timezone_check"();
-
-
-
-CREATE OR REPLACE TRIGGER "prayer_call_sessions_touch_updated_at" BEFORE UPDATE ON "public"."prayer_call_sessions" FOR EACH ROW EXECUTE FUNCTION "public"."touch_updated_at"();
 
 
 
@@ -5965,26 +5719,6 @@ ALTER TABLE ONLY "public"."platform_admins"
 
 
 
-ALTER TABLE ONLY "public"."prayer_call_sessions"
-    ADD CONSTRAINT "prayer_call_sessions_event_id_fkey" FOREIGN KEY ("event_id", "org_id", "group_id") REFERENCES "public"."events"("id", "org_id", "group_id") ON DELETE SET NULL ("event_id");
-
-
-
-ALTER TABLE ONLY "public"."prayer_call_sessions"
-    ADD CONSTRAINT "prayer_call_sessions_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."groups"("id", "org_id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."prayer_call_sessions"
-    ADD CONSTRAINT "prayer_call_sessions_leader_id_fkey" FOREIGN KEY ("leader_id", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE SET NULL ("leader_id");
-
-
-
-ALTER TABLE ONLY "public"."prayer_call_sessions"
-    ADD CONSTRAINT "prayer_call_sessions_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
-
-
-
 ALTER TABLE ONLY "public"."prayer_requests"
     ADD CONSTRAINT "prayer_requests_author_id_fkey" FOREIGN KEY ("author_id", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE CASCADE;
 
@@ -6324,10 +6058,6 @@ CREATE POLICY "Group leaders can delete lectures" ON "public"."lectures" FOR DEL
 
 
 
-CREATE POLICY "Group leaders can delete prayer call sessions" ON "public"."prayer_call_sessions" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
-
-
-
 CREATE POLICY "Group leaders can delete series" ON "public"."lecture_series" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
 
 
@@ -6366,10 +6096,6 @@ CREATE POLICY "Group leaders can insert lectures" ON "public"."lectures" FOR INS
 
 
 
-CREATE POLICY "Group leaders can insert prayer call sessions" ON "public"."prayer_call_sessions" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
-
-
-
 CREATE POLICY "Group leaders can insert series" ON "public"."lecture_series" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
 
 
@@ -6399,10 +6125,6 @@ CREATE POLICY "Group leaders can update group settings" ON "public"."group_setti
 
 
 CREATE POLICY "Group leaders can update lectures" ON "public"."lectures" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id"))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
-
-
-
-CREATE POLICY "Group leaders can update prayer call sessions" ON "public"."prayer_call_sessions" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id"))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
 
 
 
@@ -6461,10 +6183,6 @@ CREATE POLICY "Group members can view giving funds" ON "public"."giving_funds" F
 
 
 CREATE POLICY "Group members can view lectures" ON "public"."lectures" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id")));
-
-
-
-CREATE POLICY "Group members can view prayer call sessions" ON "public"."prayer_call_sessions" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id")));
 
 
 
@@ -6942,10 +6660,6 @@ CREATE POLICY "org isolation" ON "public"."organizations" AS RESTRICTIVE TO "aut
 
 
 
-CREATE POLICY "org isolation" ON "public"."prayer_call_sessions" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
-
-
-
 CREATE POLICY "org isolation" ON "public"."prayer_requests" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
@@ -7021,9 +6735,6 @@ CREATE POLICY "platform admins can view platform admins" ON "public"."platform_a
 
 
 ALTER TABLE "public"."platform_admins" ENABLE ROW LEVEL SECURITY;
-
-
-ALTER TABLE "public"."prayer_call_sessions" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."prayer_requests" ENABLE ROW LEVEL SECURITY;
@@ -7201,10 +6912,6 @@ REVOKE ALL ON FUNCTION "public"."giving_funds_apply_recipient_rules"(OUT "promot
 GRANT ALL ON FUNCTION "public"."giving_stewards_can_manage"() TO "anon";
 GRANT ALL ON FUNCTION "public"."giving_stewards_can_manage"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."giving_stewards_can_manage"() TO "service_role";
-
-
-
-REVOKE ALL ON FUNCTION "public"."group_content_backfill"() FROM PUBLIC;
 
 
 
@@ -7940,12 +7647,6 @@ GRANT SELECT("prayer_request_retention_months"),UPDATE("prayer_request_retention
 GRANT ALL ON TABLE "public"."platform_admins" TO "anon";
 GRANT ALL ON TABLE "public"."platform_admins" TO "authenticated";
 GRANT ALL ON TABLE "public"."platform_admins" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."prayer_call_sessions" TO "anon";
-GRANT ALL ON TABLE "public"."prayer_call_sessions" TO "authenticated";
-GRANT ALL ON TABLE "public"."prayer_call_sessions" TO "service_role";
 
 
 
