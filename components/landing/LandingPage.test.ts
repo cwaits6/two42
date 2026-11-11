@@ -6,26 +6,12 @@ import { CONTACT_EMAIL, GITHUB_URL } from "./sections";
 
 const html = renderToStaticMarkup(createElement(LandingPage));
 const hrefs = [...html.matchAll(/<a [^>]*href="([^"]*)"/g)].map((m) => m[1]);
-const ids = new Set([...html.matchAll(/ id="([^"]*)"/g)].map((m) => m[1]));
 
 describe("LandingPage", () => {
-  it("resolves every in-page anchor to a rendered id", () => {
-    const anchors = hrefs.filter((h) => h.startsWith("#"));
-    expect(anchors.length).toBeGreaterThan(0);
-    for (const anchor of anchors) {
-      expect(ids.has(anchor.slice(1)), `dead anchor ${anchor}`).toBe(true);
-    }
-  });
-
-  it("navigates only to sign-in, the contact address, GitHub and in-page anchors", () => {
-    expect(hrefs).toContain("/login");
+  it("navigates only to the contact address and GitHub", () => {
     expect(hrefs).toContain(`mailto:${CONTACT_EMAIL}`);
     for (const href of hrefs) {
-      const allowed =
-        href === "/login" ||
-        href === `mailto:${CONTACT_EMAIL}` ||
-        href.startsWith(`${GITHUB_URL}`) ||
-        href.startsWith("#");
+      const allowed = href === `mailto:${CONTACT_EMAIL}` || href.startsWith(`${GITHUB_URL}`);
       expect(allowed, `unexpected link ${href}`).toBe(true);
     }
   });
@@ -51,11 +37,6 @@ describe("LandingPage", () => {
 
   it("implies no install, public sign-up or price", () => {
     expect(html).not.toMatch(/download|install|app store|sign up|get started|pricing|per month|\$\d/i);
-  });
-
-  it("gives someone with an invite link a path from the hero", () => {
-    expect(hrefs).toContain("#invite");
-    expect(html).toMatch(/<h2[^>]*>Have an invite link\?<\/h2>/);
   });
 
   it("serves a phone-width capture of every screenshot below the md breakpoint", () => {

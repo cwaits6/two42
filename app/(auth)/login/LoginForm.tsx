@@ -67,7 +67,7 @@ export function LoginForm() {
       title="Sign in"
       altPrompt="No account yet?"
       altLabel="Use an invite link"
-      altHref="/#invite"
+      altNote="Open the invite from the email or message it came in. A group invite asks for your name and emails you a link to set up your account. A household invite asks for your name and sends a request to your church’s admins, who email you that link once they approve it."
     >
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-1.5">

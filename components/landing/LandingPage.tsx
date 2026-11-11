@@ -1,5 +1,4 @@
 import { getImageProps } from "next/image";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { HeroWindow } from "./HeroWindow";
@@ -200,7 +199,7 @@ const GIVING: Feature & { dark: boolean; textFirst: boolean } = {
 const NOTES = [
   {
     title: "One sign-in",
-    text: "Someone in more than one group keeps a single account and moves between them.",
+    text: "One account covers every group a person belongs to in their church, and they move between groups without signing in again.",
   },
 ];
 
@@ -230,15 +229,6 @@ export function LandingPage() {
               render={<a href={`mailto:${CONTACT_EMAIL}`} />}
             >
               Ask about the pilot
-            </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              className="h-14 rounded-xl border-2 border-foreground bg-transparent px-7 text-lg font-semibold"
-              nativeButton={false}
-              render={<a href="#invite" />}
-            >
-              Use an invite link
             </Button>
             <span className="basis-full text-base font-medium text-muted-foreground sm:basis-auto sm:pl-1">
               In a closed pilot
@@ -299,24 +289,6 @@ export function LandingPage() {
               host its own copy
             </a>
             .
-          </p>
-        </div>
-      </section>
-
-      <section id="invite" className="scroll-mt-20">
-        <div
-          className={`${WRAP} grid gap-x-14 gap-y-4 border-t border-border pt-12 pb-16 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:pt-14 md:pb-20`}
-        >
-          <h2 className={`${DISPLAY} text-[clamp(1.875rem,3vw,2.375rem)] leading-[1.1]`}>Have an invite link?</h2>
-          <p className="max-w-[44rem] text-[1.1875rem] leading-[1.55] text-muted-foreground">
-            Open it from the email or message it came in. A group invite asks for your name and emails
-            you a link to set up your account. A household invite asks for your name and sends a
-            request to your church&rsquo;s admins, who email you that link once they approve it. If
-            you already have an account,{" "}
-            <Link href="/login" className={LINK}>
-              sign in
-            </Link>{" "}
-            first, then open the link again.
           </p>
         </div>
       </section>
