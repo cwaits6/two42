@@ -30,7 +30,7 @@ import {
 import { useRelabelToChild } from "@/components/household/useRelabelToChild";
 import { isChildWithoutAccount } from "@/lib/household";
 import { titleCaseName } from "@/lib/sanitize";
-import { nameFieldError } from "@/lib/nameField";
+import { nameFieldError, type MemberNameErrors } from "@/lib/nameField";
 import { mintSignedUrl, uploadImage } from "@/lib/uploadImage";
 import { relObjectPath } from "@/lib/storagePaths";
 import type { FamilyMember, FamilyMemberRelationship, FamilyUnit } from "@/lib/types";
@@ -44,11 +44,7 @@ const RELATIONSHIPS: { value: FamilyMemberRelationship; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-type FieldErrors = BirthdayErrors & {
-  first_name?: string;
-  last_name?: string;
-  preferred_name?: string;
-};
+type FieldErrors = BirthdayErrors & MemberNameErrors;
 
 interface Props {
   /** null = creating new member */
@@ -222,7 +218,7 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
 
     if (!res.ok) {
       if (res.status === 400) {
-        const data = await res.json().catch(() => null);
+        const data: { fieldErrors?: MemberNameErrors } | null = await res.json().catch(() => null);
         if (data?.fieldErrors && showErrors(data.fieldErrors)) return false;
       }
       toast.error(failureMessage(`save ${first}`, res.status));

@@ -24,6 +24,7 @@ import { EMAIL, EMAIL_MAX_LENGTH } from "@/lib/emailAddress";
 import { NETWORK_ERROR, operatorMessage } from "@/lib/errorCopy";
 import type { Database } from "@/lib/supabase/database.types";
 import { logError } from "@/lib/log";
+import type { AddOrganizationResponse } from "@/app/api/platform/organizations/addOrganizationResponse";
 import { normalizeEmail } from "@/lib/sanitize";
 
 export interface PlatformOrg {
@@ -110,7 +111,7 @@ export function OrganizationsList({ initialOrgs }: OrganizationsListProps) {
         toast.error(message);
         return;
       }
-      const data: { orgId?: string; inviteSent?: boolean } = await res.json().catch(() => ({}));
+      const data: Partial<AddOrganizationResponse> = await res.json().catch(() => ({}));
       if (opening.current === sentFrom) {
         setDialogOpen(false);
         setForm({ name: "", ownerEmail: "" });

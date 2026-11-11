@@ -37,7 +37,7 @@ import { EmptyState } from "@/components/states/EmptyState";
 import { ErrorState } from "@/components/states/ErrorState";
 import { LoadingState } from "@/components/states/LoadingState";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
-import { nameFieldError } from "@/lib/nameField";
+import { nameFieldError, type MemberNameErrors } from "@/lib/nameField";
 import { AnniversaryFields } from "@/components/profile/AnniversaryFields";
 import { MonthSelect } from "@/components/profile/MonthSelect";
 import { birthdayErrors, birthdayErrorsWithoutYear, type BirthdayErrors } from "@/components/profile/birthday";
@@ -472,8 +472,8 @@ export function HouseholdsManager() {
   /** Puts a server 400's name messages on their fields; false when it had none. */
   async function showServerNameErrors(res: Response | null): Promise<boolean> {
     if (res?.status !== 400) return false;
-    const data = await res.json().catch(() => null);
-    const fieldErrors: { first_name?: string; last_name?: string } = data?.fieldErrors ?? {};
+    const data: { fieldErrors?: MemberNameErrors } | null = await res.json().catch(() => null);
+    const fieldErrors = data?.fieldErrors ?? {};
     if (!fieldErrors.first_name && !fieldErrors.last_name) return false;
     setMemberNameErrors({ first: fieldErrors.first_name, last: fieldErrors.last_name });
     document.getElementById(fieldErrors.first_name ? "fm_first" : "fm_last")?.focus();

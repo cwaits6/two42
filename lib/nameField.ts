@@ -27,6 +27,9 @@ const MEMBER_NAME_FIELDS = [
 
 export type MemberNameField = (typeof MEMBER_NAME_FIELDS)[number][0];
 
+/** The `fieldErrors` a member route answers a refused name with. */
+export type MemberNameErrors = Partial<Record<MemberNameField, string>>;
+
 /**
  * Title-cases and checks the name columns of a household member body. On an
  * update only the fields present in the body are checked and returned; a
@@ -37,10 +40,10 @@ export function memberNames(
   mode: "create" | "update",
 ): {
   names: Partial<Record<MemberNameField, string | null>>;
-  fieldErrors: Partial<Record<MemberNameField, string>>;
+  fieldErrors: MemberNameErrors;
 } {
   const names: Partial<Record<MemberNameField, string | null>> = {};
-  const fieldErrors: Partial<Record<MemberNameField, string>> = {};
+  const fieldErrors: MemberNameErrors = {};
   for (const [field, label, required] of MEMBER_NAME_FIELDS) {
     const raw = body[field];
     if (mode === "update" && raw === undefined) continue;

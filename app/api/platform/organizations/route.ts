@@ -4,6 +4,7 @@ import { requirePlatformAdmin } from "@/lib/platform-access";
 import { createServiceClient } from "@/lib/supabase/server";
 import { logError } from "@/lib/log";
 import { normalizeEmail } from "@/lib/sanitize";
+import type { AddOrganizationResponse } from "./addOrganizationResponse";
 import { sendFirstAdminInvite } from "./firstAdminInvite";
 
 export async function POST(request: Request) {
@@ -82,7 +83,8 @@ export async function POST(request: Request) {
       email: ownerEmail,
       operatorId: gate.user.id,
     });
-    return NextResponse.json({ success: true, orgId, inviteSent: invite.sent });
+    const added: AddOrganizationResponse = { success: true, orgId, inviteSent: invite.sent };
+    return NextResponse.json(added);
   } catch (error) {
     logError("Organization create error", error, { route: "/api/platform/organizations" });
     return NextResponse.json(
