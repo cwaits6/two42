@@ -591,7 +591,7 @@ describe("planImport semantics", () => {
         kind: "update_profile",
         line: 1,
         id: "p1",
-        values: { phone_mobile: "+15559990000", hide_phone_mobile: false },
+        values: { phone_mobile: "+15559990000" },
       },
     ]);
   });
@@ -864,7 +864,7 @@ describe("planImport semantics", () => {
       makeFixtureSnapshot()
     );
     expect(plan.writes).toEqual([
-      expect.objectContaining({ kind: "update_profile", id: "p2", values: { city: "Visible City", hide_address: false } }),
+      expect.objectContaining({ kind: "update_profile", id: "p2", values: { city: "Visible City" } }),
     ]);
     expect(plan.rows[0].warnings).toEqual(
       expect.arrayContaining([

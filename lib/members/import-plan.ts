@@ -29,7 +29,6 @@
  */
 import type { MemberRow } from "@/lib/members/format";
 import { anniversaryCell, parseAnniversaryCell, withoutHiddenValues } from "@/lib/members/format";
-import { retiredFlagResets } from "@/lib/members/retiredHideFlags";
 import { isChildWithoutAccount } from "@/lib/household";
 import type {
   OrgSnapshot,
@@ -105,13 +104,6 @@ export interface ProfileUpdateValues {
   is_unlisted?: boolean;
   email_announcements?: boolean;
   hide_email?: boolean;
-  hide_phone_mobile?: boolean;
-  hide_phone_home?: boolean;
-  hide_phone_work?: boolean;
-  hide_address?: boolean;
-  hide_birthday?: boolean;
-  hide_birth_year?: boolean;
-  hide_occupation?: boolean;
 }
 
 export interface FamilyMemberInsertValues {
@@ -1043,8 +1035,6 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
       changes.role = [profile.role, row.role];
       values.role = row.role;
     }
-
-    Object.assign(values, retiredFlagResets(profile, values));
 
     // `email` turns the setting on; leaving it out never turns it off, or a
     // file could reveal an email someone chose to hide. Turning it off is theirs
