@@ -3,6 +3,8 @@
  * route so both report the same message against the same field. Kept free
  * of server imports so the client component can use it.
  */
+import { nameFieldError } from "@/lib/nameField";
+import { normalizeEmail as sanitizeEmail, titleCaseName } from "@/lib/sanitize";
 
 export interface InvitePersonInput {
   email: string;
@@ -18,22 +20,13 @@ export type InvitePersonErrors = Partial<Record<InvitePersonField, string>>;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_NAME_LENGTH = 100;
 
 export function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
+  return sanitizeEmail(email) ?? "";
 }
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function nameError(value: string, label: string): string | undefined {
-  if (!value) return `Enter a ${label}.`;
-  if (value.length > MAX_NAME_LENGTH) {
-    return `Use ${MAX_NAME_LENGTH} characters or fewer.`;
-  }
-  return undefined;
 }
 
 /**
@@ -47,8 +40,8 @@ export function validateInvitePerson(raw: unknown): {
   const body = (raw ?? {}) as Record<string, unknown>;
   const input: InvitePersonInput = {
     email: normalizeEmail(text(body.email)),
-    firstName: text(body.firstName),
-    lastName: text(body.lastName),
+    firstName: titleCaseName(text(body.firstName)) ?? "",
+    lastName: titleCaseName(text(body.lastName)) ?? "",
     householdId: text(body.householdId) || null,
   };
 
@@ -58,9 +51,9 @@ export function validateInvitePerson(raw: unknown): {
   } else if (!EMAIL_PATTERN.test(input.email)) {
     errors.email = "Enter an email address like name@example.com.";
   }
-  const firstName = nameError(input.firstName, "first name");
+  const firstName = nameFieldError(input.firstName, "first name", true);
   if (firstName) errors.firstName = firstName;
-  const lastName = nameError(input.lastName, "last name");
+  const lastName = nameFieldError(input.lastName, "last name", true);
   if (lastName) errors.lastName = lastName;
   if (input.householdId && !UUID_PATTERN.test(input.householdId)) {
     errors.householdId = "Choose a household from the list.";

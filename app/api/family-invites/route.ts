@@ -6,6 +6,7 @@ import { siteConfig } from "@/lib/config";
 import { isMemberRole } from "@/lib/roles";
 import { CHILD_INVITE_REFUSED } from "@/lib/household";
 import { logError } from "@/lib/log";
+import { normalizeEmail } from "@/lib/sanitize";
 
 /**
  * POST /api/family-invites
@@ -50,10 +51,10 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const { family_member_id, invite_email } = body as {
-    family_member_id?: string;
-    invite_email?: string;
-  };
+  const { family_member_id } = body as { family_member_id?: string };
+  const invite_email = normalizeEmail(
+    typeof body.invite_email === "string" ? body.invite_email : null,
+  );
 
   if (!family_member_id || !invite_email) {
     return NextResponse.json(

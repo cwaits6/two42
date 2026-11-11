@@ -269,3 +269,15 @@ describe("clearing a birthday", () => {
     expect(document.body.textContent).not.toContain("Enter the day of the birthday.");
   });
 });
+
+describe("name checks", () => {
+  it("refuses an over-long preferred name on its field and saves nothing", async () => {
+    await mount({ ...ADULT, preferred_name: "x".repeat(101) });
+    await click("Save changes");
+
+    const field = document.getElementById("preferred_name")!;
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+    expect(document.body.textContent).toContain("Use 100 characters or fewer.");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

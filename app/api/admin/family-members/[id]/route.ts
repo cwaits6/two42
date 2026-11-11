@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { logError } from "@/lib/log";
+import { memberNames } from "@/lib/nameField";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -35,21 +36,13 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  const {
-    first_name,
-    last_name,
-    preferred_name,
-    relationship,
-    birth_month,
-    birth_day,
-    birth_year,
-    is_class_member,
-  } = body;
+  const { relationship, birth_month, birth_day, birth_year, is_class_member } = body;
 
-  const updates: Record<string, unknown> = {};
-  if (first_name !== undefined) updates.first_name = first_name;
-  if (last_name !== undefined) updates.last_name = last_name || null;
-  if (preferred_name !== undefined) updates.preferred_name = preferred_name || null;
+  const { names, fieldErrors } = memberNames(body, "update");
+  if (Object.keys(fieldErrors).length > 0) {
+    return NextResponse.json({ fieldErrors }, { status: 400 });
+  }
+  const updates: Record<string, unknown> = { ...names };
   if (relationship !== undefined) updates.relationship = relationship;
   if (birth_month !== undefined)
     updates.birth_month = birth_month ? Number(birth_month) : null;

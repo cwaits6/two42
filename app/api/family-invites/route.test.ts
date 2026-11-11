@@ -72,12 +72,12 @@ function makeClient(opts: {
   return { client, insert };
 }
 
-function post() {
+function post(inviteEmail = "kid@example.test") {
   return POST(
     new Request("http://localhost/api/family-invites", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ family_member_id: "m1", invite_email: "kid@example.test" }),
+      body: JSON.stringify({ family_member_id: "m1", invite_email: inviteEmail }),
     }),
   );
 }
@@ -121,6 +121,23 @@ describe("POST /api/family-invites", () => {
     expect(res.status).toBe(200);
     expect(insert).toHaveBeenCalledTimes(1);
     expect(sendFamilyInviteEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves and mails the address trimmed and lowercased", async () => {
+    const { client, insert } = makeClient({ member: { claimed_profile_id: null } });
+    createClient.mockResolvedValue(client);
+
+    expect((await post(" Kid@Example.COM ")).status).toBe(200);
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ invite_email: "kid@example.com" }),
+    );
+    expect(sendFamilyInviteEmail).toHaveBeenCalledWith(
+      "kid@example.com",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it("answers 404 for someone in another household, whose row RLS hides", async () => {
