@@ -102,13 +102,6 @@ const PINS = [
     ],
   },
   {
-    file: "app/api/family-invites/claim/route.ts",
-    needles: [
-      "callerProfile.org_id !== invite.org_id",
-      "family-invites/claim: caller org does not match invite org",
-    ],
-  },
-  {
     file: "app/api/household/link-member/route.ts",
     needles: [
       "target.org_id !== currentProfile.org_id",

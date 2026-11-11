@@ -140,7 +140,7 @@ end $$;
 
 -- ── Structural: the .single() token anchors are globally unique ─────────────
 -- feed.ics and events/[id]/ics .single() on token_hash; verify-token and
--- consume-token .single() on signup_token. Each must be a single-column
+-- setup-account on signup_token. Each must be a single-column
 -- UNIQUE index — a composite (token, org_id) unique would let the same
 -- token exist in two orgs and break the resolution those routes anchor on.
 
@@ -155,7 +155,7 @@ insert into idor_results
     exists (select 1 from pg_indexes
       where schemaname = 'public' and tablename = 'access_requests'
         and indexdef like '%UNIQUE%' and indexdef like '%(signup_token)%'),
-    'access_requests.signup_token is globally UNIQUE (verify/consume-token''s org anchor)');
+    'access_requests.signup_token is globally UNIQUE (verify-token/setup-account''s org anchor)');
 
 -- ── Reads: specific org-A UUIDs yield nothing to an org-B principal ─────────
 

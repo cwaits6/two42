@@ -61,9 +61,8 @@ does and does not see, stated precisely:
   not a PostgREST parser, and it sharpens the message rather than adding a
   second gate: a scoped parent passes as before.
 - **The pinned cross-org assertions are substring counts, not reachability
-  analysis.** All four hand-written checks are pinned (the two signed-link
-  surfaces, `app/api/family-invites/claim/route.ts`,
-  `app/api/household/link-member/route.ts`); the pin proves the comparison
+  analysis.** All three hand-written checks are pinned (the two signed-link
+  surfaces and `app/api/household/link-member/route.ts`); the pin proves the comparison
   and its denial log exist, not that the code path is reached.
 
 ## Org scoping status
@@ -118,9 +117,9 @@ Two deliberate behaviour changes shipped with this pass:
 - `feed.ics` gained the owner role re-check `events/[id]/ics` already had —
   a token whose owning profile is `pending` or deleted now returns `401`
   instead of a full event list.
-- `family-invites/claim`: the scoped `profiles` update returning zero rows
-  is now a real `500 Failed to link profile to family` instead of a silent
-  success.
+- `family-invites/claim` (since removed; the household claim runs inside
+  `auth/setup-account`): the scoped `profiles` update returning zero rows
+  became a real `500` instead of a silent success.
 
 The two Edge Function sites were closed by the parallel edge-function
 stream (Phase 3, #212 — see the table below).
@@ -785,7 +784,7 @@ Three `SECURITY DEFINER` functions in
   another household's person would pass. It reads the member by `(id, org_id)` from
   the invite row, whose composite FK already ties the two together. A service-role
   insert has no request org to read instead. It raises `HP003` when the member isn't in
-  the invite's `family_id`, which nothing else checks and which `/api/family-invites/claim`
+  the invite's `family_id`, which nothing else checks and which `/api/auth/setup-account`
   relies on, then `HP002` on a child without an account. The read takes `FOR SHARE`, so
   an invite and a relabel to Child can't both commit: the later one waits for the
   earlier, then this read sees the relabel or the retiring trigger below sees the invite.
@@ -797,7 +796,7 @@ Three `SECURITY DEFINER` functions in
 
 Execute on both trigger functions is revoked from `public, anon, authenticated`.
 
-## App routes and pages (26 sites)
+## App routes and pages (25 sites)
 
 | File | Why service-role is used | Org derived from | Scoped queries |
 |------|--------------------------|------------------|----------------|
@@ -822,7 +821,6 @@ Execute on both trigger functions is revoked from `public, anon, authenticated`.
 | `app/api/feedback/route.ts` | Rate-limit count and admin email fan-out (RLS exposes feedback only to admins) | Caller's own RLS-scoped profile | `feedback` (count), `profiles` (admin recipients — was a latent cross-tenant email leak; a correctness-under-change risk, not a live one at single-org scale) |
 | `app/api/household/link-member/route.ts` | Household manager updating another profile's `family_id` (RLS blocks cross-profile writes) | Caller's own RLS-scoped profile; target's org asserted equal | `profiles` update on `(id, org_id, family_id IS NULL)` |
 | `app/api/events/[id]/ics/route.ts` | Bearer-token calendar subscription; no session | `calendar_subscription_tokens` row (`org_id` stamped at issuance); the owner's membership of the event's group re-checked | `events` (404 on cross-org id; a moved date's series row read on `(id, org_id, group_id)` for its meeting details and calendar sharing; a series' exception rows on `(series_id, org_id, group_id)`), `organizations` `.eq("id", org_id)` (time zone), `group_settings` on `(org_id, group_id)` (the group's calendar sharing defaults), `group_members` (404 when the owner is not in the event's group), `profiles` (owner), token expiry update |
-| `app/api/family-invites/claim/route.ts` | New user claiming an invite while their role is still `pending` | The `family_invites` row; caller's profile org must match (403 otherwise) | `profiles`, `family_members`, `family_invites` updates all on the invite's `org_id` |
 | `app/api/admin/email-domain/route.ts` | Every method 404s before auth while `CUSTOM_SENDING_DOMAINS_ENABLED` (`lib/email/sendingDomains.ts`) is false. GET reads `organizations.custom_email_domain_enabled` through the service client; the admin's request client has no SELECT grant on that column. The `org_email_domains` row is read through the request client. POST gates on that flag, then claims the row through `org_email_domain_claim()` — the `service_role`-only RPC (see the "Email domain claim RPC" section above) that enforces the platform-wide domain cap atomically, so the route no longer holds an unscoped count read — then Resend `domains.create` returns `resend_domain_id`/`status`/`dns_records`, columns the admin's own client has no UPDATE grant on — the write must happen server-side (CWA-70 / #363); when the follow-up write fails and the Resend removal also fails, the row is kept as `status = 'cleanup_pending'` (server-set-only columns again) rather than deleted. DELETE now removes the Resend domain first and needs the same server-set-only writes when that fails | The caller's own RLS-scoped `profiles.org_id`, read on the request client; the `organizations` reads take `.eq("id", orgId)` (tenant root); the insert carries that `org_id` in its payload, and every subsequent read/write is predicate-scoped `.eq("org_id", orgId)` / `.eq("id", ...).eq("org_id", orgId)` | `organizations` `.eq("id", orgId)` (flag); `org_email_domains` existing-row select `.eq("org_id", orgId)`, unscoped head count (org-anchor), insert (payload: `org_id`, `domain`), update (`resend_domain_id`, `status`, `dns_records`, `cleanup_failed_at`) and rollback/remove deletes on `(id, org_id)` |
 | `app/api/admin/email-domain/verify/route.ts` | 404s before auth while `CUSTOM_SENDING_DOMAINS_ENABLED` is false. POST handler: the `status`/`verified_at`/`last_checked_at` transition must not be writable by the admin's own client (same column grants as above) | The caller's own RLS-scoped `profiles.org_id`, read on the request client; target row fetched `.eq("org_id", orgId)` before any write | `org_email_domains` select `.eq("org_id", orgId)` + update on `(id, org_id)` |
 | `app/api/platform/organizations/[id]/email-cap/route.ts` | Daily email cap override (CWA-72): `org_email_limits` is platform-operator-owned with no permissive policy, so only a service-role write can reach it — an org that can raise its own cap does not have a cap | Platform-admin authority; org id from the route param, validated against an existing `organizations` row before the write | `organizations` `.eq("id", id)` (existence check); `org_email_limits` upsert carrying the validated `org_id`, zero-row-checked |
