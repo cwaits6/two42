@@ -76,16 +76,35 @@ export async function POST(request: Request) {
   const userId = setupUserId(token);
   const ids = { user: userId, accessRequest: requestId, org: orgId };
 
-  async function consumeLink(): Promise<boolean> {
-    // A zero-row update means a concurrent request already consumed it.
-    const { error } = await service
+  // `retireReplacement` is for the request that has just set the account up:
+  // a repeat invite can replace the token while that request runs, and the
+  // replacement would otherwise stay a live link to an account that exists.
+  async function consumeLink(retireReplacement = false): Promise<boolean> {
+    const { data, error } = await service
       .from("access_requests")
       .update({ signup_token: null })
       .eq("id", requestId)
       .eq("org_id", orgId)
-      .eq("signup_token", token);
+      .eq("signup_token", token)
+      .select("id");
     if (error) {
       logError("Setup account: consuming the link failed", error, { route: "/api/auth/setup-account", ids });
+      return false;
+    }
+    // A zero-row update means a concurrent request already consumed it, or
+    // the token was replaced.
+    if (!retireReplacement || (data && data.length > 0)) return true;
+
+    const { error: retireError } = await service
+      .from("access_requests")
+      .update({ signup_token: null })
+      .eq("id", requestId)
+      .eq("org_id", orgId);
+    if (retireError) {
+      logError("Setup account: retiring a replaced link failed", retireError, {
+        route: "/api/auth/setup-account",
+        ids,
+      });
       return false;
     }
     return true;
@@ -114,6 +133,32 @@ export async function POST(request: Request) {
       return true;
     }
 
+    // The invite names a household and a member. A member moved to another
+    // household since the invite was written makes it stale: linking would
+    // put the profile in one household and claim a member of another.
+    if (invite.family_member_id) {
+      const { data: member, error: memberLookupError } = await service
+        .from("family_members")
+        .select("id, family_id")
+        .eq("id", invite.family_member_id)
+        .eq("org_id", orgId)
+        .maybeSingle();
+      if (memberLookupError) {
+        logError("Setup account: household member lookup failed", memberLookupError, {
+          route: "/api/auth/setup-account",
+          ids: { ...ids, invite: invite.id },
+        });
+        return false;
+      }
+      if (member && member.family_id !== invite.family_id) {
+        logWarn("Setup account: household invite not claimable", undefined, {
+          route: "/api/auth/setup-account",
+          ids: { ...ids, invite: invite.id },
+        });
+        return true;
+      }
+    }
+
     const { data: linked, error: profileError } = await service
       .from("profiles")
       .update({ family_id: invite.family_id })
@@ -134,6 +179,7 @@ export async function POST(request: Request) {
       .update({ claimed_profile_id: userId })
       .eq("id", invite.family_member_id)
       .eq("org_id", orgId)
+      .eq("family_id", invite.family_id)
       .or(`claimed_profile_id.is.null,claimed_profile_id.eq.${userId}`)
       .select("id");
     if (memberError) {
@@ -228,7 +274,7 @@ export async function POST(request: Request) {
   if (link.row.invite_token && !(await linkHousehold(link.row.invite_token))) {
     return failed();
   }
-  if (!(await consumeLink())) {
+  if (!(await consumeLink(true))) {
     return failed();
   }
 

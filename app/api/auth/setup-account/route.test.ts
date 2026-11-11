@@ -66,6 +66,7 @@ function fakeService(opts: {
   row?: Row | null;
   lookupError?: unknown;
   invite?: Record<string, unknown> | null;
+  member?: Record<string, unknown> | null;
   respond?: (call: Call) => Result | undefined;
   users?: Map<string, { email: string }>;
   createError?: AuthError;
@@ -81,6 +82,10 @@ function fakeService(opts: {
     }
     if (call.table === "family_invites" && call.op === "select") {
       return { data: opts.invite ?? null, error: null };
+    }
+    if (call.table === "family_members" && call.op === "select") {
+      const member = opts.member === undefined ? { id: "member-1", family_id: opts.invite?.family_id } : opts.member;
+      return { data: member, error: null };
     }
     return { data: [{ id: "x" }], error: null };
   };
@@ -228,6 +233,7 @@ describe("POST /api/auth/setup-account — each invite kind", () => {
     expect(writes[1].eqs).toEqual([
       ["id", "member-1"],
       ["org_id", ORG],
+      ["family_id", "family-1"],
     ]);
     expect(writes[1].ors).toEqual([`claimed_profile_id.is.null,claimed_profile_id.eq.${USER_ID}`]);
     expect(writes[2].payload).toEqual({ accepted_at: expect.any(String) });
@@ -252,6 +258,29 @@ describe("POST /api/auth/setup-account — each invite kind", () => {
     });
     const res = await post({ token: TOKEN, password: PASSWORD });
     expect(res.status).toBe(200);
+    expect(householdWrites(calls)).toEqual([]);
+    expect(consumeCalls(calls)).toHaveLength(1);
+  });
+
+  it("skips an invite whose member has moved to another household", async () => {
+    const { calls } = fakeService({
+      row: { ...BASE_ROW, invite_token: INVITE_TOKEN },
+      invite: {
+        id: INVITE,
+        family_id: "family-1",
+        family_member_id: "member-1",
+        invite_email: "ada@example.com",
+        accepted_at: null,
+      },
+      member: { id: "member-1", family_id: "family-2" },
+    });
+    const res = await post({ token: TOKEN, password: PASSWORD });
+    expect(res.status).toBe(200);
+    const memberLookup = calls.find((c) => c.table === "family_members" && c.op === "select")!;
+    expect(memberLookup.eqs).toEqual([
+      ["id", "member-1"],
+      ["org_id", ORG],
+    ]);
     expect(householdWrites(calls)).toEqual([]);
     expect(consumeCalls(calls)).toHaveLength(1);
   });
@@ -492,6 +521,26 @@ describe("POST /api/auth/setup-account — partial failure and retry", () => {
     const res = await post({ token: TOKEN, password: PASSWORD });
     expect(res.status).toBe(200);
     expect(admin.updateUserById).toHaveBeenCalledWith(USER_ID, { password: PASSWORD });
+  });
+
+  it("retires a token that replaced this one while the account was being set up", async () => {
+    const { calls } = fakeService({
+      respond: (call) =>
+        call.table === "access_requests" &&
+        call.op === "update" &&
+        call.eqs.some(([col]) => col === "signup_token")
+          ? { data: [], error: null }
+          : undefined,
+    });
+    const res = await post({ token: TOKEN, password: PASSWORD });
+    expect(res.status).toBe(200);
+    const updates = calls.filter((c) => c.table === "access_requests" && c.op === "update");
+    expect(updates).toHaveLength(2);
+    expect(updates[1].payload).toEqual({ signup_token: null });
+    expect(updates[1].eqs).toEqual([
+      ["id", REQUEST],
+      ["org_id", ORG],
+    ]);
   });
 
   it("treats a link a concurrent request already consumed as consumed", async () => {
