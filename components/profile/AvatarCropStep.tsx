@@ -193,7 +193,7 @@ export function AvatarCropStep({
         finalFocus={returnFocusRef}
         showCloseButton={!saving}
         // Below 352px the default margin and padding leave less room than the fixed crop frame.
-        className="max-[351px]:max-w-[calc(100%-1rem)] max-[351px]:p-2 motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none"
+        className="max-h-[calc(100dvh-2rem)] overflow-y-auto max-[351px]:max-w-[calc(100%-1rem)] max-[351px]:p-2 motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none"
       >
         <DialogHeader>
           <DialogTitle>Crop photo</DialogTitle>
