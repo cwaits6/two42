@@ -203,8 +203,9 @@ export function EventsPageClient({ groups, allEvents, replies, userId, timeZone 
     ) : null;
   // The list's empty state carries the single-group Add event link, so the
   // header leaves it out then.
+  const listCreateHref = ledVisible.length === 1 ? newEventHref(ledVisible[0].id) : null;
   const listEmptyCarriesAdd =
-    view === "list" && upcomingVisible.length === 0 && ledVisible.length === 1;
+    view === "list" && upcomingVisible.length === 0 && listCreateHref !== null;
 
   return (
     <div>
@@ -282,7 +283,7 @@ export function EventsPageClient({ groups, allEvents, replies, userId, timeZone 
           events={upcomingVisible}
           replies={replies}
           userId={userId}
-          createHref={ledVisible.length === 1 ? newEventHref(ledVisible[0].id) : null}
+          createHref={listCreateHref}
           timeZone={timeZone}
           viewSwitch={viewSwitch}
         />

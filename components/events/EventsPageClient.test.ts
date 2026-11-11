@@ -15,7 +15,17 @@ function view(name: string) {
 }
 vi.mock("@/components/events/EventCalendarView", () => ({ EventCalendarView: view("month") }));
 vi.mock("@/components/events/EventWeekView", () => ({ EventWeekView: view("week") }));
-vi.mock("@/components/events/EventListView", () => ({ EventListView: view("list") }));
+// The list stands in for its empty state's Add event link, so a count of
+// links proves the page offers it exactly once.
+vi.mock("@/components/events/EventListView", () => ({
+  EventListView: ({ viewSwitch, createHref }: { viewSwitch: ReactNode; createHref: string | null }) =>
+    createElement(
+      "section",
+      { "data-view": "list" },
+      viewSwitch,
+      createHref && createElement("a", { href: createHref }, "Add event")
+    ),
+}));
 
 const { EventsPageClient } = await import("./EventsPageClient");
 
@@ -78,10 +88,12 @@ describe("EventsPageClient Add event", () => {
   const addEvents = (container: HTMLElement) =>
     Array.from(container.querySelectorAll("a")).filter((a) => a.textContent === "Add event");
 
-  it("drops the header Add event in an empty list view, where the empty state offers it", async () => {
+  it("offers Add event once in an empty list view, from the empty state and not the header", async () => {
     const { container, radio } = await mount({ isLeader: true });
     expect(addEvents(container)).toHaveLength(1);
     await act(async () => radio("List").click());
-    expect(addEvents(container)).toHaveLength(0);
+    const links = addEvents(container);
+    expect(links).toHaveLength(1);
+    expect(links[0].closest('[data-view="list"]')).not.toBeNull();
   });
 });
