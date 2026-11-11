@@ -13,7 +13,8 @@ import { parsePhoneNumberFromString, AsYouType } from "libphonenumber-js";
 // -----------------------------------------------------------------------------
 
 // Name particles that should stay lowercase when they appear in the middle of a
-// name (but are capitalized at the start). Intentionally conservative — we only
+// name. At the start they are capitalized unless typed in lowercase before a
+// surname typed with its capital. Intentionally conservative — we only
 // handle the common western European patterns our members are likely to use.
 const LOWERCASE_PARTICLES = new Set([
   "de", "del", "de la", "de las", "de los", "della", "der", "di", "du",
@@ -25,44 +26,54 @@ const UPPERCASE_TOKENS = new Set([
   "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x",
 ]);
 
+const isUpper = (c: string) => c !== c.toLowerCase();
+const isLower = (c: string) => c !== c.toUpperCase();
+
 /**
- * Title-case a single word, preserving internal capitals for Mc/Mac and
- * handling O'Brien / O'Neill etc.
+ * Upper-case the first character, keeping one character where the capital is
+ * longer ("ß" → "S", "ﬁ" → "F"), so a second pass leaves the word alone.
+ */
+function capitalize(word: string): string {
+  const upper = word.charAt(0).toUpperCase();
+  return upper.charAt(0) + upper.slice(1).toLowerCase() + word.slice(1);
+}
+
+/**
+ * A word typed with deliberate inner capitals ("DeSantis", "McKay",
+ * "O'Brien") rather than in one case or with Caps Lock on ("mARY",
+ * "McDONALD"). A lowercase first letter alone is not taken as intent.
+ */
+function hasTypedCapitals(word: string): boolean {
+  const chars = [...capitalize(word)];
+  if (!isUpper(chars[0])) return false;
+  if (!chars.some(isLower)) return false;
+  if (!chars.slice(1).some(isUpper)) return false;
+  return !chars.some((c, i) => i > 0 && isUpper(c) && isUpper(chars[i - 1]));
+}
+
+/**
+ * Title-case a single word. Keeps capitals typed inside the word; a word typed
+ * in one case gets Mc and O'/D' capitals and upper-case roman numerals.
  */
 function titleCaseWord(word: string): string {
   if (!word) return word;
-  const lower = word.toLowerCase();
+  if (word.includes("-")) return word.split("-").map(titleCaseWord).join("-");
+  if (hasTypedCapitals(word)) return capitalize(word);
 
-  // Roman numerals / suffixes (II, III, IV, …)
+  const lower = word.toLowerCase();
   if (UPPERCASE_TOKENS.has(lower)) return lower.toUpperCase();
 
-  // O'Brien, D'Angelo — capitalize both sides of the apostrophe
   if (lower.length > 2 && (lower.startsWith("o'") || lower.startsWith("d'"))) {
-    return (
-      lower.charAt(0).toUpperCase() +
-      "'" +
-      lower.charAt(2).toUpperCase() +
-      lower.slice(3)
-    );
+    return capitalize(lower.slice(0, 2)) + capitalize(lower.slice(2));
   }
 
-  // McDonald, MacArthur — capitalize after the prefix
+  // "Mac" is left alone: Mack, Macy and Machado outnumber the MacDonalds,
+  // who keep their capital by typing it.
   if (lower.startsWith("mc") && lower.length > 2) {
-    return "Mc" + lower.charAt(2).toUpperCase() + lower.slice(3);
-  }
-  if (lower.startsWith("mac") && lower.length > 3) {
-    return "Mac" + lower.charAt(3).toUpperCase() + lower.slice(4);
+    return "Mc" + capitalize(lower.slice(2));
   }
 
-  // Hyphenated names: Smith-Jones
-  if (lower.includes("-")) {
-    return lower
-      .split("-")
-      .map((part) => titleCaseWord(part))
-      .join("-");
-  }
-
-  return lower.charAt(0).toUpperCase() + lower.slice(1);
+  return capitalize(lower);
 }
 
 /**
@@ -75,12 +86,16 @@ export function titleCaseName(raw: string | null | undefined): string | null {
   if (!trimmed) return null;
 
   const words = trimmed.split(" ");
+  const restWrittenInCase = words
+    .slice(1)
+    .some((w) => isUpper(w.charAt(0)) && [...w].some(isLower));
   return words
     .map((word, i) => {
-      // Particle stays lowercase if it's not the first word.
-      if (i > 0 && LOWERCASE_PARTICLES.has(word.toLowerCase())) {
-        return word.toLowerCase();
-      }
+      const lower = word.toLowerCase();
+      if (!LOWERCASE_PARTICLES.has(lower)) return titleCaseWord(word);
+      // A leading particle typed in lowercase before a surname typed with its
+      // capital ("van der Berg", "de la Cruz") is kept that way.
+      if (i > 0 || (word === lower && restWrittenInCase)) return lower;
       return titleCaseWord(word);
     })
     .join(" ");
