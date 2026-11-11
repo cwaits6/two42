@@ -165,7 +165,8 @@ for (const { outcome, status } of [
       await expect(page.getByText("Couldn't sign out everywhere. Other devices may still be signed in.")).toHaveCount(
         status === 204 ? 0 : 1
       );
-      expect(requests).toBe(1);
+      // A refused sign-out everywhere is followed by one for this device alone.
+      expect(requests).toBe(status === 204 ? 1 : 2);
     });
   });
 }
