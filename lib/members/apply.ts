@@ -33,6 +33,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import type { PlannedWrite } from "@/lib/members/import-plan";
 import { logError } from "@/lib/log";
+import { titleCaseName } from "@/lib/sanitize";
 
 export type ApplyResult =
   | { ok: true; applied: number; appliedLines: number[] }
@@ -81,6 +82,17 @@ function noRowsTouched(
 }
 
 /**
+ * Capitalizes a name the import inserts. Only the case may change: the plan
+ * matches saved rows on the trimmed, lowercased name, so a collapsed space
+ * would make the next import miss this row and insert it again.
+ */
+function capitalized<T extends string | undefined>(name: T): T {
+  if (!name) return name;
+  const cased = titleCaseName(name);
+  return (cased?.toLowerCase() === name.trim().toLowerCase() ? cased : name) as T;
+}
+
+/**
  * Execute planned writes in dependency order. Household inserts feed their
  * new ids to the family_members inserts that reference them by the per-file
  * household key, which is why the plan's ordering is load-bearing.
@@ -121,7 +133,11 @@ export async function applyWrites(
         case "insert_family_unit": {
           const { data, error } = await supabase
             .from("family_units")
-            .insert({ ...write.values, org_id: orgId })
+            .insert({
+              ...write.values,
+              family_name: capitalized(write.values.family_name),
+              org_id: orgId,
+            })
             .select("id")
             .single();
           if (error || !data) {
@@ -150,7 +166,14 @@ export async function applyWrites(
           }
           const { error } = await supabase
             .from("family_members")
-            .insert({ ...write.values, family_id: familyId, org_id: orgId });
+            .insert({
+              ...write.values,
+              first_name: capitalized(write.values.first_name),
+              last_name: capitalized(write.values.last_name),
+              preferred_name: capitalized(write.values.preferred_name),
+              family_id: familyId,
+              org_id: orgId,
+            });
           failure = error;
           break;
         }

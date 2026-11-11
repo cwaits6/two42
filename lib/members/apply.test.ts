@@ -131,6 +131,38 @@ describe("applyWrites — write routing", () => {
     });
   });
 
+  it("capitalizes the names it inserts and leaves the names it updates as the file has them", async () => {
+    const { client, calls } = fakeClient({ insertedId: "f-new" });
+    await applyWrites(client, USER, ORG, [
+      { kind: "insert_family_unit", line: 1, householdKey: "hh-1", values: { family_name: "van der BERG" } },
+      {
+        kind: "insert_family_member",
+        line: 1,
+        familyId: null,
+        householdKey: "hh-1",
+        values: { first_name: "john", last_name: "MCDONALD", preferred_name: "jack", relationship: "primary" },
+      },
+      { kind: "update_family_member", line: 2, id: "fm-1", values: { preferred_name: "jill" } },
+    ]);
+    expect(calls[0].payload).toMatchObject({ family_name: "Van der Berg" });
+    expect(calls[1].payload).toMatchObject({ first_name: "John", last_name: "McDonald", preferred_name: "Jack" });
+    expect(calls[2].payload).toEqual({ preferred_name: "jill" });
+  });
+
+  it("keeps an inserted name's spacing, which the next import matches on", async () => {
+    const { client, calls } = fakeClient();
+    await applyWrites(client, USER, ORG, [
+      {
+        kind: "insert_family_member",
+        line: 1,
+        familyId: "f-existing",
+        householdKey: null,
+        values: { first_name: "mary  ann", relationship: "child" },
+      },
+    ]);
+    expect(calls[0].payload).toMatchObject({ first_name: "mary  ann" });
+  });
+
   it("prefers an existing familyId over the per-file key", async () => {
     const { client, calls } = fakeClient();
     await applyWrites(client, USER, ORG, [
