@@ -218,8 +218,8 @@ npx supabase secrets set RESEND_API_KEY=<key> SITE_URL=https://your.domain \
 ```
 
 Then create the two Vault secrets above. Repeat `db push --remote` and
-`functions deploy` after every update; each asks before it changes the
-project. This repository's own CI does both on
+`functions deploy` after every update. Each asks before it changes the
+project, unless `--yes` is passed or `SUPABASE_YES` is exported in the shell. This repository's own CI does both on
 each push to `main` that touches `supabase/` or the database types
 ([`.github/workflows/supabase.yml`](./.github/workflows/supabase.yml))
 with the repository secrets `SUPABASE_PROJECT_REF`, `SUPABASE_ACCESS_TOKEN` and
