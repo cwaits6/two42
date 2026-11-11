@@ -42,4 +42,15 @@ describe("memberNames", () => {
       last_name: "Use 100 characters or fewer.",
     });
   });
+
+  it("refuses a name that is not a string instead of clearing it", () => {
+    expect(memberNames({ last_name: 42, preferred_name: {} }, "update")).toEqual({
+      names: {},
+      fieldErrors: { last_name: "Enter a last name.", preferred_name: "Enter a preferred name." },
+    });
+    expect(memberNames({ last_name: null }, "update")).toEqual({
+      names: { last_name: null },
+      fieldErrors: {},
+    });
+  });
 });

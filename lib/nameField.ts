@@ -33,7 +33,7 @@ export type MemberNameErrors = Partial<Record<MemberNameField, string>>;
 /**
  * Title-cases and checks the name columns of a household member body. On an
  * update only the fields present in the body are checked and returned; a
- * cleared optional name is saved as null.
+ * cleared optional name is saved as null, and a non-string name is refused.
  */
 export function memberNames(
   body: Record<string, unknown>,
@@ -47,6 +47,10 @@ export function memberNames(
   for (const [field, label, required] of MEMBER_NAME_FIELDS) {
     const raw = body[field];
     if (mode === "update" && raw === undefined) continue;
+    if (raw != null && typeof raw !== "string") {
+      fieldErrors[field] = `Enter a ${label}.`;
+      continue;
+    }
     const name = titleCaseName(typeof raw === "string" ? raw : null);
     const error = nameFieldError(name, label, required);
     if (error) fieldErrors[field] = error;
