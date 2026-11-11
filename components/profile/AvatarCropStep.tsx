@@ -94,8 +94,8 @@ export function AvatarCropStep({
   const { w, h } = loaded;
 
   const move = (dx: number, dy: number) =>
-    setCrop((from) => clampCrop({ ...from, x: from.x + dx, y: from.y + dy }, w, h, VIEWPORT));
-  const zoomTo = (zoom: number) => setCrop((from) => zoomCrop(from, zoom, w, h, VIEWPORT));
+    setCrop((from) => clampCrop({ ...from, x: from.x + dx, y: from.y + dy }, w, h));
+  const zoomTo = (zoom: number) => setCrop((from) => zoomCrop(from, zoom, w, h));
 
   const startGesture = () => {
     const points = [...pointers.current.values()];
@@ -162,7 +162,7 @@ export function AvatarCropStep({
   const save = async () => {
     setSaving(true);
     try {
-      const cropped = await renderCrop(loaded.img, crop, VIEWPORT);
+      const cropped = await renderCrop(loaded.img, crop);
       await onSave(cropped);
     } catch {
       logWarn("AvatarCropStep: crop failed");
@@ -173,7 +173,7 @@ export function AvatarCropStep({
     }
   };
 
-  const scale = displayScale(w, h, VIEWPORT, crop.zoom);
+  const scale = displayScale(w, h, crop.zoom);
   const shownW = w * scale;
   const shownH = h * scale;
 

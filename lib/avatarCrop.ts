@@ -17,41 +17,35 @@ export type SourceRect = { sx: number; sy: number; side: number };
 export const INITIAL_CROP: CropState = { zoom: 1, x: 0, y: 0 };
 
 /** Frame pixels per source pixel at the given zoom. */
-export function displayScale(w: number, h: number, viewport: number, zoom: number): number {
-  return (viewport / Math.min(w, h)) * zoom;
+export function displayScale(w: number, h: number, zoom: number): number {
+  return (VIEWPORT / Math.min(w, h)) * zoom;
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 /** Keeps the zoom in range and the picture covering the whole frame. */
-export function clampCrop(state: CropState, w: number, h: number, viewport: number): CropState {
+export function clampCrop(state: CropState, w: number, h: number): CropState {
   const zoom = clamp(state.zoom, MIN_ZOOM, MAX_ZOOM);
-  const s = displayScale(w, h, viewport, zoom);
-  const maxX = (w * s - viewport) / 2;
-  const maxY = (h * s - viewport) / 2;
+  const s = displayScale(w, h, zoom);
+  const maxX = (w * s - VIEWPORT) / 2;
+  const maxY = (h * s - VIEWPORT) / 2;
   return { zoom, x: clamp(state.x, -maxX, maxX), y: clamp(state.y, -maxY, maxY) };
 }
 
 /** Zooms about the frame's centre, so the point in the middle stays put. */
-export function zoomCrop(
-  state: CropState,
-  nextZoom: number,
-  w: number,
-  h: number,
-  viewport: number,
-): CropState {
+export function zoomCrop(state: CropState, nextZoom: number, w: number, h: number): CropState {
   const zoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
   const ratio = zoom / state.zoom;
-  return clampCrop({ zoom, x: state.x * ratio, y: state.y * ratio }, w, h, viewport);
+  return clampCrop({ zoom, x: state.x * ratio, y: state.y * ratio }, w, h);
 }
 
 /** The square of the source picture, in source pixels, that the frame shows. */
-export function sourceRect(w: number, h: number, viewport: number, state: CropState): SourceRect {
-  const s = displayScale(w, h, viewport, state.zoom);
+export function sourceRect(w: number, h: number, state: CropState): SourceRect {
+  const s = displayScale(w, h, state.zoom);
   return {
-    sx: w / 2 - (viewport / 2 + state.x) / s,
-    sy: h / 2 - (viewport / 2 + state.y) / s,
-    side: viewport / s,
+    sx: w / 2 - (VIEWPORT / 2 + state.x) / s,
+    sy: h / 2 - (VIEWPORT / 2 + state.y) / s,
+    side: VIEWPORT / s,
   };
 }
 
@@ -65,12 +59,8 @@ export function outputEdge(side: number): number {
  * when decoding into an <img>, and the canvas output carries no flag, so the
  * saved square is upright and is not rotated again on compression.
  */
-export async function renderCrop(
-  img: HTMLImageElement,
-  state: CropState,
-  viewport: number,
-): Promise<File> {
-  const { sx, sy, side } = sourceRect(img.naturalWidth, img.naturalHeight, viewport, state);
+export async function renderCrop(img: HTMLImageElement, state: CropState): Promise<File> {
+  const { sx, sy, side } = sourceRect(img.naturalWidth, img.naturalHeight, state);
   const edge = outputEdge(side);
   const canvas = document.createElement("canvas");
   canvas.width = edge;

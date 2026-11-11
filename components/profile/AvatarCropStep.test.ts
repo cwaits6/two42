@@ -14,7 +14,6 @@ vi.mock("@/lib/avatarCrop", async (original) => ({
 vi.mock("@/lib/log", () => ({ logWarn: vi.fn() }));
 
 const { AvatarCropStep } = await import("./AvatarCropStep");
-const { VIEWPORT } = await import("@/lib/avatarCrop");
 
 // jsdom neither decodes pictures nor reports their size.
 function stubPicture(decodes: boolean) {
@@ -90,7 +89,7 @@ describe("AvatarCropStep", () => {
     );
     await act(async () => save!.click());
     await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
-    expect(renderCrop).toHaveBeenCalledWith(expect.anything(), { zoom: 1, x: 0, y: 8 }, VIEWPORT);
+    expect(renderCrop).toHaveBeenCalledWith(expect.anything(), { zoom: 1, x: 0, y: 8 });
     expect(onSave).toHaveBeenCalledWith(await renderCrop.mock.results[0].value);
     expect(onLoadError).not.toHaveBeenCalled();
   });
