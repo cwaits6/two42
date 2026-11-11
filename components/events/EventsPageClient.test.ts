@@ -2,6 +2,7 @@
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Event } from "@/lib/types";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -15,15 +16,23 @@ function view(name: string) {
 }
 vi.mock("@/components/events/EventCalendarView", () => ({ EventCalendarView: view("month") }));
 vi.mock("@/components/events/EventWeekView", () => ({ EventWeekView: view("week") }));
-// The list stands in for its empty state's Add event link, so a count of
-// links proves the page offers it exactly once.
+// Like the real list, only an empty list renders the Add event link, so a
+// count of links proves the page offers it exactly once.
 vi.mock("@/components/events/EventListView", () => ({
-  EventListView: ({ viewSwitch, createHref }: { viewSwitch: ReactNode; createHref: string | null }) =>
+  EventListView: ({
+    viewSwitch,
+    events,
+    createHref,
+  }: {
+    viewSwitch: ReactNode;
+    events: unknown[];
+    createHref: string | null;
+  }) =>
     createElement(
       "section",
       { "data-view": "list" },
       viewSwitch,
-      createHref && createElement("a", { href: createHref }, "Add event")
+      events.length === 0 && createHref && createElement("a", { href: createHref }, "Add event")
     ),
 }));
 
@@ -39,7 +48,30 @@ afterEach(() => {
   }
 });
 
-async function mount({ isLeader = false } = {}) {
+const NEXT_WEEK = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+const UPCOMING = {
+  id: "e1",
+  group_id: "g1",
+  title: "Group night",
+  description: null,
+  location: null,
+  start_time: NEXT_WEEK,
+  end_time: null,
+  calendar_id: null,
+  is_rsvp_enabled: false,
+  created_by: null,
+  created_at: NEXT_WEEK,
+  recurrence_frequency: null,
+  recurrence_interval: 1,
+  recurrence_end_mode: null,
+  recurrence_count: null,
+  recurrence_until: null,
+  series_id: null,
+  series_occurrence_date: null,
+  is_cancelled: false,
+} as Event;
+
+async function mount({ isLeader = false, allEvents = [] as Event[] } = {}) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -48,7 +80,7 @@ async function mount({ isLeader = false } = {}) {
     root.render(
       createElement(EventsPageClient, {
         groups: [{ id: "g1", name: "Group", color: "#b4532a", isLeader }],
-        allEvents: [],
+        allEvents,
         replies: [],
         userId: "u1",
         timeZone: "America/Chicago",
@@ -95,5 +127,13 @@ describe("EventsPageClient Add event", () => {
     const links = addEvents(container);
     expect(links).toHaveLength(1);
     expect(links[0].closest('[data-view="list"]')).not.toBeNull();
+  });
+
+  it("keeps Add event in the header when the list has upcoming events", async () => {
+    const { container, radio } = await mount({ isLeader: true, allEvents: [UPCOMING] });
+    await act(async () => radio("List").click());
+    const links = addEvents(container);
+    expect(links).toHaveLength(1);
+    expect(links[0].closest('[data-view="list"]')).toBeNull();
   });
 });
