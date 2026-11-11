@@ -189,6 +189,16 @@ describe("ProfileForm inline errors", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it("marks the household surname checkbox when the surname it would save is over 100 characters", async () => {
+    const family = { id: "f1", family_name: `${"a".repeat(101)} Family` } as FamilyUnit;
+    const form = await mount({ last_name: "a".repeat(101), family_id: "f1" }, { family });
+    await form.submit();
+
+    expect(form.message("different_last_name")).toBe("Use 100 characters or fewer.");
+    expect(document.activeElement).toBe(form.field("different_last_name"));
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it("saves without a birthday", async () => {
     const form = await mount({ birth_month: null, birth_day: null });
     await form.submit();

@@ -330,7 +330,12 @@ export function ProfileForm({
     const firstInvalid = Object.keys(found)[0];
     if (firstInvalid) {
       setSaving(false);
-      setFocusTarget({ id: firstInvalid });
+      setFocusTarget({
+        id:
+          firstInvalid === "last_name" && familySurname && !differentLastName
+            ? "different_last_name"
+            : firstInvalid,
+      });
       return;
     }
 
@@ -470,7 +475,15 @@ export function ProfileForm({
                 id="different_last_name"
                 label={`My last name is different from my household's (${familySurname})`}
                 checked={differentLastName}
-                onChange={setDifferentLastName}
+                onChange={(checked) => {
+                  setDifferentLastName(checked);
+                  setErrors((prev) => {
+                    const next = { ...prev };
+                    delete next.last_name;
+                    return next;
+                  });
+                }}
+                error={!differentLastName ? errors.last_name : undefined}
               />
             )}
             {(!familySurname || differentLastName) && (
