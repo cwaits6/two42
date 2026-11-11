@@ -6,10 +6,10 @@ export type SignOutOutcome =
   | { signedOut: false; message: string };
 
 /**
- * Signs this device out and says what became of its session. The library's
- * error alone doesn't: a failed revoke request has already removed the session
- * here, while a failure to load the session returns with it still stored. So
- * after an error the stored session is read back, and an unreadable one counts
+ * Signs out everywhere and says what became of this device's session. A failed
+ * revoke request leaves the session stored here, so this device is then signed
+ * out on its own. That can fail too, and the library's error doesn't say which
+ * state it left: the stored session is read back, and an unreadable one counts
  * as still signed in.
  */
 export async function signOutHere(): Promise<SignOutOutcome> {
@@ -17,6 +17,7 @@ export async function signOutHere(): Promise<SignOutOutcome> {
   const { error } = await supabase.auth.signOut();
   if (!error) return { signedOut: true };
 
+  await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
   const { data, error: sessionError } = await supabase.auth.getSession();
   if (sessionError || data.session) {
     return { signedOut: false, message: failureMessage("sign out", error.status || "network") };

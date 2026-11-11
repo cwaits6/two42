@@ -23,13 +23,20 @@ describe("signOutHere", () => {
     expect(getSession).not.toHaveBeenCalled();
   });
 
-  it("reports this device signed out when the error left no session behind", async () => {
-    signOut.mockResolvedValue(failed);
+  it("signs this device out on its own when signing out everywhere fails", async () => {
+    signOut.mockResolvedValueOnce(failed).mockResolvedValueOnce({ error: null });
     getSession.mockResolvedValue(noSession);
     expect(await signOutHere()).toEqual({
       signedOut: true,
       message: "Couldn't sign out everywhere. Other devices may still be signed in.",
     });
+    expect(signOut.mock.calls).toEqual([[], [{ scope: "local" }]]);
+  });
+
+  it("still reads the session back when signing out this device throws", async () => {
+    signOut.mockResolvedValueOnce(failed).mockRejectedValueOnce(new Error("subscriber"));
+    getSession.mockResolvedValue({ data: { session: { access_token: "t" } }, error: null });
+    expect(await signOutHere()).toEqual({ signedOut: false, message: "Couldn't sign out. Try again." });
   });
 
   it("reports this device still signed in when the session is still stored", async () => {
