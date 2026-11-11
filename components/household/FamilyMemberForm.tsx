@@ -20,6 +20,7 @@ import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { CheckRow } from "@/components/profile/CheckRow";
 import { ChildListingNotice, DirectoryNotice } from "@/components/profile/DirectoryNotice";
 import { MonthSelect } from "@/components/profile/MonthSelect";
+import { useAvatarCrop } from "@/components/profile/useAvatarCrop";
 import {
   birthdayColumns,
   birthdayErrors,
@@ -119,9 +120,8 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
       return next;
     });
 
-  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !member) return; // avatar upload only works after creation (member.id needed)
+  async function uploadAvatar(file: File) {
+    if (!member) return; // avatar upload only works after creation (member.id needed)
 
     const previousAvatarUrl = avatarUrl;
     setUploadingAvatar(true);
@@ -149,9 +149,13 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
       toast.error(failureMessage("upload the photo"));
     } finally {
       setUploadingAvatar(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
+  const {
+    onPick: pickAvatar,
+    triggerRef: avatarButtonRef,
+    cropStep: avatarCropStep,
+  } = useAvatarCrop(uploadAvatar);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -229,6 +233,7 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
                   {displayFirst} {displayLast}
                 </p>
                 <Button
+                  ref={avatarButtonRef}
                   type="button"
                   variant="outline"
                   onClick={() => fileInputRef.current?.click()}
@@ -241,9 +246,10 @@ export function FamilyMemberForm({ member, family, onSaved, onCancel, onChanged 
                   ref={fileInputRef}
                   type="file"
                   accept="image/*"
-                  onChange={handleAvatarUpload}
+                  onChange={pickAvatar}
                   className="hidden"
                 />
+                {avatarCropStep}
               </div>
             </div>
           </CardContent>

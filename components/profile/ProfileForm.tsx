@@ -42,6 +42,7 @@ import { birthdayColumns, birthdayErrors } from "@/components/profile/birthday";
 import { MonthSelect } from "@/components/profile/MonthSelect";
 import { CLAIMED_BIRTHDAY_KEPT, clearClaimedBirthday, removesBirthday } from "@/components/profile/claimedBirthday";
 import { DirectoryNotice } from "@/components/profile/DirectoryNotice";
+import { useAvatarCrop } from "@/components/profile/useAvatarCrop";
 import { retiredFlagResets } from "@/lib/members/retiredHideFlags";
 import {
   canManageAvatar,
@@ -215,12 +216,7 @@ export function ProfileForm({
     if (focusTarget) document.getElementById(focusTarget.id)?.focus();
   }, [focusTarget]);
 
-  const handleAvatarUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const uploadAvatar = async (file: File) => {
     setUploadingAvatar(true);
     try {
       const url = await uploadImage(
@@ -247,9 +243,13 @@ export function ProfileForm({
       toast.error(failureMessage("upload the photo"));
     } finally {
       setUploadingAvatar(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
+  const {
+    onPick: pickAvatar,
+    triggerRef: avatarButtonRef,
+    cropStep: avatarCropStep,
+  } = useAvatarCrop(uploadAvatar);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -420,6 +420,7 @@ export function ProfileForm({
                 </AvatarFallback>
               </Avatar>
               <Button
+                ref={avatarButtonRef}
                 type="button"
                 variant="outline"
                 onClick={() => fileInputRef.current?.click()}
@@ -432,9 +433,10 @@ export function ProfileForm({
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
-                onChange={handleAvatarUpload}
+                onChange={pickAvatar}
                 className="hidden"
               />
+              {avatarCropStep}
             </div>
           )}
 
