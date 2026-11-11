@@ -5,8 +5,8 @@
 -- an org admin outside both groups reads nothing (their power is over
 -- people); that the structural pins hold (NOT NULL, composite FK, the
 -- about_page key, the serving rename, the calendar color boundary); that
--- group_settings and prayer_wall follow the same rule; that the calendar
--- fold is idempotent; and that the signup RPC admits a group leader. Every
+-- group_settings and prayer_wall follow the same rule; and that the signup
+-- RPC admits a group leader. Every
 -- "cannot" assertion has a paired positive control.
 --
 -- Run locally (rollback-safe, never mutates the shared local stack):
@@ -668,83 +668,7 @@ select is(
     where org_id = current_setting('gs.org')::uuid and group_id not in (current_setting('gs.grp_a')::uuid, current_setting('gs.grp_b')::uuid)),
   0, 'provisioning seeds no calendar');
 
--- ── 4. The calendar fold is per group and idempotent ────────────────────────
-do $$
-declare
-  org uuid := current_setting('gs.org')::uuid;
-  grp_a uuid := current_setting('gs.grp_a')::uuid;
-  grp_b uuid := current_setting('gs.grp_b')::uuid;
-  cal_a uuid := current_setting('gs.cal_a')::uuid;
-  extra1 uuid; extra2 uuid;
-  events_before bigint;
-  cal_b_name text;
-begin
-  select name into cal_b_name from public.event_calendars where group_id = grp_b;
-  -- now() is the transaction's start for every row here, so the extras get
-  -- an explicit later created_at to make the fixture calendar the oldest.
-  insert into public.event_calendars (org_id, group_id, name, color, created_at)
-    values (org, grp_a, 'A extra 1', '#111111', now() + interval '1 minute') returning id into extra1;
-  insert into public.event_calendars (org_id, group_id, name, color, created_at)
-    values (org, grp_a, 'A extra 2', '#222222', now() + interval '2 minutes') returning id into extra2;
-  insert into public.events (org_id, group_id, calendar_id, title, start_time) values
-    (org, grp_a, extra1, 'on extra 1', now()),
-    (org, grp_a, extra2, 'on extra 2', now());
-  update public.event_calendars set name = 'renamed', color = '#333333' where id = cal_a;
-  select count(*) into events_before from public.events where group_id = grp_a;
-
-  perform public.group_content_backfill();
-
-  perform set_config('gs.fold_cals', (select count(*) from public.event_calendars where group_id = grp_a)::text, true);
-  perform set_config('gs.fold_survivor', (select id from public.event_calendars where group_id = grp_a)::text, true);
-  perform set_config('gs.fold_name', (select name from public.event_calendars where group_id = grp_a), true);
-  perform set_config('gs.fold_color', (select color from public.event_calendars where group_id = grp_a), true);
-  perform set_config('gs.fold_strays', (select count(*) from public.events where group_id = grp_a and calendar_id is distinct from cal_a)::text, true);
-  perform set_config('gs.fold_events', (select count(*) from public.events where group_id = grp_a)::text, true);
-  perform set_config('gs.fold_events_before', events_before::text, true);
-  perform set_config('gs.fold_b_name', (select name from public.event_calendars where group_id = grp_b), true);
-  perform set_config('gs.fold_b_name_before', cal_b_name, true);
-
-  perform public.group_content_backfill();
-  perform set_config('gs.fold_again_cals', (select count(*) from public.event_calendars where org_id = org)::text, true);
-  perform set_config('gs.fold_again_name', (select name from public.event_calendars where group_id = grp_a), true);
-end $$;
-select is(current_setting('gs.fold_cals')::int, 1, 'the fold leaves group A exactly one calendar');
-select is(current_setting('gs.fold_survivor'), current_setting('gs.cal_a'), 'the oldest calendar survives');
-select is(current_setting('gs.fold_name'), 'Group A', 'the survivor is named after the group');
-select is(current_setting('gs.fold_color'), '#B85C38', 'the survivor is recolored Clay');
-select is(current_setting('gs.fold_strays')::int, 0, 'every event of group A points at the survivor');
-select is(current_setting('gs.fold_events'), current_setting('gs.fold_events_before'), 'the fold keeps every event');
-select is(current_setting('gs.fold_b_name'), current_setting('gs.fold_b_name_before'), 'group B''s calendar is untouched');
-select is(current_setting('gs.fold_again_cals')::int, 2, 'a second call changes nothing');
-select is(current_setting('gs.fold_again_name'), 'Group A', 'a second call leaves the survivor''s name alone');
-
--- ── 4b. The backfill gives a group-less org a group before adopting content ─
-do $$
-declare
-  org uuid; cal uuid; n int; err text := 'ok';
-begin
-  insert into public.organizations (name, branding, status)
-    values ('Groupless', '{}'::jsonb, 'active')
-    returning id into org;
-  alter table public.event_calendars alter column group_id drop not null;
-  insert into public.event_calendars (org_id, name, color) values (org, 'Prayer Calls', '#2F6BA8');
-  begin
-    perform public.group_model_backfill();
-    perform public.group_content_backfill();
-  exception when others then err := sqlstate || ' ' || sqlerrm; end;
-  alter table public.event_calendars alter column group_id set not null;
-  perform set_config('gs.bf_err', err, true);
-  select count(*) into n from public.groups where org_id = org;
-  perform set_config('gs.bf_groups', n::text, true);
-  select count(*) into n from public.event_calendars c
-    join public.groups g on g.id = c.group_id where g.org_id = org;
-  perform set_config('gs.bf_cals', n::text, true);
-end $$;
-select is(current_setting('gs.bf_err'), 'ok', 'an org with a calendar but no group does not abort the backfill');
-select is(current_setting('gs.bf_groups'), '1', 'the group-model backfill gave it one group');
-select is(current_setting('gs.bf_cals'), '1', 'the calendar was adopted by that group');
-
--- ── 5. The signup RPC admits a group leader, and only for their group ───────
+-- ── 4. The signup RPC admits a group leader, and only for their group ───────
 do $$
 declare
   owner uuid := current_setting('gs.owner')::uuid;

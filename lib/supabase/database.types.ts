@@ -1698,9 +1698,6 @@ isOneToOne: false
 "giving_stewards_can_manage":
 { Args: Record<PropertyKey, never>; Returns: boolean
                            },
-"group_content_backfill":
-{ Args: Record<PropertyKey, never>; Returns: undefined
-                           },
 "group_create":
 { Args: { "_description"?: string,"_leader_id"?: string,"_name": string }; Returns: string
                            },

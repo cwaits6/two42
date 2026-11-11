@@ -396,15 +396,12 @@ the same logic the migration ran against fixture orgs. It is idempotent
 and asserts its own enrolment and leader counts. Grants, org checks and the
 within-org boundary are pinned by that suite and by `idor_suite.sql`.
 
-`group_content_backfill()` (`20261017000000_group_scoped_content.sql`) is
+`group_content_backfill()` (`20261017000000_group_scoped_content.sql`) was
 its content-layer twin, with the same shape: plain `plpgsql`, no client
-grant, idempotent. It gives every ungrouped content row to its org's oldest
-group, folds each group's calendars into one (events re-pointed, extras
-deleted, counts asserted), creates a calendar for a group without one, and
-moves the org-level link-mode setting onto `group_settings`.
-`supabase/tests/group_scope_suite.sql` runs it against fixture groups and
-pins the fold, the NOT NULL and composite FKs, the policy shapes and the
-member / leader / org-admin read and write matrix.
+grant. It ran once inside that migration and was dropped by
+`20261123000000_database_tidy_up.sql` with the call fields it moved.
+`supabase/tests/group_scope_suite.sql` pins the NOT NULL and composite FKs,
+the policy shapes and the member / leader / org-admin read and write matrix.
 
 The content policies themselves gate on `is_group_member(group_id)` /
 `is_group_leader(group_id)` — see "Group visibility" in

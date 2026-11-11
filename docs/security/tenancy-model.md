@@ -285,12 +285,12 @@ keeps only the `giving_manage_mode` key. The anonymous read arms on `lectures`, 
 is false for anon by construction, and the middleware already sends those
 paths to login.
 
-The backfill lives in `group_content_backfill()` (plain `plpgsql`,
-idempotent, no client grant), mirroring `group_model_backfill()`, so
-`supabase/tests/group_scope_suite.sql` proves the calendar fold and the
-boundary against fixture groups in CI. Ungrouped rows go to the org's oldest
-group: production has exactly one group per org, and a local stack seeded
-with several keeps its pre-existing content under the first one.
+The backfill ran once, as `group_content_backfill()` (plain `plpgsql`, no
+client grant), inside that migration; the function was later dropped with
+the call fields it moved. `supabase/tests/group_scope_suite.sql` proves the
+boundary against fixture groups in CI. Ungrouped rows went to the org's
+oldest group: production had exactly one group per org, and a local stack
+seeded with several kept its pre-existing content under the first one.
 
 **The one-group backfill.** The migration gives every existing org one
 group named from `branding.display_name` (fallback: the org name), enrols
@@ -457,7 +457,7 @@ NULL for anyone without one, so every comparison fails closed.
 `groups` with `on delete set null (group_id)`) holds a pending request
 rather than a `status` column on `groups`, so nothing that treats a
 `groups` row as a live group — the one-group signup enrolment in
-`handle_new_user()`, `group_content_backfill()`, the directory helpers, the
+`handle_new_user()`, the directory helpers, the
 one-calendar-per-group invariant — needs a new predicate. Its permissive
 policies compose on the floor as `ORG AND (arms)`:
 
