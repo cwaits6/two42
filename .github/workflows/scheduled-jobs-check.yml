@@ -40,9 +40,17 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
-          # --read-only needs no confirmation on the hosted project. The rows
-          # come back bare or wrapped in .rows, depending on the CLI version.
-          output="$(npx supabase db query --remote --read-only -f scripts/check-scheduled-jobs.sql --output-format json)"
+          # Not --read-only: that runs the query as a role with no execute on
+          # private.scheduled_jobs_check(), which is revoked from public. The
+          # function is STABLE, so it cannot write. --yes answers the prompt a
+          # hosted query without --read-only asks. The rows come back bare or
+          # wrapped in .rows, depending on the CLI version.
+          # With --output-format json the CLI writes its error to stdout, so a
+          # failed query is printed here or the log would hold nothing.
+          if ! output="$(npx supabase db query --remote --yes -f scripts/check-scheduled-jobs.sql --output-format json)"; then
+            printf '%s\n' "$output"
+            exit 1
+          fi
           result="$(printf '%s' "$output" | jq -c '(if type == "array" then . else .rows end)[0].result')"
           printf '%s\n' "$result" | jq .
           # An empty or reshaped result must fail too, so this requires the array.
