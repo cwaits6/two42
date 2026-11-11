@@ -38,11 +38,17 @@ jobs:
       - name: Read the firings since the last check
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           set -euo pipefail
           # --read-only needs no confirmation on the hosted project. The rows
           # come back bare or wrapped in .rows, depending on the CLI version.
-          output="$(npx supabase db query --remote --read-only -f scripts/check-scheduled-jobs.sql --output-format json)"
+          # With --output-format json the CLI writes its error to stdout, so a
+          # failed query is printed here or the log would hold nothing.
+          if ! output="$(npx supabase db query --remote --read-only -f scripts/check-scheduled-jobs.sql --output-format json)"; then
+            printf '%s\n' "$output"
+            exit 1
+          fi
           result="$(printf '%s' "$output" | jq -c '(if type == "array" then . else .rows end)[0].result')"
           printf '%s\n' "$result" | jq .
           # An empty or reshaped result must fail too, so this requires the array.
