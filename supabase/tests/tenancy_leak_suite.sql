@@ -88,8 +88,8 @@ begin
     values (_org, _group, _tag || ' announcement', 'body', true, _owner);
   insert into public.about_page (org_id, group_id, body)
     values (_org, _group, _tag || ' about');
-  insert into public.group_settings (org_id, group_id, weekly_zoom_url)
-    values (_org, _group, 'https://' || _tag || '.example.test/zoom');
+  insert into public.group_settings (org_id, group_id, serving_link_mode)
+    values (_org, _group, 'login');
 
   insert into public.event_calendars (org_id, group_id, name, created_by)
     values (_org, _group, _tag || ' calendar', _owner) returning id into _calendar;
@@ -119,8 +119,6 @@ begin
   insert into public.lectures (org_id, group_id, title, video_url, series_id, created_by)
     values (_org, _group, _tag || ' lecture', 'https://example.test/v', _series, _owner);
 
-  insert into public.prayer_call_sessions (org_id, group_id, weekday, start_time, leader_id, event_id)
-    values (_org, _group, 2, '07:00', _owner, _event);
   insert into public.prayer_requests (org_id, group_id, author_id, body)
     values (_org, _group, _owner, _tag || ' prayer');
   insert into public.prayer_responses (org_id, group_id, request_id, profile_id)

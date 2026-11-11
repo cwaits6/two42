@@ -41,7 +41,7 @@ begin
 
   select count(*) into anon_private_count
     from public.site_settings
-    where key in ('giving_manage_mode', 'giving_dashboard_tile');
+    where key = 'giving_manage_mode';
   if anon_private_count <> 0 then
     raise exception 'anon should NOT read private settings, got % rows', anon_private_count;
   end if;
@@ -52,9 +52,9 @@ begin
 
   select count(*) into member_private_count
     from public.site_settings
-    where key in ('giving_manage_mode', 'giving_dashboard_tile');
-  if member_private_count <> 2 then
-    raise exception 'member should read all private settings via is_member(), got % of 2 rows', member_private_count;
+    where key = 'giving_manage_mode';
+  if member_private_count <> 1 then
+    raise exception 'member should read the private setting via is_member(), got % of 1 row', member_private_count;
   end if;
 
   reset role;

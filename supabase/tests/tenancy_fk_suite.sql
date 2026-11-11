@@ -9,14 +9,14 @@
 --      loudly if someone "simplifies" the column list away (the bare form
 --      would try to null org_id and blow up on NOT NULL).
 --
--- Coverage boundary: 20260731000013_composite_fks.sql creates 15 SET NULL
--- relations — the 7 capability/entity ones asserted below get their runtime
--- behavior proven here; the remaining 8 attribution ones
--- (announcements.author_id, feedback.profile_id, the created_by /
--- leader_id / sent_by columns) are covered structurally by
--- schema_tenancy_lint.sql's check 3b, which asserts every FK with
--- confdeltype = 'n' whose referencing columns include org_id names a
--- column list excluding org_id — all 15 plus any added later.
+-- Coverage boundary: of the SET NULL relations
+-- 20260731000013_composite_fks.sql creates, the capability/entity ones
+-- asserted below get their runtime behavior proven here; the attribution
+-- ones (announcements.author_id, feedback.profile_id, the created_by /
+-- sent_by columns) are covered structurally by schema_tenancy_lint.sql's
+-- check 3b, which asserts every FK with confdeltype = 'n' whose referencing
+-- columns include org_id names a column list excluding org_id — all of
+-- them plus any added later.
 --
 -- Exhaustive composite-ness of every FK is a structural invariant asserted
 -- by schema_tenancy_lint.sql; this file proves the runtime behavior on
@@ -167,13 +167,6 @@ select throws_ok(
   '23503', null,
   'a profile in org A cannot be placed in an org B household');
 
-select throws_ok(
-  $$ insert into public.prayer_call_sessions (org_id, group_id, weekday, start_time, event_id)
-     values (current_setting('fk.org_a')::uuid, current_setting('fk.grp_a')::uuid, 1, '07:00',
-             current_setting('fk.event_b')::uuid) $$,
-  '23503', null,
-  'prayer_call_sessions in org A cannot bind to an org B event');
-
 -- The recipients guard fires first and would hide a weakened foreign key.
 alter table public.giving_funds disable trigger giving_funds_keep_recipients_in_group;
 select throws_ok(
@@ -185,15 +178,15 @@ select throws_ok(
 alter table public.giving_funds enable trigger giving_funds_keep_recipients_in_group;
 
 -- ── 2. ON DELETE SET NULL (col): the FK column nulls, org_id survives ──────
--- The 7 capability/entity relations only — see the coverage boundary in the
--- file header for the 8 attribution relations this does not reach.
+-- The capability/entity relations only — see the coverage boundary in the
+-- file header for the attribution relations this does not reach.
 do $$
 declare
   org_a uuid := current_setting('fk.org_a')::uuid;
   owner_a uuid := current_setting('fk.owner_a')::uuid;
   costeward_a uuid := current_setting('fk.costeward_a')::uuid;
   _family uuid; _fm uuid; _invite_token uuid; _ar uuid;
-  _cal uuid; _event uuid; _series uuid; _lecture uuid; _pcs uuid;
+  _cal uuid; _event uuid; _series uuid; _lecture uuid;
   _signup uuid; _fund uuid; _group uuid;
   _grp uuid := current_setting('fk.grp_a')::uuid;
 begin
@@ -232,33 +225,25 @@ begin
     select (series_id is null and org_id = org_a)::text
     from public.lectures where id = _lecture), true);
 
-  -- 4. prayer_call_sessions.event_id ← events.id (reuse _event)
-  insert into public.prayer_call_sessions (org_id, group_id, weekday, start_time, event_id)
-    values (org_a, _grp, 3, '07:00', _event) returning id into _pcs;
-  delete from public.events where id = _event;
-  perform set_config('fk.sn4', (
-    select (event_id is null and org_id = org_a)::text
-    from public.prayer_call_sessions where id = _pcs), true);
-
-  -- 5 & 6. profiles.family_id and serving_signups.family_id ← family_units.id
+  -- 4 & 5. profiles.family_id and serving_signups.family_id ← family_units.id
   update public.profiles set family_id = _family where id = owner_a;
   insert into public.serving_signups (org_id, team_id, service_date, family_id, created_by)
     values (org_a, _group, current_date + 14, _family, owner_a) returning id into _signup;
   delete from public.family_units where id = _family;
-  perform set_config('fk.sn5', (
+  perform set_config('fk.sn4', (
     select (family_id is null and org_id = org_a)::text
     from public.profiles where id = owner_a), true);
-  perform set_config('fk.sn6', (
+  perform set_config('fk.sn5', (
     select (family_id is null and org_id = org_a)::text
     from public.serving_signups where id = _signup), true);
 
-  -- 7. giving_funds.co_steward_id ← profiles.id
+  -- 6. giving_funds.co_steward_id ← profiles.id
   insert into public.group_members (org_id, group_id, profile_id)
     values (org_a, _grp, owner_a), (org_a, _grp, costeward_a) on conflict (group_id, profile_id) do nothing;
   insert into public.giving_funds (org_id, group_id, name, steward_id, co_steward_id)
     values (org_a, _grp, 'shared fund', owner_a, costeward_a) returning id into _fund;
   delete from public.profiles where id = costeward_a;
-  perform set_config('fk.sn7', (
+  perform set_config('fk.sn6', (
     select (co_steward_id is null and org_id = org_a)::text
     from public.giving_funds where id = _fund), true);
 end $$;
@@ -270,12 +255,10 @@ select is(current_setting('fk.sn2'), 'true',
 select is(current_setting('fk.sn3'), 'true',
   'deleting a series nulls only lectures.series_id — org_id survives');
 select is(current_setting('fk.sn4'), 'true',
-  'deleting an event nulls only prayer_call_sessions.event_id — org_id survives');
-select is(current_setting('fk.sn5'), 'true',
   'deleting a household nulls only profiles.family_id — org_id survives');
-select is(current_setting('fk.sn6'), 'true',
+select is(current_setting('fk.sn5'), 'true',
   'deleting a household nulls only serving_signups.family_id — org_id survives');
-select is(current_setting('fk.sn7'), 'true',
+select is(current_setting('fk.sn6'), 'true',
   'deleting a co-steward profile nulls only giving_funds.co_steward_id — org_id survives');
 
 select * from finish();

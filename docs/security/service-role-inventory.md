@@ -401,7 +401,7 @@ its content-layer twin, with the same shape: plain `plpgsql`, no client
 grant, idempotent. It gives every ungrouped content row to its org's oldest
 group, folds each group's calendars into one (events re-pointed, extras
 deleted, counts asserted), creates a calendar for a group without one, and
-moves the org-level call and link-mode settings onto `group_settings`.
+moves the org-level link-mode setting onto `group_settings`.
 `supabase/tests/group_scope_suite.sql` runs it against fixture groups and
 pins the fold, the NOT NULL and composite FKs, the policy shapes and the
 member / leader / org-admin read and write matrix.
@@ -496,8 +496,9 @@ policy (members and admins only) cannot express without widening every
   Directory › Groups. Tenant anchor: the caller's own `profiles` row
   (`auth.uid()`, not pending), no parameter. Returns the caller's own
   groups always, other non-private groups while `organizations.group_discovery`
-  is on, and private groups additionally for an org admin; every join in
-  the body carries the group's `org_id`. Read-only. EXECUTE:
+  is on, and private groups additionally for an org admin, each with its
+  oldest calendar's color; every join and the color lookup carry the
+  group's `org_id`. Read-only. EXECUTE:
   `authenticated` only.
 - `join_group(_group_id)` — the member-facing gate. Tenant anchor: the
   caller's own `profiles` row; the group is looked up by id **and** that
