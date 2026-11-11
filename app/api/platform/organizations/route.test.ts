@@ -2,7 +2,7 @@
 // the service client's org filters are asserted because they are the tenant
 // boundary.
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeFirstAdminService } from "./firstAdminInviteTestHelpers";
 
 const requirePlatformAdmin = vi.fn();
@@ -67,6 +67,10 @@ beforeEach(() => {
   vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("POST /api/platform/organizations", () => {
   it("saves the first admin's email lowercased and sends them one invite", async () => {
     const fake = fakeFirstAdminService({ rows: [ADMIN_ROW] });
@@ -92,6 +96,29 @@ describe("POST /api/platform/organizations", () => {
     expect(mail.html).toContain(
       `https://two42.io/setup-account?token=${update?.payload?.signup_token}`,
     );
+  });
+
+  it("mints a setup link that expires seven days after it is sent", async () => {
+    const now = new Date("2026-11-11T15:00:00.000Z");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    const fake = fakeFirstAdminService({ rows: [ADMIN_ROW] });
+    createServiceClient.mockResolvedValue(fake.client);
+
+    await POST(addRequest("admin@hillside.example"));
+
+    const [mint] = fake.calls.filter((c) => c.op === "update");
+    expect(mint.payload).toEqual({
+      status: "approved",
+      reviewed_by: "operator-1",
+      reviewed_at: now.toISOString(),
+      signup_token: expect.stringMatching(/^[0-9a-f]{64}$/),
+      token_expires_at: "2026-11-18T15:00:00.000Z",
+    });
+    expect(mint.filters).toEqual([
+      ["id", ADMIN_ROW.id],
+      ["org_id", ORG],
+    ]);
   });
 
   it("sends nothing the second time the same church or first admin is added", async () => {
