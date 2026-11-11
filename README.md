@@ -211,14 +211,15 @@ migrations, deploy the functions and set their secrets:
 ```bash
 npx supabase login
 npx supabase link --project-ref <project-ref>
-npx supabase db push
+npx supabase db push --remote
 npx supabase functions deploy send-event-reminders send-serving-reminders clean-up-expired-data
 npx supabase secrets set RESEND_API_KEY=<key> SITE_URL=https://your.domain \
   SERVING_LINK_SECRET=<secret> EMAIL_FROM='Your Church <noreply@your.domain>'
 ```
 
-Then create the two Vault secrets above. Repeat `db push` and
-`functions deploy` after every update. This repository's own CI does both on
+Then create the two Vault secrets above. Repeat `db push --remote` and
+`functions deploy` after every update. Each asks before it changes the
+project, unless `--yes` is passed or `SUPABASE_YES` is exported in the shell. This repository's own CI does both on
 each push to `main` that touches `supabase/` or the database types
 ([`.github/workflows/supabase.yml`](./.github/workflows/supabase.yml))
 with the repository secrets `SUPABASE_PROJECT_REF`, `SUPABASE_ACCESS_TOKEN` and

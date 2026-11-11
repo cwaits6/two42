@@ -15,7 +15,7 @@
     "test:run": "vitest run",
     "test:e2e": "playwright test",
     "guard:tenancy": "node scripts/check-service-role-org-scope.mjs && node scripts/check-profile-email-reads.mjs",
-    "db:types": "supabase gen types typescript --local --schema public > lib/supabase/database.types.ts.tmp && mv lib/supabase/database.types.ts.tmp lib/supabase/database.types.ts"
+    "db:types": "supabase gen types typescript --schema public > lib/supabase/database.types.ts.tmp && mv lib/supabase/database.types.ts.tmp lib/supabase/database.types.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",
@@ -83,7 +83,7 @@
     "eslint-config-next": "16.4.5",
     "jsdom": "^30.0.0",
     "shadcn": "^4.3.0",
-    "supabase": "2.122.1",
+    "supabase": "3.0.0",
     "tailwindcss": "^4",
     "typescript": "^6.0.3",
     "vitest": "^5.0.0"
