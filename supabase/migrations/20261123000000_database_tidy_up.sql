@@ -6,7 +6,8 @@
 -- selects named lectures and group_settings columns without the dropped ones,
 -- never reads prayer_call_sessions or giving_dashboard_tile, and ignores the
 -- extra discoverable_groups() column. The retired directory hide flags are
--- not dropped here: that build still writes them on every profile save.
+-- not dropped here: profile saves still reset them, which keeps a newly
+-- entered value from being deleted by the sweep that precedes their drop.
 
 -- ── 1. Lesson thumbnail link ──────────────────────────────────────────────
 alter table public.lectures drop column thumbnail_url;

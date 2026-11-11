@@ -42,6 +42,7 @@ import { birthdayColumns, birthdayErrors } from "@/components/profile/birthday";
 import { MonthSelect } from "@/components/profile/MonthSelect";
 import { CLAIMED_BIRTHDAY_KEPT, clearClaimedBirthday, removesBirthday } from "@/components/profile/claimedBirthday";
 import { DirectoryNotice } from "@/components/profile/DirectoryNotice";
+import { retiredFlagResets } from "@/lib/members/retiredHideFlags";
 import {
   canManageAvatar,
   type AvatarEligibilityCaller,
@@ -364,7 +365,7 @@ export function ProfileForm({
     // A write a policy filters out answers with no error and no row.
     const { data: saved, error } = await supabase
       .from("profiles")
-      .update(updates)
+      .update({ ...updates, ...retiredFlagResets(profile, updates) })
       .eq("id", profile.id)
       .select("id");
 

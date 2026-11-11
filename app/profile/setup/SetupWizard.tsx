@@ -22,6 +22,7 @@ import { CheckRow } from "@/components/profile/CheckRow";
 import { AnniversaryFields, type AnniversaryField } from "@/components/profile/AnniversaryFields";
 import { ChildListingNotice, DirectoryNotice } from "@/components/profile/DirectoryNotice";
 import { isChildWithoutAccount } from "@/lib/household";
+import { retiredFlagResets } from "@/lib/members/retiredHideFlags";
 import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
 import { anniversaryColumns, birthdayColumns } from "@/components/profile/birthday";
 import { MonthSelect } from "@/components/profile/MonthSelect";
@@ -463,7 +464,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
 
       const { error: profileError } = await supabase
         .from("profiles")
-        .update(updates)
+        .update({ ...updates, ...retiredFlagResets(profile, updates) })
         .eq("id", profile.id);
       if (profileError) throw profileError;
 
