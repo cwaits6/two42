@@ -81,8 +81,8 @@ const INVENTORY = "docs/security/service-role-inventory.md";
 
 // The hand-written cross-org assertions. The two signed-link surfaces read
 // the profile row unscoped ON PURPOSE so a cross-org pairing can be rejected
-// explicitly; the invite-claim and household-link routes compare the
-// caller's org to the target row's as defence in depth. Each only stays safe
+// explicitly; the household-link route compares the caller's org to the
+// target row's as defence in depth. Each only stays safe
 // while the explicit rejection exists — pin it, and its distinctive denial
 // log, to exactly one occurrence.
 const PINS = [
