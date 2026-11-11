@@ -23,6 +23,24 @@ export type FirstAdminInviteResult =
   | { sent: true }
   | { sent: false; reason: "not_found" | "limit" | "failed" };
 
+type ServiceClient = Awaited<ReturnType<typeof createServiceClient>>;
+
+/**
+ * The founding request: the church's earliest admin-role access request.
+ * The church page reads it with this same query, so the admin it shows is
+ * the one Send invite mails. `orgId` must already be validated.
+ */
+export function foundingRequestQuery(service: ServiceClient, orgId: string) {
+  return service
+    .from("access_requests")
+    .select("id, name, email, signup_token, token_expires_at")
+    .eq("org_id", orgId)
+    .eq("approved_role", "admin")
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
+    .limit(1);
+}
+
 export async function sendFirstAdminInvite(opts: {
   orgId: string;
   /** The address the caller expects on the founding request. */
@@ -40,13 +58,7 @@ export async function sendFirstAdminInvite(opts: {
 
   try {
     const service = await createServiceClient();
-    const { data: rows, error: readError } = await service
-      .from("access_requests")
-      .select("id, email")
-      .eq("org_id", orgId)
-      .eq("approved_role", "admin")
-      .order("created_at", { ascending: true })
-      .limit(1);
+    const { data: rows, error: readError } = await foundingRequestQuery(service, orgId);
     if (readError) return fail("founding request read", readError);
 
     // Compared here rather than in the query: rows added before emails were
