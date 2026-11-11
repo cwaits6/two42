@@ -14,7 +14,7 @@ import { parsePhoneNumberFromString, AsYouType } from "libphonenumber-js";
 
 // Name particles that should stay lowercase when they appear in the middle of a
 // name. At the start they are capitalized unless typed in lowercase before a
-// surname typed with its capital. Intentionally conservative — we only
+// later word typed with its capital. Intentionally conservative — we only
 // handle the common western European patterns our members are likely to use.
 const LOWERCASE_PARTICLES = new Set([
   "de", "del", "de la", "de las", "de los", "della", "der", "di", "du",
@@ -87,20 +87,25 @@ export function titleCaseName(raw: string | null | undefined): string | null {
   if (!trimmed) return null;
 
   const words = trimmed.split(" ");
-  const restWrittenInCase = words
-    .slice(1)
-    .some((w) => isUpper(w.charAt(0)) && [...w].some(isLower));
-  return words
-    .map((word, i) => {
-      const lower = word.toLowerCase();
-      if (!LOWERCASE_PARTICLES.has(lower)) return titleCaseWord(word);
-      // A leading particle typed in lowercase before a surname typed with its
-      // capital ("van der Berg", "de la Cruz") is kept that way.
-      if (i > 0 || (word === lower && restWrittenInCase)) return lower;
-      return titleCaseWord(word);
-    })
-    .join(" ");
+  const cased = words.map((word, i) => {
+    const lower = word.toLowerCase();
+    return i > 0 && LOWERCASE_PARTICLES.has(lower) ? lower : titleCaseWord(word);
+  });
+  const first = words[0];
+  // A leading particle typed in lowercase before a later word typed with its
+  // capital ("van der Berg", "de la Cruz") is kept that way. The later word
+  // must keep that shape once cased too, or a second pass would decide
+  // differently ("de La O" saves as "De la O").
+  const keepFirstLower =
+    first === first.toLowerCase() &&
+    LOWERCASE_PARTICLES.has(first) &&
+    words.some((w, i) => i > 0 && writtenInCase(w) && writtenInCase(cased[i]));
+  if (keepFirstLower) cased[0] = first;
+  return cased.join(" ");
 }
+
+const writtenInCase = (word: string) =>
+  isUpper(word.charAt(0)) && [...word].some(isLower);
 
 /**
  * Alias for titleCaseName — "john smith" → "John Smith".
