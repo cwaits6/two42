@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,8 +55,7 @@ export function SetupAccountForm() {
   const [view, setView] = useState<View>({ kind: "verifying" });
   const [attempt, setAttempt] = useState(0);
   const [errors, setErrors] = useState<PasswordFieldErrors>({});
-  const [formError, setFormError] = useState<string | null>(null);
-  const [accountExists, setAccountExists] = useState(false);
+  const [formError, setFormError] = useState<ReactNode>(null);
   const focusField = useFieldFocus();
   const supabase = useMemo(() => createClient(), []);
   const searchParams = useSearchParams();
@@ -120,7 +119,6 @@ export function SetupAccountForm() {
     }
 
     setLoading(true);
-    setAccountExists(false);
     let res: Response;
     let body: SetupAccountResponse | Record<string, never>;
     try {
@@ -145,8 +143,14 @@ export function SetupAccountForm() {
       } else if (res.status === 409 && "status" in body && body.status === SETUP_STATUS.setUp) {
         setView({ kind: "set_up" });
       } else if (res.status === 409 && "status" in body && body.status === SETUP_STATUS.accountExists) {
-        setAccountExists(true);
-        setFormError("An account already uses this email.");
+        setFormError(
+          <>
+            An account already uses this email.{" "}
+            <Link href="/login" className={LINK_CLASS}>
+              Sign in
+            </Link>
+          </>,
+        );
       } else if (res.status === 404 || res.status === 410) {
         setView({ kind: "invalid" });
       } else {
@@ -250,14 +254,6 @@ export function SetupAccountForm() {
         {formError && (
           <p role="alert" className="text-base text-destructive">
             {formError}
-            {accountExists && (
-              <>
-                {" "}
-                <Link href="/login" className={LINK_CLASS}>
-                  Sign in
-                </Link>
-              </>
-            )}
           </p>
         )}
         <AccountAgeNotice />
