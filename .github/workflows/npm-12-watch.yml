@@ -1,0 +1,72 @@
+name: Watch npm 12 lockfile fix
+
+# Opens a tracking issue when the latest npm can run a lockfile-only install
+# of a package with bundled dependencies again, so the npm 11 constraint on
+# Renovate can be removed. Paired with the "npm-12-guard" constraint in
+# renovate.json5 — this workflow self-deactivates once that guard is lifted.
+
+on:
+  schedule:
+    - cron: '0 8 * * 1' # Mondays 08:00 UTC
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Check the latest npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+
+      - name: Notify when the latest npm no longer fails
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # Self-deactivate once the guard has been lifted.
+          if ! grep -q 'npm-12-guard' renovate.json5; then
+            echo "npm guard already lifted — nothing to watch."
+            exit 0
+          fi
+
+          version="$(npm view npm version)"
+          probe="$(mktemp -d)"
+          cd "$probe"
+          printf '{"name":"probe","version":"1.0.0","private":true}\n' > package.json
+
+          # The same kind of install Renovate runs. @tailwindcss/oxide pulls in
+          # the optional wasm package whose bundled dependencies trip the bug.
+          status=0
+          output="$(npx -y "npm@$version" install --package-lock-only --ignore-scripts \
+            --no-audit --no-fund @tailwindcss/oxide 2>&1)" || status=$?
+          printf '%s\n' "$output"
+
+          if [ "$status" -ne 0 ]; then
+            if grep -q 'EALLOWREMOTE' <<< "$output"; then
+              echo "npm $version still fails with EALLOWREMOTE."
+              exit 0
+            fi
+            # Any other failure says nothing about the bug, so it must not pass.
+            echo "::error::The probe failed for another reason."
+            exit 1
+          fi
+
+          title="npm $version fixes the lockfile failure — remove Renovate's npm 11 constraint"
+          if [ "$(gh issue list --state open --search "Renovate's npm 11 constraint in:title" --json number --jq 'length')" != "0" ]; then
+            echo "Tracking issue already open."
+            exit 0
+          fi
+
+          body="$(printf 'npm %s runs a lockfile-only install of `@tailwindcss/oxide` without `EALLOWREMOTE`, so [npm/cli#9800](https://github.com/npm/cli/issues/9800) no longer blocks Renovate.\n\n**To lift the guard:** in `renovate.json5`, delete the `constraints` entry marked `npm-12-guard` and the `npm` package rule that names it. Then tick the rebase box on an open Renovate npm PR, or wait for the next one, and confirm it has no "Artifact update problem" comment.\n\nRenovate uses the newest npm that has passed its minimum release age, so a release from the last few days may not be the one it runs yet.\n\nAfter that merges, delete `.github/workflows/npm-12-watch.yml` (or it self-deactivates once the guard is gone).\n\n_Opened automatically by the npm-12-watch workflow._' "$version")"
+
+          gh issue create --title "$title" --body "$body"
