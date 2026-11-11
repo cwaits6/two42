@@ -14,14 +14,29 @@ import { AccountAgeNotice } from "../_components/AccountAgeNotice";
 import { AuthShell } from "../_components/AuthShell";
 import { AuthFormLoading } from "../_components/AuthFormLoading";
 import { InvalidLink } from "../_components/InvalidLink";
-import { CHURCH_ADMIN_INVALID_HELP } from "@/lib/groups/invites";
 import { NewPasswordFields } from "../_components/NewPasswordFields";
 import { passwordFieldErrors, type PasswordFieldErrors } from "../_components/passwordRules";
 import { useFieldFocus } from "../_components/useFieldFocus";
 import { sanitizeNext } from "@/app/api/auth/callback/sanitize-next";
+import { SETUP_STATUS, type SetupAccountResponse } from "@/app/api/auth/setup-response";
 import { logError, logWarn } from "@/lib/log";
 
 const TITLE = "Set up your account";
+
+const LINK_CLASS =
+  "font-semibold text-brand-primary-text underline underline-offset-4 hover:text-foreground";
+
+// One wording for every dead link: a used link whose account was not created
+// under the link's derived id looks the same as an unknown one.
+const INVALID_HELP = (
+  <>
+    If you already set up your account,{" "}
+    <Link href="/login" className={LINK_CLASS}>
+      sign in
+    </Link>
+    . Otherwise ask your church admin for a new link.
+  </>
+);
 
 interface SignupLink {
   name: string;
@@ -108,7 +123,7 @@ export function SetupAccountForm() {
     setLoading(true);
     setAccountExists(false);
     let res: Response;
-    let body: { redirect?: unknown; status?: unknown; field?: unknown; error?: unknown };
+    let body: SetupAccountResponse | Record<string, never>;
     try {
       res = await fetch("/api/auth/setup-account", {
         method: "POST",
@@ -125,12 +140,12 @@ export function SetupAccountForm() {
 
     if (!res.ok) {
       setLoading(false);
-      if (res.status === 400 && body.field === "password" && typeof body.error === "string") {
+      if (res.status === 400 && "field" in body && body.field === "password") {
         setErrors({ password: body.error });
         focusField("password");
-      } else if (res.status === 409 && body.status === "set_up") {
+      } else if (res.status === 409 && "status" in body && body.status === SETUP_STATUS.setUp) {
         setView({ kind: "set_up" });
-      } else if (res.status === 409 && body.status === "account_exists") {
+      } else if (res.status === 409 && "status" in body && body.status === SETUP_STATUS.accountExists) {
         setAccountExists(true);
         setFormError("An account already uses this email.");
       } else if (res.status === 404 || res.status === 410) {
@@ -141,14 +156,14 @@ export function SetupAccountForm() {
       return;
     }
 
-    const destination = sanitizeNext(typeof body.redirect === "string" ? body.redirect : null);
+    const destination = sanitizeNext("redirect" in body ? body.redirect : null);
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email: link.email,
       password,
     });
     if (signInError) {
       setLoading(false);
-      logWarn("Account created but sign-in failed", undefined, { route: "/setup-account" });
+      logWarn("Account created but sign-in failed", signInError, { route: "/setup-account" });
       setView({ kind: "signed_up", redirect: destination });
       return;
     }
@@ -181,7 +196,7 @@ export function SetupAccountForm() {
   }
 
   if (view.kind === "invalid") {
-    return <InvalidLink help={CHURCH_ADMIN_INVALID_HELP} />;
+    return <InvalidLink help={INVALID_HELP} />;
   }
 
   if (view.kind === "set_up" || view.kind === "signed_up") {
@@ -239,10 +254,7 @@ export function SetupAccountForm() {
             {accountExists && (
               <>
                 {" "}
-                <Link
-                  href="/login"
-                  className="font-semibold text-brand-primary-text underline underline-offset-4 hover:text-foreground"
-                >
+                <Link href="/login" className={LINK_CLASS}>
                   Sign in
                 </Link>
               </>

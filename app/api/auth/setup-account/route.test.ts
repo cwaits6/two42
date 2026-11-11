@@ -5,6 +5,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setupUserId } from "../setup-link";
+import { SETUP_STATUS } from "../setup-response";
 
 const createServiceClient = vi.fn();
 vi.mock("@/lib/supabase/server", () => ({
@@ -266,7 +267,7 @@ describe("POST /api/auth/setup-account — dead and malformed links", () => {
     });
     const res = await post({ token: TOKEN, password: PASSWORD });
     expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ status: "set_up" });
+    expect(await res.json()).toEqual({ status: SETUP_STATUS.setUp });
   });
 
   it("answers a reused link as already set up without creating or changing anything", async () => {
@@ -276,7 +277,7 @@ describe("POST /api/auth/setup-account — dead and malformed links", () => {
     });
     const res = await post({ token: TOKEN, password: PASSWORD });
     expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ status: "set_up" });
+    expect(await res.json()).toEqual({ status: SETUP_STATUS.setUp });
     expect(admin.createUser).not.toHaveBeenCalled();
     expect(admin.updateUserById).not.toHaveBeenCalled();
     expect(consumeCalls(calls)).toEqual([]);
@@ -352,7 +353,7 @@ describe("POST /api/auth/setup-account — accounts that cannot be created", () 
     });
     const res = await post({ token: TOKEN, password: PASSWORD });
     expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ status: "account_exists" });
+    expect(await res.json()).toEqual({ status: SETUP_STATUS.accountExists });
     expect(consumeCalls(calls)).toEqual([]);
   });
 

@@ -4,6 +4,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setupUserId } from "../setup-link";
+import { SETUP_STATUS } from "../setup-response";
 
 const createServiceClient = vi.fn();
 vi.mock("@/lib/supabase/server", () => ({
@@ -82,7 +83,7 @@ describe("POST /api/auth/verify-token", () => {
     fakeService({ account: true });
     const res = await post({ token: TOKEN });
     expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ status: "set_up" });
+    expect(await res.json()).toEqual({ status: SETUP_STATUS.setUp });
   });
 
   it("answers an expired link as expired", async () => {

@@ -8,15 +8,18 @@ import {
 } from "@/app/(auth)/_components/passwordRules";
 import {
   INVALID_LINK,
+  accountExistsResponse,
   deadLinkResponse,
   findSetupAccount,
   readSetupToken,
+  setUpResponse,
   setupUserId,
 } from "../setup-link";
+import type { SetupAccountResponse } from "../setup-response";
 
-const invalid = () => NextResponse.json(INVALID_LINK, { status: 404 });
-const failed = () => NextResponse.json({ error: "Couldn't create your account." }, { status: 500 });
-const setUp = () => NextResponse.json({ status: "set_up" }, { status: 409 });
+const invalid = () => NextResponse.json<SetupAccountResponse>(INVALID_LINK, { status: 404 });
+const failed = () =>
+  NextResponse.json<SetupAccountResponse>({ error: "Couldn't create your account." }, { status: 500 });
 const logAccountLookup = (error: unknown) =>
   logError("Setup account: account lookup failed", error, { route: "/api/auth/setup-account" });
 
@@ -42,7 +45,7 @@ export async function POST(request: Request) {
   const password = typeof rawPassword === "string" ? rawPassword : "";
   const passwordError = passwordFieldErrors(password, password).password;
   if (passwordError) {
-    return NextResponse.json({ field: "password", error: passwordError }, { status: 400 });
+    return NextResponse.json<SetupAccountResponse>({ field: "password", error: passwordError }, { status: 400 });
   }
 
   const service = await createServiceClient();
@@ -90,7 +93,7 @@ export async function POST(request: Request) {
 
   // Links the new profile to the household the link's invite was for. Only a
   // failure that a retry can repair is fatal; an invite that is gone, already
-  // accepted or for another address is skipped, as the claim route does.
+  // accepted or for another address is skipped.
   async function linkHousehold(inviteToken: string): Promise<boolean> {
     const { data: invite, error: inviteError } = await service
       .from("family_invites")
@@ -173,10 +176,10 @@ export async function POST(request: Request) {
       account = await findSetupAccount(service.auth.admin, token);
       if (account.kind !== "found") {
         if (createError.code === "email_exists") {
-          return NextResponse.json({ status: "account_exists" }, { status: 409 });
+          return accountExistsResponse();
         }
         if (createError.code === "weak_password") {
-          return NextResponse.json(
+          return NextResponse.json<SetupAccountResponse>(
             { field: "password", error: PASSWORD_AUTH_ERRORS.weak_password },
             { status: 400 },
           );
@@ -191,12 +194,12 @@ export async function POST(request: Request) {
     // The row's email can only differ if it was edited after setup; the
     // account is not this row's to change.
     if (account.email?.toLowerCase() !== email.toLowerCase()) {
-      return (await consumeLink()) ? setUp() : failed();
+      return (await consumeLink()) ? setUpResponse() : failed();
     }
     const { error: updateError } = await service.auth.admin.updateUserById(userId, { password });
     if (updateError) {
       if (updateError.code === "weak_password") {
-        return NextResponse.json(
+        return NextResponse.json<SetupAccountResponse>(
           { field: "password", error: PASSWORD_AUTH_ERRORS.weak_password },
           { status: 400 },
         );
@@ -213,7 +216,7 @@ export async function POST(request: Request) {
     return failed();
   }
 
-  return NextResponse.json({
+  return NextResponse.json<SetupAccountResponse>({
     redirect: row.group_id ? groupPath(row.group_id, "/dashboard") : "/dashboard",
   });
 }

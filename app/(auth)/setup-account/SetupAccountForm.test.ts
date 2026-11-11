@@ -18,6 +18,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 const { SetupAccountForm } = await import("./SetupAccountForm");
+const { SETUP_STATUS } = await import("@/app/api/auth/setup-response");
 
 let root: Root;
 let container: HTMLElement;
@@ -77,10 +78,14 @@ describe("SetupAccountForm verification", () => {
     expect(container.textContent).toContain("Couldn't load this signup link");
   });
 
-  it("shows the dead-link message for an unknown link with no session", async () => {
-    await render(async () => new Response(null, { status: 404 }));
+  it.each([404, 410])("shows the one dead-link message for a %i with no session", async (status) => {
+    await render(async () => new Response(null, { status }));
     expect(container.textContent).toContain("This link isn't valid anymore");
-    expect(container.textContent).toContain("Ask a church admin for a new one.");
+    expect(container.textContent).toContain(
+      "If you already set up your account, sign in. Otherwise ask your church admin for a new link.",
+    );
+    const signIn = [...container.querySelectorAll("a")].find((a) => a.textContent === "sign in");
+    expect(signIn?.getAttribute("href")).toBe("/login");
   });
 });
 
@@ -109,14 +114,14 @@ const signInHref = () =>
 
 describe("SetupAccountForm used links", () => {
   it("says the account is already set up and offers Sign in", async () => {
-    await render(async () => Response.json({ status: "set_up" }, { status: 409 }));
+    await render(async () => Response.json({ status: SETUP_STATUS.setUp }, { status: 409 }));
     expect(container.textContent).toContain("Your account is already set up");
     expect(signInHref()).toBe("/login");
   });
 
   it("sends a signed-in viewer of a used link Home", async () => {
     getSession.mockResolvedValueOnce({ data: { session: {} } } as never);
-    await render(async () => Response.json({ status: "set_up" }, { status: 409 }));
+    await render(async () => Response.json({ status: SETUP_STATUS.setUp }, { status: 409 }));
     expect(router.replace).toHaveBeenCalledWith("/dashboard");
   });
 });
@@ -138,14 +143,14 @@ describe("SetupAccountForm submit", () => {
   });
 
   it("offers Sign in when another account already uses the email", async () => {
-    await submitWith(Response.json({ status: "account_exists" }, { status: 409 }));
+    await submitWith(Response.json({ status: SETUP_STATUS.accountExists }, { status: 409 }));
     expect(container.textContent).toContain("An account already uses this email.");
     expect(signInHref()).toBe("/login");
     expect(signInWithPassword).not.toHaveBeenCalled();
   });
 
   it("shows the already-set-up view when the link was used meanwhile", async () => {
-    await submitWith(Response.json({ status: "set_up" }, { status: 409 }));
+    await submitWith(Response.json({ status: SETUP_STATUS.setUp }, { status: 409 }));
     expect(container.textContent).toContain("Your account is already set up");
   });
 

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { SETUP_STATUS, type SetupAccountResponse } from "./setup-response";
 
 const MAX_TOKEN_LENGTH = 512;
 const USER_ID_PREFIX = "two42:setup-account:";
@@ -50,6 +51,11 @@ export async function findSetupAccount(
 
 export const INVALID_LINK = { error: "Invalid or expired token" } as const;
 
+export const setUpResponse = () =>
+  NextResponse.json<SetupAccountResponse>({ status: SETUP_STATUS.setUp }, { status: 409 });
+export const accountExistsResponse = () =>
+  NextResponse.json<SetupAccountResponse>({ status: SETUP_STATUS.accountExists }, { status: 409 });
+
 /**
  * The answer for a setup link with no live row: "already set up" when this
  * link created an account, otherwise unknown (404) or expired (410). A failed
@@ -63,7 +69,7 @@ export async function deadLinkResponse(
 ): Promise<NextResponse> {
   const account = await findSetupAccount(admin, token);
   if (account.kind === "found") {
-    return NextResponse.json({ status: "set_up" }, { status: 409 });
+    return setUpResponse();
   }
   if (account.kind === "error") {
     logLookupFailure(account.error);
