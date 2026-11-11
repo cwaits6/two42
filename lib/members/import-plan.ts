@@ -31,6 +31,7 @@ import type { MemberRow } from "@/lib/members/format";
 import { anniversaryCell, parseAnniversaryCell, withoutHiddenValues } from "@/lib/members/format";
 import { retiredFlagResets } from "@/lib/members/retiredHideFlags";
 import { isChildWithoutAccount } from "@/lib/household";
+import { nameFieldError } from "@/lib/nameField";
 import type {
   OrgSnapshot,
   SnapshotFamilyMember,
@@ -58,6 +59,7 @@ export type ImportErrorCode =
   | "INVALID_BIRTH_PART"
   | "INVALID_RELATIONSHIP"
   | "INVALID_ROLE"
+  | "NAME_TOO_LONG"
   | "DUPLICATE_IN_FILE"
   | "MISSING_HOUSEHOLD_NAME"
   | "HOUSEHOLD_MOVE";
@@ -398,6 +400,14 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
         field: "role",
         message: `role must be one of: ${[...ROLES].join(", ")}`,
       });
+    }
+    for (const [field, label] of [
+      ["first_name", "first name"],
+      ["last_name", "last name"],
+      ["preferred_name", "preferred name"],
+    ] as const) {
+      const message = nameFieldError(row[field], label, false);
+      if (message) fail(row, { code: "NAME_TOO_LONG", field, message });
     }
     checkBirthPart(row, "birth_month", 1, 12);
     checkBirthPart(row, "birth_day", 1, 31);
@@ -1156,7 +1166,9 @@ export function planImport(fileRows: MemberRow[], snapshot: OrgSnapshot): Import
     const values: FamilyMemberUpdateValues = {};
     if (
       row.preferred_name !== null &&
-      row.preferred_name !== (member.preferred_name ?? "")
+      // Case-blind: an insert saves the name capitalized, so the file's own
+      // casing must not count as a change on the next import.
+      norm(row.preferred_name) !== norm(member.preferred_name)
     ) {
       changes.preferred_name = [member.preferred_name, row.preferred_name];
       values.preferred_name = row.preferred_name;
