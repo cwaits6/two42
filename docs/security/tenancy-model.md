@@ -320,7 +320,14 @@ arm — `is_member() and is_unlisted = false and role in (member, admin)` **and*
 ("Members can view family units"): org admin, own household (`is_member()`-gated,
 so a pending account linked by a family-invite claim still reads neither table),
 or `is_member() and (org_directory_visible() or
-shares_group_with_household(<family id>))`.
+shares_group_with_household(<family id>))`. That rule is stated once, in
+`household_visible(family_id, is_admin, is_member, own_family_id, directory_open)`
+(`20261125000000_household_and_deletion_rules.sql`): the policy passes it the
+viewer's facts, each wrapped `(select ...)`, and so does
+`family_directory_people()`. It is `SECURITY INVOKER` with no `SET` clause and
+no subquery, so Postgres inlines it into the policy instead of calling it per
+row; `supabase/tests/household_rules_suite.sql` proves the policy and the
+function agree for each kind of viewer.
 The three directory views are `security_invoker` and narrow with the base
 tables; nothing else changed.
 
@@ -329,10 +336,13 @@ tables; nothing else changed.
 another member can't read a stored column the directory doesn't show.
 `families_directory_full.family_members_list` reads people through
 `family_directory_people(_family_id)`, a `SECURITY DEFINER` function that
-repeats the directory arm above in its own `WHERE` clause and returns only what
+gates on `household_visible()`, the policy's own rule, and returns only what
 the directory uses: no `birth_year` for anyone, and a child without an account
 (`relationship = 'child'` with no `claimed_profile_id`) under their preferred name
-alone when they have one. No view reads the table directly.
+alone when they have one. `is_child_without_account()` is the one SQL statement
+of that rule, read by this function and the `family_members` and
+`family_invites` triggers; `isChildWithoutAccount()` in `lib/household.ts` is
+the app's, and `lib/household.test.ts` checks both against one case table. No view reads the table directly.
 
 The helpers are `SECURITY DEFINER`, `STABLE`, `set search_path = ''`,
 EXECUTE revoked from `anon` and granted to `authenticated`:
