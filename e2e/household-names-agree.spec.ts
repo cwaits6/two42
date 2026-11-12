@@ -84,3 +84,15 @@ for (const { persona, who, groupId, seesCouple } of VIEWERS) {
     });
   });
 }
+
+test.describe("someone who shares no group with the household", () => {
+  test.use({ persona: "leadsC" });
+
+  test("gets none of its people's names from a link to it", async ({ page }) => {
+    await page.goto(`/directory/families?family=${HOUSEHOLD}`);
+    await expect(page.getByText("Choose a household from the list to see their details.")).toBeVisible();
+    for (const name of ["Henry", "Chloe", "Jack", "Sophie", "Mockingham"]) {
+      await expect(page.getByText(name)).toHaveCount(0);
+    }
+  });
+});
