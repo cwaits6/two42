@@ -35,8 +35,10 @@ const isLower = (c: string) => c !== c.toUpperCase();
  * leaves the word alone.
  */
 function capitalize(word: string): string {
-  const upper = word.charAt(0).toUpperCase();
-  return upper.charAt(0) + upper.slice(1).toLowerCase() + word.slice(1);
+  const [first = "", ...rest] = word;
+  const upper = first.toUpperCase();
+  const [head = "", ...tail] = upper;
+  return head + tail.join("").toLowerCase() + rest.join("");
 }
 
 /**
@@ -105,7 +107,7 @@ export function titleCaseName(raw: string | null | undefined): string | null {
 }
 
 const writtenInCase = (word: string) =>
-  isUpper(word.charAt(0)) && [...word].some(isLower);
+  isUpper([...word][0] ?? "") && [...word].some(isLower);
 
 /**
  * Alias for titleCaseName — "john smith" → "John Smith".

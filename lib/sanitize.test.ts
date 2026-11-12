@@ -48,6 +48,8 @@ const NAMES: [string, string, string][] = [
   ["ßmith", "Ssmith", "SSmith"],
   ["ﬁnn o'ﬂaherty", "Finn O'Flaherty", "FInn O'FLaherty"],
   ["ǆenan", "Ǆenan", "Ǆenan"],
+  ["𐐨esantis", "𐐀esantis", "𐐨esantis"],
+  ["𐐨eSantis", "𐐀eSantis", "𐐨esantis"],
 ];
 
 describe("titleCaseName", () => {
