@@ -10,6 +10,7 @@ const NAMES: [string, string, string][] = [
   ["JOHN SMITH", "John Smith", "John Smith"],
   ["john smith", "John Smith", "John Smith"],
   ["John smith", "John Smith", "John Smith"],
+  ["mary Ann", "Mary Ann", "Mary Ann"],
   ["  john   smith ", "John Smith", "John Smith"],
   ["mARY o'brien", "Mary O'Brien", "Mary O'Brien"],
   ["O'Brien", "O'Brien", "O'Brien"],
