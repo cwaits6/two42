@@ -1718,8 +1718,14 @@ isOneToOne: false
 "group_request_approve":
 { Args: { "_request_id": string }; Returns: string
                            },
+"household_visible":
+{ Args: { "_directory_open": boolean,"_family_id": string,"_is_admin": boolean,"_is_member": boolean,"_own_family_id": string }; Returns: boolean
+                           },
 "is_admin":
 { Args: Record<PropertyKey, never>; Returns: boolean
+                           },
+"is_child_without_account":
+{ Args: { "_claimed_profile_id": string,"_relationship": string }; Returns: boolean
                            },
 "is_group_leader":
 { Args: { "_group_id": string }; Returns: boolean
@@ -1777,6 +1783,9 @@ isOneToOne: false
 { Args: { "_group_id": string }; Returns: {
               "created_at": string,"email": string,"first_name": string,"id": string,"last_name": string,"preferred_name": string
             }[]
+                           },
+"person_deletion_outcomes":
+{ Args: { "_org_id": string,"_person_id": string }; Returns: Json
                            },
 "prayer_request_visible_author":
 { Args: { "_request_id": string }; Returns: string

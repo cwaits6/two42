@@ -33,6 +33,8 @@ export function fakeService(tables: Tables) {
   };
   const state = {
     rpcResult: null as unknown,
+    // Per function, ahead of rpcResult.
+    rpcResults: {} as Record<string, unknown>,
     rpcError: null as { code: string } | null,
     storageError: null as { message: string } | null,
     // Keys storage reports nothing for, as it does for a key it couldn't find.
@@ -124,7 +126,7 @@ export function fakeService(tables: Tables) {
       log.rpcs.push({ name, args });
       return state.rpcError
         ? { data: null, error: state.rpcError }
-        : { data: state.rpcResult, error: null };
+        : { data: name in state.rpcResults ? state.rpcResults[name] : state.rpcResult, error: null };
     },
     storage: {
       from: (bucket: string) => ({
