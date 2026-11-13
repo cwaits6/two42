@@ -129,6 +129,15 @@ describe("buildAccountExport", () => {
     expect(JSON.stringify(data)).not.toContain("Bens sealed request");
   });
 
+  it("finds their anonymous requests past the first page of the church's", async () => {
+    const { tables, state } = setup();
+    const others = Array.from({ length: 1000 }, (_, i) => sealed(`b${i}`, "ben", "Not hers", "t0"));
+    tables.prayer_requests = [...others, ...tables.prayer_requests];
+    state.maxRows = 1000;
+    const data = await buildAccountExport(ORG, "ada");
+    expect(data?.prayer_requests.map((p) => p.body)).toContain("Sealed and hers");
+  });
+
   it("throws rather than leave out their requests when the prayer keys are missing", async () => {
     setup();
     keys = null;

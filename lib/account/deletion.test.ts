@@ -115,6 +115,21 @@ describe("deletePerson", () => {
     ]);
   });
 
+  it("finds their hashed requests past the first page of the church's", async () => {
+    const hashed = (id: string, author: string) => ({
+      id,
+      org_id: ORG,
+      is_anonymous: true,
+      author_id: null,
+      author_hash: authorHash(KEYS, ORG, id, author),
+    });
+    const others = Array.from({ length: 1000 }, (_, i) => hashed(`b${i}`, "ben"));
+    const { log, state } = setup({ prayer_requests: [...others, hashed("last", "ada")] });
+    state.maxRows = 1000;
+    expect(await deletePerson(ORG, "ada")).toEqual({ outcome: "deleted", photosNotRemoved: 0 });
+    expect(log.rpcs[0].args).toMatchObject({ _anonymous_request_ids: ["last"] });
+  });
+
   it("fails, deleting nothing, without the prayer keys or when their requests can't be read", async () => {
     keys = null;
     const { log } = setup();
