@@ -6,6 +6,9 @@
 // so scripts/encrypt-prayer-requests.mjs can import it under Node's type
 // stripping. Keep it that way.
 import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes, timingSafeEqual } from "node:crypto";
+import type { Tables } from "../supabase/database.types";
+
+type RequestRow = Tables<"prayer_requests">;
 
 export interface KeyRing {
   current: Buffer;
@@ -166,13 +169,10 @@ export function hashedWithCurrentKey(keys: PrayerKeys, stored: string): boolean 
 /** Who wrote a request, in the one form the row stores. */
 export type RequestAuthor = { anonymous: boolean; authorId: string } | { anonymous: true; authorHash: string };
 
-export interface StoredForm {
-  body: null;
-  body_ciphertext: string;
-  is_anonymous: boolean;
-  author_id: string | null;
-  author_hash: string | null;
-}
+export type StoredForm = Pick<RequestRow, "is_anonymous" | "author_id" | "author_hash"> & {
+  body: RequestRow["body"] & null;
+  body_ciphertext: NonNullable<RequestRow["body_ciphertext"]>;
+};
 
 /**
  * The columns a write sets. It always fills one text form and one author form
@@ -197,15 +197,10 @@ export function storedForm(
 }
 
 /** A prayer_requests row as the backfill reads it. */
-export interface StoredRow {
-  id: string;
-  org_id: string;
-  body: string | null;
-  body_ciphertext: string | null;
-  is_anonymous: boolean;
-  author_id: string | null;
-  author_hash: string | null;
-}
+export type StoredRow = Pick<
+  RequestRow,
+  "id" | "org_id" | "body" | "body_ciphertext" | "is_anonymous" | "author_id" | "author_hash"
+>;
 
 export type RowPlan =
   | { action: "noop" }
@@ -213,8 +208,10 @@ export type RowPlan =
       action: "write";
       steps: ("encrypt" | "reencrypt" | "hash" | "rehash")[];
       patch: Pick<StoredForm, "body" | "body_ciphertext" | "author_id" | "author_hash">;
+      /** The text still needs resealing, but the stale author hash matched no one and is kept as it is. */
+      unmatched: boolean;
     }
-  /** An anonymous hash under the previous author key that matched no one in the church. */
+  /** An anonymous hash under a key that is not current, matching no one in the church; nothing else to do. */
   | { action: "unmatched" }
   /** Text that cannot be opened with the configured keys. */
   | { action: "error" };
@@ -243,6 +240,7 @@ export function planRow(row: StoredRow, keys: PrayerKeys, memberIds: readonly st
 
   let author_id = row.author_id;
   let author_hash = row.author_hash;
+  let unmatched = false;
   if (row.is_anonymous && row.author_id) {
     author_hash = authorHash(keys, row.org_id, row.id, row.author_id);
     author_id = null;
@@ -250,16 +248,20 @@ export function planRow(row: StoredRow, keys: PrayerKeys, memberIds: readonly st
   } else if (row.is_anonymous && row.author_hash && !hashedWithCurrentKey(keys, row.author_hash)) {
     const stored = row.author_hash;
     const match = memberIds.find((id) => isAuthor(keys, row.org_id, row.id, id, stored));
-    if (!match) return { action: "unmatched" };
-    author_hash = authorHash(keys, row.org_id, row.id, match);
-    steps.push("rehash");
+    if (match) {
+      author_hash = authorHash(keys, row.org_id, row.id, match);
+      steps.push("rehash");
+    } else {
+      unmatched = true;
+    }
   }
 
-  if (steps.length === 0) return { action: "noop" };
+  if (steps.length === 0) return unmatched ? { action: "unmatched" } : { action: "noop" };
   const reseal = steps.includes("encrypt") || steps.includes("reencrypt");
   return {
     action: "write",
     steps,
+    unmatched,
     patch: {
       body: null,
       body_ciphertext: reseal || !row.body_ciphertext ? encryptBody(keys, row.org_id, row.id, text) : row.body_ciphertext,

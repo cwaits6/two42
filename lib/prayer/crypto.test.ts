@@ -193,4 +193,26 @@ describe("planRow", () => {
     expect(planRow(row, rotating, [BEN])).toEqual({ action: "unmatched" });
     expect(planRow(row, testKeys())).toEqual({ action: "error" });
   });
+
+  it("still moves the text off the previous body key when an old hash matches no one", () => {
+    const first = testKeys();
+    const row = converge(legacy({ is_anonymous: true }), planRow(legacy({ is_anonymous: true }), first));
+    const newAuthorKey = newKey();
+    // The author rotation ran earlier and left this request unmatched; now the body key rotates.
+    const rotatingBody = parsePrayerKeys({
+      PRAYER_BODY_KEY: newKey(),
+      PRAYER_BODY_KEY_PREVIOUS: first.body.current.toString("base64"),
+      PRAYER_AUTHOR_KEY: newAuthorKey,
+    })!;
+    const plan = planRow(row, rotatingBody, []);
+    expect(plan).toMatchObject({ action: "write", steps: ["reencrypt"], unmatched: true });
+    const after = converge(row, plan);
+    expect(after.author_hash).toBe(row.author_hash);
+    const current = parsePrayerKeys({
+      PRAYER_BODY_KEY: rotatingBody.body.current.toString("base64"),
+      PRAYER_AUTHOR_KEY: newAuthorKey,
+    })!;
+    expect(decryptBody(current, ORG, REQ, after.body_ciphertext!)).toBe("Pray for Ada.");
+    expect(planRow(after, current)).toEqual({ action: "unmatched" });
+  });
 });

@@ -67,7 +67,8 @@ each anonymous request's `author_id` with its keyed hash, and, during a key
 rotation, moves text and hashes onto the current keys. The keys live outside
 the database, so no migration can do it. Dry run by default, `--apply` to
 write, `--org <uuid>` for one church; rerunnable, and it never sets
-`updated_at`. It imports `lib/prayer/crypto.ts` directly under Node's type
+`updated_at`. It imports `lib/prayer/crypto.ts` (planning) and
+`lib/prayer/backfill.ts` (the guarded write) directly under Node's type
 stripping, which prints a `MODULE_TYPELESS_PACKAGE_JSON` warning. Usage,
 rotation and what losing a key means:
 [`docs/security/prayer-encryption.md`](../docs/security/prayer-encryption.md).

@@ -68,14 +68,20 @@ malformed key (not exactly 32 bytes of base64) counts as missing.
 - **The prayer page** shows its failed state, never ciphertext and never an
   empty wall. So does a page holding any request whose text fails to open,
   which is what a wrong body key causes.
-- **Home** shows its prayer section as failed, never empty.
+- **Home** shows its prayer section as failed, never empty. The rest of the
+  page, "New in the group" included, still shows; answered requests are left
+  out of it.
 - **Posting, marking answered, editing and deleting** return 503 and the
   board's usual error message.
-- **Account download and account deletion** fail, rather than leave a
-  person's anonymous requests out of the file or behind in the database.
+- **Account download and account deletion** fail when a key is missing,
+  rather than leave a person's anonymous requests out of the file or behind in
+  the database.
 - **A wrong author key** cannot be detected: a hash under another key matches
   no one, so authors are not recognised on their anonymous requests until the
-  right key is back.
+  right key is back. Under it, account download leaves the person's anonymous
+  requests out, and account deletion goes ahead without them: they stay,
+  nobody's, until a leader deletes them or the church's retention period
+  removes them.
 
 **Production** must have both keys. **Preview deployments** carry no service
 secrets by design, the prayer keys included, so on a preview the prayer page
@@ -92,13 +98,15 @@ text and hashes onto the current keys. The database cannot do this itself,
 because the keys are not in it.
 
 ```bash
-SUPABASE_URL=https://<project>.supabase.co \
-SUPABASE_SECRET_KEY=<service key> \
-PRAYER_BODY_KEY=<key> PRAYER_AUTHOR_KEY=<key> \
+export SUPABASE_URL=https://<project>.supabase.co
+export SUPABASE_SECRET_KEY=<service key>
+export PRAYER_BODY_KEY=<key> PRAYER_AUTHOR_KEY=<key>
 node scripts/encrypt-prayer-requests.mjs            # dry run: counts per church
 node scripts/encrypt-prayer-requests.mjs --apply    # converts
-node scripts/encrypt-prayer-requests.mjs            # should report only noop
+node scripts/encrypt-prayer-requests.mjs            # should report only noop (and unmatched)
 ```
+
+During a rotation, also export the `_PREVIOUS` key.
 
 `--org <uuid>` limits it to one church. The dry run opens every sealed row, so
 it proves the keys before anything is written. The script never sets
@@ -106,9 +114,11 @@ it proves the keys before anything is written. The script never sets
 Each write is guarded on the `updated_at` it read; a row the app changed in
 the meantime is counted and left for the next run. It prints counts only,
 never request text or anyone's id, and exits non-zero when anything is left:
-`error` (text that does not open with the configured keys), `unmatched` (an
-anonymous hash under a key that matches no one; see below), or a write that
-lost a race.
+`error` (text that does not open with the configured keys) or a write that
+lost a race. `unmatched` (an anonymous hash under an old author key that
+matches no one; see below) is reported but is not a failure: nothing can
+change it, and the script still moves that row's text onto the current body
+key.
 
 Afterwards, this should return 0:
 
@@ -128,7 +138,7 @@ Rotate one key at a time.
    `PRAYER_BODY_KEY` to the new one, and redeploy. New writes use the new key;
    old rows still open.
 3. Run the script: a dry run shows `reencrypt` for every old row, then
-   `--apply`, then a dry run showing only `noop`.
+   `--apply`, then a dry run showing only `noop` and `unmatched`, exiting 0.
 4. Remove `PRAYER_BODY_KEY_PREVIOUS` and redeploy.
 5. Keep the old key for as long as you keep backups taken before step 3; they
    hold text sealed with it.
@@ -140,7 +150,8 @@ hash carries only its key id, not its author, so the script finds each
 anonymous request's author by trying every person in the church under the
 previous key, and rehashes under the new one. A request whose author is no
 longer in the church reports as `unmatched`; it stays anonymous and nobody's,
-and a leader can still delete it.
+and a leader can still delete it. The script reports it as `unmatched` on
+every run from then on, and it no longer stops a body-key rotation.
 
 ## Losing a key
 
@@ -150,7 +161,7 @@ longer mark them answered or delete them. The text stays readable and leaders
 can still delete them. Account deletion can no longer find them, so they stay
 until a leader deletes them or the church's retention period removes them.
 Set a new key; new anonymous requests work normally, and the script reports
-the old ones as `unmatched` on every run from then on.
+the old ones as `unmatched` on every run from then on, without failing.
 
 **The body key.** The text of every request sealed with it is gone; no one can
 recover it without a copy of the key. Every group holding such a request shows
