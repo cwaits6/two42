@@ -162,6 +162,8 @@ begin
     values (_org, _event, current_date);
   insert into public.event_reminder_sends (org_id, event_id, occurrence_date, profile_id)
     values (_org, _event, current_date, _owner);
+  insert into public.usage_counts (org_id, usage_date, kind, pattern, total)
+    values (_org, current_date, 'view', '/dashboard', 1);
 end;
 $$;
 
