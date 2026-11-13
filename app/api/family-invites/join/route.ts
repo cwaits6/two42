@@ -31,13 +31,14 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  let body: { token?: unknown };
+  let body: unknown;
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  const token = typeof body.token === "string" ? body.token.trim() : "";
+  const raw = body && typeof body === "object" ? (body as { token?: unknown }).token : undefined;
+  const token = typeof raw === "string" ? raw.trim() : "";
   if (!isUuid(token)) return notFound();
 
   const service = await createServiceClient();

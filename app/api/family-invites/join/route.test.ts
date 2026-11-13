@@ -154,6 +154,14 @@ describe("POST /api/family-invites/join", () => {
     expect(updates()).toHaveLength(0);
   });
 
+  it("answers a null or non-object body as a missing invite without reading it", async () => {
+    for (const body of [null, "token", 42]) {
+      const res = await post(body);
+      expect(res.status).toBe(404);
+    }
+    expect(calls).toHaveLength(0);
+  });
+
   it("refuses another address as a different account without writing", async () => {
     user = { ...USER, email: "someone@example.test" };
 
