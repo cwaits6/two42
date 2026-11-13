@@ -75,6 +75,11 @@ export function fakeService(tables: Tables) {
         predicates.push((row) => row[column] === value);
         return builder;
       },
+      is: (column: string, value: null) => {
+        filters.push(column);
+        predicates.push((row) => (row[column] ?? null) === value);
+        return builder;
+      },
       neq: (column: string, value: unknown) => {
         filters.push(column);
         predicates.push((row) => row[column] !== value);

@@ -1,7 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { readList } from "@/lib/supabase/readList";
-import { toWallRow } from "@/lib/prayer";
+import type { PrayerKeys } from "@/lib/prayer/crypto";
+import { loadPrayerKeys } from "@/lib/prayer/keys";
+import { openWallRows } from "@/lib/prayer/wall";
 import { todayIn } from "@/lib/serving/dates";
 import { dayKey } from "@/lib/time/zone";
 import {
@@ -16,11 +18,30 @@ import {
   type ServingSignupRow,
   type ServingTeamRow,
 } from "@/lib/groups/groupHome";
-import type { DirectoryProfile, Event, FamilyDirectoryFull, Rsvp } from "@/lib/types";
+import type { DirectoryProfile, Event, FamilyDirectoryFull, PrayerWallRow, Rsvp } from "@/lib/types";
 import { logError } from "@/lib/log";
 
-const PRAYER_WALL_COLUMNS =
-  "id, group_id, body, is_anonymous, is_answered, created_at, mine, first_name, last_name, preferred_name, avatar_url, praying_count, i_am_praying";
+// All columns rather than a list: the app deploys before the migration that
+// adds the sealed-text columns, and naming a missing column fails the read.
+// A list is safe again once that migration is everywhere.
+const PRAYER_WALL_COLUMNS = "*";
+const OPEN_PRAYER_PAGE = 10;
+
+type PrayerReader = { client: SupabaseClient<Database>; orgId: string; groupId: string; userId: string; keys: PrayerKeys };
+
+/** Null, logged, when the keys are missing or any text fails to open, which Home shows as its prayer failure. */
+async function withPrayerKeys<T>(
+  keys: PrayerKeys | null,
+  read: (keys: PrayerKeys) => Promise<T | null>,
+): Promise<T | null> {
+  if (!keys) return null;
+  try {
+    return await read(keys);
+  } catch (err) {
+    logError("Prayer requests could not be opened for Home", err);
+    return null;
+  }
+}
 
 /**
  * Newly answered requests. prayer_wall has no updated_at, so the time comes
@@ -28,10 +49,9 @@ const PRAYER_WALL_COLUMNS =
  * anonymous author. Editing an answered request moves its time.
  */
 async function loadAnsweredPrayers(
-  client: SupabaseClient<Database>,
-  opts: { orgId: string; groupId: string; since: string },
+  { client, orgId, groupId, userId, keys }: PrayerReader,
+  since: string,
 ): Promise<AnsweredPrayerRow[] | null> {
-  const { orgId, groupId, since } = opts;
   const answered = readList(
     await client
       .from("prayer_requests")
@@ -60,10 +80,37 @@ async function loadAnsweredPrayers(
   );
   if (!wall) return null;
   const answeredAt = new Map(answered.map((row) => [row.id, row.updated_at]));
-  return wall.map((row) => ({
-    ...toWallRow(row),
-    answered_at: answeredAt.get(row.id ?? "") ?? "",
+  return openWallRows(wall, { viewerId: userId, keys }).map((row) => ({
+    ...row,
+    answered_at: answeredAt.get(row.id) ?? "",
   }));
+}
+
+/**
+ * The newest open request the viewer neither wrote nor prays for. The view
+ * cannot tell the viewer's own anonymous requests, so they are dropped here; a
+ * further page is read only when a whole page was the viewer's own.
+ */
+async function loadOpenPrayer({ client, orgId, groupId, userId, keys }: PrayerReader): Promise<PrayerWallRow[] | null> {
+  for (let from = 0; ; from += OPEN_PRAYER_PAGE) {
+    const page = readList(
+      await client
+        .from("prayer_wall")
+        .select(PRAYER_WALL_COLUMNS)
+        .eq("org_id", orgId)
+        .eq("group_id", groupId)
+        .eq("is_answered", false)
+        .eq("mine", false)
+        .eq("i_am_praying", false)
+        .order("created_at", { ascending: false })
+        .range(from, from + OPEN_PRAYER_PAGE - 1),
+      "Home's prayer request",
+    );
+    if (!page) return null;
+    const other = openWallRows(page, { viewerId: userId, keys }).find((row) => !row.mine);
+    if (other) return [other];
+    if (page.length < OPEN_PRAYER_PAGE) return [];
+  }
 }
 
 /**
@@ -83,6 +130,8 @@ export async function loadGroupHomeReads(
   },
 ): Promise<GroupHomeReads> {
   const { orgId, groupId, isLeader, userId, timeZone, now } = opts;
+  const prayerKeys = loadPrayerKeys();
+  if (!prayerKeys) logError("Prayer keys are not configured");
   const today = todayIn(timeZone, now);
   const nowIso = now.toISOString();
   const eventsSince = new Date(now.getTime() - EVENTS_LOOKBACK_MS).toISOString();
@@ -226,7 +275,9 @@ export async function loadGroupHomeReads(
       .order("published_at", { ascending: false })
       .limit(3)
       .then((read) => readList<AnnouncementRow>(read, "new announcements")),
-    loadAnsweredPrayers(client, { orgId, groupId, since: newSinceIso }),
+    withPrayerKeys(prayerKeys, (keys) =>
+      loadAnsweredPrayers({ client, orgId, groupId, userId, keys }, newSinceIso),
+    ),
     client
       .from("prayer_wall")
       .select("id")
@@ -238,17 +289,7 @@ export async function loadGroupHomeReads(
         const rows = readList(read, "whether the group has a prayer request");
         return rows && rows.length > 0;
       }),
-    client
-      .from("prayer_wall")
-      .select(PRAYER_WALL_COLUMNS)
-      .eq("org_id", orgId)
-      .eq("group_id", groupId)
-      .eq("is_answered", false)
-      .eq("mine", false)
-      .eq("i_am_praying", false)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .then((read) => readList(read, "Home's prayer request")?.map(toWallRow) ?? null),
+    withPrayerKeys(prayerKeys, (keys) => loadOpenPrayer({ client, orgId, groupId, userId, keys })),
   ]);
 
   return {

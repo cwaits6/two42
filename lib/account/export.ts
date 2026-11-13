@@ -1,16 +1,29 @@
 /**
  * One person's own data, for their download. Every read is on the service
- * client because the author of an anonymous prayer request isn't readable
- * otherwise, and because memberships and RSVPs outlive the group access that
- * RLS would need to read them. Each chain filters on the org and on this person,
+ * client because memberships and RSVPs outlive the group access that RLS would
+ * need to read them, and because an anonymous prayer request is recognised as
+ * theirs only by recomputing its author hash over the church's hashed rows. Each chain filters on the org and on this person,
  * their current address, or the household on their own profile row. Only unclaimed
  * household entries name anyone else, with their details, since nothing records
  * who typed them.
  * Nothing else selected does: no co-attendees of a serving date, no one else's
  * RSVPs, and no one who prayed for a request.
  */
+import { decryptBody, isAuthor } from "@/lib/prayer/crypto";
+import { loadPrayerKeys } from "@/lib/prayer/keys";
 import { createServiceClient } from "@/lib/supabase/server";
 import { rowsOf } from "./rows";
+
+interface PrayerRow {
+  id: string;
+  body: string | null;
+  body_ciphertext: string | null;
+  author_hash: string | null;
+  is_anonymous: boolean;
+  is_answered: boolean;
+  created_at: string;
+  groups: { name: string } | null;
+}
 
 const PROFILE_COLUMNS =
   "first_name, last_name, preferred_name, email, phone, phone_mobile, phone_home, phone_work, " +
@@ -27,6 +40,8 @@ const HOUSEHOLD_ENTRY_COLUMNS =
 
 /** Null when the person has no profile in this org. Throws on any failed read, never a partial file. */
 export async function buildAccountExport(orgId: string, personId: string) {
+  const keys = loadPrayerKeys();
+  if (!keys) throw new Error("prayer keys are not configured");
   const service = await createServiceClient();
 
   const [profile] = rowsOf<Record<string, unknown> & { family_id: string | null; email: string | null }>(
@@ -40,7 +55,7 @@ export async function buildAccountExport(orgId: string, personId: string) {
   if (!profile) return null;
   const { family_id: familyId, ...ownProfile } = profile;
 
-  const [groups, teams, rsvps, serving, prayers, funds, feedback, households, entries, groupRequests, accessRequests] = await Promise.all([
+  const [groups, teams, rsvps, serving, namedPrayers, hashedPrayers, funds, feedback, households, entries, groupRequests, accessRequests] = await Promise.all([
     service
       .from("group_members")
       .select("role, joined_at, groups(name)")
@@ -61,12 +76,19 @@ export async function buildAccountExport(orgId: string, personId: string) {
       .select("serving_signups(service_date, teams(name))")
       .eq("org_id", orgId)
       .eq("profile_id", personId),
+    // All columns: the app deploys before the migration that adds the sealed
+    // columns, and naming one that is missing fails the read.
     service
       .from("prayer_requests")
-      .select("body, is_anonymous, is_answered, created_at, groups(name)")
+      .select("*, groups(name)")
       .eq("org_id", orgId)
-      .eq("author_id", personId)
-      .order("created_at", { ascending: false }),
+      .eq("author_id", personId),
+    service
+      .from("prayer_requests")
+      .select("*, groups(name)")
+      .eq("org_id", orgId)
+      .eq("is_anonymous", true)
+      .is("author_id", null),
     service
       .from("giving_funds")
       .select("name, description, is_active, retire_on, groups(name), giving_fund_methods(method, custom_handle)")
@@ -110,6 +132,12 @@ export async function buildAccountExport(orgId: string, personId: string) {
   ]);
 
   const named = (row: { name?: string } | null | undefined) => row?.name ?? null;
+  const prayers = [
+    ...rowsOf<PrayerRow>(namedPrayers, "prayer requests"),
+    ...rowsOf<PrayerRow>(hashedPrayers, "anonymous prayer requests").filter(
+      (p) => p.author_hash !== null && isAuthor(keys, orgId, p.id, personId, p.author_hash),
+    ),
+  ].sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   return {
     profile: ownProfile,
@@ -141,15 +169,9 @@ export async function buildAccountExport(orgId: string, personId: string) {
       team: named(s.serving_signups?.teams),
       date: s.serving_signups?.service_date ?? null,
     })),
-    prayer_requests: rowsOf<{
-      body: string;
-      is_anonymous: boolean;
-      is_answered: boolean;
-      created_at: string;
-      groups: { name: string } | null;
-    }>(prayers, "prayer requests").map((p) => ({
+    prayer_requests: prayers.map((p) => ({
       group: named(p.groups),
-      body: p.body,
+      body: p.body_ciphertext ? decryptBody(keys, orgId, p.id, p.body_ciphertext) : p.body,
       anonymous: p.is_anonymous,
       answered: p.is_answered,
       posted_at: p.created_at,

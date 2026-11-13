@@ -15,6 +15,8 @@ import type { DeletionSummary, DeletionViewer } from "./deletionCopy";
 import { parseDeletionOutcomes } from "./deletionOutcomes";
 import { dataOf, rowsOf } from "./rows";
 import { logError } from "@/lib/log";
+import { isAuthor } from "@/lib/prayer/crypto";
+import { loadPrayerKeys } from "@/lib/prayer/keys";
 
 type ServiceClient = Awaited<ReturnType<typeof createServiceClient>>;
 
@@ -177,6 +179,35 @@ async function tellLeadersDatesOpened(
   }
 }
 
+/**
+ * The person's anonymous requests stored as a hash, which no foreign key ties
+ * to them. Null when the keys are missing or the read fails: deleting the person
+ * and leaving their requests behind is not an outcome. A request they post
+ * between this read and the commit stays until retention removes it, and they
+ * can no longer sign in to post another.
+ */
+async function hashedRequestsOf(service: ServiceClient, orgId: string, personId: string): Promise<string[] | null> {
+  const keys = loadPrayerKeys();
+  if (!keys) {
+    logError("Prayer keys are not configured");
+    return null;
+  }
+  // All columns: the app deploys before the migration that adds author_hash.
+  const { data, error } = await service
+    .from("prayer_requests")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("is_anonymous", true)
+    .is("author_id", null);
+  if (error) {
+    logError("Failed to read anonymous prayer requests for a deletion", error);
+    return null;
+  }
+  return (data ?? []).flatMap((row) =>
+    row.author_hash && isAuthor(keys, orgId, row.id, personId, row.author_hash) ? [row.id] : [],
+  );
+}
+
 /** `actorId` is who to leave out of the team-lead notices, when someone else is acting. */
 export async function deletePerson(
   orgId: string,
@@ -187,9 +218,14 @@ export async function deletePerson(
   let person: DeletedPerson;
   try {
     service = await createServiceClient();
+    const requestIds = await hashedRequestsOf(service, orgId, personId);
+    if (!requestIds) return { outcome: "failed" };
+    // Without hashed requests this is the two-argument call, which works
+    // before and after the migration that adds the third.
     const { data, error } = await service.rpc("delete_person", {
       _person_id: personId,
       _org_id: orgId,
+      ...(requestIds.length > 0 && { _anonymous_request_ids: requestIds }),
     });
     if (error) {
       const refusal = REFUSALS[error.code];
