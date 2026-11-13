@@ -7,7 +7,17 @@ const lookup = vi.fn();
 const createServiceClient = vi.fn(async () => ({
   from: () => ({ select: () => ({ eq: () => ({ maybeSingle: () => lookup() }) }) }),
 }));
-vi.mock("@/lib/supabase/server", () => ({ createServiceClient: () => createServiceClient() }));
+const profileLookup = vi.fn();
+vi.mock("@/lib/supabase/server", () => ({
+  createServiceClient: () => createServiceClient(),
+  createClient: async () => ({
+    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: () => profileLookup() }) }) }),
+  }),
+}));
+const currentUser = vi.fn();
+vi.mock("@/lib/supabase/current-user", () => ({ getOptionalUser: () => currentUser() }));
+vi.mock("./JoinHouseholdButton", () => ({ JoinHouseholdButton: () => "[join household]" }));
+vi.mock("@/app/join/[token]/SignOutButton", () => ({ SignOutButton: () => "[sign out]" }));
 vi.mock("@/lib/pageTitle", () => ({ pageTitle: async () => ({}) }));
 vi.mock("@/components/states/ErrorState", () => ({
   ErrorState: ({ thing }: { thing: string }) => `Couldn't load ${thing}.`,
@@ -25,15 +35,21 @@ async function render(token: string): Promise<string> {
 const liveRow = {
   id: "invite-1",
   org_id: "org-1",
+  family_id: "fam-1",
   invite_email: "mia@example.test",
   accepted_at: null,
   family_member_id: "member-1",
-  family_members: { first_name: "Mia", last_name: "Fakeworth" },
+  family_members: { first_name: "Mia", last_name: "Fakeworth", family_id: "fam-1", claimed_profile_id: null },
   family_units: { family_name: "Fakeworth" },
 };
+const MIA = { id: "user-1", email: "Mia@Example.test" };
+const PROFILE = { org_id: "org-1", role: "member", family_id: null };
 
 beforeEach(() => {
   lookup.mockReset();
+  profileLookup.mockReset();
+  currentUser.mockReset();
+  currentUser.mockResolvedValue(null);
   createServiceClient.mockClear();
 });
 
@@ -82,5 +98,81 @@ describe("FamilyJoinPage", () => {
     expect(html).toContain("Fakeworth household");
     expect(html).toContain("A church admin reviews each request");
     expect(html).toContain('value="mia@example.test"');
+  });
+
+  it("offers Sign in that returns to the invite", async () => {
+    lookup.mockResolvedValueOnce({ data: liveRow, error: null });
+
+    const html = await render(LIVE_TOKEN);
+
+    expect(html).toContain(`href="/login?redirect=${encodeURIComponent(`/join/family/${LIVE_TOKEN}`)}"`);
+  });
+});
+
+describe("FamilyJoinPage signed in", () => {
+  async function renderSignedIn(opts: {
+    user?: typeof MIA;
+    profile?: Record<string, unknown> | null;
+    row?: typeof liveRow;
+  }) {
+    currentUser.mockResolvedValue(opts.user ?? MIA);
+    lookup.mockResolvedValueOnce({ data: opts.row ?? liveRow, error: null });
+    profileLookup.mockResolvedValueOnce({ data: opts.profile === undefined ? PROFILE : opts.profile, error: null });
+    return render(LIVE_TOKEN);
+  }
+
+  it("shows the Join this household step naming the household", async () => {
+    const html = await renderSignedIn({});
+
+    expect(html).toContain("Join this household");
+    expect(html).toContain("Fakeworth household");
+    expect(html).toContain("[join household]");
+    expect(html).not.toContain("A church admin reviews each request");
+  });
+
+  it("refuses another address with the different-account message", async () => {
+    const html = await renderSignedIn({ user: { ...MIA, email: "leo@example.test" } });
+
+    expect(html).toContain("This link is for a different account");
+    expect(html).toContain("Sign out, then open the link again");
+    expect(html).toContain("[sign out]");
+    expect(html).not.toContain("[join household]");
+  });
+
+  it.each([
+    ["in another church", { ...PROFILE, org_id: "org-2" }],
+    ["pending", { ...PROFILE, role: "pending" }],
+  ])("shows the invited address %s the invalid-link message", async (_, profile) => {
+    const html = await renderSignedIn({ profile });
+
+    expect(html).toContain("This link isn't valid anymore");
+    expect(html).not.toContain("Fakeworth household");
+    expect(html).not.toContain("This link is for a different account");
+    expect(html).not.toContain("[join household]");
+  });
+
+  it("refuses someone already in another household", async () => {
+    const html = await renderSignedIn({ profile: { ...PROFILE, family_id: "fam-other" } });
+
+    expect(html).toContain("You're already in a household");
+    expect(html).not.toContain("[join household]");
+  });
+
+  it("shows the invalid-link message when the invited member moved", async () => {
+    const html = await renderSignedIn({
+      row: { ...liveRow, family_members: { ...liveRow.family_members, family_id: "fam-other" } },
+    });
+
+    expect(html).toContain(INVITE_INVALID_TITLE);
+    expect(html).not.toContain("[join household]");
+  });
+
+  it("offers a retry when the viewer's profile cannot be read", async () => {
+    currentUser.mockResolvedValue(MIA);
+    lookup.mockResolvedValueOnce({ data: liveRow, error: null });
+    profileLookup.mockResolvedValueOnce({ data: null, error: { message: "boom" } });
+    vi.spyOn(console, "error").mockImplementationOnce(() => {});
+
+    expect(await render(LIVE_TOKEN)).toContain("Couldn't load this invite.");
   });
 });

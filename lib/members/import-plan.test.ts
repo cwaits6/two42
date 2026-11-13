@@ -610,9 +610,38 @@ describe("planImport semantics", () => {
         kind: "update_profile",
         line: 1,
         id: "p1",
-        values: { phone_mobile: "+15559990000", hide_phone_mobile: false },
+        values: { phone_mobile: "+15559990000" },
       },
     ]);
+  });
+
+  it("plans a profile update with no retired hide setting", () => {
+    const plan = planImport(
+      [
+        makeRow({
+          email: "bea@example.org",
+          has_login: true,
+          first_name: "Bea",
+          last_name: "Alpha",
+          phone_mobile: "+15559990000",
+          phone_home: "555-999-0001",
+          phone_work: "555-999-0002",
+          address_line1: "9 Oak Ave",
+          city: "Austin",
+          state: "TX",
+          postal_code: "78701",
+          birth_month: 3,
+          birth_day: 5,
+          birth_year: 1980,
+          occupation: "Nurse",
+          employer: "Clinic",
+        }),
+      ],
+      makeFixtureSnapshot()
+    );
+    const update = plan.writes.find((w) => w.kind === "update_profile");
+    expect(update).toMatchObject({ id: "p2", values: { phone_mobile: "+15559990000", occupation: "Nurse" } });
+    expect(Object.keys(update?.kind === "update_profile" ? update.values : {}).filter((k) => k.startsWith("hide_"))).toEqual([]);
   });
 
   it("never plans a write that carries org_id", () => {
@@ -883,7 +912,7 @@ describe("planImport semantics", () => {
       makeFixtureSnapshot()
     );
     expect(plan.writes).toEqual([
-      expect.objectContaining({ kind: "update_profile", id: "p2", values: { city: "Visible City", hide_address: false } }),
+      expect.objectContaining({ kind: "update_profile", id: "p2", values: { city: "Visible City" } }),
     ]);
     expect(plan.rows[0].warnings).toEqual(
       expect.arrayContaining([

@@ -99,15 +99,16 @@ fall back to an org.
 under an `// org-anchor:` marker and each the org anchor for everything that
 follows: `/setup-account` (the `access_requests.signup_token` row, via
 `verify-token` / `setup-account`), `/join/family/[token]` (the
-`family_invites` row, and its request route below), `/serving/go` (the
+`family_invites` row, and its request and join routes below), `/serving/go` (the
 HMAC-validated `teams` row) and `/join/[token]` (the `group_invites` row).
 Every one of them fails closed on both failure modes — a lookup error and no
 row each take the page's generic invalid path, never a fallback org.
 
 Those initial lookups are deliberately unscoped: the `signup_token` read in
 `app/api/auth/setup-account/route.ts` and `app/api/auth/verify-token/route.ts`,
-the `family_invites` read in `app/join/family/[token]/page.tsx` and
-`app/api/family-invites/request/route.ts`, and the `group_invites` read in
+the `family_invites` read in `app/join/family/[token]/page.tsx`,
+`app/api/family-invites/request/route.ts` and
+`app/api/family-invites/join/route.ts`, and the `group_invites` read in
 `app/join/[token]/page.tsx`, where the token row is what resolves the org.
 Each fails closed if it yields no row, and every subsequent operation is
 scoped to the resolved row's `org_id`.
@@ -117,8 +118,9 @@ Two deliberate behaviour changes shipped with this pass:
 - `feed.ics` gained the owner role re-check `events/[id]/ics` already had —
   a token whose owning profile is `pending` or deleted now returns `401`
   instead of a full event list.
-- `family-invites/claim` (since removed; the household claim runs inside
-  `auth/setup-account`): the scoped `profiles` update returning zero rows
+- `family-invites/claim` (since removed; a household is claimed in
+  `auth/setup-account` for a new account and in `family-invites/join` for an
+  existing one): the scoped `profiles` update returning zero rows
   became a real `500` instead of a silent success.
 
 The two Edge Function sites were closed by the parallel edge-function
@@ -871,8 +873,9 @@ cascade with the church are pinned by `supabase/tests/usage_counts_suite.sql`.
 | `app/api/platform/organizations/firstAdminInvite.ts` | `sendFirstAdminInvite()`, called in-process by Add organization (`app/api/platform/organizations/route.ts`) and Send invite (`app/api/platform/organizations/[id]/invite-owner/route.ts`): mints the first admin's `signup_token` and sends their invite; the platform admin's own-org RLS could never reach the new org's request row | Platform-admin authority; org id is the one `provision_organization()` returned in the same request, or the route param behind the gate | `access_requests` select through the exported `foundingRequestQuery()` (`.eq("org_id", orgId).eq("approved_role", "admin")`, earliest by `created_at` then `id`; the church page reads the same query), email compared case-insensitively in code; token update on `.eq("id", row.id).eq("org_id", orgId)`, zero-row-checked; rollback update on the same filters + minted token; daily cap via `reserveEmailQuota(orgId, 1)` before the token; email branding via `resolveEmailBranding(orgId)` |
 | `app/serving/go/page.tsx` | Unauthenticated, HMAC-signed serving link; no session exists to satisfy RLS | HMAC-validated `teams` row (`org_id` and `group_id`); link rejected when `profiles.org_id` disagrees | `group_settings` (link mode, on the team's `group_id`), `serving_team_settings`, `team_members`, `serving_signups` (all on `team_id`, including the following dates a booking would add, `.in("service_date", candidates)`), `team_members` with embedded `profiles` through `findSpouse()` (spouse, on `org_id` and `team_id`), `organizations` `.eq("id", org_id)` (the time zone that decides which dates have passed) |
 | `app/g/[groupId]/serving/[teamId]/page.tsx` | Surfaces pending (never-logged-in) spouse profiles that RLS hides from the caller | Caller's own RLS-scoped profile | `team_members` with embedded `profiles` through `findSpouse()` (spouse, on `org_id` and `team_id`) |
-| `app/join/family/[token]/page.tsx` | Signed family-invite link resolved before login; no session | The `family_invites` row itself: looked up by `token` alone (unscoped by org — the row is what resolves it), and only for a well-formed uuid; fails closed on a lookup error, on no row and on an accepted invite | `family_invites` (with its `family_members` / `family_units` embeds, reached by the row's own composite FKs) |
+| `app/join/family/[token]/page.tsx` | Signed family-invite link resolved before login; no session | The `family_invites` row itself: looked up by `token` alone (unscoped by org — the row is what resolves it), and only for a well-formed uuid; fails closed on a lookup error, on no row and on an accepted invite. A signed-in viewer's own `profiles` row is read on the request client, and the Join step shows only when its email and `org_id` match the invite's | `family_invites` (with its `family_members` / `family_units` embeds, reached by the row's own composite FKs; the member embed also carries `family_id` and `claimed_profile_id`) |
 | `app/api/family-invites/request/route.ts` | A household invitee files their access request before login; no session, and `access_requests` has no client INSERT policy | The `family_invites` row looked up by `token` alone (the org anchor); 404 on no row or an already-claimed invite, 500 on a lookup error | `access_requests` existing-request select `.eq("org_id", invite.org_id)` and insert carrying `org_id: invite.org_id` and `invite_token: invite.token` |
+| `app/api/family-invites/join/route.ts` | A signed-in household invitee joins the household; the claim writes another household's member row and the invite, which RLS does not let the invitee write | The `family_invites` row looked up by `token` alone (the org anchor); 404 on no row, a used invite or a stale member, 500 on a lookup error. The caller's own `profiles` row is read on the request client. Another address is refused (403); the invited address on a pending account or in another church gets the same 404 as a dead link, so another church's invite is never confirmed | `family_members` select `.eq("id", invite.family_member_id).eq("org_id", invite.org_id)`; `profiles` update of `family_id` / `relationship` on `(id, org_id)` and the `family_id` the check read (null or the invite's); on zero rows the profile's `family_id` is re-read on `(id, org_id)`, and only a household other than the invite's is a 409; `family_members` claim on `(id, org_id, family_id)` and the `claimed_profile_id` the check read (null or the caller); `family_invites` accept on `(id, org_id, accepted_at IS NULL)`, last |
 | `app/join/[token]/page.tsx` | Group invite link resolved before login (and for a signed-in member, before the group's own policies can see them); no session | The `group_invites` row looked up by `token` alone (unscoped — the row is what resolves the org); a lookup error renders "Couldn't load this invite." with a retry, no row or a dead link renders the one invalid message | `group_invites` (with `groups` / `organizations` embeds by the row's own FKs); `group_invite_uses` count `.eq("invite_id", id).eq("org_id", org_id)`. The signed-in viewer's own `profiles` and `group_members` rows are read on the request client |
 | `app/api/join/[token]/route.ts` | `group_invite_redeem()` is EXECUTE-granted to `service_role` only, and the route holds the signup token it mails | The function resolves the org from the token row inside the transaction (`// org-anchor:` on the `.rpc()`); the returned `org_id` anchors the quota reservation, the branding read and the rollback | `rpc("group_invite_redeem")`; `access_requests` token-clearing update `.eq("id", access_request_id).eq("org_id", org_id)` when quota refuses or the send fails |
 | `app/api/serving/signups/route.ts` | Post-delete notification email lookups for affected members; the addresses a booking or change confirmation goes to, which the app does not read on the request client and a spouse may hide | The deleted signup row's own `org_id` (authorised by the RLS-checked delete); the link's group from its `teams` embed. For confirmations, the RLS-read `teams` row's `org_id` on a booking and the RLS-read signup row's on a change, after the attendees were validated on the request client | `team_members` (leaders, on `team_id`); `profiles` (`id, email`, on `org_id` and the validated attendee ids) |

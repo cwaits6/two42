@@ -79,6 +79,9 @@ same container, and puts the seeded date back in `beforeAll` and `afterAll`.
 `usage-counts.spec.ts` adds three usage counts dated 89 days back through the
 same container in `beforeAll` and deletes exactly those in `afterAll`; the
 pages it opens add to the church's counts for the day, as every visit does.
+`household-invite-existing-account.spec.ts` creates its own two people, one in
+another church, their records in the Seedly household and an invite for each
+through the same container, and deletes them in `beforeAll` and `afterAll`.
 
 ## Personas
 
@@ -136,6 +139,7 @@ not covered here.
 | `group-settings.spec.ts`             | A leader of two groups sees the number of requests to join waiting on their Group settings row and on Requests, for the group they are in only; inside Group settings the sections are one click apart; each group's Requests lists its own requester and not the other group's; declining on one and approving on the other removes each and its count; Group settings opens on Details and the old serving settings address on Teams; a member of the group who opens any Group settings address lands on the group's Home with no Group settings row and no request shown; the rows created are deleted in afterAll |
 | `household-names-agree.spec.ts`      | Group Home's "This week" anniversaries name the same couples as the group Directory's This week, for a member, the household's primary and the church admin in Group B, who see the Mockinghams there, and for two Group C members, who don't; Group C's leader, who shares no group with that household, gets none of its people's names from a link to it |
 | `usage-counts.spec.ts`               | A member who opens Usage lands on Home; opening an invite page and a group page adds to their patterns' counts and stores no token or id; a church admin sees the church's counts at 390 and 1280, a count under 5 as "fewer than 5", and the 7-day list leaves out an older count |
+| `household-invite-existing-account.spec.ts` | A person with an account who opens a household invite signs in and is returned to it, and is listed under Members with an account in the household only after pressing Join household, once, with their record gone from Others; a repeat join answers success; the same invite is refused, on the page and by the API, to someone signed in with another address as a different account, and to the invited address in another church as a dead link, and neither appears in the household; the people, records and invites created are deleted in afterAll |
 
 ## Adding a spec
 

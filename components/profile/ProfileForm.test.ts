@@ -358,14 +358,16 @@ describe("ProfileForm inline errors", () => {
     expect(update).toHaveBeenCalledOnce();
   });
 
-  it("resets a retired flag only for a number that replaced the hidden one", async () => {
+  it("sends no retired hide setting when the values they covered change", async () => {
     const form = await mount({ phone_mobile: "+15125550100", phone_work: "+15125550111" });
     await form.type("phone_mobile", "(512) 555-0199");
+    await form.type("phone_work", "");
+    await form.type("city", "Austin");
+    await form.type("occupation", "Teacher");
     await form.submit();
 
     const written = update.mock.calls[0][0];
-    expect(written.hide_phone_mobile).toBe(false);
-    expect(written).not.toHaveProperty("hide_phone_work");
+    expect(Object.keys(written).filter((k) => k.startsWith("hide_"))).toEqual(["hide_email"]);
   });
 
   it("saves when every field is valid", async () => {
