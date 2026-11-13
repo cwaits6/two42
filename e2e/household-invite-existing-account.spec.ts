@@ -125,7 +125,7 @@ test("a person with an account signs in from the invite, returns to it and joins
   const { context, page } = await signedOut(browser, baseURL!);
   const invite = `/join/family/${JOINER.token}`;
   await page.goto(invite);
-  await page.getByRole("link", { name: "Sign in" }).click();
+  await page.locator(`a[href="/login?redirect=${encodeURIComponent(invite)}"]`).click();
   await expect(page).toHaveURL(/\/login\?redirect=/);
 
   await signIn(page, JOINER.email);
