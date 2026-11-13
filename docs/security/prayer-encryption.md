@@ -103,22 +103,44 @@ export SUPABASE_SECRET_KEY=<service key>
 export PRAYER_BODY_KEY=<key> PRAYER_AUTHOR_KEY=<key>
 node scripts/encrypt-prayer-requests.mjs            # dry run: counts per church
 node scripts/encrypt-prayer-requests.mjs --apply    # converts
-node scripts/encrypt-prayer-requests.mjs            # should report only noop (and unmatched)
+node scripts/encrypt-prayer-requests.mjs            # should report only noop
 ```
 
 During a rotation, also export the `_PREVIOUS` key.
 
-`--org <uuid>` limits it to one church. The dry run opens every sealed row, so
-it proves the keys before anything is written. The script never sets
+`--org <uuid>` limits it to one church.
+
+**What the dry run proves.** It opens every sealed row, so it proves the
+**body key** before anything is written. It cannot prove the **author key** the
+same way, because a hash cannot be opened, and hashing a legacy anonymous
+request under a wrong author key cannot be undone. Two checks cover it:
+
+- The script prints the id of each key it was given (`body key <id>, author
+  key <id>`). Every hash the app wrote names its key:
+  `select distinct split_part(author_hash, '.', 2) from public.prayer_requests where author_hash is not null;`
+  must return only the printed author key id (and, during an author rotation,
+  the previous key's).
+- In a church that still has anonymous requests to hash and already holds
+  hashes, none of them under the given author key or its `_PREVIOUS`, the
+  script refuses to hash, reports it, and exits non-zero, on the dry run and
+  on `--apply` alike.
+
+On a first conversion, `unmatched` means the author key is wrong: stop, and do
+not run `--apply`. The same goes for `unmatched` on a request posted since the
+deploy. Outside the end of an author rotation or a lost author key, it is never
+expected.
+
+The script never sets
 `updated_at`, so a converted request does not look newly answered on Home.
 Each write is guarded on the `updated_at` it read; a row the app changed in
 the meantime is counted and left for the next run. It prints counts only,
 never request text or anyone's id, and exits non-zero when anything is left:
 `error` (text that does not open with the configured keys) or a write that
-lost a race. `unmatched` (an anonymous hash under an old author key that
-matches no one; see below) is reported but is not a failure: nothing can
-change it, and the script still moves that row's text onto the current body
-key.
+lost a race, or a church refused as above. `unmatched` (an anonymous hash
+under an old author key that matches no one; see below) is reported but does
+not change the exit code: once an author rotation has finished or an author
+key is lost, nothing can change it, and the script still moves that row's text
+onto the current body key.
 
 Afterwards, this should return 0:
 
@@ -138,7 +160,8 @@ Rotate one key at a time.
    `PRAYER_BODY_KEY` to the new one, and redeploy. New writes use the new key;
    old rows still open.
 3. Run the script: a dry run shows `reencrypt` for every old row, then
-   `--apply`, then a dry run showing only `noop` and `unmatched`, exiting 0.
+   `--apply`, then a dry run showing only `noop` (and `unmatched` only for
+   requests an earlier author rotation or a lost author key left), exiting 0.
 4. Remove `PRAYER_BODY_KEY_PREVIOUS` and redeploy.
 5. Keep the old key for as long as you keep backups taken before step 3; they
    hold text sealed with it.
@@ -161,7 +184,9 @@ longer mark them answered or delete them. The text stays readable and leaders
 can still delete them. Account deletion can no longer find them, so they stay
 until a leader deletes them or the church's retention period removes them.
 Set a new key; new anonymous requests work normally, and the script reports
-the old ones as `unmatched` on every run from then on, without failing.
+the old ones as `unmatched` on every run from then on, without failing. A
+church that still has requests to convert is refused until it holds a hash
+under the new key, that is, until someone posts an anonymous request there.
 
 **The body key.** The text of every request sealed with it is gone; no one can
 recover it without a copy of the key. Every group holding such a request shows
