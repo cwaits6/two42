@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { parseDeletionOutcomes } from "./deletionOutcomes";
 import { fakeService, type Tables } from "./fakeServiceTestHelpers";
 
 const createServiceClient = vi.fn();
@@ -316,6 +318,32 @@ describe("loadDeletionSummary", () => {
     const { failures } = withOutcomes(OUTCOMES);
     failures.push({ table: "platform_admins", op: "select" });
     await expect(loadDeletionSummary(ORG, "ada", "self")).rejects.toThrow();
+  });
+
+  describe("the answer person_deletion_outcomes() gives", () => {
+    // The pgTAP suite asserts the real function returns this literal, ids aside.
+    const suite = readFileSync("supabase/tests/deletion_outcomes_suite.sql", "utf8");
+    const literal = suite.split("-- deletion outcome shape: begin")[1]?.split("-- deletion outcome shape: end")[0] ?? "";
+    const outcomes: unknown = JSON.parse(literal.trim().slice(1, -1));
+
+    it("passes the shape check", () => {
+      expect(parseDeletionOutcomes(outcomes)).toEqual(outcomes);
+    });
+
+    it("is what the confirmation shows", async () => {
+      withOutcomes(outcomes);
+      const summary = await loadDeletionSummary(ORG, "ada", "self");
+      expect(summary?.groupContent).toEqual({
+        kind: "names",
+        fundsPassedOn: [{ name: "passes_on", group: "Outcomes Group", recipient: "Sam Second" }],
+        fundsNeedingRecipient: [
+          { name: "no_second", group: "Outcomes Group" },
+          { name: "pending_second", group: "Outcomes Group" },
+        ],
+        groupsLosingLeader: [],
+      });
+      expect(summary?.household).toEqual({ name: "Shared", shared: true, entries: ["Kid Shared", "Spouse Shared"] });
+    });
   });
 
   it.each([

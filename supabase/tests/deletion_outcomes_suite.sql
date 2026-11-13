@@ -14,7 +14,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(46);
+select plan(47);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.new_person(_org uuid, _email text, _role text default 'member',
@@ -152,6 +152,27 @@ select is(public.person_deletion_outcomes(gen_random_uuid(), pg_temp.fx('org')),
 insert into said values
   ('giver', public.person_deletion_outcomes(pg_temp.fx('giver'), pg_temp.fx('org')));
 
+-- The confirmation parses this answer; lib/account/deletion.test.ts reads the
+-- literal between the markers, so a change to the shape fails both suites.
+select is(
+  (select jsonb_build_object(
+     'funds', (select jsonb_agg(f - array['id', 'group_id', 'recipient_id']::text[] order by n)
+                 from jsonb_array_elements(s.outcomes -> 'funds') with ordinality x (f, n)),
+     'household', ((s.outcomes -> 'household') - 'id')
+                  || jsonb_build_object('entries', (select jsonb_agg(e - 'id' order by n)
+                       from jsonb_array_elements(s.outcomes #> '{household,entries}') with ordinality y (e, n))))
+     from said s where s.key = 'giver'),
+-- deletion outcome shape: begin
+'{"funds": [
+   {"name": "no_second", "group_name": "Outcomes Group", "outcome": "needs_recipient", "recipient": null},
+   {"name": "passes_on", "group_name": "Outcomes Group", "outcome": "passed_on",
+    "recipient": {"first_name": "Sam", "last_name": "Second", "preferred_name": null}},
+   {"name": "pending_second", "group_name": "Outcomes Group", "outcome": "needs_recipient", "recipient": null}],
+  "household": {"name": "Shared", "goes": false, "entries": [
+   {"first_name": "Kid", "last_name": "Shared", "preferred_name": null},
+   {"first_name": "Spouse", "last_name": "Shared", "preferred_name": null}]}}'
+-- deletion outcome shape: end
+  ::jsonb, 'the outcome, without its ids, is the shape the confirmation reads');
 select is(jsonb_array_length((select outcomes -> 'funds' from said where key = 'giver')), 3,
   'the outcome names the three funds they receive gifts for, and not the one they are second on');
 select is(pg_temp.fund('giver', 'passes_on') ->> 'outcome', 'passed_on',
