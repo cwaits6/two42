@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { PolicyPlaceholder } from "@/components/landing/PolicyPlaceholder";
+import { LegalPage } from "@/components/legal/LegalPage";
+import { PRIVACY } from "@/components/legal/privacy";
 import { pageTitle } from "@/lib/pageTitle";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -7,11 +8,5 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function PrivacyPage() {
-  return (
-    <PolicyPlaceholder
-      title="Privacy"
-      summary="How two42 handles the information a church and its members put into it."
-      status="The full policy is being written."
-    />
-  );
+  return <LegalPage document={PRIVACY} companion={{ href: "/terms", label: "Terms of service" }} />;
 }
