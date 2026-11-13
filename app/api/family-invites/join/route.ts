@@ -20,9 +20,9 @@ function notFound() {
  * only the token.
  *
  * The writes are conditional updates to fixed values, so two presses converge
- * on one join, even when both read the person as not yet in a household. The invite is accepted last: a failure before it leaves the
- * invite live, and a retry finds the profile already in this household and
- * finishes.
+ * on one join, even when both read the person as not yet in a household. The
+ * invite is accepted last: a failure before it leaves the invite live, and a
+ * retry finds the profile already in this household and finishes.
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -153,7 +153,7 @@ export async function POST(request: Request) {
     return failed();
   }
   if (!claimed || claimed.length === 0) {
-    logWarn("family-invites/join: household member gone or claimed by another account", undefined, {
+    logWarn("family-invites/join: household member gone or already claimed", undefined, {
       route: "/api/family-invites/join",
       ids,
     });
