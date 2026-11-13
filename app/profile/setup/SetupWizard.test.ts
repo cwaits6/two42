@@ -101,6 +101,22 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+describe("finishing the setup wizard", () => {
+  it("sends no retired hide setting with the values they covered", async () => {
+    await mount({ ...PROFILE, birth_month: null, birth_day: null, birth_year: null });
+    await click("Continue");
+    await type("phone_mobile", "(512) 555-0199");
+    await click("Continue");
+    await click("Continue");
+    await type("occupation", "Teacher");
+    await click("Finish setup");
+
+    const profileWrite = writes.find((w) => w.table === "profiles")!;
+    expect(profileWrite.values).toMatchObject({ phone_mobile: "+15125550199", occupation: "Teacher" });
+    expect(Object.keys(profileWrite.values).filter((k) => k.startsWith("hide_"))).toEqual(["hide_email"]);
+  });
+});
+
 describe("choosing No date in the setup wizard", () => {
   it("clears the whole birthday, on the profile and the household record it claimed", async () => {
     await mount();
