@@ -9,7 +9,18 @@ const BEN = "66666666-6666-6666-6666-666666666666";
 const keys = testKeys();
 
 function raw(id: string, extra: Record<string, unknown>) {
-  return { id, org_id: ORG, group_id: "g1", is_anonymous: false, is_answered: false, mine: false, body: null, ...extra };
+  return {
+    id,
+    org_id: ORG,
+    group_id: "g1",
+    is_anonymous: false,
+    is_answered: false,
+    mine: false,
+    body: null,
+    body_ciphertext: null,
+    author_hash: null,
+    ...extra,
+  };
 }
 
 describe("openWallRows", () => {
