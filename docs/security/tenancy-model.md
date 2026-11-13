@@ -904,16 +904,16 @@ Only two directory settings remain: `is_unlisted` and `hide_email` (email stays
 stored because it is how people sign in). The other flags on `profiles`
 (`hide_phone_mobile`, `hide_phone_home`, `hide_phone_work`, `hide_address`,
 `hide_birthday`, `hide_birth_year`, `hide_anniversary`, `hide_occupation`) and on
-`family_units` (`hide_address`, `hide_phone_home`) are retired: the app reads
-none of them and only ever writes them `false`, through `retiredFlagResets()`,
-and the values they hid were deleted by `directory_retire_hidden_values()`.
-That sweep has run twice: once when the flags were retired and again after, to
-catch anything hidden through a page still open on the earlier build. The
-columns, the view gates over them, `family_anniversary_hidden()`, the anniversary
-sync trigger, the sweep itself and `retiredFlagResets()` stay until a later
-release drops them. A flag is still writable through a direct API update of
-one's own row while its column exists, so that release sweeps once more and
-checks that no flag is true before it removes the resets and drops the gates.
+`family_units` (`hide_address`, `hide_phone_home`) are retired: the app neither
+reads nor writes them, and the values they hid were deleted by
+`directory_retire_hidden_values()`. That sweep has run twice: once when the
+flags were retired and again after, to catch anything hidden through a page
+still open on the earlier build. The columns, the view gates over them,
+`family_anniversary_hidden()`, the anniversary sync trigger and the sweep itself
+stay until a later release drops them. A flag is still writable through a direct
+API update of one's own row while its column exists, and a value saved under it
+stays hidden by the gate, so that release sweeps once more before it drops the
+gates and the columns.
 
 The app applies `hide_email` by where it reads the address. No request-client
 code reads `profiles.email`; the address has three read paths:
