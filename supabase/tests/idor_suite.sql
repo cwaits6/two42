@@ -262,8 +262,8 @@ do $$
 declare
   org_b uuid := current_setting('idor.org_b')::uuid;
   owner_b uuid := current_setting('idor.owner_b')::uuid;
-  prayer_cross int := -1;
-  prayer_own int := -1;
+  prayer_cross text := 'none';
+  prayer_own text := 'none';
   signup_cross int := -1;
   signup_own int := -1;
   fm_update_cross int := -1;
@@ -276,15 +276,16 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', owner_b)::text, true);
   perform set_config('request.headers', '{}', true);
 
-  -- Mark-answered on an org-A prayer request (mirrors PrayerBoard.tsx).
-  with u as (
+  -- Prayer requests are written only by server code, which scopes each write to
+  -- the caller's org; a client gets no write at all, in either org.
+  begin
     update public.prayer_requests set is_answered = true
-    where id = current_setting('idor.prayer_a')::uuid returning 1
-  ) select count(*) into prayer_cross from u;
-  with u as (
+    where id = current_setting('idor.prayer_a')::uuid;
+  exception when others then prayer_cross := sqlstate; end;
+  begin
     update public.prayer_requests set is_answered = true
-    where id = current_setting('idor.prayer_b')::uuid returning 1
-  ) select count(*) into prayer_own from u;
+    where id = current_setting('idor.prayer_b')::uuid;
+  exception when others then prayer_own := sqlstate; end;
 
   -- family_members by org-A UUID as an org-B ADMIN — this is
   -- app/api/admin/family-members/[id]/route.ts, whose only gate is
@@ -333,9 +334,9 @@ begin
   reset role;
 
   insert into idor_results
-    select is(prayer_cross, 0, 'org B principal cannot mark an org-A prayer request answered (0 rows)');
+    select is(prayer_cross, '42501', 'org B principal cannot mark an org-A prayer request answered');
   insert into idor_results
-    select is(prayer_own, 1, 'non-vacuity: the same update lands on the own-org prayer request');
+    select is(prayer_own, '42501', 'nor their own org''s: only server code writes prayer requests');
   insert into idor_results
     select is(fm_update_cross, 0, 'org B ADMIN updating an org-A family_members UUID affects 0 rows (admin-gated API shape)');
   insert into idor_results

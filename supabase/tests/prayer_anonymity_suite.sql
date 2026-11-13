@@ -1,6 +1,7 @@
 -- Prayer anonymity suite: nobody but its author learns who wrote an anonymous
--- request, through the wall, the table, a write's return value, or a write
--- that succeeds or fails depending on who the author is.
+-- request, through the wall, the table, or a write. Only server code holding the
+-- prayer keys writes requests, so every client write is refused, and a request
+-- in the server's anonymous form stores no author at all.
 --
 -- Every actor is a seeded person, because the rule is about real roles: Leo is
 -- a member of Group B, Zoe leads it, the church admin is a plain member of it
@@ -150,14 +151,30 @@ select is(has_column_privilege(r, 'public.prayer_requests', 'author_id', 'select
           r || ' cannot select author_id') from unnest(array['anon', 'authenticated']) r;
 select is(has_column_privilege(r, 'public.prayer_requests', 'author_id', 'update'), false,
           r || ' cannot update author_id') from unnest(array['anon', 'authenticated']) r;
-select is(has_column_privilege('authenticated', 'public.prayer_requests', 'author_id', 'insert'), true,
-          'authenticated can still name itself as author on insert');
+select is(has_table_privilege(r, 'public.prayer_requests', p), false,
+          r || ' has no ' || p || ' on prayer_requests')
+from unnest(array['anon', 'authenticated']) r
+cross join unnest(array['insert', 'update', 'delete', 'truncate']) p;
+select is(has_any_column_privilege(r, 'public.prayer_requests', p), false,
+          r || ' has no column-level ' || p || ' on prayer_requests')
+from unnest(array['anon', 'authenticated']) r
+cross join unnest(array['insert', 'update']) p;
+select is(has_column_privilege('authenticated', 'public.prayer_requests', c, 'select'), true,
+          'authenticated reads ' || c || ', which the server opens')
+from unnest(array['body_ciphertext', 'author_hash']) c;
+select is(
+  (select count(*)::int from pg_policies
+    where schemaname = 'public' and tablename = 'prayer_requests' and cmd in ('INSERT', 'UPDATE', 'DELETE')),
+  0, 'prayer_requests has no client write policy left');
+select hasnt_trigger('public', 'prayer_requests', t, t || ' is gone')
+from unnest(array['prayer_requests_author_sets_anonymity', 'prayer_requests_touch_updated_at']) t;
 select is(
   (select 'security_invoker=true' = any(reloptions) from pg_class where oid = 'public.prayer_wall'::regclass),
   true, 'prayer_wall stays security_invoker');
 select columns_are('public', 'prayer_wall', array[
   'id', 'body', 'is_anonymous', 'is_answered', 'created_at', 'mine', 'first_name', 'last_name',
-  'preferred_name', 'avatar_url', 'praying_count', 'i_am_praying', 'org_id', 'group_id'
+  'preferred_name', 'avatar_url', 'praying_count', 'i_am_praying', 'org_id', 'group_id',
+  'body_ciphertext', 'author_hash'
 ], 'prayer_wall keeps its columns and has no author column');
 select is(
   (select count(*)::int
@@ -399,109 +416,49 @@ insert into public.group_members (org_id, group_id, profile_id, role)
 select org_id, 'c0000000-0000-0000-0000-00000000000b', id, 'member'
   from public.profiles where email = 'isaac.seedly@example.test';
 
--- ── Writes return nothing about the author ──────────────────────────────────
+-- ── No client writes ────────────────────────────────────────────────────────
+-- The author, a leader, a church admin who leads another group, and a member
+-- all get the same refusal, so a write cannot tell them apart.
 select is(
-  pg_temp.attempt('zoe.dummyfield@example.test', route.sql),
-  '42501', 'a leader is refused: ' || route.what)
+  pg_temp.attempt(who.email, format(w.sql, row_key)),
+  '42501', who.who || ' is refused: ' || w.what || ' on ' || row_key)
 from (values
-  ('update returning author_id', $q$update public.prayer_requests set body = 'x' where id = 'aaaa0000-0000-0000-0000-0000000000a1' returning author_id$q$),
-  ('update returning *', $q$update public.prayer_requests set body = 'x' where id = 'aaaa0000-0000-0000-0000-0000000000a1' returning *$q$),
-  ('update filtered on author_id', $q$update public.prayer_requests set body = 'x' where author_id = auth.uid()$q$),
-  ('delete returning author_id', $q$delete from public.prayer_requests where id = 'aaaa0000-0000-0000-0000-0000000000a1' returning author_id$q$),
-  ('delete returning *', $q$delete from public.prayer_requests where id = 'aaaa0000-0000-0000-0000-0000000000a1' returning *$q$),
-  ('delete filtered on author_id', $q$delete from public.prayer_requests where author_id = auth.uid()$q$)
-) route(what, sql);
-select is(
-  (select body from public.prayer_requests where id = 'aaaa0000-0000-0000-0000-0000000000a1'),
-  'fixture a1', 'the refused writes left the request as it was');
-
-select is(
-  pg_temp.attempt('isaac.seedly@example.test', format(
-    $q$insert into public.prayer_requests (author_id, group_id, body) values (auth.uid(), 'c0000000-0000-0000-0000-00000000000b', 'returning') %s$q$, ret)),
-  expected, 'an insert ' || ret)
-from (values
-  ('returning author_id', '42501'),
-  ('returning *', '42501'),
-  ('returning id, created_at', 'rows:1')
-) r(ret, expected);
-
--- ── Moderation, with row counts ─────────────────────────────────────────────
-select is(
-  pg_temp.attempt('zoe.dummyfield@example.test', format(
-    $q$update public.prayer_requests set body = 'edited' where id = 'aaaa0000-0000-0000-0000-0000000000%s'$q$, row_key)),
-  'rows:1', 'a leader edits request ' || row_key || ' whoever wrote it')
-from (values ('a2'), ('c1')) k(row_key);
-select is(
-  (select array_agg(body order by id) from public.prayer_requests
-    where id in ('aaaa0000-0000-0000-0000-0000000000a2', 'aaaa0000-0000-0000-0000-0000000000c1')),
-  array['edited', 'edited'], 'the leader''s edits landed');
-select is(
-  pg_temp.attempt('zoe.dummyfield@example.test', format(
-    $q$delete from public.prayer_requests where id = 'aaaa0000-0000-0000-0000-0000000000%s'$q$, row_key)),
-  'rows:1', 'a leader deletes request ' || row_key || ' whoever wrote it')
-from (values ('f1'), ('f2')) k(row_key);
-
-select is(
-  pg_temp.attempt('admin@local.dev', $q$update public.prayer_requests set body = 'admin edit' where id = 'aaaa0000-0000-0000-0000-0000000000d1'$q$),
-  'rows:1', 'a church admin leading the group edits an anonymous request');
-select is(
-  pg_temp.attempt('admin@local.dev', $q$delete from public.prayer_requests where id = 'aaaa0000-0000-0000-0000-0000000000f3'$q$),
-  'rows:1', 'a church admin leading the group deletes an anonymous request');
-select is(
-  pg_temp.val('admin@local.dev', $q$select concat_ws('|', mine::text, first_name) from public.prayer_wall where id = 'aaaa0000-0000-0000-0000-0000000000d1'$q$),
-  'false', 'the edit taught the church admin nothing about the author');
-select is(
-  pg_temp.attempt('admin@local.dev', format(sql, row_key)),
-  'rows:0', 'a church admin who only belongs to the group has no moderation on ' || row_key || ': ' || what)
-from (values
-  ('update', $q$update public.prayer_requests set body = 'admin edit' where id = 'aaaa0000-0000-0000-0000-0000000000%s'$q$),
-  ('delete', $q$delete from public.prayer_requests where id = 'aaaa0000-0000-0000-0000-0000000000%s'$q$)
-) w(what, sql)
-cross join (values ('a1'), ('c1')) k(row_key);
-
--- ── Writes are not an oracle ────────────────────────────────────────────────
-select is(
-  pg_temp.attempt('leo.loremsworth@example.test', format(sql, row_key)),
-  'rows:0', 'a member''s ' || what || ' on ' || row_key || ' matches nothing, whoever wrote it')
-from (values
+  ('isaac.seedly@example.test', 'the author'),
+  ('zoe.dummyfield@example.test', 'a leader'),
+  ('admin@local.dev', 'a church admin'),
+  ('leo.loremsworth@example.test', 'a member')
+) who(email, who)
+cross join (values
   ('update', $q$update public.prayer_requests set body = 'x' where id = 'aaaa0000-0000-0000-0000-0000000000%s'$q$),
-  ('delete', $q$delete from public.prayer_requests where id = 'aaaa0000-0000-0000-0000-0000000000%s'$q$)
+  ('update returning *', $q$update public.prayer_requests set is_answered = true where id = 'aaaa0000-0000-0000-0000-0000000000%s' returning *$q$),
+  ('unmask', $q$update public.prayer_requests set is_anonymous = false where id = 'aaaa0000-0000-0000-0000-0000000000%s'$q$),
+  ('delete', $q$delete from public.prayer_requests where id = 'aaaa0000-0000-0000-0000-0000000000%s'$q$),
+  ('delete returning author_id', $q$delete from public.prayer_requests where id = 'aaaa0000-0000-0000-0000-0000000000%s' returning author_id$q$)
 ) w(what, sql)
-cross join (values ('a1'), ('c1')) k(row_key);
-
+cross join (values ('a1'), ('b1'), ('c1')) k(row_key);
+select is(
+  pg_temp.attempt(who, sql), '42501', what)
+from (values
+  ('isaac.seedly@example.test', 'the author cannot post from the browser',
+   $q$insert into public.prayer_requests (author_id, group_id, body) values (auth.uid(), 'c0000000-0000-0000-0000-00000000000b', 'mine') returning id$q$),
+  ('isaac.seedly@example.test', 'nobody can store text the server did not seal',
+   $q$insert into public.prayer_requests (author_hash, group_id, body_ciphertext, is_anonymous) values ('h1.x.y', 'c0000000-0000-0000-0000-00000000000b', 'v1.forged', true)$q$),
+  ('leo.loremsworth@example.test', 'a member cannot post in someone else''s name',
+   format($q$insert into public.prayer_requests (author_id, group_id, body) values ('%s', 'c0000000-0000-0000-0000-00000000000b', 'forged')$q$,
+          pg_temp.uid('isaac.seedly@example.test'))),
+  ('zoe.dummyfield@example.test', 'a leader cannot take over a request through an upsert',
+   $q$insert into public.prayer_requests (id, author_id, group_id, body) values ('aaaa0000-0000-0000-0000-0000000000a1', auth.uid(), 'c0000000-0000-0000-0000-00000000000b', 'u') on conflict (id) do update set author_id = excluded.author_id$q$),
+  ('zoe.dummyfield@example.test', 'a leader cannot probe the author through an upsert condition',
+   $q$insert into public.prayer_requests (id, author_id, group_id, body) values ('aaaa0000-0000-0000-0000-0000000000a1', auth.uid(), 'c0000000-0000-0000-0000-00000000000b', 'u') on conflict (id) do update set body = 'probe' where public.prayer_requests.author_id = auth.uid()$q$)
+) a(who, what, sql);
+select is(
+  (select concat_ws('|', body, is_anonymous::text, is_answered::text) from public.prayer_requests
+    where id = 'aaaa0000-0000-0000-0000-0000000000a1'),
+  'fixture a1|true|false', 'the refused writes left the request as it was');
 select is(
   pg_temp.attempt_text('zoe.dummyfield@example.test', $q$update public.prayer_requests set is_anonymous = false where id = 'aaaa0000-0000-0000-0000-0000000000a1'$q$),
   pg_temp.attempt_text('zoe.dummyfield@example.test', $q$update public.prayer_requests set is_anonymous = false where id = 'aaaa0000-0000-0000-0000-0000000000c1'$q$),
   'a leader''s attempt to unmask fails identically whoever wrote the request');
-select is(
-  pg_temp.attempt('zoe.dummyfield@example.test', $q$update public.prayer_requests set is_anonymous = false where id = 'aaaa0000-0000-0000-0000-0000000000a1'$q$),
-  '42501', 'a leader cannot make an anonymous request by name');
-select is(
-  (select is_anonymous from public.prayer_requests where id = 'aaaa0000-0000-0000-0000-0000000000a1'),
-  true, 'the request stays anonymous');
-select is(
-  pg_temp.attempt('zoe.dummyfield@example.test', $q$update public.prayer_requests set is_anonymous = true where id = 'aaaa0000-0000-0000-0000-0000000000b1'$q$),
-  '42501', 'a leader cannot make a by-name request anonymous');
-select is(
-  pg_temp.attempt('zoe.dummyfield@example.test', $q$update public.prayer_requests set is_anonymous = true where id = 'aaaa0000-0000-0000-0000-0000000000a1'$q$),
-  'rows:1', 'a leader''s edit that leaves is_anonymous unchanged goes through');
-
-select is(
-  pg_temp.attempt('zoe.dummyfield@example.test', route.sql),
-  expected, route.what)
-from (values
-  ('a leader cannot take over a request by setting author_id',
-   $q$update public.prayer_requests set author_id = auth.uid() where id = 'aaaa0000-0000-0000-0000-0000000000a1'$q$, '42501'),
-  ('a leader cannot take over a request through an upsert',
-   $q$insert into public.prayer_requests (id, author_id, group_id, body) values ('aaaa0000-0000-0000-0000-0000000000a1', auth.uid(), 'c0000000-0000-0000-0000-00000000000b', 'u') on conflict (id) do update set author_id = excluded.author_id$q$, '42501'),
-  ('a leader cannot probe the author through an upsert condition',
-   $q$insert into public.prayer_requests (id, author_id, group_id, body) values ('aaaa0000-0000-0000-0000-0000000000a1', auth.uid(), 'c0000000-0000-0000-0000-00000000000b', 'u') on conflict (id) do update set body = 'probe' where public.prayer_requests.author_id = auth.uid()$q$, '42501')
-) route(what, sql, expected);
-select is(
-  pg_temp.attempt('leo.loremsworth@example.test', format(
-    $q$insert into public.prayer_requests (author_id, group_id, body) values ('%s', 'c0000000-0000-0000-0000-00000000000b', 'forged')$q$,
-    pg_temp.uid('isaac.seedly@example.test'))),
-  '42501', 'a member cannot post in someone else''s name');
 
 -- A foreign key names the constraint it trips, so without a guard the error
 -- from changing a person's id says whether that person has written a request.
@@ -526,15 +483,6 @@ select is(
   (select count(*)::int from public.prayer_requests where author_id = pg_temp.uid('isaac.seedly@example.test')) > 0,
   true, 'the author''s requests remain');
 
-select is(
-  pg_temp.attempt_text('zoe.dummyfield@example.test', $q$update public.prayer_requests set body = '' where id = 'aaaa0000-0000-0000-0000-0000000000a1'$q$),
-  '23514:new row for relation "prayer_requests" violates check constraint "prayer_requests_body_check":',
-  'a check violation names no author in its detail');
-select is(
-  pg_temp.attempt_text('leo.loremsworth@example.test', $q$insert into public.prayer_requests (id, author_id, group_id, body) values ('aaaa0000-0000-0000-0000-0000000000a1', auth.uid(), 'c0000000-0000-0000-0000-00000000000b', 'dup')$q$),
-  '23505:duplicate key value violates unique constraint "prayer_requests_pkey":',
-  'a duplicate id names no author in its detail');
-
 -- ── Removing a person from a group ──────────────────────────────────────────
 select is(
   pg_temp.attempt('zoe.dummyfield@example.test', format(
@@ -551,38 +499,49 @@ insert into public.group_members (org_id, group_id, profile_id, role)
 select org_id, 'c0000000-0000-0000-0000-00000000000b', id, 'member'
   from public.profiles where email in ('isaac.seedly@example.test', 'ruth.fixtureton@example.test');
 
--- ── Switching ───────────────────────────────────────────────────────────────
+-- ── The stored forms ────────────────────────────────────────────────────────
+-- Request e1 as the server stores it once anonymous: no author_id, only a hash
+-- the database cannot compute or check.
+update public.prayer_requests
+   set author_id = null, author_hash = 'h1.0000beef.not-a-real-mac', body = null, body_ciphertext = 'v1.0000beef.aXY.c2VhbGVk'
+ where id = 'aaaa0000-0000-0000-0000-0000000000e1';
 select is(
-  pg_temp.attempt('isaac.seedly@example.test', $q$update public.prayer_requests set is_anonymous = false where id = 'aaaa0000-0000-0000-0000-0000000000e1'$q$),
-  'rows:1', 'the author makes an anonymous request by name');
+  (select author_id from public.prayer_requests where id = 'aaaa0000-0000-0000-0000-0000000000e1'),
+  null, 'an anonymous request in the server''s form stores no author, even for the table owner');
+select is(
+  pg_temp.val(reader, $q$select public.prayer_request_visible_author('aaaa0000-0000-0000-0000-0000000000e1')$q$),
+  '<null>', 'the helper names no author of a hashed request to ' || reader)
+from unnest(array['isaac.seedly@example.test', 'leo.loremsworth@example.test',
+                  'zoe.dummyfield@example.test', 'admin@local.dev']) reader;
+select is(
+  pg_temp.val(reader, $q$select concat_ws('|', mine::text, first_name, body, body_ciphertext) from public.prayer_wall where id = 'aaaa0000-0000-0000-0000-0000000000e1'$q$),
+  'false|v1.0000beef.aXY.c2VhbGVk',
+  reader || ' gets the sealed text and no author from the wall; the server opens it and matches the hash')
+from unnest(array['isaac.seedly@example.test', 'leo.loremsworth@example.test']) reader;
+
+-- Switching to by-name writes the author and clears the hash.
+update public.prayer_requests
+   set is_anonymous = false, author_id = pg_temp.uid('isaac.seedly@example.test'), author_hash = null
+ where id = 'aaaa0000-0000-0000-0000-0000000000e1';
 select is(
   pg_temp.val('leo.loremsworth@example.test', $q$select concat_ws('|', mine::text, first_name) from public.prayer_wall where id = 'aaaa0000-0000-0000-0000-0000000000e1'$q$),
   'false|Isaac', 'a member sees the name once the author shares it');
 select is(
-  pg_temp.val('leo.loremsworth@example.test', $q$select concat_ws('|', mine::text, first_name) from public.prayer_wall where id = 'aaaa0000-0000-0000-0000-0000000000a1'$q$),
-  'false', 'the author''s other anonymous request stays anonymous');
-select is(
-  pg_temp.attempt('isaac.seedly@example.test', $q$update public.prayer_requests set is_anonymous = true where id = 'aaaa0000-0000-0000-0000-0000000000e1'$q$),
-  'rows:1', 'the author makes the by-name request anonymous');
-select is(
-  pg_temp.val('leo.loremsworth@example.test', $q$select concat_ws('|', mine::text, first_name) from public.prayer_wall where id = 'aaaa0000-0000-0000-0000-0000000000e1'$q$),
-  'false', 'a member no longer sees the name');
-select is(
-  pg_temp.val('leo.loremsworth@example.test', $q$select public.prayer_request_visible_author('aaaa0000-0000-0000-0000-0000000000e1')$q$),
-  '<null>', 'the helper no longer returns the author');
-select is(
-  pg_temp.val('isaac.seedly@example.test', $q$select concat_ws('|', mine::text, first_name) from public.prayer_wall where id = 'aaaa0000-0000-0000-0000-0000000000e1'$q$),
-  'true|Isaac', 'the author still sees it as theirs');
+  pg_temp.val('isaac.seedly@example.test', $q$select mine::text from public.prayer_wall where id = 'aaaa0000-0000-0000-0000-0000000000e1'$q$),
+  'true', 'the author sees a by-name request as theirs from the view');
 
--- ── The author keeps their own request ──────────────────────────────────────
-select is(
-  pg_temp.attempt('isaac.seedly@example.test', sql), 'rows:1', 'the author can ' || what)
+-- One text form and one author form, always.
+select throws_ok(
+  format('update public.prayer_requests set %s where id = ''aaaa0000-0000-0000-0000-0000000000e1''', w.set_clause),
+  '23514', format('new row for relation "prayer_requests" violates check constraint "%s"', w.con),
+  w.what)
 from (values
-  ('edit the body', $q$update public.prayer_requests set body = 'mine' where id = 'aaaa0000-0000-0000-0000-0000000000e1'$q$),
-  ('mark it answered', $q$update public.prayer_requests set is_answered = true where id = 'aaaa0000-0000-0000-0000-0000000000e1' returning id$q$),
-  ('delete it', $q$delete from public.prayer_requests where id = 'aaaa0000-0000-0000-0000-0000000000e1' returning id$q$)
-) w(what, sql);
-
+  ('both text forms', $q$body = 'plain', body_ciphertext = 'v1.a.b.c'$q$, 'prayer_requests_one_body'),
+  ('no text', $q$body = null, body_ciphertext = null$q$, 'prayer_requests_one_body'),
+  ('an author and a hash', $q$author_hash = 'h1.a.b'$q$, 'prayer_requests_one_author'),
+  ('neither author form', $q$is_anonymous = true, author_id = null$q$, 'prayer_requests_one_author'),
+  ('a by-name request with only a hash', $q$author_id = null, author_hash = 'h1.a.b'$q$, 'prayer_requests_named_has_author')
+) w(what, set_clause, con);
 -- ── Every other route ───────────────────────────────────────────────────────
 select hasnt_column('public', 'prayer_responses', 'author_id',
   'prayer_responses carries no author');
