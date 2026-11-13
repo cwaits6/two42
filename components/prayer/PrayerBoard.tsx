@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import { HandHeart, Search, SearchX, X } from "lucide-react";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
 import { failureMessage } from "@/lib/errorCopy";
+import { groupPath } from "@/lib/groups/active";
 import { prayerAuthorLabel } from "@/lib/prayer";
 import { PrayerCard } from "@/components/prayer/PrayerCard";
 import { savePrayerResponse } from "@/components/prayer/savePrayerResponse";
@@ -27,6 +27,19 @@ const STATUS_OPTIONS = STATUS_FILTERS.map((f) => ({ value: f, label: f }));
 
 export type PrayerGroup = { id: string; name: string };
 
+/** The response body, or null for any failure, network included. */
+async function sendJson<T = unknown>(url: string, method: string, body?: unknown): Promise<T | null> {
+  try {
+    const res = await fetch(url, {
+      method,
+      ...(body !== undefined && { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+    });
+    return res.ok ? ((await res.json()) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function PrayerBoard({
   initialRequests,
   me,
@@ -46,14 +59,11 @@ export function PrayerBoard({
   const [prayPending, setPrayPending] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState<PrayerWallRow | null>(null);
 
+  const requestsUrl = groupPath(group.id, "/prayer/requests");
+
   const handlePost = async (draft: { body: string; is_anonymous: boolean }) => {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("prayer_requests")
-      .insert({ author_id: me.id, group_id: group.id, ...draft })
-      .select("id, created_at")
-      .single();
-    if (error || !data) {
+    const data = await sendJson<{ id: string; created_at: string }>(requestsUrl, "POST", draft);
+    if (!data) {
       toast.error(failureMessage("post your request"));
       return false;
     }
@@ -114,31 +124,16 @@ export function PrayerBoard({
   };
 
   const handleToggleAnswered = async (row: PrayerWallRow) => {
-    const supabase = createClient();
     const answered = !row.is_answered;
     patchRequest(row.id, { is_answered: answered });
-    const { data, error } = await supabase
-      .from("prayer_requests")
-      .update({ is_answered: answered })
-      .eq("id", row.id)
-      .eq("group_id", group.id)
-      .select("id");
-    if (error || !data?.length) {
+    if (!(await sendJson(`${requestsUrl}/${row.id}`, "PATCH", { is_answered: answered }))) {
       patchRequest(row.id, { is_answered: row.is_answered });
       toast.error(failureMessage("save that"));
     }
   };
 
-  // A delete RLS refuses matches zero rows without an error.
   const handleDelete = async (row: PrayerWallRow) => {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("prayer_requests")
-      .delete()
-      .eq("id", row.id)
-      .eq("group_id", group.id)
-      .select("id");
-    if (error || !data?.length) {
+    if (!(await sendJson(`${requestsUrl}/${row.id}`, "DELETE"))) {
       toast.error(failureMessage("delete your request"));
       return;
     }

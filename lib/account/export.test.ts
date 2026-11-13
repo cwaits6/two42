@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { authorHash, encryptBody, type PrayerKeys } from "@/lib/prayer/crypto";
+import { testKeys } from "@/lib/prayer/testKeys";
 import { fakeService, type Tables } from "./fakeServiceTestHelpers";
 
 const createServiceClient = vi.fn();
@@ -6,10 +8,29 @@ vi.mock("@/lib/supabase/server", () => ({
   createServiceClient: () => createServiceClient(),
 }));
 
+let keys: PrayerKeys | null;
+vi.mock("@/lib/prayer/keys", () => ({ loadPrayerKeys: () => keys }));
+
 const { buildAccountExport } = await import("./export");
+const KEYS = testKeys();
 
 const ORG = "org-1";
 const OTHER_ORG = "org-2";
+
+function sealed(id: string, author: string, text: string, created_at: string) {
+  return {
+    id,
+    org_id: ORG,
+    author_id: null,
+    author_hash: authorHash(KEYS, ORG, id, author),
+    body: null,
+    body_ciphertext: encryptBody(KEYS, ORG, id, text),
+    is_anonymous: true,
+    is_answered: false,
+    created_at,
+    groups: { name: "Grace" },
+  };
+}
 
 function setup() {
   const tables: Tables = {
@@ -62,10 +83,12 @@ function setup() {
       { org_id: OTHER_ORG, email: "ada_o@example.test", message: "Far note", status: "approved", created_at: "t" },
     ],
     prayer_requests: [
-      { org_id: ORG, author_id: "ada", body: "By name", is_anonymous: false, is_answered: false, created_at: "t", groups: { name: "Grace" } },
-      { org_id: ORG, author_id: "ada", body: "Quietly", is_anonymous: true, is_answered: true, created_at: "t", groups: { name: "Grace" } },
-      { org_id: ORG, author_id: "ben", body: "Bens request", is_anonymous: true, is_answered: false, created_at: "t", groups: { name: "Grace" } },
-      { org_id: OTHER_ORG, author_id: "ada", body: "Other church", is_anonymous: false, is_answered: false, created_at: "t", groups: { name: "Far" } },
+      { id: "p1", org_id: ORG, author_id: "ada", body: "By name", is_anonymous: false, is_answered: false, created_at: "t4", groups: { name: "Grace" } },
+      { id: "p2", org_id: ORG, author_id: "ada", body: "Quietly", is_anonymous: true, is_answered: true, created_at: "t2", groups: { name: "Grace" } },
+      { id: "p3", org_id: ORG, author_id: "ben", body: "Bens request", is_anonymous: true, is_answered: false, created_at: "t", groups: { name: "Grace" } },
+      { id: "p4", org_id: OTHER_ORG, author_id: "ada", body: "Other church", is_anonymous: false, is_answered: false, created_at: "t", groups: { name: "Far" } },
+      sealed("p5", "ada", "Sealed and hers", "t3"),
+      sealed("p6", "ben", "Bens sealed request", "t5"),
     ],
   };
   const fake = fakeService(tables);
@@ -74,6 +97,7 @@ function setup() {
 }
 
 beforeEach(() => {
+  keys = KEYS;
   createServiceClient.mockReset();
 });
 
@@ -94,13 +118,21 @@ describe("buildAccountExport", () => {
     }
   });
 
-  it("includes their anonymous prayer requests", async () => {
+  it("includes their anonymous prayer requests, found by the hash and opened, newest first", async () => {
     setup();
     const data = await buildAccountExport(ORG, "ada");
     expect(data?.prayer_requests.map((p) => [p.body, p.anonymous])).toEqual([
       ["By name", false],
+      ["Sealed and hers", true],
       ["Quietly", true],
     ]);
+    expect(JSON.stringify(data)).not.toContain("Bens sealed request");
+  });
+
+  it("throws rather than leave out their requests when the prayer keys are missing", async () => {
+    setup();
+    keys = null;
+    await expect(buildAccountExport(ORG, "ada")).rejects.toThrow();
   });
 
   it("includes the funds they receive, with their payment methods, and no one else's", async () => {

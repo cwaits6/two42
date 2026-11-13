@@ -164,10 +164,7 @@ export function hashedWithCurrentKey(keys: PrayerKeys, stored: string): boolean 
 }
 
 /** Who wrote a request, in the one form the row stores. */
-export type RequestAuthor =
-  | { anonymous: false; authorId: string }
-  | { anonymous: true; authorId: string }
-  | { anonymous: true; authorHash: string };
+export type RequestAuthor = { anonymous: boolean; authorId: string } | { anonymous: true; authorHash: string };
 
 export interface StoredForm {
   body: null;

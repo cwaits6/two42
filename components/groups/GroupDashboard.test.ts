@@ -3,6 +3,8 @@ import type { ReactElement, ReactNode } from "react";
 import type { ActiveGroup } from "@/lib/groups/active";
 import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
 import { loggedLines } from "@/lib/log/testing";
+import { authorHash, encryptBody, type PrayerKeys } from "@/lib/prayer/crypto";
+import { testKeys } from "@/lib/prayer/testKeys";
 
 type Read = { data: unknown; error: { code: string; message: string } | null; count?: number };
 
@@ -11,6 +13,8 @@ const FAILED: Read = { data: null, error: { code: "57014", message: "timeout" } 
 let reads: Record<string, Read | ((filters: Record<string, unknown>) => Read)>;
 let filtersByTable: Record<string, Record<string, unknown>[]>;
 let zone: string;
+let prayerKeys: PrayerKeys | null;
+const KEYS = testKeys();
 
 /** A query builder whose every call chains, resolving to the table's canned read; `eq` and `gte` arguments are recorded per chain. */
 function query(table: string) {
@@ -42,6 +46,7 @@ vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: query }) }));
 vi.mock("@/lib/supabase/current-user", () => ({ getOptionalUser: async () => ({ id: "user-1" }) }));
 vi.mock("@/lib/time/orgZone", () => ({ getOrgTimeZone: async () => zone }));
+vi.mock("@/lib/prayer/keys", () => ({ loadPrayerKeys: () => prayerKeys }));
 vi.mock("@/components/states/ErrorState", () => ({ ErrorState: () => null }));
 vi.mock("@/components/events/RsvpControl", () => ({ RsvpControl: () => null }));
 vi.mock("@/components/groups/home/StartingNowPanel", () => ({ StartingNowPanel: () => null }));
@@ -165,6 +170,7 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.useFakeTimers({ now: NOW, toFake: ["Date"] });
   zone = "America/New_York";
+  prayerKeys = KEYS;
   filtersByTable = {};
   reads = {
     profiles: { data: { org_id: ORG, preferred_name: null, first_name: "Ann" }, error: null },
@@ -473,6 +479,39 @@ describe("GroupDashboard", () => {
       "eq:mine": false,
       "eq:i_am_praying": false,
     });
+  });
+
+  it("skips your own anonymous request, which only the server can recognise", async () => {
+    const yours = (id: string) => ({
+      ...openPrayer,
+      id,
+      org_id: ORG,
+      body: null,
+      body_ciphertext: encryptBody(KEYS, ORG, id, "Mine"),
+      author_hash: authorHash(KEYS, ORG, id, "user-1"),
+    });
+    const sealed = { ...openPrayer, org_id: ORG, body: null, body_ciphertext: encryptBody(KEYS, ORG, "p1", "Sealed") };
+    const pages = [Array.from({ length: 10 }, (_, i) => yours(`own-${i}`)), [yours("own-10"), sealed]];
+    let page = 0;
+    reads.prayer_wall = (filters) =>
+      filters["eq:mine"] === false ? { data: pages[page++] ?? [], error: null } : { data: [], error: null };
+
+    const cards = propsOf<{ request: { id: string; body: string } }>(await render(), HomePrayerCard);
+
+    expect(cards.map((c) => [c.request.id, c.request.body])).toEqual([["p1", "Sealed"]]);
+    expect(page).toBe(2);
+  });
+
+  it("shows prayer as failed, never an empty section, when the server has no keys", async () => {
+    prayerKeys = null;
+    reads.prayer_wall = { data: [openPrayer], error: null };
+    reads.prayer_requests = { data: [{ id: "p1", updated_at: "2026-11-02T14:00:00Z" }], error: null };
+
+    const tree = await render();
+
+    expect(failedSections(tree)).toContain("prayer requests");
+    expect(propsOf(tree, HomePrayerCard)).toEqual([]);
+    expect(texts(tree).join("")).not.toContain("No prayer requests yet.");
   });
 
   it("gives each request its own card, so a response never carries over to the next one", async () => {
