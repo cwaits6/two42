@@ -584,7 +584,7 @@ describe("GroupDashboard's failed reads", () => {
     ["team_members", "serving dates"],
     ["lectures", "what's new in the group"],
     ["announcements", "what's new in the group"],
-    ["prayer_requests", "what's new in the group"],
+    ["prayer_requests", "prayer requests"],
   ])("shows a failed %s read as a failed section, not an empty one", async (table, thing) => {
     someContent();
     reads[table] = FAILED;
