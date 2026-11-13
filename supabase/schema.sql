@@ -3309,6 +3309,177 @@ $$;
 ALTER FUNCTION "public"."touch_updated_at"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."usage_count_record"("_pattern" "text", "_kind" "text") RETURNS boolean
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _org uuid := public.app_request_org_id();
+begin
+  if _org is null
+     or _kind is null or _kind not in ('view', 'error')
+     or _pattern is null or not (_pattern = any (public.usage_page_patterns())) then
+    return false;
+  end if;
+
+  -- Concurrent views of one page on one day wait on this row's lock for one
+  -- single-row update; other pages and churches do not contend.
+  insert into public.usage_counts as u (org_id, usage_date, kind, pattern, total)
+  values (_org, (now() at time zone 'utc')::date, _kind, _pattern, 1)
+  on conflict (org_id, usage_date, kind, pattern)
+  do update set total = u.total + 1;
+
+  return true;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."usage_count_record"("_pattern" "text", "_kind" "text") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."usage_count_record"("_pattern" "text", "_kind" "text") IS 'Adds one to today''s count of a page view or error state for the caller''s church. Tenant anchor: app_request_org_id(), never a parameter. Returns false and writes nothing for an unknown pattern or kind, or a caller with no church. authenticated only.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."usage_count_totals"("_org_id" "uuid", "_days" integer) RETURNS TABLE("kind" "text", "pattern" "text", "total" bigint)
+    LANGUAGE "sql" STABLE
+    SET "search_path" TO ''
+    AS $$
+  select u.kind, u.pattern, sum(u.total)::bigint
+  from public.usage_counts u
+  where u.org_id = _org_id
+    and u.usage_date > (now() at time zone 'utc')::date - _days
+  group by u.kind, u.pattern;
+$$;
+
+
+ALTER FUNCTION "public"."usage_count_totals"("_org_id" "uuid", "_days" integer) OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."usage_count_totals"("_org_id" "uuid", "_days" integer) IS 'Totals per kind and pattern for one church over the last _days UTC days. Invoker: RLS bounds request-client callers; _org_id bounds the service role.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."usage_counts_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) RETURNS integer
+    LANGUAGE "sql"
+    SET "search_path" TO ''
+    AS $$
+  with doomed as (
+    select u.usage_date, u.kind, u.pattern
+    from public.usage_counts u
+    where u.org_id = _org_id and u.usage_date < _before
+    order by u.usage_date
+    limit _limit
+  ),
+  gone as (
+    delete from public.usage_counts u
+    using doomed d
+    where u.org_id = _org_id and u.usage_date = d.usage_date
+      and u.kind = d.kind and u.pattern = d.pattern
+    returning 1
+  )
+  select count(*)::integer from gone;
+$$;
+
+
+ALTER FUNCTION "public"."usage_counts_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."usage_counts_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) IS 'Deletes at most _limit of one church''s usage counts dated before _before, oldest first, and returns how many went. Tenant anchor: the _org_id predicate on every row it reads and deletes. service_role only.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."usage_page_patterns"() RETURNS "text"[]
+    LANGUAGE "sql" IMMUTABLE
+    SET "search_path" TO ''
+    AS $$
+  select array[
+    '/',
+    '/admin',
+    '/admin/families',
+    '/admin/groups',
+    '/admin/groups/[id]',
+    '/admin/invite',
+    '/admin/members',
+    '/admin/members/[id]',
+    '/admin/members/invite',
+    '/admin/requests',
+    '/admin/settings',
+    '/admin/settings/email',
+    '/admin/usage',
+    '/calendar',
+    '/dashboard',
+    '/directory',
+    '/directory/anniversaries',
+    '/directory/birthdays',
+    '/directory/families',
+    '/directory/groups',
+    '/find-a-group',
+    '/forgot-password',
+    '/g/[groupId]/about',
+    '/g/[groupId]/about/edit',
+    '/g/[groupId]/announcements',
+    '/g/[groupId]/announcements/[id]/edit',
+    '/g/[groupId]/announcements/new',
+    '/g/[groupId]/calendar',
+    '/g/[groupId]/calendar/[id]',
+    '/g/[groupId]/calendar/[id]/edit',
+    '/g/[groupId]/calendar/new',
+    '/g/[groupId]/dashboard',
+    '/g/[groupId]/directory',
+    '/g/[groupId]/directory/anniversaries',
+    '/g/[groupId]/directory/birthdays',
+    '/g/[groupId]/directory/families',
+    '/g/[groupId]/directory/groups',
+    '/g/[groupId]/give',
+    '/g/[groupId]/give/[fundId]/edit',
+    '/g/[groupId]/give/new',
+    '/g/[groupId]/lectures',
+    '/g/[groupId]/lectures/[id]',
+    '/g/[groupId]/lectures/[id]/edit',
+    '/g/[groupId]/lectures/new',
+    '/g/[groupId]/lectures/series',
+    '/g/[groupId]/lectures/series/[id]',
+    '/g/[groupId]/lectures/series/[id]/edit',
+    '/g/[groupId]/lectures/series/new',
+    '/g/[groupId]/prayer',
+    '/g/[groupId]/serving',
+    '/g/[groupId]/serving/[teamId]',
+    '/g/[groupId]/settings',
+    '/g/[groupId]/settings/details',
+    '/g/[groupId]/settings/invites',
+    '/g/[groupId]/settings/labels',
+    '/g/[groupId]/settings/privacy',
+    '/g/[groupId]/settings/requests',
+    '/g/[groupId]/settings/serving',
+    '/g/[groupId]/settings/teams',
+    '/household',
+    '/join/[token]',
+    '/join/family/[token]',
+    '/login',
+    '/platform',
+    '/platform/organizations',
+    '/platform/organizations/[id]',
+    '/platform/usage',
+    '/privacy',
+    '/profile',
+    '/profile/setup',
+    '/serving/go',
+    '/settings',
+    '/setup-account',
+    '/terms',
+    '/update-password'
+  ]::text[];
+$$;
+
+
+ALTER FUNCTION "public"."usage_page_patterns"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."usage_page_patterns"() IS 'The route patterns usage_count_record() accepts: every page under app/, equal to PAGE_PATTERNS in lib/analytics/pagePattern.ts.';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."about_page" (
     "body" "text" DEFAULT ''::"text" NOT NULL,
     "updated_by" "uuid",
@@ -4488,6 +4659,24 @@ COMMENT ON COLUMN "public"."teams"."group_id" IS 'The group this team belongs to
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."usage_counts" (
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "usage_date" "date" NOT NULL,
+    "kind" "text" NOT NULL,
+    "pattern" "text" NOT NULL,
+    "total" integer NOT NULL,
+    CONSTRAINT "usage_counts_kind_check" CHECK (("kind" = ANY (ARRAY['view'::"text", 'error'::"text"]))),
+    CONSTRAINT "usage_counts_total_check" CHECK (("total" > 0))
+);
+
+
+ALTER TABLE "public"."usage_counts" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."usage_counts" IS 'Page views and error states per church, per UTC day, per route pattern. No column identifies a person. Written only by usage_count_record().';
+
+
+
 ALTER TABLE ONLY "public"."about_page"
     ADD CONSTRAINT "about_page_pkey" PRIMARY KEY ("group_id");
 
@@ -4885,6 +5074,11 @@ ALTER TABLE ONLY "public"."teams"
 
 ALTER TABLE ONLY "public"."teams"
     ADD CONSTRAINT "teams_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."usage_counts"
+    ADD CONSTRAINT "usage_counts_pkey" PRIMARY KEY ("org_id", "usage_date", "kind", "pattern");
 
 
 
@@ -6037,6 +6231,11 @@ ALTER TABLE ONLY "public"."teams"
 
 
 
+ALTER TABLE ONLY "public"."usage_counts"
+    ADD CONSTRAINT "usage_counts_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
 CREATE POLICY "Admins and household leaders can delete family members" ON "public"."family_members" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR (("family_id" = ( SELECT "public"."current_family_id"() AS "current_family_id")) AND ( SELECT "public"."is_member"() AS "is_member") AND (EXISTS ( SELECT 1
    FROM "public"."profiles" "self"
   WHERE (("self"."id" = ( SELECT "auth"."uid"() AS "uid")) AND ("self"."relationship" = ANY (ARRAY['primary'::"text", 'spouse'::"text"])))))))));
@@ -6128,6 +6327,10 @@ CREATE POLICY "Admins manage org email domains" ON "public"."org_email_domains" 
 
 
 CREATE POLICY "Anon can read public settings" ON "public"."site_settings" FOR SELECT TO "authenticated", "anon" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "is_public"));
+
+
+
+CREATE POLICY "Church admins can read usage counts" ON "public"."usage_counts" FOR SELECT TO "authenticated" USING (( SELECT "public"."is_admin"() AS "is_admin"));
 
 
 
@@ -6825,6 +7028,10 @@ CREATE POLICY "org isolation" ON "public"."teams" AS RESTRICTIVE TO "authenticat
 
 
 
+CREATE POLICY "org isolation" ON "public"."usage_counts" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
 ALTER TABLE "public"."org_domain_worker_events" ENABLE ROW LEVEL SECURITY;
 
 
@@ -6887,6 +7094,9 @@ ALTER TABLE "public"."team_members" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."teams" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."usage_counts" ENABLE ROW LEVEL SECURITY;
 
 
 GRANT USAGE ON SCHEMA "public" TO "postgres";
@@ -7316,6 +7526,28 @@ GRANT ALL ON FUNCTION "public"."team_moved_prunes_members"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."touch_updated_at"() TO "anon";
 GRANT ALL ON FUNCTION "public"."touch_updated_at"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."touch_updated_at"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."usage_count_record"("_pattern" "text", "_kind" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."usage_count_record"("_pattern" "text", "_kind" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."usage_count_record"("_pattern" "text", "_kind" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."usage_count_totals"("_org_id" "uuid", "_days" integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."usage_count_totals"("_org_id" "uuid", "_days" integer) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."usage_count_totals"("_org_id" "uuid", "_days" integer) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."usage_counts_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."usage_counts_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."usage_page_patterns"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."usage_page_patterns"() TO "service_role";
 
 
 
@@ -7897,6 +8129,11 @@ GRANT ALL ON TABLE "public"."team_members" TO "service_role";
 GRANT ALL ON TABLE "public"."teams" TO "anon";
 GRANT ALL ON TABLE "public"."teams" TO "authenticated";
 GRANT ALL ON TABLE "public"."teams" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."usage_counts" TO "service_role";
+GRANT SELECT ON TABLE "public"."usage_counts" TO "authenticated";
 
 
 
