@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getPlatformAdmin } from "@/lib/platform-access";
 import { createServiceClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetchAll";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ErrorState } from "@/components/states/ErrorState";
@@ -32,8 +33,10 @@ export default async function PlatformUsagePage({
   // and adding up every tenant is the point of this page. getPlatformAdmin()
   // above is the authority boundary standing in for an org predicate here.
   // See docs/security/service-role-inventory.md.
-  const { data: orgs, error } = await service.from("organizations").select("id, name").order("name");
-  if (error) {
+  const { data: orgs, error } = await fetchAll((from, to) =>
+    service.from("organizations").select("id, name").order("name").order("id").range(from, to),
+  );
+  if (error || !orgs) {
     logError("Platform usage organizations read failed", error, { route: "/platform/usage" });
     return (
       <PageContainer>

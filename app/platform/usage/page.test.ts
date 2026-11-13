@@ -22,7 +22,11 @@ vi.mock("@/lib/supabase/server", () => ({
   createServiceClient: async () => ({
     from: () => ({
       select: () => ({
-        order: () => organizations(),
+        order: () => ({
+          order: () => ({
+            range: (from: number, to: number) => organizations(from, to),
+          }),
+        }),
       }),
     }),
     rpc: (_fn: string, args: { _org_id: string }) => totals(args._org_id),
@@ -75,6 +79,19 @@ describe("PlatformUsagePage", () => {
     const [lists] = listsIn(await PlatformUsagePage({ searchParams }));
     expect(totals.mock.calls).toEqual([["org-a"], ["org-b"]]);
     expect(lists.props?.rows).toEqual([{ kind: "view", pattern: "/dashboard", total: 6 }]);
+  });
+
+  it("reads every page of churches before adding them up", async () => {
+    const firstPage = Array.from({ length: 1000 }, (_, i) => ({ id: `org-${i}`, name: `${i}` }));
+    organizations.mockImplementation(async (from: number) => ({
+      data: from === 0 ? firstPage : [{ id: "org-last", name: "Last" }],
+      error: null,
+    }));
+    const [lists] = listsIn(await PlatformUsagePage({ searchParams }));
+    expect(organizations.mock.calls).toEqual([[0, 999], [1000, 1999]]);
+    expect(totals).toHaveBeenCalledTimes(1001);
+    expect(totals).toHaveBeenLastCalledWith("org-last");
+    expect(lists.props?.rows).toEqual([{ kind: "view", pattern: "/dashboard", total: 3003 }]);
   });
 
   it("shows a failed read, not a smaller total, when one church can't be read", async () => {
