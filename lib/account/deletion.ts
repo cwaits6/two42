@@ -10,6 +10,7 @@ import { displayName } from "@/lib/names";
 import { personName, personNameOrEmail } from "@/lib/serving/display";
 import { notifyLeadersOfCancel } from "@/lib/serving/server";
 import { removeAvatarObjects } from "@/lib/storageDelete";
+import { fetchAll } from "@/lib/supabase/fetchAll";
 import { createServiceClient } from "@/lib/supabase/server";
 import type { DeletionSummary, DeletionViewer } from "./deletionCopy";
 import { parseDeletionOutcomes } from "./deletionOutcomes";
@@ -181,10 +182,12 @@ async function tellLeadersDatesOpened(
 
 /**
  * The person's anonymous requests stored as a hash, which no foreign key ties
- * to them. Null when the keys are missing or the read fails: deleting the person
- * and leaving their requests behind is not an outcome. A request they post
- * between this read and the commit stays until retention removes it, and they
- * can no longer sign in to post another.
+ * to them. Null when the keys are missing or the read fails, so deletion
+ * refuses rather than leave them behind. A hash under a wrong author key
+ * matches no one and cannot be told apart, so under one the deletion goes
+ * ahead without them. A request they post between this read and the commit
+ * stays until retention removes it, and they can no longer sign in to post
+ * another.
  */
 async function hashedRequestsOf(service: ServiceClient, orgId: string, personId: string): Promise<string[] | null> {
   const keys = loadPrayerKeys();
@@ -193,12 +196,16 @@ async function hashedRequestsOf(service: ServiceClient, orgId: string, personId:
     return null;
   }
   // All columns: the app deploys before the migration that adds author_hash.
-  const { data, error } = await service
-    .from("prayer_requests")
-    .select("*")
-    .eq("org_id", orgId)
-    .eq("is_anonymous", true)
-    .is("author_id", null);
+  const { data, error } = await fetchAll((from, to) =>
+    service
+      .from("prayer_requests")
+      .select("*")
+      .eq("org_id", orgId)
+      .eq("is_anonymous", true)
+      .is("author_id", null)
+      .order("id")
+      .range(from, to),
+  );
   if (error) {
     logError("Failed to read anonymous prayer requests for a deletion", error);
     return null;

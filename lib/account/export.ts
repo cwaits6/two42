@@ -2,7 +2,8 @@
  * One person's own data, for their download. Every read is on the service
  * client because memberships and RSVPs outlive the group access that RLS would
  * need to read them, and because an anonymous prayer request is recognised as
- * theirs only by recomputing its author hash over the church's hashed rows. Each chain filters on the org and on this person,
+ * theirs only by recomputing its author hash over the church's hashed rows,
+ * which under a wrong author key matches none of them. Each chain filters on the org and on this person,
  * their current address, or the household on their own profile row. Only unclaimed
  * household entries name anyone else, with their details, since nothing records
  * who typed them.
@@ -11,19 +12,15 @@
  */
 import { decryptBody, isAuthor } from "@/lib/prayer/crypto";
 import { loadPrayerKeys } from "@/lib/prayer/keys";
+import type { Tables } from "@/lib/supabase/database.types";
+import { fetchAll } from "@/lib/supabase/fetchAll";
 import { createServiceClient } from "@/lib/supabase/server";
 import { rowsOf } from "./rows";
 
-interface PrayerRow {
-  id: string;
-  body: string | null;
-  body_ciphertext: string | null;
-  author_hash: string | null;
-  is_anonymous: boolean;
-  is_answered: boolean;
-  created_at: string;
-  groups: { name: string } | null;
-}
+type PrayerRow = Pick<
+  Tables<"prayer_requests">,
+  "id" | "body" | "body_ciphertext" | "author_hash" | "is_anonymous" | "is_answered" | "created_at"
+> & { groups: { name: string } | null };
 
 const PROFILE_COLUMNS =
   "first_name, last_name, preferred_name, email, phone, phone_mobile, phone_home, phone_work, " +
@@ -83,12 +80,17 @@ export async function buildAccountExport(orgId: string, personId: string) {
       .select("*, groups(name)")
       .eq("org_id", orgId)
       .eq("author_id", personId),
-    service
-      .from("prayer_requests")
-      .select("*, groups(name)")
-      .eq("org_id", orgId)
-      .eq("is_anonymous", true)
-      .is("author_id", null),
+    // Every hashed request in the church, since only the key tells whose is whose.
+    fetchAll((from, to) =>
+      service
+        .from("prayer_requests")
+        .select("*, groups(name)")
+        .eq("org_id", orgId)
+        .eq("is_anonymous", true)
+        .is("author_id", null)
+        .order("id")
+        .range(from, to),
+    ),
     service
       .from("giving_funds")
       .select("name, description, is_active, retire_on, groups(name), giving_fund_methods(method, custom_handle)")
