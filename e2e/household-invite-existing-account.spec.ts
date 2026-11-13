@@ -172,9 +172,10 @@ test("an invite is refused for another address and for someone in another church
   await signIn(outsider.page, OUTSIDER.email);
   await outsider.page.waitForURL((url) => url.pathname !== "/login");
   await outsider.page.goto(invite);
-  await expect(outsider.page.getByRole("heading", { name: "This link is for a different account" })).toBeVisible();
+  await expect(outsider.page.getByText("This link isn't valid anymore")).toBeVisible();
+  await expect(outsider.page.getByText("Seedly household")).toHaveCount(0);
   await expect(outsider.page.getByRole("button", { name: "Join household" })).toHaveCount(0);
-  expect((await outsider.page.request.post("/api/family-invites/join", { data: { token: OUTSIDER.token } })).status()).toBe(403);
+  expect((await outsider.page.request.post("/api/family-invites/join", { data: { token: OUTSIDER.token } })).status()).toBe(404);
   await outsider.context.close();
 
   const { context, page } = await isaacsHousehold(browser, baseURL!);

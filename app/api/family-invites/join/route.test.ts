@@ -8,13 +8,18 @@ type Result = { data: unknown; error: unknown };
 type Call = { table: string; op: "select" | "update"; payload?: unknown; filters: unknown[][] };
 
 let calls: Call[] = [];
-let results: Record<string, Result> = {};
+let results: Record<string, Result | Result[]> = {};
 
-/** A chain that records its filters and resolves to `results["<table>.<op>"]`. */
+/**
+ * A chain that records its filters and resolves to `results["<table>.<op>"]`;
+ * an array answers successive calls in turn.
+ */
 function chain(table: string, op: Call["op"], payload?: unknown) {
   const call: Call = { table, op, payload, filters: [] };
   calls.push(call);
-  const result = () => results[`${table}.${op}`] ?? { data: null, error: null };
+  const entry = results[`${table}.${op}`];
+  const answer = (Array.isArray(entry) ? entry.shift() : entry) ?? { data: null, error: null };
+  const result = () => answer;
   const c: Record<string, unknown> = {};
   for (const m of ["eq", "is", "select"]) {
     c[m] = (...args: unknown[]) => {
@@ -149,18 +154,26 @@ describe("POST /api/family-invites/join", () => {
     expect(updates()).toHaveLength(0);
   });
 
-  it.each([
-    ["another address", { profile: PROFILE }, { email: "someone@example.test" }],
-    ["another church", { profile: { ...PROFILE, org_id: "org-2" } }, {}],
-    ["a pending account", { profile: { ...PROFILE, role: "pending" } }, {}],
-    ["no profile", { profile: null }, {}],
-  ])("refuses %s without writing", async (_, state, userPatch) => {
-    user = { ...USER, ...userPatch };
-    given(state);
+  it("refuses another address as a different account without writing", async () => {
+    user = { ...USER, email: "someone@example.test" };
 
     const res = await post();
 
     expect(res.status).toBe(403);
+    expect(updates()).toHaveLength(0);
+  });
+
+  it.each([
+    ["in another church", { ...PROFILE, org_id: "org-2" }],
+    ["pending", { ...PROFILE, role: "pending" }],
+    ["without a profile", null],
+  ])("answers the invited address %s as a dead link without writing", async (_, profile) => {
+    given({ profile });
+
+    const res = await post();
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Invite not found" });
     expect(updates()).toHaveLength(0);
   });
 
@@ -213,8 +226,25 @@ describe("POST /api/family-invites/join", () => {
     expect((await post()).status).toBe(200);
   });
 
+  it("finishes when a concurrent press linked this household first", async () => {
+    results["profiles.update"] = { data: [], error: null };
+    results["profiles.select"] = [
+      { data: PROFILE, error: null },
+      { data: { family_id: "fam-1" }, error: null },
+    ];
+
+    expect((await post()).status).toBe(200);
+    const reread = calls.filter((c) => c.table === "profiles" && c.op === "select")[1];
+    expect(reread.filters).toContainEqual(["eq", "org_id", "org-1"]);
+    expect(updates().map((c) => c.table)).toEqual(["profiles", "family_members", "family_invites"]);
+  });
+
   it("stops before claiming when the profile moved to another household in between", async () => {
     results["profiles.update"] = { data: [], error: null };
+    results["profiles.select"] = [
+      { data: PROFILE, error: null },
+      { data: { family_id: "fam-other" }, error: null },
+    ];
 
     expect((await post()).status).toBe(409);
     expect(updates().map((c) => c.table)).toEqual(["profiles"]);

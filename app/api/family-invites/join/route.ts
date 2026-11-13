@@ -20,7 +20,7 @@ function notFound() {
  * only the token.
  *
  * The writes are conditional updates to fixed values, so two presses converge
- * on one join. The invite is accepted last: a failure before it leaves the
+ * on one join, even when both read the person as not yet in a household. The invite is accepted last: a failure before it leaves the
  * invite live, and a retry finds the profile already in this household and
  * finishes.
  */
@@ -77,14 +77,14 @@ export async function POST(request: Request) {
     case "joined":
       return NextResponse.json({ joined: true });
     case "invalid":
-      return notFound();
-    case "different_account":
       if (profile && profile.org_id !== invite.org_id) {
         logWarn("family-invites/join: invite from another church refused", undefined, {
           route: "/api/family-invites/join",
           ids: { ...ids, org: invite.org_id, callerOrg: profile.org_id },
         });
       }
+      return notFound();
+    case "different_account":
       return NextResponse.json({ error: "Different account" }, { status: 403 });
     case "other_household":
       return NextResponse.json({ error: "Already in a household" }, { status: 409 });
@@ -113,7 +113,24 @@ export async function POST(request: Request) {
     return failed();
   }
   if (!linked || linked.length === 0) {
-    return NextResponse.json({ error: "Already in a household" }, { status: 409 });
+    // A concurrent press may have linked this same household first; only a
+    // different household is a refusal.
+    const { data: now, error: rereadError } = await service
+      .from("profiles")
+      .select("family_id")
+      .eq("id", user.id)
+      .eq("org_id", invite.org_id)
+      .maybeSingle();
+    if (rereadError) {
+      logError("family-invites/join: re-reading the household failed", rereadError, {
+        route: "/api/family-invites/join",
+        ids,
+      });
+      return failed();
+    }
+    if (now?.family_id !== invite.family_id) {
+      return NextResponse.json({ error: "Already in a household" }, { status: 409 });
+    }
   }
 
   // Never take over a member another account already claimed.

@@ -8,10 +8,11 @@ import { Button } from "@/components/ui/button";
 import { failureMessage } from "@/lib/errorCopy";
 import { HOUSEHOLD_INVITE_INVALID_TEXT } from "@/lib/groups/invites";
 import { HOUSEHOLD_TAB } from "@/lib/profileTabs";
+import { DIFFERENT_ACCOUNT_TEXT } from "./joinVerdict";
 
 const ACTION = "join this household";
 const KNOWN = {
-  403: "This invite was sent to a different email address. Sign out, then open the link again with that account.",
+  403: DIFFERENT_ACCOUNT_TEXT,
   404: HOUSEHOLD_INVITE_INVALID_TEXT,
   409: "You're already in a household. Ask a church admin to move you.",
 };

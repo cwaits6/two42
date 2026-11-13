@@ -104,6 +104,9 @@ Accounts come from invites, never from an open sign-up form:
   The account is created and placed in that group straight away.
 - A household invite (`/join/family/<token>`) sends a request to the church's
   admins instead. When they approve it, the person gets the same setup email.
+  Someone who already has an account signs in from the same link and joins
+  the household straight away, if the invite was sent to their address in
+  their church.
 - The database refuses anything else. A trigger on new Auth users rejects an
   email that has no approved access request and no open household invite, so
   calling Supabase Auth directly cannot create an account.

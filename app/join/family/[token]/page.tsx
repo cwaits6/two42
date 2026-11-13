@@ -11,7 +11,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { CHURCH_ADMIN_INVALID_HELP } from "@/lib/groups/invites";
 import { FamilyRequestForm } from "./FamilyRequestForm";
 import { JoinHouseholdButton } from "./JoinHouseholdButton";
-import { householdInviteVerdict } from "./joinVerdict";
+import { DIFFERENT_ACCOUNT_TEXT, householdInviteVerdict } from "./joinVerdict";
 import { logError } from "@/lib/log";
 
 interface PageProps {
@@ -161,7 +161,7 @@ export default async function FamilyJoinPage({ params }: PageProps) {
       <AuthShell
         eyebrow={EYEBROW}
         title="This link is for a different account"
-        kicker="Sign out, then open the link again with the account this invite was sent to."
+        kicker={DIFFERENT_ACCOUNT_TEXT}
       >
         <SignOutButton />
       </AuthShell>

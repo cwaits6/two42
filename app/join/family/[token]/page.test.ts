@@ -130,14 +130,24 @@ describe("FamilyJoinPage signed in", () => {
     expect(html).not.toContain("A church admin reviews each request");
   });
 
-  it.each([
-    ["another address", { user: { ...MIA, email: "leo@example.test" } }],
-    ["another church", { profile: { ...PROFILE, org_id: "org-2" } }],
-  ])("refuses %s with the different-account message", async (_, opts) => {
-    const html = await renderSignedIn(opts);
+  it("refuses another address with the different-account message", async () => {
+    const html = await renderSignedIn({ user: { ...MIA, email: "leo@example.test" } });
 
     expect(html).toContain("This link is for a different account");
+    expect(html).toContain("Sign out, then open the link again");
     expect(html).toContain("[sign out]");
+    expect(html).not.toContain("[join household]");
+  });
+
+  it.each([
+    ["in another church", { ...PROFILE, org_id: "org-2" }],
+    ["pending", { ...PROFILE, role: "pending" }],
+  ])("shows the invited address %s the invalid-link message", async (_, profile) => {
+    const html = await renderSignedIn({ profile });
+
+    expect(html).toContain("This link isn't valid anymore");
+    expect(html).not.toContain("Fakeworth household");
+    expect(html).not.toContain("This link is for a different account");
     expect(html).not.toContain("[join household]");
   });
 
