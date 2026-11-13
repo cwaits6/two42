@@ -15,7 +15,7 @@ const COUPLE = "Henry & Chloe Mockingham";
 
 const SEED_SQL = `
   update public.family_units
-     set anniversary_month = 10, anniversary_day = 3, anniversary_year = 2008
+     set anniversary_month = 10, anniversary_day = 3, anniversary_year = 2009
    where id = '${HOUSEHOLD}';
 `;
 
