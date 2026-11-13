@@ -70,7 +70,6 @@ export const PAGE_PATTERNS: readonly string[] = [
   "/platform/organizations",
   "/platform/organizations/[id]",
   "/platform/usage",
-  "/platform/usage/[id]",
   "/privacy",
   "/profile",
   "/profile/setup",

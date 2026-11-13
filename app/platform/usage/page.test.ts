@@ -23,7 +23,6 @@ vi.mock("@/lib/supabase/server", () => ({
     from: () => ({
       select: () => ({
         order: () => organizations(),
-        eq: () => ({ maybeSingle: () => organizations() }),
       }),
     }),
     rpc: (_fn: string, args: { _org_id: string }) => totals(args._org_id),
@@ -35,7 +34,6 @@ vi.mock("@/components/states/ErrorState", () => ({ ErrorState: () => null }));
 const { ErrorState } = await import("@/components/states/ErrorState");
 const { UsageLists } = await import("@/components/analytics/UsageLists");
 const { default: PlatformUsagePage } = await import("./page");
-const { default: PlatformOrganizationUsagePage } = await import("./[id]/page");
 
 type Element = { type?: unknown; props?: { children?: unknown; rows?: unknown } };
 
@@ -69,9 +67,6 @@ describe("PlatformUsagePage", () => {
   it("sends a person who is not an operator to Home without reading anything", async () => {
     getPlatformAdmin.mockResolvedValue(null);
     await expect(PlatformUsagePage({ searchParams })).rejects.toMatchObject({ target: "/dashboard" });
-    await expect(
-      PlatformOrganizationUsagePage({ params: Promise.resolve({ id: "org-a" }), searchParams }),
-    ).rejects.toMatchObject({ target: "/dashboard" });
     expect(organizations).not.toHaveBeenCalled();
     expect(totals).not.toHaveBeenCalled();
   });
@@ -89,24 +84,5 @@ describe("PlatformUsagePage", () => {
     const elements = elementsIn(await PlatformUsagePage({ searchParams }));
     expect(elements.map((element) => element.type)).toContain(ErrorState);
     expect(listsIn(elements)).toEqual([]);
-  });
-});
-
-describe("PlatformOrganizationUsagePage", () => {
-  it("reads only the church in the address", async () => {
-    organizations.mockResolvedValue({ data: { id: "org-b", name: "B" }, error: null });
-    const [lists] = listsIn(
-      await PlatformOrganizationUsagePage({ params: Promise.resolve({ id: "org-b" }), searchParams }),
-    );
-    expect(totals.mock.calls).toEqual([["org-b"]]);
-    expect(lists.props?.rows).toEqual([{ kind: "view", pattern: "/dashboard", total: 3 }]);
-  });
-
-  it("sends an unknown church back to the list", async () => {
-    organizations.mockResolvedValue({ data: null, error: null });
-    await expect(
-      PlatformOrganizationUsagePage({ params: Promise.resolve({ id: "gone" }), searchParams }),
-    ).rejects.toMatchObject({ target: "/platform/usage" });
-    expect(totals).not.toHaveBeenCalled();
   });
 });

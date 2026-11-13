@@ -115,7 +115,6 @@ as $$
     '/platform/organizations',
     '/platform/organizations/[id]',
     '/platform/usage',
-    '/platform/usage/[id]',
     '/privacy',
     '/profile',
     '/profile/setup',

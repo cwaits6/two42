@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getPlatformAdmin } from "@/lib/platform-access";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -62,21 +61,6 @@ export default async function PlatformUsagePage({
       ) : (
         <UsageLists rows={sumUsage(perChurch.map((read) => read.data ?? []))} days={days} />
       )}
-      <section>
-        <h2 className="mb-3 text-xl font-bold text-foreground">Organizations</h2>
-        <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
-          {orgs.map((org) => (
-            <li key={org.id} className="flex min-h-11 items-center px-5 py-3">
-              <Link
-                href={`/platform/usage/${org.id}?days=${days}`}
-                className="inline-flex min-h-11 items-center text-lg font-medium text-brand-primary-text underline underline-offset-4 hover:text-foreground"
-              >
-                {org.name}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
     </PageContainer>
   );
 }

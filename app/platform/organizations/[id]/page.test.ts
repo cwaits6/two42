@@ -12,6 +12,7 @@ vi.mock("./OrganizationDetail", () => ({ OrganizationDetail: () => null }));
 
 type Result = { data: unknown; error: { code: string } | null };
 let results: Record<string, Result>;
+let rpcCalls: { fn: string; _org_id: string; _days: number }[];
 
 vi.mock("@/lib/supabase/server", () => ({
   createServiceClient: async () => ({
@@ -25,20 +26,28 @@ vi.mock("@/lib/supabase/server", () => ({
       };
       return chain;
     },
+    rpc: async (fn: string, args: { _org_id: string; _days: number }) => {
+      rpcCalls.push({ fn, ...args });
+      return results[fn];
+    },
   }),
 }));
 
 const { ErrorState } = await import("@/components/states/ErrorState");
 const { OrganizationDetail } = await import("./OrganizationDetail");
+const { UsageLists } = await import("@/components/analytics/UsageLists");
 const { default: PlatformOrganizationPage } = await import("./page");
 
 type Element = {
   type?: unknown;
-  props: { children?: unknown; emailCap?: unknown; emailDomain?: unknown; owner?: unknown; thing?: string };
+  props: { children?: unknown; rows?: unknown; emailCap?: unknown; emailDomain?: unknown; owner?: unknown; thing?: string };
 };
 
 async function renderedChildren(): Promise<Element[]> {
-  const page = (await PlatformOrganizationPage({ params: Promise.resolve({ id: "o" }) })) as Element;
+  const page = (await PlatformOrganizationPage({
+    params: Promise.resolve({ id: "o" }),
+    searchParams: Promise.resolve({ days: "30" }),
+  })) as Element;
   return page.props.children as Element[];
 }
 
@@ -46,6 +55,16 @@ async function renderedDetail(): Promise<Element> {
   const detail = (await renderedChildren()).find((child) => child.type === OrganizationDetail);
   if (!detail) throw new Error("The page did not render the organization's cards");
   return detail;
+}
+
+function descendants(node: unknown, found: Element[] = []): Element[] {
+  if (Array.isArray(node)) {
+    for (const child of node) descendants(child, found);
+    return found;
+  }
+  if (!node || typeof node !== "object") return found;
+  found.push(node as Element);
+  return descendants((node as Element).props?.children, found);
 }
 
 /** What the page shows in place of the organization's cards when a read fails. */
@@ -59,6 +78,7 @@ const FAILED: Result = { data: null, error: { code: "57014" } };
 
 beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
+  rpcCalls = [];
   results = {
     organizations: {
       data: {
@@ -75,6 +95,7 @@ beforeEach(() => {
     org_email_limits: { data: { daily_cap: 200 }, error: null },
     org_email_usage: { data: { sent_count: 3 }, error: null },
     org_email_domains: { data: null, error: null },
+    usage_count_totals: { data: [{ kind: "view", pattern: "/dashboard", total: 7 }], error: null },
   };
 });
 
@@ -124,5 +145,21 @@ describe("PlatformOrganizationPage", () => {
     results.org_email_domains = FAILED;
 
     expect((await renderedDetail()).props.emailDomain).toEqual({ loaded: false });
+  });
+
+  it("shows this church's usage for the period in the address", async () => {
+    const lists = descendants(await renderedChildren()).filter((element) => element.type === UsageLists);
+
+    expect(rpcCalls).toEqual([{ fn: "usage_count_totals", _org_id: "o", _days: 30 }]);
+    expect(lists.map((element) => element.props.rows)).toEqual([[{ kind: "view", pattern: "/dashboard", total: 7 }]]);
+  });
+
+  it("shows a failed usage read in its section and keeps the organization's cards", async () => {
+    results.usage_count_totals = FAILED;
+    const elements = descendants(await renderedChildren());
+
+    expect(elements.map((element) => element.type)).toContain(OrganizationDetail);
+    expect(elements.map((element) => element.type)).not.toContain(UsageLists);
+    expect(elements.find((element) => element.type === ErrorState)?.props.thing).toBe("usage");
   });
 });
