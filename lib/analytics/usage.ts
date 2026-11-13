@@ -1,13 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
+import type { UsageKind } from "@/lib/analytics/recordUsage";
 
 export const USAGE_PERIODS = [7, 30, 90] as const;
 export type UsagePeriod = (typeof USAGE_PERIODS)[number];
 
 const DEFAULT_PERIOD: UsagePeriod = 30;
 
-/** A count below this is shown as "fewer than 5": in a small church it can point at one person. */
+/** A count below this is hidden: in a small church it can point at one person. */
 export const SMALLEST_SHOWN = 5;
+export const HIDDEN_COUNT = `fewer than ${SMALLEST_SHOWN}`;
 
 export type UsageTotal = { kind: string; pattern: string; total: number };
 export type RankedUsage = { pattern: string; shown: string };
@@ -37,8 +39,8 @@ export function sumUsage(perChurch: UsageTotal[][]): UsageTotal[] {
  * Views and errors, most first. A hidden count sorts after every shown one,
  * by pattern, so its place in the list does not give its value away.
  */
-export function rankUsage(rows: UsageTotal[]): { views: RankedUsage[]; errors: RankedUsage[] } {
-  const rank = (kind: string): RankedUsage[] => {
+export function rankUsage(rows: UsageTotal[]): Record<UsageKind, RankedUsage[]> {
+  const rank = (kind: UsageKind): RankedUsage[] => {
     const ofKind = rows.filter((row) => row.kind === kind);
     const byPattern = (a: UsageTotal, b: UsageTotal) => a.pattern.localeCompare(b.pattern);
     const shown = ofKind
@@ -48,8 +50,8 @@ export function rankUsage(rows: UsageTotal[]): { views: RankedUsage[]; errors: R
     const hidden = ofKind
       .filter((row) => row.total < SMALLEST_SHOWN)
       .sort(byPattern)
-      .map((row) => ({ pattern: row.pattern, shown: "fewer than 5" }));
+      .map((row) => ({ pattern: row.pattern, shown: HIDDEN_COUNT }));
     return [...shown, ...hidden];
   };
-  return { views: rank("view"), errors: rank("error") };
+  return { view: rank("view"), error: rank("error") };
 }

@@ -38,11 +38,11 @@ function RankedList({ title, rows, empty }: { title: string; rows: RankedUsage[]
 
 /** Pages by how often they were opened, and by how often they showed an error. */
 export function UsageLists({ rows, days }: { rows: UsageTotal[]; days: UsagePeriod }) {
-  const { views, errors } = rankUsage(rows);
+  const { view, error } = rankUsage(rows);
   return (
     <>
-      <RankedList title="Most opened pages" rows={views} empty={`No pages opened in the last ${days} days.`} />
-      <RankedList title="Pages with errors" rows={errors} empty={`No errors in the last ${days} days.`} />
+      <RankedList title="Most opened pages" rows={view} empty={`No pages opened in the last ${days} days.`} />
+      <RankedList title="Pages with errors" rows={error} empty={`No errors in the last ${days} days.`} />
     </>
   );
 }

@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { ErrorState } from "@/components/states/ErrorState";
 import { LoadingState } from "@/components/states/LoadingState";
 import { UsageLists, UsagePeriodLinks } from "@/components/analytics/UsageLists";
-import { readUsageTotals, usagePeriod, type UsagePeriod } from "@/lib/analytics/usage";
+import { HIDDEN_COUNT, readUsageTotals, SMALLEST_SHOWN, usagePeriod, type UsagePeriod } from "@/lib/analytics/usage";
 import { resolveRequestOrgId } from "@/lib/org";
 import { pageTitle } from "@/lib/pageTitle";
 import { createClient } from "@/lib/supabase/server";
@@ -35,7 +35,7 @@ export default async function UsagePage({
     <PageContainer>
       <PageHeader
         title="Usage"
-        subtitle="How often each page was opened across the whole church. Counts under 5 show as fewer than 5."
+        subtitle={`How often each page was opened, and how often one couldn't load, across the whole church. Counts under ${SMALLEST_SHOWN} show as ${HIDDEN_COUNT}.`}
       />
       <UsagePeriodLinks path="/admin/usage" days={days} />
       <Suspense key={days} fallback={<LoadingState thing="usage" />}>

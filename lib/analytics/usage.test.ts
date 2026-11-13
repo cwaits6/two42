@@ -6,7 +6,7 @@ const error = (pattern: string, total: number) => ({ kind: "error", pattern, tot
 
 describe("rankUsage", () => {
   it("shows 5 and more as a number and anything under 5 as fewer than 5", () => {
-    const { views } = rankUsage([view("/a", 5), view("/b", 4), view("/c", 1)]);
+    const { view: views } = rankUsage([view("/a", 5), view("/b", 4), view("/c", 1)]);
     expect(views).toEqual([
       { pattern: "/a", shown: "5" },
       { pattern: "/b", shown: "fewer than 5" },
@@ -15,14 +15,14 @@ describe("rankUsage", () => {
   });
 
   it("ranks shown counts most first, and hidden ones after them by pattern so the order hides their value", () => {
-    const { views } = rankUsage([view("/z", 1), view("/b", 12), view("/y", 4), view("/a", 1200), view("/c", 12)]);
+    const { view: views } = rankUsage([view("/z", 1), view("/b", 12), view("/y", 4), view("/a", 1200), view("/c", 12)]);
     expect(views.map((row) => row.pattern)).toEqual(["/a", "/b", "/c", "/y", "/z"]);
     expect(views[0].shown).toBe("1,200");
   });
 
   it("keeps views and errors apart", () => {
     const ranked = rankUsage([view("/a", 9), error("/a", 6)]);
-    expect(ranked).toEqual({ views: [{ pattern: "/a", shown: "9" }], errors: [{ pattern: "/a", shown: "6" }] });
+    expect(ranked).toEqual({ view: [{ pattern: "/a", shown: "9" }], error: [{ pattern: "/a", shown: "6" }] });
   });
 });
 
@@ -30,8 +30,8 @@ describe("sumUsage", () => {
   it("adds churches together before anything is hidden", () => {
     const total = sumUsage([[view("/a", 3), error("/a", 1)], [view("/a", 3)]]);
     expect(rankUsage(total)).toEqual({
-      views: [{ pattern: "/a", shown: "6" }],
-      errors: [{ pattern: "/a", shown: "fewer than 5" }],
+      view: [{ pattern: "/a", shown: "6" }],
+      error: [{ pattern: "/a", shown: "fewer than 5" }],
     });
   });
 });
