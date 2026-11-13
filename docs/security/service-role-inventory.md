@@ -276,13 +276,22 @@ own `org_id`. No client or job can call it.
 ## Person deletion RPC — a definer-function bypass surface
 
 `delete_person(_person_id, _org_id)`
-(`20261113000000_delete_person.sql`) runs every database step of deleting a
+(first `20261113000000_delete_person.sql`; the current body is in
+`20261125000000_household_and_deletion_rules.sql`) runs every database step of deleting a
 person in one transaction: refusing a platform operator and the last church
 admin, serving dates, sign-up records, household entries, and the
 `auth.users` row, which cascades to the profile, through it to the person's
 `serving_reminder_sends` and `event_reminder_sends` rows, and to the fund
 rules below (`20261115000000_fund_recipients_in_group.sql`). EXECUTE: `service_role` only,
 reached from `deletePerson()` in `lib/account/deletion.ts`.
+
+Whether the household goes, and where each fund ends up, come from
+`person_deletion_outcomes()` (below), the same answer the confirmation shows.
+After the profile delete it checks every fund ended as that answer said, and
+otherwise raises `AD003`, which rolls the whole delete back. `AD003` means
+either that the fund rules and `person_deletion_outcomes()` disagree, or that a
+fund's recipient or the second person's group membership changed while the
+delete ran; a retry resolves the second.
 
 Their `group_invite_uses` rows stay, because `max_uses` counts them and deleting
 one would make a used-up link live again. The function clears what identifies the
@@ -306,6 +315,26 @@ stops the deploy if the role running it lacks the privilege.
 
 The grant matrix, each refusal, the row counts and a rollback forced at the last
 step are pinned by `supabase/tests/account_deletion_suite.sql`.
+
+## Person deletion outcomes — a definer-function bypass surface
+
+`person_deletion_outcomes(_person_id, _org_id)`
+(`20261125000000_household_and_deletion_rules.sql`) says what deleting a person
+does to each fund they receive gifts for (passed on to the second person, or
+waiting for a recipient) and to their household (stays, or goes with the people
+listed in it). Read-only (`STABLE`, no writes). Called by `delete_person()` and
+by `loadDeletionSummary()` in `lib/account/deletion.ts`, so the confirmation and
+the delete can't describe different outcomes. EXECUTE: `service_role` only.
+
+`SECURITY DEFINER` bypasses RLS, so **the org checks in the body are the tenant
+boundary.** The org comes from the target's own `profiles` row; `_org_id` is
+only compared with it, and a mismatch or an unknown person returns null. Every
+read filters `org_id` on that org, and the joins to `groups`, `group_members`
+and `profiles` carry it through the composite keys. It returns fund, group and
+person names; the confirmation reduces them to counts for a church admin. The
+fund rule it reports is the one `giving_fund_recipients_guard()` applies.
+`search_path = ''`, revoked from `public, anon, authenticated`. Pinned by
+`supabase/tests/deletion_outcomes_suite.sql`.
 
 ## Fund recipient triggers — definer-function bypass surfaces
 
@@ -424,8 +453,10 @@ caller resolved from `auth.uid()` only, EXECUTE revoked from `public` and
   with any profile in the given household, in the caller's org.
 
 Every `group_members` read in them carries `org_id =
-public.app_current_org_id()`. They are called by the `profiles` and
-`family_units` SELECT policies and by `family_directory_people()` — see
+public.app_current_org_id()`. `shares_group_with()` is called by the `profiles`
+SELECT policy; `shares_group_with_household()` only by `household_visible()`,
+the one statement of household visibility, which the `family_units` SELECT
+policy and `family_directory_people()` both read — see
 "Directory visibility" in [`tenancy-model.md`](tenancy-model.md). None writes.
 
 `handle_new_user()` (the auth signup trigger, `SECURITY DEFINER`) writes
@@ -768,14 +799,17 @@ granted to `authenticated, service_role`. Remove it with `profiles.hide_annivers
 
 ## Children in the directory — definer-function bypass surfaces
 
-Three `SECURITY DEFINER` functions in
-`supabase/migrations/20261112000000_children_directory.sql`. Each has
-`search_path = ''`, and each is read or fired only as described here.
+Three `SECURITY DEFINER` functions, first in
+`supabase/migrations/20261112000000_children_directory.sql`; the current bodies
+are in `20261125000000_household_and_deletion_rules.sql`. Each has
+`search_path = ''`, and each is read or fired only as described here. Each
+reads the child rule from `is_child_without_account()`, a pure `SECURITY INVOKER`
+function that is not a bypass surface.
 
 - `public.family_directory_people(_family_id)` is read-only over `family_members`.
   `families_directory_full` calls it, because other members have no direct read of
   that table. Its org comes from `app_current_org_id()`, never from a parameter, and
-  its `WHERE` clause repeats the directory arm, so a direct call for a household the
+  it gates on `household_visible()`, the rule the `family_units` policy reads, so a direct call for a household the
   caller can't see, for another org or by a pending account returns `[]`. Execute is
   revoked from `public, anon, service_role` and granted to `authenticated` only: with
   no principal the service role could only read `[]`, which a caller would take for an
@@ -836,7 +870,7 @@ column below describes what a regression would cost, not a pending work item.
 
 | File | Why service-role is used | Tenancy risk | Mitigation |
 |------|--------------------------|--------------|------------|
-| `lib/account/deletion.ts` | `deletePerson(orgId, personId, actorId?)` and `loadDeletionSummary(orgId, personId, viewer)` — the one path that deletes a person, from `DELETE /api/account` (themself) and `DELETE /api/admin/members/[id]` (a church admin). `delete_person()` is granted only to `service_role`. After it commits, and after the response, the team-lead notices read other people's rows. The confirmation reads a person's funds, leaders and household, which RLS would refuse a church admin or a member | A wrong org would delete a person in another church, or show a church admin group content from it | `orgId` comes from the caller's own RLS-scoped profile (`currentPerson()` or `requireOrgAdmin()`), never the request, and `delete_person()` compares it with the target's own row. A self-delete's `personId` is the session's user id. Every read filters `org_id` except `platform_admins`, which has none and is keyed on a target already read inside the org. A church admin's summary carries counts, not fund or group names |
+| `lib/account/deletion.ts` | `deletePerson(orgId, personId, actorId?)` and `loadDeletionSummary(orgId, personId, viewer)` — the one path that deletes a person, from `DELETE /api/account` (themself) and `DELETE /api/admin/members/[id]` (a church admin). `delete_person()` is granted only to `service_role`. After it commits, and after the response, the team-lead notices read other people's rows. The confirmation reads a person's leaders and refusal flags, and their fund and household outcomes from `person_deletion_outcomes()` (granted only to `service_role`), which RLS would refuse a church admin or a member | A wrong org would delete a person in another church, or show a church admin group content from it | `orgId` comes from the caller's own RLS-scoped profile (`currentPerson()` or `requireOrgAdmin()`), never the request, and `delete_person()` compares it with the target's own row. A self-delete's `personId` is the session's user id. Every read filters `org_id` except `platform_admins`, which has none and is keyed on a target already read inside the org. A church admin's summary carries counts, not fund or group names |
 | `lib/account/export.ts` | `buildAccountExport(orgId, personId)` — a person's own download. `prayer_requests.author_id` has no column grant for `authenticated`, so an anonymous request can only be matched to its author here; memberships and RSVPs in groups the person has left aren't RLS-readable either | A dropped filter would put another person's data in the file | `orgId` and `personId` come from `currentPerson()`, the session and its RLS-scoped profile, never the request. Every chain filters `org_id` and this person, the household id read off their own profile row, or, for `access_requests`, the address on that row, matched exactly and case-insensitively. Unclaimed household entries are the one place other people appear, with their names and birth dates, because nothing records who typed them; entries claimed by someone else are excluded, and no other selected column names anyone else |
 | `lib/storageDelete.ts` | `removeAvatarObjects(orgId, keys)` — removes a deleted person's photos after `delete_person()` commits. There is no browser session by then, and a key from before org partitioning is unreachable by every RLS-constrained client | The client ignores the org partition on `storage.objects`, so a wrong key would remove another church's object. The guard flags this chain, since it is rooted at a service client, but its marker only records the reason and no check can see the key's value | The module owns its client and accepts none. `orgId` comes from the caller's validated anchor, and a key under another org is refused and reported as still stored. The keys come from `delete_person()`, which finds them from row ids it has already scoped to the org, never from a stored URL column the row's owner can write. This and the operator script are the only service-role `.storage.from(` call sites |
 | `lib/email/identity.ts` | `resolveEmailBranding(orgId)` — `orgId` is **required** — reads `organizations.branding` for callers that hold an explicit org id but no request-scoped session (e.g. `lib/serving/server.ts`, invoked from HMAC-signed link flows), and a second, org-scoped read of `org_email_domains` to resolve the per-org `From:` address. The link origin (`EmailBranding.baseUrl`) is the app's one canonical host, `siteConfig.url`, and needs no read. The genuinely request-scoped case is the separately named `resolveRequestEmailBranding()`: it resolves the org id via `resolveRequestOrgId()` on the cookie-bound request client, then runs the same service-role `org_email_domains` read for it — it has no live caller today and exists so that path must be typed out, never reached by omitting an argument | A missing filter on either table would leak another org's branding or sending domain into an email | The `organizations` read's `.eq("id", orgId)` and the `org_email_domains` read's `.eq("org_id", orgId)` are the only tenant boundaries, both mandatory; `orgId` is always either the caller's already-authorized id or the value `resolveRequestOrgId()` resolves for the current request — never a header, never a body field. `SENDING_DOMAIN` additionally gates the stored domain value itself (with `status = 'verified'`) before it can reach a `From:` header — see CLAUDE.md's injection-boundary list. Branding on the request-scoped path still comes from the request-scoped client, so RLS applies — but that resolves to the *request* org, which can differ from the row's org, so any caller holding an authorized `org_id` must pass it. |

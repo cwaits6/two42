@@ -320,7 +320,14 @@ arm — `is_member() and is_unlisted = false and role in (member, admin)` **and*
 ("Members can view family units"): org admin, own household (`is_member()`-gated,
 so a pending account linked by a family-invite claim still reads neither table),
 or `is_member() and (org_directory_visible() or
-shares_group_with_household(<family id>))`.
+shares_group_with_household(<family id>))`. That rule is stated once, in
+`household_visible(family_id, is_admin, is_member, own_family_id, directory_open)`
+(`20261125000000_household_and_deletion_rules.sql`): the policy passes it the
+viewer's facts, each wrapped `(select ...)`, and so does
+`family_directory_people()`. It is `SECURITY INVOKER` with no `SET` clause and
+no subquery, so Postgres inlines it into the policy instead of calling it per
+row; `supabase/tests/household_rules_suite.sql` proves the policy and the
+function agree for each kind of viewer.
 The three directory views are `security_invoker` and narrow with the base
 tables; nothing else changed.
 
@@ -329,10 +336,14 @@ tables; nothing else changed.
 another member can't read a stored column the directory doesn't show.
 `families_directory_full.family_members_list` reads people through
 `family_directory_people(_family_id)`, a `SECURITY DEFINER` function that
-repeats the directory arm above in its own `WHERE` clause and returns only what
+gates on `household_visible()`, the policy's own rule, and returns only what
 the directory uses: no `birth_year` for anyone, and a child without an account
 (`relationship = 'child'` with no `claimed_profile_id`) under their preferred name
-alone when they have one. No view reads the table directly.
+alone when they have one. `is_child_without_account()` is the one SQL statement
+of that rule, read by this function, the `family_members` and
+`family_invites` triggers, and the `family_members_retire_child_details()`
+cleanup; `isChildWithoutAccount()` in `lib/household.ts` is
+the app's, and `lib/household.test.ts` checks both against one case table. No view reads the table directly.
 
 The helpers are `SECURITY DEFINER`, `STABLE`, `set search_path = ''`,
 EXECUTE revoked from `anon` and granted to `authenticated`:
@@ -346,8 +357,11 @@ EXECUTE revoked from `anon` and granted to `authenticated`:
 - `shares_group_with_household(_family_id)` — the same, for any profile
   whose `family_id` is the given household.
 
-Like `is_group_member()`, the two row-dependent helpers are called bare in
-the policy expressions; a correlated `(select f(id))` is not an InitPlan.
+Like `is_group_member()`, `shares_group_with()` is called bare in the
+`profiles` policy. `shares_group_with_household()` appears in no policy: it is
+reached only through `household_visible()`, whose `(select …)` wrapper in the
+`family_units` policy is a per-row SubPlan, not an InitPlan; the four viewer
+facts passed to it are the InitPlans.
 The caller is always `auth.uid()`; the argument names the other person or
 household, never the principal.
 

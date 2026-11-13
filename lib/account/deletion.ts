@@ -12,7 +12,8 @@ import { notifyLeadersOfCancel } from "@/lib/serving/server";
 import { removeAvatarObjects } from "@/lib/storageDelete";
 import { createServiceClient } from "@/lib/supabase/server";
 import type { DeletionSummary, DeletionViewer } from "./deletionCopy";
-import { rowsOf } from "./rows";
+import { parseDeletionOutcomes } from "./deletionOutcomes";
+import { dataOf, rowsOf } from "./rows";
 import { logError } from "@/lib/log";
 
 type ServiceClient = Awaited<ReturnType<typeof createServiceClient>>;
@@ -21,69 +22,13 @@ export type PersonDeletionResult =
   | { outcome: "deleted"; photosNotRemoved: number }
   | { outcome: "not_found" | "platform_operator" | "last_church_admin" | "failed" };
 
-interface FundRow {
-  name: string;
-  group_id: string;
-  co_steward_id: string | null;
-  groups: { name: string } | null;
-}
-
-// The rule the giving_funds triggers apply when delete_person() removes the
-// profile, read ahead of time for the confirmation.
-async function loadFunds(service: ServiceClient, orgId: string, personId: string) {
-  const funds = rowsOf<FundRow>(
-    await service
-      .from("giving_funds")
-      .select("name, group_id, co_steward_id, groups(name)")
-      .eq("org_id", orgId)
-      .eq("steward_id", personId)
-      .order("name"),
-    "funds",
+async function loadOutcomes(service: ServiceClient, orgId: string, personId: string) {
+  return parseDeletionOutcomes(
+    dataOf<unknown>(
+      await service.rpc("person_deletion_outcomes", { _person_id: personId, _org_id: orgId }),
+      "deletion outcomes",
+    ),
   );
-  const seconds = [
-    ...new Set(funds.flatMap((f) => (f.co_steward_id && f.co_steward_id !== personId ? f.co_steward_id : []))),
-  ];
-  if (seconds.length === 0) return { passedOn: [], needingRecipient: funds.map(namedFund) };
-
-  const memberships = rowsOf<{ group_id: string; profile_id: string }>(
-    await service
-      .from("group_members")
-      .select("group_id, profile_id")
-      .eq("org_id", orgId)
-      .in("profile_id", seconds),
-    "second people's groups",
-  );
-  const people = rowsOf<{
-    id: string;
-    role: string;
-    first_name: string | null;
-    last_name: string | null;
-    preferred_name: string | null;
-  }>(
-    await service
-      .from("profiles")
-      .select("id, role, first_name, last_name, preferred_name")
-      .eq("org_id", orgId)
-      .in("id", seconds),
-    "second people",
-  );
-  const inGroup = new Set(memberships.map((m) => `${m.group_id}:${m.profile_id}`));
-  const names = new Map(people.map((p) => [p.id, personName(p)]));
-  const pending = new Set(people.filter((p) => p.role === "pending").map((p) => p.id));
-
-  const passesOn = (f: FundRow) =>
-    !!f.co_steward_id && !pending.has(f.co_steward_id) && inGroup.has(`${f.group_id}:${f.co_steward_id}`);
-  return {
-    passedOn: funds.filter(passesOn).map((f) => ({
-      ...namedFund(f),
-      recipient: names.get(f.co_steward_id ?? "") ?? "",
-    })),
-    needingRecipient: funds.filter((f) => !passesOn(f)).map(namedFund),
-  };
-}
-
-function namedFund(fund: FundRow) {
-  return { name: fund.name, group: fund.groups?.name ?? "" };
 }
 
 /**
@@ -99,7 +44,6 @@ export async function loadDeletionSummary(
   const service = await createServiceClient();
   const [target] = rowsOf<{
     role: string;
-    family_id: string | null;
     first_name: string | null;
     last_name: string | null;
     preferred_name: string | null;
@@ -107,12 +51,14 @@ export async function loadDeletionSummary(
   }>(
     await service
       .from("profiles")
-      .select("role, family_id, first_name, last_name, preferred_name, email")
+      .select("role, first_name, last_name, preferred_name, email")
       .eq("id", personId)
       .eq("org_id", orgId),
     "target profile",
   );
   if (!target) return null;
+  const outcomes = await loadOutcomes(service, orgId, personId);
+  if (!outcomes) return null;
 
   const operators = rowsOf<{ profile_id: string }>(
     // org-anchor: platform_admins has no org_id; personId was just read inside this org
@@ -133,8 +79,6 @@ export async function loadDeletionSummary(
           "other church admins",
         )
       : [];
-
-  const funds = await loadFunds(service, orgId, personId);
 
   const led = rowsOf<{ group_id: string; groups: { name: string } | null }>(
     await service
@@ -163,6 +107,16 @@ export async function loadDeletionSummary(
     .filter((g) => !stillLed.has(g.group_id))
     .map((g) => g.groups?.name ?? "");
 
+  const funds = {
+    passedOn: outcomes.funds.flatMap((f) =>
+      f.outcome === "passed_on" ? [{ name: f.name, group: f.group_name ?? "", recipient: personName(f.recipient) }] : [],
+    ),
+    needingRecipient: outcomes.funds.flatMap((f) =>
+      f.outcome === "needs_recipient" ? [{ name: f.name, group: f.group_name ?? "" }] : [],
+    ),
+  };
+  const household = outcomes.household;
+
   return {
     name: personNameOrEmail(target),
     lastChurchAdmin: target.role === "admin" && otherAdmins.length === 0,
@@ -176,53 +130,11 @@ export async function loadDeletionSummary(
             fundsNeedingRecipient: funds.needingRecipient.length,
             groupsLosingLeader: groupsLosingLeader.length,
           },
-    household: target.family_id
-      ? await loadHousehold(service, orgId, personId, target.family_id)
-      : null,
-  };
-}
-
-// The same household rule delete_person() applies.
-async function loadHousehold(
-  service: ServiceClient,
-  orgId: string,
-  personId: string,
-  familyId: string,
-) {
-  const [family] = rowsOf<{ family_name: string }>(
-    await service.from("family_units").select("family_name").eq("id", familyId).eq("org_id", orgId),
-    "household",
-  );
-  if (!family) return null;
-  const otherProfiles = rowsOf<{ id: string }>(
-    await service
-      .from("profiles")
-      .select("id")
-      .eq("org_id", orgId)
-      .eq("family_id", familyId)
-      .neq("id", personId)
-      .limit(1),
-    "household profiles",
-  );
-  const entries = rowsOf<{
-    first_name: string;
-    last_name: string | null;
-    preferred_name: string | null;
-    claimed_profile_id: string | null;
-  }>(
-    await service
-      .from("family_members")
-      .select("first_name, last_name, preferred_name, claimed_profile_id")
-      .eq("org_id", orgId)
-      .eq("family_id", familyId),
-    "household entries",
-  );
-  return {
-    name: family.family_name,
-    shared:
-      otherProfiles.length > 0 ||
-      entries.some((e) => e.claimed_profile_id && e.claimed_profile_id !== personId),
-    entries: entries.filter((e) => e.claimed_profile_id !== personId).map((e) => displayName(e)),
+    household: household && {
+      name: household.name,
+      shared: !household.goes,
+      entries: household.entries.map((e) => displayName(e)),
+    },
   };
 }
 

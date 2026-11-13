@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { parseDeletionOutcomes } from "./deletionOutcomes";
 import { fakeService, type Tables } from "./fakeServiceTestHelpers";
 
 const createServiceClient = vi.fn();
@@ -46,9 +48,6 @@ function setup(overrides: Partial<Tables> = {}) {
   const tables: Tables = {
     profiles: [person("ada"), person("ben"), person("outsider", { org_id: OTHER_ORG })],
     platform_admins: [],
-    family_members: [],
-    family_units: [],
-    giving_funds: [],
     group_members: [],
     ...overrides,
   } as Tables;
@@ -182,34 +181,54 @@ describe("deletePerson: team leads, after the response", () => {
 });
 
 describe("loadDeletionSummary", () => {
-  const funds = [
-    { name: "Passes on", org_id: ORG, steward_id: "ada", co_steward_id: "ben", group_id: "g1", groups: { name: "Grace" } },
-    { name: "No second", org_id: ORG, steward_id: "ada", co_steward_id: null, group_id: "g1", groups: { name: "Grace" } },
-    { name: "Second left", org_id: ORG, steward_id: "ada", co_steward_id: "cam", group_id: "g1", groups: { name: "Grace" } },
-    { name: "Bens", org_id: ORG, steward_id: "ben", co_steward_id: "ada", group_id: "g1", groups: { name: "Grace" } },
-    { name: "Elsewhere", org_id: OTHER_ORG, steward_id: "ada", co_steward_id: null, group_id: "g9", groups: { name: "Far" } },
-  ];
-  const memberships = [
-    { org_id: ORG, group_id: "g1", profile_id: "ben", role: "member" },
-    { org_id: ORG, group_id: "g2", profile_id: "cam", role: "member" },
-  ];
+  const named = (first_name: string | null, last_name: string | null = "Test") => ({
+    first_name,
+    last_name,
+    preferred_name: null,
+  });
+  const OUTCOMES = {
+    funds: [
+      { name: "Passes on", group_name: "Grace", outcome: "passed_on", recipient: named("ben") },
+      { name: "No second", group_name: "Grace", outcome: "needs_recipient", recipient: null },
+      { name: "Second left", group_name: "Grace", outcome: "needs_recipient", recipient: null },
+    ],
+    household: null,
+  };
+
+  function withOutcomes(outcomes: unknown, overrides: Partial<Tables> = {}) {
+    const fake = setup(overrides);
+    fake.state.rpcResults.person_deletion_outcomes = outcomes;
+    return fake;
+  }
+
+  it("asks the database for the outcomes, in the caller's church", async () => {
+    const { log } = withOutcomes(OUTCOMES);
+    await loadDeletionSummary(ORG, "ada", "self");
+    expect(log.rpcs).toEqual([{ name: "person_deletion_outcomes", args: { _person_id: "ada", _org_id: ORG } }]);
+  });
 
   it("is null for someone in another church", async () => {
-    setup();
+    withOutcomes(null);
     expect(await loadDeletionSummary(ORG, "outsider", "church_admin")).toBeNull();
   });
 
+  it("is null when the database knows no such person in this church", async () => {
+    withOutcomes(null);
+    expect(await loadDeletionSummary(ORG, "ada", "self")).toBeNull();
+  });
+
   it("names the person being deleted by their email when they have no name", async () => {
-    setup({ profiles: [person("ada", { first_name: null, last_name: null, email: "ada@example.test" })] });
+    withOutcomes(OUTCOMES, {
+      profiles: [person("ada", { first_name: null, last_name: null, email: "ada@example.test" })],
+    });
     expect((await loadDeletionSummary(ORG, "ada", "church_admin"))?.name).toBe("ada@example.test");
     expect((await loadDeletionSummary(ORG, "ada", "self"))?.name).toBe("ada@example.test");
   });
 
   it("never names a second person by their email", async () => {
-    setup({
-      giving_funds: funds,
-      group_members: memberships,
-      profiles: [person("ada"), person("ben", { first_name: null, last_name: null, email: "ben@example.test" })],
+    withOutcomes({
+      ...OUTCOMES,
+      funds: [{ ...OUTCOMES.funds[0], recipient: named(null, null) }],
     });
     const summary = await loadDeletionSummary(ORG, "ada", "self");
     expect(summary?.groupContent).toMatchObject({
@@ -217,40 +236,23 @@ describe("loadDeletionSummary", () => {
     });
   });
 
-  it("doesn't pass a fund on to a pending second person, as the database won't", async () => {
-    setup({
-      giving_funds: funds,
-      group_members: memberships,
-      profiles: [person("ada"), person("ben", { role: "pending" }), person("cam")],
-    });
+  it("names each fund's outcome for the person, as the database gives it", async () => {
+    withOutcomes(OUTCOMES);
     const summary = await loadDeletionSummary(ORG, "ada", "self");
-    expect(summary?.groupContent).toMatchObject({
-      fundsPassedOn: [],
-      fundsNeedingRecipient: [{ name: "Passes on" }, { name: "No second" }, { name: "Second left" }],
-    });
-  });
-
-  it("names each fund's fate for the person, in this church only", async () => {
-    setup({ giving_funds: funds, group_members: memberships, profiles: [person("ada"), person("ben"), person("cam")] });
-    const summary = await loadDeletionSummary(ORG, "ada", "self");
-    expect(summary?.groupContent).toMatchObject({
+    expect(summary?.groupContent).toEqual({
       kind: "names",
       fundsPassedOn: [{ name: "Passes on", group: "Grace", recipient: "ben Test" }],
       fundsNeedingRecipient: [
         { name: "No second", group: "Grace" },
         { name: "Second left", group: "Grace" },
       ],
+      groupsLosingLeader: [],
     });
   });
 
   it("gives a church admin counts, with no fund or group name anywhere in the answer", async () => {
-    setup({
-      giving_funds: funds,
-      group_members: [
-        ...memberships,
-        { org_id: ORG, group_id: "g3", profile_id: "ada", role: "leader", groups: { name: "Alone" } },
-      ],
-      profiles: [person("ada"), person("ben"), person("cam")],
+    withOutcomes(OUTCOMES, {
+      group_members: [{ org_id: ORG, group_id: "g3", profile_id: "ada", role: "leader", groups: { name: "Alone" } }],
     });
     const summary = await loadDeletionSummary(ORG, "ada", "church_admin");
     expect(summary?.groupContent).toEqual({
@@ -266,7 +268,7 @@ describe("loadDeletionSummary", () => {
   });
 
   it("names the groups they alone lead, for the person", async () => {
-    setup({
+    withOutcomes(OUTCOMES, {
       group_members: [
         { org_id: ORG, group_id: "g1", profile_id: "ada", role: "leader", groups: { name: "Alone" } },
         { org_id: ORG, group_id: "g2", profile_id: "ada", role: "leader", groups: { name: "Shared" } },
@@ -280,45 +282,83 @@ describe("loadDeletionSummary", () => {
   });
 
   it("says whether the household stays, and who goes with it when it doesn't", async () => {
-    const entries = [
-      { id: "m1", org_id: ORG, family_id: "f1", first_name: "Ada", last_name: "O", preferred_name: null, claimed_profile_id: "ada" },
-      { id: "m2", org_id: ORG, family_id: "f1", first_name: "Kid", last_name: "O", preferred_name: null, claimed_profile_id: null },
-    ];
-    const units = [{ id: "f1", org_id: ORG, family_name: "Okafor" }];
-
-    setup({
-      profiles: [person("ada", { family_id: "f1" })],
-      family_units: units,
-      family_members: entries,
-    });
+    const household = {
+      name: "Okafor",
+      goes: true,
+      entries: [{ first_name: "Kid", last_name: "O", preferred_name: null }],
+    };
+    withOutcomes({ ...OUTCOMES, household });
     expect((await loadDeletionSummary(ORG, "ada", "self"))?.household).toEqual({
       name: "Okafor",
       shared: false,
       entries: ["Kid O"],
     });
 
-    setup({
-      profiles: [person("ada", { family_id: "f1" }), person("ben", { family_id: "f1" })],
-      family_units: units,
-      family_members: entries,
-    });
-    expect((await loadDeletionSummary(ORG, "ada", "self"))?.household?.shared).toBe(true);
+    withOutcomes({ ...OUTCOMES, household: { ...household, goes: false } });
+    expect((await loadDeletionSummary(ORG, "ada", "church_admin"))?.household?.shared).toBe(true);
+  });
+
+  it("has no household for someone in none", async () => {
+    withOutcomes(OUTCOMES);
+    expect((await loadDeletionSummary(ORG, "ada", "self"))?.household).toBeNull();
   });
 
   it("flags the last church admin", async () => {
-    setup({ profiles: [person("ada", { role: "admin" })] });
+    withOutcomes(OUTCOMES, { profiles: [person("ada", { role: "admin" })] });
     expect((await loadDeletionSummary(ORG, "ada", "self"))?.lastChurchAdmin).toBe(true);
   });
 
   it("flags a platform operator", async () => {
-    setup({ platform_admins: [{ profile_id: "ada" }] });
+    withOutcomes(OUTCOMES, { platform_admins: [{ profile_id: "ada" }] });
     expect((await loadDeletionSummary(ORG, "ada", "church_admin"))?.platformOperator).toBe(true);
     expect((await loadDeletionSummary(ORG, "ben", "church_admin"))?.platformOperator).toBe(false);
   });
 
   it("throws rather than answer from a failed read", async () => {
-    const { failures } = setup();
+    const { failures } = withOutcomes(OUTCOMES);
     failures.push({ table: "platform_admins", op: "select" });
+    await expect(loadDeletionSummary(ORG, "ada", "self")).rejects.toThrow();
+  });
+
+  describe("the answer person_deletion_outcomes() gives", () => {
+    // The pgTAP suite asserts the real function returns this literal, ids aside.
+    const suite = readFileSync("supabase/tests/deletion_outcomes_suite.sql", "utf8");
+    const literal = suite.split("-- deletion outcome shape: begin")[1]?.split("-- deletion outcome shape: end")[0] ?? "";
+    const outcomes: unknown = JSON.parse(literal.trim().slice(1, -1));
+
+    it("passes the shape check", () => {
+      expect(parseDeletionOutcomes(outcomes)).toEqual(outcomes);
+    });
+
+    it("is what the confirmation shows", async () => {
+      withOutcomes(outcomes);
+      const summary = await loadDeletionSummary(ORG, "ada", "self");
+      expect(summary?.groupContent).toEqual({
+        kind: "names",
+        fundsPassedOn: [{ name: "passes_on", group: "Outcomes Group", recipient: "Sam Second" }],
+        fundsNeedingRecipient: [
+          { name: "no_second", group: "Outcomes Group" },
+          { name: "pending_second", group: "Outcomes Group" },
+        ],
+        groupsLosingLeader: [],
+      });
+      expect(summary?.household).toEqual({ name: "Shared", shared: true, entries: ["Kid Shared", "Spouse Shared"] });
+    });
+  });
+
+  it.each([
+    ["a renamed fund outcome", { ...OUTCOMES, funds: [{ ...OUTCOMES.funds[1], outcome: "no_recipient" }] }],
+    ["a passed-on fund without its recipient", { ...OUTCOMES, funds: [{ ...OUTCOMES.funds[0], recipient: null }] }],
+    ["a renamed funds key", { fund_list: OUTCOMES.funds, household: null }],
+    ["a household without goes", { ...OUTCOMES, household: { name: "Okafor", stays: false, entries: [] } }],
+  ])("throws rather than answer from outcomes with %s", async (_, outcomes) => {
+    withOutcomes(outcomes);
+    await expect(loadDeletionSummary(ORG, "ada", "self")).rejects.toThrow();
+  });
+
+  it("throws rather than answer when the outcomes can't be read", async () => {
+    const { state } = withOutcomes(OUTCOMES);
+    state.rpcError = { code: "XX000" };
     await expect(loadDeletionSummary(ORG, "ada", "self")).rejects.toThrow();
   });
 });

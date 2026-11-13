@@ -6,8 +6,8 @@ export function canEditSpouseProfiles(profile: Pick<Profile, "relationship">): b
 }
 
 /**
- * A child with an account is an adult child. The family_members triggers and
- * family_directory_people() state this predicate in SQL too: change them together.
+ * A child with an account is an adult child. is_child_without_account() is the
+ * same rule in SQL; household.test.ts fails if the two disagree on its cases.
  */
 export function isChildWithoutAccount(person: {
   relationship: string | null;
