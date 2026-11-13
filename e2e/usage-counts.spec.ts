@@ -6,16 +6,17 @@ import { GROUP_B, ORG_NAME } from "./fixtures/personas";
 // Counts are read and written through the stack's Postgres container, the
 // name `supabase start` gives it from config.toml's project_id. The fixture
 // rows sit 89 days back, inside the 90-day list and outside the 7-day one,
-// on a date no visit in this run can reach; afterAll deletes exactly those.
+// under patterns usage_count_record() refuses, so no visit can add to them
+// and deleting them never removes a real count.
 test.describe.configure({ mode: "serial" });
 
 const DB_CONTAINER = "supabase_db_small-group-hub";
 const ORG = `(select id from public.organizations where name = '${ORG_NAME}')`;
 const FIXTURE_DATE = "(now() at time zone 'utc')::date - 89";
 const FIXTURES: Array<[kind: string, pattern: string, total: number]> = [
-  ["view", "/dashboard", 4200],
-  ["view", "/terms", 3],
-  ["error", "/g/[groupId]/settings/labels", 2],
+  ["view", "/e2e-usage-fixture/large", 4200],
+  ["view", "/e2e-usage-fixture/small", 3],
+  ["error", "/e2e-usage-fixture/error", 2],
 ];
 
 function sql(query: string): string {
@@ -87,16 +88,16 @@ for (const width of [390, 1280]) {
 
     await page.goto("/admin/usage?days=90");
     await expect(page.getByRole("heading", { level: 1, name: "Usage" })).toBeVisible();
-    const views = page.getByRole("listitem").filter({ hasText: /^\/dashboard/ });
-    const terms = page.getByRole("listitem").filter({ hasText: /^\/terms/ });
-    const labelsError = page.getByRole("listitem").filter({ hasText: "/g/[groupId]/settings/labels" });
-    await expect(views).toContainText(/4,2\d\d/);
-    await expect(terms).toContainText("fewer than 5");
-    await expect(labelsError).toContainText("fewer than 5");
+    const large = page.getByRole("listitem").filter({ hasText: "/e2e-usage-fixture/large" });
+    const small = page.getByRole("listitem").filter({ hasText: "/e2e-usage-fixture/small" });
+    const error = page.getByRole("listitem").filter({ hasText: "/e2e-usage-fixture/error" });
+    await expect(large).toContainText("4,200");
+    await expect(small).toContainText("fewer than 5");
+    await expect(error).toContainText("fewer than 5");
 
     await page.getByRole("link", { name: "Last 7 days" }).click();
     await expect(page).toHaveURL(/days=7$/);
-    await expect(terms).toHaveCount(0);
+    await expect(small).toHaveCount(0);
     await context.close();
   });
 }
