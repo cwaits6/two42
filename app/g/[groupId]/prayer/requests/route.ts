@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { logError } from "@/lib/log";
 import { storedForm } from "@/lib/prayer/crypto";
-import { requestText, type PostedPrayerRequest } from "@/lib/prayer/requests";
+import { parseNewRequest, type PostedPrayerRequest } from "@/lib/prayer/requests";
 import { createServiceClient } from "@/lib/supabase/server";
 import { jsonBody, prayerWriter } from "./context";
 
@@ -12,17 +12,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ gro
   const writer = await prayerWriter(groupId);
   if (writer instanceof Response) return writer;
 
-  const input = await jsonBody(request);
-  const text = requestText(input?.body);
-  if (!input || text === null || typeof input.is_anonymous !== "boolean") {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
-  }
+  const input = parseNewRequest(await jsonBody(request));
+  if (!input) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
   const id = randomUUID();
   const form = storedForm(writer.keys, {
     id,
     orgId: writer.orgId,
-    text,
+    text: input.body,
     author: { anonymous: input.is_anonymous, authorId: writer.userId },
   });
   const service = await createServiceClient();

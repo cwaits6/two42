@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { isUuid } from "@/lib/groups/active";
 import { logError, stepOf } from "@/lib/log";
 import { decryptBody, isAuthor, storedForm, type RequestAuthor } from "@/lib/prayer/crypto";
-import { requestText, type PrayerRequestSaved } from "@/lib/prayer/requests";
+import { parseRequestEdit, type PrayerRequestSaved } from "@/lib/prayer/requests";
 import { createServiceClient } from "@/lib/supabase/server";
 import { jsonBody, prayerWriter, type PrayerWriter } from "../context";
 
@@ -58,17 +58,8 @@ export async function PATCH(request: Request, { params }: Params) {
   if (writer instanceof Response) return writer;
   if (!isUuid(requestId)) return notFound();
 
-  const input = await jsonBody(request);
-  const text = input?.body === undefined ? undefined : requestText(input.body);
-  if (
-    !input ||
-    text === null ||
-    (input.is_answered !== undefined && typeof input.is_answered !== "boolean") ||
-    (input.is_anonymous !== undefined && typeof input.is_anonymous !== "boolean") ||
-    (text === undefined && input.is_answered === undefined && input.is_anonymous === undefined)
-  ) {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
-  }
+  const input = parseRequestEdit(await jsonBody(request));
+  if (!input) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
   const service = await createServiceClient();
   const { data: row, error } = await readRequest(service, writer, groupId, requestId);
@@ -77,7 +68,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
   const isAuthorOfRow = wroteIt(writer, row);
   if (!isAuthorOfRow && !writer.isLeader) return notFound();
-  const anonymous = typeof input.is_anonymous === "boolean" ? input.is_anonymous : row.is_anonymous;
+  const anonymous = input.is_anonymous ?? row.is_anonymous;
   // A leader who could flip it would unmask the author.
   if (anonymous !== row.is_anonymous && !isAuthorOfRow) {
     return NextResponse.json({ error: "Only the author can change this" }, { status: 403 });
@@ -85,7 +76,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
   let current: string;
   try {
-    current = text ?? (row.body_ciphertext ? decryptBody(writer.keys, writer.orgId, row.id, row.body_ciphertext) : (row.body ?? ""));
+    current = input.body ?? (row.body_ciphertext ? decryptBody(writer.keys, writer.orgId, row.id, row.body_ciphertext) : (row.body ?? ""));
   } catch (err) {
     return failed("open text", err);
   }
@@ -99,7 +90,7 @@ export async function PATCH(request: Request, { params }: Params) {
     .from("prayer_requests")
     .update({
       ...form,
-      is_answered: typeof input.is_answered === "boolean" ? input.is_answered : row.is_answered,
+      is_answered: input.is_answered ?? row.is_answered,
       updated_at: new Date().toISOString(),
     })
     .eq("org_id", writer.orgId)
