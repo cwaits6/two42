@@ -231,7 +231,14 @@ select is(public.is_child_without_account(c.relationship, c.claimed_profile_id),
     case when c.claimed_profile_id is null then 'no account' else 'an account' end))
 from child_cases c;
 
-select is((select count(*) from child_cases), 13::bigint, 'every relationship is checked with and without an account');
+select set_eq(
+  $$select (regexp_matches(pg_get_constraintdef(c.oid), '''(\w+)''', 'g'))[1]
+    from pg_constraint c
+    where c.conrelid = 'public.family_members'::regclass and c.conname = 'family_members_relationship_check'$$,
+  $$select relationship from child_cases where relationship is not null
+    group by relationship
+    having bool_or(claimed_profile_id is null) and bool_or(claimed_profile_id is not null)$$,
+  'every relationship family_members allows is checked with and without an account');
 
 select * from finish();
 rollback;

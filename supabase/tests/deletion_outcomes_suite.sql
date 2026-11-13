@@ -14,7 +14,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(42);
+select plan(46);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.new_person(_org uuid, _email text, _role text default 'member',
@@ -73,10 +73,12 @@ begin
   insert into public.organizations (id, name) values
     (_org, 'Outcomes Church'), (_other, 'Outcomes Other');
   insert into public.family_units (id, org_id, family_name) values
-    (gen_random_uuid(), _org, 'Shared'), (gen_random_uuid(), _org, 'Alone');
+    (gen_random_uuid(), _org, 'Shared'), (gen_random_uuid(), _org, 'Alone'),
+    (gen_random_uuid(), _org, 'Claimed');
   insert into fx values ('org', _org), ('other_org', _other),
     ('shared', (select id from public.family_units where org_id = _org and family_name = 'Shared')),
-    ('alone', (select id from public.family_units where org_id = _org and family_name = 'Alone'));
+    ('alone', (select id from public.family_units where org_id = _org and family_name = 'Alone')),
+    ('claimed', (select id from public.family_units where org_id = _org and family_name = 'Claimed'));
 end $$;
 
 insert into fx values
@@ -87,6 +89,8 @@ insert into fx values
   ('second', pg_temp.new_person(pg_temp.fx('org'), 'second@outcomes.test')),
   ('late_pending', pg_temp.new_person(pg_temp.fx('org'), 'late-pending@outcomes.test')),
   ('alone_person', pg_temp.new_person(pg_temp.fx('org'), 'alone@outcomes.test', 'member', pg_temp.fx('alone'))),
+  ('claimed_owner', pg_temp.new_person(pg_temp.fx('org'), 'claimed-owner@outcomes.test', 'member', pg_temp.fx('claimed'))),
+  ('claimed_elsewhere', pg_temp.new_person(pg_temp.fx('org'), 'claimed-elsewhere@outcomes.test')),
   ('operator', pg_temp.new_person(pg_temp.fx('org'), 'operator@outcomes.test')),
   ('outsider', pg_temp.new_person(pg_temp.fx('other_org'), 'outsider@outcomes.test', 'admin'));
 insert into public.platform_admins (profile_id) values (pg_temp.fx('operator'));
@@ -122,7 +126,9 @@ values
   (pg_temp.fx('org'), pg_temp.fx('shared'), 'Spouse', 'Shared', 'spouse', pg_temp.fx('spouse')),
   (pg_temp.fx('org'), pg_temp.fx('shared'), 'Kid', 'Shared', 'child', null),
   (pg_temp.fx('org'), pg_temp.fx('alone'), 'Alone', 'Person', 'primary', pg_temp.fx('alone_person')),
-  (pg_temp.fx('org'), pg_temp.fx('alone'), 'Kit', 'Person', 'child', null);
+  (pg_temp.fx('org'), pg_temp.fx('alone'), 'Kit', 'Person', 'child', null),
+  (pg_temp.fx('org'), pg_temp.fx('claimed'), 'Owner', 'Claimed', 'primary', pg_temp.fx('claimed_owner')),
+  (pg_temp.fx('org'), pg_temp.fx('claimed'), 'Elsewhere', 'Claimed', 'sibling', pg_temp.fx('claimed_elsewhere'));
 
 -- ── Who can call it ─────────────────────────────────────────────────────────
 select ok((select prosecdef from pg_proc where oid = 'public.person_deletion_outcomes(uuid, uuid)'::regprocedure),
@@ -206,6 +212,19 @@ select is((select count(*) from public.family_units where id = pg_temp.fx('alone
   0::bigint, 'the household went, as the outcome said');
 select is((select count(*) from public.family_members where family_id = pg_temp.fx('alone')),
   0::bigint, 'and the people listed in it went with it');
+
+-- ── A household whose only other tie is an entry claimed from another household
+insert into said values
+  ('claimed', public.person_deletion_outcomes(pg_temp.fx('claimed_owner'), pg_temp.fx('org')));
+
+select is((select outcomes #>> '{household,goes}' from said where key = 'claimed'), 'false',
+  'a household listing someone with their own account stays, though no one else''s profile is in it');
+select is(pg_temp.delete(pg_temp.fx('claimed_owner'), pg_temp.fx('org')), 'deleted', 'the delete runs');
+select is((select count(*) from public.family_units where id = pg_temp.fx('claimed')),
+  1::bigint, 'the household stays, as the outcome said');
+select is((select count(*) from public.family_members
+            where family_id = pg_temp.fx('claimed') and claimed_profile_id = pg_temp.fx('claimed_elsewhere')),
+  1::bigint, 'and still lists the person with their own account');
 
 -- ── Refusals are unchanged ──────────────────────────────────────────────────
 select is(pg_temp.delete(pg_temp.fx('second'), pg_temp.fx('other_org')), 'AD001',
