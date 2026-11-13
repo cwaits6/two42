@@ -860,7 +860,7 @@ function, because a client role holds no write grant on the table:
 The grant matrix, the refused inputs, the read boundaries, the prune and the
 cascade with the church are pinned by `supabase/tests/usage_counts_suite.sql`.
 
-## App routes and pages (26 sites)
+## App routes and pages (27 sites)
 
 | File | Why service-role is used | Org derived from | Scoped queries |
 |------|--------------------------|------------------|----------------|
