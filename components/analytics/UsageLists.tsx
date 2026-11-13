@@ -1,4 +1,5 @@
 import { SegmentedLinks } from "@/components/ui/segmented";
+import { USAGE_KINDS, type UsageKind } from "@/lib/analytics/recordUsage";
 import { rankUsage, USAGE_PERIODS, type RankedUsage, type UsagePeriod, type UsageTotal } from "@/lib/analytics/usage";
 
 /** Last 7, 30 or 90 days, kept in the page's `days` query. */
@@ -36,13 +37,19 @@ function RankedList({ title, rows, empty }: { title: string; rows: RankedUsage[]
   );
 }
 
+const LIST_COPY: Record<UsageKind, { title: string; empty: (days: UsagePeriod) => string }> = {
+  view: { title: "Most opened pages", empty: (days) => `No pages opened in the last ${days} days.` },
+  error: { title: "Pages with errors", empty: (days) => `No errors in the last ${days} days.` },
+};
+
 /** Pages by how often they were opened, and by how often they showed an error. */
 export function UsageLists({ rows, days }: { rows: UsageTotal[]; days: UsagePeriod }) {
-  const { view, error } = rankUsage(rows);
+  const ranked = rankUsage(rows);
   return (
     <>
-      <RankedList title="Most opened pages" rows={view} empty={`No pages opened in the last ${days} days.`} />
-      <RankedList title="Pages with errors" rows={error} empty={`No errors in the last ${days} days.`} />
+      {USAGE_KINDS.map((kind) => (
+        <RankedList key={kind} title={LIST_COPY[kind].title} rows={ranked[kind]} empty={LIST_COPY[kind].empty(days)} />
+      ))}
     </>
   );
 }
