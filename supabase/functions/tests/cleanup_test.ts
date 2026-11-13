@@ -27,6 +27,8 @@ const SIX_MONTH_CUTOFF = "2026-05-03T09:00:00.000Z";
 const JUST_PAST_SIX_MONTHS = "2026-05-03T08:59:59.999Z";
 const REMINDER_CUTOFF = "2026-09-29";
 const JUST_PAST_REMINDERS = "2026-09-28";
+const USAGE_CUTOFF = "2025-10-03";
+const JUST_PAST_USAGE = "2025-10-02";
 
 interface FakeOptions {
   /** Tables whose deletes answer with an error. */
@@ -105,11 +107,16 @@ function fakeClient(tables: Record<string, Row[]>, options: FakeOptions = {}) {
     return builder;
   }
 
-  // The two prune functions as their migrations define them: one church's
-  // passes before the date, oldest first, at most the limit.
+  // The prune functions as their migrations define them: one church's rows
+  // before the date, oldest first, at most the limit.
+  const PRUNE_DAY: Record<string, string> = {
+    serving_reminder_passes: "send_date",
+    event_reminder_passes: "occurrence_date",
+    usage_counts: "usage_date",
+  };
   function prune(fn: string, args: { _org_id: string; _before: string; _limit: number }) {
     const table = fn.slice(0, -"_prune".length);
-    const day = table === "event_reminder_passes" ? "occurrence_date" : "send_date";
+    const day = PRUNE_DAY[table];
     queries.push({ table, op: "rpc", filters: [`eq org_id=${args._org_id}`, `lt ${day}=${args._before}`] });
     if (options.failDelete?.includes(table)) {
       return { data: null, error: { message: `${table} delete refused`, code: "57014" } };
@@ -478,6 +485,49 @@ Deno.test("event_reminder_passes: a refused delete is a failure and the serving 
   assertEquals(ids(tables.event_reminder_passes), ["old"]);
 });
 
+Deno.test("usage_counts: a count older than 13 months goes, one on the cutoff stays", async () => {
+  const { client, tables } = fakeClient({
+    organizations: [org()],
+    usage_counts: [
+      { id: "old", org_id: ORG, usage_date: JUST_PAST_USAGE },
+      { id: "on-cutoff", org_id: ORG, usage_date: USAGE_CUTOFF },
+      { id: "recent", org_id: ORG, usage_date: "2026-11-02" },
+    ],
+  });
+
+  const { removed, failures } = await cleanUpOrg(client, ORG, NOW);
+
+  assertEquals(failures, []);
+  assertEquals(removed.usageCounts, 1);
+  assertEquals(ids(tables.usage_counts), ["on-cutoff", "recent"]);
+});
+
+Deno.test("usage_counts: a backlog goes a batch at a time, and a refused delete is a failure that stops no other rule", async () => {
+  const backlog = Array.from({ length: DELETE_BATCH + 1 }, (_, i) => ({
+    id: `u${i}`,
+    org_id: ORG,
+    usage_date: JUST_PAST_USAGE,
+  }));
+  const drained = fakeClient({ organizations: [org()], usage_counts: backlog });
+  const first = await cleanUpOrg(drained.client, ORG, NOW);
+  assertEquals(first.failures, []);
+  assertEquals(first.removed.usageCounts, DELETE_BATCH + 1);
+  assertEquals(drained.queries.filter((q) => q.table === "usage_counts").length, 2);
+
+  const refused = fakeClient(
+    {
+      organizations: [org()],
+      serving_reminder_passes: [{ id: "old", org_id: ORG, send_date: JUST_PAST_REMINDERS }],
+      usage_counts: [{ id: "old", org_id: ORG, usage_date: JUST_PAST_USAGE }],
+    },
+    { failDelete: ["usage_counts"] },
+  );
+  const second = await cleanUpOrg(refused.client, ORG, NOW);
+  assertEquals(second.failures, [{ step: "usage_counts", error: "usage_counts delete refused" }]);
+  assertEquals([second.removed.reminderPasses, second.removed.usageCounts], [1, 0]);
+  assertEquals(ids(refused.tables.usage_counts), ["old"]);
+});
+
 Deno.test("every query is bound to the org being cleaned, and another church's rows stay", async () => {
   const old = JUST_PAST_EXPIRED;
   const { client, tables, queries } = fakeClient({
@@ -491,6 +541,7 @@ Deno.test("every query is bound to the org being cleaned, and another church's r
     prayer_requests: [{ id: "theirs", org_id: OTHER_ORG, created_at: JUST_PAST_SIX_MONTHS }],
     serving_reminder_passes: [{ id: "theirs", org_id: OTHER_ORG, send_date: JUST_PAST_REMINDERS }],
     event_reminder_passes: [{ id: "theirs", org_id: OTHER_ORG, occurrence_date: JUST_PAST_REMINDERS }],
+    usage_counts: [{ id: "theirs", org_id: OTHER_ORG, usage_date: JUST_PAST_USAGE }],
   });
 
   const { removed, failures } = await cleanUpOrg(client, ORG, NOW);
@@ -504,8 +555,9 @@ Deno.test("every query is bound to the org being cleaned, and another church's r
     prayerRequests: 0,
     reminderPasses: 0,
     eventReminderPasses: 0,
+    usageCounts: 0,
   });
-  for (const table of ["access_requests", "family_invites", "group_invites", "feedback", "prayer_requests", "serving_reminder_passes", "event_reminder_passes"]) {
+  for (const table of ["access_requests", "family_invites", "group_invites", "feedback", "prayer_requests", "serving_reminder_passes", "event_reminder_passes", "usage_counts"]) {
     assertEquals(ids(tables[table]), ["theirs"], table);
   }
   assertEquals(queries.length > 0, true);
@@ -606,7 +658,7 @@ for (
 }
 
 Deno.test("a clean run summarizes with no failures", () => {
-  const removed = { accessRequests: 1, familyInvites: 2, groupInvites: 3, feedback: 4, prayerRequests: 5, reminderPasses: 6, eventReminderPasses: 7 };
+  const removed = { accessRequests: 1, familyInvites: 2, groupInvites: 3, feedback: 4, prayerRequests: 5, reminderPasses: 6, eventReminderPasses: 7, usageCounts: 8 };
   assertEquals(summarizeCleanup([{ orgId: ORG, removed, failures: [] }]), {
     orgs: 1,
     removed: [{ org: ORG, ...removed }],

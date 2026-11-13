@@ -13,10 +13,11 @@ import {
   isLiveSignupToken,
   prayerCutoff,
   reminderCutoff,
+  usageCutoff,
 } from "./retention.ts";
 import { logError, logInfo, stepOf } from "./log.ts";
 
-/** Passes one call to a reminder prune function deletes at most. */
+/** Rows one call to a prune function deletes at most. */
 export const DELETE_BATCH = 500;
 
 type QueryError = { message: string } | null;
@@ -45,7 +46,7 @@ export interface CleanupClient {
     select(columns: string, options?: { count: "exact" }): ReadChain;
   };
   rpc(
-    fn: "serving_reminder_passes_prune" | "event_reminder_passes_prune",
+    fn: "serving_reminder_passes_prune" | "event_reminder_passes_prune" | "usage_counts_prune",
     args: { _org_id: string; _before: string; _limit: number },
   ): PromiseLike<{ data: number | null; error: QueryError }>;
 }
@@ -58,6 +59,7 @@ export interface RemovedCounts {
   prayerRequests: number;
   reminderPasses: number;
   eventReminderPasses: number;
+  usageCounts: number;
 }
 
 export interface OrgCleanupResult {
@@ -134,6 +136,7 @@ export async function cleanUpOrg(
     prayerRequests: 0,
     reminderPasses: 0,
     eventReminderPasses: 0,
+    usageCounts: 0,
   };
   const failures: OrgCleanupResult["failures"] = [];
 
@@ -255,14 +258,15 @@ export async function cleanUpOrg(
   // night after a gap never deletes everything in one statement. The
   // database API cannot limit a delete, so the bound lives in the function.
   function prune(
-    key: "reminderPasses" | "eventReminderPasses",
-    table: "serving_reminder_passes" | "event_reminder_passes",
+    key: "reminderPasses" | "eventReminderPasses" | "usageCounts",
+    table: "serving_reminder_passes" | "event_reminder_passes" | "usage_counts",
+    before: string,
   ) {
     return attempt(table, async () => {
       for (;;) {
         const { data, error } = await supabase.rpc(`${table}_prune`, {
           _org_id: orgId,
-          _before: reminderCutoff(now),
+          _before: before,
           _limit: DELETE_BATCH,
         });
         if (error) logError("cleanup delete failed", error, { step: table, ids: { org: orgId } });
@@ -274,8 +278,9 @@ export async function cleanUpOrg(
     });
   }
 
-  await prune("reminderPasses", "serving_reminder_passes");
-  await prune("eventReminderPasses", "event_reminder_passes");
+  await prune("reminderPasses", "serving_reminder_passes", reminderCutoff(now));
+  await prune("eventReminderPasses", "event_reminder_passes", reminderCutoff(now));
+  await prune("usageCounts", "usage_counts", usageCutoff(now));
 
   return { orgId, removed, failures };
 }
