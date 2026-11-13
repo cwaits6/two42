@@ -60,6 +60,18 @@ legacy objects keep rendering (public buckets serve reads without consulting
 RLS) but cannot be deleted or overwritten by any client — see
 `docs/security/tenancy-model.md` ("Storage tenancy").
 
+## `encrypt-prayer-requests.mjs` — convert prayer requests to sealed text
+
+Seals every plaintext `prayer_requests.body` into `body_ciphertext`, replaces
+each anonymous request's `author_id` with its keyed hash, and, during a key
+rotation, moves text and hashes onto the current keys. The keys live outside
+the database, so no migration can do it. Dry run by default, `--apply` to
+write, `--org <uuid>` for one church; rerunnable, and it never sets
+`updated_at`. It imports `lib/prayer/crypto.ts` directly under Node's type
+stripping, which prints a `MODULE_TYPELESS_PACKAGE_JSON` warning. Usage,
+rotation and what losing a key means:
+[`docs/security/prayer-encryption.md`](../docs/security/prayer-encryption.md).
+
 ## `check-service-role-org-scope.mjs` — the service-role tenancy guard
 
 Service-role Supabase clients carry `BYPASSRLS`, so the `.eq("org_id", …)`
