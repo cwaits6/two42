@@ -2,9 +2,9 @@
 // request's author as an HMAC of (request id, author id). Both keys live in the
 // server environment and each church gets its own keys derived from them.
 //
-// This file imports nothing but node:crypto and uses only erasable TypeScript,
-// so scripts/encrypt-prayer-requests.mjs can import it under Node's type
-// stripping. Keep it that way.
+// scripts/encrypt-prayer-requests.mjs imports this file under Node's type
+// stripping, so its only runtime import is node:crypto, every other import is
+// `import type`, and it uses only erasable TypeScript. Keep it that way.
 import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Tables } from "../supabase/database.types";
 
@@ -98,7 +98,9 @@ const TAG_BYTES = 16;
 export function encryptBody(keys: PrayerKeys, orgId: string, requestId: string, text: string): string {
   const master = keys.body.current;
   const iv = randomBytes(IV_BYTES);
-  const cipher = createCipheriv("aes-256-gcm", orgKey(master, "prayer-body", orgId), iv);
+  const cipher = createCipheriv("aes-256-gcm", orgKey(master, "prayer-body", orgId), iv, {
+    authTagLength: TAG_BYTES,
+  });
   cipher.setAAD(aad(orgId, requestId));
   const sealed = Buffer.concat([cipher.update(text, "utf8"), cipher.final(), cipher.getAuthTag()]);
   return [ENVELOPE_VERSION, keyId(master), iv.toString("base64url"), sealed.toString("base64url")].join(".");
@@ -116,7 +118,9 @@ export function decryptBody(keys: PrayerKeys, orgId: string, requestId: string, 
   const sealed = Buffer.from(sealedText, "base64url");
   if (iv.length !== IV_BYTES || sealed.length < TAG_BYTES) throw new PrayerCryptoError("not a prayer text envelope");
   try {
-    const decipher = createDecipheriv("aes-256-gcm", orgKey(master, "prayer-body", orgId), iv);
+    const decipher = createDecipheriv("aes-256-gcm", orgKey(master, "prayer-body", orgId), iv, {
+      authTagLength: TAG_BYTES,
+    });
     decipher.setAAD(aad(orgId, requestId));
     decipher.setAuthTag(sealed.subarray(sealed.length - TAG_BYTES));
     return Buffer.concat([decipher.update(sealed.subarray(0, sealed.length - TAG_BYTES)), decipher.final()]).toString(
@@ -164,6 +168,17 @@ export function isAuthor(
 
 export function hashedWithCurrentKey(keys: PrayerKeys, stored: string): boolean {
   return stored.split(".")[1] === keyId(keys.author.current);
+}
+
+/**
+ * True when a church still has anonymous requests to hash, already holds
+ * hashes, and none of them is under a configured author key. The author key is
+ * then wrong, and hashing the rest under it could not be undone.
+ */
+export function authorKeyDisowned(keys: PrayerKeys, rows: readonly StoredRow[]): boolean {
+  if (!rows.some((row) => row.is_anonymous && row.author_id)) return false;
+  const kids = rows.flatMap((row) => (row.author_hash ? [row.author_hash.split(".")[1]] : []));
+  return kids.length > 0 && !kids.some((kid) => keyFor(keys.author, kid) !== null);
 }
 
 /** Who wrote a request, in the one form the row stores. */

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   authorHash,
+  authorKeyDisowned,
   decryptBody,
   encryptBody,
   isAuthor,
@@ -214,5 +215,48 @@ describe("planRow", () => {
     })!;
     expect(decryptBody(current, ORG, REQ, after.body_ciphertext!)).toBe("Pray for Ada.");
     expect(planRow(after, current)).toEqual({ action: "unmatched" });
+  });
+});
+
+describe("authorKeyDisowned", () => {
+  const right = testKeys();
+  const hashed: StoredRow = storedFormRow(right, OTHER_REQ, BEN);
+  const legacy: StoredRow = {
+    id: REQ,
+    org_id: ORG,
+    body: "Pray for Ada.",
+    body_ciphertext: null,
+    is_anonymous: true,
+    author_id: ADA,
+    author_hash: null,
+  };
+
+  function storedFormRow(keys: ReturnType<typeof testKeys>, id: string, authorId: string): StoredRow {
+    const form = storedForm(keys, { id, orgId: ORG, text: "Pray for Ben.", author: { anonymous: true, authorId } });
+    return { id, org_id: ORG, ...form };
+  }
+
+  it("refuses to hash a church's legacy requests under an author key none of its hashes is under", () => {
+    const wrong = parsePrayerKeys({
+      PRAYER_BODY_KEY: right.body.current.toString("base64"),
+      PRAYER_AUTHOR_KEY: newKey(),
+    })!;
+    expect(planRow(hashed, wrong)).toEqual({ action: "unmatched" });
+    expect(authorKeyDisowned(wrong, [hashed, legacy])).toBe(true);
+  });
+
+  it("allows it under the right key, during a rotation, and in a church with no hashes yet", () => {
+    expect(authorKeyDisowned(right, [hashed, legacy])).toBe(false);
+    const rotating = parsePrayerKeys({
+      PRAYER_BODY_KEY: right.body.current.toString("base64"),
+      PRAYER_AUTHOR_KEY: newKey(),
+      PRAYER_AUTHOR_KEY_PREVIOUS: right.author.current.toString("base64"),
+    })!;
+    expect(authorKeyDisowned(rotating, [hashed, legacy])).toBe(false);
+    expect(authorKeyDisowned(testKeys(), [legacy])).toBe(false);
+  });
+
+  it("leaves a church with nothing to hash alone, so a lost author key does not block a body rotation", () => {
+    expect(authorKeyDisowned(testKeys(), [hashed])).toBe(false);
   });
 });

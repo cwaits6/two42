@@ -10,8 +10,11 @@
 //   PRAYER_BODY_KEY=<base64> PRAYER_AUTHOR_KEY=<base64> \
 //   node scripts/encrypt-prayer-requests.mjs [--apply] [--org <uuid>]
 //
-// Dry run by default: it prints what it would change, and opening every
-// sealed row proves the keys before anything is written. Rerunnable: a row
+// Dry run by default: it prints the key ids and what it would change. Opening
+// every sealed row proves the body key. Nothing proves the author key until a
+// church holds a hash: a church still to convert whose existing hashes are all
+// under unconfigured keys is refused, because hashing under a wrong author key
+// cannot be undone. Rerunnable: a row
 // already in the current form is left alone, so a run after a partial one
 // picks up what is left. Each write is guarded on the row as it was read (see
 // lib/prayer/backfill.ts): a row the app changed in the meantime is counted and
@@ -20,7 +23,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { writePlan } from "../lib/prayer/backfill.ts";
-import { parsePrayerKeys, planRow } from "../lib/prayer/crypto.ts";
+import { authorKeyDisowned, keyId, parsePrayerKeys, planRow } from "../lib/prayer/crypto.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PAGE = 200;
@@ -42,6 +45,8 @@ const serviceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVI
 if (!url || !serviceKey) fail("SUPABASE_URL and SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY) must be set");
 const keys = parsePrayerKeys(process.env);
 if (!keys) fail("PRAYER_BODY_KEY and PRAYER_AUTHOR_KEY must each be 32 bytes of base64, and any _PREVIOUS key too");
+
+console.log(`body key ${keyId(keys.body.current)}, author key ${keyId(keys.author.current)}`);
 
 const supabase = createClient(url, serviceKey, { auth: { persistSession: false } });
 
@@ -102,6 +107,11 @@ for (const orgId of await orgIds()) {
   const counts = summarise(planned);
   problems += counts.error ?? 0;
   console.log(`org ${orgId}: ${format(counts)}`);
+  if (authorKeyDisowned(keys, planned.map((p) => p.row))) {
+    problems += planned.filter((p) => p.row.is_anonymous && p.row.author_id).length;
+    console.error(`org ${orgId}: none of its anonymous hashes is under a configured author key; refusing to hash`);
+    continue;
+  }
   if (!apply) continue;
 
   const outcomes = {};
