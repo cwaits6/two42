@@ -52,7 +52,7 @@ npx supabase start
 
 The first start pulls the container images, then applies every migration and
 `supabase/seed.sql` and prints the stack's URLs and keys. Copy the example
-file, set four values and clear two:
+file, set six values and clear two:
 
 ```bash
 cp .env.example .env.local
@@ -64,6 +64,8 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | the printed Publishable key |
 | `SUPABASE_SECRET_KEY` | the printed Secret key |
 | `SERVING_LINK_SECRET` | any random string, for example `openssl rand -hex 32` |
+| `PRAYER_BODY_KEY` | `openssl rand -base64 32` |
+| `PRAYER_AUTHOR_KEY` | another `openssl rand -base64 32` |
 
 | Clear | Why |
 |---|---|
@@ -137,6 +139,9 @@ described in [`scripts/README.md`](./scripts/README.md).
 | `SUPABASE_SECRET_KEY` | yes | The secret (service role) key. Server only; it bypasses row-level security |
 | `NEXT_PUBLIC_SITE_URL` | yes | The one origin the app serves. Requests for any other host get a 404, except `localhost`, `127.0.0.1` and `*.vercel.app`; emailed links are built on it too ([`docs/security/domains.md`](./docs/security/domains.md)) |
 | `SERVING_LINK_SECRET` | yes | HMAC key for the serving links that act straight from an email. Use the same value in the edge function secrets |
+| `PRAYER_BODY_KEY` | yes | Seals and opens prayer request text: 32 random bytes in base64. Without it the prayer page, Home's prayer section, account download and account deletion fail ([`docs/security/prayer-encryption.md`](./docs/security/prayer-encryption.md)) |
+| `PRAYER_AUTHOR_KEY` | yes | Keys the hash that stands in for an anonymous prayer request's author, 32 random bytes in base64. Same failure without it |
+| `PRAYER_BODY_KEY_PREVIOUS`, `PRAYER_AUTHOR_KEY_PREVIOUS` | no | Set only while rotating a prayer key |
 | `RESEND_API_KEY` | in production | Sends invite, setup, approval and serving emails. The app starts without it; every send fails |
 | `NEXT_PUBLIC_EMAIL_FROM` | in production | The `From:` address, `Name <address>`. Defaults to two42.io's, which Resend will refuse for any other account; use an address on a domain you have verified in Resend |
 | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | no | Address suggestions and event maps ([setup](#event-locations)). Empty or unset leaves them out; any other value loads Google Maps with it |
@@ -242,7 +247,15 @@ confirmation message.
 **The app.** Import the repository at [vercel.com/new](https://vercel.com/new),
 or any Next.js host, set the app variables from the table above with
 `NEXT_PUBLIC_SITE_URL` as your production origin, deploy, and attach your
-domain.
+domain. Keep two copies of the prayer keys outside the host: request text
+sealed with a lost body key cannot be recovered.
+
+**Upgrading an install that already has prayer requests.** Requests posted
+before the release that seals prayer text stay in plaintext until you convert
+them. Set the two prayer keys, deploy, apply the migrations, then run
+`scripts/encrypt-prayer-requests.mjs` as described in
+[`docs/security/prayer-encryption.md`](./docs/security/prayer-encryption.md)
+("Converting existing rows").
 
 **The first church admin.** The migrations create one church with one group.
 Approve your own email in the SQL editor, as a church admin:

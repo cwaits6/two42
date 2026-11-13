@@ -13,12 +13,13 @@
 // Dry run by default: it prints what it would change, and opening every
 // sealed row proves the keys before anything is written. Rerunnable: a row
 // already in the current form is left alone, so a run after a partial one
-// picks up what is left. It never sets updated_at, and every app write does,
-// so each write is guarded on the updated_at it read: a row the app changed in
-// the meantime is counted and left for the next run. Prints counts per church, never request text or
+// picks up what is left. Each write is guarded on the row as it was read (see
+// lib/prayer/backfill.ts): a row the app changed in the meantime is counted and
+// left for the next run. Prints counts per church, never request text or
 // anyone's id, and exits non-zero on anything it could not convert.
 
 import { createClient } from "@supabase/supabase-js";
+import { writePlan } from "../lib/prayer/backfill.ts";
 import { parsePrayerKeys, planRow } from "../lib/prayer/crypto.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -81,28 +82,10 @@ async function planChurch(orgId) {
   return rows.map((row) => ({ row, plan: planRow(row, keys, members) }));
 }
 
-const matches = (query, column, value) => (value === null ? query.is(column, null) : query.eq(column, value));
-
-async function write({ row, plan }) {
-  let query = supabase
-    .from("prayer_requests")
-    .update(plan.patch)
-    .eq("org_id", row.org_id)
-    .eq("id", row.id)
-    .eq("updated_at", row.updated_at)
-    .eq("is_anonymous", row.is_anonymous);
-  for (const column of ["author_id", "author_hash"]) {
-    query = matches(query, column, row[column]);
-  }
-  const { data, error } = await query.select("id");
-  if (error) return "failed";
-  return data.length === 1 ? "written" : "changed meanwhile";
-}
-
 function summarise(planned) {
   const counts = {};
   for (const { plan } of planned) {
-    const keysOf = plan.action === "write" ? plan.steps : [plan.action];
+    const keysOf = plan.action === "write" ? [...plan.steps, ...(plan.unmatched ? ["unmatched"] : [])] : [plan.action];
     for (const k of keysOf) counts[k] = (counts[k] ?? 0) + 1;
   }
   return counts;
@@ -117,17 +100,18 @@ let problems = 0;
 for (const orgId of await orgIds()) {
   const planned = await planChurch(orgId);
   const counts = summarise(planned);
-  problems += (counts.error ?? 0) + (counts.unmatched ?? 0);
+  problems += counts.error ?? 0;
   console.log(`org ${orgId}: ${format(counts)}`);
   if (!apply) continue;
 
   const outcomes = {};
   for (const item of planned.filter((p) => p.plan.action === "write")) {
-    const outcome = await write(item);
+    const outcome = await writePlan(supabase, item.row, item.plan);
     outcomes[outcome] = (outcomes[outcome] ?? 0) + 1;
   }
   problems += (outcomes.failed ?? 0) + (outcomes["changed meanwhile"] ?? 0);
-  const left = (await planChurch(orgId)).filter((p) => p.plan.action !== "noop").length;
+  // An unmatched hash stays as it is for good, so it is not left to convert.
+  const left = (await planChurch(orgId)).filter((p) => !["noop", "unmatched"].includes(p.plan.action)).length;
   problems += left;
   console.log(`org ${orgId}: ${format(outcomes)}; ${left} left to convert`);
 }
