@@ -1525,6 +1525,26 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"usage_counts": {
+                  Row: {
+                    "kind": string,"org_id": string,"pattern": string,"total": number,"usage_date": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "kind": string,"org_id"?: string,"pattern": string,"total": number,"usage_date": string
+                  }
+                  Update: {
+                    "kind"?: string,"org_id"?: string,"pattern"?: string,"total"?: number,"usage_date"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "usage_counts_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
                 }
           }
           Views: {
@@ -1833,6 +1853,20 @@ isOneToOne: false
                            },
 "shares_group_with_household":
 { Args: { "_family_id": string }; Returns: boolean
+                           },
+"usage_count_record":
+{ Args: { "_kind": string,"_pattern": string }; Returns: boolean
+                           },
+"usage_count_totals":
+{ Args: { "_days": number,"_org_id": string }; Returns: {
+              "kind": string,"pattern": string,"total": number
+            }[]
+                           },
+"usage_counts_prune":
+{ Args: { "_before": string,"_limit": number,"_org_id": string }; Returns: number
+                           },
+"usage_page_patterns":
+{ Args: Record<PropertyKey, never>; Returns: (string)[]
                            }
           }
           Enums: {

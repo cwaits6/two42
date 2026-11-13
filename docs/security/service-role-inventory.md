@@ -833,13 +833,41 @@ function that is not a bypass surface.
 
 Execute on both trigger functions is revoked from `public, anon, authenticated`.
 
-## App routes and pages (26 sites)
+## Usage count RPC — a definer-function bypass surface
+
+Page views and error states are counted per church, per UTC day, per route
+pattern in `usage_counts` (`20261126000000_usage_counts.sql`). No column
+identifies a person. The browser writes through one `SECURITY DEFINER`
+function, because a client role holds no write grant on the table:
+
+- `usage_count_record(_pattern, _kind)` — adds one to today's count. The
+  church is `app_request_org_id()`, the signed-in person's own, never a
+  parameter; a caller with no church writes nothing. `_pattern` is stored
+  only when it is one of `usage_page_patterns()`, the app's own route list
+  (`PAGE_PATTERNS`, held equal by `lib/analytics/usagePatterns.test.ts`), so
+  text from a browser is never stored. `search_path = ''`; EXECUTE:
+  `authenticated` only.
+- `usage_count_totals(_org_id, _days)` — `SECURITY INVOKER`. On the request
+  client the restrictive floor plus the church-admin SELECT arm keep a church
+  admin to their own church and give a member no rows; on the service client
+  (`/platform/usage` and the organization page) the `_org_id` predicate is the
+  bound.
+  EXECUTE: `authenticated`, `service_role`.
+- `usage_counts_prune(_org_id, _before, _limit)` — `SECURITY INVOKER`,
+  `service_role` only; the nightly `clean-up-expired-data` job deletes counts
+  older than 13 months through it, at most 500 per call.
+
+The grant matrix, the refused inputs, the read boundaries, the prune and the
+cascade with the church are pinned by `supabase/tests/usage_counts_suite.sql`.
+
+## App routes and pages (27 sites)
 
 | File | Why service-role is used | Org derived from | Scoped queries |
 |------|--------------------------|------------------|----------------|
 | `app/platform/page.tsx` | Platform overview counts every org across tenants; RLS pins a request to one org | Platform-admin authority: `getPlatformAdmin()` via the cookie-bound request client; cross-org by design, confined to `organizations` (tenant root) | `organizations` (id, status — deliberately unfiltered) |
 | `app/platform/organizations/page.tsx` | Org list across tenants — the surface's purpose | Platform-admin authority (as above); confined to `organizations` (tenant root) | `organizations` (deliberately unfiltered list) |
-| `app/platform/organizations/[id]/page.tsx` | Org detail + founding-admin request + email cap/usage (CWA-72) + the org's sending-domain row (for the custom-domain gate and stuck-cleanup cards); all invisible to the caller's own-org RLS (the cap tables have no permissive policy at all; the domain row is scoped to the org's own admins) | Platform-admin authority; org id from the route param | `organizations` `.eq("id", id)` (now also reads `custom_email_domain_enabled`); `access_requests` via `foundingRequestQuery(service, org.id)` from `firstAdminInvite.ts` (`.eq("org_id", orgId).eq("approved_role", "admin")`); `org_email_limits` `.eq("org_id", id)`; `org_email_usage` `.eq("org_id", id).eq("usage_date", today)`; `org_email_domains` `.eq("org_id", id)` |
+| `app/platform/organizations/[id]/page.tsx` | Org detail + founding-admin request + email cap/usage (CWA-72) + the org's sending-domain row (for the custom-domain gate and stuck-cleanup cards) + its usage counts; all invisible to the caller's own-org RLS (the cap tables have no permissive policy at all; the domain row is scoped to the org's own admins) | Platform-admin authority; org id from the route param | `organizations` `.eq("id", id)` (now also reads `custom_email_domain_enabled`); `access_requests` via `foundingRequestQuery(service, org.id)` from `firstAdminInvite.ts` (`.eq("org_id", orgId).eq("approved_role", "admin")`); `org_email_limits` `.eq("org_id", id)`; `org_email_usage` `.eq("org_id", id).eq("usage_date", today)`; `org_email_domains` `.eq("org_id", id)`; `usage_count_totals` via `readUsageTotals(service, org.id, …)` |
+| `app/platform/usage/page.tsx` | Usage totals for every church and added together; RLS pins a request to one org | Platform-admin authority; cross-org by design | `organizations` (id, name — deliberately unfiltered); `usage_count_totals` via `readUsageTotals(service, org.id, …)` per church, `_org_id` = that row's id |
 | `app/api/platform/organizations/route.ts` | `provision_organization()` is EXECUTE-granted to `service_role` only | Platform-admin authority; the RPC creates the org and derives everything from it transactionally | `rpc("provision_organization")`; then `sendFirstAdminInvite()` (see `firstAdminInvite.ts` below) with the org id the RPC returned |
 | `app/api/platform/organizations/[id]/route.ts` | Status/branding/`custom_email_domain_enabled` writes on the tenant root, whose only org-admin write policy is the single-column `directory_visibility` UPDATE (the custom-domain flag is platform-operator-only by design: no grant to the org's own admin, this route is its sole write path) | Platform-admin authority; org id from the route param | `organizations` read + update `.eq("id", id)` (branding merged, never replaced) |
 | `app/api/platform/organizations/firstAdminInvite.ts` | `sendFirstAdminInvite()`, called in-process by Add organization (`app/api/platform/organizations/route.ts`) and Send invite (`app/api/platform/organizations/[id]/invite-owner/route.ts`): mints the first admin's `signup_token` and sends their invite; the platform admin's own-org RLS could never reach the new org's request row | Platform-admin authority; org id is the one `provision_organization()` returned in the same request, or the route param behind the gate | `access_requests` select through the exported `foundingRequestQuery()` (`.eq("org_id", orgId).eq("approved_role", "admin")`, earliest by `created_at` then `id`; the church page reads the same query), email compared case-insensitively in code; token update on `.eq("id", row.id).eq("org_id", orgId)`, zero-row-checked; rollback update on the same filters + minted token; daily cap via `reserveEmailQuota(orgId, 1)` before the token; email branding via `resolveEmailBranding(orgId)` |
@@ -1000,7 +1028,7 @@ outside its scan set entirely, so these calls are covered by review and by
 |------|--------------------------|-------------------------|------------|
 | `supabase/functions/send-event-reminders/index.ts` | Cron job; reads events and sends reminders with no user session | Reminder fan-out iterates all rows across orgs | Refuses any caller but a service key. **Implemented (Phase 3, #212):** iterates active orgs via `_shared/orgs.ts`, every query filtered on `org_id`, per-org failures isolated so one org cannot suppress another's send. **Dates mode:** events read on `org_id`, the dates due worked out in pure code, and each date's recipients chosen and claimed in `event_reminder_claim()` with `_org_id` from the same iteration; per-event failures in `failedItems[]`. **Deploy-window mode** (a body with no mode): org → group iteration, events on `group_id`, recipients gated on current group membership, per-group failures in `failedItems[]`. **Branding (CWA-56, #322):** `organizations.branding` rides along on the already-org-anchored `listActiveOrgs()` select — no new service-role call site, no new unscoped query — and is validated by `_shared/branding.ts` (a mirror of `lib/branding.ts` + `lib/email/identity.ts`) before reaching any CSS or RFC 5322 sink. **Link origin:** every link is built on the one canonical host (the `SITE_URL` function secret) — no query. **Time zone:** `organizations.timezone` rides along on the same `listActiveOrgs()` select and formats the reminder's event time |
 | `supabase/functions/send-serving-reminders/index.ts` | Cron job; reads serving signups and emails assignees with no user session | Same as `send-event-reminders` | Refuses any caller but a service key. **Implemented (Phase 3, #212):** same per-org iteration and `org_id` filters; `resolveCanSign` org-scoped; `serving_broadcasts` audit rows stamped with the processed row's org, not a constant. **Branding (CWA-56, #322):** same `listActiveOrgs()` ride-along, validated by `_shared/branding.ts`. **Link origin:** the same canonical `SITE_URL`, threaded into every cancel/signup/team-page link. **Per-team isolation (CWA-50, #316):** a failing team is recorded in the run summary's `failedItems[]` keyed by `team_id` — ids, never org-defined team names, in operator diagnostics. **Group scope:** the link mode is per group (`group_settings` through `_shared/groups.ts`), every `serving_*` query is on `team_id`, and links open `/g/<group_id>/serving/<team_id>` |
-| `supabase/functions/clean-up-expired-data/index.ts` | Cron job; deletes expired requests, invites, feedback, serving and event reminder passes older than 35 days (through `serving_reminder_passes_prune()` and `event_reminder_passes_prune()`, at most 500 per call, their sends through the foreign key) and, for a church that opted in, prayer requests, with no user session | A delete missing its filter removes another church's data for good | Refuses any caller but a service key. Iterates active orgs, one org-filtered delete per rule, failures isolated per step and per org. The rules and their boundaries are unit-tested in `tests/retention_test.ts` and `tests/cleanup_test.ts` |
+| `supabase/functions/clean-up-expired-data/index.ts` | Cron job; deletes expired requests, invites, feedback, serving and event reminder passes older than 35 days (through `serving_reminder_passes_prune()` and `event_reminder_passes_prune()`, at most 500 per call, their sends through the foreign key), usage counts older than 13 months (through `usage_counts_prune()`, the same way) and, for a church that opted in, prayer requests, with no user session | A delete missing its filter removes another church's data for good | Refuses any caller but a service key. Iterates active orgs, one org-filtered delete per rule, failures isolated per step and per org. The rules and their boundaries are unit-tested in `tests/retention_test.ts` and `tests/cleanup_test.ts` |
 
 All three check their own caller first, because each acts unattended: the
 reminder jobs send email that cannot be recalled, and the cleanup job deletes

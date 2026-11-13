@@ -4,7 +4,9 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ErrorState } from "@/components/states/ErrorState";
+import { UsageLists, UsagePeriodLinks } from "@/components/analytics/UsageLists";
 import { DEFAULT_DAILY_EMAIL_CAP } from "@/lib/email/quota";
+import { readUsageTotals, usagePeriod } from "@/lib/analytics/usage";
 import {
   OrganizationDetail,
   type EmailCapInfo,
@@ -20,6 +22,7 @@ export const generateMetadata = () => pageTitle("Organization");
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ days?: string | string[] }>;
 }
 
 // Explicit locale and zone, so SSR and hydration render the same date.
@@ -33,11 +36,12 @@ function createdLabel(createdAt: string): string {
   return `Created ${date}`;
 }
 
-export default async function PlatformOrganizationPage({ params }: PageProps) {
+export default async function PlatformOrganizationPage({ params, searchParams }: PageProps) {
   const user = await getPlatformAdmin();
   if (!user) redirect("/dashboard");
 
   const { id } = await params;
+  const days = usagePeriod((await searchParams).days);
 
   // Cross-org reads: organizations is the tenant root and takes .eq("id");
   // access_requests is org-owned, so .eq("org_id", id) IS its tenant
@@ -83,14 +87,15 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
   // scoped to the org's own admins, so these reads must run here;
   // .eq("org_id", org.id) is their tenant boundary on this BYPASSRLS client
   // — org.id, not the raw route param, so the anchor is the validated row.
-  // Fail-soft: a failed read renders the card's unavailable state rather
-  // than blocking the rest of the page — neither card is load-bearing for
-  // the branding/lifecycle surfaces.
+  // Fail-soft: a failed read renders the card's or section's unavailable
+  // state rather than blocking the rest of the page — none is load-bearing
+  // for the branding/lifecycle surfaces.
   const today = new Date().toISOString().slice(0, 10);
   const [
     { data: capRow, error: capError },
     { data: usageRow, error: usageError },
     { data: domainRow, error: domainError },
+    { data: usageRows, error: usageTotalsError },
   ] = await Promise.all([
     service
       .from("org_email_limits")
@@ -108,6 +113,7 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
       .select("domain, status, cleanup_failed_at")
       .eq("org_id", org.id)
       .maybeSingle(),
+    readUsageTotals(service, org.id, days),
   ]);
 
   let emailCap: EmailCapInfo | null = null;
@@ -139,6 +145,13 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
           }
         : null,
     };
+  }
+
+  if (usageTotalsError) {
+    logError("Platform usage totals read failed", usageTotalsError, {
+      route: "/platform/organizations/[id]",
+      ids: { org: org.id },
+    });
   }
 
   const ownerRow = ownerRequests?.[0] ?? null;
@@ -185,6 +198,11 @@ export default async function PlatformOrganizationPage({ params }: PageProps) {
         emailCap={emailCap}
         emailDomain={emailDomain}
       />
+      <section className="mt-10">
+        <h2 className="mb-3 text-2xl font-bold text-foreground">Usage</h2>
+        <UsagePeriodLinks path={`/platform/organizations/${org.id}`} days={days} />
+        {usageTotalsError ? <ErrorState thing="usage" /> : <UsageLists rows={usageRows} days={days} />}
+      </section>
     </PageContainer>
   );
 }

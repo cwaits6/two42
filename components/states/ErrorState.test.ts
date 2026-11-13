@@ -8,6 +8,8 @@ import { describe, expect, it, vi } from "vitest";
 
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
+const recordUsage = vi.fn();
+vi.mock("@/lib/analytics/recordUsage", () => ({ recordUsage }));
 
 const { ErrorState } = await import("./ErrorState");
 
@@ -41,6 +43,15 @@ describe("ErrorState", () => {
 
   it("shows no reference when no server log line carries one", () => {
     expect(render()).not.toContain("Reference");
+  });
+
+  it("counts one error for the page once it is on screen", async () => {
+    recordUsage.mockClear();
+    window.history.pushState({}, "", "/g/abc/prayer");
+    const root = createRoot(document.createElement("div"));
+    await act(async () => root.render(createElement(ErrorState, { thing: "prayer requests" })));
+    expect(recordUsage.mock.calls).toEqual([["error", "/g/abc/prayer"]]);
+    await act(async () => root.unmount());
   });
 
   it("never reads as an empty list", () => {

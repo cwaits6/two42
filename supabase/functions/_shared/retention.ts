@@ -9,6 +9,8 @@ export const FEEDBACK_RETENTION_MONTHS = 12;
 export const PRAYER_RETENTION_MONTHS = [6, 12, 24] as const;
 /** Reminder passes hold who was reminded; a month covers any question about one. */
 export const REMINDER_RETENTION_DAYS = 35;
+/** Usage counts hold no person; thirteen months compares a month with the same month a year before. */
+export const USAGE_RETENTION_MONTHS = 13;
 
 export function daysBefore(now: Date, days: number): Date {
   return new Date(now.getTime() - days * DAY_MS);
@@ -38,6 +40,11 @@ export function expiredCutoff(now: Date): string {
 /** The date before which a serving or event reminder pass goes, "YYYY-MM-DD". */
 export function reminderCutoff(now: Date): string {
   return daysBefore(now, REMINDER_RETENTION_DAYS).toISOString().slice(0, 10);
+}
+
+/** The UTC day before which a church's usage counts go, "YYYY-MM-DD". */
+export function usageCutoff(now: Date): string {
+  return monthsBefore(now, USAGE_RETENTION_MONTHS).toISOString().slice(0, 10);
 }
 
 export function feedbackCutoff(now: Date): string {

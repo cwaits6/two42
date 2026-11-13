@@ -8,6 +8,7 @@ import {
   monthsBefore,
   prayerCutoff,
   reminderCutoff,
+  usageCutoff,
 } from "../_shared/retention.ts";
 
 const NOW = new Date("2026-11-03T09:00:00.000Z");
@@ -18,6 +19,11 @@ Deno.test("the expired cutoff is exactly 90 days back, across a DST change", () 
 
 Deno.test("the reminder cutoff is the send date 35 days back", () => {
   assertEquals(reminderCutoff(new Date("2026-11-03T09:00:00Z")), "2026-09-29");
+});
+
+Deno.test("the usage cutoff is the UTC day 13 calendar months back, clamped to a shorter month", () => {
+  assertEquals(usageCutoff(new Date("2026-11-12T23:30:00Z")), "2025-10-12");
+  assertEquals(usageCutoff(new Date("2027-03-31T09:00:00Z")), "2026-02-28");
 });
 
 Deno.test("the feedback cutoff is 12 calendar months back", () => {
