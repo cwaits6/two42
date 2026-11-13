@@ -288,7 +288,10 @@ reached from `deletePerson()` in `lib/account/deletion.ts`.
 Whether the household goes, and where each fund ends up, come from
 `person_deletion_outcomes()` (below), the same answer the confirmation shows.
 After the profile delete it checks every fund ended as that answer said, and
-otherwise raises `AD003`, which rolls the whole delete back.
+otherwise raises `AD003`, which rolls the whole delete back. `AD003` means
+either that the fund rules and `person_deletion_outcomes()` disagree, or that a
+fund's recipient or the second person's group membership changed while the
+delete ran; a retry resolves the second.
 
 Their `group_invite_uses` rows stay, because `max_uses` counts them and deleting
 one would make a used-up link live again. The function clears what identifies the

@@ -340,8 +340,9 @@ gates on `household_visible()`, the policy's own rule, and returns only what
 the directory uses: no `birth_year` for anyone, and a child without an account
 (`relationship = 'child'` with no `claimed_profile_id`) under their preferred name
 alone when they have one. `is_child_without_account()` is the one SQL statement
-of that rule, read by this function and the `family_members` and
-`family_invites` triggers; `isChildWithoutAccount()` in `lib/household.ts` is
+of that rule, read by this function, the `family_members` and
+`family_invites` triggers, and the `family_members_retire_child_details()`
+cleanup; `isChildWithoutAccount()` in `lib/household.ts` is
 the app's, and `lib/household.test.ts` checks both against one case table. No view reads the table directly.
 
 The helpers are `SECURITY DEFINER`, `STABLE`, `set search_path = ''`,
@@ -356,8 +357,11 @@ EXECUTE revoked from `anon` and granted to `authenticated`:
 - `shares_group_with_household(_family_id)` — the same, for any profile
   whose `family_id` is the given household.
 
-Like `is_group_member()`, the two row-dependent helpers are called bare in
-the policy expressions; a correlated `(select f(id))` is not an InitPlan.
+Like `is_group_member()`, `shares_group_with()` is called bare in the
+`profiles` policy. `shares_group_with_household()` appears in no policy: it is
+reached only through `household_visible()`, whose `(select …)` wrapper in the
+`family_units` policy is a per-row SubPlan, not an InitPlan; the four viewer
+facts passed to it are the InitPlans.
 The caller is always `auth.uid()`; the argument names the other person or
 household, never the principal.
 

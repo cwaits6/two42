@@ -341,7 +341,9 @@ comment on function public.person_deletion_outcomes(uuid, uuid) is
 
 -- The household and fund outcomes come from person_deletion_outcomes(). The
 -- profile delete applies the fund rules through the foreign keys and triggers;
--- AD003 means those and person_deletion_outcomes() disagreed, and nothing is deleted.
+-- AD003 means a fund didn't end as the outcome said, and nothing is deleted. Either
+-- those rules and person_deletion_outcomes() disagree, or a fund or the second
+-- person's membership changed during the delete, which a retry resolves.
 create or replace function public.delete_person(_person_id uuid, _org_id uuid)
   returns jsonb
   language plpgsql security definer set search_path = ''
