@@ -468,7 +468,7 @@ $$;
 ALTER FUNCTION "public"."directory_retire_hidden_values"() OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."directory_retire_hidden_values"() IS 'Deletes values hidden with the retired flags and moves anniversaries to the household parts. Idempotent. The release that drops the retired columns re-runs it, to sweep anything hidden through the old app in between, then drops it.';
+COMMENT ON FUNCTION "public"."directory_retire_hidden_values"() IS 'Deletes values hidden with the retired flags and moves anniversaries to the household parts. Idempotent. Drop it with the retired columns.';
 
 
 
