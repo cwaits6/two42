@@ -2,22 +2,12 @@ import { NextResponse } from "next/server";
 import { isUuid } from "@/lib/groups/active";
 import { logError, stepOf } from "@/lib/log";
 import { decryptBody, isAuthor, storedForm, type RequestAuthor } from "@/lib/prayer/crypto";
+import { requestText, type PrayerRequestSaved } from "@/lib/prayer/requests";
 import { createServiceClient } from "@/lib/supabase/server";
-import { jsonBody, prayerWriter, requestText, type PrayerWriter } from "../context";
+import { jsonBody, prayerWriter, type PrayerWriter } from "../context";
 
 type Params = { params: Promise<{ groupId: string; requestId: string }> };
 type ServiceClient = Awaited<ReturnType<typeof createServiceClient>>;
-
-interface StoredRequest {
-  id: string;
-  body: string | null;
-  body_ciphertext: string | null;
-  is_anonymous: boolean;
-  is_answered: boolean;
-  author_id: string | null;
-  author_hash: string | null;
-  updated_at: string;
-}
 
 const notFound = () => NextResponse.json({ error: "Not found" }, { status: 404 });
 const failed = (step: string, error: unknown) => {
@@ -35,8 +25,10 @@ async function readRequest(service: ServiceClient, writer: PrayerWriter, groupId
     .eq("org_id", writer.orgId)
     .eq("group_id", groupId)
     .eq("id", requestId)
-    .maybeSingle<StoredRequest>();
+    .maybeSingle();
 }
+
+type StoredRequest = NonNullable<Awaited<ReturnType<typeof readRequest>>["data"]>;
 
 function wroteIt(writer: PrayerWriter, row: StoredRequest): boolean {
   if (row.author_id) return row.author_id === writer.userId;
@@ -117,7 +109,7 @@ export async function PATCH(request: Request, { params }: Params) {
     .select("id");
   if (updateError) return failed("update", updateError);
   if (!updated?.length) return NextResponse.json({ error: "Changed meanwhile" }, { status: 409 });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json<PrayerRequestSaved>({ ok: true });
 }
 
 /** Deletes a request, for its author or a leader of the group. */
@@ -141,5 +133,5 @@ export async function DELETE(_request: Request, { params }: Params) {
     .select("id");
   if (deleteError) return failed("delete", deleteError);
   if (!deleted?.length) return notFound();
-  return NextResponse.json({ ok: true });
+  return NextResponse.json<PrayerRequestSaved>({ ok: true });
 }

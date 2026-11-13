@@ -6,6 +6,12 @@ import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
 import { groupPath } from "@/lib/groups/active";
 import { prayerAuthorLabel } from "@/lib/prayer";
+import type {
+  NewPrayerRequest,
+  PostedPrayerRequest,
+  PrayerRequestEdit,
+  PrayerRequestSaved,
+} from "@/lib/prayer/requests";
 import { PrayerCard } from "@/components/prayer/PrayerCard";
 import { savePrayerResponse } from "@/components/prayer/savePrayerResponse";
 import { PrayerComposer } from "@/components/prayer/PrayerComposer";
@@ -28,7 +34,11 @@ const STATUS_OPTIONS = STATUS_FILTERS.map((f) => ({ value: f, label: f }));
 export type PrayerGroup = { id: string; name: string };
 
 /** The response body, or null for any failure, network included. */
-async function sendJson<T = unknown>(url: string, method: string, body?: unknown): Promise<T | null> {
+async function sendJson<T>(
+  url: string,
+  method: "POST" | "PATCH" | "DELETE",
+  body?: NewPrayerRequest | PrayerRequestEdit,
+): Promise<T | null> {
   try {
     const res = await fetch(url, {
       method,
@@ -61,8 +71,8 @@ export function PrayerBoard({
 
   const requestsUrl = groupPath(group.id, "/prayer/requests");
 
-  const handlePost = async (draft: { body: string; is_anonymous: boolean }) => {
-    const data = await sendJson<{ id: string; created_at: string }>(requestsUrl, "POST", draft);
+  const handlePost = async (draft: NewPrayerRequest) => {
+    const data = await sendJson<PostedPrayerRequest>(requestsUrl, "POST", draft);
     if (!data) {
       toast.error(failureMessage("post your request"));
       return false;
@@ -126,14 +136,14 @@ export function PrayerBoard({
   const handleToggleAnswered = async (row: PrayerWallRow) => {
     const answered = !row.is_answered;
     patchRequest(row.id, { is_answered: answered });
-    if (!(await sendJson(`${requestsUrl}/${row.id}`, "PATCH", { is_answered: answered }))) {
+    if (!(await sendJson<PrayerRequestSaved>(`${requestsUrl}/${row.id}`, "PATCH", { is_answered: answered }))) {
       patchRequest(row.id, { is_answered: row.is_answered });
       toast.error(failureMessage("save that"));
     }
   };
 
   const handleDelete = async (row: PrayerWallRow) => {
-    if (!(await sendJson(`${requestsUrl}/${row.id}`, "DELETE"))) {
+    if (!(await sendJson<PrayerRequestSaved>(`${requestsUrl}/${row.id}`, "DELETE"))) {
       toast.error(failureMessage("delete your request"));
       return;
     }

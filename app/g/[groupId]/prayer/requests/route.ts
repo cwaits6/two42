@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { logError } from "@/lib/log";
 import { storedForm } from "@/lib/prayer/crypto";
+import { requestText, type PostedPrayerRequest } from "@/lib/prayer/requests";
 import { createServiceClient } from "@/lib/supabase/server";
-import { jsonBody, prayerWriter, requestText } from "./context";
+import { jsonBody, prayerWriter } from "./context";
 
 /** Posts a request. The text is sealed, and an anonymous author stored only as a hash, before it reaches the database. */
 export async function POST(request: Request, { params }: { params: Promise<{ groupId: string }> }) {
@@ -34,5 +35,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ gro
     logError("Failed to post a prayer request", error, { route: "/g/[groupId]/prayer/requests" });
     return NextResponse.json({ error: "Save failed" }, { status: 500 });
   }
-  return NextResponse.json({ id: row.id, created_at: row.created_at });
+  return NextResponse.json<PostedPrayerRequest>({ id: row.id, created_at: row.created_at });
 }

@@ -43,13 +43,6 @@ export async function prayerWriter(groupId: string): Promise<PrayerWriter | Resp
   return { userId: user.id, orgId: profile.org_id, isLeader: group.role === "leader", keys };
 }
 
-/** The same 1 to 2000 characters the table allowed when it could still see the text. */
-export function requestText(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const length = [...value].length;
-  return length >= 1 && length <= 2000 ? value : null;
-}
-
 export async function jsonBody(request: Request): Promise<Record<string, unknown> | null> {
   try {
     const body: unknown = await request.json();

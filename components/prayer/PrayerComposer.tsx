@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { Me } from "@/components/prayer/PrayerBoard";
+import { REQUEST_TEXT_MAX, type NewPrayerRequest } from "@/lib/prayer/requests";
 
 function SwitchRow({
   id,
@@ -61,7 +62,7 @@ export function PrayerComposer({
 }: {
   me: Me;
   groupName: string;
-  onPost: (draft: { body: string; is_anonymous: boolean }) => Promise<boolean>;
+  onPost: (draft: NewPrayerRequest) => Promise<boolean>;
 }) {
   const [body, setBody] = useState("");
   const [anonymous, setAnonymous] = useState(false);
@@ -107,7 +108,7 @@ export function PrayerComposer({
           onChange={(e) => setBody(e.target.value)}
           placeholder="What can we pray with you about?"
           rows={4}
-          maxLength={2000}
+          maxLength={REQUEST_TEXT_MAX}
           aria-labelledby="prayer-composer-title"
           className="bg-background text-base"
         />

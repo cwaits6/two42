@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { ErrorState } from "@/components/states/ErrorState";
 import { logError } from "@/lib/log";
 import { loadPrayerKeys } from "@/lib/prayer/keys";
-import { openWallRows } from "@/lib/prayer/wall";
+import { openWallRows, type SealedWallRow } from "@/lib/prayer/wall";
 import { readList } from "@/lib/supabase/readList";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { requireActiveGroup } from "@/lib/groups/server";
@@ -18,7 +18,7 @@ import { groupPageTitle } from "@/lib/pageTitle";
 export const generateMetadata = groupPageTitle("Prayer");
 
 /** Null when the keys are missing or any text fails to open: the page shows its failed state, never ciphertext or a partial wall. */
-function openRequests(raws: Record<string, unknown>[], viewerId: string) {
+function openRequests(raws: SealedWallRow[], viewerId: string) {
   const keys = loadPrayerKeys();
   if (!keys) {
     logError("Prayer keys are not configured", undefined, { route: "/g/[groupId]/prayer" });

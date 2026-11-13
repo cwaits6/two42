@@ -191,6 +191,25 @@ describe("editing", () => {
     expect(row(R_HASHED).is_anonymous).toBe(true);
   });
 
+  it("keeps the author's name on a by-name request a leader marks answered", async () => {
+    user = { id: LEADER };
+    role = "leader";
+    expect((await patch(R_NAMED, { is_answered: true })).status).toBe(200);
+    expect(row(R_NAMED)).toMatchObject({ is_answered: true, author_id: ADA, author_hash: null });
+    expect(text(row(R_NAMED))).toBe("Named");
+  });
+
+  it("hashes the author, not the leader, when a leader marks an unconverted anonymous request answered", async () => {
+    user = { id: LEADER };
+    role = "leader";
+    expect((await patch(R_LEGACY, { is_answered: true })).status).toBe(200);
+    const stored = row(R_LEGACY);
+    expect(stored).toMatchObject({ is_answered: true, is_anonymous: true, author_id: null, body: null });
+    expect(isAuthor(keys, ORG, R_LEGACY, ADA, stored.author_hash as string)).toBe(true);
+    expect(isAuthor(keys, ORG, R_LEGACY, LEADER, stored.author_hash as string)).toBe(false);
+    expect(text(stored)).toBe("Legacy");
+  });
+
   it("gives another member the same answer as a request that does not exist", async () => {
     user = { id: BEN };
     expect((await patch(R_HASHED, { is_answered: true })).status).toBe(404);

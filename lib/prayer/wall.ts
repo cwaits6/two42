@@ -1,8 +1,12 @@
 import { toWallRow } from "@/lib/prayer";
+import type { Tables } from "@/lib/supabase/database.types";
 import type { PrayerWallRow } from "@/lib/types";
 import { decryptBody, isAuthor, type PrayerKeys } from "./crypto";
 
-const text = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
+export type SealedWallRow = Pick<
+  Tables<"prayer_wall">,
+  "id" | "org_id" | "body" | "body_ciphertext" | "is_anonymous" | "author_hash" | "mine"
+>;
 
 /**
  * prayer_wall rows as the board renders them: the text opened, and `mine` also
@@ -12,20 +16,15 @@ const text = (v: unknown): string | null => (typeof v === "string" && v ? v : nu
  * wall or ciphertext.
  */
 export function openWallRows(
-  raws: readonly Record<string, unknown>[],
+  raws: readonly SealedWallRow[],
   opts: { viewerId: string; keys: PrayerKeys },
 ): PrayerWallRow[] {
   return raws.map((raw) => {
-    const id = text(raw.id) ?? "";
-    const orgId = text(raw.org_id) ?? "";
-    const sealed = text(raw.body_ciphertext);
-    const hash = text(raw.author_hash);
+    const { id, org_id: orgId, body_ciphertext: sealed, author_hash: hash } = raw;
     return toWallRow({
       ...raw,
       body: sealed ? decryptBody(opts.keys, orgId, id, sealed) : raw.body,
-      mine:
-        raw.mine === true ||
-        (raw.is_anonymous === true && hash !== null && isAuthor(opts.keys, orgId, id, opts.viewerId, hash)),
+      mine: raw.mine === true || (raw.is_anonymous && !!hash && isAuthor(opts.keys, orgId, id, opts.viewerId, hash)),
     });
   });
 }
