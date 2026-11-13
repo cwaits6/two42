@@ -56,7 +56,7 @@ export async function POST(request: Request) {
   const ids = { user: user.id, invite: invite.id };
 
   const [{ data: profile, error: profileError }, { data: member, error: memberError }] = await Promise.all([
-    supabase.from("profiles").select("org_id, role, family_id").eq("id", user.id).maybeSingle(),
+    supabase.from("profiles").select("org_id, role, family_id, relationship").eq("id", user.id).maybeSingle(),
     service
       .from("family_members")
       .select("id, family_id, relationship, claimed_profile_id")
@@ -153,10 +153,44 @@ export async function POST(request: Request) {
     return failed();
   }
   if (!claimed || claimed.length === 0) {
-    logWarn("family-invites/join: household member gone or already claimed", undefined, {
-      route: "/api/family-invites/join",
-      ids,
-    });
+    // A concurrent press by this account may have claimed it first; anything
+    // else means the member left or went to another account since the verdict.
+    const { data: memberNow, error: memberRereadError } = await service
+      .from("family_members")
+      .select("family_id, claimed_profile_id")
+      .eq("id", member.id)
+      .eq("org_id", invite.org_id)
+      .maybeSingle();
+    if (memberRereadError) {
+      logError("family-invites/join: re-reading the household member failed", memberRereadError, {
+        route: "/api/family-invites/join",
+        ids,
+      });
+      return failed();
+    }
+    if (memberNow?.family_id !== invite.family_id || memberNow?.claimed_profile_id !== user.id) {
+      logWarn("family-invites/join: household member gone or claimed by another account", undefined, {
+        route: "/api/family-invites/join",
+        ids,
+      });
+      // Undo only a link this request made, so the refusal grants nothing.
+      if (linked && linked.length > 0 && profile.family_id === null) {
+        const { error: unlinkError } = await service
+          .from("profiles")
+          .update({ family_id: null, relationship: profile.relationship })
+          .eq("id", user.id)
+          .eq("org_id", invite.org_id)
+          .eq("family_id", invite.family_id);
+        if (unlinkError) {
+          logError("family-invites/join: undoing the household link failed", unlinkError, {
+            route: "/api/family-invites/join",
+            ids,
+          });
+          return failed();
+        }
+      }
+      return notFound();
+    }
   }
 
   // Zero rows here means a concurrent press accepted it first.

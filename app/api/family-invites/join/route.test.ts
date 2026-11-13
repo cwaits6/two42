@@ -63,7 +63,7 @@ const INVITE = {
   accepted_at: null as string | null,
 };
 const MEMBER = { id: "mem-1", family_id: "fam-1", relationship: "spouse", claimed_profile_id: null as string | null };
-const PROFILE = { org_id: "org-1", role: "member", family_id: null as string | null };
+const PROFILE = { org_id: "org-1", role: "member", family_id: null as string | null, relationship: "primary" };
 
 function post(body: unknown = { token: TOKEN }) {
   return POST(
@@ -248,6 +248,35 @@ describe("POST /api/family-invites/join", () => {
 
     expect((await post()).status).toBe(409);
     expect(updates().map((c) => c.table)).toEqual(["profiles"]);
+  });
+
+  it("finishes when a concurrent press by this account claimed the member first", async () => {
+    results["family_members.update"] = { data: [], error: null };
+    results["family_members.select"] = [
+      { data: MEMBER, error: null },
+      { data: { family_id: "fam-1", claimed_profile_id: "user-1" }, error: null },
+    ];
+
+    expect((await post()).status).toBe(200);
+    expect(updates().map((c) => c.table)).toEqual(["profiles", "family_members", "family_invites"]);
+  });
+
+  it("refuses and undoes its link when another account claimed the member in between", async () => {
+    results["family_members.update"] = { data: [], error: null };
+    results["family_members.select"] = [
+      { data: MEMBER, error: null },
+      { data: { family_id: "fam-1", claimed_profile_id: "user-2" }, error: null },
+    ];
+
+    expect((await post()).status).toBe(404);
+    const [, , unlink] = updates();
+    expect(updates().map((c) => c.table)).toEqual(["profiles", "family_members", "profiles"]);
+    expect(unlink.payload).toEqual({ family_id: null, relationship: "primary" });
+    expect(unlink.filters).toEqual([
+      ["eq", "id", "user-1"],
+      ["eq", "org_id", "org-1"],
+      ["eq", "family_id", "fam-1"],
+    ]);
   });
 
   it("leaves the invite live when the member claim fails", async () => {
