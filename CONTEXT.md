@@ -78,6 +78,12 @@ _Avoid_: speaker, lecturer
 A named way for members to give money to a person or cause in the group. A fund goes to someone, named on the fund as "Goes to {name}".
 _Avoid_: collection, donation page; steward and co-collector (for the person it goes to)
 
+### Church admin pages
+
+**Usage**:
+How often each page of the church's space was opened, and how often one showed an error, counted per day for the whole church. It records the kind of page only, never who opened it or its address. Counts under 5 show as "fewer than 5".
+_Avoid_: analytics, tracking, stats, visits
+
 ### Actions
 
 **Add**:

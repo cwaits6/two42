@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { Users, Home, Inbox, Settings, UsersRound } from "lucide-react";
+import { ChartColumn, Users, Home, Inbox, Settings, UsersRound } from "lucide-react";
 
 export interface AdminNavItem {
   href: string;
@@ -26,6 +26,7 @@ export const adminNavGroups: AdminNavGroup[] = [
       { href: "/admin/families", label: "Households", icon: Home },
       { href: "/admin/groups", label: "Groups", icon: UsersRound },
       { href: "/admin/requests", label: "Requests", icon: Inbox },
+      { href: "/admin/usage", label: "Usage", icon: ChartColumn },
       { href: "/admin/settings", label: "Church settings", icon: Settings },
     ],
   },

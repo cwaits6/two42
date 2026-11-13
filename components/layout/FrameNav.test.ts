@@ -97,6 +97,7 @@ describe("FrameNav", () => {
       "/admin/families",
       "/admin/groups",
       "/admin/requests",
+      "/admin/usage",
       "/admin/settings",
     ]);
   });

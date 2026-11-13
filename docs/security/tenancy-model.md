@@ -451,6 +451,22 @@ an `occurrence_date` older than 35 days through
 them. `event_reminder_suite.sql` pins the grants, the claim, the cascades and
 the cut-over.
 
+### Usage counts
+
+`usage_counts` (`20261126000000_usage_counts.sql`) holds one running total per
+church, UTC day, kind (`view` or `error`) and route pattern, and no column that
+identifies a person. It carries `org_id` with the fail-closed default, the
+restrictive isolation floor and one permissive arm, `SELECT` for church admins
+(`is_admin()`); members read nothing. No client role can write it: the only
+writer is the `SECURITY DEFINER` `usage_count_record()`, which takes the church
+from `app_request_org_id()` and stores a pattern only from
+`usage_page_patterns()`, the app's own route list. Its only foreign key is to
+the tenant root, cascading, so the counts go with the church and
+`delete_person()` has nothing to remove. The nightly `clean-up-expired-data`
+job deletes counts older than 13 months through `usage_counts_prune()`.
+`usage_counts_suite.sql` pins the columns, the grants, the refused inputs, the
+read boundaries, the prune and the cascade.
+
 ### Group creation
 
 Who may start a group is an org setting read by RLS and by a definer
@@ -1054,6 +1070,12 @@ table's own FK.
   cap-boundary behavior are pinned by
   `supabase/tests/org_email_quota_suite.sql`; the inventory records the
   call sites ([service-role-inventory.md](service-role-inventory.md)).
+- Usage counts are written by a `SECURITY DEFINER` writer,
+  `usage_count_record(_pattern, _kind)` (`20261126000000_usage_counts.sql`),
+  because no client role holds a write grant on `usage_counts`. It takes no
+  org parameter: the church is `app_request_org_id()`, and a caller with
+  none writes nothing. EXECUTE is `authenticated` only. Pinned by
+  `supabase/tests/usage_counts_suite.sql`.
 - An authenticated member of org A who opens org B's group invite link is
   told the link is for a different account and offered Sign out:
   `group_invite_join()` compares the caller's own org to the invite row's
