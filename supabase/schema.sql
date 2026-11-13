@@ -122,6 +122,7 @@ declare
   _opened jsonb := '[]'::jsonb;
   _addresses text[];
   _own_entries uuid[];
+  _outcomes jsonb;
   _household_entries uuid[] := '{}';
   _household_goes boolean := false;
   _own_uses uuid[];
@@ -241,22 +242,11 @@ begin
          or (r.signup_token is null
              and (r.id = any (_linked_requests) or r.invite_token = any (_accepted_tokens))));
 
-  -- A household belongs to everyone in it, so it goes only when no other profile
-  -- points at it and no entry is claimed by someone else.
-  if _family is not null then
-    _household_goes := not exists (
-        select 1 from public.profiles p
-        where p.org_id = _org and p.family_id = _family and p.id <> _person_id
-      ) and not exists (
-        select 1 from public.family_members m
-        where m.org_id = _org and m.family_id = _family
-          and m.claimed_profile_id is not null and m.claimed_profile_id <> _person_id
-      );
-    if _household_goes then
-      select coalesce(array_agg(m.id), '{}') into _household_entries
-      from public.family_members m
-      where m.org_id = _org and m.family_id = _family;
-    end if;
+  _outcomes := public.person_deletion_outcomes(_person_id, _org);
+  _household_goes := coalesce((_outcomes #>> '{household,goes}')::boolean, false);
+  if _household_goes then
+    select coalesce(array_agg((e ->> 'id')::uuid), '{}') into _household_entries
+    from jsonb_array_elements(_outcomes #> '{household,entries}') as e;
   end if;
 
   select coalesce(array_agg(o.name), '{}') into _photo_keys
@@ -280,6 +270,19 @@ begin
   delete from auth.users u where u.id = _person_id;
   if not found then
     raise exception 'delete_person: the login was gone before it could be deleted' using errcode = 'AD001';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_to_recordset(_outcomes -> 'funds') as o (id uuid, recipient_id uuid)
+    where not exists (
+      select 1 from public.giving_funds f
+      where f.org_id = _org
+        and f.id = o.id
+        and f.steward_id is not distinct from o.recipient_id
+        and f.needs_review)
+  ) then
+    raise exception 'delete_person: a fund didn''t end as its outcome said' using errcode = 'AD003';
   end if;
 
   return jsonb_build_object(
@@ -703,7 +706,7 @@ CREATE OR REPLACE FUNCTION "public"."family_directory_people"("_family_id" "uuid
     -- The card shows a preferred name, so a child's other first name would be a
     -- stored detail beyond what's shown.
     'first_name', case
-      when fm.relationship = 'child' and fm.claimed_profile_id is null
+      when public.is_child_without_account(fm.relationship, fm.claimed_profile_id)
         then coalesce(nullif(btrim(fm.preferred_name), ''), fm.first_name)
       else fm.first_name
     end,
@@ -715,20 +718,18 @@ CREATE OR REPLACE FUNCTION "public"."family_directory_people"("_family_id" "uuid
     'birth_month', fm.birth_month,
     'birth_day', fm.birth_day,
     'claimed_profile_id', fm.claimed_profile_id
-  ) order by fm.relationship), '[]'::jsonb)
-  from (
-    select *
-      from public.family_members
-     where family_id = _family_id
-       and org_id = (select public.app_current_org_id())
-    offset 0
-  ) fm
-  where (select public.is_admin())
-    or ((select public.is_member()) and (
-      fm.family_id = (select public.current_family_id())
-      or (select public.org_directory_visible())
-      or (select public.shares_group_with_household(_family_id))
-    ));
+  ) order by fm.relationship)
+  -- A gate in WHERE that names no column of fm runs before the scan, so a
+  -- household listing nobody would pay for it. Here it runs at the first row.
+  filter (where (select public.household_visible(
+    _family_id,
+    (select public.is_admin()),
+    (select public.is_member()),
+    (select public.current_family_id()),
+    (select public.org_directory_visible())))), '[]'::jsonb)
+  from public.family_members fm
+  where fm.family_id = _family_id
+    and fm.org_id = (select public.app_current_org_id());
 $$;
 
 
@@ -764,7 +765,7 @@ begin
       using errcode = 'HP003';
   end if;
 
-  if _relationship = 'child' and _claimed_profile_id is null then
+  if public.is_child_without_account(_relationship, _claimed_profile_id) then
     raise exception 'family_invites: a child without an account cannot be invited'
       using errcode = 'HP002';
   end if;
@@ -785,7 +786,7 @@ CREATE OR REPLACE FUNCTION "public"."family_members_clear_child_year"() RETURNS 
     SET "search_path" TO ''
     AS $$
 begin
-  if new.relationship = 'child' and new.claimed_profile_id is null then
+  if public.is_child_without_account(new.relationship, new.claimed_profile_id) then
     new.birth_year := null;
   end if;
   return new;
@@ -810,8 +811,7 @@ declare
 begin
   update public.family_members
      set birth_year = null
-   where relationship = 'child'
-     and claimed_profile_id is null
+   where public.is_child_without_account(relationship, claimed_profile_id)
      and birth_year is not null;
   get diagnostics _n = row_count;
   _counts := _counts || jsonb_build_object('child_birth_year', _n);
@@ -820,8 +820,7 @@ begin
    using public.family_invites fi, public.family_members fm
    where fm.id = fi.family_member_id
      and fm.org_id = fi.org_id
-     and fm.relationship = 'child'
-     and fm.claimed_profile_id is null
+     and public.is_child_without_account(fm.relationship, fm.claimed_profile_id)
      and fi.accepted_at is null
      and ar.invite_token = fi.token
      and ar.org_id = fi.org_id
@@ -834,8 +833,7 @@ begin
    using public.family_members fm
    where fm.id = fi.family_member_id
      and fm.org_id = fi.org_id
-     and fm.relationship = 'child'
-     and fm.claimed_profile_id is null;
+     and public.is_child_without_account(fm.relationship, fm.claimed_profile_id);
   get diagnostics _n = row_count;
   _counts := _counts || jsonb_build_object('child_invites', _n);
 
@@ -887,8 +885,8 @@ CREATE OR REPLACE FUNCTION "public"."family_members_retire_child_invites"() RETU
     SET "search_path" TO ''
     AS $$
 begin
-  if new.relationship = 'child' and new.claimed_profile_id is null
-     and not (old.relationship = 'child' and old.claimed_profile_id is null) then
+  if public.is_child_without_account(new.relationship, new.claimed_profile_id)
+     and not public.is_child_without_account(old.relationship, old.claimed_profile_id) then
     delete from public.access_requests ar
      using public.family_invites fi
      where fi.family_member_id = new.id
@@ -1802,6 +1800,24 @@ $$;
 ALTER FUNCTION "public"."handle_new_user"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."household_visible"("_family_id" "uuid", "_is_admin" boolean, "_is_member" boolean, "_own_family_id" "uuid", "_directory_open" boolean) RETURNS boolean
+    LANGUAGE "sql" STABLE
+    AS $$
+  select _is_admin
+      or (_is_member and (
+            _family_id = _own_family_id
+            or _directory_open
+            or public.shares_group_with_household(_family_id)));
+$$;
+
+
+ALTER FUNCTION "public"."household_visible"("_family_id" "uuid", "_is_admin" boolean, "_is_member" boolean, "_own_family_id" "uuid", "_directory_open" boolean) OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."household_visible"("_family_id" "uuid", "_is_admin" boolean, "_is_member" boolean, "_own_family_id" "uuid", "_directory_open" boolean) IS 'Who can see a household: a church admin, or a member in it, in a group with someone in it, or in a church whose directory is open. Read by the family_units policy and family_directory_people().';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."is_admin"() RETURNS boolean
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO ''
@@ -1815,6 +1831,20 @@ $$;
 
 
 ALTER FUNCTION "public"."is_admin"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."is_child_without_account"("_relationship" "text", "_claimed_profile_id" "uuid") RETURNS boolean
+    LANGUAGE "sql" IMMUTABLE PARALLEL SAFE
+    AS $$
+  select _relationship is not distinct from 'child' and _claimed_profile_id is null;
+$$;
+
+
+ALTER FUNCTION "public"."is_child_without_account"("_relationship" "text", "_claimed_profile_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."is_child_without_account"("_relationship" "text", "_claimed_profile_id" "uuid") IS 'A person listed as a child with no account of their own. A child with an account is an adult child.';
+
 
 
 CREATE OR REPLACE FUNCTION "public"."is_group_leader"("_group_id" "uuid") RETURNS boolean
@@ -2209,6 +2239,89 @@ ALTER FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") OWNER 
 
 
 COMMENT ON FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") IS 'Pending requests for a group with each requester''s name and email (NULL when hide_email), for the leader''s review list. Tenant anchor: the caller''s own profiles row; rows only when the caller leads the group or is an org admin, else empty.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."person_deletion_outcomes"("_person_id" "uuid", "_org_id" "uuid") RETURNS "jsonb"
+    LANGUAGE "plpgsql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _org uuid;
+  _family uuid;
+  _funds jsonb;
+  _household jsonb;
+begin
+  select p.org_id, p.family_id into _org, _family
+  from public.profiles p
+  where p.id = _person_id;
+
+  if _org is null or _org is distinct from _org_id then
+    return null;
+  end if;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', f.id,
+           'name', f.name,
+           'group_id', f.group_id,
+           'group_name', g.name,
+           'outcome', case when r.id is null then 'needs_recipient' else 'passed_on' end,
+           'recipient_id', r.id,
+           'recipient', case when r.id is not null then jsonb_build_object(
+             'first_name', r.first_name,
+             'last_name', r.last_name,
+             'preferred_name', r.preferred_name) end
+         ) order by f.name, f.id), '[]'::jsonb)
+    into _funds
+  from public.giving_funds f
+  left join public.groups g on g.id = f.group_id and g.org_id = f.org_id
+  left join lateral (
+    select p.id, p.first_name, p.last_name, p.preferred_name
+    from public.group_members gm
+    join public.profiles p on p.id = gm.profile_id and p.org_id = gm.org_id
+    where gm.group_id = f.group_id
+      and gm.org_id = f.org_id
+      and gm.profile_id = f.co_steward_id
+      and f.co_steward_id is distinct from _person_id
+      and p.role <> 'pending'
+  ) r on true
+  where f.org_id = _org and f.steward_id = _person_id;
+
+  -- A household belongs to everyone in it, so it goes only when no other profile
+  -- points at it and no entry is claimed by someone else.
+  select jsonb_build_object(
+           'id', h.id,
+           'name', h.family_name,
+           'goes', not exists (
+               select 1 from public.profiles p
+               where p.org_id = _org and p.family_id = h.id and p.id <> _person_id
+             ) and not exists (
+               select 1 from public.family_members m
+               where m.org_id = _org and m.family_id = h.id
+                 and m.claimed_profile_id is not null and m.claimed_profile_id <> _person_id
+             ),
+           'entries', coalesce((
+             select jsonb_agg(jsonb_build_object(
+                      'id', m.id,
+                      'first_name', m.first_name,
+                      'last_name', m.last_name,
+                      'preferred_name', m.preferred_name) order by m.first_name, m.id)
+             from public.family_members m
+             where m.org_id = _org and m.family_id = h.id
+               and m.claimed_profile_id is distinct from _person_id), '[]'::jsonb))
+    into _household
+  from public.family_units h
+  where h.org_id = _org and h.id = _family;
+
+  return jsonb_build_object('funds', _funds, 'household', _household);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."person_deletion_outcomes"("_person_id" "uuid", "_org_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."person_deletion_outcomes"("_person_id" "uuid", "_org_id" "uuid") IS 'What deleting a person does to each fund they receive gifts for and to their household. Null when they are not in that church. Read by the delete confirmation and by delete_person().';
 
 
 
@@ -6368,7 +6481,7 @@ CREATE POLICY "Members can view family members" ON "public"."family_members" FOR
 
 
 
-CREATE POLICY "Members can view family units" ON "public"."family_units" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR (("id" = ( SELECT "public"."current_family_id"() AS "current_family_id")) AND ( SELECT "public"."is_member"() AS "is_member")) OR (( SELECT "public"."is_member"() AS "is_member") AND (( SELECT "public"."org_directory_visible"() AS "org_directory_visible") OR "public"."shares_group_with_household"("id"))))));
+CREATE POLICY "Members can view family units" ON "public"."family_units" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."household_visible"("family_units"."id", ( SELECT "public"."is_admin"() AS "is_admin"), ( SELECT "public"."is_member"() AS "is_member"), ( SELECT "public"."current_family_id"() AS "current_family_id"), ( SELECT "public"."org_directory_visible"() AS "org_directory_visible")) AS "household_visible")));
 
 
 
@@ -6972,9 +7085,21 @@ GRANT ALL ON FUNCTION "public"."handle_new_user"() TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."household_visible"("_family_id" "uuid", "_is_admin" boolean, "_is_member" boolean, "_own_family_id" "uuid", "_directory_open" boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."household_visible"("_family_id" "uuid", "_is_admin" boolean, "_is_member" boolean, "_own_family_id" "uuid", "_directory_open" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."household_visible"("_family_id" "uuid", "_is_admin" boolean, "_is_member" boolean, "_own_family_id" "uuid", "_directory_open" boolean) TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."is_admin"() TO "anon";
 GRANT ALL ON FUNCTION "public"."is_admin"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."is_admin"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."is_child_without_account"("_relationship" "text", "_claimed_profile_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."is_child_without_account"("_relationship" "text", "_claimed_profile_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_child_without_account"("_relationship" "text", "_claimed_profile_id" "uuid") TO "service_role";
 
 
 
@@ -7065,6 +7190,11 @@ GRANT ALL ON FUNCTION "public"."organizations_timezone_check"() TO "service_role
 REVOKE ALL ON FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."pending_group_join_requests"("_group_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."person_deletion_outcomes"("_person_id" "uuid", "_org_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."person_deletion_outcomes"("_person_id" "uuid", "_org_id" "uuid") TO "service_role";
 
 
 
