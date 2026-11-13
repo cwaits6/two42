@@ -808,12 +808,18 @@ export function buildGroupHome(reads: GroupHomeReads, ctx: HomeContext): GroupHo
   const celebrations =
     members && families && roster ? celebrationRows(members, families, roster, ctx) : null;
 
+  // Answered requests fail with the prayer keys, which is the prayer section's
+  // failure; the rest of the feed does not depend on them.
   const tiles =
-    reads.lessons && reads.announcements && reads.answeredPrayers && roster && members
-      ? newTiles(reads.lessons, reads.announcements, reads.answeredPrayers, roster, members, ctx)
+    reads.lessons && reads.announcements && roster && members
+      ? newTiles(reads.lessons, reads.announcements, reads.answeredPrayers ?? [], roster, members, ctx)
       : null;
 
   const prayer = reads.openPrayers?.[0] ?? null;
+  const prayerFailed =
+    reads.openPrayers === null ||
+    reads.answeredPrayers === null ||
+    (prayer === null && reads.hasOpenPrayer === null);
 
   const nothingAtAll =
     notices.length === 0 &&
@@ -826,7 +832,8 @@ export function buildGroupHome(reads: GroupHomeReads, ctx: HomeContext): GroupHo
     !eventsAhead &&
     reads.announcements?.length === 0 &&
     reads.openPrayers?.length === 0 &&
-    reads.hasOpenPrayer === false;
+    reads.hasOpenPrayer === false &&
+    !prayerFailed;
 
   return {
     notices,
@@ -837,7 +844,7 @@ export function buildGroupHome(reads: GroupHomeReads, ctx: HomeContext): GroupHo
     celebrations,
     newTiles: tiles,
     prayer,
-    prayerFailed: reads.openPrayers === null || (prayer === null && reads.hasOpenPrayer === null),
+    prayerFailed,
     nothingAtAll,
   };
 }
