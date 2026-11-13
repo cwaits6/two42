@@ -75,6 +75,18 @@ describe("recordUsage", () => {
     expect(rpc.mock.calls.filter(([, args]) => args._kind === "error")).toHaveLength(1);
   });
 
+  it("counts an error again when a failing page is opened again after another page", async () => {
+    await recordUsage("view", "/dashboard");
+    await recordUsage("error", "/dashboard");
+    await recordUsage("view", "/settings");
+    await recordUsage("view", "/dashboard");
+    await recordUsage("error", "/dashboard");
+    expect(rpc.mock.calls.filter(([, args]) => args._kind === "error")).toEqual([
+      ["usage_count_record", { _pattern: "/dashboard", _kind: "error" }],
+      ["usage_count_record", { _pattern: "/dashboard", _kind: "error" }],
+    ]);
+  });
+
   it("stays quiet when the database has no such function", async () => {
     abortSignal.mockResolvedValue({ data: null, error: { code: "PGRST202", message: "not found" } });
     await expect(recordUsage("view", "/dashboard")).resolves.toBeUndefined();
