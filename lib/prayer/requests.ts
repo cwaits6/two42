@@ -1,6 +1,6 @@
 // The prayer request routes' wire contract, shared by the routes and the board.
-// Text is sealed, so the table can no longer check its length; this is the
-// one place the limit lives.
+// The table holds only sealed text and cannot check its length, so the limit
+// lives here.
 
 export const REQUEST_TEXT_MAX = 2000;
 

@@ -198,7 +198,7 @@ describe("planRow", () => {
     const first = testKeys();
     const row = converge(legacy({ is_anonymous: true }), planRow(legacy({ is_anonymous: true }), first));
     const newAuthorKey = newKey();
-    // The author rotation ran earlier and left this request unmatched; now the body key rotates.
+    // An earlier author rotation left this request unmatched; this is the later body rotation.
     const rotatingBody = parsePrayerKeys({
       PRAYER_BODY_KEY: newKey(),
       PRAYER_BODY_KEY_PREVIOUS: first.body.current.toString("base64"),
