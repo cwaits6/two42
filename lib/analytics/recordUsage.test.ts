@@ -52,6 +52,29 @@ describe("recordUsage", () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
+  it("counts one error per page view, however many sections show one", async () => {
+    await recordUsage("view", "/dashboard");
+    await recordUsage("error", "/dashboard");
+    await recordUsage("error", "/dashboard");
+    await recordUsage("view", "/settings");
+    await recordUsage("error", "/settings");
+    await recordUsage("view", "/dashboard");
+    await recordUsage("error", "/dashboard");
+    expect(rpc.mock.calls.filter(([, args]) => args._kind === "error")).toEqual([
+      ["usage_count_record", { _pattern: "/dashboard", _kind: "error" }],
+      ["usage_count_record", { _pattern: "/settings", _kind: "error" }],
+      ["usage_count_record", { _pattern: "/dashboard", _kind: "error" }],
+    ]);
+  });
+
+  it("counts an error shown before its page's view is recorded only once", async () => {
+    await recordUsage("view", "/profile");
+    await recordUsage("error", "/settings");
+    await recordUsage("view", "/settings");
+    await recordUsage("error", "/settings");
+    expect(rpc.mock.calls.filter(([, args]) => args._kind === "error")).toHaveLength(1);
+  });
+
   it("stays quiet when the database has no such function", async () => {
     abortSignal.mockResolvedValue({ data: null, error: { code: "PGRST202", message: "not found" } });
     await expect(recordUsage("view", "/dashboard")).resolves.toBeUndefined();
