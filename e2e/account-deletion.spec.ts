@@ -1,7 +1,9 @@
 import { execFileSync } from "node:child_process";
 import type { Browser, Page } from "@playwright/test";
+import { storedForm } from "../lib/prayer/crypto";
 import { expect, test } from "./fixtures/auth";
 import { GROUP_B, PASSWORD, PERSONAS } from "./fixtures/personas";
+import { prayerKeys } from "./fixtures/prayerKeys";
 
 // Every person deleted here is created here, through the stack's own Postgres
 // container, and afterAll removes any a failed test left behind. A seeded person
@@ -37,6 +39,8 @@ const SPOUSE_SETUP_LINK = "deletion-spec-spouse-setup-link";
 const HOUSEHOLD = "Spec household for the leaver";
 const STORAGE_API = "http://127.0.0.1:54321/storage/v1/object/avatars";
 const ANONYMOUS_BODY = "Account deletion check: an anonymous request.";
+// No foreign key reaches a request stored this way, only the author hash.
+const HASHED = { id: "0e2e0000-0000-4000-8000-000000000157", body: "Account deletion check: a hashed request." };
 
 function sql(statement: string): string {
   return execFileSync(
@@ -97,6 +101,7 @@ function removeEverythingCreated() {
   const emails = [LEAVER, REMOVED, OUTSIDER].map((p) => `'${p.email}'`).join(",");
   sql(`
     delete from public.giving_funds where name in ('${FUND}', '${SECOND_FUND}');
+    delete from public.prayer_requests where id = '${HASHED.id}';
     delete from auth.users where id in (${ids});
     delete from public.access_requests where email in (${emails}, '${OLD_ADDRESS}');
     delete from public.family_units where family_name = '${HOUSEHOLD}';
@@ -112,6 +117,15 @@ test.beforeAll(async () => {
   createPerson(LEAVER, seedOrg);
   createPerson(REMOVED, seedOrg);
   createPerson(OUTSIDER, OTHER_ORG);
+  const hashed = storedForm(prayerKeys(), {
+    id: HASHED.id,
+    orgId: seedOrg,
+    text: HASHED.body,
+    author: { anonymous: true, authorId: LEAVER.id },
+  });
+  sql(`
+    insert into public.prayer_requests (id, org_id, group_id, is_anonymous, body_ciphertext, author_hash)
+    values ('${HASHED.id}', '${seedOrg}', '${GROUP_B}', true, '${hashed.body_ciphertext}', '${hashed.author_hash}');`);
   sql(`
     insert into public.group_members (org_id, group_id, profile_id)
     values ('${seedOrg}', '${GROUP_B}', '${LEAVER.id}')
@@ -188,6 +202,7 @@ test("a member's download holds their own data and no other member's", async ({ 
 
   expect(text).toContain(LEAVER.email);
   expect(text).toContain(ANONYMOUS_BODY);
+  expect(text).toContain(HASHED.body);
   expect(JSON.parse(text).funds_you_receive.map((f: { fund: string }) => f.fund)).toContain(FUND);
   for (const other of Object.values(PERSONAS)) {
     expect(text).not.toContain(other.name);
@@ -221,6 +236,7 @@ test("a person deletes their own account and can't sign in afterwards", async ({
   expect(countOf("public.profiles", "id", LEAVER.id)).toBe("0");
   expect(photoCount(seedOrg)).toBe("0");
   expect(sql(`select count(*) from public.prayer_requests where body = '${ANONYMOUS_BODY}';`)).toBe("0");
+  expect(countOf("public.prayer_requests", "id", HASHED.id)).toBe("0");
   expect(
     sql(`select concat_ws('|', steward_id is null, needs_review) from public.giving_funds where name = '${FUND}';`),
   ).toBe("t|t");
