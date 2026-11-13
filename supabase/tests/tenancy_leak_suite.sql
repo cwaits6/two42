@@ -550,27 +550,27 @@ begin
 
   -- INSERT tagged into org B → rejected by the restrictive WITH CHECK
   begin
-    insert into public.prayer_requests (org_id, group_id, author_id, body)
-    values (org_b, (select id from public.groups where org_id = org_b limit 1), owner_a, 'cross-org write');
+    insert into public.rsvps (org_id, event_id, user_id, status, occurrence_date)
+    values (org_b, (select id from public.events where org_id = org_b limit 1), owner_a, 'yes', current_date + 8);
   exception when others then
     insert_err := sqlstate;
   end;
 
   -- Re-tagging an own row's org_id A → B → rejected
   begin
-    update public.prayer_requests set org_id = org_b
-    where author_id = owner_a and org_id = org_a;
+    update public.rsvps set org_id = org_b
+    where user_id = owner_a and org_id = org_a;
   exception when others then
     retag_err := sqlstate;
   end;
 
   -- UPDATE / DELETE targeting a B row by id → 0 rows affected
   with u as (
-    update public.prayer_requests set body = 'defaced'
+    update public.rsvps set status = 'no'
     where org_id = org_b returning 1
   ) select count(*) into update_b_count from u;
   with d as (
-    delete from public.prayer_requests
+    delete from public.rsvps
     where org_id = org_b returning 1
   ) select count(*) into delete_b_count from d;
 
