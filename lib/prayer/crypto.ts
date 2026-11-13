@@ -171,14 +171,18 @@ export function hashedWithCurrentKey(keys: PrayerKeys, stored: string): boolean 
 }
 
 /**
- * True when a church still has anonymous requests to hash, already holds
- * hashes, and none of them is under a configured author key. The author key is
- * then wrong, and hashing the rest under it could not be undone.
+ * A hash cannot be opened, so the only proof that the backfill holds the app's
+ * author key is a hash the app wrote under it. The key id names the master
+ * key, so such a hash in any church proves it for every church. The backfill
+ * writes a hash itself only once one exists, which keeps the proof the app's.
  */
-export function authorKeyDisowned(keys: PrayerKeys, rows: readonly StoredRow[]): boolean {
-  if (!rows.some((row) => row.is_anonymous && row.author_id)) return false;
-  const kids = rows.flatMap((row) => (row.author_hash ? [row.author_hash.split(".")[1]] : []));
-  return kids.length > 0 && !kids.some((kid) => keyFor(keys.author, kid) !== null);
+export function authorKeyProven(keys: PrayerKeys, rows: readonly Pick<StoredRow, "author_hash">[]): boolean {
+  return rows.some((row) => row.author_hash !== null && hashedWithCurrentKey(keys, row.author_hash));
+}
+
+/** Whether a plan writes an author hash, which cannot be checked until the app recognises its author. */
+export function writesAuthorHash(plan: RowPlan): boolean {
+  return plan.action === "write" && plan.steps.some((step) => step === "hash" || step === "rehash");
 }
 
 /** Who wrote a request, in the one form the row stores. */

@@ -111,24 +111,30 @@ During a rotation, also export the `_PREVIOUS` key.
 `--org <uuid>` limits it to one church.
 
 **What the dry run proves.** It opens every sealed row, so it proves the
-**body key** before anything is written. It cannot prove the **author key** the
-same way, because a hash cannot be opened, and hashing a legacy anonymous
-request under a wrong author key cannot be undone. Two checks cover it:
+**body key** before anything is written. A hash cannot be opened, so the only
+proof of the **author key** is a hash the app wrote under it. The script prints
+the id of each key it was given (`body key <id>, author key <id>`), and writes
+no author hash (`hash` or `rehash`) until some request in any church already
+holds one under the printed author key id. Until then those rows are held: the
+dry run and `--apply` report `<n> held` per church and exit non-zero, and
+`--apply` still converts everything else. A hash under the `_PREVIOUS` key
+proves nothing about the current one, and neither does no hash at all.
 
-- The script prints the id of each key it was given (`body key <id>, author
-  key <id>`). Every hash the app wrote names its key:
-  `select distinct split_part(author_hash, '.', 2) from public.prayer_requests where author_hash is not null;`
-  must return only the printed author key id (and, during an author rotation,
-  the previous key's).
-- In a church that still has anonymous requests to hash and already holds
-  hashes, none of them under the given author key or its `_PREVIOUS`, the
-  script refuses to hash, reports it, and exits non-zero, on the dry run and
-  on `--apply` alike.
+So on a first conversion, or after setting a new author key, prove the key
+first: post one anonymous request through the deployed app, check that
 
-On a first conversion, `unmatched` means the author key is wrong: stop, and do
-not run `--apply`. The same goes for `unmatched` on a request posted since the
-deploy. Outside the end of an author rotation or a lost author key, it is never
-expected.
+```sql
+select distinct split_part(author_hash, '.', 2) from public.prayer_requests where author_hash is not null;
+```
+
+returns the printed author key id, run the dry run (nothing should be held),
+run `--apply`, and then delete the request you posted. If the id is not there,
+the key you exported is not the app's: stop.
+
+On a first conversion, `unmatched` also means the author key is wrong: stop,
+and do not run `--apply`. The same goes for `unmatched` on a request posted
+since the deploy. Outside the end of an author rotation or a lost author key,
+it is never expected.
 
 The script never sets
 `updated_at`, so a converted request does not look newly answered on Home.
@@ -136,7 +142,7 @@ Each write is guarded on the `updated_at` it read; a row the app changed in
 the meantime is counted and left for the next run. It prints counts only,
 never request text or anyone's id, and exits non-zero when anything is left:
 `error` (text that does not open with the configured keys) or a write that
-lost a race, or a church refused as above. `unmatched` (an anonymous hash
+lost a race, or a row held as above. `unmatched` (an anonymous hash
 under an old author key that matches no one; see below) is reported but does
 not change the exit code: once an author rotation has finished or an author
 key is lost, nothing can change it, and the script still moves that row's text
@@ -159,7 +165,8 @@ Rotate one key at a time.
 2. In Production set `PRAYER_BODY_KEY_PREVIOUS` to the old key and
    `PRAYER_BODY_KEY` to the new one, and redeploy. New writes use the new key;
    old rows still open.
-3. Run the script: a dry run shows `reencrypt` for every old row, then
+3. Run the script: a dry run shows `reencrypt` for every old row and
+   nothing held, then
    `--apply`, then a dry run showing only `noop` (and `unmatched` only for
    requests an earlier author rotation or a lost author key left), exiting 0.
 4. Remove `PRAYER_BODY_KEY_PREVIOUS` and redeploy.
@@ -168,8 +175,9 @@ Rotate one key at a time.
 
 **The author key**
 
-The same steps with `PRAYER_AUTHOR_KEY` and `PRAYER_AUTHOR_KEY_PREVIOUS`. A
-hash carries only its key id, not its author, so the script finds each
+The same steps with `PRAYER_AUTHOR_KEY` and `PRAYER_AUTHOR_KEY_PREVIOUS`, and
+before step 3 prove the new key as in "What the dry run proves": until a
+request holds a hash under it, every `rehash` is held. A hash carries only its key id, not its author, so the script finds each
 anonymous request's author by trying every person in the church under the
 previous key, and rehashes under the new one. A request whose author is no
 longer in the church reports as `unmatched`; it stays anonymous and nobody's,
@@ -184,9 +192,9 @@ longer mark them answered or delete them. The text stays readable and leaders
 can still delete them. Account deletion can no longer find them, so they stay
 until a leader deletes them or the church's retention period removes them.
 Set a new key; new anonymous requests work normally, and the script reports
-the old ones as `unmatched` on every run from then on, without failing. A
-church that still has requests to convert is refused until it holds a hash
-under the new key, that is, until someone posts an anonymous request there.
+the old ones as `unmatched` on every run from then on, without failing. Any
+author hash still to write is held until a request holds a hash under the new
+key, that is, until someone posts an anonymous request.
 
 **The body key.** The text of every request sealed with it is gone; no one can
 recover it without a copy of the key. Every group holding such a request shows

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   authorHash,
-  authorKeyDisowned,
+  authorKeyProven,
   decryptBody,
   encryptBody,
   isAuthor,
@@ -9,6 +9,7 @@ import {
   planRow,
   storedForm,
   type StoredRow,
+  writesAuthorHash,
 } from "./crypto";
 import { newKey, testKeys } from "./testKeys";
 
@@ -218,10 +219,10 @@ describe("planRow", () => {
   });
 });
 
-describe("authorKeyDisowned", () => {
+describe("the backfill's author key proof", () => {
   const right = testKeys();
   const hashed: StoredRow = storedFormRow(right, OTHER_REQ, BEN);
-  const legacy: StoredRow = {
+  const legacy = (extra: Partial<StoredRow> = {}): StoredRow => ({
     id: REQ,
     org_id: ORG,
     body: "Pray for Ada.",
@@ -229,34 +230,46 @@ describe("authorKeyDisowned", () => {
     is_anonymous: true,
     author_id: ADA,
     author_hash: null,
-  };
+    ...extra,
+  });
+  const otherKey = (previous?: Buffer) =>
+    parsePrayerKeys({
+      PRAYER_BODY_KEY: right.body.current.toString("base64"),
+      PRAYER_AUTHOR_KEY: newKey(),
+      ...(previous ? { PRAYER_AUTHOR_KEY_PREVIOUS: previous.toString("base64") } : {}),
+    })!;
 
   function storedFormRow(keys: ReturnType<typeof testKeys>, id: string, authorId: string): StoredRow {
     const form = storedForm(keys, { id, orgId: ORG, text: "Pray for Ben.", author: { anonymous: true, authorId } });
     return { id, org_id: ORG, ...form };
   }
 
-  it("refuses to hash a church's legacy requests under an author key none of its hashes is under", () => {
-    const wrong = parsePrayerKeys({
-      PRAYER_BODY_KEY: right.body.current.toString("base64"),
-      PRAYER_AUTHOR_KEY: newKey(),
-    })!;
-    expect(planRow(hashed, wrong)).toEqual({ action: "unmatched" });
-    expect(authorKeyDisowned(wrong, [hashed, legacy])).toBe(true);
+  it("is a hash under the given current author key, and nothing else", () => {
+    expect(authorKeyProven(right, [legacy(), hashed])).toBe(true);
+    expect(authorKeyProven(right, [legacy()])).toBe(false);
+    expect(authorKeyProven(otherKey(), [legacy(), hashed])).toBe(false);
+    expect(authorKeyProven(otherKey(right.author.current), [legacy(), hashed])).toBe(false);
   });
 
-  it("allows it under the right key, during a rotation, and in a church with no hashes yet", () => {
-    expect(authorKeyDisowned(right, [hashed, legacy])).toBe(false);
-    const rotating = parsePrayerKeys({
-      PRAYER_BODY_KEY: right.body.current.toString("base64"),
-      PRAYER_AUTHOR_KEY: newKey(),
-      PRAYER_AUTHOR_KEY_PREVIOUS: right.author.current.toString("base64"),
-    })!;
-    expect(authorKeyDisowned(rotating, [hashed, legacy])).toBe(false);
-    expect(authorKeyDisowned(testKeys(), [legacy])).toBe(false);
+  it("is needed to hash a legacy anonymous request or move a hash onto a new author key", () => {
+    expect(writesAuthorHash(planRow(legacy(), right))).toBe(true);
+    const rotating = otherKey(right.author.current);
+    expect(writesAuthorHash(planRow(hashed, rotating, [BEN]))).toBe(true);
   });
 
-  it("leaves a church with nothing to hash alone, so a lost author key does not block a body rotation", () => {
-    expect(authorKeyDisowned(testKeys(), [hashed])).toBe(false);
+  it("is not needed to seal by-name text, or to move text onto a new body key past a lost author key", () => {
+    const named = legacy({ is_anonymous: false });
+    expect(planRow(named, right)).toMatchObject({ action: "write", steps: ["encrypt"] });
+    expect(writesAuthorHash(planRow(named, right))).toBe(false);
+
+    const lostAuthorKey = otherKey();
+    const newBodyKey = parsePrayerKeys({
+      PRAYER_BODY_KEY: newKey(),
+      PRAYER_BODY_KEY_PREVIOUS: right.body.current.toString("base64"),
+      PRAYER_AUTHOR_KEY: lostAuthorKey.author.current.toString("base64"),
+    })!;
+    const plan = planRow(hashed, newBodyKey);
+    expect(plan).toMatchObject({ action: "write", steps: ["reencrypt"], unmatched: true });
+    expect(writesAuthorHash(plan)).toBe(false);
   });
 });

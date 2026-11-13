@@ -11,11 +11,10 @@
 //   node scripts/encrypt-prayer-requests.mjs [--apply] [--org <uuid>]
 //
 // Dry run by default: it prints the key ids and what it would change. Opening
-// every sealed row proves the body key. Nothing proves the author key until a
-// church holds a hash: a church still to convert whose existing hashes are all
-// under unconfigured keys is refused, because hashing under a wrong author key
-// cannot be undone. Rerunnable: a row
-// already in the current form is left alone, so a run after a partial one
+// every sealed row proves the body key. Only a hash the app wrote under the
+// given author key proves that key, so until one exists in some church the
+// script writes no author hash: those rows are held, counted, and fail the run,
+// while the rest still convert. Rerunnable: a row already in the current form is left alone, so a run after a partial one
 // picks up what is left. Each write is guarded on the row as it was read (see
 // lib/prayer/backfill.ts): a row the app changed in the meantime is counted and
 // left for the next run. Prints counts per church, never request text or
@@ -23,7 +22,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { writePlan } from "../lib/prayer/backfill.ts";
-import { authorKeyDisowned, keyId, parsePrayerKeys, planRow } from "../lib/prayer/crypto.ts";
+import { authorKeyProven, keyId, parsePrayerKeys, planRow, writesAuthorHash } from "../lib/prayer/crypto.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PAGE = 200;
@@ -101,21 +100,31 @@ const format = (counts) =>
     .map(([k, n]) => `${k} ${n}`)
     .join(", ") || "no rows";
 
+// Every church is planned before anything is written, because a hash under the
+// author key in any one of them is what lets the others be hashed.
+const churches = [];
+for (const orgId of await orgIds()) churches.push({ orgId, planned: await planChurch(orgId) });
+const proven = authorKeyProven(keys, churches.flatMap((c) => c.planned.map((p) => p.row)));
+if (!proven) {
+  console.error(
+    `no request holds a hash under author key ${keyId(keys.author.current)}: author hashes are held until the app writes one (docs/security/prayer-encryption.md)`,
+  );
+}
+
 let problems = 0;
-for (const orgId of await orgIds()) {
-  const planned = await planChurch(orgId);
+for (const { orgId, planned } of churches) {
   const counts = summarise(planned);
+  const writes = planned.filter((p) => p.plan.action === "write");
+  const held = proven ? [] : writes.filter((p) => writesAuthorHash(p.plan));
   problems += counts.error ?? 0;
-  console.log(`org ${orgId}: ${format(counts)}`);
-  if (authorKeyDisowned(keys, planned.map((p) => p.row))) {
-    problems += planned.filter((p) => p.row.is_anonymous && p.row.author_id).length;
-    console.error(`org ${orgId}: none of its anonymous hashes is under a configured author key; refusing to hash`);
+  console.log(`org ${orgId}: ${format(counts)}${held.length ? `; ${held.length} held` : ""}`);
+  if (!apply) {
+    problems += held.length;
     continue;
   }
-  if (!apply) continue;
 
   const outcomes = {};
-  for (const item of planned.filter((p) => p.plan.action === "write")) {
+  for (const item of writes.filter((p) => !held.includes(p))) {
     const outcome = await writePlan(supabase, item.row, item.plan);
     outcomes[outcome] = (outcomes[outcome] ?? 0) + 1;
   }
