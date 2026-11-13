@@ -15,7 +15,7 @@ const COUPLE = "Henry & Chloe Mockingham";
 
 const SEED_SQL = `
   update public.family_units
-     set anniversary_month = 10, anniversary_day = 3, anniversary_year = 2009
+     set anniversary_month = 10, anniversary_day = 3, anniversary_year = 2008
    where id = '${HOUSEHOLD}';
 `;
 
@@ -23,7 +23,7 @@ const TODAY_SQL = `
   update public.family_units f
      set anniversary_month = extract(month from church.today)::int,
          anniversary_day = extract(day from church.today)::int,
-         anniversary_year = 2009
+         anniversary_year = 2008
     from (select o.id, (now() at time zone o.timezone)::date as today from public.organizations o) church
    where f.id = '${HOUSEHOLD}' and church.id = f.org_id;
 `;
