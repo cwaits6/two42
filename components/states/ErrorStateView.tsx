@@ -1,10 +1,11 @@
 "use client";
 
-import { useTransition } from "react";
+import { useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CircleAlert, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { recordUsage } from "@/lib/analytics/recordUsage";
 
 interface ErrorStateViewProps {
   thing: string;
@@ -16,6 +17,10 @@ interface ErrorStateViewProps {
 export function ErrorStateView({ thing, onRetry, className, reference }: ErrorStateViewProps) {
   const router = useRouter();
   const [retrying, startRetry] = useTransition();
+
+  useEffect(() => {
+    void recordUsage("error", window.location.pathname);
+  }, []);
 
   return (
     <div

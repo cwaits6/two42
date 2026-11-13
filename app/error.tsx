@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { digestReference, logError } from "@/lib/log";
+import { recordUsage } from "@/lib/analytics/recordUsage";
 
 export default function ErrorPage({
   error,
@@ -15,6 +16,7 @@ export default function ErrorPage({
 }) {
   useEffect(() => {
     logError("Page failed to render", error);
+    void recordUsage("error", window.location.pathname);
   }, [error]);
 
   const reference = digestReference(error);

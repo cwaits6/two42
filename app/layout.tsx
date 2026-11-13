@@ -8,6 +8,7 @@ import { SidebarProvider } from "@/components/layout/SidebarContext";
 import { buildAccount } from "@/components/layout/account";
 import { GroupProvider } from "@/components/groups/GroupProvider";
 import { PageMeasurement } from "@/components/analytics/PageMeasurement";
+import { UsageRecorder } from "@/components/analytics/UsageRecorder";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { getOptionalUser } from "@/lib/supabase/current-user";
@@ -203,7 +204,8 @@ export default async function RootLayout({
         {/* Signed in, Help, Privacy and Terms live in the account menu. */}
         {!user && <Footer />}
         <Toaster />
-        <PageMeasurement />
+        <UsageRecorder />
+        {process.env.THIRD_PARTY_PAGE_VIEWS === "on" && <PageMeasurement />}
       </body>
     </html>
   );
