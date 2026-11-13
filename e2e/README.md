@@ -76,6 +76,9 @@ the same container in `beforeAll`, and deletes those rows, Zoe's Group C leaders
 its approval gives Isaac in `beforeAll` and `afterAll`. `household-names-agree.spec.ts` moves the
 Mockingham household's anniversary to today in the church's time zone through the
 same container, and puts the seeded date back in `beforeAll` and `afterAll`.
+`household-invite-existing-account.spec.ts` creates its own two people, one in
+another church, their records in the Seedly household and an invite for each
+through the same container, and deletes them in `beforeAll` and `afterAll`.
 
 ## Personas
 
@@ -132,6 +135,7 @@ not covered here.
 | `event-replies.spec.ts`              | At 390, a member answering Going on the first Sunday Class date in List leaves the second date with no reply chosen; List shows 10 dates and Show more dates adds 10, reaching later months; the leader answering the second date on its page is the only name under Who's coming there, and the member is the only one on the first date; a past one-time event and a past date of a repeating event show no reply buttons and still list who said they were going; choosing the current reply again clears it on that date, and the other date keeps its own; one member answering Going on the first date and Can't go on the second in List keeps both after a reload, and is listed under Who's coming on the first date only; the replies and the two past events are removed in afterAll |
 | `group-settings.spec.ts`             | A leader of two groups sees the number of requests to join waiting on their Group settings row and on Requests, for the group they are in only; inside Group settings the sections are one click apart; each group's Requests lists its own requester and not the other group's; declining on one and approving on the other removes each and its count; Group settings opens on Details and the old serving settings address on Teams; a member of the group who opens any Group settings address lands on the group's Home with no Group settings row and no request shown; the rows created are deleted in afterAll |
 | `household-names-agree.spec.ts`      | Group Home's "This week" anniversaries name the same couples as the group Directory's This week, for a member, the household's primary and the church admin in Group B, who see the Mockinghams there, and for two Group C members, who don't; Group C's leader, who shares no group with that household, gets none of its people's names from a link to it |
+| `household-invite-existing-account.spec.ts` | A person with an account who opens a household invite signs in and is returned to it, and is listed under Members with an account in the household only after pressing Join household, once, with their record gone from Others; a repeat join answers success; the same invite is refused, on the page and by the API, to someone signed in with another address as a different account, and to the invited address in another church as a dead link, and neither appears in the household; the people, records and invites created are deleted in afterAll |
 
 ## Adding a spec
 
