@@ -12,6 +12,7 @@ import { notifyLeadersOfCancel } from "@/lib/serving/server";
 import { removeAvatarObjects } from "@/lib/storageDelete";
 import { createServiceClient } from "@/lib/supabase/server";
 import type { DeletionSummary, DeletionViewer } from "./deletionCopy";
+import { parseDeletionOutcomes } from "./deletionOutcomes";
 import { dataOf, rowsOf } from "./rows";
 import { logError } from "@/lib/log";
 
@@ -21,25 +22,12 @@ export type PersonDeletionResult =
   | { outcome: "deleted"; photosNotRemoved: number }
   | { outcome: "not_found" | "platform_operator" | "last_church_admin" | "failed" };
 
-interface NameParts {
-  first_name: string | null;
-  last_name: string | null;
-  preferred_name: string | null;
-}
-
-/** person_deletion_outcomes(): what the delete will do, decided in the database. */
-interface DeletionOutcomes {
-  funds: ({ name: string; group_name: string | null } & (
-    | { outcome: "passed_on"; recipient: NameParts }
-    | { outcome: "needs_recipient"; recipient: null }
-  ))[];
-  household: { name: string; goes: boolean; entries: (NameParts & { first_name: string })[] } | null;
-}
-
 async function loadOutcomes(service: ServiceClient, orgId: string, personId: string) {
-  return dataOf<DeletionOutcomes>(
-    await service.rpc("person_deletion_outcomes", { _person_id: personId, _org_id: orgId }),
-    "deletion outcomes",
+  return parseDeletionOutcomes(
+    dataOf<unknown>(
+      await service.rpc("person_deletion_outcomes", { _person_id: personId, _org_id: orgId }),
+      "deletion outcomes",
+    ),
   );
 }
 

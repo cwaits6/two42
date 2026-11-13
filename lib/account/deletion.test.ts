@@ -318,6 +318,16 @@ describe("loadDeletionSummary", () => {
     await expect(loadDeletionSummary(ORG, "ada", "self")).rejects.toThrow();
   });
 
+  it.each([
+    ["a renamed fund outcome", { ...OUTCOMES, funds: [{ ...OUTCOMES.funds[1], outcome: "no_recipient" }] }],
+    ["a passed-on fund without its recipient", { ...OUTCOMES, funds: [{ ...OUTCOMES.funds[0], recipient: null }] }],
+    ["a renamed funds key", { fund_list: OUTCOMES.funds, household: null }],
+    ["a household without goes", { ...OUTCOMES, household: { name: "Okafor", stays: false, entries: [] } }],
+  ])("throws rather than answer from outcomes with %s", async (_, outcomes) => {
+    withOutcomes(outcomes);
+    await expect(loadDeletionSummary(ORG, "ada", "self")).rejects.toThrow();
+  });
+
   it("throws rather than answer when the outcomes can't be read", async () => {
     const { state } = withOutcomes(OUTCOMES);
     state.rpcError = { code: "XX000" };
