@@ -21,7 +21,8 @@ const failed = (step: string, error: unknown) => {
 async function readRequest(service: ServiceClient, writer: PrayerWriter, groupId: string, requestId: string) {
   return service
     .from("prayer_requests")
-    .select("id, body, body_ciphertext, is_anonymous, is_answered, author_id, author_hash, updated_at")
+    // "*" so a delete still works before the migration adds the sealed columns.
+    .select("*")
     .eq("org_id", writer.orgId)
     .eq("group_id", groupId)
     .eq("id", requestId)

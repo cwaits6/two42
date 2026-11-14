@@ -137,6 +137,10 @@ for (const [i, { orgId, planned }] of churches.entries()) {
 
 if (!apply) console.log("Dry run: nothing was written. Pass --apply to convert.");
 if (problems > 0) {
-  console.error(`${problems} row(s) need attention: rerun, or see docs/security/prayer-encryption.md`);
+  console.error(
+    selected.every((c) => c.held.length === 0)
+      ? `${problems} row(s) need attention: rerun, or see docs/security/prayer-encryption.md`
+      : `${problems} row(s) need attention: post one anonymous request through the app, check its key id, then rerun (docs/security/prayer-encryption.md)`,
+  );
   process.exit(1);
 }
