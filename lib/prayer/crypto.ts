@@ -185,6 +185,34 @@ export function writesAuthorHash(plan: RowPlan): boolean {
   return plan.action === "write" && plan.steps.some((step) => step === "hash" || step === "rehash");
 }
 
+export interface PlannedRow {
+  row: Pick<StoredRow, "author_hash">;
+  plan: RowPlan;
+}
+
+/**
+ * Splits each church's planned writes into those to apply and those held. The
+ * proof is read only from the churches passed in, so a run narrowed to one
+ * church needs the proof in that church.
+ */
+export function selectWrites<T extends PlannedRow>(
+  keys: PrayerKeys,
+  churches: readonly { orgId: string; planned: readonly T[] }[],
+): { proven: boolean; churches: { orgId: string; write: T[]; held: T[] }[] } {
+  const proven = authorKeyProven(
+    keys,
+    churches.flatMap((c) => c.planned.map((p) => p.row)),
+  );
+  return {
+    proven,
+    churches: churches.map(({ orgId, planned }) => {
+      const writes = planned.filter((p) => p.plan.action === "write");
+      const held = proven ? [] : writes.filter((p) => writesAuthorHash(p.plan));
+      return { orgId, write: writes.filter((p) => !held.includes(p)), held };
+    }),
+  };
+}
+
 /** Who wrote a request, in the one form the row stores. */
 export type RequestAuthor = { anonymous: boolean; authorId: string } | { anonymous: true; authorHash: string };
 

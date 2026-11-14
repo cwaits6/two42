@@ -7,6 +7,7 @@ import {
   isAuthor,
   parsePrayerKeys,
   planRow,
+  selectWrites,
   storedForm,
   type StoredRow,
   writesAuthorHash,
@@ -271,5 +272,26 @@ describe("the backfill's author key proof", () => {
     const plan = planRow(hashed, newBodyKey);
     expect(plan).toMatchObject({ action: "write", steps: ["reencrypt"], unmatched: true });
     expect(writesAuthorHash(plan)).toBe(false);
+  });
+
+  describe("selecting the backfill's writes", () => {
+    const planned = (row: StoredRow) => ({ row, plan: planRow(row, right) });
+    const anonymous = planned(legacy());
+    const named = planned(legacy({ id: OTHER_REQ, is_anonymous: false }));
+    const churchA = { orgId: ORG, planned: [anonymous, named] };
+
+    it("holds an author hash, and writes the rest, while no church in the run proves the key", () => {
+      const { proven, churches } = selectWrites(right, [churchA]);
+      expect(proven).toBe(false);
+      expect(churches).toEqual([{ orgId: ORG, write: [named], held: [anonymous] }]);
+    });
+
+    it("holds nothing once another church in the same run holds the app's hash", () => {
+      const churchB = { orgId: OTHER_ORG, planned: [planned(hashed)] };
+      const { proven, churches } = selectWrites(right, [churchA, churchB]);
+      expect(proven).toBe(true);
+      expect(churches[0]).toEqual({ orgId: ORG, write: [anonymous, named], held: [] });
+      expect(churches[1]).toEqual({ orgId: OTHER_ORG, write: [], held: [] });
+    });
   });
 });

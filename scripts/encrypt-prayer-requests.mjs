@@ -12,17 +12,18 @@
 //
 // Dry run by default: it prints the key ids and what it would change. Opening
 // every sealed row proves the body key. Only a hash the app wrote under the
-// given author key proves that key, so until one exists in some church the
-// script writes no author hash: those rows are held, counted, and fail the run,
-// while the rest still convert. Rerunnable: a row already in the current form is left alone, so a run after a partial one
-// picks up what is left. Each write is guarded on the row as it was read (see
-// lib/prayer/backfill.ts): a row the app changed in the meantime is counted and
-// left for the next run. Prints counts per church, never request text or
+// given author key proves that key, and only the churches the run covers are
+// read for it (with --org, that one church): until one exists there the script
+// writes no author hash. Those rows are held, counted, and fail the run, while
+// the rest still convert. Rerunnable: a row already in the current form is left
+// alone, so a run after a partial one picks up what is left. Each write is
+// guarded on the row as it was read (see lib/prayer/backfill.ts): a row the app
+// changed in the meantime is counted and left for the next run. Prints counts per church, never request text or
 // anyone's id, and exits non-zero on anything it could not convert.
 
 import { createClient } from "@supabase/supabase-js";
 import { writePlan } from "../lib/prayer/backfill.ts";
-import { authorKeyProven, keyId, parsePrayerKeys, planRow, writesAuthorHash } from "../lib/prayer/crypto.ts";
+import { keyId, parsePrayerKeys, planRow, selectWrites } from "../lib/prayer/crypto.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PAGE = 200;
@@ -100,11 +101,11 @@ const format = (counts) =>
     .map(([k, n]) => `${k} ${n}`)
     .join(", ") || "no rows";
 
-// Every church is planned before anything is written, because a hash under the
-// author key in any one of them is what lets the others be hashed.
+// Every church the run covers is planned before anything is written, because a
+// hash under the author key in any one of them is what lets the others be hashed.
 const churches = [];
 for (const orgId of await orgIds()) churches.push({ orgId, planned: await planChurch(orgId) });
-const proven = authorKeyProven(keys, churches.flatMap((c) => c.planned.map((p) => p.row)));
+const { proven, churches: selected } = selectWrites(keys, churches);
 if (!proven) {
   console.error(
     `no request holds a hash under author key ${keyId(keys.author.current)}: author hashes are held until the app writes one (docs/security/prayer-encryption.md)`,
@@ -112,10 +113,9 @@ if (!proven) {
 }
 
 let problems = 0;
-for (const { orgId, planned } of churches) {
+for (const [i, { orgId, planned }] of churches.entries()) {
   const counts = summarise(planned);
-  const writes = planned.filter((p) => p.plan.action === "write");
-  const held = proven ? [] : writes.filter((p) => writesAuthorHash(p.plan));
+  const { write, held } = selected[i];
   problems += counts.error ?? 0;
   console.log(`org ${orgId}: ${format(counts)}${held.length ? `; ${held.length} held` : ""}`);
   if (!apply) {
@@ -124,7 +124,7 @@ for (const { orgId, planned } of churches) {
   }
 
   const outcomes = {};
-  for (const item of writes.filter((p) => !held.includes(p))) {
+  for (const item of write) {
     const outcome = await writePlan(supabase, item.row, item.plan);
     outcomes[outcome] = (outcomes[outcome] ?? 0) + 1;
   }
