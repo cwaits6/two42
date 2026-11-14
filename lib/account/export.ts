@@ -10,10 +10,10 @@
  * Nothing else selected does: no co-attendees of a serving date, no one else's
  * RSVPs, and no one who prayed for a request.
  */
-import { decryptBody, isAuthor } from "@/lib/prayer/crypto";
+import { decryptBody } from "@/lib/prayer/crypto";
+import { hashedRequestsOf } from "@/lib/prayer/hashedRequests";
 import { loadPrayerKeys } from "@/lib/prayer/keys";
 import type { Tables } from "@/lib/supabase/database.types";
-import { fetchAll } from "@/lib/supabase/fetchAll";
 import { createServiceClient } from "@/lib/supabase/server";
 import { rowsOf } from "./rows";
 
@@ -80,17 +80,7 @@ export async function buildAccountExport(orgId: string, personId: string) {
       .select("*, groups(name)")
       .eq("org_id", orgId)
       .eq("author_id", personId),
-    // Every hashed request in the church, since only the key tells whose is whose.
-    fetchAll((from, to) =>
-      service
-        .from("prayer_requests")
-        .select("*, groups(name)")
-        .eq("org_id", orgId)
-        .eq("is_anonymous", true)
-        .is("author_id", null)
-        .order("id")
-        .range(from, to),
-    ),
+    hashedRequestsOf<PrayerRow>(service, orgId, personId, keys, "*, groups(name)"),
     service
       .from("giving_funds")
       .select("name, description, is_active, retire_on, groups(name), giving_fund_methods(method, custom_handle)")
@@ -136,9 +126,7 @@ export async function buildAccountExport(orgId: string, personId: string) {
   const named = (row: { name?: string } | null | undefined) => row?.name ?? null;
   const prayers = [
     ...rowsOf<PrayerRow>(namedPrayers, "prayer requests"),
-    ...rowsOf<PrayerRow>(hashedPrayers, "anonymous prayer requests").filter(
-      (p) => p.author_hash !== null && isAuthor(keys, orgId, p.id, personId, p.author_hash),
-    ),
+    ...rowsOf<PrayerRow>(hashedPrayers, "anonymous prayer requests"),
   ].sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   return {

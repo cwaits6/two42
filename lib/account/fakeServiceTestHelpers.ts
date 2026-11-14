@@ -60,6 +60,7 @@ export function fakeService(tables: Tables) {
         return builder;
       },
       order: () => builder,
+      returns: () => builder,
       range: (from: number, to: number) => {
         offset = from;
         limit = to - from + 1;

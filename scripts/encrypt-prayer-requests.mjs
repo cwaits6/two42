@@ -24,6 +24,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { writePlan } from "../lib/prayer/backfill.ts";
 import { keyId, parsePrayerKeys, planRow, selectWrites } from "../lib/prayer/crypto.ts";
+import { fetchAll } from "../lib/supabase/fetchAll.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PAGE = 200;
@@ -58,21 +59,17 @@ async function orgIds() {
   return orgOnly ? [orgOnly] : ids;
 }
 
-async function readAll(build, what) {
-  const rows = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await build().range(from, from + PAGE - 1);
-    if (error) fail(`could not read ${what} (${error.code})`);
-    rows.push(...data);
-    if (data.length < PAGE) return rows;
-  }
+async function readAll(page, what) {
+  const { data, error } = await fetchAll(page, PAGE);
+  if (error) fail(`could not read ${what} (${error.code})`);
+  return data;
 }
 
 // Only a hash under the previous author key needs the members, to find whose it is.
 async function memberIds(orgId) {
   if (!keys.author.previous) return [];
   const rows = await readAll(
-    () => supabase.from("profiles").select("id").eq("org_id", orgId).order("id"),
+    (from, to) => supabase.from("profiles").select("id").eq("org_id", orgId).order("id").range(from, to),
     "the church's people",
   );
   return rows.map((r) => r.id);
@@ -80,7 +77,8 @@ async function memberIds(orgId) {
 
 async function planChurch(orgId) {
   const rows = await readAll(
-    () => supabase.from("prayer_requests").select(ROW_COLUMNS).eq("org_id", orgId).order("id"),
+    (from, to) =>
+      supabase.from("prayer_requests").select(ROW_COLUMNS).eq("org_id", orgId).order("id").range(from, to),
     "prayer requests",
   );
   const members = await memberIds(orgId);
