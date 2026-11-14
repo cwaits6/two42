@@ -94,7 +94,7 @@ export const PRIVACY: LegalDocument = {
         [
           "The directory shows what each person entered, except a birth year, which only goes into a phone contact someone saves from the directory. A church admin chooses whether members see everyone in the church or only people they share a group with.",
           "You can leave yourself out of the directory, and hide your email address from everyone but yourself and church admins.",
-          "Group content — events, announcements, lessons, prayer requests, funds and the roster — is seen by that group's members. A church admin sees every person and group in the church, but not a group's content unless they are in that group.",
+          "Group content — events, announcements, lessons, prayer requests and funds — is seen by that group's members. A church admin sees every person and group in the church, including who is in each group, but not a group's other content unless they are in that group.",
           "A leader can make a group private, so members who aren't in it can't find it.",
           "A prayer request posted by name shows the author to group members who can see that person in the directory. An anonymous request shows no author in the app to anyone but the author: not to other members, leaders or church admins. A leader can edit or delete any prayer request in their group.",
           "Email reminders and team messages go only to the people they are for.",
@@ -136,7 +136,7 @@ export const PRIVACY: LegalDocument = {
       blocks: [
         `In Settings, under Your data, you can download a copy of your data. ${DOWNLOAD_COVERS} ${DOWNLOAD_LEAVES_OUT}`,
         "You can delete your own prayer requests, and change or remove anything in your profile, at any time.",
-        "You can delete your account from the same place, and a church admin can delete an account in their church. Deleting an account removes the profile, photo, sign-in, group and team memberships, RSVPs, serving turns, and prayer requests, including anonymous ones. Announcements, events and lessons the person added stay without their name, and feedback stays without a name. A church needs at least one church admin, so the last one adds another before deleting their own account.",
+        "You can delete your account from the same place, and a church admin can delete an account in their church. Deleting an account removes the profile, photo, sign-in, group and team memberships, RSVPs, serving turns, and prayer requests, including anonymous ones. When no one else is left in the person's household, the household and the people listed in it are removed too. Announcements, events and lessons the person added stay without their name, feedback stays without a name, and serving dates shared with someone else stay with that person. A fund the person receives goes to its second person, or, without one, to whoever a leader chooses; it is off Give until a leader confirms it. A church needs at least one church admin, so the last one adds another before deleting their own account.",
         `For anything you can't do yourself, ask your church admin, or write to [${PRIVACY_EMAIL}](mailto:${PRIVACY_EMAIL}). A church admin can write there to ask for the church's data to be removed.`,
       ],
     },
