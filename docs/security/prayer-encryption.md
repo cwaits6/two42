@@ -114,17 +114,20 @@ During a rotation, also export the `_PREVIOUS` key.
 **body key** before anything is written. A hash cannot be opened, so the only
 proof of the **author key** is a hash the app wrote under it. The script prints
 the id of each key it was given (`body key <id>, author key <id>`), and writes
-no author hash (`hash` or `rehash`) until some request in any church already
-holds one under the printed author key id. Until then those rows are held: the
+no author hash (`hash` or `rehash`) until some request in a church the run
+covers already holds one under the printed author key id. With `--org`, that
+means a request in that church. Until then those rows are held: the
 dry run and `--apply` report `<n> held` per church and exit non-zero, and
 `--apply` still converts everything else. A hash under the `_PREVIOUS` key
 proves nothing about the current one, and neither does no hash at all.
 
 So on a first conversion, or after setting a new author key, prove the key
-first: post one anonymous request through the deployed app, check that
+first: post one anonymous request through the deployed app, in the church you
+pass to `--org` if you pass one, check that
 
 ```sql
-select distinct split_part(author_hash, '.', 2) from public.prayer_requests where author_hash is not null;
+select distinct split_part(author_hash, '.', 2) from public.prayer_requests
+where author_hash is not null; -- add: and org_id = '<uuid>' when you pass --org
 ```
 
 returns the printed author key id, run the dry run (nothing should be held),
