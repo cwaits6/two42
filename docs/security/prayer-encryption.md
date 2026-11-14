@@ -163,11 +163,12 @@ where body is not null or (is_anonymous and author_id is not null);
 
 ## Rolling back
 
-The migration stays applied. Once any request is sealed, do not deploy a build
-from before this release: it reads only the plaintext column, so sealed
-requests show blank text, and it writes through grants the migration revoked,
-so posting fails. Fix forward, or restore the backup taken before the upgrade
-together with that build.
+The migration stays applied. Once it is applied, do not deploy a build from
+before this release, whether or not any request is sealed yet: that build
+writes through grants the migration revoked, so posting, editing, marking
+answered and deleting all fail, and once a request is sealed it also shows that
+request's text blank. Fix forward, or restore the backup taken before the
+upgrade together with that build.
 
 Between deploying this release and applying its migration, the prayer page and
 Home still show every request, but posting, marking answered and editing fail
@@ -239,8 +240,22 @@ operator deletes them.
 No screen offers Delete on a request to anyone but its recognised author, so a
 request nobody is recognised on stays until the church's retention period
 removes it; a church with retention off keeps it. To remove one sooner, find
-its id (the request's text identifies it to someone who can open it in the
-app) and delete it in the SQL editor, scoped to its church:
+its id from what the card shows. The group's id is in the prayer page's
+address (`/g/<group uuid>/prayer`), and
+`select org_id from public.groups where id = '<group uuid>';` gives its
+church. List that group's anonymous requests with the fields a card shows:
+
+```sql
+select id, created_at, is_answered from public.prayer_requests
+where org_id = '<church uuid>' and group_id = '<group uuid>' and is_anonymous
+order by created_at desc;
+```
+
+Match the card's post time and Answered badge to one row. After losing the
+author key, add `and author_hash like 'h1.<lost key id>.%'` to keep only the
+requests nobody can be recognised on. If more than one row still matches, do
+not guess, since a delete cannot be undone short of the backup: leave it to
+retention. Otherwise delete that one row, scoped to its church:
 
 ```sql
 delete from public.prayer_requests
