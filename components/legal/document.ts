@@ -33,19 +33,14 @@ export function inlineParts(text: string): InlinePart[] {
   return parts;
 }
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
 /** Read as written, never through a time zone, so the shown day is the day typed. */
 export function formatLastUpdated(date: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  const month = match ? MONTHS[Number(match[2]) - 1] : undefined;
-  const day = match ? Number(match[3]) : 0;
-  const daysInMonth = match ? new Date(Date.UTC(Number(match[1]), Number(match[2]), 0)).getUTCDate() : 0;
-  if (!match || !month || day < 1 || day > daysInMonth) throw new Error(`lastUpdated must be YYYY-MM-DD, got "${date}"`);
-  return `${month} ${day}, ${match[1]}`;
+  const d = new Date(`${date}T00:00:00Z`);
+  // The round trip refuses a day the month does not have, which Date would roll over.
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== date) {
+    throw new Error(`lastUpdated must be YYYY-MM-DD, got "${date}"`);
+  }
+  return d.toLocaleDateString("en-US", { dateStyle: "long", timeZone: "UTC" });
 }
 
 export function sectionId(heading: string): string {
