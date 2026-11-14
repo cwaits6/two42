@@ -42,8 +42,10 @@ const MONTHS = [
 export function formatLastUpdated(date: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   const month = match ? MONTHS[Number(match[2]) - 1] : undefined;
-  if (!match || !month) throw new Error(`lastUpdated must be YYYY-MM-DD, got "${date}"`);
-  return `${month} ${Number(match[3])}, ${match[1]}`;
+  const day = match ? Number(match[3]) : 0;
+  const daysInMonth = match ? new Date(Date.UTC(Number(match[1]), Number(match[2]), 0)).getUTCDate() : 0;
+  if (!match || !month || day < 1 || day > daysInMonth) throw new Error(`lastUpdated must be YYYY-MM-DD, got "${date}"`);
+  return `${month} ${day}, ${match[1]}`;
 }
 
 export function sectionId(heading: string): string {

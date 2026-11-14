@@ -4,7 +4,7 @@ import { PRIVACY_EMAIL } from "./privacy";
 
 // Before editing, read docs/legal/README.md.
 
-const SECURITY_EMAIL = "security@two42.io";
+export const SECURITY_EMAIL = "security@two42.io";
 const AGPL_URL = "https://www.gnu.org/licenses/agpl-3.0.html";
 
 export const TERMS: LegalDocument = {

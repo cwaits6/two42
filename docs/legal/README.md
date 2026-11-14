@@ -60,7 +60,10 @@ them against the files listed.
 - [ ] **Who sees it.** `docs/security/roles-and-permissions.md` (the role
   table and "Settings that change what a role can do"), the directory rules,
   `hide_email` / `is_unlisted`, and the contact card in
-  `app/api/members/[id]/vcard/route.ts`, which carries the birth year.
+  `app/api/members/[id]/vcard/route.ts`, which carries the birth year. The
+  group content list ("seen by that group's members") must match the SELECT
+  policies in `supabase/schema.sql`: a church admin reads every group's
+  roster through the `group_members` policy, so the roster is named apart.
 - [ ] **Retention.** `supabase/functions/_shared/retention.ts` and
   `supabase/functions/_shared/cleanup.ts`. The periods in "How long it is
   kept" are read from the constants in `retention.ts`; re-check the wording

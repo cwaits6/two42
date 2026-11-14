@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -6,7 +7,7 @@ import TermsPage from "@/app/terms/page";
 import { formatLastUpdated, inlineParts } from "./document";
 import { BASECAMP_POLICIES_URL, CC_BY_URL } from "./LegalPage";
 import { PRIVACY, PROCESSORS } from "./privacy";
-import { TERMS } from "./terms";
+import { SECURITY_EMAIL, TERMS } from "./terms";
 
 const pages = [
   { name: "privacy", html: renderToStaticMarkup(createElement(PrivacyPage)), doc: PRIVACY, companion: "/terms" },
@@ -69,5 +70,18 @@ describe("formatLastUpdated", () => {
 
   it("refuses a date in any other form", () => {
     expect(() => formatLastUpdated("Nov 13 2026")).toThrow();
+  });
+
+  it("refuses a day the month does not have", () => {
+    expect(() => formatLastUpdated("2026-02-31")).toThrow();
+    expect(() => formatLastUpdated("2026-11-00")).toThrow();
+    expect(formatLastUpdated("2028-02-29")).toBe("February 29, 2028");
+  });
+});
+
+describe("the security contact in the Terms", () => {
+  it("is the address security.txt publishes", () => {
+    const securityTxt = readFileSync("public/.well-known/security.txt", "utf8");
+    expect(securityTxt).toContain(`Contact: mailto:${SECURITY_EMAIL}`);
   });
 });
