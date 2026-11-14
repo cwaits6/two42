@@ -103,6 +103,7 @@ async function loadOpenPrayer({ client, orgId, groupId, userId, keys }: PrayerRe
         .eq("mine", false)
         .eq("i_am_praying", false)
         .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
         .range(from, from + OPEN_PRAYER_PAGE - 1),
       "Home's prayer request",
     );

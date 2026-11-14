@@ -52,11 +52,17 @@ console.log(`body key ${keyId(keys.body.current)}, author key ${keyId(keys.autho
 const supabase = createClient(url, serviceKey, { auth: { persistSession: false } });
 
 async function orgIds() {
-  const { data, error } = await supabase.from("organizations").select("id");
-  if (error) fail(`could not read organizations (${error.code})`);
-  const ids = data.map((o) => o.id);
-  if (orgOnly && !ids.includes(orgOnly)) fail(`--org ${orgOnly} matches no organizations row`);
-  return orgOnly ? [orgOnly] : ids;
+  if (orgOnly) {
+    const { data, error } = await supabase.from("organizations").select("id").eq("id", orgOnly).maybeSingle();
+    if (error) fail(`could not read organizations (${error.code})`);
+    if (!data) fail(`--org ${orgOnly} matches no organizations row`);
+    return [orgOnly];
+  }
+  const rows = await readAll(
+    (from, to) => supabase.from("organizations").select("id").order("id").range(from, to),
+    "organizations",
+  );
+  return rows.map((o) => o.id);
 }
 
 async function readAll(page, what) {
