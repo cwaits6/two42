@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.33.0](https://github.com/cwaits6/two42/compare/v0.32.0...v0.33.0) (2026-11-14)
+
+
+### Features
+
+* **admin:** show church admins anonymous usage counts, kept inside the app ([#786](https://github.com/cwaits6/two42/issues/786)) ([5f6b046](https://github.com/cwaits6/two42/commit/5f6b04697cf6156a5b972bd5298573c2fefdb337))
+* **auth:** let a person with an account join a household from its invite ([#785](https://github.com/cwaits6/two42/issues/785)) ([34e4bc2](https://github.com/cwaits6/two42/commit/34e4bc2e0b86c56ee7f7b8781f77282e1f8f622c))
+* **profile:** let people crop their profile photo ([#763](https://github.com/cwaits6/two42/issues/763)) ([c0002f0](https://github.com/cwaits6/two42/commit/c0002f037f572ebac3eef07695c1d365feab7b70))
+
+
+### Bug Fixes
+
+* **admin:** capitalize names, lowercase emails and send the first admin's invite when a church is added ([#765](https://github.com/cwaits6/two42/issues/765)) ([3643798](https://github.com/cwaits6/two42/commit/364379808d9284bc9ff96338de8b0a6424bbcf58))
+* **auth:** sign new members in as soon as they set a password ([#764](https://github.com/cwaits6/two42/issues/764)) ([bfa3b5c](https://github.com/cwaits6/two42/commit/bfa3b5c3cc2aca76fd42b257a640d831db0aaf6a))
+* **auth:** sign this device out when the server can't be told ([#772](https://github.com/cwaits6/two42/issues/772)) ([0a76226](https://github.com/cwaits6/two42/commit/0a76226f7a6aab534a873d1f5a037cf617ce0e6c))
+* **db:** show a group's own color in Find a group and remove retired fields ([#766](https://github.com/cwaits6/two42/issues/766)) ([fd49df4](https://github.com/cwaits6/two42/commit/fd49df4b2af3832a08aa40f241955522d9629f1b))
+* **directory:** show Edit and Remove only in an edit mode, and one Add announcement button ([#762](https://github.com/cwaits6/two42/issues/762)) ([6b8444a](https://github.com/cwaits6/two42/commit/6b8444a58a00170ee9ff48952d8fd7459ba4941a))
+* **profile:** keep the capitals people type in names like DeSantis and Mack ([#778](https://github.com/cwaits6/two42/issues/778)) ([30e6e95](https://github.com/cwaits6/two42/commit/30e6e954906f6135534d3b1d755de1c7d97357e9))
+
 ## [0.32.0](https://github.com/cwaits6/two42/compare/v0.31.0...v0.32.0) (2026-11-11)
 
 
