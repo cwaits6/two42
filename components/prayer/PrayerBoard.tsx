@@ -33,20 +33,22 @@ const STATUS_OPTIONS = STATUS_FILTERS.map((f) => ({ value: f, label: f }));
 
 export type PrayerGroup = { id: string; name: string };
 
-/** The response body, or null for any failure, network included. */
+type Sent<T> = { ok: true; data: T } | { ok: false; failure: number | "network" };
+
+/** The response body, or the status (or "network") that failureMessage needs for its next step. */
 async function sendJson<T>(
   url: string,
   method: "POST" | "PATCH" | "DELETE",
   body?: NewPrayerRequest | PrayerRequestEdit,
-): Promise<T | null> {
+): Promise<Sent<T>> {
   try {
     const res = await fetch(url, {
       method,
       ...(body !== undefined && { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
     });
-    return res.ok ? ((await res.json()) as T) : null;
+    return res.ok ? { ok: true, data: (await res.json()) as T } : { ok: false, failure: res.status };
   } catch {
-    return null;
+    return { ok: false, failure: "network" };
   }
 }
 
@@ -72,11 +74,12 @@ export function PrayerBoard({
   const requestsUrl = groupPath(group.id, "/prayer/requests");
 
   const handlePost = async (draft: NewPrayerRequest) => {
-    const data = await sendJson<PostedPrayerRequest>(requestsUrl, "POST", draft);
-    if (!data) {
-      toast.error(failureMessage("post your request"));
+    const sent = await sendJson<PostedPrayerRequest>(requestsUrl, "POST", draft);
+    if (!sent.ok) {
+      toast.error(failureMessage("post your request", sent.failure));
       return false;
     }
+    const data = sent.data;
     setRequests((prev) => [
       {
         id: data.id,
@@ -136,15 +139,17 @@ export function PrayerBoard({
   const handleToggleAnswered = async (row: PrayerWallRow) => {
     const answered = !row.is_answered;
     patchRequest(row.id, { is_answered: answered });
-    if (!(await sendJson<PrayerRequestSaved>(`${requestsUrl}/${row.id}`, "PATCH", { is_answered: answered }))) {
+    const sent = await sendJson<PrayerRequestSaved>(`${requestsUrl}/${row.id}`, "PATCH", { is_answered: answered });
+    if (!sent.ok) {
       patchRequest(row.id, { is_answered: row.is_answered });
-      toast.error(failureMessage("save that"));
+      toast.error(failureMessage("save that", sent.failure));
     }
   };
 
   const handleDelete = async (row: PrayerWallRow) => {
-    if (!(await sendJson<PrayerRequestSaved>(`${requestsUrl}/${row.id}`, "DELETE"))) {
-      toast.error(failureMessage("delete your request"));
+    const sent = await sendJson<PrayerRequestSaved>(`${requestsUrl}/${row.id}`, "DELETE");
+    if (!sent.ok) {
+      toast.error(failureMessage("delete your request", sent.failure));
       return;
     }
     setRequests((prev) => prev.filter((r) => r.id !== row.id));
