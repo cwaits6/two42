@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal/LegalPage";
 import { PRIVACY } from "@/components/legal/privacy";
+import { TERMS } from "@/components/legal/terms";
 import { pageTitle } from "@/lib/pageTitle";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -8,5 +9,5 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function PrivacyPage() {
-  return <LegalPage document={PRIVACY} companion={{ href: "/terms", label: "Terms of service" }} />;
+  return <LegalPage document={PRIVACY} companion={{ href: "/terms", label: TERMS.title }} />;
 }
