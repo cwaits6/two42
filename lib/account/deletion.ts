@@ -10,13 +10,12 @@ import { displayName } from "@/lib/names";
 import { personName, personNameOrEmail } from "@/lib/serving/display";
 import { notifyLeadersOfCancel } from "@/lib/serving/server";
 import { removeAvatarObjects } from "@/lib/storageDelete";
-import { fetchAll } from "@/lib/supabase/fetchAll";
 import { createServiceClient } from "@/lib/supabase/server";
 import type { DeletionSummary, DeletionViewer } from "./deletionCopy";
 import { parseDeletionOutcomes } from "./deletionOutcomes";
 import { dataOf, rowsOf } from "./rows";
 import { logError } from "@/lib/log";
-import { isAuthor } from "@/lib/prayer/crypto";
+import { hashedRequestsOf } from "@/lib/prayer/hashedRequests";
 import { loadPrayerKeys } from "@/lib/prayer/keys";
 
 type ServiceClient = Awaited<ReturnType<typeof createServiceClient>>;
@@ -181,38 +180,25 @@ async function tellLeadersDatesOpened(
 }
 
 /**
- * The person's anonymous requests stored as a hash, which no foreign key ties
- * to them. Null when the keys are missing or the read fails, so deletion
- * refuses rather than leave them behind. A hash under a wrong author key
- * matches no one and cannot be told apart, so under one the deletion goes
- * ahead without them. A request they post between this read and the commit
- * stays until retention removes it, and they can no longer sign in to post
- * another.
+ * The ids of the person's hashed anonymous requests. Null when the keys are
+ * missing or the read fails, so deletion refuses rather than leave them behind.
+ * A hash under a wrong author key matches no one and cannot be told apart, so
+ * under one the deletion goes ahead without them. A request they post between
+ * this read and the commit stays until retention removes it, and they can no
+ * longer sign in to post another.
  */
-async function hashedRequestsOf(service: ServiceClient, orgId: string, personId: string): Promise<string[] | null> {
+async function hashedRequestIds(service: ServiceClient, orgId: string, personId: string): Promise<string[] | null> {
   const keys = loadPrayerKeys();
   if (!keys) {
     logError("Prayer keys are not configured");
     return null;
   }
-  // All columns: the app deploys before the migration that adds author_hash.
-  const { data, error } = await fetchAll((from, to) =>
-    service
-      .from("prayer_requests")
-      .select("*")
-      .eq("org_id", orgId)
-      .eq("is_anonymous", true)
-      .is("author_id", null)
-      .order("id")
-      .range(from, to),
-  );
+  const { data, error } = await hashedRequestsOf(service, orgId, personId, keys, "*");
   if (error) {
     logError("Failed to read anonymous prayer requests for a deletion", error);
     return null;
   }
-  return (data ?? []).flatMap((row) =>
-    row.author_hash && isAuthor(keys, orgId, row.id, personId, row.author_hash) ? [row.id] : [],
-  );
+  return data.map((row) => row.id);
 }
 
 /** `actorId` is who to leave out of the team-lead notices, when someone else is acting. */
@@ -225,7 +211,7 @@ export async function deletePerson(
   let person: DeletedPerson;
   try {
     service = await createServiceClient();
-    const requestIds = await hashedRequestsOf(service, orgId, personId);
+    const requestIds = await hashedRequestIds(service, orgId, personId);
     if (!requestIds) return { outcome: "failed" };
     // Without hashed requests this is the two-argument call, which works
     // before and after the migration that adds the third.
