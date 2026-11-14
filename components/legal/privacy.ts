@@ -1,9 +1,21 @@
 import { GITHUB_URL } from "@/components/landing/sections";
+import { DOWNLOAD_COVERS, DOWNLOAD_LEAVES_OUT } from "@/lib/account/deletionCopy";
+import {
+  EXPIRED_RETENTION_DAYS,
+  FEEDBACK_RETENTION_MONTHS,
+  PRAYER_RETENTION_MONTHS,
+  REMINDER_RETENTION_DAYS,
+  USAGE_RETENTION_MONTHS,
+} from "@/supabase/functions/_shared/retention";
 import type { LegalDocument } from "./document";
 
 // Every sentence here must be true of the code on main. Before editing, read
 // docs/legal/README.md: it lists what to re-check and the sentences that must
 // change when prayer storage changes.
+
+function listOr(values: readonly number[]): string {
+  return values.length < 2 ? values.join("") : `${values.slice(0, -1).join(", ")} or ${values[values.length - 1]}`;
+}
 
 export const PRIVACY_EMAIL = "privacy@two42.io";
 
@@ -80,7 +92,7 @@ export const PRIVACY: LegalDocument = {
       blocks: [
         "Each church's data is kept apart from every other church's: every read and write in the database is checked against the church of the person asking.",
         [
-          "The directory shows what each person entered, except a birth year. A church admin chooses whether members see everyone in the church or only people they share a group with.",
+          "The directory shows what each person entered, except a birth year, which only goes into a phone contact someone saves from the directory. A church admin chooses whether members see everyone in the church or only people they share a group with.",
           "You can leave yourself out of the directory, and hide your email address from everyone but yourself and church admins.",
           "Group content — events, announcements, lessons, prayer requests, funds and the roster — is seen by that group's members. A church admin sees every person and group in the church, but not a group's content unless they are in that group.",
           "A leader can make a group private, so members who aren't in it can't find it.",
@@ -109,12 +121,12 @@ export const PRIVACY: LegalDocument = {
       blocks: [
         "What you and your church enter is kept while your account and your church use two42. A nightly job deletes:",
         [
-          "Prayer requests older than 6, 12 or 24 months, if a church admin turns that on for the church. It is off unless they do.",
-          "Feedback older than 12 months.",
-          "Declined requests to join the church, 90 days after they were declined.",
-          "Sign-up links never used, household invitations never accepted, and group invite links revoked or expired, 90 days later.",
-          "Records of which reminders were sent, after 35 days.",
-          "Usage counts older than 13 months.",
+          `Prayer requests older than ${listOr(PRAYER_RETENTION_MONTHS)} months, if a church admin turns that on for the church. It is off unless they do.`,
+          `Feedback older than ${FEEDBACK_RETENTION_MONTHS} months.`,
+          `Declined requests to join the church, ${EXPIRED_RETENTION_DAYS} days after they were declined.`,
+          `Sign-up links never used, household invitations never accepted, and group invite links revoked or expired, ${EXPIRED_RETENTION_DAYS} days later.`,
+          `Records of which reminders were sent, after ${REMINDER_RETENTION_DAYS} days.`,
+          `Usage counts older than ${USAGE_RETENTION_MONTHS} months.`,
         ],
         "Backups kept by the database host may hold deleted data until they expire.",
       ],
@@ -122,7 +134,7 @@ export const PRIVACY: LegalDocument = {
     {
       heading: "Your copy and your account",
       blocks: [
-        "In Settings, under Your data, you can download a copy of your data. The file holds your profile, your household and anyone listed in it without their own account, your groups, RSVPs, serving turns, prayer requests, the funds you receive, your feedback, and your requests. It leaves out your photo and anything you added for a group, like events and announcements.",
+        `In Settings, under Your data, you can download a copy of your data. ${DOWNLOAD_COVERS} ${DOWNLOAD_LEAVES_OUT}`,
         "You can delete your own prayer requests, and change or remove anything in your profile, at any time.",
         "You can delete your account from the same place, and a church admin can delete an account in their church. Deleting an account removes the profile, photo, sign-in, group and team memberships, RSVPs, serving turns, and prayer requests, including anonymous ones. Announcements, events and lessons the person added stay without their name, and feedback stays without a name. A church needs at least one church admin, so the last one adds another before deleting their own account.",
         `For anything you can't do yourself, ask your church admin, or write to [${PRIVACY_EMAIL}](mailto:${PRIVACY_EMAIL}). A church admin can write there to ask for the church's data to be removed.`,

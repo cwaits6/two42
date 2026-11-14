@@ -59,15 +59,18 @@ them against the files listed.
   `lib/profileColumns.ts`, and the storage kinds in `lib/storagePaths.ts`.
 - [ ] **Who sees it.** `docs/security/roles-and-permissions.md` (the role
   table and "Settings that change what a role can do"), the directory rules,
-  and `hide_email` / `is_unlisted`.
+  `hide_email` / `is_unlisted`, and the contact card in
+  `app/api/members/[id]/vcard/route.ts`, which carries the birth year.
 - [ ] **Retention.** `supabase/functions/_shared/retention.ts` and
-  `supabase/functions/_shared/cleanup.ts`: every period in "How long it is
-  kept" comes from there, and the prayer request choices from
-  `organizations.prayer_request_retention_months`.
-- [ ] **Deletion and download.** `lib/account/deletionCopy.ts` (what goes and
-  stays, `DOWNLOAD_COVERS`, `DOWNLOAD_LEAVES_OUT`), `lib/account/deletion.ts`
-  and `lib/account/export.ts`. Removing a whole church is not built; the policy
-  only says a church admin can ask.
+  `supabase/functions/_shared/cleanup.ts`. The periods in "How long it is
+  kept" are read from the constants in `retention.ts`; re-check the wording
+  around them when the job deletes something new or stops deleting something.
+- [ ] **Deletion and download.** The policy restates by hand what goes and
+  stays in `deletionCopy()` (`lib/account/deletionCopy.ts`); check it against
+  that and `lib/account/deletion.ts`. The download sentence reads
+  `DOWNLOAD_COVERS` and `DOWNLOAD_LEAVES_OUT` from the same file, so keep those
+  true of `lib/account/export.ts`. Removing a whole church is not built; the
+  policy only says a church admin can ask.
 - [ ] **Anonymity wording.** `supabase/migrations/20261109000000_prayer_author_private.sql`
   and the prayer page. Never say two42 cannot read prayer requests or cannot
   identify an anonymous author: the operator holds database access, and would

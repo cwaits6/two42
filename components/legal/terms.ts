@@ -83,7 +83,7 @@ export const TERMS: LegalDocument = {
       heading: "Changes and ending",
       blocks: [
         "two42 is built by one person. Features can change or be removed, and the service may be down at times.",
-        "You can stop using two42 at any time. You can delete your own account in Settings, and a church admin can ask for the church's data to be removed by writing to the address below.",
+        `You can stop using two42 at any time. You can delete your own account in Settings, and a church admin can ask for the church's data to be removed by writing to [${PRIVACY_EMAIL}](mailto:${PRIVACY_EMAIL}).`,
       ],
     },
     {
