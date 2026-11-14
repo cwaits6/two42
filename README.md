@@ -267,8 +267,10 @@ insert into public.platform_admins (profile_id) values ('<your auth user id>');
 name and the files in `public/brand/` ([`TRADEMARK.md`](./TRADEMARK.md)), the
 security contact in [`SECURITY.md`](./SECURITY.md) and
 `public/.well-known/security.txt`, the GitHub and contact links in
-`components/landing/sections.ts`, and the `/privacy` and `/terms` pages, which
-are placeholders.
+`components/landing/sections.ts`, and the `/privacy` and `/terms` pages, whose
+text in `components/legal/privacy.ts` and `terms.ts` describes the hosted
+service at two42.io and names its operator
+([`docs/legal/README.md`](./docs/legal/README.md)).
 
 ## Event locations
 
