@@ -214,6 +214,9 @@ The permissive arms compose on the org floor as:
   exception to the member read: its row and its methods are readable only by
   a leader of the group and its recipient, so a paused fund's handles stay off
   Give at the database (`20261115000000_fund_recipients_in_group.sql`).
+  `prayer_requests` is the exception to the write arm: no client role writes
+  it; the prayer request routes write it on the service client after sealing
+  the text.
 
 **Org admins are not implicit members.** `is_admin()` appears in no content
 policy: an org admin reads a
