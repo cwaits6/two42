@@ -70,7 +70,7 @@ export function LegalPage({
       </div>
       <footer className="mt-12 flex flex-col gap-3 border-t border-border pt-6 text-lg">
         <p>
-          <Link href={companion.href} className={LINK}>
+          <Link href={companion.href} className={`${LINK} inline-flex min-h-11 items-center`}>
             {companion.label}
           </Link>
         </p>
