@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactElement } from "react";
+import { authorHash, encryptBody, type PrayerKeys } from "@/lib/prayer/crypto";
+import { testKeys } from "@/lib/prayer/testKeys";
 
 type Read = { data: unknown[] | null; error: { code: string; message: string } | null };
 let reads: Record<string, Read>;
 let calls: { table: string; method: string }[];
 let role: "leader" | "member";
+let keys: PrayerKeys | null;
 
 function query(table: string) {
   const record = (method: string) => calls.push({ table, method });
@@ -50,6 +53,7 @@ vi.mock("@/lib/storageRead", () => ({
 }));
 vi.mock("@/lib/time/orgZone", () => ({ getOrgTimeZone: async () => "America/New_York" }));
 vi.mock("@/lib/pageTitle", () => ({ groupPageTitle: () => async () => ({}) }));
+vi.mock("@/lib/prayer/keys", () => ({ loadPrayerKeys: () => keys }));
 
 const { default: PrayerPage } = await import("./page");
 
@@ -57,6 +61,23 @@ async function render() {
   const element = (await PrayerPage({ params: Promise.resolve({ groupId: "g1" }) })) as ReactElement;
   return renderToStaticMarkup(element);
 }
+
+const ORG = "11111111-1111-4111-8111-111111111111";
+const serverKeys = testKeys();
+const sealedRow = {
+  id: "r3",
+  org_id: ORG,
+  group_id: "g1",
+  body: null,
+  body_ciphertext: encryptBody(serverKeys, ORG, "r3", "Pray for my mother's surgery."),
+  is_anonymous: true,
+  author_hash: authorHash(serverKeys, ORG, "r3", "u1"),
+  is_answered: false,
+  created_at: new Date().toISOString(),
+  mine: false,
+  praying_count: 0,
+  i_am_praying: false,
+};
 
 const goodRow = {
   id: "r1",
@@ -78,6 +99,7 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   calls = [];
   role = "member";
+  keys = serverKeys;
   reads = { prayer_wall: { data: [goodRow], error: null } };
 });
 
@@ -121,5 +143,28 @@ describe("PrayerPage", () => {
     const html = await render();
     expect(html).toContain("Couldn&#x27;t load prayer requests.");
     expect(html).not.toContain("Share a request");
+  });
+
+  it("opens sealed text, and shows the viewer their own anonymous request as theirs", async () => {
+    reads.prayer_wall.data = [goodRow, sealedRow];
+    const html = await render();
+    expect(html).toContain("Pray for my mother&#x27;s surgery.");
+    expect(html).toContain("2 shown");
+    expect(html.match(/>You</g)).toHaveLength(1);
+    expect(html).not.toContain(sealedRow.body_ciphertext);
+    expect(html).not.toContain(sealedRow.author_hash);
+  });
+
+  it.each([
+    ["missing", () => null],
+    ["wrong", () => testKeys()],
+  ])("shows the error state, never ciphertext or an empty wall, when the key is %s", async (_, key) => {
+    keys = key();
+    reads.prayer_wall.data = [goodRow, sealedRow];
+    const html = await render();
+    expect(html).toContain("Couldn&#x27;t load prayer requests.");
+    expect(html).not.toContain("Pray for a steady week.");
+    expect(html).not.toContain("v1.");
+    expect(html).not.toContain("No prayer requests yet.");
   });
 });

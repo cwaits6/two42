@@ -3,9 +3,15 @@
 import { useMemo, useState } from "react";
 import { HandHeart, Search, SearchX, X } from "lucide-react";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
 import { failureMessage } from "@/lib/errorCopy";
+import { groupPath } from "@/lib/groups/active";
 import { prayerAuthorLabel } from "@/lib/prayer";
+import type {
+  NewPrayerRequest,
+  PostedPrayerRequest,
+  PrayerRequestEdit,
+  PrayerRequestSaved,
+} from "@/lib/prayer/requests";
 import { PrayerCard } from "@/components/prayer/PrayerCard";
 import { savePrayerResponse } from "@/components/prayer/savePrayerResponse";
 import { PrayerComposer } from "@/components/prayer/PrayerComposer";
@@ -27,6 +33,25 @@ const STATUS_OPTIONS = STATUS_FILTERS.map((f) => ({ value: f, label: f }));
 
 export type PrayerGroup = { id: string; name: string };
 
+type Sent<T> = { ok: true; data: T } | { ok: false; failure: number | "network" };
+
+/** The response body, or the status (or "network") that failureMessage needs for its next step. */
+async function sendJson<T>(
+  url: string,
+  method: "POST" | "PATCH" | "DELETE",
+  body?: NewPrayerRequest | PrayerRequestEdit,
+): Promise<Sent<T>> {
+  try {
+    const res = await fetch(url, {
+      method,
+      ...(body !== undefined && { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+    });
+    return res.ok ? { ok: true, data: (await res.json()) as T } : { ok: false, failure: res.status };
+  } catch {
+    return { ok: false, failure: "network" };
+  }
+}
+
 export function PrayerBoard({
   initialRequests,
   me,
@@ -46,17 +71,15 @@ export function PrayerBoard({
   const [prayPending, setPrayPending] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState<PrayerWallRow | null>(null);
 
-  const handlePost = async (draft: { body: string; is_anonymous: boolean }) => {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("prayer_requests")
-      .insert({ author_id: me.id, group_id: group.id, ...draft })
-      .select("id, created_at")
-      .single();
-    if (error || !data) {
-      toast.error(failureMessage("post your request"));
+  const requestsUrl = groupPath(group.id, "/prayer/requests");
+
+  const handlePost = async (draft: NewPrayerRequest) => {
+    const sent = await sendJson<PostedPrayerRequest>(requestsUrl, "POST", draft);
+    if (!sent.ok) {
+      toast.error(failureMessage("post your request", sent.failure));
       return false;
     }
+    const data = sent.data;
     setRequests((prev) => [
       {
         id: data.id,
@@ -114,32 +137,19 @@ export function PrayerBoard({
   };
 
   const handleToggleAnswered = async (row: PrayerWallRow) => {
-    const supabase = createClient();
     const answered = !row.is_answered;
     patchRequest(row.id, { is_answered: answered });
-    const { data, error } = await supabase
-      .from("prayer_requests")
-      .update({ is_answered: answered })
-      .eq("id", row.id)
-      .eq("group_id", group.id)
-      .select("id");
-    if (error || !data?.length) {
+    const sent = await sendJson<PrayerRequestSaved>(`${requestsUrl}/${row.id}`, "PATCH", { is_answered: answered });
+    if (!sent.ok) {
       patchRequest(row.id, { is_answered: row.is_answered });
-      toast.error(failureMessage("save that"));
+      toast.error(failureMessage("save that", sent.failure));
     }
   };
 
-  // A delete RLS refuses matches zero rows without an error.
   const handleDelete = async (row: PrayerWallRow) => {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("prayer_requests")
-      .delete()
-      .eq("id", row.id)
-      .eq("group_id", group.id)
-      .select("id");
-    if (error || !data?.length) {
-      toast.error(failureMessage("delete your request"));
+    const sent = await sendJson<PrayerRequestSaved>(`${requestsUrl}/${row.id}`, "DELETE");
+    if (!sent.ok) {
+      toast.error(failureMessage("delete your request", sent.failure));
       return;
     }
     setRequests((prev) => prev.filter((r) => r.id !== row.id));

@@ -6,7 +6,9 @@ import { PrayerBoard } from "@/components/prayer/PrayerBoard";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ErrorState } from "@/components/states/ErrorState";
-import { toWallRow } from "@/lib/prayer";
+import { logError } from "@/lib/log";
+import { loadPrayerKeys } from "@/lib/prayer/keys";
+import { openWallRows, type SealedWallRow } from "@/lib/prayer/wall";
 import { readList } from "@/lib/supabase/readList";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { requireActiveGroup } from "@/lib/groups/server";
@@ -14,6 +16,21 @@ import { getOptionalUser } from "@/lib/supabase/current-user";
 import { groupPageTitle } from "@/lib/pageTitle";
 
 export const generateMetadata = groupPageTitle("Prayer");
+
+/** Null when the keys are missing or any text fails to open: the page shows its failed state, never ciphertext or a partial wall. */
+function openRequests(raws: SealedWallRow[], viewerId: string) {
+  const keys = loadPrayerKeys();
+  if (!keys) {
+    logError("Prayer keys are not configured", undefined, { route: "/g/[groupId]/prayer" });
+    return null;
+  }
+  try {
+    return openWallRows(raws, { viewerId, keys });
+  } catch (err) {
+    logError("Prayer requests could not be opened", err, { route: "/g/[groupId]/prayer" });
+    return null;
+  }
+}
 
 export default async function PrayerPage({
   params,
@@ -47,7 +64,8 @@ export default async function PrayerPage({
     <PageHeader title="Prayer" subtitle="Post a request with your name or anonymously." />
   );
 
-  if (requests === null) {
+  const wallRows = requests && openRequests(requests, user.id);
+  if (wallRows === null) {
     return (
       <PageContainer size="wide">
         {header}
@@ -58,7 +76,6 @@ export default async function PrayerPage({
 
   // Private buckets: exchange stored avatar URLs for signed URLs
   // before the wall rows and the composer's "me" reach client renders.
-  const wallRows = requests.map(toWallRow);
   const [signedWallAvatars, myAvatarUrl] = await Promise.all([
     mintSignedUrls(wallRows.map((r) => r.avatar_url)),
     mintSignedUrl(profile.avatar_url),

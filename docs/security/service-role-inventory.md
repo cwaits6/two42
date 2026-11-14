@@ -75,9 +75,9 @@ by CWA-57 / #328 (org-partitioned `storage.objects` policies — see
 tenancy-model.md "Storage tenancy"), and storage reads by CWA-59 / #333
 (private buckets + signed URLs, the revisit ADR-3 tracked).
 
-One service-key user lives outside the "App routes and pages" and
-"Lib helpers" tables by design — the one-time storage re-key operator
-script; see the "Operator scripts" section below.
+Two service-key users live outside the "App routes and pages" and
+"Lib helpers" tables by design — the one-time storage re-key and the prayer
+request conversion operator scripts; see the "Operator scripts" section below.
 
 Every app-code site below now derives `org_id` from an anchor it has already
 validated — the calendar subscription-token row, the HMAC-signed link's
@@ -277,9 +277,9 @@ own `org_id`. No client or job can call it.
 
 ## Person deletion RPC — a definer-function bypass surface
 
-`delete_person(_person_id, _org_id)`
+`delete_person(_person_id, _org_id, _anonymous_request_ids)`
 (first `20261113000000_delete_person.sql`; the current body is in
-`20261125000000_household_and_deletion_rules.sql`) runs every database step of deleting a
+`20261127000000_prayer_request_encryption.sql`) runs every database step of deleting a
 person in one transaction: refusing a platform operator and the last church
 admin, serving dates, sign-up records, household entries, and the
 `auth.users` row, which cascades to the profile, through it to the person's
@@ -294,6 +294,15 @@ otherwise raises `AD003`, which rolls the whole delete back. `AD003` means
 either that the fund rules and `person_deletion_outcomes()` disagree, or that a
 fund's recipient or the second person's group membership changed while the
 delete ran; a retry resolves the second.
+
+An anonymous prayer request in the hashed form has no `author_id`, so the
+cascade cannot reach it, and the database cannot compute the hash. The caller
+passes the ids it matched with the key as `_anonymous_request_ids` (default
+empty). The function deletes only rows among them that belong to the target's
+church, are anonymous and carry no `author_id`; an id that is by-name, still
+names its author, or is in another church is ignored. Which of the church's
+hashed rows are the person's is the caller's word, which is why EXECUTE stays
+`service_role` only.
 
 Their `group_invite_uses` rows stay, because `max_uses` counts them and deleting
 one would make a used-up link live again. The function clears what identifies the
@@ -725,12 +734,20 @@ where the name is hidden, which links a person's requests to each other. The
 grant matrix and each arm are pinned by
 `supabase/tests/prayer_anonymity_suite.sql`.
 
-Two plain (not definer) triggers from the same migration close write oracles:
-`prayer_requests_author_sets_anonymity` lets only the author change
-`is_anonymous`, and `profiles_keep_id` refuses a client's change to
-`profiles.id` before a foreign key error can name `prayer_requests`.
-`service_role` is outside both, and no service-role client reads
-`prayer_requests` or `prayer_wall`.
+A request in the hashed anonymous form (`20261127000000_prayer_request_encryption.sql`)
+has no `author_id`, so the helper returns NULL for it to everyone, its author
+included; the server recognises the author by the hash. See
+[`prayer-encryption.md`](prayer-encryption.md).
+
+No client role writes `prayer_requests`: the same migration revoked INSERT,
+UPDATE and DELETE and dropped the write policies and the
+`prayer_requests_author_sets_anonymity` trigger, because only server code
+holding the keys can seal the text or hash an author. The plain trigger
+`profiles_keep_id` still refuses a client's change to `profiles.id` before a
+foreign key error can name `prayer_requests`. The service-role clients that
+read or write `prayer_requests` are the two prayer request routes,
+`lib/account/deletion.ts`, `lib/account/export.ts`, the retention job in
+`supabase/functions/_shared/cleanup.ts`, and `scripts/encrypt-prayer-requests.mjs`.
 
 ## Hidden email helpers — definer-function bypass surfaces
 
@@ -860,7 +877,7 @@ function, because a client role holds no write grant on the table:
 The grant matrix, the refused inputs, the read boundaries, the prune and the
 cascade with the church are pinned by `supabase/tests/usage_counts_suite.sql`.
 
-## App routes and pages (27 sites)
+## App routes and pages (29 sites)
 
 | File | Why service-role is used | Org derived from | Scoped queries |
 |------|--------------------------|------------------|----------------|
@@ -891,6 +908,8 @@ cascade with the church are pinned by `supabase/tests/usage_counts_suite.sql`.
 | `app/api/admin/email-domain/verify/route.ts` | 404s before auth while `CUSTOM_SENDING_DOMAINS_ENABLED` is false. POST handler: the `status`/`verified_at`/`last_checked_at` transition must not be writable by the admin's own client (same column grants as above) | The caller's own RLS-scoped `profiles.org_id`, read on the request client; target row fetched `.eq("org_id", orgId)` before any write | `org_email_domains` select `.eq("org_id", orgId)` + update on `(id, org_id)` |
 | `app/api/platform/organizations/[id]/email-cap/route.ts` | Daily email cap override (CWA-72): `org_email_limits` is platform-operator-owned with no permissive policy, so only a service-role write can reach it — an org that can raise its own cap does not have a cap | Platform-admin authority; org id from the route param, validated against an existing `organizations` row before the write | `organizations` `.eq("id", id)` (existence check); `org_email_limits` upsert carrying the validated `org_id`, zero-row-checked |
 | `app/api/platform/organizations/[id]/email-domain-cleanup/route.ts` | Platform-admin retry of a stuck Resend domain removal: the org's `org_email_domains` row is scoped to that org's own admins, so a platform operator finishing the cleanup from `/platform` needs the service client for both the read and the delete; the row's `cleanup_failed_at` is a server-set-only column besides | Platform-admin authority; org id from the route param, validated against an existing `organizations` row before any `org_email_domains` access | `organizations` `.eq("id", id)` (existence check); `org_email_domains` select `.eq("org_id", org.id)` (must be `cleanup_pending` with a `resend_domain_id`), update on `(id, org_id)` on a failed retry, delete on `(id, org_id)` zero-row-checked after Resend confirms removal |
+| `app/g/[groupId]/prayer/requests/route.ts` | POST posts a prayer request. Only server code holding the prayer keys can seal the text and hash an anonymous author, so no client role writes `prayer_requests` at all | Caller's own RLS-scoped profile (`prayerWriter()` in `requests/context.ts`); the group from `getGroupMemberships()`, which 404s a non-member | `prayer_requests` insert carrying `org_id` and the verified `group_id`; the id is generated here and bound into the ciphertext |
+| `app/g/[groupId]/prayer/requests/[requestId]/route.ts` | PATCH (mark answered, edit the text, switch between by-name and anonymous) and DELETE. The author of a hashed anonymous request is recognised only by recomputing the hash with the key, and the rewrite reseals the text | Caller's own RLS-scoped profile, as above; the author or a group leader may write, only the author may change `is_anonymous`, and anyone else gets the same 404 as a missing request | `prayer_requests` read, update and delete on `(id, org_id, group_id)`; the update is also guarded on the `updated_at` it read, so a write that read the row before a switch to anonymous cannot undo it |
 
 ## Lib helpers (6 sites)
 
@@ -901,8 +920,8 @@ column below describes what a regression would cost, not a pending work item.
 
 | File | Why service-role is used | Tenancy risk | Mitigation |
 |------|--------------------------|--------------|------------|
-| `lib/account/deletion.ts` | `deletePerson(orgId, personId, actorId?)` and `loadDeletionSummary(orgId, personId, viewer)` — the one path that deletes a person, from `DELETE /api/account` (themself) and `DELETE /api/admin/members/[id]` (a church admin). `delete_person()` is granted only to `service_role`. After it commits, and after the response, the team-lead notices read other people's rows. The confirmation reads a person's leaders and refusal flags, and their fund and household outcomes from `person_deletion_outcomes()` (granted only to `service_role`), which RLS would refuse a church admin or a member | A wrong org would delete a person in another church, or show a church admin group content from it | `orgId` comes from the caller's own RLS-scoped profile (`currentPerson()` or `requireOrgAdmin()`), never the request, and `delete_person()` compares it with the target's own row. A self-delete's `personId` is the session's user id. Every read filters `org_id` except `platform_admins`, which has none and is keyed on a target already read inside the org. A church admin's summary carries counts, not fund or group names |
-| `lib/account/export.ts` | `buildAccountExport(orgId, personId)` — a person's own download. `prayer_requests.author_id` has no column grant for `authenticated`, so an anonymous request can only be matched to its author here; memberships and RSVPs in groups the person has left aren't RLS-readable either | A dropped filter would put another person's data in the file | `orgId` and `personId` come from `currentPerson()`, the session and its RLS-scoped profile, never the request. Every chain filters `org_id` and this person, the household id read off their own profile row, or, for `access_requests`, the address on that row, matched exactly and case-insensitively. Unclaimed household entries are the one place other people appear, with their names and birth dates, because nothing records who typed them; entries claimed by someone else are excluded, and no other selected column names anyone else |
+| `lib/account/deletion.ts` | `deletePerson(orgId, personId, actorId?)` and `loadDeletionSummary(orgId, personId, viewer)` — the one path that deletes a person, from `DELETE /api/account` (themself) and `DELETE /api/admin/members/[id]` (a church admin). `delete_person()` is granted only to `service_role`. After it commits, and after the response, the team-lead notices read other people's rows. The confirmation reads a person's leaders and refusal flags, and their fund and household outcomes from `person_deletion_outcomes()` (granted only to `service_role`), which RLS would refuse a church admin or a member. Before the RPC it reads the church's hashed anonymous prayer requests and passes the ids whose author hash matches the person, since no foreign key reaches them; without the prayer keys, or on a failed read, the deletion fails rather than leave them | A wrong org would delete a person in another church, or show a church admin group content from it; a wrong id list would delete someone else's anonymous request | `orgId` comes from the caller's own RLS-scoped profile (`currentPerson()` or `requireOrgAdmin()`), never the request, and `delete_person()` compares it with the target's own row. A self-delete's `personId` is the session's user id. Every read filters `org_id` except `platform_admins`, which has none and is keyed on a target already read inside the org. A church admin's summary carries counts, not fund or group names |
+| `lib/account/export.ts` | `buildAccountExport(orgId, personId)` — a person's own download. An anonymous prayer request stores no author, only a hash, so it is matched to the person here by recomputing the hash over the church's hashed rows, and its text opened with the prayer key; memberships and RSVPs in groups the person has left aren't RLS-readable either | A dropped filter would put another person's data in the file | `orgId` and `personId` come from `currentPerson()`, the session and its RLS-scoped profile, never the request. Every chain filters `org_id` and this person, the household id read off their own profile row, or, for `access_requests`, the address on that row, matched exactly and case-insensitively. Unclaimed household entries are the one place other people appear, with their names and birth dates, because nothing records who typed them; entries claimed by someone else are excluded, and no other selected column names anyone else |
 | `lib/storageDelete.ts` | `removeAvatarObjects(orgId, keys)` — removes a deleted person's photos after `delete_person()` commits. There is no browser session by then, and a key from before org partitioning is unreachable by every RLS-constrained client | The client ignores the org partition on `storage.objects`, so a wrong key would remove another church's object. The guard flags this chain, since it is rooted at a service client, but its marker only records the reason and no check can see the key's value | The module owns its client and accepts none. `orgId` comes from the caller's validated anchor, and a key under another org is refused and reported as still stored. The keys come from `delete_person()`, which finds them from row ids it has already scoped to the org, never from a stored URL column the row's owner can write. This and the operator script are the only service-role `.storage.from(` call sites |
 | `lib/email/identity.ts` | `resolveEmailBranding(orgId)` — `orgId` is **required** — reads `organizations.branding` for callers that hold an explicit org id but no request-scoped session (e.g. `lib/serving/server.ts`, invoked from HMAC-signed link flows), and a second, org-scoped read of `org_email_domains` to resolve the per-org `From:` address. The link origin (`EmailBranding.baseUrl`) is the app's one canonical host, `siteConfig.url`, and needs no read. The genuinely request-scoped case is the separately named `resolveRequestEmailBranding()`: it resolves the org id via `resolveRequestOrgId()` on the cookie-bound request client, then runs the same service-role `org_email_domains` read for it — it has no live caller today and exists so that path must be typed out, never reached by omitting an argument | A missing filter on either table would leak another org's branding or sending domain into an email | The `organizations` read's `.eq("id", orgId)` and the `org_email_domains` read's `.eq("org_id", orgId)` are the only tenant boundaries, both mandatory; `orgId` is always either the caller's already-authorized id or the value `resolveRequestOrgId()` resolves for the current request — never a header, never a body field. `SENDING_DOMAIN` additionally gates the stored domain value itself (with `status = 'verified'`) before it can reach a `From:` header — see CLAUDE.md's injection-boundary list. Branding on the request-scoped path still comes from the request-scoped client, so RLS applies — but that resolves to the *request* org, which can differ from the row's org, so any caller holding an authorized `org_id` must pass it. |
 | `lib/email/quota.ts` | `reserveEmailQuota(orgId, n)` calls `email_quota_consume()` — a `service_role`-only RPC (see the "Email quota RPC" section above), so the service client is the only client that can execute it | The `.rpc()` call is invisible to the guard (it walks `.from()` chains only), so a refactor could silently pass an unvalidated org id | `orgId` must come from an anchor the caller already validated — the caller's RLS-scoped profile (`app/api/feedback`), the RLS-checked group row (`app/api/serving/broadcast`), the already-authorized `opts.orgId` both `notifyLeadersOfCancel` callers hold, or the org id `sendFirstAdminInvite()` (`app/api/platform/organizations/firstAdminInvite.ts`) holds: the id `provision_organization()` returned, or the route param behind `requirePlatformAdmin()` — never a header or body field. Fail-closed: any RPC error or throw is a refusal, never "send anyway" |
@@ -1051,10 +1070,10 @@ counts are rows the deletes matched: `group_invite_uses` and `prayer_responses`
 go with their parent through the foreign key and are not counted. It never
 deletes an `organizations` row.
 
-## Operator scripts (1 site)
+## Operator scripts (2 sites)
 
-Not app code: this runs from an operator's shell, once per environment, in no
-request path. It reads the service key straight from `process.env`
+Not app code: these run from an operator's shell, in no request path. Each
+reads the service key straight from `process.env`
 (`SUPABASE_SECRET_KEY`, falling back to `SUPABASE_SERVICE_ROLE_KEY`) rather
 than through `createServiceClient()` or `resolveServiceKey()` — a third
 service-key entry point, and the reason `npm run guard:tenancy` cannot see
@@ -1070,3 +1089,4 @@ prose above the real heading silently becomes the section it parses.)
 | File | Why service-role is used | Tenancy risk | Mitigation |
 |------|--------------------------|--------------|------------|
 | `scripts/rekey-storage-objects.mjs` | One-time re-key of pre-CWA-57 storage objects onto `<org_id>/<kind>/<entity_id>/<file>`. A legacy un-prefixed key is unreachable by every RLS-constrained **mutation** — its first path segment is not an org id, so the new restrictive floor on `storage.objects` matches no row for it and no `anon`/`authenticated` principal can move or delete it. That was write-only exposure while the buckets were public (the object kept serving on `/object/public/*`, which bypassed RLS — the state this script runs in, since it is a precondition for the CWA-59 / #333 private-bucket deploy); post-CWA-59 the same un-moved key is unreadable to every anon/authenticated application caller too (service-role access still reaches it — that is what this script uses), which is what makes skipping this script a user-visible outage rather than a deferred cleanup. Moving it needs the service role either way | Un-scoped URL-column updates (`profiles.avatar_url`, `family_units.photo_url`, `family_members.avatar_url`) would rewrite another org's rows; a wrong org prefix would move objects *into* a tenant they do not belong to | The org id **is** operator input — legacy keys carry no org marker, so nothing in the data can identify the tenant and `--org <uuid>` is how it is named. What is guaranteed is that the value is never trusted as given: it must parse as a UUID and match a real `organizations` row or the script exits before touching anything, and with more than one org present the flag is mandatory rather than defaulted, so the script never guesses a tenant. Every URL update carries `.eq("org_id", orgId)` alongside `.eq("id", …)`. A pre-flight check aborts before any mutation if the app's stored URL base disagrees with this process's `SUPABASE_URL`; destination collisions and un-updated URL rows are collected and force a non-zero exit rather than reading as success. Classification is unit-tested (`scripts/rekeyPlan.test.mjs`) |
+| `scripts/encrypt-prayer-requests.mjs` | Converts existing prayer requests to the stored form the app writes: plaintext `body` sealed into `body_ciphertext`, an anonymous row's `author_id` replaced by `author_hash`, and, during a key rotation, text and hashes moved onto the new key. The database cannot do this itself, because the keys live outside it; rerunnable, dry run by default, `--apply` to write | A write keyed on `id` alone could rewrite another church's row; the per-church keys mean a row sealed under the wrong church's key would fail to open there | Iterates the `organizations` rows (or one, `--org <uuid>`, which must parse and match a real row). Every read and write on `prayer_requests` and `profiles` carries `.eq("org_id", orgId)`; each update is also guarded on the value it read and counts a zero-row write as a failure. Prints counts per church only, never request text or anyone's id, and exits non-zero on any row it could not convert. Planning and the guarded write are unit-tested (`lib/prayer/crypto.test.ts`, `lib/prayer/backfill.test.ts`) |

@@ -112,42 +112,51 @@ on conflict (group_id, profile_id) do update set role = excluded.role;
 insert into public.team_members (org_id, team_id, profile_id)
 select pg_temp.fx('org'), pg_temp.fx('team'), pg_temp.fx(k) from (values ('spouse_a'), ('spouse_b')) v(k);
 
--- ── A prayer request: the author deletes it, by name or anonymous ───────────
+-- ── Prayer requests ─────────────────────────────────────────────────────────
+-- 'anon 3' and 'named 1' still carry spouse_a as author_id, so the profile
+-- cascade removes them. A hashed anonymous request carries no author at all:
+-- the app finds the person's by the hash and passes their ids.
+create function pg_temp.h(_n int) returns uuid language sql immutable as $$
+  select ('b0000000-0000-4000-8000-' || lpad(_n::text, 12, '0'))::uuid;
+$$;
 insert into public.prayer_requests (id, org_id, group_id, author_id, body, is_anonymous)
 select gen_random_uuid(), pg_temp.fx('org'), pg_temp.fx('group'), pg_temp.fx('spouse_a'), b, a
-from (values ('anon 1', true), ('anon 2', true), ('named 1', false), ('anon 3', true)) v(b, a);
+from (values ('named 1', false), ('anon 3', true)) v(b, a);
+insert into public.prayer_requests (id, org_id, group_id, author_id, author_hash, body, body_ciphertext, is_anonymous)
+values
+  -- spouse_a's, hashed
+  (pg_temp.h(1), pg_temp.fx('org'), pg_temp.fx('group'), null, 'h1.k.mine', null, 'v1.k.a.b', true),
+  -- spouse_b's, hashed, and not passed in
+  (pg_temp.h(2), pg_temp.fx('org'), pg_temp.fx('group'), null, 'h1.k.theirs', null, 'v1.k.a.b', true),
+  -- another church's, hashed
+  (pg_temp.h(3), pg_temp.fx('other_org'), pg_temp.fx('other_group'), null, 'h1.k.other', null, 'v1.k.a.b', true),
+  -- spouse_b's by name
+  (pg_temp.h(4), pg_temp.fx('org'), pg_temp.fx('group'), pg_temp.fx('spouse_b'), null, 'named b', null, false),
+  -- spouse_b's, anonymous, not yet converted
+  (pg_temp.h(5), pg_temp.fx('org'), pg_temp.fx('group'), pg_temp.fx('spouse_b'), null, 'anon b', null, true);
 
-select is(pg_temp.attempt(pg_temp.fx('spouse_b'),
-  $$delete from public.prayer_requests where body = 'anon 1'$$), 'rows:0',
-  'another member deletes no anonymous request');
-select is(pg_temp.attempt(pg_temp.fx('outsider'),
-  $$delete from public.prayer_requests where body = 'anon 1'$$), 'rows:0',
-  'someone in another church deletes no request');
-select is(pg_temp.attempt(pg_temp.fx('spouse_a'),
-  $$delete from public.prayer_requests where body = 'anon 1'$$), 'rows:1',
-  'the author deletes their anonymous request');
-select is(pg_temp.attempt(pg_temp.fx('spouse_a'),
-  $$delete from public.prayer_requests where body = 'named 1'$$), 'rows:1',
-  'the author deletes their request by name');
-select is(pg_temp.attempt(pg_temp.fx('leader'),
-  $$delete from public.prayer_requests where body = 'anon 2'$$), 'rows:1',
-  'a leader keeps the right to delete a request in their group');
+select is(pg_temp.attempt(pg_temp.fx(who),
+  format('delete from public.prayer_requests where id = %L', pg_temp.h(1))), '42501',
+  who || ' deletes no request from the browser; the server does it with the key')
+from unnest(array['spouse_a', 'spouse_b', 'leader', 'outsider']) who;
 
 -- ── Who can call it ─────────────────────────────────────────────────────────
-select ok((select p.prosecdef from pg_proc p where p.oid = 'public.delete_person(uuid, uuid)'::regprocedure),
+select ok((select p.prosecdef from pg_proc p where p.oid = 'public.delete_person(uuid, uuid, uuid[])'::regprocedure),
   'delete_person is SECURITY DEFINER');
-select is((select p.proconfig from pg_proc p where p.oid = 'public.delete_person(uuid, uuid)'::regprocedure),
+select is((select p.proconfig from pg_proc p where p.oid = 'public.delete_person(uuid, uuid, uuid[])'::regprocedure),
   array['search_path=""'], 'delete_person pins an empty search_path');
-select ok(not has_function_privilege('anon', 'public.delete_person(uuid, uuid)', 'execute'),
+select ok(not has_function_privilege('anon', 'public.delete_person(uuid, uuid, uuid[])', 'execute'),
   'anon can''t call it');
-select ok(not has_function_privilege('authenticated', 'public.delete_person(uuid, uuid)', 'execute'),
+select ok(not has_function_privilege('authenticated', 'public.delete_person(uuid, uuid, uuid[])', 'execute'),
   'a signed-in person can''t call it');
-select ok(has_function_privilege('service_role', 'public.delete_person(uuid, uuid)', 'execute'),
+select ok(has_function_privilege('service_role', 'public.delete_person(uuid, uuid, uuid[])', 'execute'),
   'the service role can call it');
 select ok(has_table_privilege(
-    (select p.proowner::regrole::text from pg_proc p where p.oid = 'public.delete_person(uuid, uuid)'::regprocedure),
+    (select p.proowner::regrole::text from pg_proc p where p.oid = 'public.delete_person(uuid, uuid, uuid[])'::regprocedure),
     'auth.users', 'delete'),
   'its owner holds DELETE on auth.users');
+select hasnt_function('public', 'delete_person', array['uuid', 'uuid'],
+  'the two-argument signature is gone, so no grant is left on it');
 
 -- ── Fixture: everything a deletion touches ──────────────────────────────────
 create function pg_temp.d(_n int) returns uuid language sql immutable as $$
@@ -272,12 +281,18 @@ insert into storage.objects (bucket_id, name) values
 -- ── Helpers around the call ─────────────────────────────────────────────────
 create temp table result (who text primary key, body jsonb) on commit drop;
 
--- 'deleted', or the SQLSTATE it raised. Called as the service role, as the app does.
-create function pg_temp.delete_person(_who text, _org uuid) returns text language plpgsql as $$
+-- 'deleted', or the SQLSTATE it raised. Called as the service role, as the app
+-- does, with two arguments when no anonymous requests are passed.
+create function pg_temp.delete_person(_who text, _org uuid, _requests uuid[] default null)
+  returns text language plpgsql as $$
 declare _body jsonb; _id uuid := pg_temp.fx(_who);
 begin
   set local role service_role;
-  _body := public.delete_person(_id, _org);
+  if _requests is null then
+    _body := public.delete_person(_id, _org);
+  else
+    _body := public.delete_person(_id, _org, _requests);
+  end if;
   set local role none;
   insert into result values (_who, _body);
   return 'deleted';
@@ -339,7 +354,7 @@ create trigger a_late_step before delete on public.profiles
   for each row execute function pg_temp.late_step();
 
 select set_config('deletion_suite.fail', 'on', true);
-select is(pg_temp.delete_person('spouse_a', pg_temp.fx('org')), 'DS999',
+select is(pg_temp.delete_person('spouse_a', pg_temp.fx('org'), array[pg_temp.h(1)]), 'DS999',
   'a failure at the last step reaches the caller');
 select set_config('deletion_suite.fail', 'off', true);
 select ok(pg_temp.untouched(), 'and every earlier step is rolled back with it');
@@ -354,6 +369,8 @@ select is((select count(*) from public.access_requests where email = 'a.spouse@d
   'the access request is still there');
 select is((select count(*) from auth.identities where user_id = pg_temp.fx('spouse_a')), 1::bigint,
   'and they can still sign in');
+select is((select count(*) from public.prayer_requests where id = pg_temp.h(1)), 1::bigint,
+  'and their hashed anonymous request is still there');
 
 -- ── The last church admin ───────────────────────────────────────────────────
 -- Another admin is demoted between the check and the cascade, the race the
@@ -398,7 +415,9 @@ insert into public.rsvps (org_id, event_id, user_id, status, occurrence_date) va
   (pg_temp.fx('org'), pg_temp.fx('reply_series'), pg_temp.fx('spouse_b'), 'no', current_date + 8);
 
 -- ── The delete itself ───────────────────────────────────────────────────────
-select is(pg_temp.delete_person('spouse_a', pg_temp.fx('org')), 'deleted', 'one spouse is deleted');
+select is(pg_temp.delete_person('spouse_a', pg_temp.fx('org'),
+            array[pg_temp.h(1), pg_temp.h(3), pg_temp.h(4), pg_temp.h(5)]),
+  'deleted', 'one spouse is deleted');
 select is((select count(*) from public.rsvps where user_id = pg_temp.fx('spouse_a')), 0::bigint,
   'their replies go, for every date');
 select is((select count(*) from public.rsvps where user_id = pg_temp.fx('spouse_b')), 1::bigint,
@@ -409,7 +428,14 @@ select is((select count(*) from auth.identities where user_id = pg_temp.fx('spou
 select is((select count(*) from auth.sessions where user_id = pg_temp.fx('spouse_a')), 0::bigint, 'and sessions');
 select is((select count(*) from auth.refresh_tokens where token = 'deletion-suite-token'), 0::bigint, 'and refresh tokens');
 select is((select count(*) from public.profiles where id = pg_temp.fx('spouse_a')), 0::bigint, 'the profile goes');
-select is((select count(*) from public.prayer_requests where body = 'anon 3'), 0::bigint, 'their anonymous prayer request goes');
+select is((select count(*) from public.prayer_requests where body in ('anon 3', 'named 1')), 0::bigint,
+  'their requests that still name them go through the foreign key');
+select is((select count(*) from public.prayer_requests where id = pg_temp.h(1)), 0::bigint,
+  'their hashed anonymous request goes, found by the ids passed in');
+select is((select array_agg(id order by id) from public.prayer_requests where id in
+             (pg_temp.h(2), pg_temp.h(3), pg_temp.h(4), pg_temp.h(5))),
+  array[pg_temp.h(2), pg_temp.h(3), pg_temp.h(4), pg_temp.h(5)],
+  'a request not passed in, another church''s, and one that is by name or names its author all stay');
 select is((select count(*) from public.group_members where profile_id = pg_temp.fx('spouse_a')), 0::bigint, 'their group memberships go');
 select is((select count(*) from public.team_members where profile_id = pg_temp.fx('spouse_a')), 0::bigint, 'their team memberships go');
 

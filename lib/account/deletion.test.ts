@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { parseDeletionOutcomes } from "./deletionOutcomes";
+import { authorHash, type PrayerKeys } from "@/lib/prayer/crypto";
+import { testKeys } from "@/lib/prayer/testKeys";
 import { fakeService, type Tables } from "./fakeServiceTestHelpers";
 
 const createServiceClient = vi.fn();
@@ -16,6 +18,9 @@ vi.mock("next/server", () => ({
   after: (task: () => Promise<void>) => afterResponse.push(task),
 }));
 const consoleError = vi.spyOn(console, "log").mockImplementation(() => {});
+let keys: PrayerKeys | null;
+vi.mock("@/lib/prayer/keys", () => ({ loadPrayerKeys: () => keys }));
+const KEYS = testKeys();
 
 const { deletePerson, deletionResponse, loadDeletionSummary } = await import("./deletion");
 
@@ -58,6 +63,7 @@ function setup(overrides: Partial<Tables> = {}) {
 }
 
 beforeEach(() => {
+  keys = KEYS;
   createServiceClient.mockReset();
   notifyLeadersOfCancel.mockReset();
   afterResponse.length = 0;
@@ -84,6 +90,57 @@ describe("deletePerson", () => {
     expect(log.removedObjects).toEqual([]);
     expect(notifyLeadersOfCancel).not.toHaveBeenCalled();
     expect(afterResponse).toEqual([]);
+  });
+
+  it("passes the ids of their hashed anonymous requests, and no one else's", async () => {
+    const hashed = (id: string, author: string, org = ORG) => ({
+      id,
+      org_id: org,
+      is_anonymous: true,
+      author_id: null,
+      author_hash: authorHash(KEYS, org, id, author),
+    });
+    const { log } = setup({
+      prayer_requests: [
+        hashed("p1", "ada"),
+        hashed("p2", "ben"),
+        hashed("p3", "ada", OTHER_ORG),
+        hashed("p4", "ada"),
+        { id: "p5", org_id: ORG, is_anonymous: true, author_id: "ada", author_hash: null },
+      ],
+    });
+    expect(await deletePerson(ORG, "ada")).toEqual({ outcome: "deleted", photosNotRemoved: 0 });
+    expect(log.rpcs).toEqual([
+      { name: "delete_person", args: { _person_id: "ada", _org_id: ORG, _anonymous_request_ids: ["p1", "p4"] } },
+    ]);
+  });
+
+  it("finds their hashed requests past the first page of the church's", async () => {
+    const hashed = (id: string, author: string) => ({
+      id,
+      org_id: ORG,
+      is_anonymous: true,
+      author_id: null,
+      author_hash: authorHash(KEYS, ORG, id, author),
+    });
+    const others = Array.from({ length: 1000 }, (_, i) => hashed(`b${i}`, "ben"));
+    const { log, state } = setup({ prayer_requests: [...others, hashed("last", "ada")] });
+    state.maxRows = 1000;
+    expect(await deletePerson(ORG, "ada")).toEqual({ outcome: "deleted", photosNotRemoved: 0 });
+    expect(log.rpcs[0].args).toMatchObject({ _anonymous_request_ids: ["last"] });
+  });
+
+  it("fails, deleting nothing, without the prayer keys or when their requests can't be read", async () => {
+    keys = null;
+    const { log } = setup();
+    expect(await deletePerson(ORG, "ada")).toEqual({ outcome: "failed" });
+    expect(log.rpcs).toEqual([]);
+
+    keys = KEYS;
+    const second = setup();
+    second.failures.push({ table: "prayer_requests", op: "select" });
+    expect(await deletePerson(ORG, "ada")).toEqual({ outcome: "failed" });
+    expect(second.log.rpcs).toEqual([]);
   });
 
   it("reports failure when the service client can't be built", async () => {

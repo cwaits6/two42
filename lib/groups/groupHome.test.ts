@@ -967,6 +967,28 @@ describe("a quiet or failed page", () => {
     expect(buildGroupHome(reads({ openPrayers: null }), ctx()).prayerFailed).toBe(true);
   });
 
+  it("keeps the rest of the new feed, and flags prayer as failed, when answered requests fail", () => {
+    const home = buildGroupHome(
+      reads({
+        answeredPrayers: null,
+        lessons: [
+          {
+            id: "l",
+            title: "l",
+            video_url: "https://example.test/v",
+            lecture_date: "2026-10-30",
+            scripture_reference: null,
+            created_at: "2026-10-30T12:00:00Z",
+          },
+        ],
+      }),
+      ctx(),
+    );
+    expect(home.newTiles?.map((t) => t.key)).toEqual(["lesson-l"]);
+    expect(home.prayerFailed).toBe(true);
+    expect(home.nothingAtAll).toBe(false);
+  });
+
   it("flags a failed check for any request only when there is no request to show", () => {
     const open = { id: "p" } as PrayerWallRow;
     expect(buildGroupHome(reads({ hasOpenPrayer: null }), ctx()).prayerFailed).toBe(true);
