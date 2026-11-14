@@ -255,7 +255,8 @@ before the release that seals prayer text stay in plaintext until you convert
 them. Set the two prayer keys, deploy, apply the migrations, then run
 `scripts/encrypt-prayer-requests.mjs` as described in
 [`docs/security/prayer-encryption.md`](./docs/security/prayer-encryption.md)
-("Converting existing rows").
+("Converting existing rows"). Once a request is sealed, do not roll the app
+back to a build from before that release; see "Rolling back" there.
 
 **The first church admin.** The migrations create one church with one group.
 Approve your own email in the SQL editor, as a church admin:

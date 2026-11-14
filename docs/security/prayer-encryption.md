@@ -63,7 +63,10 @@ readable as the keys you keep for them.
 ## When a key is missing or wrong
 
 The server reads the keys from its environment on every request. A missing or
-malformed key (not exactly 32 bytes of base64) counts as missing.
+malformed key (not exactly 32 bytes of base64) counts as missing. Leaving a
+`_PREVIOUS` key unset is fine, but one that is set and malformed fails the
+same way as a missing current key, on every prayer surface of every church:
+check the prayer page after setting one.
 
 - **The prayer page** shows its failed state, never ciphertext and never an
   empty wall. So does a page holding any request whose text fails to open,
@@ -80,8 +83,8 @@ malformed key (not exactly 32 bytes of base64) counts as missing.
   no one, so authors are not recognised on their anonymous requests until the
   right key is back. Under it, account download leaves the person's anonymous
   requests out, and account deletion goes ahead without them: they stay,
-  nobody's, until a leader deletes them or the church's retention period
-  removes them.
+  nobody's, until the church's retention period removes them or an operator
+  deletes them (see "Deleting an orphaned request").
 
 **Production** must have both keys. **Preview deployments** carry no service
 secrets by design, the prayer keys included, so on a preview the prayer page
@@ -158,6 +161,18 @@ select count(*) from public.prayer_requests
 where body is not null or (is_anonymous and author_id is not null);
 ```
 
+## Rolling back
+
+The migration stays applied. Once any request is sealed, do not deploy a build
+from before this release: it reads only the plaintext column, so sealed
+requests show blank text, and it writes through grants the migration revoked,
+so posting fails. Fix forward, or restore the backup taken before the upgrade
+together with that build.
+
+Between deploying this release and applying its migration, the prayer page and
+Home still show every request, but posting, marking answered and editing fail
+with the board's usual error message until the migration is applied.
+
 ## Rotating a key
 
 Rotate one key at a time.
@@ -183,17 +198,18 @@ before step 3 prove the new key as in "What the dry run proves": until a
 request holds a hash under it, every `rehash` is held. A hash carries only its key id, not its author, so the script finds each
 anonymous request's author by trying every person in the church under the
 previous key, and rehashes under the new one. A request whose author is no
-longer in the church reports as `unmatched`; it stays anonymous and nobody's,
-and a leader can still delete it. The script reports it as `unmatched` on
+longer in the church reports as `unmatched`; it stays anonymous and nobody's
+until retention removes it or an operator deletes it. The script reports it as `unmatched` on
 every run from then on, and it no longer stops a body-key rotation.
 
 ## Losing a key
 
 **The author key.** Nobody is recognised as the author of any anonymous
 request: those requests lose "You" and My requests, and their authors can no
-longer mark them answered or delete them. The text stays readable and leaders
-can still delete them. Account deletion can no longer find them, so they stay
-until a leader deletes them or the church's retention period removes them.
+longer mark them answered or delete them. The text stays readable. Account
+deletion can no longer find them, so they stay until the church's retention
+period removes them or an operator deletes them (see "Deleting an orphaned
+request").
 Set a new key; new anonymous requests work normally, and the script reports
 the old ones as `unmatched` on every run from then on, without failing. Any
 author hash still to write is held until a request holds a hash under the new
@@ -215,5 +231,18 @@ ids to `delete_person()`, which deletes them in the same transaction as the
 rest. A request the person posts between that read and the commit stays; their
 login is gone by then, so it cannot happen twice. A login deleted outside the
 app, for example from the Supabase dashboard, leaves that person's hashed
-anonymous requests behind, unnamed, until a leader deletes them or retention
-removes them.
+anonymous requests behind, unnamed, until retention removes them or an
+operator deletes them.
+
+## Deleting an orphaned request
+
+No screen offers Delete on a request to anyone but its recognised author, so a
+request nobody is recognised on stays until the church's retention period
+removes it; a church with retention off keeps it. To remove one sooner, find
+its id (the request's text identifies it to someone who can open it in the
+app) and delete it in the SQL editor, scoped to its church:
+
+```sql
+delete from public.prayer_requests
+where org_id = '<church uuid>' and id = '<request uuid>';
+```
