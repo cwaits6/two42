@@ -21,35 +21,18 @@ export const PRIVACY_EMAIL = "privacy@two42.io";
 
 /** Every outside service that receives data from the hosted service. */
 export const PROCESSORS: readonly { name: string; does: string }[] = [
-  {
-    name: "Supabase",
-    does: "Stores the database, photos and sign-in, runs the nightly jobs, and sends password reset emails.",
-  },
+  { name: "Supabase", does: "Stores the database and photos, handles sign-in, runs the nightly jobs and sends password reset emails." },
   {
     name: "Vercel",
-    does:
-      "Hosts the app. Vercel Web Analytics counts page views by page pattern only, such as /g/[groupId]/calendar or /join/[token], plus the site that linked to two42 when the browser reports one. It never receives the real page address, a query string, an invite token, or the id of a group, member or event.",
-  },
-  {
-    name: "Resend",
-    does:
-      "Sends two42's email: invitations and sign-up links, approvals, event and serving reminders, messages a team lead sends to a team, and feedback copies to church admins. Resend receives each recipient's address and the email's content.",
+    does: "Hosts the app. Vercel Web Analytics counts page views by kind of page and the site that linked to two42, never the full page address.",
   },
   {
     name: "Grafana",
-    does:
-      "Receives traces of how long the app's server work takes, so problems can be found and fixed. A trace records the page pattern, the kind of database operation and whether it failed. It never holds the real page address, a query string, what you entered, or your IP address.",
+    does: "Receives traces of the app's server work to find problems. They never hold what you entered or your IP address.",
   },
-  {
-    name: "Google Maps",
-    does:
-      "Shows the map on an event with a location and suggests addresses while a leader types one. The map loads in your browser, so Google receives the location shown and your browser's request.",
-  },
-  {
-    name: "YouTube",
-    does:
-      "Supplies the thumbnail for a lesson with a YouTube recording. The image loads from YouTube in your browser, so YouTube receives your browser's request.",
-  },
+  { name: "Resend", does: "Sends two42's email, so it receives each recipient's address and the email's content." },
+  { name: "Google Maps", does: "Shows event maps and suggests addresses. The map loads in your browser." },
+  { name: "YouTube", does: "Shows the thumbnail for a lesson's video. It loads in your browser." },
 ];
 
 export const PRIVACY: LegalDocument = {
@@ -60,7 +43,7 @@ export const PRIVACY: LegalDocument = {
     {
       heading: "Who runs two42",
       blocks: [
-        "two42 is run by Cody Waits as a solo developer. This policy covers the hosted service at two42.io: the website, the app and the emails it sends.",
+        "This policy covers the hosted service at two42.io: the website, the app and the emails it sends.",
         `two42 is [open source](${GITHUB_URL}). A church that runs its own copy of the software is responsible for that copy and its own policies; this policy does not cover it.`,
         "two42 is offered in the United States and is not directed at people outside it.",
         `Questions about this policy, and requests for a copy or removal of your data, go to [${PRIVACY_EMAIL}](mailto:${PRIVACY_EMAIL}).`,
@@ -70,7 +53,7 @@ export const PRIVACY: LegalDocument = {
       heading: "Who decides what is shared",
       blocks: [
         "Each church decides who joins its two42 space and what is shared there, and confirms it has permission to add the people it adds. A church admin answers its members' requests about their data first.",
-        "Cody Waits runs and secures the service, and answers for sign-in, security and analytics data. two42 does not sell data and shows no ads.",
+        "two42 runs and secures the service, and answers for sign-in, security and analytics data. two42 does not sell data and shows no ads.",
       ],
     },
     {
@@ -107,9 +90,9 @@ export const PRIVACY: LegalDocument = {
       ],
     },
     {
-      heading: "What Cody Waits can see",
+      heading: "What two42 can see",
       blocks: [
-        "As the person who runs the service, Cody Waits has administrator access to the database and can read everything stored in it, including prayer requests and who wrote an anonymous one. That access is used only to keep the service running, fix a problem, answer a request you make, or comply with the law.",
+        "two42 has administrator access to the database, including prayer requests. That access is used only to keep the service running, fix a problem, answer a request you make, or comply with the law.",
         "two42 discloses data to authorities only when the law requires it.",
       ],
     },

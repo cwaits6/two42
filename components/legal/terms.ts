@@ -15,7 +15,7 @@ export const TERMS: LegalDocument = {
     {
       heading: "Who these terms are with",
       blocks: [
-        "two42 is run by Cody Waits as a solo developer. These terms cover the hosted service at two42.io. By using it, you agree to them and to the [Privacy policy](/privacy).",
+        "These terms cover the hosted service at two42.io. By using it, you agree to them and to the [Privacy policy](/privacy).",
         "\"You\" means a church that uses two42 and each person with an account in it.",
         "two42 is offered in the United States and is not directed at people outside it.",
       ],
@@ -70,7 +70,7 @@ export const TERMS: LegalDocument = {
       heading: "Your content",
       blocks: [
         "What you and your church put into two42 stays yours. You give two42 permission to store it and show it to the people your church and your settings allow, only to run the service.",
-        "If content, an account or a church breaks these terms or puts the service or other people at risk, Cody Waits may remove the content, delete the account or suspend the church.",
+        "If content, an account or a church breaks these terms or puts the service or other people at risk, two42 may remove the content, delete the account or suspend the church.",
       ],
     },
     {
@@ -90,7 +90,7 @@ export const TERMS: LegalDocument = {
       heading: "No warranty",
       blocks: [
         "two42 is provided as is and as available, without any warranty, express or implied, including that it will meet your needs, be available without interruption, or be free of errors. Keep your own copy of anything you can't afford to lose.",
-        "To the fullest extent the law allows, Cody Waits is not liable for any indirect, incidental, special or consequential damages, or for lost data, arising from your use of two42 or your inability to use it.",
+        "To the fullest extent the law allows, two42 is not liable for any indirect, incidental, special or consequential damages, or for lost data, arising from your use of two42 or your inability to use it.",
       ],
     },
     {

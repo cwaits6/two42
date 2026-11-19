@@ -96,7 +96,7 @@ policy does not describe it. When it merges, re-check each sentence below in
 | What two42 stores | "Prayer requests you post, by name or anonymous, and the requests you say you are praying for." | Whether the author of an anonymous request is still stored anywhere, and that the text is stored encrypted. |
 | Who can see it | "An anonymous request shows no author in the app to anyone but the author: not to other members, leaders or church admins." | Whether the author still sees it as theirs, and how. |
 | Who can see it | "A leader can edit or delete any prayer request in their group." | Whether a leader can still edit an encrypted request. |
-| What Cody Waits can see | "…can read everything stored in it, including prayer requests and who wrote an anonymous one." | Rewrite to say the text is encrypted and who holds the key. Keep saying the operator holds the key and so could read it; never say reading it or identifying an author is impossible. |
+| What two42 can see | "two42 has administrator access to the database, including prayer requests." | Rewrite to say the text is encrypted and who holds the key. Keep saying the operator holds the key and so could read it; never say reading it or identifying an author is impossible. |
 | Your copy and your account | "The file holds … prayer requests …" | Whether the download still includes the person's anonymous requests. |
 | Your copy and your account | "You can delete your own prayer requests …" | Whether an author can still find and delete an anonymous request. |
 | Your copy and your account | "Deleting an account removes … prayer requests, including anonymous ones." | Whether account deletion can still find anonymous requests once the author is gone. |
@@ -115,6 +115,7 @@ is true without it; fill one in here, then add the sentence to the document.
 - [MAINTAINER: how a requester's identity is checked before a copy or removal is sent]
 - [MAINTAINER: how long privacy request emails are kept]
 - [MAINTAINER: the governing law and venue for the Terms]
+- [MAINTAINER: whether a legal entity (such as an LLC) runs two42; the documents name no person, but without an entity the operator is still the party to the Terms]
 - [MAINTAINER: confirm the commitment that database access is used only to run the service, fix a problem, answer a request, or comply with the law]
 - [MAINTAINER: confirm hello@two42.io for questions about the Terms and security@two42.io for security reports]
 - [MAINTAINER: whether the hosted Supabase Auth sends password reset email through its own mailer or through Resend as custom SMTP]
