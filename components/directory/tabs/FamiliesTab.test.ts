@@ -17,8 +17,31 @@ const family = {
   id: "miller",
   family_name: "Miller",
   photo_url: null,
-  members: [],
+  members: [{ id: "in-miller", first_name: "Ben", last_name: "Miller", relationship: "primary" }],
   family_members_list: [],
+} as unknown as FamilyDirectoryFull;
+
+// Henry is listed; Chloe's account is hidden from the directory, so the view
+// leaves her out of `members` but keeps her claimed household record.
+const mockingham = {
+  id: "mockingham",
+  family_name: "Mockingham",
+  photo_url: null,
+  members: [{ id: "henry", first_name: "Henry", last_name: "Mockingham", relationship: "primary" }],
+  family_members_list: [
+    { id: "fm-chloe", first_name: "Chloe", last_name: "Mockingham", relationship: "spouse", claimed_profile_id: "chloe" },
+  ],
+} as unknown as FamilyDirectoryFull;
+
+// Everyone in it is hidden from the directory.
+const hidden = {
+  id: "hidden",
+  family_name: "Quietly",
+  photo_url: null,
+  members: [],
+  family_members_list: [
+    { id: "fm-q", first_name: "Quinn", last_name: "Quietly", relationship: "primary", claimed_profile_id: "quinn" },
+  ],
 } as unknown as FamilyDirectoryFull;
 
 const solo = { id: "solo", first_name: "Ava", last_name: "Sampleton", family_id: null } as unknown as DirectoryProfile;
@@ -27,7 +50,7 @@ const inMiller = { id: "in-miller", first_name: "Ben", last_name: "Miller", fami
 // One value across renders, as the provider gives: the deep-link effect re-runs on a new map.
 const directory = {
   members: [],
-  families: [family],
+  families: [family, mockingham, hidden],
   memberships: [{ id: "g" }],
   profileMap: { [solo.id]: solo, [inMiller.id]: inMiller },
   familyMap: { [family.id]: family },
@@ -100,5 +123,33 @@ describe("FamiliesTab's way back to the list", () => {
     await open("person=in-miller&from=birthdays&when=week");
     const back = [...host.querySelectorAll("a, button")].find((el) => el.textContent === "Back to Miller")!;
     expect(back.tagName).toBe("BUTTON");
+  });
+});
+
+describe("FamiliesTab and people hidden from the directory", () => {
+  const typeSearch = async (value: string) => {
+    const input = host.querySelector<HTMLInputElement>('input[type="search"]')!;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      setter.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+
+  it("names only the listed adult of a household whose spouse is hidden", async () => {
+    await open("");
+    expect(host.textContent).toContain("Henry");
+    expect(host.textContent).not.toContain("Chloe");
+  });
+
+  it("finds no household by a hidden person's name", async () => {
+    await open("");
+    await typeSearch("chloe");
+    expect(host.textContent).toContain("No households match your search.");
+  });
+
+  it("leaves out a household whose people are all hidden", async () => {
+    await open("");
+    expect(host.textContent).not.toContain("Quietly");
   });
 });

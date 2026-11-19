@@ -12,6 +12,7 @@ import { DirectoryLoadState } from "@/components/directory/DirectoryLoadState";
 import { useDirectory } from "@/components/directory/DirectoryContext";
 import { celebrationBackHref } from "@/components/directory/celebrations";
 import { FamilyCard } from "@/components/directory/FamilyCard";
+import { hasPeopleToShow, nameableSpouse, searchablePeople } from "@/components/directory/householdPeople";
 import { PersonCard } from "@/components/directory/PersonCard";
 import { TwoPane, scrollToPanel } from "@/components/directory/TwoPane";
 import { EmptyState } from "@/components/states/EmptyState";
@@ -28,10 +29,7 @@ type ListEntry =
 /** "Tom & Linda" — adult first names for the household row subtitle */
 function adultNames(family: FamilyDirectoryFull): string {
   const primary = family.members.find((m) => m.relationship === "primary");
-  const spouse =
-    family.members.find((m) => m.relationship === "spouse") ||
-    family.family_members_list.find((fm) => fm.relationship === "spouse");
-  return [primary, spouse]
+  return [primary, nameableSpouse(family)]
     .filter(Boolean)
     .map((p) => p!.preferred_name || p!.first_name)
     .filter(Boolean)
@@ -79,22 +77,14 @@ function FamiliesTabInner() {
     const matchesFamily = (f: FamilyDirectoryFull) =>
       !q ||
       f.family_name.toLowerCase().includes(q) ||
-      f.members.some(
-        (m) =>
-          [m.first_name, m.last_name, m.preferred_name]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase()
-            .includes(q),
-      ) ||
-      f.family_members_list.some((fm) =>
-        [fm.first_name, fm.last_name].filter(Boolean).join(" ").toLowerCase().includes(q),
+      searchablePeople(f).some((p) =>
+        [p.first_name, p.last_name, p.preferred_name].filter(Boolean).join(" ").toLowerCase().includes(q),
       );
 
     const solos = members.filter((m) => !m.family_id && (!q || matchesProfile(m)));
 
     const result: ListEntry[] = [
-      ...families.filter(matchesFamily).map((f) => ({ kind: "family" as const, family: f })),
+      ...families.filter((f) => hasPeopleToShow(f) && matchesFamily(f)).map((f) => ({ kind: "family" as const, family: f })),
       ...solos.map((m) => ({ kind: "solo" as const, member: m })),
     ];
 
