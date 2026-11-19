@@ -71,7 +71,11 @@ const UPCOMING = {
   is_cancelled: false,
 } as Event;
 
-async function mount({ isLeader = false, allEvents = [] as Event[] } = {}) {
+async function mount({
+  isLeader = false,
+  allEvents = [] as Event[],
+  groups = [{ id: "g1", name: "Group", color: "#b4532a", isLeader }],
+} = {}) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -79,7 +83,7 @@ async function mount({ isLeader = false, allEvents = [] as Event[] } = {}) {
   await act(async () =>
     root.render(
       createElement(EventsPageClient, {
-        groups: [{ id: "g1", name: "Group", color: "#b4532a", isLeader }],
+        groups,
         allEvents,
         replies: [],
         userId: "u1",
@@ -223,5 +227,23 @@ describe("EventsPageClient Subscribe", () => {
     await choose(container, "Group");
     expect(appleHref()).toContain("token=tok789");
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("shares the pending link request and shows the latest choice's links", async () => {
+    let resolve!: (value: unknown) => void;
+    const fetchMock = vi.fn().mockReturnValue(new Promise((r) => (resolve = r)));
+    vi.stubGlobal("fetch", fetchMock);
+    const { container } = await mount({
+      groups: [
+        { id: "g1", name: "Group", color: "#b4532a", isLeader: false },
+        { id: "g2", name: "Other group", color: "#c99a2e", isLeader: false },
+      ],
+    });
+    await choose(container, "Group");
+    await close();
+    await choose(container, "Other group");
+    await act(async () => resolve({ ok: true, json: async () => ({ token: "tokP" }) }));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(appleHref()).toBe(`webcal://${window.location.host}/api/calendar/feed.ics?token=tokP&group=g2`);
   });
 });
