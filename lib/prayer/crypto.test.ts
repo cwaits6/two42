@@ -281,8 +281,9 @@ describe("the backfill's author key proof", () => {
     const churchA = { orgId: ORG, planned: [anonymous, named] };
 
     it("holds an author hash, and writes the rest, while no church in the run proves the key", () => {
-      const { proven, churches } = selectWrites(right, [churchA]);
+      const { proven, unopened, churches } = selectWrites(right, [churchA]);
       expect(proven).toBe(false);
+      expect(unopened).toBe(0);
       expect(churches).toEqual([{ orgId: ORG, write: [named], held: [anonymous] }]);
     });
 
@@ -292,6 +293,19 @@ describe("the backfill's author key proof", () => {
       expect(proven).toBe(true);
       expect(churches[0]).toEqual({ orgId: ORG, write: [anonymous, named], held: [] });
       expect(churches[1]).toEqual({ orgId: OTHER_ORG, write: [], held: [] });
+    });
+
+    it("writes nothing in any church while a sealed row in one of them fails to open", () => {
+      const wrongBodyKey = parsePrayerKeys({
+        PRAYER_BODY_KEY: newKey(),
+        PRAYER_AUTHOR_KEY: right.author.current.toString("base64"),
+      })!;
+      const sealedElsewhere = { row: hashed, plan: planRow(hashed, wrongBodyKey) };
+      expect(sealedElsewhere.plan).toEqual({ action: "error" });
+      const churchB = { orgId: OTHER_ORG, planned: [sealedElsewhere] };
+      const { unopened, churches } = selectWrites(right, [churchA, churchB]);
+      expect(unopened).toBe(1);
+      expect(churches.flatMap((c) => [...c.write, ...c.held])).toEqual([]);
     });
   });
 });

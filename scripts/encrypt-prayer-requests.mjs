@@ -11,7 +11,8 @@
 //   node scripts/encrypt-prayer-requests.mjs [--apply] [--org <uuid>]
 //
 // Dry run by default: it prints the key ids and what it would change. Opening
-// every sealed row proves the body key. Only a hash the app wrote under the
+// every sealed row proves the body key, and if any fails to open nothing is
+// written. Only a hash the app wrote under the
 // given author key proves that key, and only the churches the run covers are
 // read for it (with --org, that one church): until one exists there the script
 // writes no author hash. Those rows are held, counted, and fail the run, while
@@ -109,7 +110,12 @@ const format = (counts) =>
 // hash under the author key in any one of them is what lets the others be hashed.
 const churches = [];
 for (const orgId of await orgIds()) churches.push({ orgId, planned: await planChurch(orgId) });
-const { proven, churches: selected } = selectWrites(keys, churches);
+const { proven, unopened, churches: selected } = selectWrites(keys, churches);
+if (unopened > 0) {
+  console.error(
+    `${unopened} sealed row(s) did not open under body key ${keyId(keys.body.current)}: nothing will be written until every one opens (docs/security/prayer-encryption.md)`,
+  );
+}
 if (!proven) {
   console.error(
     `no request holds a hash under author key ${keyId(keys.author.current)}: author hashes are held until the app writes one (docs/security/prayer-encryption.md)`,

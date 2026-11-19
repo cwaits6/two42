@@ -114,7 +114,9 @@ During a rotation, also export the `_PREVIOUS` key.
 `--org <uuid>` limits it to one church.
 
 **What the dry run proves.** It opens every sealed row, so it proves the
-**body key** before anything is written. A hash cannot be opened, so the only
+**body key** before anything is written. If any sealed row fails to open,
+`--apply` writes nothing in any church and exits non-zero, so a wrong body key
+never leaves rows sealed under two keys. A hash cannot be opened, so the only
 proof of the **author key** is a hash the app wrote under it. The script prints
 the id of each key it was given (`body key <id>, author key <id>`), and writes
 no author hash (`hash` or `rehash`) until some request in a church the run

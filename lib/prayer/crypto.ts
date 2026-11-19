@@ -193,20 +193,24 @@ export interface PlannedRow {
 /**
  * Splits each church's planned writes into those to apply and those held. The
  * proof is read only from the churches passed in, so a run narrowed to one
- * church needs the proof in that church.
+ * church needs the proof in that church. A sealed row that fails to open in any
+ * of them means the body key may be wrong, so then nothing is written at all:
+ * text sealed under a wrong key would sit beside text under the right one.
  */
 export function selectWrites<T extends PlannedRow>(
   keys: PrayerKeys,
   churches: readonly { orgId: string; planned: readonly T[] }[],
-): { proven: boolean; churches: { orgId: string; write: T[]; held: T[] }[] } {
+): { proven: boolean; unopened: number; churches: { orgId: string; write: T[]; held: T[] }[] } {
   const proven = authorKeyProven(
     keys,
     churches.flatMap((c) => c.planned.map((p) => p.row)),
   );
+  const unopened = churches.reduce((n, c) => n + c.planned.filter((p) => p.plan.action === "error").length, 0);
   return {
     proven,
+    unopened,
     churches: churches.map(({ orgId, planned }) => {
-      const writes = planned.filter((p) => p.plan.action === "write");
+      const writes = unopened > 0 ? [] : planned.filter((p) => p.plan.action === "write");
       const held = proven ? [] : writes.filter((p) => writesAuthorHash(p.plan));
       return { orgId, write: writes.filter((p) => !held.includes(p)), held };
     }),
