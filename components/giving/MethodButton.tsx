@@ -69,15 +69,6 @@ function MethodDetails({ resolved }: { resolved: ResolvedMethod }) {
   );
 }
 
-function CopyAction() {
-  return (
-    <span className={`mt-1 ${ACTION}`}>
-      <Copy className="h-4 w-4" aria-hidden="true" />
-      Copy
-    </span>
-  );
-}
-
 /**
  * One payment option. Venmo opens a payment for the fund; PayPal and Cash App
  * open the payer's own app in a new tab; copy methods (Zelle, Apple/Google
@@ -122,7 +113,10 @@ export function MethodButton({
       <MethodChip method={meta} />
       <span className="min-w-0 flex-1 text-left">
         <MethodDetails resolved={resolved} />
-        <CopyAction />
+        <span className={`mt-1 ${ACTION}`}>
+          <Copy className="h-4 w-4" aria-hidden="true" />
+          Copy
+        </span>
       </span>
     </button>
   );
