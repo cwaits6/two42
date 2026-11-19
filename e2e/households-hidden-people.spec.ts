@@ -53,8 +53,14 @@ async function openEveryone(page: Page) {
 }
 
 // A household row's name is its initial, the household name, then its adults.
-function row(page: Page, household: string) {
-  return page.getByRole("button", { name: new RegExp(`^[A-Z] ${household}\\b`) });
+const ROW_NAMES = {
+  Mockingham: /^[A-Z] Mockingham\b/,
+  Placeholder: /^[A-Z] Placeholder\b/,
+  Seedly: /^[A-Z] Seedly\b/,
+} as const;
+
+function row(page: Page, household: keyof typeof ROW_NAMES) {
+  return page.getByRole("button", { name: ROW_NAMES[household] });
 }
 
 test.describe("what a member sees under Households", () => {
