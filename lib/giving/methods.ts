@@ -124,6 +124,18 @@ export function venmoAppHref(handle: string, note: string, amount: string | null
   return `venmo://paycharge?${params.toString().replace(/\+/g, "%20")}`;
 }
 
+/**
+ * Venmo's web payment page, for a phone without the app: it stays in the
+ * browser, asks the person to sign in, and keeps the recipient, amount and
+ * note through sign-in. `amount` must come from parseGiveAmount.
+ */
+export function venmoWebPayHref(handle: string, note: string, amount: string | null): string {
+  const params = new URLSearchParams({ recipients: handle.trim().replace(/^@/, "") });
+  if (amount) params.set("amount", amount);
+  params.set("note", note);
+  return `https://account.venmo.com/pay?${params.toString().replace(/\+/g, "%20")}`;
+}
+
 export type GiveAmount =
   | { ok: true; amount: string | null }
   | { ok: false; error: string };

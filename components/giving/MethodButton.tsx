@@ -13,6 +13,7 @@ import {
   parseGiveAmount,
   venmoAppHref,
   venmoPayHref,
+  venmoWebPayHref,
   type ResolvedMethod,
 } from "@/lib/giving/methods";
 
@@ -233,17 +234,26 @@ function VenmoPhoneAction({ resolved, fundName }: { resolved: ResolvedMethod; fu
       {notOpened && (
         <div role="status" className="space-y-1">
           <p className="text-base text-muted-foreground">
-            Venmo didn&apos;t open. If the app isn&apos;t on this phone, copy {resolved.handle} and
-            pay in Venmo yourself.
+            Venmo didn&apos;t open. If the app isn&apos;t on this phone, pay on Venmo&apos;s website
+            instead, or copy {resolved.handle}.
           </p>
-          <button
-            type="button"
-            onClick={() => copyHandle(resolved)}
-            className={`min-h-11 ${ACTION} hover:underline`}
-          >
-            <Copy className="h-4 w-4" aria-hidden="true" />
-            Copy
-          </button>
+          <div className="flex flex-wrap gap-x-5">
+            <a
+              href={venmoWebPayHref(resolved.handle, fundName, parsed.ok ? parsed.amount : null)}
+              className={`min-h-11 ${ACTION} hover:underline`}
+            >
+              Pay on Venmo&apos;s website
+              <ExternalLink className="h-4 w-4" aria-hidden="true" />
+            </a>
+            <button
+              type="button"
+              onClick={() => copyHandle(resolved)}
+              className={`min-h-11 ${ACTION} hover:underline`}
+            >
+              <Copy className="h-4 w-4" aria-hidden="true" />
+              Copy
+            </button>
+          </div>
         </div>
       )}
     </div>
