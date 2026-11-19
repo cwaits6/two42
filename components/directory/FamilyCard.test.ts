@@ -39,12 +39,49 @@ describe("FamilyCard", () => {
     document.body.append(host);
     root = createRoot(host);
     await act(async () => {
-      root.render(createElement(FamilyCard, { family, profileMap: {}, onOpenPerson: () => {} }));
+      root.render(
+        createElement(FamilyCard, { family, profileMap: {}, onOpenPerson: () => {}, viewerId: "x" }),
+      );
     });
 
     expect(host.textContent!.match(/Grown Mockingham/g)).toHaveLength(1);
     expect(host.textContent).toContain("Grown MockinghamChild");
     expect(host.textContent).not.toContain("Jack MockinghamChild");
     expect(host.textContent).toContain("Pat MockinghamParent");
+  });
+
+  it("offers Edit household on the viewer's own household only", async () => {
+    const family = {
+      id: "f1",
+      family_name: "Mockingham",
+      members: [
+        {
+          id: "me",
+          first_name: "Sam",
+          last_name: "Mockingham",
+          preferred_name: null,
+          avatar_url: null,
+          relationship: "primary",
+          phone_mobile: null,
+        },
+      ],
+      family_members_list: [],
+    } as unknown as FamilyDirectoryFull;
+    const render = async (viewerId: string) => {
+      await act(async () => {
+        root.render(createElement(FamilyCard, { family, profileMap: {}, onOpenPerson: () => {}, viewerId }));
+      });
+    };
+
+    const host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+
+    await render("me");
+    const link = [...host.querySelectorAll("a")].find((a) => a.textContent === "Edit household");
+    expect(link?.getAttribute("href")).toBe("/profile?tab=household");
+
+    await render("someone-else");
+    expect(host.textContent).not.toContain("Edit household");
   });
 });
