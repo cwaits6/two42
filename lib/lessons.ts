@@ -136,6 +136,15 @@ export function lessonEmbedUrl(lesson: { video_url: string }): string | null {
 }
 
 /**
+ * YouTube's watch page for a YouTube recording, else null. An embed address
+ * opened on its own shows a player error, not the video.
+ */
+export function lessonWatchUrl(lesson: { video_url: string }): string | null {
+  const id = lessonYouTubeId(lesson);
+  return id ? `https://www.youtube.com/watch?v=${id}` : null;
+}
+
+/**
  * Whether a loaded thumbnail should give way to the no-thumbnail look: the
  * browser could not load it, or YouTube answered with the 120×90 grey card
  * it serves in place of a removed video's picture.

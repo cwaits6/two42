@@ -11,6 +11,7 @@ import { requireActiveGroup } from "@/lib/groups/server";
 import {
   formatLessonDate,
   lessonEmbedUrl,
+  lessonWatchUrl,
   partNumbers,
   safeHttpUrl,
 } from "@/lib/lessons";
@@ -108,6 +109,7 @@ export default async function LessonPage({
 
   const videoUrl = safeHttpUrl(lesson.video_url);
   const embedUrl = lessonEmbedUrl(lesson);
+  const watchUrl = lessonWatchUrl(lesson);
 
   return (
     <PageContainer>
@@ -148,7 +150,7 @@ export default async function LessonPage({
         ]}
       />
 
-      {videoUrl && embedUrl ? (
+      {embedUrl && watchUrl ? (
         <section aria-label="Recording" className="rounded-2xl border border-border bg-card p-5">
           <iframe
             src={embedUrl}
@@ -160,7 +162,7 @@ export default async function LessonPage({
             className="block aspect-video w-full rounded-xl bg-brand-warm"
           />
           <a
-            href={videoUrl}
+            href={watchUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="mt-4 inline-flex min-h-11 items-center gap-2 text-lg font-medium text-brand-primary-text underline underline-offset-4 hover:text-foreground"

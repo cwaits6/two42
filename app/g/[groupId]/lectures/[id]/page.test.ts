@@ -62,7 +62,7 @@ describe("LessonPage", () => {
     expect(html).toContain(
       '<iframe src="https://www.youtube-nocookie.com/embed/jNQXAC9IVRw" title="Recording of One" allow="encrypted-media; picture-in-picture; fullscreen" allowFullScreen="" referrerPolicy="strict-origin-when-cross-origin" loading="lazy"',
     );
-    expect(html).toContain('href="https://youtu.be/jNQXAC9IVRw?si=x" target="_blank" rel="noopener noreferrer"');
+    expect(html).toContain('href="https://www.youtube.com/watch?v=jNQXAC9IVRw" target="_blank" rel="noopener noreferrer"');
     expect(html).toContain("Watch on YouTube");
     expect(html).not.toContain("Watch recording");
   });

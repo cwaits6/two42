@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatLessonDate,
   lessonEmbedUrl,
+  lessonWatchUrl,
   lessonThumbnail,
   lessonsInOrder,
   needsSummary,
@@ -193,5 +194,19 @@ describe("lessonEmbedUrl", () => {
     "not a link",
   ])("has none for %s", (video_url) => {
     expect(lessonEmbedUrl({ video_url })).toBeNull();
+  });
+});
+
+describe("lessonWatchUrl", () => {
+  it.each([
+    "https://www.youtube-nocookie.com/embed/jNQXAC9IVRw",
+    "https://youtu.be/jNQXAC9IVRw?si=AbC_dEf-123",
+    "https://www.youtube.com/watch?v=jNQXAC9IVRw&t=30s",
+  ])("sends %s to the watch page", (video_url) => {
+    expect(lessonWatchUrl({ video_url })).toBe("https://www.youtube.com/watch?v=jNQXAC9IVRw");
+  });
+
+  it("has no watch page for a recording elsewhere", () => {
+    expect(lessonWatchUrl({ video_url: "https://vimeo.com/123" })).toBeNull();
   });
 });
