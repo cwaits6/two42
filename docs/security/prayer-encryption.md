@@ -107,9 +107,10 @@ check the prayer page after setting one.
   rather than leave a person's anonymous requests out of the file or behind in
   the database.
 - **A wrong author key** cannot be detected: a hash under another key matches
-  no one, so authors are not recognised on their anonymous requests until the
-  right key is back. Under it, account download leaves the person's anonymous
-  requests out, and account deletion goes ahead without them: they stay,
+  no one, so authors are not recognised on their anonymous requests or
+  hidden-name comments until the right key is back. Under it, account
+  download leaves the person's anonymous requests and hidden-name comments
+  out, and account deletion goes ahead without them: they stay,
   nobody's, until the church's retention period removes them or an operator
   deletes them (see "Deleting an orphaned request").
 
@@ -217,7 +218,8 @@ Rotate one key at a time.
    shows `reencrypt` for every old row and
    nothing held, then
    `--apply`, then a dry run showing only `noop` (and `unmatched` only for
-   requests an earlier author rotation or a lost author key left), exiting 0.
+   anonymous requests and hidden-name comments an earlier author rotation or
+   a lost author key left), exiting 0.
 4. Remove `PRAYER_BODY_KEY_PREVIOUS` and redeploy.
 5. Keep the old key for as long as you keep backups taken before step 3; they
    hold text sealed with it.
@@ -232,17 +234,23 @@ previous key, and rehashes under the new one. A request whose author is no
 longer in the church reports as `unmatched`; it stays anonymous and nobody's
 until retention removes it or an operator deletes it. The script reports it as `unmatched` on
 every run from then on, and it no longer stops a body-key rotation.
+Hidden-name comments are rehashed and reported the same way: one whose writer
+is no longer in the church is `unmatched`, and stays, nobody's, until its
+request goes or the person who asked or a leader deletes it.
 
 ## Losing a key
 
 **The author key.** Nobody is recognised as the author of any anonymous
-request: those requests lose "You" and My requests, and their authors can no
-longer mark them answered or delete them. The text stays readable. Account
-deletion can no longer find them, so they stay until the church's retention
-period removes them or an operator deletes them (see "Deleting an orphaned
-request").
+request or the writer of any hidden-name comment: those requests lose "You"
+and My requests, and their authors can no longer mark them answered or delete
+them; those comments lose "You" and their writers can no longer delete them.
+The text stays readable. Account deletion can no longer find them, so the
+requests stay until the church's retention period removes them or an operator
+deletes them (see "Deleting an orphaned request"), and the comments stay until
+their request goes or the person who asked or a leader deletes them.
 Set a new key; new anonymous requests work normally, and the script reports
-the old ones as `unmatched` on every run from then on, without failing. Any
+the old requests and hidden-name comments as `unmatched` on every run from
+then on, without failing. Any
 author hash still to write is held until a request holds a hash under the new
 key, that is, until someone posts an anonymous request.
 
@@ -265,8 +273,9 @@ comments go with the profile, and comments on the person's requests with
 those requests. A request or comment the person posts between that read and
 the commit stays; their login is gone by then, so it cannot happen twice. A login deleted outside the
 app, for example from the Supabase dashboard, leaves that person's hashed
-anonymous requests behind, unnamed, until retention removes them or an
-operator deletes them.
+anonymous requests and hidden-name comments behind, unnamed, until retention
+removes the requests or an operator deletes them; a comment goes with its
+request, or sooner if the person who asked or a leader deletes it.
 
 ## Deleting an orphaned request
 

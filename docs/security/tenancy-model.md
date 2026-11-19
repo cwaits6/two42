@@ -196,6 +196,13 @@ there is no fail-closed group resolver the way `app_current_org_id()` is one
 for the org, so NOT NULL is the guard — a write path that forgets the group
 fails with `23502` rather than landing in a wrong group.
 
+`prayer_comments` is the exception: it has no `group_id` and reaches its group
+only through `(request_id, org_id)` into `prayer_requests`. It grants clients
+nothing, so on its service-client reads the org filter is the only boundary
+the database applies; a read for one group must also filter the request's
+group, as `readCommentRows()` in `lib/prayer/commentThread.ts` does with
+`prayer_requests!inner(group_id)` and `.eq("prayer_requests.group_id", …)`.
+
 The permissive arms compose on the org floor as:
 
 - read: `org_id = (select app_request_org_id()) and
