@@ -5,7 +5,7 @@
 // each comment.
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import type { Tables } from "@/lib/supabase/database.types";
-import { fetchAll } from "@/lib/supabase/fetchAll";
+import { fetchAll, PAGE_SIZE } from "@/lib/supabase/fetchAll";
 import { decryptBody, isAuthor, type PrayerKeys } from "./crypto";
 import type { PrayerCommentView } from "./comments";
 
@@ -112,18 +112,24 @@ export type HashedCommentRow = SealedCommentRow & { prayer_requests: { groups: {
  * whose is whose. `orgId` must come from an anchor the caller already validated.
  */
 export async function hashedCommentsOf(client: SupabaseClient, orgId: string, personId: string, keys: PrayerKeys) {
-  const { data, error } = await fetchAll<HashedCommentRow, PostgrestError>((from, to) =>
-    client
+  // Keyset, not offset: a comment deleted mid-scan must not shift an unread row past the cursor.
+  const rows: HashedCommentRow[] = [];
+  let after: string | null = null;
+  for (;;) {
+    let query = client
       .from("prayer_comments")
       .select(
         "id, request_id, body_ciphertext, only_asker, hide_name, writer_id, writer_hash, created_at, prayer_requests(groups(name))",
       )
       .eq("org_id", orgId)
-      .is("writer_id", null)
-      .order("id")
-      .range(from, to)
-      .returns<HashedCommentRow[]>(),
-  );
-  if (error) return { data: null, error };
-  return { data: (data ?? []).filter((row) => wroteComment(keys, orgId, personId, row)), error: null };
+      .is("writer_id", null);
+    if (after) query = query.gt("id", after);
+    const { data, error } = await query.order("id").limit(PAGE_SIZE).returns<HashedCommentRow[]>();
+    if (error) return { data: null, error };
+    const batch = data ?? [];
+    rows.push(...batch);
+    if (batch.length < PAGE_SIZE) break;
+    after = batch[batch.length - 1].id;
+  }
+  return { data: rows.filter((row) => wroteComment(keys, orgId, personId, row)), error: null };
 }

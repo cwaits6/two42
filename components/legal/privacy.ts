@@ -85,7 +85,7 @@ export const PRIVACY: LegalDocument = {
           "Group content — events, announcements, lessons, prayer requests and funds — is seen by that group's members. A church admin sees every person and group in the church, including who is in each group, its teams and labels, and requests to join it. They don't see a group's events, announcements, lessons, prayer requests or funds unless they are in that group.",
           "A leader can make a group private, so members who aren't in it can't find it.",
           "A prayer request posted by name shows the author to group members who can see that person in the directory, and to church admins and the author's household who are in the group. An anonymous request shows no author in the app to anyone but the author: not to other members, leaders or church admins. A leader can edit or delete any prayer request in their group, without learning who wrote an anonymous one.",
-          "A comment on a prayer request is seen by everyone who can see the request, or, if you choose, only by the person who posted it. With your name hidden, a comment shows no name to anyone: not to other members, leaders or church admins. You, the person who posted the request, and the group's leaders can delete a comment.",
+          "A comment on a prayer request is seen by everyone who can see the request, or, if you choose, only by you and the person who posted the request. With your name hidden, a comment shows no name to anyone: not to other members, leaders or church admins. You, the person who posted the request, and the group's leaders can delete a comment.",
           "Email reminders and team messages go only to the people they are for.",
         ],
       ],

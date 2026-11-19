@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { authorHash, encryptBody } from "./crypto";
+import { PAGE_SIZE } from "@/lib/supabase/fetchAll";
 import { hashedCommentsOf, openComments, type SealedCommentRow } from "./commentThread";
 import { testKeys } from "./testKeys";
 
@@ -89,7 +90,9 @@ describe("hashedCommentsOf", () => {
       select: () => chain,
       eq: (c: string, v: unknown) => (filters.push([c, v]), chain),
       is: (c: string, v: unknown) => (filters.push([c, v]), chain),
+      gt: (c: string, v: unknown) => (filters.push([c, v]), chain),
       order: () => chain,
+      limit: () => chain,
       range: () => chain,
       returns: () => Promise.resolve({ data, error: null }),
     };
@@ -105,5 +108,31 @@ describe("hashedCommentsOf", () => {
     expect(data?.map((c) => c.id)).toEqual([theirs.id]);
     expect(filters).toContainEqual(["org_id", ORG]);
     expect(filters).toContainEqual(["writer_id", null]);
+  });
+
+  it("pages by id, so a comment deleted between pages can't hide the next one", async () => {
+    const ids = Array.from({ length: PAGE_SIZE + 1 }, (_, i) =>
+      `c0000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+    );
+    const table = ids.map((id) => comment(id, { hidden: true, writer: MEMBER }));
+    table[PAGE_SIZE] = comment(ids[PAGE_SIZE], { hidden: true });
+    let after: string | null = null;
+    const chain = {
+      from: () => chain,
+      select: () => chain,
+      eq: () => chain,
+      is: () => chain,
+      gt: (_c: string, v: string) => ((after = v), chain),
+      order: () => chain,
+      limit: () => chain,
+      returns: () => {
+        const page = table.filter((c) => after === null || c.id > after).slice(0, PAGE_SIZE);
+        // Someone else's comment on the first page goes while the scan runs.
+        if (after === null) table.splice(0, 1);
+        return Promise.resolve({ data: page, error: null });
+      },
+    };
+    const { data } = await hashedCommentsOf(chain as never, ORG, WRITER, keys);
+    expect(data?.map((c) => c.id)).toEqual([ids[PAGE_SIZE]]);
   });
 });

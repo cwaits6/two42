@@ -31,8 +31,9 @@ export function PrayerCommentForm({
   const [hideName, setHideName] = useState(ownAnonymousRequest);
   const [submitting, setSubmitting] = useState(false);
 
-  const canPost = body.trim().length > 0 && !submitting;
-  const left = COMMENT_TEXT_MAX - body.length;
+  // Counted in code points, as the server counts them; a native maxLength counts UTF-16 units.
+  const left = COMMENT_TEXT_MAX - [...body].length;
+  const canPost = body.trim().length > 0 && left >= 0 && !submitting;
 
   const submit = async () => {
     if (!canPost) return;
@@ -58,10 +59,9 @@ export function PrayerCommentForm({
       <Textarea
         id={`${id}-text`}
         value={body}
-        onChange={(e) => setBody(e.target.value)}
+        onChange={(e) => setBody([...e.target.value].slice(0, COMMENT_TEXT_MAX).join(""))}
         rows={3}
         readOnly={submitting}
-        maxLength={COMMENT_TEXT_MAX}
         className="bg-background text-base"
         aria-describedby={left <= COMMENT_NEAR_LIMIT ? `${id}-left` : undefined}
       />
