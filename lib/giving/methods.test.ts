@@ -84,6 +84,7 @@ describe("parseGiveAmount", () => {
     ["$25", "25.00"],
     ["$ 25", "25.00"],
     ["1,000", "1000.00"],
+    ["$1,250.50", "1250.50"],
     [" 12.34 ", "12.34"],
   ])("formats %j as %j", (input, amount) => {
     expect(parseGiveAmount(input)).toEqual({ ok: true, amount });
@@ -96,7 +97,7 @@ describe("parseGiveAmount", () => {
     });
   });
 
-  it.each(["-5", "25.123", "abc", "25.5.5", "1e3", ".", "$", "25 dollars"])(
+  it.each(["-5", "25.123", "abc", "25.5.5", "1e3", ".", "$", "25 dollars", "25,50", "1,00", ",100"])(
     "refuses %j",
     (input) => {
       expect(parseGiveAmount(input)).toEqual({

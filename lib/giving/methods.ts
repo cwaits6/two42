@@ -114,6 +114,8 @@ export type GiveAmount =
   | { ok: false; error: string };
 
 const DOLLARS_AND_CENTS = /^(?:\d+(?:\.\d{0,2})?|\.\d{1,2})$/;
+// Commas only as thousands separators: "25,50" is refused, not read as 2550.
+const GROUPED_THOUSANDS = /^\d{1,3}(?:,\d{3})+(?:\.\d*)?$/;
 
 /**
  * Check an optional amount typed on Give. Blank means "no amount"; otherwise
@@ -121,7 +123,8 @@ const DOLLARS_AND_CENTS = /^(?:\d+(?:\.\d{0,2})?|\.\d{1,2})$/;
  */
 export function parseGiveAmount(input: string): GiveAmount {
   if (input.trim() === "") return { ok: true, amount: null };
-  const typed = input.trim().replace(/^\$\s*/, "").replace(/,/g, "");
+  const bare = input.trim().replace(/^\$\s*/, "");
+  const typed = GROUPED_THOUSANDS.test(bare) ? bare.replace(/,/g, "") : bare;
   if (!DOLLARS_AND_CENTS.test(typed)) {
     return { ok: false, error: "Enter dollars and cents, like 25 or 25.50." };
   }
