@@ -44,6 +44,15 @@ const buttonStyle = [
   "--list-padding:0.8em 1em",
 ].join(";");
 
+/**
+ * Notes in the button's markup. Its `.ics` writer escapes only `\`, `,` and
+ * `;`, so a bare line break ends DESCRIPTION and Apple Calendar drops every
+ * line after the first; `[br]` is the one break it writes for every target.
+ */
+export function calendarButtonNotes(notes: string | null | undefined): string | undefined {
+  return notes ? notes.replace(/\r\n|\r|\n/g, "[br]") : undefined;
+}
+
 /** The wall-clock date and time in `zone`, in the `YYYY-MM-DD` / `HH:mm` shapes the button takes. */
 function wallClock(iso: string, zone: string): { date: string; time: string } {
   const [date, time] = isoToLocalInput(iso, zone).split("T");
@@ -94,7 +103,7 @@ export function AddToCalendarButton({
       endTime={end.time}
       timeZone={timeZone}
       location={location || undefined}
-      description={description ?? undefined}
+      description={calendarButtonNotes(description)}
       options={["Apple", "Google", "iCal", "Outlook.com", "Microsoft365"]}
       buttonStyle="default"
       lightMode="light"

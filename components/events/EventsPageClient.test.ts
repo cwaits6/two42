@@ -71,7 +71,13 @@ const UPCOMING = {
   is_cancelled: false,
 } as Event;
 
-async function mount({ isLeader = false, allEvents = [] as Event[] } = {}) {
+type TestGroup = { id: string; name: string; color: string; isLeader: boolean };
+
+async function mount({
+  isLeader = false,
+  allEvents = [] as Event[],
+  groups = undefined as TestGroup[] | undefined,
+} = {}) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -79,7 +85,7 @@ async function mount({ isLeader = false, allEvents = [] as Event[] } = {}) {
   await act(async () =>
     root.render(
       createElement(EventsPageClient, {
-        groups: [{ id: "g1", name: "Group", color: "#b4532a", isLeader }],
+        groups: groups ?? [{ id: "g1", name: "Group", color: "#b4532a", isLeader }],
         allEvents,
         replies: [],
         userId: "u1",
@@ -135,5 +141,111 @@ describe("EventsPageClient Add event", () => {
     const links = addEvents(container);
     expect(links).toHaveLength(1);
     expect(links[0].closest('[data-view="list"]')).toBeNull();
+  });
+});
+
+describe("EventsPageClient Subscribe", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  async function choose(container: HTMLElement, name: string) {
+    const trigger = Array.from(container.querySelectorAll("button")).find((b) => b.textContent === "Subscribe")!;
+    await act(async () => {
+      trigger.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+      trigger.click();
+    });
+    const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+      (el) => el.textContent === name
+    )!;
+    await act(async () => item.click());
+  }
+
+  it("opens the dialog with the group's feed links after a group is chosen", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ token: "tok123" }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const { container } = await mount();
+    await choose(container, "Group");
+    const apple = Array.from(document.querySelectorAll("a")).find((a) => a.textContent === "Open in Apple Calendar");
+    expect(apple?.getAttribute("href")).toBe(
+      `webcal://${window.location.host}/api/calendar/feed.ics?token=tok123&group=g1`
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the dialog open and says so when the link could not be made", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    const { container } = await mount();
+    await choose(container, "Group");
+    expect(document.querySelector('[role="alert"]')?.textContent).toBeTruthy();
+    expect(document.body.textContent).toContain("Subscribe to Group");
+  });
+
+  const appleHref = () =>
+    Array.from(document.querySelectorAll("a"))
+      .find((a) => a.textContent === "Open in Apple Calendar")
+      ?.getAttribute("href");
+
+  async function close() {
+    const button = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "Close")!;
+    await act(async () => button.click());
+  }
+
+  // A second mint replaces the person's token, so it would break the link
+  // the first choice already handed out.
+  it("asks for one link per page view however many choices are made", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ token: "tok123" }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const { container } = await mount();
+    await choose(container, "Group");
+    const first = appleHref();
+    await close();
+    await choose(container, "Group");
+    expect(appleHref()).toBe(first);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks again after a failed link when the person tries again", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 500 })
+      .mockResolvedValue({ ok: true, json: async () => ({ token: "tok456" }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const { container } = await mount();
+    await choose(container, "Group");
+    const retry = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "Try again")!;
+    await act(async () => retry.click());
+    expect(appleHref()).toContain("token=tok456");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks again after a failed link when the person chooses again", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 500 })
+      .mockResolvedValue({ ok: true, json: async () => ({ token: "tok789" }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const { container } = await mount();
+    await choose(container, "Group");
+    await close();
+    await choose(container, "Group");
+    expect(appleHref()).toContain("token=tok789");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("shares the pending link request and shows the latest choice's links", async () => {
+    let resolve!: (value: unknown) => void;
+    const fetchMock = vi.fn().mockReturnValue(new Promise((r) => (resolve = r)));
+    vi.stubGlobal("fetch", fetchMock);
+    const { container } = await mount({
+      groups: [
+        { id: "g1", name: "Group", color: "#b4532a", isLeader: false },
+        { id: "g2", name: "Other group", color: "#c99a2e", isLeader: false },
+      ],
+    });
+    await choose(container, "Group");
+    await close();
+    await choose(container, "Other group");
+    await act(async () => resolve({ ok: true, json: async () => ({ token: "tokP" }) }));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(appleHref()).toBe(`webcal://${window.location.host}/api/calendar/feed.ics?token=tokP&group=g2`);
   });
 });

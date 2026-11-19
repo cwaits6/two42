@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { expandOccurrences } from "@/lib/recurrence";
 import type { ReplyRow } from "@/lib/events/replies";
+import type { MeetingDetails } from "@/lib/meetings";
 import type { Event } from "@/lib/types";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -12,7 +13,13 @@ vi.mock("next/link", () => ({
   default: ({ href, children, ref, ...rest }: { href: string; children: ReactNode; ref?: Ref<HTMLAnchorElement> }) =>
     createElement("a", { href, ref, ...rest }, children),
 }));
-vi.mock("@/components/events/AddToCalendarButton", () => ({ AddToCalendarButton: () => null }));
+const notesAdded: (string | null | undefined)[] = [];
+vi.mock("@/components/events/AddToCalendarButton", () => ({
+  AddToCalendarButton: ({ description }: { description?: string | null }) => {
+    notesAdded.push(description);
+    return null;
+  },
+}));
 vi.mock("@/components/events/CalendarToolbar", () => ({ CalendarToolbar: () => null }));
 vi.mock("@/components/events/RsvpControl", () => ({
   RsvpControl: ({
@@ -55,7 +62,12 @@ const groups = [{ id: "b", name: "Group B", color: "#B5532E", isLeader: false }]
 
 let mounted: { root: Root; container: HTMLElement } | null = null;
 
-async function mount(replies: ReplyRow[] = [], events: Event[] = dates, createHref: string | null = null) {
+async function mount(
+  replies: ReplyRow[] = [],
+  events: Event[] = dates,
+  createHref: string | null = null,
+  seriesMeetings: ReadonlyMap<string, MeetingDetails> = new Map(),
+) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -70,6 +82,7 @@ async function mount(replies: ReplyRow[] = [], events: Event[] = dates, createHr
         createHref,
         timeZone: ZONE,
         viewSwitch: null,
+        seriesMeetings,
       }),
     );
   });
@@ -96,6 +109,7 @@ afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
   mounted = null;
+  notesAdded.length = 0;
 });
 
 describe("EventListView", () => {
@@ -174,5 +188,27 @@ describe("EventListView", () => {
     expect(text).toContain("9:30 AM");
     expect(text).toContain("Room 242");
     expect(view.more()).toBeUndefined();
+  });
+
+  it("adds a moved date of a repeating event with the series' meeting", async () => {
+    const moved = {
+      ...SUNDAYS,
+      id: "moved-sunday",
+      description: "Moved to Monday",
+      start_time: "2031-11-10T23:00:00Z",
+      end_time: "2031-11-11T00:00:00Z",
+      recurrence_frequency: null,
+      series_id: "sunday-class",
+      series_occurrence_date: "2031-11-09T14:30:00Z",
+      meeting_url: null,
+      meeting_id: null,
+      meeting_passcode: null,
+    } as Event;
+    await mount([], [moved], null, new Map([
+      ["sunday-class", { meeting_url: "https://zoom.us/j/123", meeting_id: "123", meeting_passcode: "faith" }],
+    ]));
+    expect(notesAdded.at(-1)).toBe(
+      "Moved to Monday\n\nOnline meeting\nJoin: https://zoom.us/j/123\nMeeting ID: 123\nPasscode: faith",
+    );
   });
 });

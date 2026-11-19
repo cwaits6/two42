@@ -12,7 +12,7 @@ import { CalendarDays, Clock, MapPin, Pencil, Plus } from "lucide-react";
 import { groupPath } from "@/lib/groups/active";
 import { groupTextColor } from "@/lib/groups/settings";
 import { formatEventDate, formatEventRange, formatInZone } from "@/lib/time/zone";
-import { notesWithMeeting } from "@/lib/meetings";
+import { notesWithMeeting, type MeetingDetails } from "@/lib/meetings";
 import type { CalendarGroup } from "@/components/events/EventsPageClient";
 import { replyFor, replyKey, type ReplyRow } from "@/lib/events/replies";
 import type { Event } from "@/lib/types";
@@ -31,6 +31,8 @@ interface EventListViewProps {
   /** The org's zone, resolved by the server; every time here is its wall clock. */
   timeZone: string;
   viewSwitch: ReactNode;
+  /** Series anchors by id: a moved or edited date carries no meeting of its own and joins with its series'. */
+  seriesMeetings: ReadonlyMap<string, MeetingDetails>;
 }
 
 export function EventListView({
@@ -41,6 +43,7 @@ export function EventListView({
   createHref,
   timeZone,
   viewSwitch,
+  seriesMeetings,
 }: EventListViewProps) {
   const byId = new Map(groups.map((g) => [g.id, g]));
   const showGroupName = groups.length >= 2;
@@ -98,6 +101,7 @@ export function EventListView({
           const key = event.is_rsvp_enabled ? replyKey(event, timeZone) : null;
           const reply = key && { key, status: replyFor(replies, key, userId)?.status ?? null };
           const editHref = groupPath(event.group_id, `/calendar/${event.id}/edit${occurrenceParam}`);
+          const meeting = event.series_id ? (seriesMeetings.get(event.series_id) ?? event) : event;
 
           return (
             <div
@@ -191,7 +195,7 @@ export function EventListView({
                           startTime={event.start_time}
                           endTime={event.end_time}
                           location={event.location}
-                          description={notesWithMeeting(event.description, event)}
+                          description={notesWithMeeting(event.description, meeting)}
                           timeZone={timeZone}
                         />
                       </div>
