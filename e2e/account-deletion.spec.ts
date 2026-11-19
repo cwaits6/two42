@@ -217,7 +217,7 @@ test("a person deletes their own account and can't sign in afterwards", async ({
   await page.getByRole("button", { name: "Delete my account" }).click();
 
   const dialog = page.getByRole("dialog");
-  await expect(dialog.getByText("Your prayer requests, including anonymous ones")).toBeVisible();
+  await expect(dialog.getByText("Your prayer requests and comments, including anonymous ones")).toBeVisible();
   await expect(dialog.getByText(new RegExp(`The ${FUND} fund in .*payment methods, off Give`))).toBeVisible();
   await expect(
     dialog.getByText(new RegExp(`The ${SECOND_FUND} fund in .*goes to ${SECOND_PERSON.name}, off Give`)),

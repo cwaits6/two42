@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Converts existing prayer requests to the form the app writes: the text
 // sealed into body_ciphertext, and an anonymous request's author_id replaced
-// by author_hash. During a key rotation it also moves text and hashes from the
-// _PREVIOUS keys onto the current ones. The keys live outside the database,
+// by author_hash. During a key rotation it also moves text and hashes, of
+// requests and of comments on them, from the _PREVIOUS keys onto the current
+// ones. The keys live outside the database,
 // so no migration can do this.
 //
 //   SUPABASE_URL=https://<project>.supabase.co \
@@ -19,11 +20,11 @@
 // the rest still convert. Rerunnable: a row already in the current form is left
 // alone, so a run after a partial one picks up what is left. Each write is
 // guarded on the row as it was read (see lib/prayer/backfill.ts): a row the app
-// changed in the meantime is counted and left for the next run. Prints counts per church, never request text or
-// anyone's id, and exits non-zero on anything it could not convert.
+// changed in the meantime is counted and left for the next run. Prints counts per church and table, never
+// request text or anyone's id, and exits non-zero on anything it could not convert.
 
 import { createClient } from "@supabase/supabase-js";
-import { writePlan } from "../lib/prayer/backfill.ts";
+import { COMMENT_COLUMNS, commentAsStoredRow, writeCommentPlan, writePlan } from "../lib/prayer/backfill.ts";
 import { keyId, parsePrayerKeys, planRow, selectWrites } from "../lib/prayer/crypto.ts";
 import { fetchAll } from "../lib/supabase/fetchAll.ts";
 
@@ -82,24 +83,39 @@ async function memberIds(orgId) {
   return rows.map((r) => r.id);
 }
 
+// `row` is what planRow and the key proof read; `stored` is the row as read, for the guarded write.
 async function planChurch(orgId) {
-  const rows = await readAll(
+  const requests = await readAll(
     (from, to) =>
       supabase.from("prayer_requests").select(ROW_COLUMNS).eq("org_id", orgId).order("id").range(from, to),
     "prayer requests",
   );
+  const comments = await readAll(
+    (from, to) =>
+      supabase.from("prayer_comments").select(COMMENT_COLUMNS.join(", ")).eq("org_id", orgId).order("id").range(from, to),
+    "prayer comments",
+  );
   const members = await memberIds(orgId);
-  return rows.map((row) => ({ row, plan: planRow(row, keys, members) }));
+  const plan = (table, stored, row) => ({ table, stored, row, plan: planRow(row, keys, members) });
+  return [
+    ...requests.map((row) => plan("requests", row, row)),
+    ...comments.map((row) => plan("comments", row, commentAsStoredRow(row))),
+  ];
 }
 
 function summarise(planned) {
-  const counts = {};
-  for (const { plan } of planned) {
+  const counts = { requests: {}, comments: {} };
+  for (const { table, plan } of planned) {
     const keysOf = plan.action === "write" ? [...plan.steps, ...(plan.unmatched ? ["unmatched"] : [])] : [plan.action];
-    for (const k of keysOf) counts[k] = (counts[k] ?? 0) + 1;
+    for (const k of keysOf) counts[table][k] = (counts[table][k] ?? 0) + 1;
   }
   return counts;
 }
+
+const write = (item) =>
+  item.table === "comments"
+    ? writeCommentPlan(supabase, item.stored, item.plan)
+    : writePlan(supabase, item.stored, item.plan);
 
 const format = (counts) =>
   Object.entries(counts)
@@ -125,17 +141,19 @@ if (!proven) {
 let problems = 0;
 for (const [i, { orgId, planned }] of churches.entries()) {
   const counts = summarise(planned);
-  const { write, held } = selected[i];
-  problems += counts.error ?? 0;
-  console.log(`org ${orgId}: ${format(counts)}${held.length ? `; ${held.length} held` : ""}`);
+  const { write: writes, held } = selected[i];
+  problems += (counts.requests.error ?? 0) + (counts.comments.error ?? 0);
+  console.log(
+    `org ${orgId}: requests ${format(counts.requests)}; comments ${format(counts.comments)}${held.length ? `; ${held.length} held` : ""}`,
+  );
   if (!apply) {
     problems += held.length;
     continue;
   }
 
   const outcomes = {};
-  for (const item of write) {
-    const outcome = await writePlan(supabase, item.row, item.plan);
+  for (const item of writes) {
+    const outcome = await write(item);
     outcomes[outcome] = (outcomes[outcome] ?? 0) + 1;
   }
   problems += (outcomes.failed ?? 0) + (outcomes["changed meanwhile"] ?? 0);

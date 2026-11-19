@@ -4,9 +4,11 @@ import { Check, HandHeart, Trash2, UserRound } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PrayerThread } from "@/components/prayer/PrayerThread";
 import { initials } from "@/lib/names";
 import { prayerAuthorLabel, timeAgo } from "@/lib/prayer";
 import { cn } from "@/lib/utils";
+import type { NewPrayerComment, PrayerCommentView } from "@/lib/prayer/comments";
 import type { PrayerWallRow } from "@/lib/types";
 
 export function PrayerCard({
@@ -15,6 +17,9 @@ export function PrayerCard({
   onPray,
   onToggleAnswered,
   onDelete,
+  comments,
+  onComment,
+  onDeleteComment,
   timeZone,
 }: {
   row: PrayerWallRow;
@@ -22,6 +27,10 @@ export function PrayerCard({
   onPray: () => void;
   onToggleAnswered: () => void;
   onDelete: () => void;
+  /** Null when the comments couldn't be read. */
+  comments: PrayerCommentView[] | null;
+  onComment: (draft: NewPrayerComment) => Promise<boolean>;
+  onDeleteComment: (comment: PrayerCommentView) => void;
   /** The church's zone; older requests show the date there. */
   timeZone: string;
 }) {
@@ -100,6 +109,14 @@ export function PrayerCard({
           <strong className="font-semibold text-foreground">{row.praying_count}</strong> praying
         </span>
       </div>
+
+      <PrayerThread
+        row={row}
+        comments={comments}
+        onComment={onComment}
+        onDeleteComment={onDeleteComment}
+        timeZone={timeZone}
+      />
     </article>
   );
 }

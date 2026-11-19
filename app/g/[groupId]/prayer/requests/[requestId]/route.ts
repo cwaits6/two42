@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import { isUuid } from "@/lib/groups/active";
 import { logError, stepOf } from "@/lib/log";
-import { decryptBody, isAuthor, storedForm, type RequestAuthor } from "@/lib/prayer/crypto";
+import { decryptBody, storedForm, type RequestAuthor } from "@/lib/prayer/crypto";
 import { parseRequestEdit, type PrayerRequestSaved } from "@/lib/prayer/requests";
 import { createServiceClient } from "@/lib/supabase/server";
-import { jsonBody, prayerWriter, type PrayerWriter } from "../context";
+import { jsonBody, prayerWriter, readPrayerRequest, wroteRequest, type PrayerWriter, type StoredRequest } from "../context";
 
 type Params = { params: Promise<{ groupId: string; requestId: string }> };
-type ServiceClient = Awaited<ReturnType<typeof createServiceClient>>;
 
 const notFound = () => NextResponse.json({ error: "Not found" }, { status: 404 });
 const failed = (step: string, error: unknown) => {
@@ -17,24 +16,6 @@ const failed = (step: string, error: unknown) => {
   });
   return NextResponse.json({ error: "Save failed" }, { status: 500 });
 };
-
-async function readRequest(service: ServiceClient, writer: PrayerWriter, groupId: string, requestId: string) {
-  return service
-    .from("prayer_requests")
-    // "*" so a delete still works before the migration adds the sealed columns.
-    .select("*")
-    .eq("org_id", writer.orgId)
-    .eq("group_id", groupId)
-    .eq("id", requestId)
-    .maybeSingle();
-}
-
-type StoredRequest = NonNullable<Awaited<ReturnType<typeof readRequest>>["data"]>;
-
-function wroteIt(writer: PrayerWriter, row: StoredRequest): boolean {
-  if (row.author_id) return row.author_id === writer.userId;
-  return row.author_hash !== null && isAuthor(writer.keys, writer.orgId, row.id, writer.userId, row.author_hash);
-}
 
 /**
  * Who the rewritten row names. Only the author can change whether it is
@@ -63,11 +44,11 @@ export async function PATCH(request: Request, { params }: Params) {
   if (!input) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
   const service = await createServiceClient();
-  const { data: row, error } = await readRequest(service, writer, groupId, requestId);
+  const { data: row, error } = await readPrayerRequest(service, writer, groupId, requestId);
   if (error) return failed("edit read", error);
   if (!row) return notFound();
 
-  const isAuthorOfRow = wroteIt(writer, row);
+  const isAuthorOfRow = wroteRequest(writer, row);
   if (!isAuthorOfRow && !writer.isLeader) return notFound();
   const anonymous = input.is_anonymous ?? row.is_anonymous;
   // A leader who could flip it would unmask the author.
@@ -117,9 +98,9 @@ export async function DELETE(_request: Request, { params }: Params) {
   if (!isUuid(requestId)) return notFound();
 
   const service = await createServiceClient();
-  const { data: row, error } = await readRequest(service, writer, groupId, requestId);
+  const { data: row, error } = await readPrayerRequest(service, writer, groupId, requestId);
   if (error) return failed("delete read", error);
-  if (!row || (!writer.isLeader && !wroteIt(writer, row))) return notFound();
+  if (!row || (!writer.isLeader && !wroteRequest(writer, row))) return notFound();
 
   const { data: deleted, error: deleteError } = await service
     .from("prayer_requests")

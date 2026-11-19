@@ -168,6 +168,34 @@ describe("deletePerson", () => {
     expect(third.log.rpcs).toEqual([]);
   });
 
+  it("passes the ids of their hidden-name comments, and no one else's", async () => {
+    const hidden = (id: string, writer: string, org = ORG) => ({
+      id,
+      org_id: org,
+      writer_id: null,
+      writer_hash: authorHash(KEYS, org, id, writer),
+    });
+    const { log } = setup({
+      prayer_comments: [
+        hidden("c1", "ada"),
+        hidden("c2", "ben"),
+        hidden("c3", "ada", OTHER_ORG),
+        { id: "c4", org_id: ORG, writer_id: "ada", writer_hash: null },
+      ],
+    });
+    expect(await deletePerson(ORG, "ada")).toEqual({ outcome: "deleted", photosNotRemoved: 0 });
+    expect(log.rpcs).toEqual([
+      { name: "delete_person", args: { _person_id: "ada", _org_id: ORG, _hidden_comment_ids: ["c1"] } },
+    ]);
+  });
+
+  it("fails, deleting nothing, when their comments can't be read", async () => {
+    const { log, failures } = setup();
+    failures.push({ table: "prayer_comments", op: "select" });
+    expect(await deletePerson(ORG, "ada")).toEqual({ outcome: "failed" });
+    expect(log.rpcs).toEqual([]);
+  });
+
   it("reports failure when the service client can't be built", async () => {
     createServiceClient.mockRejectedValue(new Error("no key"));
     expect(await deletePerson(ORG, "ada")).toEqual({ outcome: "failed" });

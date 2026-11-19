@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
 import { groupPath } from "@/lib/groups/active";
 import { prayerAuthorLabel } from "@/lib/prayer";
+import type { NewPrayerComment, PostedPrayerComment, PrayerCommentView } from "@/lib/prayer/comments";
 import type {
   NewPrayerRequest,
   PostedPrayerRequest,
@@ -39,7 +40,7 @@ type Sent<T> = { ok: true; data: T } | { ok: false; failure: number | "network" 
 async function sendJson<T>(
   url: string,
   method: "POST" | "PATCH" | "DELETE",
-  body?: NewPrayerRequest | PrayerRequestEdit,
+  body?: NewPrayerRequest | PrayerRequestEdit | NewPrayerComment,
 ): Promise<Sent<T>> {
   try {
     const res = await fetch(url, {
@@ -57,6 +58,7 @@ export function PrayerBoard({
   me,
   group,
   timeZone,
+  initialComments,
 }: {
   initialRequests: PrayerWallRow[];
   me: Me;
@@ -64,8 +66,12 @@ export function PrayerBoard({
   group: PrayerGroup;
   /** The church's zone, for each request's date. */
   timeZone: string;
+  /** The comments the viewer may read, by request; null when they couldn't be read. */
+  initialComments: Record<string, PrayerCommentView[]> | null;
 }) {
   const [requests, setRequests] = useState(initialRequests);
+  const [comments, setComments] = useState(initialComments);
+  const [deletingComment, setDeletingComment] = useState<PrayerCommentView | null>(null);
   const [status, setStatus] = useState<StatusFilter>("All");
   const [query, setQuery] = useState("");
   const [prayPending, setPrayPending] = useState<Set<string>>(new Set());
@@ -157,6 +163,45 @@ export function PrayerBoard({
     toast.success("Request deleted.");
   };
 
+  const commentsUrl = (requestId: string) => `${requestsUrl}/${requestId}/comments`;
+
+  const handleComment = async (row: PrayerWallRow, draft: NewPrayerComment) => {
+    const sent = await sendJson<PostedPrayerComment>(commentsUrl(row.id), "POST", draft);
+    if (!sent.ok) {
+      toast.error(failureMessage("post your comment", sent.failure));
+      return false;
+    }
+    const added: PrayerCommentView = {
+      id: sent.data.id,
+      request_id: row.id,
+      body: draft.body,
+      only_asker: draft.only_asker,
+      hide_name: draft.hide_name,
+      created_at: sent.data.created_at,
+      mine: true,
+      can_delete: true,
+      first_name: null,
+      last_name: null,
+      preferred_name: draft.hide_name ? null : me.name,
+    };
+    setComments((prev) => prev && { ...prev, [row.id]: [...(prev[row.id] ?? []), added] });
+    return true;
+  };
+
+  const handleDeleteComment = async (comment: PrayerCommentView) => {
+    const sent = await sendJson<PrayerRequestSaved>(`${commentsUrl(comment.request_id)}/${comment.id}`, "DELETE");
+    if (!sent.ok) {
+      toast.error(failureMessage("delete the comment", sent.failure));
+      return;
+    }
+    setComments(
+      (prev) =>
+        prev && { ...prev, [comment.request_id]: (prev[comment.request_id] ?? []).filter((c) => c.id !== comment.id) },
+    );
+    setDeletingComment(null);
+    toast.success("Comment deleted.");
+  };
+
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return requests.filter((r) => {
@@ -211,6 +256,9 @@ export function PrayerBoard({
               onPray={() => handlePray(r)}
               onToggleAnswered={() => handleToggleAnswered(r)}
               onDelete={() => setDeleting(r)}
+              comments={comments && (comments[r.id] ?? [])}
+              onComment={(draft) => handleComment(r, draft)}
+              onDeleteComment={setDeletingComment}
               timeZone={timeZone}
             />
           ))}
@@ -238,6 +286,17 @@ export function PrayerBoard({
         pendingLabel="Deleting…"
         onConfirm={async () => {
           if (deleting) await handleDelete(deleting);
+        }}
+      />
+      <ConfirmDialog
+        open={deletingComment !== null}
+        onOpenChange={(open) => !open && setDeletingComment(null)}
+        title="Delete this comment?"
+        description="It's gone for good, for you and for everyone who could see it."
+        confirmLabel="Delete comment"
+        pendingLabel="Deleting…"
+        onConfirm={async () => {
+          if (deletingComment) await handleDeleteComment(deletingComment);
         }}
       />
     </div>

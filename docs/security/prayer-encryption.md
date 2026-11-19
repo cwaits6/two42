@@ -41,6 +41,33 @@ row, and an author on every by-name row. No client role can write the table;
 the routes under `app/g/[groupId]/prayer/requests/` are the only writers in
 the app, so a browser can never store text the server did not seal.
 
+## Comments
+
+Comments on a request (`prayer_comments`) are sealed the same way, with the
+same keys, the comment's own id in place of the request id: `body_ciphertext`
+is a `v1` envelope whose additional data is `<org_id>:<comment id>`. A comment
+posted with "Hide my name" stores no `writer_id`, only `writer_hash`, an `h1`
+HMAC over `<comment id>:<writer id>`, so it shows as Anonymous to everyone,
+leaders and church admins included. There is no plaintext column.
+
+No client role has any privilege on the table. Who may read a private comment
+("only the person who asked") depends on the writer's hash and, on an anonymous
+request, the request's author hash, which the database cannot compute, so the
+prayer page reads the group's comments on the service client and
+`openComments()` in `lib/prayer/commentThread.ts` decides:
+
+- a comment for the group reaches everyone who can see the request;
+- a private comment reaches only its writer and the person who posted the
+  request, each recognised by hash where they are anonymous, and is dropped
+  before its text is opened for anyone else, a leader or church admin included;
+- the writer, the person who posted the request and the group's leaders can
+  delete a comment, through
+  `app/g/[groupId]/prayer/requests/[requestId]/comments/[commentId]/route.ts`.
+  Nobody edits one.
+
+A comment's text that fails to open fails the prayer page, as request text
+does. Deleting a request deletes its comments; deleting a person is below.
+
 ## The keys
 
 | Variable | Purpose |
@@ -80,9 +107,10 @@ check the prayer page after setting one.
   rather than leave a person's anonymous requests out of the file or behind in
   the database.
 - **A wrong author key** cannot be detected: a hash under another key matches
-  no one, so authors are not recognised on their anonymous requests until the
-  right key is back. Under it, account download leaves the person's anonymous
-  requests out, and account deletion goes ahead without them: they stay,
+  no one, so authors are not recognised on their anonymous requests or
+  hidden-name comments until the right key is back. Under it, account
+  download leaves the person's anonymous requests and hidden-name comments
+  out, and account deletion goes ahead without them: they stay,
   nobody's, until the church's retention period removes them or an operator
   deletes them (see "Deleting an orphaned request").
 
@@ -186,10 +214,12 @@ Rotate one key at a time.
 2. In Production set `PRAYER_BODY_KEY_PREVIOUS` to the old key and
    `PRAYER_BODY_KEY` to the new one, and redeploy. New writes use the new key;
    old rows still open.
-3. Run the script: a dry run shows `reencrypt` for every old row and
+3. Run the script, which covers comments as well as requests: a dry run
+   shows `reencrypt` for every old row and
    nothing held, then
    `--apply`, then a dry run showing only `noop` (and `unmatched` only for
-   requests an earlier author rotation or a lost author key left), exiting 0.
+   anonymous requests and hidden-name comments an earlier author rotation or
+   a lost author key left), exiting 0.
 4. Remove `PRAYER_BODY_KEY_PREVIOUS` and redeploy.
 5. Keep the old key for as long as you keep backups taken before step 3; they
    hold text sealed with it.
@@ -204,17 +234,23 @@ previous key, and rehashes under the new one. A request whose author is no
 longer in the church reports as `unmatched`; it stays anonymous and nobody's
 until retention removes it or an operator deletes it. The script reports it as `unmatched` on
 every run from then on, and it no longer stops a body-key rotation.
+Hidden-name comments are rehashed and reported the same way: one whose writer
+is no longer in the church is `unmatched`, and stays, nobody's, until its
+request goes or the person who asked or a leader deletes it.
 
 ## Losing a key
 
 **The author key.** Nobody is recognised as the author of any anonymous
-request: those requests lose "You" and My requests, and their authors can no
-longer mark them answered or delete them. The text stays readable. Account
-deletion can no longer find them, so they stay until the church's retention
-period removes them or an operator deletes them (see "Deleting an orphaned
-request").
+request or the writer of any hidden-name comment: those requests lose "You"
+and My requests, and their authors can no longer mark them answered or delete
+them; those comments lose "You" and their writers can no longer delete them.
+The text stays readable. Account deletion can no longer find them, so the
+requests stay until the church's retention period removes them or an operator
+deletes them (see "Deleting an orphaned request"), and the comments stay until
+their request goes or the person who asked or a leader deletes them.
 Set a new key; new anonymous requests work normally, and the script reports
-the old ones as `unmatched` on every run from then on, without failing. Any
+the old requests and hidden-name comments as `unmatched` on every run from
+then on, without failing. Any
 author hash still to write is held until a request holds a hash under the new
 key, that is, until someone posts an anonymous request.
 
@@ -231,11 +267,15 @@ No foreign key reaches an anonymous request stored as a hash. Account
 deletion (`deletePerson()` in `lib/account/deletion.ts`) reads the church's
 hashed anonymous requests, matches the person's with the key, and passes their
 ids to `delete_person()`, which deletes them in the same transaction as the
-rest. A request the person posts between that read and the commit stays; their
-login is gone by then, so it cannot happen twice. A login deleted outside the
+rest. Their hidden-name comments are found
+the same way, by their writer hash, and passed as `_hidden_comment_ids`; named
+comments go with the profile, and comments on the person's requests with
+those requests. A request or comment the person posts between that read and
+the commit stays; their login is gone by then, so it cannot happen twice. A login deleted outside the
 app, for example from the Supabase dashboard, leaves that person's hashed
-anonymous requests behind, unnamed, until retention removes them or an
-operator deletes them.
+anonymous requests and hidden-name comments behind, unnamed, until retention
+removes the requests or an operator deletes them; a comment goes with its
+request, or sooner if the person who asked or a leader deletes it.
 
 ## Deleting an orphaned request
 
