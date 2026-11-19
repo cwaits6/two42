@@ -75,9 +75,14 @@ export async function PATCH(request: Request, { params }: Params) {
     return NextResponse.json({ error: "Only the author can change this" }, { status: 403 });
   }
 
+  // Opened even when the text is replaced: under a wrong body key the new text
+  // would be sealed with it, and stay unreadable once the right key is back.
   let current: string;
   try {
-    current = input.body ?? (row.body_ciphertext ? decryptBody(writer.keys, writer.orgId, row.id, row.body_ciphertext) : (row.body ?? ""));
+    const stored = row.body_ciphertext
+      ? decryptBody(writer.keys, writer.orgId, row.id, row.body_ciphertext)
+      : (row.body ?? "");
+    current = input.body ?? stored;
   } catch (err) {
     return failed("open text", err);
   }

@@ -227,6 +227,14 @@ describe("editing", () => {
     expect(row(R_NAMED).is_answered).toBe(false);
   });
 
+  it("refuses new text under a wrong body key, leaving the stored text as it was", async () => {
+    const sealed = row(R_NAMED).body_ciphertext;
+    env = { ...env, PRAYER_BODY_KEY: newKey() };
+    expect((await patch(R_NAMED, { body: "Replaced." })).status).toBe(500);
+    expect(row(R_NAMED).body_ciphertext).toBe(sealed);
+    expect(writes.filter((w) => w.op !== "select")).toEqual([]);
+  });
+
   it("refuses an empty or malformed edit", async () => {
     expect((await patch(R_NAMED, {})).status).toBe(400);
     expect((await patch(R_NAMED, { is_answered: "yes" })).status).toBe(400);
