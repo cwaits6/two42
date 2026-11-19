@@ -71,10 +71,12 @@ const UPCOMING = {
   is_cancelled: false,
 } as Event;
 
+type TestGroup = { id: string; name: string; color: string; isLeader: boolean };
+
 async function mount({
   isLeader = false,
   allEvents = [] as Event[],
-  groups = [{ id: "g1", name: "Group", color: "#b4532a", isLeader }],
+  groups = undefined as TestGroup[] | undefined,
 } = {}) {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -83,7 +85,7 @@ async function mount({
   await act(async () =>
     root.render(
       createElement(EventsPageClient, {
-        groups,
+        groups: groups ?? [{ id: "g1", name: "Group", color: "#b4532a", isLeader }],
         allEvents,
         replies: [],
         userId: "u1",
