@@ -115,7 +115,7 @@ export function EventsPageClient({ groups, allEvents, replies, userId, timeZone 
   }
 
   const seriesMeetings = useMemo(
-    () => new Map(allEvents.filter((e) => e.recurrence_frequency && !e.series_id).map((e) => [e.id, e])),
+    () => new Map(allEvents.map((e) => [e.id, e])),
     [allEvents]
   );
 
