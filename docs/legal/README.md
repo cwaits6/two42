@@ -1,0 +1,110 @@
+# Privacy policy and Terms of service
+
+The two documents published at [`/privacy`](../../app/privacy/page.tsx) and
+[`/terms`](../../app/terms/page.tsx) cover the hosted service at two42.io. They
+are a first draft: the maintainer owns the wording, and a lawyer should check
+it before it is relied on.
+
+## Where the text lives
+
+| Document | Text | Page |
+|---|---|---|
+| Privacy policy | [`components/legal/privacy.ts`](../../components/legal/privacy.ts) | `app/privacy/page.tsx` |
+| Terms of service | [`components/legal/terms.ts`](../../components/legal/terms.ts) | `app/terms/page.tsx` |
+
+Each file is plain data, no React. A document has a `title`, a one-line
+`summary`, a `lastUpdated` date and a list of `sections`. Each section has a
+`heading` and `blocks`:
+
+- a string is a paragraph;
+- an array of strings is a bulleted list;
+- `[text](href)` inside either is a link. A link starting with `/` stays on two42.
+
+`components/legal/LegalPage.tsx` renders both, adds the "Last updated" line,
+the link to the other document and the Basecamp / CC BY 4.0 attribution at the
+bottom. Keep that attribution while any of the structure adapted from the
+[Basecamp policies](https://github.com/basecamp/policies) remains.
+
+## Updating a document
+
+1. Edit the text in `components/legal/privacy.ts` or `terms.ts`.
+2. Set `lastUpdated` in that file to the day the change is published
+   (`YYYY-MM-DD`). It is the only place the date is written.
+3. Run `npx vitest run components/legal`. It fails if a page says "being
+   written", has no date, drops a processor, loses the attribution, or shows a
+   bracketed placeholder.
+4. Never put a `[bracketed placeholder]` on the public page. Open choices live
+   in this file; the public text says only what is already true.
+
+The public commit history of each file is the record of what changed.
+
+## What to re-check when a feature changes
+
+Every sentence in the Privacy policy must be true of the code on `main`. When a
+change touches any of the following, re-read the matching sentences and check
+them against the files listed.
+
+- [ ] **Processors.** A new outside service the app or browser talks to:
+  grep `app/`, `components/`, `lib/` and `supabase/functions/` for `https://`,
+  and read the CSP in `lib/supabase/middleware.ts`. Add it to `PROCESSORS` in
+  `privacy.ts`, and to the processor test in `components/legal/LegalPage.test.ts`.
+  Production sets `OTEL_EXPORTER_OTLP_ENDPOINT` to Grafana, which is listed;
+  if the tracing receiver changes, or `lib/tracing/redactSpans.ts` starts
+  keeping a new attribute, update the Grafana entry.
+- [ ] **Analytics.** Vercel Web Analytics (`components/analytics/PageMeasurement.tsx`)
+  loads only when `THIRD_PARTY_PAGE_VIEWS=on`, which production does not set, so
+  the policy does not mention it. Turning it on adds a sentence under Vercel: it
+  counts page views by kind of page (`lib/analytics/pagePattern.ts`), the
+  linking site, and the visitor's country and device. Speed Insights (`@vercel/speed-insights`) is installed but not loaded;
+  loading it adds a sentence.
+- [ ] **Stored data.** A new table or column that holds something a person
+  entered: `lib/supabase/database.types.ts`, the profile fields in
+  `lib/profileColumns.ts`, and the storage kinds in `lib/storagePaths.ts`.
+- [ ] **Who sees it.** `docs/security/roles-and-permissions.md` (the role
+  table and "Settings that change what a role can do"), the directory rules,
+  `hide_email` / `is_unlisted`, and the contact card in
+  `app/api/members/[id]/vcard/route.ts`, which carries the birth year. The
+  group content list ("seen by that group's members") must match the SELECT
+  policies in `supabase/schema.sql`: a church admin reads every group's
+  roster through the `group_members` policy, so the roster is named apart.
+- [ ] **Retention.** `supabase/functions/_shared/retention.ts` and
+  `supabase/functions/_shared/cleanup.ts`. The periods in "How long it is
+  kept" are read from the constants in `retention.ts`; re-check the wording
+  around them when the job deletes something new or stops deleting something.
+- [ ] **Deletion and download.** The policy restates by hand what goes and
+  stays in `deletionCopy()` (`lib/account/deletionCopy.ts`); check it against
+  that and `lib/account/deletion.ts`. The download sentence reads
+  `DOWNLOAD_COVERS` and `DOWNLOAD_LEAVES_OUT` from the same file, so keep those
+  true of `lib/account/export.ts`. Removing a whole church is not built; the
+  policy only says a church admin can ask.
+- [ ] **Anonymity wording.** `supabase/migrations/20261109000000_prayer_author_private.sql`
+  and [`docs/security/prayer-encryption.md`](../security/prayer-encryption.md).
+  Never say two42 cannot read prayer requests or cannot identify an anonymous
+  author: the operator holds database access and the keys. If the keys move
+  out of Vercel, update the Vercel entry and the sentence under "What two42
+  can see".
+- [ ] **Email.** `lib/email/` and the edge functions: the kinds of email listed
+  under Resend.
+- [ ] **Vocabulary.** [`CONTEXT.md`](../../CONTEXT.md): church admin, leader,
+  household, event, lesson, usage.
+
+## Open choices for the maintainer
+
+Settled: the documents say "two42" and name no person. With no company
+behind two42, the maintainer is the party to the Terms; if one is formed, name
+it in both documents. hello@, privacy@ and security@two42.io all receive mail.
+Supabase Auth sends password reset and email change emails with its own
+mailer; moving it to Resend as custom SMTP changes both processor entries.
+
+Each is a commitment the code does not enforce. The public text says only what
+is true without it; fill one in here, then add the sentence to the document.
+
+- [MAINTAINER: how quickly a privacy request sent to privacy@two42.io is answered]
+- [MAINTAINER: how long Supabase backups are kept on the project's plan, so "until they expire" can name a period]
+- [MAINTAINER: where data is stored — the Supabase project's region and Vercel's function region]
+- [MAINTAINER: how and how far ahead people are told about a significant change to either document]
+- [MAINTAINER: how long to remove a church's data after a church admin asks, and whether that is done by hand]
+- [MAINTAINER: how a requester's identity is checked before a copy or removal is sent]
+- [MAINTAINER: how long privacy request emails are kept]
+- [MAINTAINER: the governing law and venue for the Terms]
+- [MAINTAINER: confirm the commitment that database access is used only to run the service, fix a problem, answer a request, or comply with the law]

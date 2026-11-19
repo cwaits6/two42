@@ -1,0 +1,147 @@
+import { GITHUB_URL } from "@/components/landing/sections";
+import { DOWNLOAD_COVERS, DOWNLOAD_LEAVES_OUT } from "@/lib/account/deletionCopy";
+import {
+  EXPIRED_RETENTION_DAYS,
+  FEEDBACK_RETENTION_MONTHS,
+  PRAYER_RETENTION_MONTHS,
+  REMINDER_RETENTION_DAYS,
+  USAGE_RETENTION_MONTHS,
+} from "@/supabase/functions/_shared/retention";
+import type { LegalDocument } from "./document";
+
+// Every sentence here must be true of the code on main. Before editing, read
+// docs/legal/README.md: it lists what to re-check when a feature changes.
+
+function listOr(values: readonly number[]): string {
+  return values.length < 2 ? values.join("") : `${values.slice(0, -1).join(", ")} or ${values[values.length - 1]}`;
+}
+
+export const PRIVACY_EMAIL = "privacy@two42.io";
+
+/** Every outside service that receives data from the hosted service. */
+export const PROCESSORS: readonly { name: string; does: string }[] = [
+  { name: "Supabase", does: "Stores the database and photos, handles sign-in, runs the nightly jobs, and sends password reset and email change emails." },
+  {
+    name: "Vercel",
+    does: "Hosts the app, and keeps the keys that open prayer requests.",
+  },
+  {
+    name: "Grafana",
+    does: "Receives traces of the app's server work to find problems. They never hold what you entered or your IP address.",
+  },
+  { name: "Resend", does: "Sends two42's email, so it receives each recipient's address and the email's content." },
+  { name: "Google Maps", does: "Shows event maps and suggests addresses. The map loads in your browser." },
+  { name: "YouTube", does: "Shows the thumbnail for a lesson's video. It loads in your browser." },
+];
+
+export const PRIVACY: LegalDocument = {
+  title: "Privacy policy",
+  summary: "How two42 handles the information a church and its members put into it.",
+  lastUpdated: "2026-11-13",
+  sections: [
+    {
+      heading: "What this policy covers",
+      blocks: [
+        "This policy covers the hosted service at two42.io: the website, the app and the emails it sends.",
+        `two42 is [open source](${GITHUB_URL}). A church that runs its own copy of the software is responsible for that copy and its own policies; this policy does not cover it.`,
+        "two42 is offered in the United States and is not directed at people outside it.",
+        `Questions about this policy, and requests for a copy or removal of your data, go to [${PRIVACY_EMAIL}](mailto:${PRIVACY_EMAIL}).`,
+      ],
+    },
+    {
+      heading: "Who decides what is shared",
+      blocks: [
+        "Each church decides who joins its two42 space and what is shared there, and confirms it has permission to add the people it adds. A church admin answers its members' requests about their data first.",
+        "two42 runs the service and is responsible for keeping it secure. two42 does not sell data and shows no ads.",
+      ],
+    },
+    {
+      heading: "What two42 stores",
+      blocks: [
+        "two42 stores what a church and its members enter so the app can show it back to them:",
+        [
+          "Your sign-in: your email address and password (stored only as a secure hash by Supabase), and the IP address and browser of each signed-in session.",
+          "Your profile: name, preferred name, photo, birthday, anniversary, phone numbers, address, occupation and anything else you add. Leave out anything you don't want stored. A church admin, or whoever manages your household, can also add or change these details.",
+          "Your household: the people listed in it, including children without their own account. A parent or a church admin chooses what to enter about a child; a child no one adds is not stored at all.",
+          "Your groups and teams, your role in each, any labels a leader gives you in a group, your RSVPs and your serving turns.",
+          "Prayer requests you post, by name or anonymous, and the requests you say you are praying for. The text of a request is stored encrypted. An anonymous request stores no author, only a code the app uses to recognize it as yours.",
+          "What leaders add for a group: events, announcements, lessons, the group's about page, and funds with their payment handles, such as a Venmo or PayPal name. two42 does not process payments; a gift happens in the payment app.",
+          "Requests to join the church or a group, invitations, and feedback you send.",
+          "A private calendar link, if you make one. Anyone with that link can see your calendar, so keep it to yourself.",
+        ],
+        "Your browser keeps a sign-in cookie, a cookie for the last group you opened, and your display choices. two42 sets no advertising or tracking cookies.",
+        "Each church keeps usage counts for its church admins: how often each kind of page was opened, and how often one showed an error, per day. They record the kind of page only, never who opened it.",
+        "two42's own error logs record what failed, the kind of page, and internal record numbers for what was involved. They never record what you entered. The hosting services keep their own request logs, which can include the addresses requested.",
+      ],
+    },
+    {
+      heading: "Who can see it",
+      blocks: [
+        "Each church's data is kept separate from every other church's. People in one church cannot see another church's data.",
+        [
+          "The directory shows what each person entered, except a birth year. The year goes into a phone contact someone saves from the directory, and church admins see it in the member list they download. A church admin chooses whether members see everyone in the church or only people they share a group with.",
+          "You can leave yourself out of the directory, so your name and details don't appear in it. Your household still shows its name, address and home phone when someone else in it is listed or a child is listed in it.",
+          "You can hide your email address from everyone but yourself and church admins.",
+          "Group content — events, announcements, lessons, prayer requests and funds — is seen by that group's members. A church admin sees every person and group in the church, including who is in each group, its teams and labels, and requests to join it. They don't see a group's events, announcements, lessons, prayer requests or funds unless they are in that group.",
+          "A leader can make a group private, so members who aren't in it can't find it.",
+          "A prayer request posted by name shows the author to group members who can see that person in the directory, and to church admins and the author's household who are in the group. An anonymous request shows no author in the app to anyone but the author: not to other members, leaders or church admins. A leader can edit or delete any prayer request in their group, without learning who wrote an anonymous one.",
+          "Email reminders and team messages go only to the people they are for.",
+        ],
+      ],
+    },
+    {
+      heading: "What two42 can see",
+      blocks: [
+        "two42 has administrator access to the database. Prayer request text is encrypted, and the keys are kept in the hosting settings, apart from the database, so a copy of the database alone shows no request text and no anonymous author. two42 holds those keys, so it can still open a request and work out who wrote an anonymous one. That access is used only to keep the service running, fix a problem, answer a request you make, or comply with the law.",
+        "two42 discloses data to authorities only when the law requires it.",
+      ],
+    },
+    {
+      heading: "Services that handle your data",
+      blocks: [
+        PROCESSORS.map((p) => `${p.name}: ${p.does}`),
+        "The services your browser connects to see your IP address and browser details with each request, and keep their own logs for periods they set.",
+        "Some links take you to other services by your choice: adding an event to your own calendar, opening a map or a meeting link, or giving through a payment app. What happens there is covered by that service's policy.",
+      ],
+    },
+    {
+      heading: "How long it is kept",
+      blocks: [
+        "What you and your church enter is kept while your account and your church use two42. For each active church, a nightly job deletes:",
+        [
+          `Prayer requests older than ${listOr(PRAYER_RETENTION_MONTHS)} months, if a church admin turns that on for the church. It is off unless they do.`,
+          `Feedback older than ${FEEDBACK_RETENTION_MONTHS} months.`,
+          `Declined requests to join the church, ${EXPIRED_RETENTION_DAYS} days after they were declined.`,
+          `Sign-up links never used, household invitations never accepted, and group invite links revoked or expired, ${EXPIRED_RETENTION_DAYS} days later.`,
+          `Records of which reminders were sent, after ${REMINDER_RETENTION_DAYS} days.`,
+          `Usage counts older than ${USAGE_RETENTION_MONTHS} months.`,
+        ],
+        "Backups kept by the database host may hold deleted data until they expire.",
+      ],
+    },
+    {
+      heading: "Your copy and your account",
+      blocks: [
+        `In Settings, under Your data, you can download a copy of your data. ${DOWNLOAD_COVERS} ${DOWNLOAD_LEAVES_OUT}`,
+        "You can delete your own prayer requests at any time. You can change anything in your profile, and remove anything except your name and email address.",
+        "You can delete your account from the same place, and a church admin can delete an account in their church. Deleting an account:",
+        [
+          "Removes the profile, photo, sign-in, group and team memberships, RSVPs, serving turns, and prayer requests, including anonymous ones.",
+          "Removes the household and the people listed in it, when no one else is left in it.",
+          "Keeps announcements, events and lessons the person added, without their name, and feedback without a name.",
+          "Keeps serving dates shared with someone else, with that person.",
+          "Moves a fund the person receives to its second person, or to whoever a leader chooses. The fund is hidden from Give until a leader confirms it.",
+        ],
+        "A church needs at least one church admin, so the last one adds another before deleting their own account.",
+        `For anything you can't do yourself, ask your church admin, or write to [${PRIVACY_EMAIL}](mailto:${PRIVACY_EMAIL}). A church admin can write there to ask for the church's data to be removed.`,
+      ],
+    },
+    {
+      heading: "Changes to this policy",
+      blocks: [
+        `When this policy changes, the date at the top changes too. Every change is public in [the two42 source](${GITHUB_URL}/commits/main/components/legal/privacy.ts).`,
+        "The rules for using two42 are in the [Terms of service](/terms).",
+      ],
+    },
+  ],
+};
