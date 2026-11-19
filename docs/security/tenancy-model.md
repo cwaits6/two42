@@ -335,12 +335,14 @@ arm — `is_member() and is_unlisted = false and role in (member, admin)` **and*
 so a pending account linked by a family-invite claim still reads neither table),
 or `is_member() and (org_directory_visible() or
 shares_group_with_household(<family id>))` for a household not in
-`unlisted_household_ids()`, the households whose people with an account have
-all left the directory. That rule is stated once, in
+`unlisted_household_ids()`, the households whose members with an account have
+all left the directory (a pending account neither keeps nor hides one). That rule is stated once, in
 `household_visible(family_id, is_admin, is_member, own_family_id, directory_open, hidden_family_ids)`
 (`20261130000000_household_hidden_when_all_unlisted.sql`): the policy passes it the
 viewer's facts, each wrapped `(select ...)`, and so does
-`family_directory_people()`. The own-household arm comes before the hidden
+`family_directory_people()`, which passes its one household's own hidden test
+instead of `unlisted_household_ids()` because `families_directory_full` calls it
+once per household. The own-household arm comes before the hidden
 test, so someone who left the directory still reads their own household. It is `SECURITY INVOKER` with no `SET` clause and
 no subquery, so Postgres inlines it into the policy instead of calling it per
 row; `supabase/tests/household_rules_suite.sql` proves the policy and the
@@ -378,10 +380,12 @@ EXECUTE revoked from `anon` and granted to `authenticated`:
 - `shares_group_with_household(_family_id)` — the same, for any profile
   whose `family_id` is the given household.
 - `unlisted_household_ids()` — the ids of the caller's org's households
-  (`org_id = app_current_org_id()`) with at least one profile, every one of
-  them `is_unlisted`. Zero arguments and an array result, so every caller
-  evaluates it once per statement as an InitPlan; `household_visible()` takes
-  it as an argument and stays inlinable.
+  (`org_id = app_current_org_id()`) with at least one `member` or `admin`
+  profile, every one of them `is_unlisted`. Zero arguments and an array result,
+  so the `family_units` policy and `families_directory_full` each evaluate it
+  once per statement as an InitPlan; `household_visible()` takes it as an
+  argument and stays inlinable. `family_directory_people()` states the same
+  test for its one household over `profiles_family_id_idx`.
 
 Like `is_group_member()`, `shares_group_with()` is called bare in the
 `profiles` policy. `shares_group_with_household()` appears in no policy: it is

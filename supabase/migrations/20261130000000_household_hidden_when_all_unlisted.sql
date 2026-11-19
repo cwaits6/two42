@@ -2,8 +2,12 @@
 -- it too, with everyone listed in it. A household with no one with an account
 -- shows as before.
 
--- Returns an array so each caller evaluates it once per statement as an
--- InitPlan and household_visible() stays inlinable.
+-- Returns an array so the family_units policy and families_directory_full
+-- evaluate it once per statement as an InitPlan and household_visible() stays
+-- inlinable. Only people listed in the directory when not hidden count, as in
+-- profiles_directory: someone pending neither keeps a household nor hides it.
+-- family_directory_people() states the same rule for its one household; the two
+-- change together.
 create function public.unlisted_household_ids()
   returns uuid[]
   language sql
@@ -16,6 +20,7 @@ as $$
           from public.profiles p
          where p.org_id = public.app_current_org_id()
            and p.family_id is not null
+           and p.role = any (array['member'::text, 'admin'::text])
          group by p.family_id
         having bool_and(p.is_unlisted)) h;
 $$;
@@ -24,7 +29,7 @@ revoke execute on function public.unlisted_household_ids() from public, anon;
 grant execute on function public.unlisted_household_ids() to authenticated;
 
 comment on function public.unlisted_household_ids() is
-  'The caller''s church''s households whose people with an account are all unlisted. Org from app_current_org_id(). Read by the family_units policy, family_directory_people() and families_directory_full.';
+  'The caller''s church''s households that have a member or church admin with an account, every one unlisted. Pending accounts don''t count. Org from app_current_org_id(). Read by the family_units policy and families_directory_full; family_directory_people() states the same rule for one household.';
 
 -- The viewer's facts are arguments so each call site evaluates them once per
 -- statement. No SECURITY DEFINER, no SET clause and no subquery in the body: any
@@ -102,13 +107,20 @@ as $$
   ) order by fm.relationship)
   -- A gate in WHERE that names no column of fm runs before the scan, so a
   -- household listing nobody would pay for it. Here it runs at the first row.
+  -- families_directory_full calls this once per household, so the hidden test
+  -- reads this household's profiles, not the church-wide unlisted_household_ids().
   filter (where (select public.household_visible(
     _family_id,
     (select public.is_admin()),
     (select public.is_member()),
     (select public.current_family_id()),
     (select public.org_directory_visible()),
-    (select public.unlisted_household_ids())))), '[]'::jsonb)
+    coalesce((select array[_family_id]
+                from public.profiles p
+               where p.family_id = _family_id
+                 and p.org_id = (select public.app_current_org_id())
+                 and p.role = any (array['member'::text, 'admin'::text])
+              having bool_and(p.is_unlisted)), '{}'::uuid[])))), '[]'::jsonb)
   from public.family_members fm
   where fm.family_id = _family_id
     and fm.org_id = (select public.app_current_org_id());

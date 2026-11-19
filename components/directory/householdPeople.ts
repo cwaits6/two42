@@ -33,9 +33,10 @@ export function searchablePeople(family: FamilyDirectoryFull) {
 
 /**
  * False when every person in the household is someone the viewer can't see.
- * The database already leaves out a household whose people with an account are
- * all hidden, so a person without an account here belongs to a household with
- * someone listed, or with no one who has an account.
+ * The database already leaves out a household whose members with an account
+ * are all hidden, so a person without an account here belongs to a household
+ * with someone listed, outside the viewer's groups or pending, or with no one
+ * who has an account.
  */
 export function hasPeopleToShow(family: FamilyDirectoryFull): boolean {
   return family.members.length > 0 || family.family_members_list.some((fm) => !fm.claimed_profile_id);
