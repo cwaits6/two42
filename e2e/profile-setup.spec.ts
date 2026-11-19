@@ -28,7 +28,8 @@ function sql(statement: string): string {
 
 function removeEverythingCreated() {
   sql(`
-    delete from public.family_units where family_name = '${HOUSEHOLD}';
+    delete from public.family_units
+     where id = (select family_id from public.profiles where id = '${NEWCOMER.id}');
     delete from auth.users where id = '${NEWCOMER.id}';
     delete from public.access_requests where email = '${NEWCOMER.email}';`);
 }
