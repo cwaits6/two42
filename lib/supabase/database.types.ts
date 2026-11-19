@@ -1055,6 +1055,50 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"prayer_comments": {
+                  Row: {
+                    "body_ciphertext": string,"created_at": string,"hide_name": boolean,"id": string,"only_asker": boolean,"org_id": string,"request_id": string,"writer_hash": string | null,"writer_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "body_ciphertext": string,"created_at"?: string,"hide_name"?: boolean,"id": string,"only_asker"?: boolean,"org_id"?: string,"request_id": string,"writer_hash"?: string | null,"writer_id"?: string | null
+                  }
+                  Update: {
+                    "body_ciphertext"?: string,"created_at"?: string,"hide_name"?: boolean,"id"?: string,"only_asker"?: boolean,"org_id"?: string,"request_id"?: string,"writer_hash"?: string | null,"writer_id"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "prayer_comments_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "prayer_comments_request_id_fkey"
+      columns: ["request_id","org_id"]
+isOneToOne: false
+      referencedRelation: "prayer_requests"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "prayer_comments_request_id_fkey"
+      columns: ["request_id","org_id"]
+isOneToOne: false
+      referencedRelation: "prayer_wall"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "prayer_comments_writer_id_fkey"
+      columns: ["writer_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "prayer_comments_writer_id_fkey"
+      columns: ["writer_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
                 },"prayer_requests": {
                   Row: {
                     "author_hash": string | null,"author_id": string | null,"body": string | null,"body_ciphertext": string | null,"created_at": string,"group_id": string,"id": string,"is_anonymous": boolean,"is_answered": boolean,"org_id": string,"updated_at": string
@@ -1673,7 +1717,7 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: string
                            },
 "delete_person":
-{ Args: { "_anonymous_request_ids"?: (string)[],"_org_id": string,"_person_id": string }; Returns: Json
+{ Args: { "_anonymous_request_ids"?: (string)[],"_hidden_comment_ids"?: (string)[],"_org_id": string,"_person_id": string }; Returns: Json
                            },
 "directory_retire_hidden_values":
 { Args: Record<PropertyKey, never>; Returns: Json
