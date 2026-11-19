@@ -102,6 +102,9 @@ describe("Venmo on a phone or tablet", () => {
       act(() => vi.advanceTimersByTime(2500));
       expect(status()?.textContent).toContain("Venmo didn't open");
       expect(status()?.querySelector("button")?.textContent).toBe("Copy");
+      expect(status()?.querySelector("a")?.getAttribute("href")).toBe(
+        "https://account.venmo.com/pay?recipients=gracechurch&note=Meals%20%26%20Care"
+      );
     });
 
     it("stays quiet when the page leaves for the app", () => {

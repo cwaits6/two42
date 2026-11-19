@@ -5,6 +5,7 @@ import {
   PAYMENT_METHODS,
   venmoAppHref,
   venmoPayHref,
+  venmoWebPayHref,
 } from "@/lib/giving/methods";
 
 describe("venmoPayHref", () => {
@@ -136,5 +137,13 @@ describe("venmoAppHref", () => {
   it("keeps a typed plus sign distinct from a space", () => {
     const href = venmoAppHref("gracechurch", "A+B C", null);
     expect(href.endsWith("note=A%2BB%20C")).toBe(true);
+  });
+});
+
+describe("venmoWebPayHref", () => {
+  it("opens Venmo's web payment page with the recipient, amount and note", () => {
+    expect(venmoWebPayHref("@gracechurch", "Meals & Care", "25.00")).toBe(
+      "https://account.venmo.com/pay?recipients=gracechurch&amount=25.00&note=Meals%20%26%20Care"
+    );
   });
 });
