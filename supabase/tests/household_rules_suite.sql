@@ -186,16 +186,16 @@ select ok(
   'family_directory_people() reads household_visible()');
 
 -- ── Neither helper gains privileges ─────────────────────────────────────────
-select ok(not (select prosecdef from pg_proc where oid = 'public.household_visible(uuid, boolean, boolean, uuid, boolean)'::regprocedure),
+select ok(not (select prosecdef from pg_proc where oid = 'public.household_visible(uuid, boolean, boolean, uuid, boolean, uuid[])'::regprocedure),
   'household_visible() runs as its caller');
 select ok(not (select prosecdef from pg_proc where oid = 'public.is_child_without_account(text, uuid)'::regprocedure),
   'is_child_without_account() runs as its caller');
 -- A SET clause would stop Postgres inlining household_visible() into the policy.
-select is((select proconfig from pg_proc where oid = 'public.household_visible(uuid, boolean, boolean, uuid, boolean)'::regprocedure),
+select is((select proconfig from pg_proc where oid = 'public.household_visible(uuid, boolean, boolean, uuid, boolean, uuid[])'::regprocedure),
   null, 'household_visible() has no SET clause, so the policy inlines it');
-select ok(not has_function_privilege('anon', 'public.household_visible(uuid, boolean, boolean, uuid, boolean)', 'execute'),
+select ok(not has_function_privilege('anon', 'public.household_visible(uuid, boolean, boolean, uuid, boolean, uuid[])', 'execute'),
   'anon can''t call household_visible()');
-select ok(has_function_privilege('authenticated', 'public.household_visible(uuid, boolean, boolean, uuid, boolean)', 'execute'),
+select ok(has_function_privilege('authenticated', 'public.household_visible(uuid, boolean, boolean, uuid, boolean, uuid[])', 'execute'),
   'a signed-in member can, as the policy needs');
 select ok(not has_function_privilege('anon', 'public.is_child_without_account(text, uuid)', 'execute'),
   'anon can''t call is_child_without_account()');

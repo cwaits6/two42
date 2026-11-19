@@ -1786,7 +1786,7 @@ isOneToOne: false
 { Args: { "_request_id": string }; Returns: string
                            },
 "household_visible":
-{ Args: { "_directory_open": boolean,"_family_id": string,"_is_admin": boolean,"_is_member": boolean,"_own_family_id": string }; Returns: boolean
+{ Args: { "_directory_open": boolean,"_family_id": string,"_hidden_family_ids": (string)[],"_is_admin": boolean,"_is_member": boolean,"_own_family_id": string }; Returns: boolean
                            },
 "is_admin":
 { Args: Record<PropertyKey, never>; Returns: boolean
@@ -1900,6 +1900,9 @@ isOneToOne: false
                            },
 "shares_group_with_household":
 { Args: { "_family_id": string }; Returns: boolean
+                           },
+"unlisted_household_ids":
+{ Args: Record<PropertyKey, never>; Returns: (string)[]
                            },
 "usage_count_record":
 { Args: { "_kind": string,"_pattern": string }; Returns: boolean
