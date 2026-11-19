@@ -317,6 +317,13 @@ describe("cookie scope regression", () => {
 });
 
 describe("content security policy", () => {
+  // The lesson paths are protected; a signed-out request redirects before the
+  // header is set.
+  beforeEach(() => {
+    getClaims.mockReset();
+    getClaims.mockResolvedValue({ data: { claims: { sub: "user-1" } } });
+  });
+
   it("names no speed measurement host, and every other source is as before", async () => {
     const req = new NextRequest("https://two42.io/", {
       headers: { host: "two42.io" },
@@ -364,6 +371,7 @@ describe("content security policy", () => {
       headers: { host: "two42.io" },
     });
     const res = await updateSession(req);
+    expect(res.headers.get("location")).toBeNull();
     const imgSrc = res.headers
       .get("Content-Security-Policy")
       ?.split(";")
@@ -382,6 +390,7 @@ describe("content security policy", () => {
       headers: { host: "two42.io" },
     });
     const res = await updateSession(req);
+    expect(res.headers.get("location")).toBeNull();
     const imgSrc = res.headers
       .get("Content-Security-Policy")
       ?.split(";")
@@ -398,6 +407,7 @@ describe("content security policy", () => {
       headers: { host: "two42.io" },
     });
     const res = await updateSession(req);
+    expect(res.headers.get("location")).toBeNull();
     const frameSrc = res.headers
       .get("Content-Security-Policy")
       ?.split(";")
