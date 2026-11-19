@@ -187,8 +187,8 @@ async function tellLeadersDatesOpened(
  * Null when the keys are missing or a read fails, so deletion refuses rather
  * than leave them behind. A hash under a wrong author key matches no one and
  * cannot be told apart, so under one the deletion goes ahead without them. One
- * they post between this read and the commit stays until retention removes
- * it, and they can no longer sign in to post another.
+ * they post between this read and the commit stays, unnamed, and they can no
+ * longer sign in to post another.
  *
  * Requests not yet converted still carry author_id and go with the profile's
  * cascade, but the backfill can hash one after this read and before that

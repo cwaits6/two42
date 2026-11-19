@@ -12,11 +12,13 @@
  * Nothing else selected does: no co-attendees of a serving date, no one else's
  * RSVPs, and no one who prayed for a request.
  */
+import type { PostgrestError } from "@supabase/supabase-js";
 import { decryptBody } from "@/lib/prayer/crypto";
 import { hashedCommentsOf, type HashedCommentRow } from "@/lib/prayer/commentThread";
 import { hashedRequestsOf } from "@/lib/prayer/hashedRequests";
 import { loadPrayerKeys } from "@/lib/prayer/keys";
 import type { Tables } from "@/lib/supabase/database.types";
+import { fetchAll } from "@/lib/supabase/fetchAll";
 import { createServiceClient } from "@/lib/supabase/server";
 import { rowsOf } from "./rows";
 
@@ -84,13 +86,18 @@ export async function buildAccountExport(orgId: string, personId: string) {
       .eq("org_id", orgId)
       .eq("author_id", personId),
     hashedRequestsOf<PrayerRow>(service, orgId, personId, keys, "*, groups(name)"),
-    service
-      .from("prayer_comments")
-      .select(
-        "id, request_id, body_ciphertext, only_asker, hide_name, writer_id, writer_hash, created_at, prayer_requests(groups(name))",
-      )
-      .eq("org_id", orgId)
-      .eq("writer_id", personId),
+    fetchAll<HashedCommentRow, PostgrestError>((from, to) =>
+      service
+        .from("prayer_comments")
+        .select(
+          "id, request_id, body_ciphertext, only_asker, hide_name, writer_id, writer_hash, created_at, prayer_requests(groups(name))",
+        )
+        .eq("org_id", orgId)
+        .eq("writer_id", personId)
+        .order("id")
+        .range(from, to)
+        .returns<HashedCommentRow[]>(),
+    ),
     hashedCommentsOf(service, orgId, personId, keys),
     service
       .from("giving_funds")
