@@ -3,10 +3,15 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { create as createQr } from "qrcode";
 import { MethodButton } from "@/components/giving/MethodButton";
 import { PAYMENT_METHODS, type ResolvedMethod } from "@/lib/giving/methods";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("qrcode", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("qrcode")>();
+  return { ...actual, create: vi.fn(actual.create) };
+});
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -34,6 +39,14 @@ function render(resolved: ResolvedMethod = venmo) {
 
 function payLink() {
   return container.querySelector<HTMLAnchorElement>("a")!;
+}
+
+function click(el: HTMLElement) {
+  const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+  act(() => {
+    el.dispatchEvent(event);
+  });
+  return event;
 }
 
 function type(input: HTMLInputElement, value: string) {
@@ -73,15 +86,22 @@ describe("Venmo on a phone or tablet", () => {
     expect(new URL(payLink().href).searchParams.get("amount")).toBe("25.00");
   });
 
+  it.each([
+    ["blank", ""],
+    ["valid", "25"],
+  ])("lets Open Venmo through with a %s amount", (_, amount) => {
+    render();
+    const input = container.querySelector("input")!;
+    type(input, amount);
+    expect(click(payLink()).defaultPrevented).toBe(false);
+    expect(input.getAttribute("aria-invalid")).toBeNull();
+  });
+
   it("keeps Venmo closed and shows the error on the field for a bad amount", () => {
     render();
     const input = container.querySelector("input")!;
     type(input, "25.123");
-    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
-    act(() => {
-      payLink().dispatchEvent(click);
-    });
-    expect(click.defaultPrevented).toBe(true);
+    expect(click(payLink()).defaultPrevented).toBe(true);
     expect(input.getAttribute("aria-invalid")).toBe("true");
     expect(document.getElementById(input.getAttribute("aria-describedby")!)?.textContent).toBe(
       "Enter dollars and cents, like 25 or 25.50."
@@ -99,6 +119,14 @@ describe("Venmo on a computer", () => {
     expect(container.textContent).toContain("@gracechurch");
     expect(container.querySelector("button")?.textContent).toBe("Copy");
     expect(container.querySelector("svg[role=img] path")?.getAttribute("d")).toMatch(/^M/);
+  });
+
+  it("encodes the payment link with the fund name and no amount in the QR code", () => {
+    vi.mocked(createQr).mockClear();
+    render();
+    expect(vi.mocked(createQr).mock.calls.map(([value]) => value)).toEqual([
+      "https://venmo.com/gracechurch?txn=pay&note=Meals%20%26%20Care",
+    ]);
   });
 });
 

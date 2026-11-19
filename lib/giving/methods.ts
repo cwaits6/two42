@@ -3,7 +3,8 @@ import type { PaymentMethodKey } from "@/lib/types";
 /**
  * Payment method metadata for the Give page.
  *
- * Two kinds: "link" methods (Venmo, PayPal, Cash App) deep-link straight into
+ * Three kinds: "pay" (Venmo) opens a payment for the fund, with the amount
+ * when one is given; "link" methods (PayPal, Cash App) deep-link straight into
  * the payer's app; "copy" methods (Zelle, Apple/Google Pay) have no public
  * profile URLs, so the handle is copied to the clipboard instead.
  *
@@ -13,7 +14,7 @@ export interface PaymentMethodMeta {
   key: PaymentMethodKey;
   name: string;
   glyph: string;
-  kind: "link" | "copy";
+  kind: "pay" | "link" | "copy";
   verb: string;
   /** Shown before the handle for context, e.g. "paypal.me/" */
   prefix: string;
@@ -25,7 +26,7 @@ export const PAYMENT_METHODS: Record<PaymentMethodKey, PaymentMethodMeta> = {
     key: "venmo",
     name: "Venmo",
     glyph: "V",
-    kind: "link",
+    kind: "pay",
     verb: "Open Venmo",
     prefix: "",
     placeholder: "@your-venmo",
@@ -77,8 +78,7 @@ export const METHOD_ORDER: PaymentMethodKey[] = [
 ];
 
 /**
- * External deep link for PayPal and Cash App; undefined for copy methods.
- * Venmo links carry the fund and amount, so they come from venmoPayHref.
+ * External deep link for the "link" methods; undefined for the others.
  */
 export function methodHref(
   key: PaymentMethodKey,

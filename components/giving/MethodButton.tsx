@@ -93,7 +93,7 @@ export function MethodButton({
 }) {
   const { meta, handle } = resolved;
 
-  if (meta.key === "venmo") {
+  if (meta.kind === "pay") {
     return <VenmoMethod resolved={resolved} fundName={fundName} />;
   }
 
