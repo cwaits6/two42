@@ -795,12 +795,20 @@ CREATE OR REPLACE FUNCTION "public"."family_directory_people"("_family_id" "uuid
   ) order by fm.relationship)
   -- A gate in WHERE that names no column of fm runs before the scan, so a
   -- household listing nobody would pay for it. Here it runs at the first row.
+  -- families_directory_full calls this once per household, so the hidden test
+  -- reads this household's profiles, not the church-wide unlisted_household_ids().
   filter (where (select public.household_visible(
     _family_id,
     (select public.is_admin()),
     (select public.is_member()),
     (select public.current_family_id()),
-    (select public.org_directory_visible())))), '[]'::jsonb)
+    (select public.org_directory_visible()),
+    coalesce((select array[_family_id]
+                from public.profiles p
+               where p.family_id = _family_id
+                 and p.org_id = (select public.app_current_org_id())
+                 and p.role = any (array['member'::text, 'admin'::text])
+              having bool_and(p.is_unlisted)), '{}'::uuid[])))), '[]'::jsonb)
   from public.family_members fm
   where fm.family_id = _family_id
     and fm.org_id = (select public.app_current_org_id());
@@ -1874,21 +1882,22 @@ $$;
 ALTER FUNCTION "public"."handle_new_user"() OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."household_visible"("_family_id" "uuid", "_is_admin" boolean, "_is_member" boolean, "_own_family_id" "uuid", "_directory_open" boolean) RETURNS boolean
+CREATE OR REPLACE FUNCTION "public"."household_visible"("_family_id" "uuid", "_is_admin" boolean, "_is_member" boolean, "_own_family_id" "uuid", "_directory_open" boolean, "_hidden_family_ids" "uuid"[]) RETURNS boolean
     LANGUAGE "sql" STABLE
     AS $$
   select _is_admin
       or (_is_member and (
             _family_id = _own_family_id
-            or _directory_open
-            or public.shares_group_with_household(_family_id)));
+            or (_family_id <> all (_hidden_family_ids)
+                and (_directory_open
+                     or public.shares_group_with_household(_family_id)))));
 $$;
 
 
-ALTER FUNCTION "public"."household_visible"("_family_id" "uuid", "_is_admin" boolean, "_is_member" boolean, "_own_family_id" "uuid", "_directory_open" boolean) OWNER TO "postgres";
+ALTER FUNCTION "public"."household_visible"("_family_id" "uuid", "_is_admin" boolean, "_is_member" boolean, "_own_family_id" "uuid", "_directory_open" boolean, "_hidden_family_ids" "uuid"[]) OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."household_visible"("_family_id" "uuid", "_is_admin" boolean, "_is_member" boolean, "_own_family_id" "uuid", "_directory_open" boolean) IS 'Who can see a household: a church admin, or a member in it, in a group with someone in it, or in a church whose directory is open. Read by the family_units policy and family_directory_people().';
+COMMENT ON FUNCTION "public"."household_visible"("_family_id" "uuid", "_is_admin" boolean, "_is_member" boolean, "_own_family_id" "uuid", "_directory_open" boolean, "_hidden_family_ids" "uuid"[]) IS 'Who can see a household: a church admin, or a member in it, or a member in a group with someone in it or in a church whose directory is open, unless every person with an account in it has left the directory. Read by the family_units policy and family_directory_people().';
 
 
 
@@ -3366,6 +3375,28 @@ $$;
 ALTER FUNCTION "public"."touch_updated_at"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."unlisted_household_ids"() RETURNS "uuid"[]
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select coalesce(array_agg(h.family_id), '{}')
+  from (select p.family_id
+          from public.profiles p
+         where p.org_id = public.app_current_org_id()
+           and p.family_id is not null
+           and p.role = any (array['member'::text, 'admin'::text])
+         group by p.family_id
+        having bool_and(p.is_unlisted)) h;
+$$;
+
+
+ALTER FUNCTION "public"."unlisted_household_ids"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."unlisted_household_ids"() IS 'The caller''s church''s households that have a member or church admin with an account, every one unlisted. Pending accounts don''t count. Org from app_current_org_id(). Read by the family_units policy and families_directory_full; family_directory_people() states the same rule for one household.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."usage_count_record"("_pattern" "text", "_kind" "text") RETURNS boolean
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO ''
@@ -3951,7 +3982,7 @@ CREATE OR REPLACE VIEW "public"."families_directory_full" WITH ("security_invoke
         END AS "anniversary_year",
     "phone_profile_id"
    FROM "public"."family_units" "f"
-  WHERE ("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"));
+  WHERE (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("id" <> ALL (( SELECT "public"."unlisted_household_ids"() AS "unlisted_household_ids")::"uuid"[])));
 
 
 ALTER VIEW "public"."families_directory_full" OWNER TO "postgres";
@@ -6786,7 +6817,7 @@ CREATE POLICY "Members can view family members" ON "public"."family_members" FOR
 
 
 
-CREATE POLICY "Members can view family units" ON "public"."family_units" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."household_visible"("family_units"."id", ( SELECT "public"."is_admin"() AS "is_admin"), ( SELECT "public"."is_member"() AS "is_member"), ( SELECT "public"."current_family_id"() AS "current_family_id"), ( SELECT "public"."org_directory_visible"() AS "org_directory_visible")) AS "household_visible")));
+CREATE POLICY "Members can view family units" ON "public"."family_units" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ( SELECT "public"."household_visible"("family_units"."id", ( SELECT "public"."is_admin"() AS "is_admin"), ( SELECT "public"."is_member"() AS "is_member"), ( SELECT "public"."current_family_id"() AS "current_family_id"), ( SELECT "public"."org_directory_visible"() AS "org_directory_visible"), ( SELECT "public"."unlisted_household_ids"() AS "unlisted_household_ids")) AS "household_visible")));
 
 
 
@@ -7402,9 +7433,9 @@ GRANT ALL ON FUNCTION "public"."handle_new_user"() TO "service_role";
 
 
 
-REVOKE ALL ON FUNCTION "public"."household_visible"("_family_id" "uuid", "_is_admin" boolean, "_is_member" boolean, "_own_family_id" "uuid", "_directory_open" boolean) FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."household_visible"("_family_id" "uuid", "_is_admin" boolean, "_is_member" boolean, "_own_family_id" "uuid", "_directory_open" boolean) TO "authenticated";
-GRANT ALL ON FUNCTION "public"."household_visible"("_family_id" "uuid", "_is_admin" boolean, "_is_member" boolean, "_own_family_id" "uuid", "_directory_open" boolean) TO "service_role";
+REVOKE ALL ON FUNCTION "public"."household_visible"("_family_id" "uuid", "_is_admin" boolean, "_is_member" boolean, "_own_family_id" "uuid", "_directory_open" boolean, "_hidden_family_ids" "uuid"[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."household_visible"("_family_id" "uuid", "_is_admin" boolean, "_is_member" boolean, "_own_family_id" "uuid", "_directory_open" boolean, "_hidden_family_ids" "uuid"[]) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."household_visible"("_family_id" "uuid", "_is_admin" boolean, "_is_member" boolean, "_own_family_id" "uuid", "_directory_open" boolean, "_hidden_family_ids" "uuid"[]) TO "service_role";
 
 
 
@@ -7627,6 +7658,12 @@ GRANT ALL ON FUNCTION "public"."team_moved_prunes_members"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."touch_updated_at"() TO "anon";
 GRANT ALL ON FUNCTION "public"."touch_updated_at"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."touch_updated_at"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."unlisted_household_ids"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."unlisted_household_ids"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."unlisted_household_ids"() TO "service_role";
 
 
 
