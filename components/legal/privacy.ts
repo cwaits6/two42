@@ -37,7 +37,7 @@ export const PROCESSORS: readonly { name: string; does: string }[] = [
 export const PRIVACY: LegalDocument = {
   title: "Privacy policy",
   summary: "How two42 handles the information a church and its members put into it.",
-  lastUpdated: "2026-11-13",
+  lastUpdated: "2026-11-19",
   sections: [
     {
       heading: "What this policy covers",
@@ -64,7 +64,7 @@ export const PRIVACY: LegalDocument = {
           "Your profile: name, preferred name, photo, birthday, anniversary, phone numbers, address, occupation and anything else you add. Leave out anything you don't want stored. A church admin, or whoever manages your household, can also add or change these details.",
           "Your household: the people listed in it, including children without their own account. A parent or a church admin chooses what to enter about a child; a child no one adds is not stored at all.",
           "Your groups and teams, your role in each, any labels a leader gives you in a group, your RSVPs and your serving turns.",
-          "Prayer requests you post, by name or anonymous, and the requests you say you are praying for. The text of a request is stored encrypted. An anonymous request stores no author, only a code the app uses to recognize it as yours.",
+          "Prayer requests you post, by name or anonymous, the requests you say you are praying for, and comments you add to a request. The text of a request or a comment is stored encrypted. An anonymous request, or a comment with your name hidden, stores no author, only a code the app uses to recognize it as yours.",
           "What leaders add for a group: events, announcements, lessons, the group's about page, and funds with their payment handles, such as a Venmo or PayPal name. two42 does not process payments; a gift happens in the payment app.",
           "Requests to join the church or a group, invitations, and feedback you send.",
           "A private calendar link, if you make one. Anyone with that link can see your calendar, so keep it to yourself.",
@@ -85,6 +85,7 @@ export const PRIVACY: LegalDocument = {
           "Group content — events, announcements, lessons, prayer requests and funds — is seen by that group's members. A church admin sees every person and group in the church, including who is in each group, its teams and labels, and requests to join it. They don't see a group's events, announcements, lessons, prayer requests or funds unless they are in that group.",
           "A leader can make a group private, so members who aren't in it can't find it.",
           "A prayer request posted by name shows the author to group members who can see that person in the directory, and to church admins and the author's household who are in the group. An anonymous request shows no author in the app to anyone but the author: not to other members, leaders or church admins. A leader can edit or delete any prayer request in their group, without learning who wrote an anonymous one.",
+          "A comment on a prayer request is seen by everyone who can see the request, or, if you choose, only by the person who posted it. With your name hidden, a comment shows no name to anyone: not to other members, leaders or church admins. You, the person who posted the request, and the group's leaders can delete a comment.",
           "Email reminders and team messages go only to the people they are for.",
         ],
       ],
@@ -92,7 +93,7 @@ export const PRIVACY: LegalDocument = {
     {
       heading: "What two42 can see",
       blocks: [
-        "two42 has administrator access to the database. Prayer request text is encrypted, and the keys are kept in the hosting settings, apart from the database, so a copy of the database alone shows no request text and no anonymous author. two42 holds those keys, so it can still open a request and work out who wrote an anonymous one. That access is used only to keep the service running, fix a problem, answer a request you make, or comply with the law.",
+        "two42 has administrator access to the database. Prayer request and comment text is encrypted, and the keys are kept in the hosting settings, apart from the database, so a copy of the database alone shows no request or comment text and no anonymous author. two42 holds those keys, so it can still open a request or comment and work out who wrote an anonymous one. That access is used only to keep the service running, fix a problem, answer a request you make, or comply with the law.",
         "two42 discloses data to authorities only when the law requires it.",
       ],
     },
@@ -123,10 +124,10 @@ export const PRIVACY: LegalDocument = {
       heading: "Your copy and your account",
       blocks: [
         `In Settings, under Your data, you can download a copy of your data. ${DOWNLOAD_COVERS} ${DOWNLOAD_LEAVES_OUT}`,
-        "You can delete your own prayer requests at any time. You can change anything in your profile, and remove anything except your name and email address.",
+        "You can delete your own prayer requests and comments at any time. You can change anything in your profile, and remove anything except your name and email address.",
         "You can delete your account from the same place, and a church admin can delete an account in their church. Deleting an account:",
         [
-          "Removes the profile, photo, sign-in, group and team memberships, RSVPs, serving turns, and prayer requests, including anonymous ones.",
+          "Removes the profile, photo, sign-in, group and team memberships, RSVPs, serving turns, and prayer requests and comments, including anonymous ones.",
           "Removes the household and the people listed in it, when no one else is left in it.",
           "Keeps announcements, events and lessons the person added, without their name, and feedback without a name.",
           "Keeps serving dates shared with someone else, with that person.",

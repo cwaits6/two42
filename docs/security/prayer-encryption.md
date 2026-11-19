@@ -41,6 +41,33 @@ row, and an author on every by-name row. No client role can write the table;
 the routes under `app/g/[groupId]/prayer/requests/` are the only writers in
 the app, so a browser can never store text the server did not seal.
 
+## Comments
+
+Comments on a request (`prayer_comments`) are sealed the same way, with the
+same keys, the comment's own id in place of the request id: `body_ciphertext`
+is a `v1` envelope whose additional data is `<org_id>:<comment id>`. A comment
+posted with "Hide my name" stores no `writer_id`, only `writer_hash`, an `h1`
+HMAC over `<comment id>:<writer id>`, so it shows as Anonymous to everyone,
+leaders and church admins included. There is no plaintext column.
+
+No client role has any privilege on the table. Who may read a private comment
+("only the person who asked") depends on the writer's hash and, on an anonymous
+request, the request's author hash, which the database cannot compute, so the
+prayer page reads the group's comments on the service client and
+`openComments()` in `lib/prayer/commentThread.ts` decides:
+
+- a comment for the group reaches everyone who can see the request;
+- a private comment reaches only its writer and the person who posted the
+  request, each recognised by hash where they are anonymous, and is dropped
+  before its text is opened for anyone else, a leader or church admin included;
+- the writer, the person who posted the request and the group's leaders can
+  delete a comment, through
+  `app/g/[groupId]/prayer/requests/[requestId]/comments/[commentId]/route.ts`.
+  Nobody edits one.
+
+A comment's text that fails to open fails the prayer page, as request text
+does. Deleting a request deletes its comments; deleting a person is below.
+
 ## The keys
 
 | Variable | Purpose |
@@ -186,7 +213,8 @@ Rotate one key at a time.
 2. In Production set `PRAYER_BODY_KEY_PREVIOUS` to the old key and
    `PRAYER_BODY_KEY` to the new one, and redeploy. New writes use the new key;
    old rows still open.
-3. Run the script: a dry run shows `reencrypt` for every old row and
+3. Run the script, which covers comments as well as requests: a dry run
+   shows `reencrypt` for every old row and
    nothing held, then
    `--apply`, then a dry run showing only `noop` (and `unmatched` only for
    requests an earlier author rotation or a lost author key left), exiting 0.
@@ -231,8 +259,11 @@ No foreign key reaches an anonymous request stored as a hash. Account
 deletion (`deletePerson()` in `lib/account/deletion.ts`) reads the church's
 hashed anonymous requests, matches the person's with the key, and passes their
 ids to `delete_person()`, which deletes them in the same transaction as the
-rest. A request the person posts between that read and the commit stays; their
-login is gone by then, so it cannot happen twice. A login deleted outside the
+rest. Their hidden-name comments are found
+the same way, by their writer hash, and passed as `_hidden_comment_ids`; named
+comments go with the profile, and comments on the person's requests with
+those requests. A request or comment the person posts between that read and
+the commit stays; their login is gone by then, so it cannot happen twice. A login deleted outside the
 app, for example from the Supabase dashboard, leaves that person's hashed
 anonymous requests behind, unnamed, until retention removes them or an
 operator deletes them.
