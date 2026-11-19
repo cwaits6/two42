@@ -11,6 +11,7 @@ import {
   occurrenceThisYear,
 } from "@/components/directory/utils";
 import { displayName, initials } from "@/lib/names";
+import { nameableSpouse } from "@/components/directory/householdPeople";
 import type { DirectoryProfile, FamilyDirectoryFull } from "@/lib/types";
 
 export type CelebrationWhen = "week" | "month" | "all";
@@ -115,24 +116,6 @@ export interface CelebrationSection<T> {
 /** Today and the next 6 days. */
 export function isThisWeek(month: number, day: number, today: Date): boolean {
   return daysUntilNextOccurrence(month, day, today) < 7;
-}
-
-/**
- * The spouse a couple can be named with. A claimed spouse counts only when
- * their profile is in `members`. The view keeps the claimed family_members row
- * when the profile is missing, and nothing in the row says why: the spouse is
- * unlisted, pending, moved out of the household, or listed but in none of the
- * viewer's groups while the directory is limited to shared groups.
- */
-function nameableSpouse(family: FamilyDirectoryFull) {
-  return (
-    family.members.find((m) => m.relationship === "spouse") ||
-    family.family_members_list.find(
-      (fm) =>
-        fm.relationship === "spouse" &&
-        (!fm.claimed_profile_id || family.members.some((m) => m.id === fm.claimed_profile_id)),
-    )
-  );
 }
 
 /**
