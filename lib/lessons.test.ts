@@ -199,11 +199,22 @@ describe("lessonEmbedUrl", () => {
 
 describe("lessonWatchUrl", () => {
   it.each([
-    "https://www.youtube-nocookie.com/embed/jNQXAC9IVRw",
     "https://youtu.be/jNQXAC9IVRw?si=AbC_dEf-123",
     "https://www.youtube.com/watch?v=jNQXAC9IVRw&t=30s",
-  ])("sends %s to the watch page", (video_url) => {
-    expect(lessonWatchUrl({ video_url })).toBe("https://www.youtube.com/watch?v=jNQXAC9IVRw");
+  ])("keeps %s as it was entered", (video_url) => {
+    expect(lessonWatchUrl({ video_url })).toBe(video_url);
+  });
+
+  it("sends an embed address to the watch page", () => {
+    expect(
+      lessonWatchUrl({ video_url: "https://www.youtube-nocookie.com/embed/jNQXAC9IVRw" }),
+    ).toBe("https://www.youtube.com/watch?v=jNQXAC9IVRw");
+  });
+
+  it("keeps an embed address's start time", () => {
+    expect(
+      lessonWatchUrl({ video_url: "https://www.youtube.com/embed/jNQXAC9IVRw?start=90" }),
+    ).toBe("https://www.youtube.com/watch?v=jNQXAC9IVRw&t=90s");
   });
 
   it("has no watch page for a recording elsewhere", () => {

@@ -136,12 +136,21 @@ export function lessonEmbedUrl(lesson: { video_url: string }): string | null {
 }
 
 /**
- * YouTube's watch page for a YouTube recording, else null. An embed address
- * opened on its own shows a player error, not the video.
+ * Where "Watch on YouTube" goes for a YouTube recording, else null. The stored
+ * link is kept, start time included, unless it is an embed address: opened on
+ * its own that shows a player error, so it becomes the watch page.
  */
 export function lessonWatchUrl(lesson: { video_url: string }): string | null {
+  const video = safeHttpUrl(lesson.video_url);
   const id = lessonYouTubeId(lesson);
-  return id ? `https://www.youtube.com/watch?v=${id}` : null;
+  if (!video || !id) return null;
+  const url = new URL(video);
+  if (!url.pathname.startsWith("/embed/")) return video;
+  const watch = new URL("https://www.youtube.com/watch");
+  watch.searchParams.set("v", id);
+  const start = url.searchParams.get("start");
+  if (start && /^\d+$/.test(start)) watch.searchParams.set("t", `${start}s`);
+  return watch.toString();
 }
 
 /**
