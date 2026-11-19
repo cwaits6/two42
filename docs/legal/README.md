@@ -104,6 +104,10 @@ policy does not describe it. When it merges, re-check each sentence below in
 
 ## Open choices for the maintainer
 
+Settled: the documents say "two42" and name no person. With no company
+behind two42, the maintainer is the party to the Terms; if one is formed, name
+it in both documents. hello@, privacy@ and security@two42.io all receive mail.
+
 Each is a commitment the code does not enforce. The public text says only what
 is true without it; fill one in here, then add the sentence to the document.
 
@@ -115,7 +119,5 @@ is true without it; fill one in here, then add the sentence to the document.
 - [MAINTAINER: how a requester's identity is checked before a copy or removal is sent]
 - [MAINTAINER: how long privacy request emails are kept]
 - [MAINTAINER: the governing law and venue for the Terms]
-- [MAINTAINER: whether a legal entity (such as an LLC) runs two42; the documents name no person, but without an entity the operator is still the party to the Terms]
 - [MAINTAINER: confirm the commitment that database access is used only to run the service, fix a problem, answer a request, or comply with the law]
-- [MAINTAINER: confirm hello@two42.io for questions about the Terms and security@two42.io for security reports]
 - [MAINTAINER: whether the hosted Supabase Auth sends password reset email through its own mailer or through Resend as custom SMTP]
