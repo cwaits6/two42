@@ -815,7 +815,9 @@ export function ProfileForm({
               onChange={(v) => update("is_unlisted", v)}
             />
             <p className="text-base text-muted-foreground">
-              The profile won&apos;t appear in the directory at all.
+              The profile won&apos;t appear in the directory at all. When everyone in the
+              household who has an account and isn&apos;t pending is hidden, the household and
+              everyone in it leave the directory too.
             </p>
           </div>
 

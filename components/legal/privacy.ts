@@ -80,7 +80,7 @@ export const PRIVACY: LegalDocument = {
         "Each church's data is kept separate from every other church's. People in one church cannot see another church's data.",
         [
           "The directory shows what each person entered, except a birth year. The year goes into a phone contact someone saves from the directory, and church admins see it in the member list they download. A church admin chooses whether members see everyone in the church or only people they share a group with.",
-          "You can leave yourself out of the directory, so your name and details don't appear in it. Your household still shows its name, address and home phone when someone else in it is listed or a child is listed in it.",
+          "You can leave yourself out of the directory, so your name and details don't appear in it. Your household still shows its name, address and home phone while someone else in it with an account is listed. When no one else is, the household leaves the directory too, with everyone listed in it.",
           "You can hide your email address from everyone but yourself and church admins.",
           "Group content — events, announcements, lessons, prayer requests and funds — is seen by that group's members. A church admin sees every person and group in the church, including who is in each group, its teams and labels, and requests to join it. They don't see a group's events, announcements, lessons, prayer requests or funds unless they are in that group.",
           "A leader can make a group private, so members who aren't in it can't find it.",

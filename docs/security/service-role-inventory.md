@@ -457,7 +457,8 @@ manage) its steward; the org admin arm is gone from it, as from every
 content policy.
 
 The people layer's directory boundary
-(`20261018000000_directory_visibility.sql`) adds three read-only helpers
+(`20261018000000_directory_visibility.sql`) adds three read-only helpers, and
+`20261130000000_household_hidden_when_all_unlisted.sql` a fourth,
 of the same shape — `SECURITY DEFINER`, `STABLE`, `set search_path = ''`,
 caller resolved from `auth.uid()` only, EXECUTE revoked from `public` and
 `anon` and granted to `authenticated`:
@@ -469,12 +470,18 @@ caller resolved from `auth.uid()` only, EXECUTE revoked from `public` and
   a `group_members` group in the caller's org.
 - `shares_group_with_household(_family_id)` — the caller shares a group
   with any profile in the given household, in the caller's org.
+- `unlisted_household_ids()` — the caller's org's households whose member and
+  church admin profiles are all unlisted. Reads only `profiles`, pinned by
+  `org_id = app_current_org_id()`; returns household ids only.
 
 Every `group_members` read in them carries `org_id =
 public.app_current_org_id()`. `shares_group_with()` is called by the `profiles`
 SELECT policy; `shares_group_with_household()` only by `household_visible()`,
 the one statement of household visibility, which the `family_units` SELECT
-policy and `family_directory_people()` both read — see
+policy and `family_directory_people()` both read; the policy passes
+`unlisted_household_ids()` as an argument, `family_directory_people()` its one
+household's own hidden test, and `families_directory_full` reads
+`unlisted_household_ids()` too — see
 "Directory visibility" in [`tenancy-model.md`](tenancy-model.md). None writes.
 
 `handle_new_user()` (the auth signup trigger, `SECURITY DEFINER`) writes
@@ -836,7 +843,8 @@ granted to `authenticated, service_role`. Remove it with `profiles.hide_annivers
 
 Three `SECURITY DEFINER` functions, first in
 `supabase/migrations/20261112000000_children_directory.sql`; the current bodies
-are in `20261125000000_household_and_deletion_rules.sql`. Each has
+are in `20261125000000_household_and_deletion_rules.sql`, and
+`family_directory_people()`'s in `20261130000000_household_hidden_when_all_unlisted.sql`. Each has
 `search_path = ''`, and each is read or fired only as described here. Each
 reads the child rule from `is_child_without_account()`, a pure `SECURITY INVOKER`
 function that is not a bypass surface.
