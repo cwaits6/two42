@@ -74,16 +74,45 @@ describe("Venmo on a phone or tablet", () => {
   it("opens a payment with the fund name and no amount when the amount is blank", () => {
     render();
     expect(container.querySelector("input")?.inputMode).toBe("decimal");
-    expect(payLink().href).toBe(
-      "https://venmo.com/gracechurch?txn=pay&note=Meals%20%26%20Care"
+    expect(payLink().getAttribute("href")).toBe(
+      "venmo://paycharge?txn=pay&recipients=gracechurch&note=Meals%20%26%20Care"
     );
+    expect(payLink().target).toBe("");
     expect(container.querySelector("svg[role=img]")).toBeNull();
   });
 
   it("puts the typed amount in the link", () => {
     render();
     type(container.querySelector("input")!, "25");
-    expect(new URL(payLink().href).searchParams.get("amount")).toBe("25.00");
+    expect(new URL(payLink().getAttribute("href")!).searchParams.get("amount")).toBe("25.00");
+  });
+
+  describe("when the app doesn't open", () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    function status() {
+      return container.querySelector("[role=status]");
+    }
+
+    it("offers Copy once the page is still in front", () => {
+      render();
+      click(payLink());
+      expect(status()).toBeNull();
+      act(() => vi.advanceTimersByTime(2500));
+      expect(status()?.textContent).toContain("Venmo didn't open");
+      expect(status()?.querySelector("button")?.textContent).toBe("Copy");
+    });
+
+    it("stays quiet when the page leaves for the app", () => {
+      render();
+      click(payLink());
+      act(() => {
+        window.dispatchEvent(new Event("blur"));
+        vi.advanceTimersByTime(2500);
+      });
+      expect(status()).toBeNull();
+    });
   });
 
   it.each([
