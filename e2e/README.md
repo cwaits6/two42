@@ -51,7 +51,9 @@ so the spec finds it by opening Group B's requests with `PRAYER_BODY_KEY` and
 `PRAYER_AUTHOR_KEY`, read from the environment or `.env.local`
 (`fixtures/prayerKeys.ts`), the same keys the app under test uses. `account-deletion.spec.ts`
 never deletes a seeded person: it creates its own people through the same
-container, deletes them through the pages, and removes any left in `afterAll`. `serving-cancel.spec.ts` builds a Group B team (Leo as its
+container, deletes them through the pages, and removes any left in `afterAll`. `profile-setup.spec.ts`
+creates a Group B member who hasn't finished setup through the same container, because every seeded
+person has, and removes them and the household they add in `beforeAll` and `afterAll`. `serving-cancel.spec.ts` builds a Group B team (Leo as its
 lead, Henry, Chloe and Isaac as members) through the same container in
 `beforeAll`, puts Henry and Chloe's date back before each test, and deletes the
 team in `afterAll`. `event-replies.spec.ts` adds two past Group B events with Zoe's reply through the same
@@ -144,6 +146,7 @@ not covered here.
 | `household-names-agree.spec.ts`      | Group Home's "This week" anniversaries name the same couples as the group Directory's This week, for a member, the household's primary and the church admin in Group B, who see the Mockinghams there, and for two Group C members, who don't; Group C's leader, who shares no group with that household, gets none of its people's names from a link to it |
 | `usage-counts.spec.ts`               | A member who opens Usage lands on Home; opening an invite page and a group page adds to their patterns' counts and stores no token or id; a church admin sees the church's counts at 390 and 1280, a count under 5 as "fewer than 5", and the 7-day list leaves out an older count |
 | `household-invite-existing-account.spec.ts` | A person with an account who opens a household invite signs in and is returned to it, and is listed under Members with an account in the household only after pressing Join household, once, with their record gone from Others; a repeat join answers success; the same invite is refused, on the page and by the API, to someone signed in with another address as a different account, and to the invited address in another church as a dead link, and neither appears in the household; the people, records and invites created are deleted in afterAll |
+| `profile-setup.spec.ts`             | A member who hasn't finished setup is sent from sign-in and from Home, the directory, a group page and My profile to profile setup; with no household under their last name they add one, finish, land on Home and are no longer sent back, and their household is listed under Households with their name; they are removed in afterAll |
 
 ## Adding a spec
 

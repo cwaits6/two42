@@ -33,9 +33,8 @@ export default async function ProfileSetupPage() {
     redirect("/dashboard");
   }
 
-  // If already completed, send to directory
   if (profile.setup_completed) {
-    redirect("/directory");
+    redirect("/dashboard");
   }
 
   // Private buckets: the wizard's avatar preview renders this

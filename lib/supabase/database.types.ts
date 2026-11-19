@@ -1666,6 +1666,9 @@ isOneToOne: false
 "app_request_org_id":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
+"create_own_household":
+{ Args: { "_family_name": string }; Returns: string
+                           },
 "current_family_id":
 { Args: Record<PropertyKey, never>; Returns: string
                            },

@@ -13,6 +13,7 @@ import { loadGroupMemberships } from "@/lib/groups/memberships";
 import { isExpectedHost, normalizeHost } from "@/lib/org";
 import { siteConfig } from "@/lib/config";
 import { logError } from "@/lib/log";
+import { isMemberRole } from "@/lib/roles";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -151,14 +152,39 @@ export async function updateSession(request: NextRequest) {
     return redirectTo(url);
   }
 
-  let profile: { role: string; org_id: string } | null = null;
-  if ((isAdmin || isLegacy) && user) {
+  // Pages a member with unfinished setup can still open: the wizard and the
+  // API it calls, the account and token landings (an invite link must not be
+  // lost on the way through setup), the legal pages, /platform and files.
+  const setupExempt =
+    [
+      "/profile/setup",
+      "/api",
+      "/setup-account",
+      "/update-password",
+      "/join",
+      "/serving/go",
+      "/privacy",
+      "/terms",
+    ].some(atOrUnder) ||
+    isPlatform ||
+    pathname.startsWith("/_next/") ||
+    /\.\w+$/.test(pathname);
+
+  let profile: { role: string; org_id: string; setup_completed: boolean } | null = null;
+  if ((isAdmin || isLegacy || !setupExempt) && user) {
     const { data } = await supabase
       .from("profiles")
-      .select("role, org_id")
+      .select("role, org_id, setup_completed")
       .eq("id", user.id)
       .single();
     profile = data;
+  }
+
+  if (profile && !setupExempt && isMemberRole(profile.role) && !profile.setup_completed) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/profile/setup";
+    url.search = "";
+    return redirectTo(url);
   }
 
   if (isAdmin && user && profile?.role !== "admin") {

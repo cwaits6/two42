@@ -132,7 +132,9 @@ describe("legacy group routes and the group cookie", () => {
   }) {
     getClaims.mockResolvedValue({ data: { claims: { sub: "user-1" } } });
     const profile =
-      opts.profile === undefined ? { role: "member", org_id: "org-1" } : opts.profile;
+      opts.profile === undefined
+        ? { role: "member", org_id: "org-1", setup_completed: true }
+        : opts.profile;
     from.mockImplementation((table: string) => {
       if (table === "profiles") return chain({ data: profile, error: null });
       if (table === "group_members") return chain({ data: opts.memberships ?? [], error: null });
@@ -231,7 +233,7 @@ describe("legacy group routes and the group cookie", () => {
   it.each(["member", "content_editor", "pending"])(
     "sends a stored %s away from /admin to Home",
     async (role) => {
-      signedIn({ profile: { role, org_id: "org-1" } });
+      signedIn({ profile: { role, org_id: "org-1", setup_completed: true } });
       expect(location(await updateSession(get("/admin")))).toBe("/dashboard");
       expect(location(await updateSession(get("/admin/members")))).toBe("/dashboard");
     }
@@ -243,9 +245,48 @@ describe("legacy group routes and the group cookie", () => {
   });
 
   it("lets an admin through to /admin", async () => {
-    signedIn({ profile: { role: "admin", org_id: "org-1" } });
+    signedIn({ profile: { role: "admin", org_id: "org-1", setup_completed: true } });
     expect(location(await updateSession(get("/admin")))).toBeNull();
     expect(location(await updateSession(get("/admin/members")))).toBeNull();
+  });
+
+  it.each(["member", "content_editor", "admin"])(
+    "sends a stored %s with unfinished setup to profile setup from every member page",
+    async (role) => {
+      signedIn({ profile: { role, org_id: "org-1", setup_completed: false }, memberships: membershipRows });
+      for (const path of ["/", "/dashboard", `/g/${A}/calendar?view=month`, "/directory", "/profile", "/admin", "/prayer", "/settings"]) {
+        expect(location(await updateSession(get(path)))).toBe("/profile/setup");
+      }
+    }
+  );
+
+  it("lets a member with unfinished setup open the wizard, the API, sign-in and token pages, the legal pages and files", async () => {
+    signedIn({ profile: { role: "member", org_id: "org-1", setup_completed: false } });
+    for (const path of [
+      "/profile/setup",
+      "/api/profile/resolve-family",
+      "/update-password",
+      "/setup-account",
+      `/join/${Z}`,
+      `/join/family/${Z}`,
+      "/serving/go?token=x",
+      "/privacy",
+      "/terms",
+      "/manifest.webmanifest",
+    ]) {
+      expect(location(await updateSession(get(path)))).toBeNull();
+    }
+    expect(from).not.toHaveBeenCalled();
+    expect(location(await updateSession(get("/platform")))).toBe("/dashboard");
+  });
+
+  it("leaves a pending profile and a finished one where they are", async () => {
+    signedIn({ profile: { role: "pending", org_id: "org-1", setup_completed: false } });
+    expect(location(await updateSession(get("/dashboard")))).toBeNull();
+
+    signedIn({ profile: { role: "member", org_id: "org-1", setup_completed: true } });
+    expect(location(await updateSession(get("/dashboard")))).toBeNull();
+    expect(location(await updateSession(get("/directory")))).toBeNull();
   });
 
   it("writes the host-scoped group cookie on a group page and nowhere else", async () => {
@@ -294,6 +335,7 @@ describe("cookie scope regression", () => {
     // emitted cookie, not on source text — so this catches a Domain=<apex>
     // regression introduced through any indirection (a spread, a renamed
     // local, a hardcoded option) that the grep above would miss.
+    getClaims.mockResolvedValueOnce({ data: null });
     createServerClient.mockImplementationOnce(
       (_url: string, _key: string, config: MockClientConfig) => {
         config.cookies.setAll([

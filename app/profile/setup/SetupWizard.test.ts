@@ -10,8 +10,10 @@ const writes: { table: string; values: Record<string, unknown>; column: string; 
 const failing: { table?: string } = {};
 // What the claimed household record still holds after the clear.
 const claimed: { kept: { id: string }[] } = { kept: [] };
+const rpc = vi.fn(async () => ({ data: "f-new", error: null }));
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
+    rpc,
     from: (table: string) => ({
       update: (values: Record<string, unknown>) => ({
         eq: async (column: string, id: string) => {
@@ -34,6 +36,7 @@ vi.mock("@/lib/supabase/client", () => ({
   }),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {} }) }));
+vi.mock("./actions", () => ({ forgetSetupRedirects: async () => {} }));
 vi.mock("@/lib/uploadImage", () => ({ mintSignedUrl: vi.fn(), uploadImage: vi.fn() }));
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
 vi.mock("sonner", () => ({ toast }));
@@ -114,6 +117,26 @@ describe("finishing the setup wizard", () => {
     const profileWrite = writes.find((w) => w.table === "profiles")!;
     expect(profileWrite.values).toMatchObject({ phone_mobile: "+15125550199", occupation: "Teacher" });
     expect(Object.keys(profileWrite.values).filter((k) => k.startsWith("hide_"))).toEqual(["hide_email"]);
+  });
+});
+
+describe("adding a household in the setup wizard", () => {
+  it("creates it through create_own_household and finishes in it", async () => {
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ matches: [] })));
+    await mount({ ...PROFILE, family_id: null });
+    await click("Continue");
+    await click("Continue");
+    await click("Find my household");
+    await click("Add household");
+
+    expect(rpc).toHaveBeenCalledWith("create_own_household", { _family_name: "Lovelace Family" });
+    expect(document.body.textContent).toContain("Household added.");
+
+    await click("Continue");
+    await click("Finish setup");
+
+    expect(writes.find((w) => w.table === "profiles")!.values).toMatchObject({ family_id: "f-new" });
+    expect(toast.success).toHaveBeenCalledWith("Profile set up.");
   });
 });
 
