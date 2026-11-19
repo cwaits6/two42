@@ -40,7 +40,7 @@ describe("FamilyCard", () => {
     root = createRoot(host);
     await act(async () => {
       root.render(
-        createElement(FamilyCard, { family, profileMap: {}, onOpenPerson: () => {}, viewerId: "x" }),
+        createElement(FamilyCard, { family, profileMap: {}, onOpenPerson: () => {}, viewerFamilyId: null }),
       );
     });
 
@@ -51,25 +51,28 @@ describe("FamilyCard", () => {
   });
 
   it("offers Edit household on the viewer's own household only", async () => {
+    // The viewer is hidden from the directory, so the listed members are someone else.
     const family = {
       id: "f1",
       family_name: "Mockingham",
       members: [
         {
-          id: "me",
+          id: "spouse",
           first_name: "Sam",
           last_name: "Mockingham",
           preferred_name: null,
           avatar_url: null,
-          relationship: "primary",
+          relationship: "spouse",
           phone_mobile: null,
         },
       ],
       family_members_list: [],
     } as unknown as FamilyDirectoryFull;
-    const render = async (viewerId: string) => {
+    const render = async (viewerFamilyId: string | null) => {
       await act(async () => {
-        root.render(createElement(FamilyCard, { family, profileMap: {}, onOpenPerson: () => {}, viewerId }));
+        root.render(
+          createElement(FamilyCard, { family, profileMap: {}, onOpenPerson: () => {}, viewerFamilyId }),
+        );
       });
     };
 
@@ -77,11 +80,14 @@ describe("FamilyCard", () => {
     document.body.append(host);
     root = createRoot(host);
 
-    await render("me");
+    await render("f1");
     const link = [...host.querySelectorAll("a")].find((a) => a.textContent === "Edit household");
     expect(link?.getAttribute("href")).toBe("/profile?tab=household");
 
-    await render("someone-else");
+    await render("f2");
+    expect(host.textContent).not.toContain("Edit household");
+
+    await render(null);
     expect(host.textContent).not.toContain("Edit household");
   });
 });

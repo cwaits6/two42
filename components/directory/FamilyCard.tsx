@@ -45,14 +45,14 @@ interface FamilyCardProps {
   family: FamilyDirectoryFull;
   profileMap: Record<string, DirectoryProfile>;
   onOpenPerson: (profile: DirectoryProfile) => void;
-  viewerId: string;
+  viewerFamilyId: string | null;
 }
 
 /**
  * Household detail: each member as a row (tappable when they have a
  * directory profile), then the shared home phone and address.
  */
-export function FamilyCard({ family, profileMap, onOpenPerson, viewerId }: FamilyCardProps) {
+export function FamilyCard({ family, profileMap, onOpenPerson, viewerFamilyId }: FamilyCardProps) {
   const hasSpouse =
     family.members.some((m) => m.relationship === "spouse") ||
     family.family_members_list.some((fm) => fm.relationship === "spouse");
@@ -156,7 +156,7 @@ export function FamilyCard({ family, profileMap, onOpenPerson, viewerId }: Famil
         </div>
       )}
 
-      {isOwnHousehold(family, viewerId) && (
+      {isOwnHousehold(family, viewerFamilyId) && (
         <div className="pt-3 border-t border-border">
           <Link href={EDIT_HOUSEHOLD_HREF} className={buttonVariants()}>
             <Pencil aria-hidden="true" />

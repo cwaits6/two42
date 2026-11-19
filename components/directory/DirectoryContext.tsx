@@ -34,6 +34,7 @@ export interface DirectoryContextValue {
   orgName: string;
   basePath: string;
   currentUserId: string;
+  currentFamilyId: string | null;
   /** Local midnight of the church's calendar date, never the browser's. */
   today: Date;
   loading: boolean;
@@ -49,6 +50,7 @@ export interface DirectoryProviderProps {
   orgVisible: boolean;
   basePath: string;
   currentUserId: string;
+  currentFamilyId: string | null;
   /** The church's calendar date, "YYYY-MM-DD", read by the layout in the org's time zone. */
   today: string;
   children: ReactNode;
@@ -65,6 +67,7 @@ export function DirectoryProvider({
   orgVisible,
   basePath,
   currentUserId,
+  currentFamilyId,
   today,
   children,
 }: DirectoryProviderProps) {
@@ -108,6 +111,7 @@ export function DirectoryProvider({
     orgName,
     basePath,
     currentUserId,
+    currentFamilyId,
     today: churchToday,
     loading: data.loading,
     error: data.error,

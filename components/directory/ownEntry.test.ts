@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { isOwnEntry, isOwnHousehold } from "./ownEntry";
-import type { FamilyDirectoryFull } from "@/lib/types";
-
-const household = (...ids: string[]) =>
-  ({ members: ids.map((id) => ({ id })) }) as unknown as Pick<FamilyDirectoryFull, "members">;
 
 describe("isOwnEntry", () => {
   it("is true only for the viewer's own profile", () => {
@@ -18,16 +14,13 @@ describe("isOwnEntry", () => {
 });
 
 describe("isOwnHousehold", () => {
-  it("is true when the viewer is one of the household's members", () => {
-    expect(isOwnHousehold(household("spouse", "me"), "me")).toBe(true);
+  it("is true only for the viewer's own household", () => {
+    expect(isOwnHousehold({ id: "f1" }, "f1")).toBe(true);
+    expect(isOwnHousehold({ id: "f2" }, "f1")).toBe(false);
   });
 
-  it("is false for a household the viewer is not in", () => {
-    expect(isOwnHousehold(household("a", "b"), "me")).toBe(false);
-    expect(isOwnHousehold(household(), "me")).toBe(false);
-  });
-
-  it("is false when there is no viewer", () => {
-    expect(isOwnHousehold(household("me"), undefined)).toBe(false);
+  it("is false when the viewer has no household", () => {
+    expect(isOwnHousehold({ id: "f1" }, null)).toBe(false);
+    expect(isOwnHousehold({ id: "" }, "")).toBe(false);
   });
 });

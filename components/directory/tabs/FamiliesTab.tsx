@@ -37,8 +37,16 @@ function adultNames(family: FamilyDirectoryFull): string {
 }
 
 function FamiliesTabInner() {
-  const { members, families, memberships, profileMap, familyMap, basePath, currentUserId } =
-    useDirectory();
+  const {
+    members,
+    families,
+    memberships,
+    profileMap,
+    familyMap,
+    basePath,
+    currentUserId,
+    currentFamilyId,
+  } = useDirectory();
   const [query, setQuery] = useState("");
   const [panel, setPanel] = useState<Panel | null>(null);
   const searchParams = useSearchParams();
@@ -231,7 +239,7 @@ function FamiliesTabInner() {
               <FamilyCard
                 family={panel.family}
                 profileMap={profileMap}
-                viewerId={currentUserId}
+                viewerFamilyId={currentFamilyId}
                 onOpenPerson={(profile) =>
                   openPanel({ kind: "person", profile, fromFamily: panel.family })
                 }

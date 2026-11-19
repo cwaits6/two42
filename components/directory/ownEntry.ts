@@ -1,5 +1,4 @@
 import { HOUSEHOLD_TAB } from "@/lib/profileTabs";
-import type { FamilyDirectoryFull } from "@/lib/types";
 
 export const EDIT_MY_DETAILS_HREF = "/profile";
 export const EDIT_HOUSEHOLD_HREF = `/profile?tab=${HOUSEHOLD_TAB}`;
@@ -9,10 +8,7 @@ export function isOwnEntry(profile: { id: string }, viewerId: string | undefined
   return !!viewerId && profile.id === viewerId;
 }
 
-/** The household the viewer belongs to, judged by its members with a profile. */
-export function isOwnHousehold(
-  family: Pick<FamilyDirectoryFull, "members">,
-  viewerId: string | undefined,
-): boolean {
-  return !!viewerId && family.members.some((m) => m.id === viewerId);
+/** The viewer's own household. A viewer without a household owns none. */
+export function isOwnHousehold(family: { id: string }, viewerFamilyId: string | null): boolean {
+  return !!viewerFamilyId && family.id === viewerFamilyId;
 }
