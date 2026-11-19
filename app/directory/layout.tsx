@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { DirectoryShell } from "@/components/directory/DirectoryShell";
 import { getRequestBranding } from "@/lib/branding";
 import { getDirectoryVisibility } from "@/lib/directory/visibility";
+import { getViewerFamilyId } from "@/lib/directory/viewerFamily";
 import { todayIn } from "@/lib/serving/dates";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
@@ -11,10 +12,11 @@ export default async function DirectoryLayout({ children }: { children: React.Re
   const user = await getOptionalUser();
   if (!user) redirect("/login");
 
-  const [branding, visibility, timeZone] = await Promise.all([
+  const [branding, visibility, timeZone, viewerFamilyId] = await Promise.all([
     getRequestBranding(),
     getDirectoryVisibility(),
     getOrgTimeZone(),
+    getViewerFamilyId(user.id),
   ]);
 
   return (
@@ -24,6 +26,7 @@ export default async function DirectoryLayout({ children }: { children: React.Re
       orgVisible={visibility === "org"}
       basePath="/directory"
       currentUserId={user.id}
+      currentFamilyId={viewerFamilyId}
       today={todayIn(timeZone)}
     >
       {children}

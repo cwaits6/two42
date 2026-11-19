@@ -1,11 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Heart, Home, MapPin } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button-variants";
+import { Heart, Home, MapPin, Pencil } from "lucide-react";
 import { formatPhone } from "@/lib/sanitize";
 import { isChildWithoutAccount } from "@/lib/household";
 import { displayName, initials } from "@/lib/names";
 import { DirRow, PhoneText } from "@/components/directory/DirRow";
+import { EDIT_HOUSEHOLD_HREF, isOwnHousehold } from "@/components/directory/ownEntry";
 import { formatAnniversary, householdPhoneLabel, relLabel } from "@/components/directory/utils";
 import type {
   DirectoryProfile,
@@ -42,13 +45,14 @@ interface FamilyCardProps {
   family: FamilyDirectoryFull;
   profileMap: Record<string, DirectoryProfile>;
   onOpenPerson: (profile: DirectoryProfile) => void;
+  viewerFamilyId: string | null;
 }
 
 /**
  * Household detail: each member as a row (tappable when they have a
  * directory profile), then the shared home phone and address.
  */
-export function FamilyCard({ family, profileMap, onOpenPerson }: FamilyCardProps) {
+export function FamilyCard({ family, profileMap, onOpenPerson, viewerFamilyId }: FamilyCardProps) {
   const hasSpouse =
     family.members.some((m) => m.relationship === "spouse") ||
     family.family_members_list.some((fm) => fm.relationship === "spouse");
@@ -149,6 +153,15 @@ export function FamilyCard({ family, profileMap, onOpenPerson }: FamilyCardProps
               </span>
             </div>
           )}
+        </div>
+      )}
+
+      {isOwnHousehold(family, viewerFamilyId) && (
+        <div className="pt-3 border-t border-border">
+          <Link href={EDIT_HOUSEHOLD_HREF} className={buttonVariants()}>
+            <Pencil aria-hidden="true" />
+            Edit household
+          </Link>
         </div>
       )}
     </div>

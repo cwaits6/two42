@@ -39,12 +39,55 @@ describe("FamilyCard", () => {
     document.body.append(host);
     root = createRoot(host);
     await act(async () => {
-      root.render(createElement(FamilyCard, { family, profileMap: {}, onOpenPerson: () => {} }));
+      root.render(
+        createElement(FamilyCard, { family, profileMap: {}, onOpenPerson: () => {}, viewerFamilyId: null }),
+      );
     });
 
     expect(host.textContent!.match(/Grown Mockingham/g)).toHaveLength(1);
     expect(host.textContent).toContain("Grown MockinghamChild");
     expect(host.textContent).not.toContain("Jack MockinghamChild");
     expect(host.textContent).toContain("Pat MockinghamParent");
+  });
+
+  it("offers Edit household on the viewer's own household only", async () => {
+    // The viewer is hidden from the directory, so the listed members are someone else.
+    const family = {
+      id: "f1",
+      family_name: "Mockingham",
+      members: [
+        {
+          id: "spouse",
+          first_name: "Sam",
+          last_name: "Mockingham",
+          preferred_name: null,
+          avatar_url: null,
+          relationship: "spouse",
+          phone_mobile: null,
+        },
+      ],
+      family_members_list: [],
+    } as unknown as FamilyDirectoryFull;
+    const render = async (viewerFamilyId: string | null) => {
+      await act(async () => {
+        root.render(
+          createElement(FamilyCard, { family, profileMap: {}, onOpenPerson: () => {}, viewerFamilyId }),
+        );
+      });
+    };
+
+    const host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+
+    await render("f1");
+    const link = [...host.querySelectorAll("a")].find((a) => a.textContent === "Edit household");
+    expect(link?.getAttribute("href")).toBe("/profile?tab=household");
+
+    await render("f2");
+    expect(host.textContent).not.toContain("Edit household");
+
+    await render(null);
+    expect(host.textContent).not.toContain("Edit household");
   });
 });

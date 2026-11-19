@@ -386,6 +386,7 @@ function MembersTabInner() {
               </BackLink>
               <PersonCard
                 profile={selected}
+                viewerId={currentUserId}
                 family={selected.family_id ? (familyMap[selected.family_id] ?? null) : null}
               />
             </>

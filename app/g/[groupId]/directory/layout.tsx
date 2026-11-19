@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { DirectoryShell } from "@/components/directory/DirectoryShell";
 import { getRequestBranding } from "@/lib/branding";
 import { getDirectoryVisibility } from "@/lib/directory/visibility";
+import { getViewerFamilyId } from "@/lib/directory/viewerFamily";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
 import { todayIn } from "@/lib/serving/dates";
@@ -20,10 +21,11 @@ export default async function GroupDirectoryLayout({
   const user = await getOptionalUser();
   if (!user) redirect("/login");
   const group = await requireActiveGroup(groupId);
-  const [branding, visibility, timeZone] = await Promise.all([
+  const [branding, visibility, timeZone, viewerFamilyId] = await Promise.all([
     getRequestBranding(),
     getDirectoryVisibility(),
     getOrgTimeZone(),
+    getViewerFamilyId(user.id),
   ]);
 
   return (
@@ -33,6 +35,7 @@ export default async function GroupDirectoryLayout({
       orgVisible={visibility === "org"}
       basePath={groupPath(group.id, "/directory")}
       currentUserId={user.id}
+      currentFamilyId={viewerFamilyId}
       today={todayIn(timeZone)}
     >
       {children}

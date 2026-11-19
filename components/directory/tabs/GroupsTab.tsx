@@ -37,8 +37,15 @@ type ListRow =
  * not apply, since this tab lists groups rather than people.
  */
 function GroupsTabInner() {
-  const { memberships, groupRosters, profileMap, familyMap, orgName, reload: reloadDirectory } =
-    useDirectory();
+  const {
+    memberships,
+    groupRosters,
+    profileMap,
+    familyMap,
+    orgName,
+    currentUserId,
+    reload: reloadDirectory,
+  } = useDirectory();
   const discoveryOn = useDiscoveryOn();
   const discovery = useDiscoverableGroups();
   const [panel, setPanel] = useState<Panel | null>(null);
@@ -146,6 +153,7 @@ function GroupsTabInner() {
                 </BackLink>
                 <PersonCard
                   profile={panel.profile}
+                  viewerId={currentUserId}
                   family={
                     panel.profile.family_id ? (familyMap[panel.profile.family_id] ?? null) : null
                   }

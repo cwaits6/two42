@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import {
   Briefcase,
   Cake,
@@ -11,11 +13,13 @@ import {
   Mail,
   MapPin,
   MessageSquare,
+  Pencil,
   Phone,
 } from "lucide-react";
 import { formatPhone } from "@/lib/sanitize";
 import { displayName, initials } from "@/lib/names";
 import { GroupBadge } from "@/components/directory/GroupBadge";
+import { EDIT_MY_DETAILS_HREF, isOwnEntry } from "@/components/directory/ownEntry";
 import {
   downloadVCard,
   formatBirthdayShort,
@@ -57,13 +61,15 @@ const telLink = `${contactLink} whitespace-nowrap`;
 interface PersonCardProps {
   profile: DirectoryProfile;
   family: FamilyDirectoryFull | null;
+  /** The signed-in person; omitted where the card previews the viewer's own entry. */
+  viewerId?: string;
 }
 
 /**
  * Person detail: contact info plus a save-to-contacts action. Rendered in
  * the directory detail panels and the profile page's directory preview.
  */
-export function PersonCard({ profile, family }: PersonCardProps) {
+export function PersonCard({ profile, family, viewerId }: PersonCardProps) {
   const address = resolveAddress(profile, family);
   const hasBirthday = profile.birth_month && profile.birth_day;
 
@@ -200,8 +206,13 @@ export function PersonCard({ profile, family }: PersonCardProps) {
         )}
       </div>
 
-      {/* Save to Contacts */}
-      <div className="pt-3 border-t border-border">
+      <div className="flex flex-wrap gap-3 pt-3 border-t border-border">
+        {isOwnEntry(profile, viewerId) && (
+          <Link href={EDIT_MY_DETAILS_HREF} className={buttonVariants()}>
+            <Pencil aria-hidden="true" />
+            Edit my details
+          </Link>
+        )}
         <Button
           variant="outline"
           onClick={() => downloadVCard(profile.id)}
