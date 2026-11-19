@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { methodHref, parseGiveAmount, venmoPayHref } from "@/lib/giving/methods";
+import {
+  methodHref,
+  parseGiveAmount,
+  PAYMENT_METHODS,
+  venmoPayHref,
+} from "@/lib/giving/methods";
 
 describe("venmoPayHref", () => {
   it("builds the payment link on the bare handle path", () => {
@@ -51,6 +56,14 @@ describe("methodHref", () => {
 
   it("has no link for copy methods", () => {
     expect(methodHref("zelle", "grace@example.com")).toBeUndefined();
+  });
+
+  it("has a link for exactly the methods whose card renders one", () => {
+    for (const meta of Object.values(PAYMENT_METHODS)) {
+      expect(methodHref(meta.key, "grace") !== undefined, meta.key).toBe(
+        meta.kind === "link"
+      );
+    }
   });
 });
 
