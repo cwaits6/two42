@@ -116,6 +116,8 @@ export type GiveAmount =
 const DOLLARS_AND_CENTS = /^(?:\d+(?:\.\d{0,2})?|\.\d{1,2})$/;
 // Commas only as thousands separators: "25,50" is refused, not read as 2550.
 const GROUPED_THOUSANDS = /^\d{1,3}(?:,\d{3})+(?:\.\d*)?$/;
+// Far above any real gift, and far below where toFixed switches to "1e+21".
+const MAX_AMOUNT = 1_000_000;
 
 /**
  * Check an optional amount typed on Give. Blank means "no amount"; otherwise
@@ -130,6 +132,7 @@ export function parseGiveAmount(input: string): GiveAmount {
   }
   const value = Number(typed);
   if (value <= 0) return { ok: false, error: "Enter an amount more than $0." };
+  if (value > MAX_AMOUNT) return { ok: false, error: "Enter an amount up to $1,000,000." };
   return { ok: true, amount: value.toFixed(2) };
 }
 

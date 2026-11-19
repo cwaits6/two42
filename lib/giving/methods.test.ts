@@ -86,6 +86,7 @@ describe("parseGiveAmount", () => {
     ["1,000", "1000.00"],
     ["$1,250.50", "1250.50"],
     [" 12.34 ", "12.34"],
+    ["1,000,000", "1000000.00"],
   ])("formats %j as %j", (input, amount) => {
     expect(parseGiveAmount(input)).toEqual({ ok: true, amount });
   });
@@ -96,6 +97,16 @@ describe("parseGiveAmount", () => {
       error: "Enter an amount more than $0.",
     });
   });
+
+  it.each(["1000000.01", "1,000,001", "1000000000000000000000", "9".repeat(400)])(
+    "refuses an amount over the cap (%j)",
+    (input) => {
+      expect(parseGiveAmount(input)).toEqual({
+        ok: false,
+        error: "Enter an amount up to $1,000,000.",
+      });
+    }
+  );
 
   it.each(["-5", "25.123", "abc", "25.5.5", "1e3", ".", "$", "25 dollars", "25,50", "1,00", ",100"])(
     "refuses %j",
