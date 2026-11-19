@@ -649,7 +649,7 @@ export function FundForm({
           <div className="mt-3.5 space-y-2">
             {previewMethods.length > 0 ? (
               previewMethods.map((m) => (
-                <MethodButton key={m.method} resolved={m} />
+                <MethodButton key={m.method} resolved={m} fundName={name.trim() || "Fund name"} />
               ))
             ) : (
               <p className="text-base text-muted-foreground">

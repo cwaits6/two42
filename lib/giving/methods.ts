@@ -3,7 +3,8 @@ import type { PaymentMethodKey } from "@/lib/types";
 /**
  * Payment method metadata for the Give page.
  *
- * Two kinds: "link" methods (Venmo, PayPal, Cash App) deep-link straight into
+ * Three kinds: "pay" (Venmo) opens a payment for the fund, with the amount
+ * when one is given; "link" methods (PayPal, Cash App) deep-link straight into
  * the payer's app; "copy" methods (Zelle, Apple/Google Pay) have no public
  * profile URLs, so the handle is copied to the clipboard instead.
  *
@@ -13,7 +14,7 @@ export interface PaymentMethodMeta {
   key: PaymentMethodKey;
   name: string;
   glyph: string;
-  kind: "link" | "copy";
+  kind: "pay" | "link" | "copy";
   verb: string;
   /** Shown before the handle for context, e.g. "paypal.me/" */
   prefix: string;
@@ -25,7 +26,7 @@ export const PAYMENT_METHODS: Record<PaymentMethodKey, PaymentMethodMeta> = {
     key: "venmo",
     name: "Venmo",
     glyph: "V",
-    kind: "link",
+    kind: "pay",
     verb: "Open Venmo",
     prefix: "",
     placeholder: "@your-venmo",
@@ -76,14 +77,14 @@ export const METHOD_ORDER: PaymentMethodKey[] = [
   "wallet",
 ];
 
-/** External deep link for "link" methods; undefined for copy methods */
+/**
+ * External deep link for the "link" methods; undefined for the others.
+ */
 export function methodHref(
   key: PaymentMethodKey,
   handle: string
 ): string | undefined {
   switch (key) {
-    case "venmo":
-      return `https://venmo.com/u/${encodeURIComponent(handle.replace(/^@/, ""))}`;
     case "paypal":
       return `https://paypal.me/${encodeURIComponent(handle.replace(/^paypal\.me\//i, ""))}`;
     case "cashapp":
@@ -91,6 +92,48 @@ export function methodHref(
     default:
       return undefined;
   }
+}
+
+/**
+ * Venmo's documented payment link (venmo.com/paymentlinks): opens a payment
+ * to `handle` with the note, and the amount when one is given, filled in.
+ * `amount` must come from parseGiveAmount.
+ */
+export function venmoPayHref(handle: string, note: string, amount: string | null): string {
+  const params = new URLSearchParams({ txn: "pay" });
+  if (amount) params.set("amount", amount);
+  params.set("note", note);
+  const recipient = encodeURIComponent(handle.trim().replace(/^@/, ""));
+  // URLSearchParams writes a space as "+"; a literal "+" is already "%2B", so
+  // every "+" left is a space, spelled %20 for apps that don't decode "+".
+  return `https://venmo.com/${recipient}?${params.toString().replace(/\+/g, "%20")}`;
+}
+
+export type GiveAmount =
+  | { ok: true; amount: string | null }
+  | { ok: false; error: string };
+
+const DOLLARS_AND_CENTS = /^(?:\d+(?:\.\d{0,2})?|\.\d{1,2})$/;
+// Commas only as thousands separators: "25,50" is refused, not read as 2550.
+const GROUPED_THOUSANDS = /^\d{1,3}(?:,\d{3})+(?:\.\d*)?$/;
+// Far above any real gift, and far below where toFixed switches to "1e+21".
+const MAX_AMOUNT = 1_000_000;
+
+/**
+ * Check an optional amount typed on Give. Blank means "no amount"; otherwise
+ * dollars and cents above zero, returned as a fixed two-decimal string.
+ */
+export function parseGiveAmount(input: string): GiveAmount {
+  if (input.trim() === "") return { ok: true, amount: null };
+  const bare = input.trim().replace(/^\$\s*/, "");
+  const typed = GROUPED_THOUSANDS.test(bare) ? bare.replace(/,/g, "") : bare;
+  if (!DOLLARS_AND_CENTS.test(typed)) {
+    return { ok: false, error: "Enter dollars and cents, like 25 or 25.50." };
+  }
+  const value = Number(typed);
+  if (value <= 0) return { ok: false, error: "Enter an amount more than $0." };
+  if (value > MAX_AMOUNT) return { ok: false, error: "Enter an amount up to $1,000,000." };
+  return { ok: true, amount: value.toFixed(2) };
 }
 
 /** A fund method with its handle */

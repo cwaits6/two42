@@ -83,7 +83,7 @@ export function GiveList({ funds, groupId }: { funds: FundView[]; groupId: strin
                 {fund.methods.length > 0 ? (
                   <div className="space-y-2">
                     {fund.methods.map((m) => (
-                      <MethodButton key={m.method} resolved={m} />
+                      <MethodButton key={m.method} resolved={m} fundName={fund.name} />
                     ))}
                   </div>
                 ) : (
