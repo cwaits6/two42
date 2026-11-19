@@ -36,6 +36,7 @@ vi.mock("@/lib/supabase/client", () => ({
   }),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {} }) }));
+vi.mock("./actions", () => ({ forgetSetupRedirects: async () => {} }));
 vi.mock("@/lib/uploadImage", () => ({ mintSignedUrl: vi.fn(), uploadImage: vi.fn() }));
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
 vi.mock("sonner", () => ({ toast }));

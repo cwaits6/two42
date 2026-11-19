@@ -40,6 +40,7 @@ import {
   type StepErrors,
 } from "./setupValidation";
 import { logError } from "@/lib/log";
+import { forgetSetupRedirects } from "./actions";
 
 interface HouseholdMatch {
   id: string;
@@ -502,8 +503,8 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
 
       if (claimed?.kept) toast.info(`Profile set up. ${CLAIMED_BIRTHDAY_KEPT}`);
       else toast.success("Profile set up.");
-      router.push("/directory");
-      router.refresh();
+      await forgetSetupRedirects();
+      router.push("/dashboard");
     } catch (err) {
       logError("Failed to finish setting up the profile", err, { route: "/profile/setup" });
       toast.error(failureMessage("finish setting up your profile"));
