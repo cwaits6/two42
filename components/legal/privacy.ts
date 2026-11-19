@@ -41,7 +41,7 @@ export const PRIVACY: LegalDocument = {
   lastUpdated: "2026-11-13",
   sections: [
     {
-      heading: "Who runs two42",
+      heading: "What this policy covers",
       blocks: [
         "This policy covers the hosted service at two42.io: the website, the app and the emails it sends.",
         `two42 is [open source](${GITHUB_URL}). A church that runs its own copy of the software is responsible for that copy and its own policies; this policy does not cover it.`,
@@ -53,7 +53,7 @@ export const PRIVACY: LegalDocument = {
       heading: "Who decides what is shared",
       blocks: [
         "Each church decides who joins its two42 space and what is shared there, and confirms it has permission to add the people it adds. A church admin answers its members' requests about their data first.",
-        "two42 runs and secures the service, and answers for sign-in, security and analytics data. two42 does not sell data and shows no ads.",
+        "two42 runs the service and is responsible for keeping it secure. two42 does not sell data and shows no ads.",
       ],
     },
     {
@@ -71,14 +71,14 @@ export const PRIVACY: LegalDocument = {
           "A private calendar link, if you make one. Anyone with that link can see your calendar, so keep it to yourself.",
         ],
         "Your browser keeps a sign-in cookie, a cookie for the last group you opened, and your display choices. two42 sets no advertising or tracking cookies.",
-        "Each church keeps usage counts for its church admins: how often each kind of page was opened, and how often one showed an error, per day. They record the page pattern only, never who opened it.",
-        "Error logs record what failed, the page pattern and the ids of the rows involved. They never record what you entered.",
+        "Each church keeps usage counts for its church admins: how often each kind of page was opened, and how often one showed an error, per day. They record the kind of page only, never who opened it.",
+        "Error logs record what failed, the kind of page, and internal record numbers for what was involved. They never record what you entered.",
       ],
     },
     {
       heading: "Who can see it",
       blocks: [
-        "Each church's data is kept apart from every other church's: every read and write in the database is checked against the church of the person asking.",
+        "Each church's data is kept separate from every other church's. People in one church cannot see another church's data.",
         [
           "The directory shows what each person entered, except a birth year, which only goes into a phone contact someone saves from the directory. A church admin chooses whether members see everyone in the church or only people they share a group with.",
           "You can leave yourself out of the directory, and hide your email address from everyone but yourself and church admins.",
@@ -100,7 +100,7 @@ export const PRIVACY: LegalDocument = {
       heading: "Services that handle your data",
       blocks: [
         PROCESSORS.map((p) => `${p.name}: ${p.does}`),
-        "Like any web host, the services your browser connects to see your IP address and browser details with each request, and keep their own logs for periods they set.",
+        "The services your browser connects to see your IP address and browser details with each request, and keep their own logs for periods they set.",
         "Some links take you to other services by your choice: adding an event to your own calendar, opening a map or a meeting link, or giving through a payment app. What happens there is covered by that service's policy.",
       ],
     },
@@ -124,7 +124,15 @@ export const PRIVACY: LegalDocument = {
       blocks: [
         `In Settings, under Your data, you can download a copy of your data. ${DOWNLOAD_COVERS} ${DOWNLOAD_LEAVES_OUT}`,
         "You can delete your own prayer requests, and change or remove anything in your profile, at any time.",
-        "You can delete your account from the same place, and a church admin can delete an account in their church. Deleting an account removes the profile, photo, sign-in, group and team memberships, RSVPs, serving turns, and prayer requests, including anonymous ones. When no one else is left in the person's household, the household and the people listed in it are removed too. Announcements, events and lessons the person added stay without their name, feedback stays without a name, and serving dates shared with someone else stay with that person. A fund the person receives goes to its second person, or, without one, to whoever a leader chooses; it is off Give until a leader confirms it. A church needs at least one church admin, so the last one adds another before deleting their own account.",
+        "You can delete your account from the same place, and a church admin can delete an account in their church. Deleting an account:",
+        [
+          "Removes the profile, photo, sign-in, group and team memberships, RSVPs, serving turns, and prayer requests, including anonymous ones.",
+          "Removes the household and the people listed in it, when no one else is left in it.",
+          "Keeps announcements, events and lessons the person added, without their name, and feedback without a name.",
+          "Keeps serving dates shared with someone else, with that person.",
+          "Moves a fund the person receives to its second person, or to whoever a leader chooses. The fund is hidden from Give until a leader confirms it.",
+        ],
+        "A church needs at least one church admin, so the last one adds another before deleting their own account.",
         `For anything you can't do yourself, ask your church admin, or write to [${PRIVACY_EMAIL}](mailto:${PRIVACY_EMAIL}). A church admin can write there to ask for the church's data to be removed.`,
       ],
     },

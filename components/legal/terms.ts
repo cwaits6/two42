@@ -41,9 +41,9 @@ export const TERMS: LegalDocument = {
     {
       heading: "Churches and church admins",
       blocks: [
-        "A church decides who joins its two42 space and what is shared there. Its church admins:",
+        "A church decides who joins its two42 space and what is shared there. Its church admins must:",
         [
-          "Confirm they have permission to add each person they invite, import or list, and to share what they enter about them.",
+          "Have permission to add each person they invite, import or list, and to share what they enter about them.",
           "Answer their members' questions and requests about their data first, and pass on what they can't handle.",
           "Keep at least one church admin on the church, and keep the church's details current.",
           "Make sure the church's leaders and members use two42 as these terms allow.",
@@ -82,7 +82,7 @@ export const TERMS: LegalDocument = {
     {
       heading: "Changes and ending",
       blocks: [
-        "two42 is built by one person. Features can change or be removed, and the service may be down at times.",
+        "Features can change or be removed, and the service may sometimes be unavailable.",
         `You can stop using two42 at any time. You can delete your own account in Settings, and a church admin can ask for the church's data to be removed by writing to [${PRIVACY_EMAIL}](mailto:${PRIVACY_EMAIL}).`,
       ],
     },
