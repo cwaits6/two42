@@ -60,6 +60,7 @@ export function PrayerCommentForm({
         value={body}
         onChange={(e) => setBody(e.target.value)}
         rows={3}
+        readOnly={submitting}
         maxLength={COMMENT_TEXT_MAX}
         className="bg-background text-base"
         aria-describedby={left <= COMMENT_NEAR_LIMIT ? `${id}-left` : undefined}
@@ -74,6 +75,7 @@ export function PrayerCommentForm({
           id={`${id}-only-asker`}
           on={onlyAsker}
           onToggle={setOnlyAsker}
+          disabled={submitting}
           title={`Only ${askerLabel} can see this`}
           sub="Others in the group won't see your comment."
           icon={<Lock className="h-4 w-4" aria-hidden="true" />}
@@ -83,6 +85,7 @@ export function PrayerCommentForm({
         id={`${id}-hide-name`}
         on={hideName}
         onToggle={setHideName}
+        disabled={submitting}
         title="Hide my name"
         sub={
           ownAnonymousRequest
@@ -92,7 +95,8 @@ export function PrayerCommentForm({
         icon={<EyeOff className="h-4 w-4" aria-hidden="true" />}
       />
       <div className="flex flex-wrap justify-end gap-2 pt-1">
-        <Button type="button" variant="outline" onClick={onCancel}>
+        {/* A post that lands after Cancel would close a newer draft, so the form holds still until it returns. */}
+        <Button type="button" variant="outline" onClick={onCancel} disabled={submitting}>
           Cancel
         </Button>
         <Button type="button" onClick={submit} disabled={!canPost} className="font-semibold">

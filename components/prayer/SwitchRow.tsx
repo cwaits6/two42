@@ -10,6 +10,7 @@ export function SwitchRow({
   title,
   sub,
   icon,
+  disabled = false,
 }: {
   id: string;
   on: boolean;
@@ -17,11 +18,14 @@ export function SwitchRow({
   title: string;
   sub: string;
   icon: ReactNode;
+  disabled?: boolean;
 }) {
   return (
     <label
       htmlFor={id}
-      className={`flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
+      className={`flex min-h-14 w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
+        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+      } ${
         on
           ? "border-brand-primary/40 bg-brand-warm"
           : "border-border bg-card hover:border-brand-primary/30"
@@ -44,7 +48,7 @@ export function SwitchRow({
           {sub}
         </span>
       </span>
-      <Switch id={id} checked={on} onCheckedChange={onToggle} />
+      <Switch id={id} checked={on} onCheckedChange={onToggle} disabled={disabled} />
     </label>
   );
 }
