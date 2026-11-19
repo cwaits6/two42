@@ -43,7 +43,7 @@ vi.hoisted(() => {
 
 // vi.mock is hoisted, so this import sees the mocks above.
 import { updateSession } from "@/lib/supabase/middleware";
-import { lessonThumbnail } from "@/lib/lessons";
+import { lessonEmbedUrl, lessonThumbnail } from "@/lib/lessons";
 
 describe("updateSession — expected host", () => {
   beforeEach(() => {
@@ -388,6 +388,22 @@ describe("content security policy", () => {
       .map((d) => d.trim())
       .find((d) => d.startsWith("img-src "));
     expect(imgSrc?.split(" ")).toContain(origin);
+  });
+
+  it("lets the origin lessonEmbedUrl builds through frame-src", async () => {
+    const embed = lessonEmbedUrl({ video_url: "https://youtu.be/jNQXAC9IVRw" });
+    expect(embed).not.toBeNull();
+    const origin = new URL(embed!).origin;
+    const req = new NextRequest("https://two42.io/g/x/lectures/y", {
+      headers: { host: "two42.io" },
+    });
+    const res = await updateSession(req);
+    const frameSrc = res.headers
+      .get("Content-Security-Policy")
+      ?.split(";")
+      .map((d) => d.trim())
+      .find((d) => d.startsWith("frame-src "));
+    expect(frameSrc?.split(" ")).toContain(origin);
   });
 
   it("allows the calendar's inline font and nothing wider", async () => {

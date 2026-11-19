@@ -126,7 +126,7 @@ export function lessonThumbnail(lesson: { video_url: string }): string | null {
   return id ? `${YOUTUBE_THUMBNAIL}${id}/hqdefault.jpg` : null;
 }
 
-// The only video origin the Content-Security-Policy's frame-src allows.
+// Must stay in the Content-Security-Policy's frame-src; middleware.test.ts checks it.
 const YOUTUBE_EMBED = "https://www.youtube-nocookie.com/embed/";
 
 /** The player address for a YouTube recording, else null. */
