@@ -16,6 +16,7 @@ import type { DeletionSummary, DeletionViewer } from "./deletionCopy";
 import { parseDeletionOutcomes } from "./deletionOutcomes";
 import { dataOf, rowsOf } from "./rows";
 import { logError } from "@/lib/log";
+import { hashedCommentsOf } from "@/lib/prayer/commentThread";
 import { hashedRequestsOf } from "@/lib/prayer/hashedRequests";
 import { loadPrayerKeys } from "@/lib/prayer/keys";
 import { fetchAll } from "@/lib/supabase/fetchAll";
@@ -182,34 +183,42 @@ async function tellLeadersDatesOpened(
 }
 
 /**
- * The ids of the person's anonymous requests. Null when the keys are missing
- * or a read fails, so deletion refuses rather than leave them behind. A hash
- * under a wrong author key matches no one and cannot be told apart, so under
- * one the deletion goes ahead without them. A request they post between this
- * read and the commit stays until retention removes it, and they can no longer
- * sign in to post another.
+ * The ids of the person's anonymous requests and hidden-name prayer comments.
+ * Null when the keys are missing or a read fails, so deletion refuses rather
+ * than leave them behind. A hash under a wrong author key matches no one and
+ * cannot be told apart, so under one the deletion goes ahead without them. One
+ * they post between this read and the commit stays until retention removes
+ * it, and they can no longer sign in to post another.
  *
- * Rows not yet converted still carry author_id and go with the profile's
+ * Requests not yet converted still carry author_id and go with the profile's
  * cascade, but the backfill can hash one after this read and before that
  * cascade, which would then miss it. Their ids are passed too, so
  * delete_person() deletes the row in whichever form it reaches.
  */
-async function anonymousRequestIds(service: ServiceClient, orgId: string, personId: string): Promise<string[] | null> {
+async function hashedIds(
+  service: ServiceClient,
+  orgId: string,
+  personId: string,
+): Promise<{ requests: string[]; comments: string[] } | null> {
   const keys = loadPrayerKeys();
   if (!keys) {
     logError("Prayer keys are not configured");
     return null;
   }
-  const [hashed, named] = await Promise.all([
+  const [hashed, named, comments] = await Promise.all([
     hashedRequestsOf(service, orgId, personId, keys, "*"),
     unconvertedAnonymousRequests(service, orgId, personId),
+    hashedCommentsOf(service, orgId, personId, keys),
   ]);
-  const error = hashed.error ?? named.error;
-  if (error || !hashed.data || !named.data) {
-    logError("Failed to read anonymous prayer requests for a deletion", error);
+  const error = hashed.error ?? named.error ?? comments.error;
+  if (error || !hashed.data || !named.data || !comments.data) {
+    logError("Failed to read anonymous prayer requests and comments for a deletion", error);
     return null;
   }
-  return [...hashed.data, ...named.data].map((row) => row.id);
+  return {
+    requests: [...hashed.data, ...named.data].map((row) => row.id),
+    comments: comments.data.map((row) => row.id),
+  };
 }
 
 function unconvertedAnonymousRequests(service: ServiceClient, orgId: string, personId: string) {
@@ -241,14 +250,13 @@ export async function deletePerson(
   let person: DeletedPerson;
   try {
     service = await createServiceClient();
-    const requestIds = await anonymousRequestIds(service, orgId, personId);
-    if (!requestIds) return { outcome: "failed" };
-    // Without anonymous requests this is the two-argument call, which works
-    // before and after the migration that adds the third.
+    const ids = await hashedIds(service, orgId, personId);
+    if (!ids) return { outcome: "failed" };
     const { data, error } = await service.rpc("delete_person", {
       _person_id: personId,
       _org_id: orgId,
-      ...(requestIds.length > 0 && { _anonymous_request_ids: requestIds }),
+      ...(ids.requests.length > 0 && { _anonymous_request_ids: ids.requests }),
+      ...(ids.comments.length > 0 && { _hidden_comment_ids: ids.comments }),
     });
     if (error) {
       const refusal = REFUSALS[error.code];

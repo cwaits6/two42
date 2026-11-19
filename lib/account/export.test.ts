@@ -90,10 +90,32 @@ function setup() {
       sealed("p5", "ada", "Sealed and hers", "t3"),
       sealed("p6", "ben", "Bens sealed request", "t5"),
     ],
+    prayer_comments: [
+      comment("c1", "ada", "Hers by name", "t2", { by: "name" }),
+      comment("c2", "ada", "Hers, name hidden", "t3", { by: "hash", privately: true }),
+      comment("c3", "ben", "Bens comment", "t4", { by: "name" }),
+      comment("c4", "ben", "Bens hidden comment", "t5", { by: "hash" }),
+      { ...comment("c5", "ada", "Other church comment", "t6", { by: "name" }), org_id: OTHER_ORG },
+    ],
   };
   const fake = fakeService(tables);
   createServiceClient.mockResolvedValue(fake.client);
   return { tables, ...fake };
+}
+
+function comment(id: string, writer: string, text: string, created_at: string, opts: { by: "name" | "hash"; privately?: boolean }) {
+  return {
+    id,
+    org_id: ORG,
+    request_id: "p1",
+    writer_id: opts.by === "name" ? writer : null,
+    writer_hash: opts.by === "hash" ? authorHash(KEYS, ORG, id, writer) : null,
+    body_ciphertext: encryptBody(KEYS, ORG, id, text),
+    only_asker: opts.privately ?? false,
+    hide_name: opts.by === "hash",
+    created_at,
+    prayer_requests: { groups: { name: "Grace" } },
+  };
 }
 
 beforeEach(() => {
@@ -127,6 +149,18 @@ describe("buildAccountExport", () => {
       ["Quietly", true],
     ]);
     expect(JSON.stringify(data)).not.toContain("Bens sealed request");
+  });
+
+  it("includes their own comments, named and hidden-name, opened and newest first, and no one else's", async () => {
+    setup();
+    const data = await buildAccountExport(ORG, "ada");
+    expect(data?.prayer_comments).toEqual([
+      { group: "Grace", body: "Hers, name hidden", only_the_person_who_asked: true, name_hidden: true, posted_at: "t3" },
+      { group: "Grace", body: "Hers by name", only_the_person_who_asked: false, name_hidden: false, posted_at: "t2" },
+    ]);
+    const text = JSON.stringify(data);
+    expect(text).not.toContain("Bens");
+    expect(text).not.toContain("Other church comment");
   });
 
   it("finds their anonymous requests past the first page of the church's", async () => {
@@ -222,7 +256,7 @@ describe("buildAccountExport", () => {
     expect(await buildAccountExport(OTHER_ORG, "ada")).toBeNull();
   });
 
-  it.each(["group_members", "team_members", "rsvps", "serving_signup_attendees", "prayer_requests", "giving_funds", "feedback", "family_units", "family_members", "group_requests", "access_requests"])(
+  it.each(["group_members", "team_members", "rsvps", "serving_signup_attendees", "prayer_requests", "prayer_comments", "giving_funds", "feedback", "family_units", "family_members", "group_requests", "access_requests"])(
     "throws rather than build a partial file when %s can't be read",
     async (table) => {
       const { failures } = setup();

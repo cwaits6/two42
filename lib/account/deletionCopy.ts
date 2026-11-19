@@ -67,7 +67,7 @@ export function photosNotRemovedMessage(count: number, subject: DeletionSubject)
 }
 
 export const DOWNLOAD_COVERS =
-  "The file holds your profile, your household and anyone listed in it without their own account, your groups, RSVPs, serving turns, prayer requests, the funds you receive, your feedback, your requests for a new group, and the message you sent with your request for access.";
+  "The file holds your profile, your household and anyone listed in it without their own account, your groups, RSVPs, serving turns, prayer requests, comments on prayer requests, the funds you receive, your feedback, your requests for a new group, and the message you sent with your request for access.";
 
 export const DOWNLOAD_LEAVES_OUT =
   "It doesn't include your photo, prayers you responded to, funds you're second on, requests to join a group, your teacher listing, your calendar link, or anything you added for a group, like events and announcements.";
@@ -133,12 +133,12 @@ export function deletionCopy(summary: DeletionSummary, subject: DeletionSubject)
     ? [
         "Your profile, photo and sign-in",
         "Your group and team memberships, RSVPs and serving turns",
-        "Your prayer requests, including anonymous ones",
+        "Your prayer requests and comments, including anonymous ones",
       ]
     : [
         "Their profile, photo and sign-in",
         "Their group and team memberships, RSVPs and serving turns",
-        "Their prayer requests, including anonymous ones",
+        "Their prayer requests and comments, including anonymous ones",
       ];
   if (household && !household.shared) goes.push(householdGoes(household));
 

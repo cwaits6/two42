@@ -3,7 +3,9 @@
  * client because memberships and RSVPs outlive the group access that RLS would
  * need to read them, and because an anonymous prayer request is recognised as
  * theirs only by recomputing its author hash over the church's hashed rows,
- * which under a wrong author key matches none of them. Each chain filters on the org and on this person,
+ * which under a wrong author key matches none of them; a hidden-name comment
+ * the same way. Only the person's own comments are included, not others' on
+ * their requests. Each chain filters on the org and on this person,
  * their current address, or the household on their own profile row. Only unclaimed
  * household entries name anyone else, with their details, since nothing records
  * who typed them.
@@ -11,6 +13,7 @@
  * RSVPs, and no one who prayed for a request.
  */
 import { decryptBody } from "@/lib/prayer/crypto";
+import { hashedCommentsOf, type HashedCommentRow } from "@/lib/prayer/commentThread";
 import { hashedRequestsOf } from "@/lib/prayer/hashedRequests";
 import { loadPrayerKeys } from "@/lib/prayer/keys";
 import type { Tables } from "@/lib/supabase/database.types";
@@ -52,7 +55,7 @@ export async function buildAccountExport(orgId: string, personId: string) {
   if (!profile) return null;
   const { family_id: familyId, ...ownProfile } = profile;
 
-  const [groups, teams, rsvps, serving, namedPrayers, hashedPrayers, funds, feedback, households, entries, groupRequests, accessRequests] = await Promise.all([
+  const [groups, teams, rsvps, serving, namedPrayers, hashedPrayers, namedComments, hiddenComments, funds, feedback, households, entries, groupRequests, accessRequests] = await Promise.all([
     service
       .from("group_members")
       .select("role, joined_at, groups(name)")
@@ -81,6 +84,14 @@ export async function buildAccountExport(orgId: string, personId: string) {
       .eq("org_id", orgId)
       .eq("author_id", personId),
     hashedRequestsOf<PrayerRow>(service, orgId, personId, keys, "*, groups(name)"),
+    service
+      .from("prayer_comments")
+      .select(
+        "id, request_id, body_ciphertext, only_asker, hide_name, writer_id, writer_hash, created_at, prayer_requests(groups(name))",
+      )
+      .eq("org_id", orgId)
+      .eq("writer_id", personId),
+    hashedCommentsOf(service, orgId, personId, keys),
     service
       .from("giving_funds")
       .select("name, description, is_active, retire_on, groups(name), giving_fund_methods(method, custom_handle)")
@@ -128,6 +139,10 @@ export async function buildAccountExport(orgId: string, personId: string) {
     ...rowsOf<PrayerRow>(namedPrayers, "prayer requests"),
     ...rowsOf<PrayerRow>(hashedPrayers, "anonymous prayer requests"),
   ].sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const comments = [
+    ...rowsOf<HashedCommentRow>(namedComments, "prayer comments"),
+    ...rowsOf<HashedCommentRow>(hiddenComments, "hidden-name prayer comments"),
+  ].sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   return {
     profile: ownProfile,
@@ -165,6 +180,13 @@ export async function buildAccountExport(orgId: string, personId: string) {
       anonymous: p.is_anonymous,
       answered: p.is_answered,
       posted_at: p.created_at,
+    })),
+    prayer_comments: comments.map((c) => ({
+      group: named(c.prayer_requests?.groups),
+      body: decryptBody(keys, orgId, c.id, c.body_ciphertext),
+      only_the_person_who_asked: c.only_asker,
+      name_hidden: c.hide_name,
+      posted_at: c.created_at,
     })),
     funds_you_receive: rowsOf<{
       name: string;
