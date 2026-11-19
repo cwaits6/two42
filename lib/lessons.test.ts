@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatLessonDate,
+  lessonEmbedUrl,
   lessonThumbnail,
   lessonsInOrder,
   needsSummary,
@@ -167,5 +168,30 @@ describe("lessonThumbnail", () => {
       "https://img.youtube.com/vi/abc123/hqdefault.jpg",
     );
     expect(lessonThumbnail({ ...stored, video_url: "https://zoom.us/rec/1" })).toBeNull();
+  });
+});
+
+describe("lessonEmbedUrl", () => {
+  it.each([
+    "https://www.youtube.com/watch?v=jNQXAC9IVRw&t=30s",
+    "https://youtu.be/jNQXAC9IVRw?si=AbC_dEf-123",
+    "https://youtube.com/shorts/jNQXAC9IVRw?feature=share",
+    "https://www.youtube-nocookie.com/embed/jNQXAC9IVRw",
+  ])("plays %s from youtube-nocookie.com", (video_url) => {
+    expect(lessonEmbedUrl({ video_url })).toBe(
+      "https://www.youtube-nocookie.com/embed/jNQXAC9IVRw",
+    );
+  });
+
+  it.each([
+    "https://notyoutube.com/watch?v=jNQXAC9IVRw",
+    "https://youtube.com.example.test/watch?v=jNQXAC9IVRw",
+    "https://www.youtube-nocookie.com.example.test/embed/jNQXAC9IVRw",
+    "https://example.test/go?to=https://youtu.be/jNQXAC9IVRw",
+    "https://zoom.us/rec/1",
+    "javascript:alert(1)",
+    "not a link",
+  ])("has none for %s", (video_url) => {
+    expect(lessonEmbedUrl({ video_url })).toBeNull();
   });
 });

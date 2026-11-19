@@ -113,13 +113,26 @@ export function youTubeId(url: URL): string | null {
   return id && VIDEO_ID.test(id) ? id : null;
 }
 
+function lessonYouTubeId(lesson: { video_url: string }): string | null {
+  const video = safeHttpUrl(lesson.video_url);
+  return video ? youTubeId(new URL(video)) : null;
+}
+
 const YOUTUBE_THUMBNAIL = "https://img.youtube.com/vi/";
 
 /** YouTube's thumbnail for a YouTube recording, else null. */
 export function lessonThumbnail(lesson: { video_url: string }): string | null {
-  const video = safeHttpUrl(lesson.video_url);
-  const id = video ? youTubeId(new URL(video)) : null;
+  const id = lessonYouTubeId(lesson);
   return id ? `${YOUTUBE_THUMBNAIL}${id}/hqdefault.jpg` : null;
+}
+
+// The only video origin the Content-Security-Policy's frame-src allows.
+const YOUTUBE_EMBED = "https://www.youtube-nocookie.com/embed/";
+
+/** The player address for a YouTube recording, else null. */
+export function lessonEmbedUrl(lesson: { video_url: string }): string | null {
+  const id = lessonYouTubeId(lesson);
+  return id ? `${YOUTUBE_EMBED}${id}` : null;
 }
 
 /**
