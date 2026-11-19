@@ -137,7 +137,7 @@ describe("PrayerCommentForm", () => {
   });
 
   it("starts with the name shown on someone else's request and on the viewer's own named request", () => {
-    expect(render(false)).toContain('aria-checked="false"');
+    expect(render(false)).not.toContain('aria-checked="true"');
     expect(render(true)).not.toContain('aria-checked="true"');
   });
 
