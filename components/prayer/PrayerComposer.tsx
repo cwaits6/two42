@@ -1,59 +1,13 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { HandHeart, UserRound } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { Me } from "@/components/prayer/PrayerBoard";
+import { SwitchRow } from "@/components/prayer/SwitchRow";
 import { REQUEST_TEXT_MAX, type NewPrayerRequest } from "@/lib/prayer/requests";
-
-function SwitchRow({
-  id,
-  on,
-  onToggle,
-  title,
-  sub,
-  icon,
-}: {
-  id: string;
-  on: boolean;
-  onToggle: (checked: boolean) => void;
-  title: string;
-  sub: string;
-  icon: ReactNode;
-}) {
-  return (
-    <label
-      htmlFor={id}
-      className={`flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
-        on
-          ? "border-brand-primary/40 bg-brand-warm"
-          : "border-border bg-card hover:border-brand-primary/30"
-      }`}
-    >
-      <span
-        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
-          on
-            ? "bg-primary text-primary-foreground"
-            : "bg-background text-muted-foreground"
-        }`}
-      >
-        {icon}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-base font-semibold text-foreground">
-          {title}
-        </span>
-        <span className="block text-sm leading-snug text-muted-foreground">
-          {sub}
-        </span>
-      </span>
-      <Switch id={id} checked={on} onCheckedChange={onToggle} />
-    </label>
-  );
-}
 
 export function PrayerComposer({
   me,

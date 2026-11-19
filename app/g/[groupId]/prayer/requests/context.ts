@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { isUuid } from "@/lib/groups/active";
 import { getGroupMemberships } from "@/lib/groups/server";
 import { logError } from "@/lib/log";
-import type { PrayerKeys } from "@/lib/prayer/crypto";
+import { isAuthor, type PrayerKeys } from "@/lib/prayer/crypto";
 import { loadPrayerKeys } from "@/lib/prayer/keys";
 import { getOptionalUser } from "@/lib/supabase/current-user";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 
 export interface PrayerWriter {
   userId: string;
@@ -50,4 +50,26 @@ export async function jsonBody(request: Request): Promise<Record<string, unknown
   } catch {
     return null;
   }
+}
+
+type ServiceClient = Awaited<ReturnType<typeof createServiceClient>>;
+
+/** The request, read on the writer's church and the group in the URL. */
+export async function readPrayerRequest(service: ServiceClient, writer: PrayerWriter, groupId: string, requestId: string) {
+  return service
+    .from("prayer_requests")
+    // "*" so a delete still works before the migration adds the sealed columns.
+    .select("*")
+    .eq("org_id", writer.orgId)
+    .eq("group_id", groupId)
+    .eq("id", requestId)
+    .maybeSingle();
+}
+
+export type StoredRequest = NonNullable<Awaited<ReturnType<typeof readPrayerRequest>>["data"]>;
+
+/** Whether the writer posted the request, by name or, on an anonymous one, by its author hash. */
+export function wroteRequest(writer: PrayerWriter, row: Pick<StoredRequest, "id" | "author_id" | "author_hash">): boolean {
+  if (row.author_id) return row.author_id === writer.userId;
+  return row.author_hash !== null && isAuthor(writer.keys, writer.orgId, row.id, writer.userId, row.author_hash);
 }

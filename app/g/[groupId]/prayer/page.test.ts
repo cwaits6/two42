@@ -16,10 +16,10 @@ function query(table: string) {
     then: (resolve: (r: Read) => unknown) => Promise.resolve(resolve(reads[table])),
     single: () => {
       record("single");
-      return Promise.resolve({ data: { role: "member", first_name: "Ada" }, error: null });
+      return Promise.resolve({ data: { org_id: ORG, role: "member", first_name: "Ada" }, error: null });
     },
   };
-  for (const method of ["select", "eq", "order", "insert", "update", "upsert", "delete"]) {
+  for (const method of ["select", "eq", "in", "order", "range", "returns", "insert", "update", "upsert", "delete"]) {
     chain[method] = () => {
       record(method);
       return chain;
@@ -35,6 +35,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: () => {} }),
 }));
 vi.mock("@/lib/supabase/server", () => ({
+  createServiceClient: async () => ({ from: (table: string) => query(`service:${table}`) }),
   createClient: async () => ({
     from: (table: string) => query(table),
     rpc: (fn: string) => {
@@ -100,7 +101,11 @@ beforeEach(() => {
   calls = [];
   role = "member";
   keys = serverKeys;
-  reads = { prayer_wall: { data: [goodRow], error: null } };
+  reads = {
+    prayer_wall: { data: [goodRow], error: null },
+    "service:prayer_comments": { data: [], error: null },
+    profiles: { data: [], error: null },
+  };
 });
 
 describe("PrayerPage", () => {
@@ -111,10 +116,10 @@ describe("PrayerPage", () => {
     expect(html).not.toMatch(/prayer call/i);
   });
 
-  it("reads only the wall and the viewer's profile, and writes nothing, so no event is deleted", async () => {
+  it("reads only the wall, its comments and the viewer's profile, and writes nothing, so no event is deleted", async () => {
     role = "leader";
     await render();
-    expect(new Set(calls.map((c) => c.table))).toEqual(new Set(["profiles", "prayer_wall"]));
+    expect(new Set(calls.map((c) => c.table))).toEqual(new Set(["profiles", "prayer_wall", "service:prayer_comments"]));
     const writes = calls.filter((c) => ["insert", "update", "upsert", "delete", "rpc"].includes(c.method));
     expect(writes).toEqual([]);
   });
@@ -166,5 +171,53 @@ describe("PrayerPage", () => {
     expect(html).not.toContain("Pray for a steady week.");
     expect(html).not.toContain("v1.");
     expect(html).not.toContain("No prayer requests yet.");
+  });
+
+  describe("comments", () => {
+    const comment = (id: string, request: string, opts: { privately?: boolean; hidden?: boolean; writer?: string } = {}) => ({
+      id,
+      request_id: request,
+      body_ciphertext: encryptBody(serverKeys, ORG, id, `Comment ${id}`),
+      only_asker: opts.privately ?? false,
+      hide_name: opts.hidden ?? false,
+      writer_id: opts.hidden ? null : (opts.writer ?? "u2"),
+      writer_hash: opts.hidden ? authorHash(serverKeys, ORG, id, opts.writer ?? "u2") : null,
+      created_at: new Date().toISOString(),
+    });
+
+    it("shows group comments with their writer, and someone else's private comment to no one else", async () => {
+      reads["service:prayer_comments"].data = [
+        comment("c1", "r1"),
+        comment("c2", "r1", { privately: true }),
+        comment("c3", "r1", { hidden: true }),
+      ];
+      reads.profiles.data = [{ id: "u2", first_name: "Ben", last_name: "Writer", preferred_name: null }];
+      const html = await render();
+      expect(html).toContain("Comment c1");
+      expect(html).toContain("Ben Writer");
+      expect(html).toContain("Comment c3");
+      expect(html).not.toContain("Comment c2");
+      expect(html).not.toContain("u2");
+    });
+
+    it("shows a private comment on the viewer's own anonymous request", async () => {
+      reads.prayer_wall.data = [sealedRow];
+      reads["service:prayer_comments"].data = [comment("c4", "r3", { privately: true })];
+      expect(await render()).toContain("Comment c4");
+    });
+
+    it("still shows the wall, without comments, when they can't be read", async () => {
+      reads["service:prayer_comments"] = { data: null, error: { code: "42P01", message: "missing" } };
+      const html = await render();
+      expect(html).toContain("Pray for a steady week.");
+      expect(html).toContain("Comments couldn&#x27;t load.");
+    });
+
+    it("shows the error state when a comment's text fails to open", async () => {
+      reads["service:prayer_comments"].data = [{ ...comment("c5", "r1"), body_ciphertext: "v1.bad.bad.bad" }];
+      const html = await render();
+      expect(html).toContain("Couldn&#x27;t load prayer requests.");
+      expect(html).not.toContain("Pray for a steady week.");
+    });
   });
 });
