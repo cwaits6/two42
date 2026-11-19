@@ -165,7 +165,7 @@ $$;
 ALTER FUNCTION "public"."current_family_id"() OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid", "_anonymous_request_ids" "uuid"[] DEFAULT '{}'::"uuid"[]) RETURNS "jsonb"
+CREATE OR REPLACE FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid", "_anonymous_request_ids" "uuid"[] DEFAULT '{}'::"uuid"[], "_hidden_comment_ids" "uuid"[] DEFAULT '{}'::"uuid"[]) RETURNS "jsonb"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO ''
     AS $$
@@ -334,6 +334,13 @@ begin
     and (r.author_id is null or r.author_id = _person_id)
     and r.id = any (coalesce(_anonymous_request_ids, '{}'));
 
+  -- Named comments go with the profile's cascade, and comments on their requests
+  -- with those requests.
+  delete from public.prayer_comments c
+  where c.org_id = _org
+    and c.writer_id is null
+    and c.id = any (coalesce(_hidden_comment_ids, '{}'));
+
   delete from auth.users u where u.id = _person_id;
   if not found then
     raise exception 'delete_person: the login was gone before it could be deleted' using errcode = 'AD001';
@@ -363,10 +370,10 @@ end;
 $$;
 
 
-ALTER FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid", "_anonymous_request_ids" "uuid"[]) OWNER TO "postgres";
+ALTER FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid", "_anonymous_request_ids" "uuid"[], "_hidden_comment_ids" "uuid"[]) OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid", "_anonymous_request_ids" "uuid"[]) IS 'Deletes one person and their login in a single transaction, and returns the storage keys and opened serving dates for the caller to act on after commit. _anonymous_request_ids are the person''s anonymous requests, which the caller finds by their author hash, plus those still carrying their author_id, which the backfill may hash meanwhile; only anonymous rows of the person''s church among them that are hashed or name the person are deleted. Tenant anchor: org_id from the target''s profile row; _org_id is only compared with it. service_role only. Raises AD001, AD002, CA001 or AD003.';
+COMMENT ON FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid", "_anonymous_request_ids" "uuid"[], "_hidden_comment_ids" "uuid"[]) IS 'Deletes one person and their login in a single transaction, and returns the storage keys and opened serving dates for the caller to act on after commit. _anonymous_request_ids are the person''s anonymous requests, which the caller finds by their author hash, plus those still carrying their author_id, which the backfill may hash meanwhile; only anonymous rows of the person''s church among them that are hashed or name the person are deleted. _hidden_comment_ids are the person''s hidden-name prayer comments, found the same way by their writer hash; only hidden-name comments of the person''s church among them are deleted. Tenant anchor: org_id from the target''s profile row; _org_id is only compared with it. service_role only. Raises AD001, AD002, CA001 or AD003.';
 
 
 
@@ -4411,6 +4418,28 @@ CREATE TABLE IF NOT EXISTS "public"."platform_admins" (
 ALTER TABLE "public"."platform_admins" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."prayer_comments" (
+    "id" "uuid" NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "request_id" "uuid" NOT NULL,
+    "writer_id" "uuid",
+    "writer_hash" "text",
+    "body_ciphertext" "text" NOT NULL,
+    "only_asker" boolean DEFAULT false NOT NULL,
+    "hide_name" boolean DEFAULT false NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "prayer_comments_hidden_has_hash" CHECK (("hide_name" = ("writer_hash" IS NOT NULL))),
+    CONSTRAINT "prayer_comments_one_writer" CHECK (("num_nonnulls"("writer_id", "writer_hash") = 1))
+);
+
+
+ALTER TABLE "public"."prayer_comments" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."prayer_comments" IS 'Comments on prayer requests: text sealed by the server, a hidden-name writer stored only as a keyed hash. Read and written by the service key only, in server code that decides who sees each comment; goes with its request and, when named, with its writer.';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."prayer_requests" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "author_id" "uuid",
@@ -5029,6 +5058,11 @@ ALTER TABLE ONLY "public"."platform_admins"
 
 
 
+ALTER TABLE ONLY "public"."prayer_comments"
+    ADD CONSTRAINT "prayer_comments_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."prayer_requests"
     ADD CONSTRAINT "prayer_requests_id_org_group_unique" UNIQUE ("id", "org_id", "group_id");
 
@@ -5364,6 +5398,14 @@ CREATE UNIQUE INDEX "org_domains_verified_domain_key" ON "public"."org_domains" 
 
 
 CREATE UNIQUE INDEX "org_email_domains_org_key" ON "public"."org_email_domains" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "prayer_comments_request_idx" ON "public"."prayer_comments" USING "btree" ("org_id", "request_id", "created_at");
+
+
+
+CREATE INDEX "prayer_comments_writer_id_idx" ON "public"."prayer_comments" USING "btree" ("writer_id") WHERE ("writer_id" IS NOT NULL);
 
 
 
@@ -6072,6 +6114,21 @@ ALTER TABLE ONLY "public"."org_email_usage"
 
 ALTER TABLE ONLY "public"."platform_admins"
     ADD CONSTRAINT "platform_admins_profile_id_fkey" FOREIGN KEY ("profile_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."prayer_comments"
+    ADD CONSTRAINT "prayer_comments_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."prayer_comments"
+    ADD CONSTRAINT "prayer_comments_request_id_fkey" FOREIGN KEY ("request_id", "org_id") REFERENCES "public"."prayer_requests"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."prayer_comments"
+    ADD CONSTRAINT "prayer_comments_writer_id_fkey" FOREIGN KEY ("writer_id", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE CASCADE;
 
 
 
@@ -7013,6 +7070,10 @@ CREATE POLICY "org isolation" ON "public"."organizations" AS RESTRICTIVE TO "aut
 
 
 
+CREATE POLICY "org isolation" ON "public"."prayer_comments" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
 CREATE POLICY "org isolation" ON "public"."prayer_requests" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
@@ -7094,6 +7155,9 @@ CREATE POLICY "platform admins can view platform admins" ON "public"."platform_a
 ALTER TABLE "public"."platform_admins" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."prayer_comments" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."prayer_requests" ENABLE ROW LEVEL SECURITY;
 
 
@@ -7172,8 +7236,8 @@ GRANT ALL ON FUNCTION "public"."current_family_id"() TO "service_role";
 
 
 
-REVOKE ALL ON FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid", "_anonymous_request_ids" "uuid"[]) FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid", "_anonymous_request_ids" "uuid"[]) TO "service_role";
+REVOKE ALL ON FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid", "_anonymous_request_ids" "uuid"[], "_hidden_comment_ids" "uuid"[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid", "_anonymous_request_ids" "uuid"[], "_hidden_comment_ids" "uuid"[]) TO "service_role";
 
 
 
@@ -8046,6 +8110,10 @@ GRANT SELECT("prayer_request_retention_months"),UPDATE("prayer_request_retention
 GRANT ALL ON TABLE "public"."platform_admins" TO "anon";
 GRANT ALL ON TABLE "public"."platform_admins" TO "authenticated";
 GRANT ALL ON TABLE "public"."platform_admins" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."prayer_comments" TO "service_role";
 
 
 
