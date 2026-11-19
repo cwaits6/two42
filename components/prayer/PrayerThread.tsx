@@ -69,6 +69,7 @@ export function PrayerThread({
         <PrayerCommentForm
           askerLabel={askerLabel(row)}
           ownRequest={row.mine}
+          ownAnonymousRequest={row.mine && row.is_anonymous}
           onPost={async (draft) => {
             const ok = await onComment(draft);
             if (ok) setWriting(false);

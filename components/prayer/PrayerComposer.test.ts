@@ -111,9 +111,15 @@ describe("PrayerCard", () => {
 });
 
 describe("PrayerCommentForm", () => {
-  const render = (ownRequest: boolean, askerLabel = "Ada Author") =>
+  const render = (ownRequest: boolean, ownAnonymousRequest = false, askerLabel = "Ada Author") =>
     renderToStaticMarkup(
-      createElement(PrayerCommentForm, { askerLabel, ownRequest, onPost: async () => true, onCancel: () => {} })
+      createElement(PrayerCommentForm, {
+        askerLabel,
+        ownRequest,
+        ownAnonymousRequest,
+        onPost: async () => true,
+        onCancel: () => {},
+      })
     );
 
   it("labels the text and both choices on someone else's request", () => {
@@ -128,6 +134,17 @@ describe("PrayerCommentForm", () => {
     const html = render(true);
     expect(html).not.toContain("can see this");
     expect(html).toContain("Hide my name");
+  });
+
+  it("starts with the name shown on someone else's request and on the viewer's own named request", () => {
+    expect(render(false)).toContain('aria-checked="false"');
+    expect(render(true)).not.toContain('aria-checked="true"');
+  });
+
+  it("starts with the name hidden, and warns, on the viewer's own anonymous request", () => {
+    const html = render(true, true);
+    expect(html).toContain('aria-checked="true"');
+    expect(html).toContain("Your request is anonymous. Turn this off and your name shows on this comment.");
   });
 
   it("names no one when the request is anonymous", () => {

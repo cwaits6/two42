@@ -7,9 +7,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { SwitchRow } from "@/components/prayer/SwitchRow";
 import { COMMENT_TEXT_MAX, type NewPrayerComment } from "@/lib/prayer/comments";
 
+const COMMENT_NEAR_LIMIT = 50;
+
 export function PrayerCommentForm({
   askerLabel,
   ownRequest,
+  ownAnonymousRequest,
   onPost,
   onCancel,
 }: {
@@ -17,16 +20,19 @@ export function PrayerCommentForm({
   askerLabel: string;
   /** A private comment on the viewer's own request would reach no one else, so the choice is not offered. */
   ownRequest: boolean;
+  /** The viewer asked anonymously: a named reply would reveal who asked, so the name starts hidden. */
+  ownAnonymousRequest: boolean;
   onPost: (draft: NewPrayerComment) => Promise<boolean>;
   onCancel: () => void;
 }) {
   const id = useId();
   const [body, setBody] = useState("");
   const [onlyAsker, setOnlyAsker] = useState(false);
-  const [hideName, setHideName] = useState(false);
+  const [hideName, setHideName] = useState(ownAnonymousRequest);
   const [submitting, setSubmitting] = useState(false);
 
   const canPost = body.trim().length > 0 && !submitting;
+  const left = COMMENT_TEXT_MAX - body.length;
 
   const submit = async () => {
     if (!canPost) return;
@@ -40,7 +46,7 @@ export function PrayerCommentForm({
     if (ok) {
       setBody("");
       setOnlyAsker(false);
-      setHideName(false);
+      setHideName(ownAnonymousRequest);
     }
   };
 
@@ -56,7 +62,13 @@ export function PrayerCommentForm({
         rows={3}
         maxLength={COMMENT_TEXT_MAX}
         className="bg-background text-base"
+        aria-describedby={left <= COMMENT_NEAR_LIMIT ? `${id}-left` : undefined}
       />
+      {left <= COMMENT_NEAR_LIMIT && (
+        <p id={`${id}-left`} className="text-sm text-muted-foreground">
+          {left === 1 ? "1 character left" : `${left} characters left`}
+        </p>
+      )}
       {!ownRequest && (
         <SwitchRow
           id={`${id}-only-asker`}
@@ -72,7 +84,11 @@ export function PrayerCommentForm({
         on={hideName}
         onToggle={setHideName}
         title="Hide my name"
-        sub="Your comment shows as Anonymous to everyone."
+        sub={
+          ownAnonymousRequest
+            ? "Your request is anonymous. Turn this off and your name shows on this comment."
+            : "Your comment shows as Anonymous to everyone."
+        }
         icon={<EyeOff className="h-4 w-4" aria-hidden="true" />}
       />
       <div className="flex flex-wrap justify-end gap-2 pt-1">
