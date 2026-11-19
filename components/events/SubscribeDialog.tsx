@@ -1,0 +1,132 @@
+"use client";
+
+import { useState } from "react";
+import { Check, Copy } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
+export type FeedLinks = {
+  /** The feed itself, for pasting into any calendar app that adds a calendar by URL. */
+  https: string;
+  /** Opens the calendar app's subscribe prompt on a Mac or an iPhone. */
+  webcal: string;
+  /** Google Calendar's add-by-URL screen with the feed filled in. */
+  google: string;
+};
+
+export function feedLinks(origin: string, token: string, groupId?: string): FeedLinks {
+  const url = new URL("/api/calendar/feed.ics", origin);
+  url.searchParams.set("token", token);
+  if (groupId) url.searchParams.set("group", groupId);
+  const https = url.toString();
+  const webcal = https.replace(/^https?:/, "webcal:");
+  return {
+    https,
+    webcal,
+    google: `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcal)}`,
+  };
+}
+
+export type SubscribeState =
+  | { status: "preparing" }
+  | { status: "ready"; links: FeedLinks }
+  | { status: "failed"; message: string };
+
+interface SubscribeDialogProps {
+  /** What the feed covers: a group's name, or "all my groups". */
+  feedName: string | null;
+  state: SubscribeState;
+  onClose: () => void;
+}
+
+const action = "h-12 w-full justify-start text-base";
+
+export function SubscribeDialog({ feedName, state, onClose }: SubscribeDialogProps) {
+  const [copied, setCopied] = useState<"yes" | "failed" | null>(null);
+
+  async function copyLink(link: string) {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied("yes");
+    } catch {
+      setCopied("failed");
+    }
+  }
+
+  return (
+    <Dialog
+      open={feedName !== null}
+      onOpenChange={(open) => {
+        if (open) return;
+        setCopied(null);
+        onClose();
+      }}
+    >
+      <DialogContent className="max-w-md gap-5 p-6">
+        <DialogHeader>
+          <DialogTitle className="font-display text-xl leading-tight">
+            Subscribe to {feedName}
+          </DialogTitle>
+        </DialogHeader>
+
+        {state.status === "preparing" && (
+          <p role="status" className="text-base text-muted-foreground">
+            Preparing your link…
+          </p>
+        )}
+
+        {state.status === "failed" && (
+          <p role="alert" className="text-base text-foreground">
+            {state.message}
+          </p>
+        )}
+
+        {state.status === "ready" && (
+          <>
+            <div className="grid gap-3">
+              <Button
+                variant="outline"
+                className={action}
+                nativeButton={false}
+                render={<a href={state.links.webcal} />}
+              >
+                Open in Apple Calendar
+              </Button>
+              <Button
+                variant="outline"
+                className={action}
+                nativeButton={false}
+                render={<a href={state.links.google} target="_blank" rel="noopener noreferrer" />}
+              >
+                Add to Google Calendar
+              </Button>
+              <Button variant="outline" className={action} onClick={() => copyLink(state.links.https)}>
+                {copied === "yes" ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+                {copied === "yes" ? "Link copied" : "Copy link"}
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-base text-muted-foreground">
+                For another calendar app, copy the link and paste it where the app adds a calendar by URL.
+              </p>
+              <p aria-live="polite" className="text-base text-foreground">
+                {copied === "yes" && <span className="sr-only">Link copied.</span>}
+                {copied === "failed" && "Couldn't copy the link. Select it below and copy it."}
+              </p>
+              {copied === "failed" && (
+                <input
+                  readOnly
+                  aria-label="Calendar link"
+                  value={state.links.https}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="h-12 w-full rounded-lg border border-border bg-background px-3 text-base text-foreground"
+                />
+              )}
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
