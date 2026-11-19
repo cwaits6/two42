@@ -70,6 +70,37 @@ describe("SubscribeDialog", () => {
     expect(document.querySelector<HTMLInputElement>('input[aria-label="Calendar link"]')?.value).toBe(links.https);
   });
 
+  it("does not report a copy from a closed dialog on the next one", async () => {
+    let finishCopy: () => void = () => {};
+    const writeText = vi.fn(() => new Promise<void>((resolve) => (finishCopy = resolve)));
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    const show = (feedName: string | null) =>
+      act(() =>
+        root!.render(
+          createElement(SubscribeDialog, {
+            feedName,
+            state: { status: "ready", links: feedLinks("https://two42.io", "tok123", feedName ?? undefined) },
+            onRetry: () => {},
+            onClose: () => show(null),
+          })
+        )
+      );
+    show("Hillside");
+    await act(async () => button("Copy link")!.click());
+    await act(async () => {
+      document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(document.body.textContent).not.toContain("Subscribe to Hillside");
+    show("Youth");
+    await act(async () => finishCopy());
+    expect(document.body.textContent).toContain("Subscribe to Youth");
+    expect(button("Copy link")).toBeTruthy();
+    expect(button("Link copied")).toBeUndefined();
+  });
+
   it("says when the link could not be made", () => {
     render({ status: "failed", message: "We couldn't create your calendar link." });
     expect(document.querySelector('[role="alert"]')?.textContent).toBe("We couldn't create your calendar link.");

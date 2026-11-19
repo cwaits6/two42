@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Check, Copy } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -46,14 +46,20 @@ const linkAction = cn(buttonVariants({ variant: "outline" }), action);
 
 export function SubscribeDialog({ feedName, state, onRetry, onClose }: SubscribeDialogProps) {
   const [copied, setCopied] = useState<"yes" | "failed" | null>(null);
+  // A copy still pending when the dialog closes must not report on the next
+  // feed's dialog, whose link it did not copy.
+  const session = useRef(0);
 
   async function copyLink(link: string) {
+    const started = session.current;
+    let result: "yes" | "failed";
     try {
       await navigator.clipboard.writeText(link);
-      setCopied("yes");
+      result = "yes";
     } catch {
-      setCopied("failed");
+      result = "failed";
     }
+    if (session.current === started) setCopied(result);
   }
 
   return (
@@ -61,6 +67,7 @@ export function SubscribeDialog({ feedName, state, onRetry, onClose }: Subscribe
       open={feedName !== null}
       onOpenChange={(open) => {
         if (open) return;
+        session.current += 1;
         setCopied(null);
         onClose();
       }}
