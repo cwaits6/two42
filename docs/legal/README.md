@@ -51,9 +51,11 @@ them against the files listed.
   Production sets `OTEL_EXPORTER_OTLP_ENDPOINT` to Grafana, which is listed;
   if the tracing receiver changes, or `lib/tracing/redactSpans.ts` starts
   keeping a new attribute, update the Grafana entry.
-- [ ] **Analytics.** `components/analytics/PageMeasurement.tsx` and
-  `lib/analytics/pagePattern.ts`: Web Analytics must still receive page patterns
-  only. Speed Insights (`@vercel/speed-insights`) is installed but not loaded;
+- [ ] **Analytics.** Vercel Web Analytics (`components/analytics/PageMeasurement.tsx`)
+  loads only when `THIRD_PARTY_PAGE_VIEWS=on`, which production does not set, so
+  the policy does not mention it. Turning it on adds a sentence under Vercel: it
+  counts page views by kind of page (`lib/analytics/pagePattern.ts`), the
+  linking site, and the visitor's country and device. Speed Insights (`@vercel/speed-insights`) is installed but not loaded;
   loading it adds a sentence.
 - [ ] **Stored data.** A new table or column that holds something a person
   entered: `lib/supabase/database.types.ts`, the profile fields in
@@ -107,6 +109,8 @@ policy does not describe it. When it merges, re-check each sentence below in
 Settled: the documents say "two42" and name no person. With no company
 behind two42, the maintainer is the party to the Terms; if one is formed, name
 it in both documents. hello@, privacy@ and security@two42.io all receive mail.
+Supabase Auth sends password reset and email change emails with its own
+mailer; moving it to Resend as custom SMTP changes both processor entries.
 
 Each is a commitment the code does not enforce. The public text says only what
 is true without it; fill one in here, then add the sentence to the document.
@@ -120,4 +124,3 @@ is true without it; fill one in here, then add the sentence to the document.
 - [MAINTAINER: how long privacy request emails are kept]
 - [MAINTAINER: the governing law and venue for the Terms]
 - [MAINTAINER: confirm the commitment that database access is used only to run the service, fix a problem, answer a request, or comply with the law]
-- [MAINTAINER: whether the hosted Supabase Auth sends password reset email through its own mailer or through Resend as custom SMTP]

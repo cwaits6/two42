@@ -21,10 +21,10 @@ export const PRIVACY_EMAIL = "privacy@two42.io";
 
 /** Every outside service that receives data from the hosted service. */
 export const PROCESSORS: readonly { name: string; does: string }[] = [
-  { name: "Supabase", does: "Stores the database and photos, handles sign-in, runs the nightly jobs and sends password reset emails." },
+  { name: "Supabase", does: "Stores the database and photos, handles sign-in, runs the nightly jobs, and sends password reset and email change emails." },
   {
     name: "Vercel",
-    does: "Hosts the app. Vercel Web Analytics counts page views by kind of page and the site that linked to two42, never the full page address.",
+    does: "Hosts the app.",
   },
   {
     name: "Grafana",
@@ -61,10 +61,10 @@ export const PRIVACY: LegalDocument = {
       blocks: [
         "two42 stores what a church and its members enter so the app can show it back to them:",
         [
-          "Your sign-in: your email address and password. The password is stored only as a secure hash by Supabase.",
-          "Your profile: name, preferred name, photo, birthday, anniversary, phone numbers, address, occupation and anything else you add. Leave out anything you don't want stored.",
-          "Your household: the people listed in it, including children without their own account. A parent chooses what to enter about a child; a child they leave out is not stored at all.",
-          "Your groups and teams, your role in each, your RSVPs and your serving turns.",
+          "Your sign-in: your email address and password (stored only as a secure hash by Supabase), and the IP address and browser of each signed-in session.",
+          "Your profile: name, preferred name, photo, birthday, anniversary, phone numbers, address, occupation and anything else you add. Leave out anything you don't want stored. A church admin, or whoever manages your household, can also add or change these details.",
+          "Your household: the people listed in it, including children without their own account. A parent or a church admin chooses what to enter about a child; a child no one adds is not stored at all.",
+          "Your groups and teams, your role in each, any labels a leader gives you in a group, your RSVPs and your serving turns.",
           "Prayer requests you post, by name or anonymous, and the requests you say you are praying for.",
           "What leaders add for a group: events, announcements, lessons, the group's about page, and funds with their payment handles, such as a Venmo or PayPal name. two42 does not process payments; a gift happens in the payment app.",
           "Requests to join the church or a group, invitations, and feedback you send.",
@@ -72,7 +72,7 @@ export const PRIVACY: LegalDocument = {
         ],
         "Your browser keeps a sign-in cookie, a cookie for the last group you opened, and your display choices. two42 sets no advertising or tracking cookies.",
         "Each church keeps usage counts for its church admins: how often each kind of page was opened, and how often one showed an error, per day. They record the kind of page only, never who opened it.",
-        "Error logs record what failed, the kind of page, and internal record numbers for what was involved. They never record what you entered.",
+        "two42's own error logs record what failed, the kind of page, and internal record numbers for what was involved. They never record what you entered. The hosting services keep their own request logs, which can include the addresses requested.",
       ],
     },
     {
@@ -80,11 +80,11 @@ export const PRIVACY: LegalDocument = {
       blocks: [
         "Each church's data is kept separate from every other church's. People in one church cannot see another church's data.",
         [
-          "The directory shows what each person entered, except a birth year, which only goes into a phone contact someone saves from the directory. A church admin chooses whether members see everyone in the church or only people they share a group with.",
+          "The directory shows what each person entered, except a birth year. The year goes into a phone contact someone saves from the directory, and church admins see it in the member list they download. A church admin chooses whether members see everyone in the church or only people they share a group with.",
           "You can leave yourself out of the directory, and hide your email address from everyone but yourself and church admins.",
-          "Group content — events, announcements, lessons, prayer requests and funds — is seen by that group's members. A church admin sees every person and group in the church, including who is in each group, but not a group's other content unless they are in that group.",
+          "Group content — events, announcements, lessons, prayer requests and funds — is seen by that group's members. A church admin sees every person and group in the church, including who is in each group, its teams and labels, and requests to join it. They don't see a group's events, announcements, lessons, prayer requests or funds unless they are in that group.",
           "A leader can make a group private, so members who aren't in it can't find it.",
-          "A prayer request posted by name shows the author to group members who can see that person in the directory. An anonymous request shows no author in the app to anyone but the author: not to other members, leaders or church admins. A leader can edit or delete any prayer request in their group.",
+          "A prayer request posted by name shows the author to group members who can see that person in the directory, and to church admins and the author's household who are in the group. An anonymous request shows no author in the app to anyone but the author: not to other members, leaders or church admins. A leader can edit or delete any prayer request in their group.",
           "Email reminders and team messages go only to the people they are for.",
         ],
       ],
@@ -107,7 +107,7 @@ export const PRIVACY: LegalDocument = {
     {
       heading: "How long it is kept",
       blocks: [
-        "What you and your church enter is kept while your account and your church use two42. A nightly job deletes:",
+        "What you and your church enter is kept while your account and your church use two42. For each active church, a nightly job deletes:",
         [
           `Prayer requests older than ${listOr(PRAYER_RETENTION_MONTHS)} months, if a church admin turns that on for the church. It is off unless they do.`,
           `Feedback older than ${FEEDBACK_RETENTION_MONTHS} months.`,
@@ -123,7 +123,7 @@ export const PRIVACY: LegalDocument = {
       heading: "Your copy and your account",
       blocks: [
         `In Settings, under Your data, you can download a copy of your data. ${DOWNLOAD_COVERS} ${DOWNLOAD_LEAVES_OUT}`,
-        "You can delete your own prayer requests, and change or remove anything in your profile, at any time.",
+        "You can delete your own prayer requests at any time. You can change anything in your profile, and remove anything except your name and email address.",
         "You can delete your account from the same place, and a church admin can delete an account in their church. Deleting an account:",
         [
           "Removes the profile, photo, sign-in, group and team memberships, RSVPs, serving turns, and prayer requests, including anonymous ones.",

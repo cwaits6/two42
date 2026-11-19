@@ -40,7 +40,7 @@ describe.each(pages)("the $name page", ({ html, doc, companion }) => {
 });
 
 describe("the privacy policy", () => {
-  it.each(["Supabase", "Vercel", "Web Analytics", "Resend", "Grafana", "Google Maps", "YouTube"])("names %s", (name) => {
+  it.each(["Supabase", "Vercel", "Resend", "Grafana", "Google Maps", "YouTube"])("names %s", (name) => {
     expect(privacyText).toContain(name);
   });
 

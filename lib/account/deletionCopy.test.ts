@@ -140,7 +140,7 @@ describe("photosNotRemovedMessage", () => {
 
 describe("the download's copy", () => {
   it("says the file holds what the person wrote in their requests", () => {
-    expect(DOWNLOAD_COVERS).toMatch(/group requests/);
+    expect(DOWNLOAD_COVERS).toMatch(/requests for a new group/);
     expect(DOWNLOAD_COVERS).toMatch(/request for access/);
   });
 
