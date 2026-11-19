@@ -39,6 +39,7 @@ import {
   type StepErrors,
 } from "./setupValidation";
 import { logError } from "@/lib/log";
+import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
 import { forgetSetupRedirects } from "./actions";
 
 interface HouseholdMatch {
@@ -715,10 +716,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
                   Email
                 </Label>
                 <Input id="email" value={userEmail} disabled className="py-5 text-base" />
-                {/* Settings redirects back here until setup is finished, so no link. */}
-                <p className="text-base text-muted-foreground">
-                  You can change your email in Settings after you finish setup.
-                </p>
+                <EmailChangeHint duringSetup />
                 <CheckRow
                   id="hide_email"
                   label="Hide my email from the directory"
