@@ -24,14 +24,13 @@
 // request text or anyone's id, and exits non-zero on anything it could not convert.
 
 import { createClient } from "@supabase/supabase-js";
-import { commentAsStoredRow, writeCommentPlan, writePlan } from "../lib/prayer/backfill.ts";
+import { COMMENT_COLUMNS, commentAsStoredRow, writeCommentPlan, writePlan } from "../lib/prayer/backfill.ts";
 import { keyId, parsePrayerKeys, planRow, selectWrites } from "../lib/prayer/crypto.ts";
 import { fetchAll } from "../lib/supabase/fetchAll.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PAGE = 200;
 const ROW_COLUMNS = "id, org_id, body, body_ciphertext, is_anonymous, author_id, author_hash, updated_at";
-const COMMENT_COLUMNS = "id, org_id, body_ciphertext, hide_name, writer_id, writer_hash";
 
 function fail(msg) {
   console.error(`ERROR: ${msg}`);
@@ -93,7 +92,7 @@ async function planChurch(orgId) {
   );
   const comments = await readAll(
     (from, to) =>
-      supabase.from("prayer_comments").select(COMMENT_COLUMNS).eq("org_id", orgId).order("id").range(from, to),
+      supabase.from("prayer_comments").select(COMMENT_COLUMNS.join(", ")).eq("org_id", orgId).order("id").range(from, to),
     "prayer comments",
   );
   const members = await memberIds(orgId);

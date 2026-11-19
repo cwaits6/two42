@@ -1,4 +1,4 @@
-// The backfill's one write. Imported by scripts/encrypt-prayer-requests.mjs
+// The backfill's writes. Imported by scripts/encrypt-prayer-requests.mjs
 // under Node's type stripping, so it imports types only. Keep it that way.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Tables } from "../supabase/database.types";
@@ -34,10 +34,9 @@ export async function writePlan(
   return data.length === 1 ? "written" : "changed meanwhile";
 }
 
-export type BackfillCommentRow = Pick<
-  Tables<"prayer_comments">,
-  "id" | "org_id" | "body_ciphertext" | "hide_name" | "writer_id" | "writer_hash"
->;
+/** The comment columns the rotation script reads; the row type is derived from them so the two can't drift. */
+export const COMMENT_COLUMNS = ["id", "org_id", "body_ciphertext", "hide_name", "writer_id", "writer_hash"] as const;
+export type BackfillCommentRow = Pick<Tables<"prayer_comments">, (typeof COMMENT_COLUMNS)[number]>;
 
 /** A comment in the shape planRow reads: its writer hash plans as an anonymous author hash. */
 export function commentAsStoredRow(row: BackfillCommentRow): StoredRow {
