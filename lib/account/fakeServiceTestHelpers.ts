@@ -39,6 +39,8 @@ export function fakeService(tables: Tables) {
     storageError: null as { message: string } | null,
     // Keys storage reports nothing for, as it does for a key it couldn't find.
     storageSkips: [] as string[],
+    // PostgREST's max_rows: a read returns at most this many, with no error.
+    maxRows: Infinity,
   };
 
   function from(table: string) {
@@ -47,6 +49,7 @@ export function fakeService(tables: Tables) {
     let op: Failure["op"] = "select";
     let patch: Row = {};
     let limit = Infinity;
+    let offset = 0;
     let columns: string[] | null = null;
 
     const builder = {
@@ -57,6 +60,12 @@ export function fakeService(tables: Tables) {
         return builder;
       },
       order: () => builder,
+      returns: () => builder,
+      range: (from: number, to: number) => {
+        offset = from;
+        limit = to - from + 1;
+        return builder;
+      },
       limit: (n: number) => {
         limit = n;
         return builder;
@@ -73,6 +82,11 @@ export function fakeService(tables: Tables) {
       eq: (column: string, value: unknown) => {
         filters.push(column);
         predicates.push((row) => row[column] === value);
+        return builder;
+      },
+      is: (column: string, value: null) => {
+        filters.push(column);
+        predicates.push((row) => (row[column] ?? null) === value);
         return builder;
       },
       neq: (column: string, value: unknown) => {
@@ -108,7 +122,7 @@ export function fakeService(tables: Tables) {
         }
         if (failure?.skip) failure.skip -= 1;
         const rows = tables[table] ?? [];
-        const matched = rows.filter((row) => predicates.every((p) => p(row))).slice(0, limit);
+        const matched = rows.filter((row) => predicates.every((p) => p(row))).slice(offset, offset + Math.min(limit, op === "select" ? state.maxRows : Infinity));
         if (op !== "select") log.writes.push({ table, op, filters });
         if (op === "update") matched.forEach((row) => Object.assign(row, patch));
         if (op === "delete") tables[table] = rows.filter((row) => !matched.includes(row));

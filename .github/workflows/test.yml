@@ -158,6 +158,17 @@ jobs:
           test "$(grep -c '^NEXT_PUBLIC_SUPABASE_' "$GITHUB_ENV")" -eq 2
           test "$(grep -c '^SUPABASE_SECRET_KEY=' "$GITHUB_ENV")" -eq 1
 
+      # The app seals prayer requests with these, and the specs open what it
+      # stored with the same keys. Fresh for each run, like the stack.
+      - name: Generate the prayer keys
+        if: steps.changes.outputs.run == 'true'
+        run: |
+          for name in PRAYER_BODY_KEY PRAYER_AUTHOR_KEY; do
+            key=$(openssl rand -base64 32)
+            echo "::add-mask::$key"
+            echo "$name=$key" >> "$GITHUB_ENV"
+          done
+
       # The .deb files the cache carries are built for one OS release.
       - name: Resolve the Playwright cache key
         if: steps.changes.outputs.run == 'true'

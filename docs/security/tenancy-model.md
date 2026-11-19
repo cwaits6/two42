@@ -202,16 +202,21 @@ The permissive arms compose on the org floor as:
   is_group_member(group_id)` — published announcements for members, drafts
   for leaders; a prayer request is readable by every member of its group,
   except `author_id`, which no client role can read: `prayer_wall` reaches it
-  only through `prayer_request_visible_author()`, and only the author can change
-  `is_anonymous`;
+  only through `prayer_request_visible_author()`. Its text is stored sealed,
+  and an anonymous request stores no author, only a keyed hash, so the server
+  opens the text and recognises the author
+  ([`prayer-encryption.md`](prayer-encryption.md));
 - write: `org_id = (select app_request_org_id()) and
   is_group_leader(group_id)`, or the existing author rule
-  (`prayer_requests`, `prayer_responses`) or steward rule (`giving_funds`,
+  (`prayer_responses`) or steward rule (`giving_funds`,
   `giving_fund_methods` through `giving_can_manage_fund()`, which now reads
   the fund's group). A fund with no recipient or `needs_review` set is the
   exception to the member read: its row and its methods are readable only by
   a leader of the group and its recipient, so a paused fund's handles stay off
   Give at the database (`20261115000000_fund_recipients_in_group.sql`).
+  `prayer_requests` is the exception to the write arm: no client role writes
+  it; the prayer request routes write it on the service client after sealing
+  the text.
 
 **Org admins are not implicit members.** `is_admin()` appears in no content
 policy: an org admin reads a
@@ -1021,12 +1026,16 @@ table's own FK.
   `<org_id>/events/<event_id>/…` — the event id resolves the group, and the
   three event-image policies gate on `is_group_leader(e.group_id)` through
   it.
-- `prayer_requests` has column-level `select` and `update` grants that leave
-  out `author_id`, the same shape as `organizations`: a new column is
-  unreadable and unwritable to clients until it is listed. The grants bind
-  client sessions only. Database-level access by the operator can still link a
-  request to its author; whether that changes is decided with the prayer
-  encryption work.
+- `prayer_requests` has a column-level `select` grant that leaves out
+  `author_id`, the same shape as `organizations`: a new column is unreadable to
+  clients until it is listed. No client role writes the table; the two prayer
+  request routes write it on the service client after sealing the text. The
+  operator holds the prayer keys, so database access together with the keys
+  still reads every request and can link an anonymous one to its author by
+  recomputing the hash; without the keys, a database copy holds neither
+  ([`prayer-encryption.md`](prayer-encryption.md)). Rows written before the
+  conversion keep plaintext and `author_id` until
+  `scripts/encrypt-prayer-requests.mjs` has run.
 - A team's dates (a rolling window or a set block) are one rule held in
   three places: `teamServiceDates()` in `lib/serving/dates.ts` for the
   screens and the two signup routes, its mirror in

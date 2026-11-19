@@ -1057,14 +1057,14 @@ isOneToOne: false
                   ]
                 },"prayer_requests": {
                   Row: {
-                    "author_id": string,"body": string,"created_at": string,"group_id": string,"id": string,"is_anonymous": boolean,"is_answered": boolean,"org_id": string,"updated_at": string
+                    "author_hash": string | null,"author_id": string | null,"body": string | null,"body_ciphertext": string | null,"created_at": string,"group_id": string,"id": string,"is_anonymous": boolean,"is_answered": boolean,"org_id": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "author_id": string,"body": string,"created_at"?: string,"group_id": string,"id"?: string,"is_anonymous"?: boolean,"is_answered"?: boolean,"org_id"?: string,"updated_at"?: string
+                    "author_hash"?: string | null,"author_id"?: string | null,"body"?: string | null,"body_ciphertext"?: string | null,"created_at"?: string,"group_id": string,"id"?: string,"is_anonymous"?: boolean,"is_answered"?: boolean,"org_id"?: string,"updated_at"?: string
                   }
                   Update: {
-                    "author_id"?: string,"body"?: string,"created_at"?: string,"group_id"?: string,"id"?: string,"is_anonymous"?: boolean,"is_answered"?: boolean,"org_id"?: string,"updated_at"?: string
+                    "author_hash"?: string | null,"author_id"?: string | null,"body"?: string | null,"body_ciphertext"?: string | null,"created_at"?: string,"group_id"?: string,"id"?: string,"is_anonymous"?: boolean,"is_answered"?: boolean,"org_id"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -1602,7 +1602,7 @@ isOneToOne: false
                   ]
                 },"prayer_wall": {
                   Row: {
-                    "avatar_url": string | null,"body": string,"created_at": string,"first_name": string | null,"group_id": string,"i_am_praying": boolean | null,"id": string,"is_anonymous": boolean,"is_answered": boolean,"last_name": string | null,"mine": boolean | null,"org_id": string,"praying_count": number | null,"preferred_name": string | null
+                    "author_hash": string | null,"avatar_url": string | null,"body": string | null,"body_ciphertext": string | null,"created_at": string,"first_name": string | null,"group_id": string,"i_am_praying": boolean | null,"id": string,"is_anonymous": boolean,"is_answered": boolean,"last_name": string | null,"mine": boolean | null,"org_id": string,"praying_count": number | null,"preferred_name": string | null
                   }
                   ComputedFields: never
                   Relationships: [
@@ -1670,7 +1670,7 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: string
                            },
 "delete_person":
-{ Args: { "_org_id": string,"_person_id": string }; Returns: Json
+{ Args: { "_anonymous_request_ids"?: (string)[],"_org_id": string,"_person_id": string }; Returns: Json
                            },
 "directory_retire_hidden_values":
 { Args: Record<PropertyKey, never>; Returns: Json

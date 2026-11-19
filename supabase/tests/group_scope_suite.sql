@@ -330,21 +330,23 @@ select is(current_setting('gs.ok_' || t), 'ok', format('positive control: the A 
 from unnest(array['announcements', 'events', 'lectures', 'lecture_series', 'giving_funds',
   'class_teachers', 'group_settings']) as t;
 
--- A member cannot update their group's announcement (0 rows); the author
--- updates their own prayer request (1 row); group_settings are leader-only.
+-- A member cannot update their group's announcement (0 rows); only server code
+-- writes a prayer request, so even its author is refused; group_settings are
+-- leader-only.
 do $$
 declare
   member_a uuid := current_setting('gs.member_a')::uuid;
   owner uuid := current_setting('gs.owner')::uuid;
   grp_a uuid := current_setting('gs.grp_a')::uuid;
-  n_ann int; n_prayer int; n_settings_member int; n_settings_leader int;
+  n_ann int; n_prayer text := 'none'; n_settings_member int; n_settings_leader int;
 begin
   set local role authenticated;
   perform set_config('request.jwt.claims', json_build_object('sub', member_a)::text, true);
   update public.announcements set title = 'defaced' where group_id = grp_a;
   get diagnostics n_ann = row_count;
-  update public.prayer_requests set is_answered = true where id = current_setting('gs.request_a')::uuid;
-  get diagnostics n_prayer = row_count;
+  begin
+    update public.prayer_requests set is_answered = true where id = current_setting('gs.request_a')::uuid;
+  exception when others then n_prayer := sqlstate; end;
   update public.group_settings set serving_link_mode = 'signed' where group_id = grp_a;
   get diagnostics n_settings_member = row_count;
   perform set_config('request.jwt.claims', json_build_object('sub', owner)::text, true);
@@ -357,7 +359,7 @@ begin
   perform set_config('gs.u_settings_leader', n_settings_leader::text, true);
 end $$;
 select is(current_setting('gs.u_ann')::int, 0, 'a plain member updates no announcement of their own group');
-select is(current_setting('gs.u_prayer')::int, 1, 'the author updates their own prayer request');
+select is(current_setting('gs.u_prayer'), '42501', 'the author cannot update their own prayer request from the browser');
 select is(current_setting('gs.u_settings_member')::int, 0, 'a plain member updates no group_settings row');
 select is(current_setting('gs.u_settings_leader')::int, 1, 'positive control: the group''s leader updates its settings row');
 
@@ -414,9 +416,11 @@ begin
     update public.prayer_requests set group_id = grp_b where id = req;
   exception when others then err := sqlstate; end;
   perform set_config('gs.mv_prayer', err, true);
-  update public.prayer_requests set body = 'edited' where id = req;
-  get diagnostics n = row_count;
-  perform set_config('gs.ok_prayer_update', n::text, true);
+  err := 'none';
+  begin
+    update public.prayer_requests set body = 'edited' where id = req;
+  exception when others then err := sqlstate; end;
+  perform set_config('gs.ok_prayer_update', err, true);
 
   -- The recipients guard fires first and would hide a missing WITH CHECK.
   reset role;
@@ -438,8 +442,8 @@ begin
 end $$;
 select is(current_setting('gs.mv_prayer'), '42501',
   'a poster cannot move their own prayer request into a group they are not in');
-select is(current_setting('gs.ok_prayer_update'), '1',
-  'non-vacuity: the poster can still edit the request inside their group');
+select is(current_setting('gs.ok_prayer_update'), '42501',
+  'nor edit it inside their group: only server code writes prayer requests');
 select is(current_setting('gs.mv_fund'), '42501',
   'a steward cannot move their fund into a group they are not in');
 select is(current_setting('gs.ok_fund_update'), '1',
