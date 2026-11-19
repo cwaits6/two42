@@ -104,7 +104,7 @@ $$;
 ALTER FUNCTION "public"."current_family_id"() OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid") RETURNS "jsonb"
+CREATE OR REPLACE FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid", "_anonymous_request_ids" "uuid"[] DEFAULT '{}'::"uuid"[]) RETURNS "jsonb"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO ''
     AS $$
@@ -267,6 +267,12 @@ begin
     delete from public.family_units f where f.org_id = _org and f.id = _family;
   end if;
 
+  delete from public.prayer_requests r
+  where r.org_id = _org
+    and r.is_anonymous
+    and (r.author_id is null or r.author_id = _person_id)
+    and r.id = any (coalesce(_anonymous_request_ids, '{}'));
+
   delete from auth.users u where u.id = _person_id;
   if not found then
     raise exception 'delete_person: the login was gone before it could be deleted' using errcode = 'AD001';
@@ -296,10 +302,10 @@ end;
 $$;
 
 
-ALTER FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid") OWNER TO "postgres";
+ALTER FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid", "_anonymous_request_ids" "uuid"[]) OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid") IS 'Deletes one person and their login in a single transaction, and returns the storage keys and opened serving dates for the caller to act on after commit. Tenant anchor: org_id from the target''s profile row; _org_id is only compared with it. service_role only. Raises AD001, AD002 or CA001.';
+COMMENT ON FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid", "_anonymous_request_ids" "uuid"[]) IS 'Deletes one person and their login in a single transaction, and returns the storage keys and opened serving dates for the caller to act on after commit. _anonymous_request_ids are the person''s anonymous requests, which the caller finds by their author hash, plus those still carrying their author_id, which the backfill may hash meanwhile; only anonymous rows of the person''s church among them that are hashed or name the person are deleted. Tenant anchor: org_id from the target''s profile row; _org_id is only compared with it. service_role only. Raises AD001, AD002, CA001 or AD003.';
 
 
 
@@ -2356,23 +2362,6 @@ $$;
 ALTER FUNCTION "public"."prayer_request_visible_author"("_request_id" "uuid") OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."prayer_requests_author_sets_anonymity"() RETURNS "trigger"
-    LANGUAGE "plpgsql"
-    SET "search_path" TO ''
-    AS $$
-begin
-  if current_user in ('anon', 'authenticated') and auth.uid() is distinct from old.author_id then
-    raise exception 'only the author can change whether a request is anonymous'
-      using errcode = '42501';
-  end if;
-  return new;
-end;
-$$;
-
-
-ALTER FUNCTION "public"."prayer_requests_author_sets_anonymity"() OWNER TO "postgres";
-
-
 CREATE OR REPLACE FUNCTION "public"."profile_directory_email"("_profile_id" "uuid") RETURNS "text"
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO ''
@@ -4363,15 +4352,20 @@ ALTER TABLE "public"."platform_admins" OWNER TO "postgres";
 
 CREATE TABLE IF NOT EXISTS "public"."prayer_requests" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "author_id" "uuid" NOT NULL,
-    "body" "text" NOT NULL,
+    "author_id" "uuid",
+    "body" "text",
     "is_anonymous" boolean DEFAULT false NOT NULL,
     "is_answered" boolean DEFAULT false NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
     "group_id" "uuid" NOT NULL,
-    CONSTRAINT "prayer_requests_body_check" CHECK ((("char_length"("body") >= 1) AND ("char_length"("body") <= 2000)))
+    "body_ciphertext" "text",
+    "author_hash" "text",
+    CONSTRAINT "prayer_requests_body_check" CHECK ((("char_length"("body") >= 1) AND ("char_length"("body") <= 2000))),
+    CONSTRAINT "prayer_requests_named_has_author" CHECK (("is_anonymous" OR ("author_id" IS NOT NULL))),
+    CONSTRAINT "prayer_requests_one_author" CHECK (("num_nonnulls"("author_id", "author_hash") = 1)),
+    CONSTRAINT "prayer_requests_one_body" CHECK (("num_nonnulls"("body", "body_ciphertext") = 1))
 );
 
 
@@ -4404,7 +4398,9 @@ CREATE OR REPLACE VIEW "public"."prayer_wall" WITH ("security_invoker"='true') A
     COALESCE("pc"."praying_count", 0) AS "praying_count",
     COALESCE("pc"."i_am_praying", false) AS "i_am_praying",
     "r"."org_id",
-    "r"."group_id"
+    "r"."group_id",
+    "r"."body_ciphertext",
+    "r"."author_hash"
    FROM ((("public"."prayer_requests" "r"
      CROSS JOIN LATERAL ( SELECT "public"."prayer_request_visible_author"("r"."id") AS "author_id"
          OFFSET 0) "a")
@@ -5536,14 +5532,6 @@ CREATE OR REPLACE TRIGGER "organizations_timezone_check" BEFORE INSERT OR UPDATE
 
 
 
-CREATE OR REPLACE TRIGGER "prayer_requests_author_sets_anonymity" BEFORE UPDATE OF "is_anonymous" ON "public"."prayer_requests" FOR EACH ROW WHEN (("old"."is_anonymous" IS DISTINCT FROM "new"."is_anonymous")) EXECUTE FUNCTION "public"."prayer_requests_author_sets_anonymity"();
-
-
-
-CREATE OR REPLACE TRIGGER "prayer_requests_touch_updated_at" BEFORE UPDATE ON "public"."prayer_requests" FOR EACH ROW EXECUTE FUNCTION "public"."touch_updated_at"();
-
-
-
 CREATE OR REPLACE TRIGGER "profiles_email_by_owner_or_admin" BEFORE UPDATE OF "email" ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."profiles_email_by_owner_or_admin"();
 
 
@@ -6458,10 +6446,6 @@ CREATE POLICY "Group members and admins can view teams" ON "public"."teams" FOR 
 
 
 
-CREATE POLICY "Group members can post own prayer requests" ON "public"."prayer_requests" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id") AND ("author_id" = ( SELECT "auth"."uid"() AS "uid"))));
-
-
-
 CREATE POLICY "Group members can pray for visible requests" ON "public"."prayer_responses" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id") AND ("profile_id" = ( SELECT "auth"."uid"() AS "uid")) AND (EXISTS ( SELECT 1
    FROM "public"."prayer_requests" "r"
   WHERE ("r"."id" = "prayer_responses"."request_id")))));
@@ -6709,14 +6693,6 @@ CREATE POLICY "Org readable within request org" ON "public"."organizations" FOR 
 CREATE POLICY "Owners, attendees, team leads and group leaders can delete serv" ON "public"."serving_signups" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("created_by" = ( SELECT "auth"."uid"() AS "uid")) OR "public"."is_serving_signup_attendee"("id") OR "public"."is_team_lead"("team_id") OR (EXISTS ( SELECT 1
    FROM "public"."teams" "t"
   WHERE (("t"."id" = "serving_signups"."team_id") AND ("t"."org_id" = "serving_signups"."org_id") AND "public"."is_group_leader"("t"."group_id")))))));
-
-
-
-CREATE POLICY "Posters and group leaders can delete prayer requests" ON "public"."prayer_requests" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("author_id" = ( SELECT "auth"."uid"() AS "uid")) OR "public"."is_group_leader"("group_id"))));
-
-
-
-CREATE POLICY "Posters and group leaders can update prayer requests" ON "public"."prayer_requests" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("author_id" = ( SELECT "auth"."uid"() AS "uid")) OR "public"."is_group_leader"("group_id")))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_member"("group_id") AND (("author_id" = ( SELECT "auth"."uid"() AS "uid")) OR "public"."is_group_leader"("group_id"))));
 
 
 
@@ -7129,8 +7105,8 @@ GRANT ALL ON FUNCTION "public"."current_family_id"() TO "service_role";
 
 
 
-REVOKE ALL ON FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid") FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid") TO "service_role";
+REVOKE ALL ON FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid", "_anonymous_request_ids" "uuid"[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid", "_anonymous_request_ids" "uuid"[]) TO "service_role";
 
 
 
@@ -7410,12 +7386,6 @@ GRANT ALL ON FUNCTION "public"."person_deletion_outcomes"("_person_id" "uuid", "
 
 REVOKE ALL ON FUNCTION "public"."prayer_request_visible_author"("_request_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."prayer_request_visible_author"("_request_id" "uuid") TO "authenticated";
-
-
-
-GRANT ALL ON FUNCTION "public"."prayer_requests_author_sets_anonymity"() TO "anon";
-GRANT ALL ON FUNCTION "public"."prayer_requests_author_sets_anonymity"() TO "authenticated";
-GRANT ALL ON FUNCTION "public"."prayer_requests_author_sets_anonymity"() TO "service_role";
 
 
 
@@ -8012,49 +7982,59 @@ GRANT ALL ON TABLE "public"."platform_admins" TO "service_role";
 
 
 
-GRANT INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."prayer_requests" TO "anon";
-GRANT INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."prayer_requests" TO "authenticated";
+GRANT MAINTAIN ON TABLE "public"."prayer_requests" TO "anon";
+GRANT MAINTAIN ON TABLE "public"."prayer_requests" TO "authenticated";
 GRANT ALL ON TABLE "public"."prayer_requests" TO "service_role";
 
 
 
-GRANT SELECT("id"),UPDATE("id") ON TABLE "public"."prayer_requests" TO "anon";
-GRANT SELECT("id"),UPDATE("id") ON TABLE "public"."prayer_requests" TO "authenticated";
+GRANT SELECT("id") ON TABLE "public"."prayer_requests" TO "anon";
+GRANT SELECT("id") ON TABLE "public"."prayer_requests" TO "authenticated";
 
 
 
-GRANT SELECT("body"),UPDATE("body") ON TABLE "public"."prayer_requests" TO "anon";
-GRANT SELECT("body"),UPDATE("body") ON TABLE "public"."prayer_requests" TO "authenticated";
+GRANT SELECT("body") ON TABLE "public"."prayer_requests" TO "anon";
+GRANT SELECT("body") ON TABLE "public"."prayer_requests" TO "authenticated";
 
 
 
-GRANT SELECT("is_anonymous"),UPDATE("is_anonymous") ON TABLE "public"."prayer_requests" TO "anon";
-GRANT SELECT("is_anonymous"),UPDATE("is_anonymous") ON TABLE "public"."prayer_requests" TO "authenticated";
+GRANT SELECT("is_anonymous") ON TABLE "public"."prayer_requests" TO "anon";
+GRANT SELECT("is_anonymous") ON TABLE "public"."prayer_requests" TO "authenticated";
 
 
 
-GRANT SELECT("is_answered"),UPDATE("is_answered") ON TABLE "public"."prayer_requests" TO "anon";
-GRANT SELECT("is_answered"),UPDATE("is_answered") ON TABLE "public"."prayer_requests" TO "authenticated";
+GRANT SELECT("is_answered") ON TABLE "public"."prayer_requests" TO "anon";
+GRANT SELECT("is_answered") ON TABLE "public"."prayer_requests" TO "authenticated";
 
 
 
-GRANT SELECT("created_at"),UPDATE("created_at") ON TABLE "public"."prayer_requests" TO "anon";
-GRANT SELECT("created_at"),UPDATE("created_at") ON TABLE "public"."prayer_requests" TO "authenticated";
+GRANT SELECT("created_at") ON TABLE "public"."prayer_requests" TO "anon";
+GRANT SELECT("created_at") ON TABLE "public"."prayer_requests" TO "authenticated";
 
 
 
-GRANT SELECT("updated_at"),UPDATE("updated_at") ON TABLE "public"."prayer_requests" TO "anon";
-GRANT SELECT("updated_at"),UPDATE("updated_at") ON TABLE "public"."prayer_requests" TO "authenticated";
+GRANT SELECT("updated_at") ON TABLE "public"."prayer_requests" TO "anon";
+GRANT SELECT("updated_at") ON TABLE "public"."prayer_requests" TO "authenticated";
 
 
 
-GRANT SELECT("org_id"),UPDATE("org_id") ON TABLE "public"."prayer_requests" TO "anon";
-GRANT SELECT("org_id"),UPDATE("org_id") ON TABLE "public"."prayer_requests" TO "authenticated";
+GRANT SELECT("org_id") ON TABLE "public"."prayer_requests" TO "anon";
+GRANT SELECT("org_id") ON TABLE "public"."prayer_requests" TO "authenticated";
 
 
 
-GRANT SELECT("group_id"),UPDATE("group_id") ON TABLE "public"."prayer_requests" TO "anon";
-GRANT SELECT("group_id"),UPDATE("group_id") ON TABLE "public"."prayer_requests" TO "authenticated";
+GRANT SELECT("group_id") ON TABLE "public"."prayer_requests" TO "anon";
+GRANT SELECT("group_id") ON TABLE "public"."prayer_requests" TO "authenticated";
+
+
+
+GRANT SELECT("body_ciphertext") ON TABLE "public"."prayer_requests" TO "anon";
+GRANT SELECT("body_ciphertext") ON TABLE "public"."prayer_requests" TO "authenticated";
+
+
+
+GRANT SELECT("author_hash") ON TABLE "public"."prayer_requests" TO "anon";
+GRANT SELECT("author_hash") ON TABLE "public"."prayer_requests" TO "authenticated";
 
 
 
