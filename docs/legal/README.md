@@ -48,8 +48,9 @@ them against the files listed.
   grep `app/`, `components/`, `lib/` and `supabase/functions/` for `https://`,
   and read the CSP in `lib/supabase/middleware.ts`. Add it to `PROCESSORS` in
   `privacy.ts`, and to the processor test in `components/legal/LegalPage.test.ts`.
-  Also check whether production sets `OTEL_EXPORTER_OTLP_ENDPOINT`
-  (`instrumentation.ts`): if it does, that tracing service is a processor.
+  Production sets `OTEL_EXPORTER_OTLP_ENDPOINT` to Grafana, which is listed;
+  if the tracing receiver changes, or `lib/tracing/redactSpans.ts` starts
+  keeping a new attribute, update the Grafana entry.
 - [ ] **Analytics.** `components/analytics/PageMeasurement.tsx` and
   `lib/analytics/pagePattern.ts`: Web Analytics must still receive page patterns
   only. Speed Insights (`@vercel/speed-insights`) is installed but not loaded;
@@ -116,5 +117,4 @@ is true without it; fill one in here, then add the sentence to the document.
 - [MAINTAINER: the governing law and venue for the Terms]
 - [MAINTAINER: confirm the commitment that database access is used only to run the service, fix a problem, answer a request, or comply with the law]
 - [MAINTAINER: confirm hello@two42.io for questions about the Terms and security@two42.io for security reports]
-- [MAINTAINER: whether production sets OTEL_EXPORTER_OTLP_ENDPOINT, and if so which service receives traces]
 - [MAINTAINER: whether the hosted Supabase Auth sends password reset email through its own mailer or through Resend as custom SMTP]

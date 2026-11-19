@@ -36,6 +36,11 @@ export const PROCESSORS: readonly { name: string; does: string }[] = [
       "Sends two42's email: invitations and sign-up links, approvals, event and serving reminders, messages a team lead sends to a team, and feedback copies to church admins. Resend receives each recipient's address and the email's content.",
   },
   {
+    name: "Grafana",
+    does:
+      "Receives traces of how long the app's server work takes, so problems can be found and fixed. A trace records the page pattern, the kind of database operation and whether it failed. It never holds the real page address, a query string, what you entered, or your IP address.",
+  },
+  {
     name: "Google Maps",
     does:
       "Shows the map on an event with a location and suggests addresses while a leader types one. The map loads in your browser, so Google receives the location shown and your browser's request.",
@@ -112,7 +117,7 @@ export const PRIVACY: LegalDocument = {
       heading: "Services that handle your data",
       blocks: [
         PROCESSORS.map((p) => `${p.name}: ${p.does}`),
-        "Like any web host, these services see your IP address and browser details with each request, and keep their own logs for periods they set.",
+        "Like any web host, the services your browser connects to see your IP address and browser details with each request, and keep their own logs for periods they set.",
         "Some links take you to other services by your choice: adding an event to your own calendar, opening a map or a meeting link, or giving through a payment app. What happens there is covered by that service's policy.",
       ],
     },
