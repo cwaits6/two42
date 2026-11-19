@@ -33,6 +33,7 @@ export function readCommentRows(client: SupabaseClient, orgId: string, groupId: 
   );
 }
 
+/** Whether the viewer wrote the row: by id when named, else by the keyed hash over the row id. Requests use it too. */
 export function wroteComment(
   keys: PrayerKeys,
   orgId: string,

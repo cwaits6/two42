@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { isUuid } from "@/lib/groups/active";
 import { getGroupMemberships } from "@/lib/groups/server";
 import { logError } from "@/lib/log";
-import { isAuthor, type PrayerKeys } from "@/lib/prayer/crypto";
+import { wroteComment } from "@/lib/prayer/commentThread";
+import type { PrayerKeys } from "@/lib/prayer/crypto";
 import { loadPrayerKeys } from "@/lib/prayer/keys";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
@@ -70,6 +71,9 @@ export type StoredRequest = NonNullable<Awaited<ReturnType<typeof readPrayerRequ
 
 /** Whether the writer posted the request, by name or, on an anonymous one, by its author hash. */
 export function wroteRequest(writer: PrayerWriter, row: Pick<StoredRequest, "id" | "author_id" | "author_hash">): boolean {
-  if (row.author_id) return row.author_id === writer.userId;
-  return row.author_hash !== null && isAuthor(writer.keys, writer.orgId, row.id, writer.userId, row.author_hash);
+  return wroteComment(writer.keys, writer.orgId, writer.userId, {
+    id: row.id,
+    writer_id: row.author_id,
+    writer_hash: row.author_hash,
+  });
 }
