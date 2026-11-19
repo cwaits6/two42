@@ -877,6 +877,28 @@ function, because a client role holds no write grant on the table:
 The grant matrix, the refused inputs, the read boundaries, the prune and the
 cascade with the church are pinned by `supabase/tests/usage_counts_suite.sql`.
 
+## Own household RPC — a definer-function bypass surface
+
+`public.create_own_household(_family_name)`
+(`supabase/migrations/20261128000000_create_own_household.sql`) lets a member
+with no household add one in profile setup. `family_units` has an admin-only
+INSERT policy and the `family_units` read policy hides a household from a member
+until their profile points at it, so the browser can neither insert the row nor
+read its id back. The function inserts the household and sets the caller's
+`profiles.family_id` to it in one transaction, and returns its id.
+
+Tenant anchor: the caller's own `profiles` row (`auth.uid()`, read `for update`),
+which resolves the org and the role; no parameter names an org, and the only
+caller-supplied value is the household's name. It refuses a caller with no
+profile or a role other than `member` or `admin` (`42501`), a blank name
+(`22023`) and a caller already in a household (`HH001`), so it can create only
+the caller's first household and only in their own org. Both writes carry that
+org. `search_path = ''`; EXECUTE revoked from `public, anon` and granted to
+`authenticated` only. The wizard calls it on the cookie-bound client, so the guard
+has nothing to check there. The grant matrix, every refusal, the org taken from
+the profile and the state left when the member later joins another household are
+pinned by `supabase/tests/create_own_household_suite.sql`.
+
 ## App routes and pages (29 sites)
 
 | File | Why service-role is used | Org derived from | Scoped queries |

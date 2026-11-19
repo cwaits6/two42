@@ -407,18 +407,15 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
     setCreatingHousehold(true);
     // The household search matches names of this form.
     const name = `${surname} Family`;
-    const { data, error } = await supabase
-      .from("family_units")
-      .insert({ family_name: name })
-      .select("id")
-      .single();
+    // Also puts the profile in the household, so it is never left empty.
+    const { data: id, error } = await supabase.rpc("create_own_household", { _family_name: name });
     setCreatingHousehold(false);
-    if (error || !data) {
+    if (error || !id) {
       logError("Failed to add the household", error, { route: "/profile/setup" });
       toast.error(failureMessage("add the household"));
       return;
     }
-    setHouseholdId(data.id);
+    setHouseholdId(id);
     setHouseholdName(name);
     setHouseholdAdded(true);
     clearError("household");
