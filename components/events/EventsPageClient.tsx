@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useReducer, useState } from "react";
+import { useMemo, useReducer, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Rss, ChevronDown, Plus } from "lucide-react";
@@ -8,6 +8,7 @@ import { CalendarViewSwitch } from "@/components/events/CalendarToolbar";
 import { EventCalendarView } from "@/components/events/EventCalendarView";
 import { EventListView } from "@/components/events/EventListView";
 import { EventWeekView } from "@/components/events/EventWeekView";
+import { SubscribeDialog, feedLinks, type SubscribeState } from "@/components/events/SubscribeDialog";
 import {
   calendarViewReducer,
   initialCalendarViewState,
@@ -27,7 +28,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { toast } from "sonner";
 import type { Event } from "@/lib/types";
 import type { ReplyRow } from "@/lib/events/replies";
 
@@ -47,6 +47,19 @@ interface EventsPageClientProps {
   userId: string;
   /** The org's zone, resolved by the server; every view formats in it. */
   timeZone: string;
+}
+
+type TokenResult = { token: string } | { error: string };
+
+async function requestToken(): Promise<TokenResult> {
+  try {
+    const res = await fetch("/api/calendar/subscription-token", { method: "POST" });
+    if (!res.ok) return { error: failureMessage("create your calendar link", res.status) };
+    const { token } = (await res.json()) as { token: string };
+    return { token };
+  } catch {
+    return { error: failureMessage("create your calendar link", "network") };
+  }
 }
 
 export function EventsPageClient({ groups, allEvents, replies, userId, timeZone }: EventsPageClientProps) {
@@ -71,39 +84,41 @@ export function EventsPageClient({ groups, allEvents, replies, userId, timeZone 
     />
   );
 
-  // webcal:// feed links need an absolute host, but this component still SSRs,
-  // where `window` is undefined. Resolve the host on the client after mount.
-  const [host, setHost] = useState("");
-  useEffect(() => setHost(window.location.host), []);
-
   // The token is hashed at rest and can't be re-read from the server, so it's
-  // minted lazily on first use and cached only for this page view. Every menu
-  // item reuses the same minted token; a fresh page load mints a new one.
-  const [mintedToken, setMintedToken] = useState<string | null>(null);
-  async function ensureToken(): Promise<string | null> {
-    if (mintedToken) return mintedToken;
-    try {
-      const res = await fetch("/api/calendar/subscription-token", { method: "POST" });
-      if (!res.ok) {
-        toast.error(failureMessage("create your calendar link", res.status));
-        return null;
-      }
-      const { token } = (await res.json()) as { token: string };
-      setMintedToken(token);
-      return token;
-    } catch {
-      toast.error(failureMessage("create your calendar link", "network"));
-      return null;
-    }
+  // minted lazily on first use and cached only for this page view: every
+  // choice shares one request, since a second mint would void the first link.
+  const tokenRequest = useRef<Promise<TokenResult> | null>(null);
+  function ensureToken(): Promise<TokenResult> {
+    tokenRequest.current ??= requestToken().then((result) => {
+      if ("error" in result) tokenRequest.current = null;
+      return result;
+    });
+    return tokenRequest.current;
   }
 
-  async function openCalendarFeed(groupId?: string) {
-    const token = await ensureToken();
-    if (!token || !host) return;
-    window.location.href = `webcal://${host}/api/calendar/feed.ics?token=${token}${
-      groupId ? `&group=${groupId}` : ""
-    }`;
+  // The dialog opens on the choice itself, before the token arrives: a link
+  // the person taps works on every device, where a jump after an awaited
+  // request is blocked or goes nowhere without a webcal handler.
+  const [feedName, setFeedName] = useState<string | null>(null);
+  const [subscribeState, setSubscribeState] = useState<SubscribeState>({ status: "preparing" });
+  const latestChoice = useRef(0);
+  async function openCalendarFeed(name: string, groupId?: string) {
+    const choice = ++latestChoice.current;
+    setFeedName(name);
+    setSubscribeState({ status: "preparing" });
+    const result = await ensureToken();
+    if (choice !== latestChoice.current) return;
+    setSubscribeState(
+      "token" in result
+        ? { status: "ready", links: feedLinks(window.location.origin, result.token, groupId) }
+        : { status: "failed", message: result.error }
+    );
   }
+
+  const seriesMeetings = useMemo(
+    () => new Map(allEvents.filter((e) => e.recurrence_frequency && !e.series_id).map((e) => [e.id, e])),
+    [allEvents]
+  );
 
   const toggleGroup = (id: string) => dispatch({ type: "toggleGroup", id });
   const showAll = () => dispatch({ type: "showAll" });
@@ -141,7 +156,7 @@ export function EventsPageClient({ groups, allEvents, replies, userId, timeZone 
             A new link replaces your earlier one, and the earlier link stops working.
           </DropdownMenuLabel>
           {groups.length >= 2 && (
-            <DropdownMenuItem className="min-h-11 text-base" onClick={() => openCalendarFeed()}>
+            <DropdownMenuItem className="min-h-11 text-base" onClick={() => openCalendarFeed("all my groups")}>
               All my groups
             </DropdownMenuItem>
           )}
@@ -149,7 +164,7 @@ export function EventsPageClient({ groups, allEvents, replies, userId, timeZone 
             <DropdownMenuItem
               key={group.id}
               className="min-h-11 gap-2 text-base"
-              onClick={() => openCalendarFeed(group.id)}
+              onClick={() => openCalendarFeed(group.name, group.id)}
             >
               <span
                 aria-hidden="true"
@@ -286,8 +301,11 @@ export function EventsPageClient({ groups, allEvents, replies, userId, timeZone 
           createHref={listCreateHref}
           timeZone={timeZone}
           viewSwitch={viewSwitch}
+          seriesMeetings={seriesMeetings}
         />
       )}
+
+      <SubscribeDialog feedName={feedName} state={subscribeState} onClose={() => setFeedName(null)} />
     </div>
   );
 }

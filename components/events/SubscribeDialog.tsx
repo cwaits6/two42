@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export type FeedLinks = {
@@ -40,6 +41,7 @@ interface SubscribeDialogProps {
 }
 
 const action = "h-12 w-full justify-start text-base";
+const linkAction = cn(buttonVariants({ variant: "outline" }), action);
 
 export function SubscribeDialog({ feedName, state, onClose }: SubscribeDialogProps) {
   const [copied, setCopied] = useState<"yes" | "failed" | null>(null);
@@ -84,22 +86,12 @@ export function SubscribeDialog({ feedName, state, onClose }: SubscribeDialogPro
         {state.status === "ready" && (
           <>
             <div className="grid gap-3">
-              <Button
-                variant="outline"
-                className={action}
-                nativeButton={false}
-                render={<a href={state.links.webcal} />}
-              >
+              <a href={state.links.webcal} className={linkAction}>
                 Open in Apple Calendar
-              </Button>
-              <Button
-                variant="outline"
-                className={action}
-                nativeButton={false}
-                render={<a href={state.links.google} target="_blank" rel="noopener noreferrer" />}
-              >
+              </a>
+              <a href={state.links.google} target="_blank" rel="noopener noreferrer" className={linkAction}>
                 Add to Google Calendar
-              </Button>
+              </a>
               <Button variant="outline" className={action} onClick={() => copyLink(state.links.https)}>
                 {copied === "yes" ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
                 {copied === "yes" ? "Link copied" : "Copy link"}

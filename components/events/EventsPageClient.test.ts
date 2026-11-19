@@ -137,3 +137,39 @@ describe("EventsPageClient Add event", () => {
     expect(links[0].closest('[data-view="list"]')).toBeNull();
   });
 });
+
+describe("EventsPageClient Subscribe", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  async function choose(container: HTMLElement, name: string) {
+    const trigger = Array.from(container.querySelectorAll("button")).find((b) => b.textContent === "Subscribe")!;
+    await act(async () => {
+      trigger.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+      trigger.click();
+    });
+    const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+      (el) => el.textContent === name
+    )!;
+    await act(async () => item.click());
+  }
+
+  it("opens the dialog with the group's feed links after a group is chosen", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ token: "tok123" }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const { container } = await mount();
+    await choose(container, "Group");
+    const apple = Array.from(document.querySelectorAll("a")).find((a) => a.textContent === "Open in Apple Calendar");
+    expect(apple?.getAttribute("href")).toBe(
+      `webcal://${window.location.host}/api/calendar/feed.ics?token=tok123&group=g1`
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the dialog open and says so when the link could not be made", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    const { container } = await mount();
+    await choose(container, "Group");
+    expect(document.querySelector('[role="alert"]')?.textContent).toBeTruthy();
+    expect(document.body.textContent).toContain("Subscribe to Group");
+  });
+});
