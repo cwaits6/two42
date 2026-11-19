@@ -78,31 +78,15 @@ them against the files listed.
   true of `lib/account/export.ts`. Removing a whole church is not built; the
   policy only says a church admin can ask.
 - [ ] **Anonymity wording.** `supabase/migrations/20261109000000_prayer_author_private.sql`
-  and the prayer page. Never say two42 cannot read prayer requests or cannot
-  identify an anonymous author: the operator holds database access, and would
-  hold any key. See the draft notes below.
+  and [`docs/security/prayer-encryption.md`](../security/prayer-encryption.md).
+  Never say two42 cannot read prayer requests or cannot identify an anonymous
+  author: the operator holds database access and the keys. If the keys move
+  out of Vercel, update the Vercel entry and the sentence under "What two42
+  can see".
 - [ ] **Email.** `lib/email/` and the edge functions: the kinds of email listed
   under Resend.
 - [ ] **Vocabulary.** [`CONTEXT.md`](../../CONTEXT.md): church admin, leader,
   household, event, lesson, usage.
-
-## Draft notes: when prayer encryption lands
-
-A change in flight encrypts prayer request text and removes the author of an
-anonymous request from the database. None of it is on `main` yet, so the
-policy does not describe it. When it merges, re-check each sentence below in
-`components/legal/privacy.ts` against what it actually does, and rewrite it:
-
-| Section | Sentence | What to re-check |
-|---|---|---|
-| What two42 stores | "Prayer requests you post, by name or anonymous, and the requests you say you are praying for." | Whether the author of an anonymous request is still stored anywhere, and that the text is stored encrypted. |
-| Who can see it | "An anonymous request shows no author in the app to anyone but the author: not to other members, leaders or church admins." | Whether the author still sees it as theirs, and how. |
-| Who can see it | "A leader can edit or delete any prayer request in their group." | Whether a leader can still edit an encrypted request. |
-| What two42 can see | "two42 has administrator access to the database, including prayer requests." | Rewrite to say the text is encrypted and who holds the key. Keep saying the operator holds the key and so could read it; never say reading it or identifying an author is impossible. |
-| Your copy and your account | "The file holds … prayer requests …" | Whether the download still includes the person's anonymous requests. |
-| Your copy and your account | "You can delete your own prayer requests …" | Whether an author can still find and delete an anonymous request. |
-| Your copy and your account | "Deleting an account removes … prayer requests, including anonymous ones." | Whether account deletion can still find anonymous requests once the author is gone. |
-| Services that handle your data | Supabase | Where the encryption key is kept, and whether that adds a processor. |
 
 ## Open choices for the maintainer
 

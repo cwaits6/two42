@@ -10,8 +10,7 @@ import {
 import type { LegalDocument } from "./document";
 
 // Every sentence here must be true of the code on main. Before editing, read
-// docs/legal/README.md: it lists what to re-check and the sentences that must
-// change when prayer storage changes.
+// docs/legal/README.md: it lists what to re-check when a feature changes.
 
 function listOr(values: readonly number[]): string {
   return values.length < 2 ? values.join("") : `${values.slice(0, -1).join(", ")} or ${values[values.length - 1]}`;
@@ -24,7 +23,7 @@ export const PROCESSORS: readonly { name: string; does: string }[] = [
   { name: "Supabase", does: "Stores the database and photos, handles sign-in, runs the nightly jobs, and sends password reset and email change emails." },
   {
     name: "Vercel",
-    does: "Hosts the app.",
+    does: "Hosts the app, and keeps the keys that open prayer requests.",
   },
   {
     name: "Grafana",
@@ -65,7 +64,7 @@ export const PRIVACY: LegalDocument = {
           "Your profile: name, preferred name, photo, birthday, anniversary, phone numbers, address, occupation and anything else you add. Leave out anything you don't want stored. A church admin, or whoever manages your household, can also add or change these details.",
           "Your household: the people listed in it, including children without their own account. A parent or a church admin chooses what to enter about a child; a child no one adds is not stored at all.",
           "Your groups and teams, your role in each, any labels a leader gives you in a group, your RSVPs and your serving turns.",
-          "Prayer requests you post, by name or anonymous, and the requests you say you are praying for.",
+          "Prayer requests you post, by name or anonymous, and the requests you say you are praying for. The text of a request is stored encrypted. An anonymous request stores no author, only a code the app uses to recognize it as yours.",
           "What leaders add for a group: events, announcements, lessons, the group's about page, and funds with their payment handles, such as a Venmo or PayPal name. two42 does not process payments; a gift happens in the payment app.",
           "Requests to join the church or a group, invitations, and feedback you send.",
           "A private calendar link, if you make one. Anyone with that link can see your calendar, so keep it to yourself.",
@@ -85,7 +84,7 @@ export const PRIVACY: LegalDocument = {
           "You can hide your email address from everyone but yourself and church admins.",
           "Group content — events, announcements, lessons, prayer requests and funds — is seen by that group's members. A church admin sees every person and group in the church, including who is in each group, its teams and labels, and requests to join it. They don't see a group's events, announcements, lessons, prayer requests or funds unless they are in that group.",
           "A leader can make a group private, so members who aren't in it can't find it.",
-          "A prayer request posted by name shows the author to group members who can see that person in the directory, and to church admins and the author's household who are in the group. An anonymous request shows no author in the app to anyone but the author: not to other members, leaders or church admins. A leader can edit or delete any prayer request in their group.",
+          "A prayer request posted by name shows the author to group members who can see that person in the directory, and to church admins and the author's household who are in the group. An anonymous request shows no author in the app to anyone but the author: not to other members, leaders or church admins. A leader can edit or delete any prayer request in their group, without learning who wrote an anonymous one.",
           "Email reminders and team messages go only to the people they are for.",
         ],
       ],
@@ -93,7 +92,7 @@ export const PRIVACY: LegalDocument = {
     {
       heading: "What two42 can see",
       blocks: [
-        "two42 has administrator access to the database, including prayer requests. That access is used only to keep the service running, fix a problem, answer a request you make, or comply with the law.",
+        "two42 has administrator access to the database. Prayer request text is encrypted, and the keys are kept in the hosting settings, apart from the database, so a copy of the database alone shows no request text and no anonymous author. two42 holds those keys, so it can still open a request and work out who wrote an anonymous one. That access is used only to keep the service running, fix a problem, answer a request you make, or comply with the law.",
         "two42 discloses data to authorities only when the law requires it.",
       ],
     },
