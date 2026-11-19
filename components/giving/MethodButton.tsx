@@ -177,21 +177,30 @@ function VenmoPhoneAction({ resolved, fundName }: { resolved: ResolvedMethod; fu
         </div>
         <FieldError fieldId={id} message={error} />
       </div>
-      <a
-        href={venmoPayHref(resolved.handle, fundName, parsed.ok ? parsed.amount : null)}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(e) => {
-          if (parsed.ok) return;
-          e.preventDefault();
-          setShowError(true);
-          document.getElementById(id)?.focus();
-        }}
-        className={`min-h-11 ${ACTION} hover:underline`}
-      >
-        {resolved.meta.verb}
-        <ExternalLink className="h-4 w-4" aria-hidden="true" />
-      </a>
+      {parsed.ok ? (
+        <a
+          href={venmoPayHref(resolved.handle, fundName, parsed.amount)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`min-h-11 ${ACTION} hover:underline`}
+        >
+          {resolved.meta.verb}
+          <ExternalLink className="h-4 w-4" aria-hidden="true" />
+        </a>
+      ) : (
+        // A button, not a link, so a middle-click or long-press can't open Venmo with the bad amount dropped.
+        <button
+          type="button"
+          onClick={() => {
+            setShowError(true);
+            document.getElementById(id)?.focus();
+          }}
+          className={`min-h-11 ${ACTION} hover:underline`}
+        >
+          {resolved.meta.verb}
+          <ExternalLink className="h-4 w-4" aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 }

@@ -101,7 +101,11 @@ describe("Venmo on a phone or tablet", () => {
     render();
     const input = container.querySelector("input")!;
     type(input, "25.123");
-    expect(click(payLink()).defaultPrevented).toBe(true);
+    expect(container.querySelector("a")).toBeNull();
+    const open = container.querySelector("button")!;
+    expect(open.textContent).toBe("Open Venmo");
+    click(open);
+    expect(document.activeElement).toBe(input);
     expect(input.getAttribute("aria-invalid")).toBe("true");
     expect(document.getElementById(input.getAttribute("aria-describedby")!)?.textContent).toBe(
       "Enter dollars and cents, like 25 or 25.50."
