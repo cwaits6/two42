@@ -22,7 +22,6 @@ import { CheckRow } from "@/components/profile/CheckRow";
 import { AnniversaryFields, type AnniversaryField } from "@/components/profile/AnniversaryFields";
 import { ChildListingNotice, DirectoryNotice } from "@/components/profile/DirectoryNotice";
 import { isChildWithoutAccount } from "@/lib/household";
-import { EmailChangeHint } from "@/components/profile/EmailChangeHint";
 import { anniversaryColumns, birthdayColumns } from "@/components/profile/birthday";
 import { MonthSelect } from "@/components/profile/MonthSelect";
 import { useAvatarCrop } from "@/components/profile/useAvatarCrop";
@@ -716,7 +715,10 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
                   Email
                 </Label>
                 <Input id="email" value={userEmail} disabled className="py-5 text-base" />
-                <EmailChangeHint />
+                {/* Settings redirects back here until setup is finished, so no link. */}
+                <p className="text-base text-muted-foreground">
+                  You can change your email in Settings after you finish setup.
+                </p>
                 <CheckRow
                   id="hide_email"
                   label="Hide my email from the directory"
