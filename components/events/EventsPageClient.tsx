@@ -99,15 +99,14 @@ export function EventsPageClient({ groups, allEvents, replies, userId, timeZone 
   // The dialog opens on the choice itself, before the token arrives: a link
   // the person taps works on every device, where a jump after an awaited
   // request is blocked or goes nowhere without a webcal handler.
-  const [feedName, setFeedName] = useState<string | null>(null);
+  const [feed, setFeed] = useState<{ name: string; groupId?: string } | null>(null);
   const [subscribeState, setSubscribeState] = useState<SubscribeState>({ status: "preparing" });
-  const latestChoice = useRef(0);
+  // Every choice awaits the same token request, so results land in the order
+  // the choices were made and the latest choice's links are the ones shown.
   async function openCalendarFeed(name: string, groupId?: string) {
-    const choice = ++latestChoice.current;
-    setFeedName(name);
+    setFeed({ name, groupId });
     setSubscribeState({ status: "preparing" });
     const result = await ensureToken();
-    if (choice !== latestChoice.current) return;
     setSubscribeState(
       "token" in result
         ? { status: "ready", links: feedLinks(window.location.origin, result.token, groupId) }
@@ -305,7 +304,12 @@ export function EventsPageClient({ groups, allEvents, replies, userId, timeZone 
         />
       )}
 
-      <SubscribeDialog feedName={feedName} state={subscribeState} onClose={() => setFeedName(null)} />
+      <SubscribeDialog
+        feedName={feed?.name ?? null}
+        state={subscribeState}
+        onRetry={() => feed && openCalendarFeed(feed.name, feed.groupId)}
+        onClose={() => setFeed(null)}
+      />
     </div>
   );
 }

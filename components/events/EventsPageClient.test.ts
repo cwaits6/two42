@@ -172,4 +172,56 @@ describe("EventsPageClient Subscribe", () => {
     expect(document.querySelector('[role="alert"]')?.textContent).toBeTruthy();
     expect(document.body.textContent).toContain("Subscribe to Group");
   });
+
+  const appleHref = () =>
+    Array.from(document.querySelectorAll("a"))
+      .find((a) => a.textContent === "Open in Apple Calendar")
+      ?.getAttribute("href");
+
+  async function close() {
+    const button = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "Close")!;
+    await act(async () => button.click());
+  }
+
+  // A second mint replaces the person's token, so it would break the link
+  // the first choice already handed out.
+  it("asks for one link per page view however many choices are made", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ token: "tok123" }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const { container } = await mount();
+    await choose(container, "Group");
+    const first = appleHref();
+    await close();
+    await choose(container, "Group");
+    expect(appleHref()).toBe(first);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks again after a failed link when the person tries again", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 500 })
+      .mockResolvedValue({ ok: true, json: async () => ({ token: "tok456" }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const { container } = await mount();
+    await choose(container, "Group");
+    const retry = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "Try again")!;
+    await act(async () => retry.click());
+    expect(appleHref()).toContain("token=tok456");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks again after a failed link when the person chooses again", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 500 })
+      .mockResolvedValue({ ok: true, json: async () => ({ token: "tok789" }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const { container } = await mount();
+    await choose(container, "Group");
+    await close();
+    await choose(container, "Group");
+    expect(appleHref()).toContain("token=tok789");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

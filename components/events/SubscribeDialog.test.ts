@@ -35,7 +35,7 @@ function render(state: SubscribeState) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
-  act(() => root!.render(createElement(SubscribeDialog, { feedName: "Hillside", state, onClose: () => {} })));
+  act(() => root!.render(createElement(SubscribeDialog, { feedName: "Hillside", state, onRetry: () => {}, onClose: () => {} })));
 }
 
 const button = (name: string) =>

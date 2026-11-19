@@ -101,7 +101,7 @@ export function EventListView({
           const key = event.is_rsvp_enabled ? replyKey(event, timeZone) : null;
           const reply = key && { key, status: replyFor(replies, key, userId)?.status ?? null };
           const editHref = groupPath(event.group_id, `/calendar/${event.id}/edit${occurrenceParam}`);
-          const meeting = event.series_id ? (seriesMeetings.get(event.series_id) ?? null) : event;
+          const meeting = event.series_id ? (seriesMeetings.get(event.series_id) ?? event) : event;
 
           return (
             <div

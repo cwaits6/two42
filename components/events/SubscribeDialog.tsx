@@ -37,13 +37,14 @@ interface SubscribeDialogProps {
   /** What the feed covers: a group's name, or "all my groups". */
   feedName: string | null;
   state: SubscribeState;
+  onRetry: () => void;
   onClose: () => void;
 }
 
 const action = "h-12 w-full justify-start text-base";
 const linkAction = cn(buttonVariants({ variant: "outline" }), action);
 
-export function SubscribeDialog({ feedName, state, onClose }: SubscribeDialogProps) {
+export function SubscribeDialog({ feedName, state, onRetry, onClose }: SubscribeDialogProps) {
   const [copied, setCopied] = useState<"yes" | "failed" | null>(null);
 
   async function copyLink(link: string) {
@@ -78,9 +79,14 @@ export function SubscribeDialog({ feedName, state, onClose }: SubscribeDialogPro
         )}
 
         {state.status === "failed" && (
-          <p role="alert" className="text-base text-foreground">
-            {state.message}
-          </p>
+          <>
+            <p role="alert" className="text-base text-foreground">
+              {state.message}
+            </p>
+            <Button variant="outline" className={action} onClick={onRetry}>
+              Try again
+            </Button>
+          </>
         )}
 
         {state.status === "ready" && (
