@@ -91,6 +91,67 @@ COMMENT ON FUNCTION "public"."app_request_org_id"() IS 'Org of the calling princ
 
 
 
+CREATE OR REPLACE FUNCTION "public"."create_own_household"("_family_name" "text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _uid uuid := auth.uid();
+  _org uuid;
+  _role text;
+  _current_family uuid;
+  _name text := btrim(_family_name);
+  _family_id uuid;
+begin
+  if _uid is null then
+    raise exception 'create_own_household: no signed-in principal'
+      using errcode = '42501';
+  end if;
+
+  -- FOR UPDATE: two concurrent calls from one person serialise here, and the
+  -- second sees the household the first set.
+  select p.org_id, p.role, p.family_id
+    into _org, _role, _current_family
+    from public.profiles p
+   where p.id = _uid
+     for update;
+
+  if _org is null or _role is null or _role not in ('member', 'admin') then
+    raise exception 'create_own_household: caller is not a member'
+      using errcode = '42501';
+  end if;
+
+  if _current_family is not null then
+    raise exception 'create_own_household: caller already belongs to a household'
+      using errcode = 'HH001';
+  end if;
+
+  if _name is null or _name = '' then
+    raise exception 'create_own_household: household name is blank'
+      using errcode = '22023';
+  end if;
+
+  insert into public.family_units (org_id, family_name)
+  values (_org, _name)
+  returning id into _family_id;
+
+  update public.profiles
+     set family_id = _family_id
+   where id = _uid
+     and org_id = _org;
+
+  return _family_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."create_own_household"("_family_name" "text") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."create_own_household"("_family_name" "text") IS 'Creates a household for the signed-in member and puts their profile in it, returning its id. Tenant anchor: org from auth.uid()''s own profile. Refuses anyone who is not a member or church admin, and anyone already in a household.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."current_family_id"() RETURNS "uuid"
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO ''
@@ -7096,6 +7157,12 @@ GRANT ALL ON FUNCTION "public"."app_current_org_id"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."app_request_org_id"() TO "anon";
 GRANT ALL ON FUNCTION "public"."app_request_org_id"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."app_request_org_id"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."create_own_household"("_family_name" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."create_own_household"("_family_name" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."create_own_household"("_family_name" "text") TO "service_role";
 
 
 
