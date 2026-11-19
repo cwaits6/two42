@@ -335,7 +335,7 @@ describe("content security policy", () => {
       "img-src 'self' data: blob: https://maps.gstatic.com https://maps.googleapis.com https://img.youtube.com http://127.0.0.1:54321",
       "font-src 'self' data: https://fonts.gstatic.com",
       "connect-src 'self' https://*.supabase.co wss://*.supabase.co http://127.0.0.1:54321 ws://127.0.0.1:54321 https://maps.googleapis.com https://places.googleapis.com https://maps.gstatic.com blob:",
-      "frame-src 'self' https://www.google.com",
+      "frame-src 'self' https://www.google.com https://www.youtube-nocookie.com",
       "frame-ancestors 'none'",
       "object-src 'none'",
       "base-uri 'self'",
