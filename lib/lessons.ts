@@ -113,13 +113,44 @@ export function youTubeId(url: URL): string | null {
   return id && VIDEO_ID.test(id) ? id : null;
 }
 
+function lessonYouTubeId(lesson: { video_url: string }): string | null {
+  const video = safeHttpUrl(lesson.video_url);
+  return video ? youTubeId(new URL(video)) : null;
+}
+
 const YOUTUBE_THUMBNAIL = "https://img.youtube.com/vi/";
 
 /** YouTube's thumbnail for a YouTube recording, else null. */
 export function lessonThumbnail(lesson: { video_url: string }): string | null {
-  const video = safeHttpUrl(lesson.video_url);
-  const id = video ? youTubeId(new URL(video)) : null;
+  const id = lessonYouTubeId(lesson);
   return id ? `${YOUTUBE_THUMBNAIL}${id}/hqdefault.jpg` : null;
+}
+
+// Must stay in the Content-Security-Policy's frame-src; middleware.test.ts checks it.
+const YOUTUBE_EMBED = "https://www.youtube-nocookie.com/embed/";
+
+/** The player address for a YouTube recording, else null. */
+export function lessonEmbedUrl(lesson: { video_url: string }): string | null {
+  const id = lessonYouTubeId(lesson);
+  return id ? `${YOUTUBE_EMBED}${id}` : null;
+}
+
+/**
+ * Where "Watch on YouTube" goes for a YouTube recording, else null. The stored
+ * link is kept, start time included, unless it is an embed address: opened on
+ * its own that shows a player error, so it becomes the watch page.
+ */
+export function lessonWatchUrl(lesson: { video_url: string }): string | null {
+  const video = safeHttpUrl(lesson.video_url);
+  const id = lessonYouTubeId(lesson);
+  if (!video || !id) return null;
+  const url = new URL(video);
+  if (!url.pathname.startsWith("/embed/")) return video;
+  const watch = new URL("https://www.youtube.com/watch");
+  watch.searchParams.set("v", id);
+  const start = url.searchParams.get("start");
+  if (start && /^\d+$/.test(start)) watch.searchParams.set("t", `${start}s`);
+  return watch.toString();
 }
 
 /**

@@ -43,7 +43,7 @@ vi.hoisted(() => {
 
 // vi.mock is hoisted, so this import sees the mocks above.
 import { updateSession } from "@/lib/supabase/middleware";
-import { lessonThumbnail } from "@/lib/lessons";
+import { lessonEmbedUrl, lessonThumbnail } from "@/lib/lessons";
 
 describe("updateSession — expected host", () => {
   beforeEach(() => {
@@ -317,6 +317,13 @@ describe("cookie scope regression", () => {
 });
 
 describe("content security policy", () => {
+  // The lesson paths are protected; a signed-out request redirects before the
+  // header is set.
+  beforeEach(() => {
+    getClaims.mockReset();
+    getClaims.mockResolvedValue({ data: { claims: { sub: "user-1" } } });
+  });
+
   it("names no speed measurement host, and every other source is as before", async () => {
     const req = new NextRequest("https://two42.io/", {
       headers: { host: "two42.io" },
@@ -335,7 +342,7 @@ describe("content security policy", () => {
       "img-src 'self' data: blob: https://maps.gstatic.com https://maps.googleapis.com https://img.youtube.com http://127.0.0.1:54321",
       "font-src 'self' data: https://fonts.gstatic.com",
       "connect-src 'self' https://*.supabase.co wss://*.supabase.co http://127.0.0.1:54321 ws://127.0.0.1:54321 https://maps.googleapis.com https://places.googleapis.com https://maps.gstatic.com blob:",
-      "frame-src 'self' https://www.google.com",
+      "frame-src 'self' https://www.google.com https://www.youtube-nocookie.com",
       "frame-ancestors 'none'",
       "object-src 'none'",
       "base-uri 'self'",
@@ -364,6 +371,7 @@ describe("content security policy", () => {
       headers: { host: "two42.io" },
     });
     const res = await updateSession(req);
+    expect(res.headers.get("location")).toBeNull();
     const imgSrc = res.headers
       .get("Content-Security-Policy")
       ?.split(";")
@@ -382,12 +390,30 @@ describe("content security policy", () => {
       headers: { host: "two42.io" },
     });
     const res = await updateSession(req);
+    expect(res.headers.get("location")).toBeNull();
     const imgSrc = res.headers
       .get("Content-Security-Policy")
       ?.split(";")
       .map((d) => d.trim())
       .find((d) => d.startsWith("img-src "));
     expect(imgSrc?.split(" ")).toContain(origin);
+  });
+
+  it("lets the origin lessonEmbedUrl builds through frame-src", async () => {
+    const embed = lessonEmbedUrl({ video_url: "https://youtu.be/jNQXAC9IVRw" });
+    expect(embed).not.toBeNull();
+    const origin = new URL(embed!).origin;
+    const req = new NextRequest("https://two42.io/g/x/lectures/y", {
+      headers: { host: "two42.io" },
+    });
+    const res = await updateSession(req);
+    expect(res.headers.get("location")).toBeNull();
+    const frameSrc = res.headers
+      .get("Content-Security-Policy")
+      ?.split(";")
+      .map((d) => d.trim())
+      .find((d) => d.startsWith("frame-src "));
+    expect(frameSrc?.split(" ")).toContain(origin);
   });
 
   it("allows the calendar's inline font and nothing wider", async () => {

@@ -8,8 +8,13 @@ import { ErrorState } from "@/components/states/ErrorState";
 import { Button } from "@/components/ui/button";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
-import { LessonThumbnail } from "@/components/lessons/LessonThumbnail";
-import { formatLessonDate, lessonThumbnail, partNumbers, safeHttpUrl } from "@/lib/lessons";
+import {
+  formatLessonDate,
+  lessonEmbedUrl,
+  lessonWatchUrl,
+  partNumbers,
+  safeHttpUrl,
+} from "@/lib/lessons";
 import { pageTitle } from "@/lib/pageTitle";
 import { readList } from "@/lib/supabase/readList";
 import { LessonList, MetaLine } from "../LessonList";
@@ -103,7 +108,8 @@ export default async function LessonPage({
   const others = inSeries.filter((l) => l.id !== lesson.id);
 
   const videoUrl = safeHttpUrl(lesson.video_url);
-  const thumbnail = lessonThumbnail(lesson);
+  const embedUrl = lessonEmbedUrl(lesson);
+  const watchUrl = lessonWatchUrl(lesson);
 
   return (
     <PageContainer>
@@ -144,47 +150,67 @@ export default async function LessonPage({
         ]}
       />
 
-      <section
-        aria-label="Recording"
-        className="grid gap-6 rounded-2xl border border-border bg-card p-5 md:grid-cols-[1.4fr_1fr] md:items-center"
-      >
-        {videoUrl ? (
+      {embedUrl && watchUrl ? (
+        <section aria-label="Recording" className="rounded-2xl border border-border bg-card p-5">
+          <iframe
+            src={embedUrl}
+            title={`Recording of ${lesson.title}`}
+            allow="encrypted-media; picture-in-picture; fullscreen"
+            allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
+            loading="lazy"
+            className="block aspect-video w-full rounded-xl bg-brand-warm"
+          />
           <a
-            href={videoUrl}
+            href={watchUrl}
             target="_blank"
             rel="noopener noreferrer"
-            tabIndex={-1}
-            aria-hidden="true"
-            className="group relative block aspect-video overflow-hidden rounded-xl bg-brand-warm"
+            className="mt-4 inline-flex min-h-11 items-center gap-2 text-lg font-medium text-brand-primary-text underline underline-offset-4 hover:text-foreground"
           >
-            <LessonThumbnail
-              src={thumbnail}
-              fallback={<BookOpen className="absolute inset-0 m-auto size-12 text-brand-primary-text" />}
-            />
-            <span className="absolute inset-0 m-auto flex size-20 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform group-hover:scale-105">
-              <Play className="size-8 fill-current" />
-            </span>
+            <ExternalLink aria-hidden="true" className="size-5" />
+            Watch on YouTube
           </a>
-        ) : (
-          <div className="flex aspect-video items-center justify-center rounded-xl bg-muted">
-            <p className="text-lg text-muted-foreground">Recording unavailable.</p>
-          </div>
-        )}
-
-        {videoUrl && (
-          <div className="flex flex-col gap-3">
-            <Button
-              size="lg"
-              nativeButton={false}
-              render={<a href={videoUrl} target="_blank" rel="noopener noreferrer" />}
+        </section>
+      ) : (
+        <section
+          aria-label="Recording"
+          className="grid gap-6 rounded-2xl border border-border bg-card p-5 md:grid-cols-[1.4fr_1fr] md:items-center"
+        >
+          {videoUrl ? (
+            <a
+              href={videoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              tabIndex={-1}
+              aria-hidden="true"
+              className="group relative block aspect-video overflow-hidden rounded-xl bg-brand-warm"
             >
-              <ExternalLink aria-hidden="true" />
-              Watch recording
-            </Button>
-            <p className="text-base text-muted-foreground">Opens in a new tab.</p>
-          </div>
-        )}
-      </section>
+              <BookOpen className="absolute inset-0 m-auto size-12 text-brand-primary-text" />
+              <span className="absolute inset-0 m-auto flex size-20 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform group-hover:scale-105">
+                <Play className="size-8 fill-current" />
+              </span>
+            </a>
+          ) : (
+            <div className="flex aspect-video items-center justify-center rounded-xl bg-muted">
+              <p className="text-lg text-muted-foreground">Recording unavailable.</p>
+            </div>
+          )}
+
+          {videoUrl && (
+            <div className="flex flex-col gap-3">
+              <Button
+                size="lg"
+                nativeButton={false}
+                render={<a href={videoUrl} target="_blank" rel="noopener noreferrer" />}
+              >
+                <ExternalLink aria-hidden="true" />
+                Watch recording
+              </Button>
+              <p className="text-base text-muted-foreground">Opens in a new tab.</p>
+            </div>
+          )}
+        </section>
+      )}
 
       <section aria-labelledby="lesson-summary" className="mt-12">
         <h2 id="lesson-summary" className="mb-4 font-serif text-2xl font-medium text-foreground">
