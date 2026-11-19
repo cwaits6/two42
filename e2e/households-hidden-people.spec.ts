@@ -110,6 +110,7 @@ test.describe("what a member sees under Households", () => {
   });
 
   test("its children's birthdays are not listed", async ({ page }) => {
+    runSql(`update public.profiles set is_unlisted = true where id in ('${HENRY}', '${CHLOE}');`);
     await page.goto("/directory/birthdays");
     const scope = page.getByRole("combobox", { name: "Show people from" });
     await scope.click();
