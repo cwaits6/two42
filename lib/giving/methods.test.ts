@@ -3,6 +3,7 @@ import {
   methodHref,
   parseGiveAmount,
   PAYMENT_METHODS,
+  venmoAppHref,
   venmoPayHref,
 } from "@/lib/giving/methods";
 
@@ -117,4 +118,23 @@ describe("parseGiveAmount", () => {
       });
     }
   );
+});
+
+describe("venmoAppHref", () => {
+  it("opens a payment in the app with the recipient, amount and note", () => {
+    expect(venmoAppHref("@gracechurch", "Meals & Care", "25.00")).toBe(
+      "venmo://paycharge?txn=pay&recipients=gracechurch&amount=25.00&note=Meals%20%26%20Care"
+    );
+  });
+
+  it("leaves the amount out when none is given", () => {
+    expect(venmoAppHref(" gracechurch ", "Missions", null)).toBe(
+      "venmo://paycharge?txn=pay&recipients=gracechurch&note=Missions"
+    );
+  });
+
+  it("keeps a typed plus sign distinct from a space", () => {
+    const href = venmoAppHref("gracechurch", "A+B C", null);
+    expect(href.endsWith("note=A%2BB%20C")).toBe(true);
+  });
 });
