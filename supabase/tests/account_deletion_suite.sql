@@ -133,7 +133,12 @@ values
   -- spouse_b's by name
   (pg_temp.h(4), pg_temp.fx('org'), pg_temp.fx('group'), pg_temp.fx('spouse_b'), null, 'named b', null, false),
   -- spouse_b's, anonymous, not yet converted
-  (pg_temp.h(5), pg_temp.fx('org'), pg_temp.fx('group'), pg_temp.fx('spouse_b'), null, 'anon b', null, true);
+  (pg_temp.h(5), pg_temp.fx('org'), pg_temp.fx('group'), pg_temp.fx('spouse_b'), null, 'anon b', null, true),
+  -- spouse_a's, read by the app while it still named them, then hashed by the
+  -- backfill before the delete, so the cascade no longer reaches it
+  (pg_temp.h(6), pg_temp.fx('org'), pg_temp.fx('group'), null, 'h1.k.converted', null, 'v1.k.a.b', true),
+  -- spouse_a's, anonymous, not yet converted, and passed in
+  (pg_temp.h(7), pg_temp.fx('org'), pg_temp.fx('group'), pg_temp.fx('spouse_a'), null, 'anon a', null, true);
 
 select is(pg_temp.attempt(pg_temp.fx(who),
   format('delete from public.prayer_requests where id = %L', pg_temp.h(1))), '42501',
@@ -416,7 +421,7 @@ insert into public.rsvps (org_id, event_id, user_id, status, occurrence_date) va
 
 -- ── The delete itself ───────────────────────────────────────────────────────
 select is(pg_temp.delete_person('spouse_a', pg_temp.fx('org'),
-            array[pg_temp.h(1), pg_temp.h(3), pg_temp.h(4), pg_temp.h(5)]),
+            array[pg_temp.h(1), pg_temp.h(3), pg_temp.h(4), pg_temp.h(5), pg_temp.h(6), pg_temp.h(7)]),
   'deleted', 'one spouse is deleted');
 select is((select count(*) from public.rsvps where user_id = pg_temp.fx('spouse_a')), 0::bigint,
   'their replies go, for every date');
@@ -432,6 +437,10 @@ select is((select count(*) from public.prayer_requests where body in ('anon 3', 
   'their requests that still name them go through the foreign key');
 select is((select count(*) from public.prayer_requests where id = pg_temp.h(1)), 0::bigint,
   'their hashed anonymous request goes, found by the ids passed in');
+select is((select count(*) from public.prayer_requests where id = pg_temp.h(6)), 0::bigint,
+  'and so does one the backfill hashed after the app read it by author_id');
+select is((select count(*) from public.prayer_requests where id = pg_temp.h(7)), 0::bigint,
+  'and one passed in that still names them');
 select is((select array_agg(id order by id) from public.prayer_requests where id in
              (pg_temp.h(2), pg_temp.h(3), pg_temp.h(4), pg_temp.h(5))),
   array[pg_temp.h(2), pg_temp.h(3), pg_temp.h(4), pg_temp.h(5)],

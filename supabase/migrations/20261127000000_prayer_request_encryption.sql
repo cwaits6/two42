@@ -79,8 +79,10 @@ where r.org_id = (select public.app_request_org_id());
 
 -- An anonymous request no longer reaches its author through a foreign key, so
 -- the caller finds the person's requests by recomputing the hash with the key
--- and passes their ids. Only anonymous, hashed rows of the person's own church
--- are deleted, inside the same transaction as the rest.
+-- and passes their ids, along with those still naming them, which the backfill
+-- could hash at any moment. Only anonymous rows of the person's own church that
+-- are hashed or still name them are deleted, inside the same transaction as the
+-- rest: a row the backfill is converting is waited on and deleted in either form.
 drop function public.delete_person(uuid, uuid);
 
 create function public.delete_person(_person_id uuid, _org_id uuid, _anonymous_request_ids uuid[] default '{}')
@@ -249,7 +251,7 @@ begin
   delete from public.prayer_requests r
   where r.org_id = _org
     and r.is_anonymous
-    and r.author_id is null
+    and (r.author_id is null or r.author_id = _person_id)
     and r.id = any (coalesce(_anonymous_request_ids, '{}'));
 
   delete from auth.users u where u.id = _person_id;
@@ -284,4 +286,4 @@ revoke execute on function public.delete_person(uuid, uuid, uuid[]) from public,
 grant execute on function public.delete_person(uuid, uuid, uuid[]) to service_role;
 
 comment on function public.delete_person(uuid, uuid, uuid[]) is
-  'Deletes one person and their login in a single transaction, and returns the storage keys and opened serving dates for the caller to act on after commit. _anonymous_request_ids are the person''s anonymous requests, which the caller finds by their author hash; only anonymous, hashed rows of the person''s church among them are deleted. Tenant anchor: org_id from the target''s profile row; _org_id is only compared with it. service_role only. Raises AD001, AD002, CA001 or AD003.';
+  'Deletes one person and their login in a single transaction, and returns the storage keys and opened serving dates for the caller to act on after commit. _anonymous_request_ids are the person''s anonymous requests, which the caller finds by their author hash, plus those still carrying their author_id, which the backfill may hash meanwhile; only anonymous rows of the person''s church among them that are hashed or name the person are deleted. Tenant anchor: org_id from the target''s profile row; _org_id is only compared with it. service_role only. Raises AD001, AD002, CA001 or AD003.';

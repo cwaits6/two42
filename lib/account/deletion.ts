@@ -5,6 +5,7 @@
  * failure leaves everything as it was. What can't join that transaction runs
  * after it commits, and can't turn a finished deletion back into a failure.
  */
+import type { PostgrestError } from "@supabase/supabase-js";
 import { after } from "next/server";
 import { displayName } from "@/lib/names";
 import { personName, personNameOrEmail } from "@/lib/serving/display";
@@ -17,6 +18,7 @@ import { dataOf, rowsOf } from "./rows";
 import { logError } from "@/lib/log";
 import { hashedRequestsOf } from "@/lib/prayer/hashedRequests";
 import { loadPrayerKeys } from "@/lib/prayer/keys";
+import { fetchAll } from "@/lib/supabase/fetchAll";
 
 type ServiceClient = Awaited<ReturnType<typeof createServiceClient>>;
 
@@ -180,25 +182,53 @@ async function tellLeadersDatesOpened(
 }
 
 /**
- * The ids of the person's hashed anonymous requests. Null when the keys are
- * missing or the read fails, so deletion refuses rather than leave them behind.
- * A hash under a wrong author key matches no one and cannot be told apart, so
- * under one the deletion goes ahead without them. A request they post between
- * this read and the commit stays until retention removes it, and they can no
- * longer sign in to post another.
+ * The ids of the person's anonymous requests. Null when the keys are missing
+ * or a read fails, so deletion refuses rather than leave them behind. A hash
+ * under a wrong author key matches no one and cannot be told apart, so under
+ * one the deletion goes ahead without them. A request they post between this
+ * read and the commit stays until retention removes it, and they can no longer
+ * sign in to post another.
+ *
+ * Rows not yet converted still carry author_id and go with the profile's
+ * cascade, but the backfill can hash one after this read and before that
+ * cascade, which would then miss it. Their ids are passed too, so
+ * delete_person() deletes the row in whichever form it reaches.
  */
-async function hashedRequestIds(service: ServiceClient, orgId: string, personId: string): Promise<string[] | null> {
+async function anonymousRequestIds(service: ServiceClient, orgId: string, personId: string): Promise<string[] | null> {
   const keys = loadPrayerKeys();
   if (!keys) {
     logError("Prayer keys are not configured");
     return null;
   }
-  const { data, error } = await hashedRequestsOf(service, orgId, personId, keys, "*");
-  if (error) {
+  const [hashed, named] = await Promise.all([
+    hashedRequestsOf(service, orgId, personId, keys, "*"),
+    unconvertedAnonymousRequests(service, orgId, personId),
+  ]);
+  const error = hashed.error ?? named.error;
+  if (error || !hashed.data || !named.data) {
     logError("Failed to read anonymous prayer requests for a deletion", error);
     return null;
   }
-  return data.map((row) => row.id);
+  return [...hashed.data, ...named.data].map((row) => row.id);
+}
+
+function unconvertedAnonymousRequests(service: ServiceClient, orgId: string, personId: string) {
+  return fetchAll<{ id: string; author_hash?: string | null }, PostgrestError>((from, to) =>
+    service
+      .from("prayer_requests")
+      // All columns: before the migration there is no author_hash to name.
+      .select("*")
+      .eq("org_id", orgId)
+      .eq("is_anonymous", true)
+      .eq("author_id", personId)
+      .order("id")
+      .range(from, to),
+  ).then(({ data, error }) => ({
+    // Before the migration no row can be converted, and the three-argument
+    // delete_person() does not exist yet.
+    data: data?.filter((row) => "author_hash" in row) ?? null,
+    error,
+  }));
 }
 
 /** `actorId` is who to leave out of the team-lead notices, when someone else is acting. */
@@ -211,9 +241,9 @@ export async function deletePerson(
   let person: DeletedPerson;
   try {
     service = await createServiceClient();
-    const requestIds = await hashedRequestIds(service, orgId, personId);
+    const requestIds = await anonymousRequestIds(service, orgId, personId);
     if (!requestIds) return { outcome: "failed" };
-    // Without hashed requests this is the two-argument call, which works
+    // Without anonymous requests this is the two-argument call, which works
     // before and after the migration that adds the third.
     const { data, error } = await service.rpc("delete_person", {
       _person_id: personId,

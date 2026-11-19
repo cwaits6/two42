@@ -106,13 +106,33 @@ describe("deletePerson", () => {
         hashed("p2", "ben"),
         hashed("p3", "ada", OTHER_ORG),
         hashed("p4", "ada"),
-        { id: "p5", org_id: ORG, is_anonymous: true, author_id: "ada", author_hash: null },
+        { id: "p5", org_id: ORG, is_anonymous: true, author_id: "ben", author_hash: null },
+        { id: "p6", org_id: ORG, is_anonymous: false, author_id: "ada", author_hash: null },
       ],
     });
     expect(await deletePerson(ORG, "ada")).toEqual({ outcome: "deleted", photosNotRemoved: 0 });
     expect(log.rpcs).toEqual([
       { name: "delete_person", args: { _person_id: "ada", _org_id: ORG, _anonymous_request_ids: ["p1", "p4"] } },
     ]);
+  });
+
+  it("also passes their anonymous requests not yet hashed, which the backfill could hash before the delete", async () => {
+    const { log } = setup({
+      prayer_requests: [
+        { id: "u1", org_id: ORG, is_anonymous: true, author_id: "ada", author_hash: null },
+        { id: "u2", org_id: OTHER_ORG, is_anonymous: true, author_id: "ada", author_hash: null },
+      ],
+    });
+    expect(await deletePerson(ORG, "ada")).toEqual({ outcome: "deleted", photosNotRemoved: 0 });
+    expect(log.rpcs[0].args).toMatchObject({ _anonymous_request_ids: ["u1"] });
+  });
+
+  it("keeps the two-argument call before the migration adds author_hash", async () => {
+    const { log } = setup({
+      prayer_requests: [{ id: "u1", org_id: ORG, is_anonymous: true, author_id: "ada" }],
+    });
+    expect(await deletePerson(ORG, "ada")).toEqual({ outcome: "deleted", photosNotRemoved: 0 });
+    expect(log.rpcs).toEqual([{ name: "delete_person", args: { _person_id: "ada", _org_id: ORG } }]);
   });
 
   it("finds their hashed requests past the first page of the church's", async () => {
@@ -141,6 +161,11 @@ describe("deletePerson", () => {
     second.failures.push({ table: "prayer_requests", op: "select" });
     expect(await deletePerson(ORG, "ada")).toEqual({ outcome: "failed" });
     expect(second.log.rpcs).toEqual([]);
+
+    const third = setup();
+    third.failures.push({ table: "prayer_requests", op: "select", skip: 1 });
+    expect(await deletePerson(ORG, "ada")).toEqual({ outcome: "failed" });
+    expect(third.log.rpcs).toEqual([]);
   });
 
   it("reports failure when the service client can't be built", async () => {
