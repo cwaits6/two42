@@ -59,15 +59,22 @@ export function PrayerCommentForm({
       <Textarea
         id={`${id}-text`}
         value={body}
-        onChange={(e) => setBody([...e.target.value].slice(0, COMMENT_TEXT_MAX).join(""))}
+        onChange={(e) => setBody(e.target.value)}
         rows={3}
         readOnly={submitting}
         className="bg-background text-base"
+        aria-invalid={left < 0 || undefined}
         aria-describedby={left <= COMMENT_NEAR_LIMIT ? `${id}-left` : undefined}
       />
       {left <= COMMENT_NEAR_LIMIT && (
-        <p id={`${id}-left`} className="text-sm text-muted-foreground">
-          {left === 1 ? "1 character left" : `${left} characters left`}
+        <p id={`${id}-left`} className={left < 0 ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
+          {left === 1
+            ? "1 character left"
+            : left >= 0
+              ? `${left} characters left`
+              : left === -1
+                ? "1 character over the limit"
+                : `${-left} characters over the limit`}
         </p>
       )}
       {!ownRequest && (
