@@ -32,13 +32,15 @@ function sql(statement: string): string {
 /** This spec's requests, found by opening each Group B request's text. */
 function specRequestIds(): string[] {
   const keys = prayerKeys();
-  return sql(`select id, org_id, coalesce(body, ''), coalesce(body_ciphertext, '')
-              from public.prayer_requests where group_id = '${GROUP_B}';`)
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => line.split("\t"))
-    .filter(([id, org, body, sealed]) => (sealed ? decryptBody(keys, org, id, sealed) : body) === BODY)
-    .map(([id]) => id);
+  // JSON, not tab-separated rows: a plaintext request on the shared stack may contain a tab or newline.
+  const rows = JSON.parse(
+    sql(`select coalesce(json_agg(json_build_object(
+                  'id', id, 'org', org_id, 'body', body, 'sealed', body_ciphertext)), '[]')
+         from public.prayer_requests where group_id = '${GROUP_B}';`),
+  ) as { id: string; org: string; body: string | null; sealed: string | null }[];
+  return rows
+    .filter(({ id, org, body, sealed }) => (sealed ? decryptBody(keys, org, id, sealed) : body) === BODY)
+    .map(({ id }) => id);
 }
 
 function deleteSpecRequests() {
