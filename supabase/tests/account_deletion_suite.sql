@@ -146,18 +146,18 @@ select is(pg_temp.attempt(pg_temp.fx(who),
 from unnest(array['spouse_a', 'spouse_b', 'leader', 'outsider']) who;
 
 -- ── Who can call it ─────────────────────────────────────────────────────────
-select ok((select p.prosecdef from pg_proc p where p.oid = 'public.delete_person(uuid, uuid, uuid[])'::regprocedure),
+select ok((select p.prosecdef from pg_proc p where p.oid = 'public.delete_person(uuid, uuid, uuid[], uuid[])'::regprocedure),
   'delete_person is SECURITY DEFINER');
-select is((select p.proconfig from pg_proc p where p.oid = 'public.delete_person(uuid, uuid, uuid[])'::regprocedure),
+select is((select p.proconfig from pg_proc p where p.oid = 'public.delete_person(uuid, uuid, uuid[], uuid[])'::regprocedure),
   array['search_path=""'], 'delete_person pins an empty search_path');
-select ok(not has_function_privilege('anon', 'public.delete_person(uuid, uuid, uuid[])', 'execute'),
+select ok(not has_function_privilege('anon', 'public.delete_person(uuid, uuid, uuid[], uuid[])', 'execute'),
   'anon can''t call it');
-select ok(not has_function_privilege('authenticated', 'public.delete_person(uuid, uuid, uuid[])', 'execute'),
+select ok(not has_function_privilege('authenticated', 'public.delete_person(uuid, uuid, uuid[], uuid[])', 'execute'),
   'a signed-in person can''t call it');
-select ok(has_function_privilege('service_role', 'public.delete_person(uuid, uuid, uuid[])', 'execute'),
+select ok(has_function_privilege('service_role', 'public.delete_person(uuid, uuid, uuid[], uuid[])', 'execute'),
   'the service role can call it');
 select ok(has_table_privilege(
-    (select p.proowner::regrole::text from pg_proc p where p.oid = 'public.delete_person(uuid, uuid, uuid[])'::regprocedure),
+    (select p.proowner::regrole::text from pg_proc p where p.oid = 'public.delete_person(uuid, uuid, uuid[], uuid[])'::regprocedure),
     'auth.users', 'delete'),
   'its owner holds DELETE on auth.users');
 select hasnt_function('public', 'delete_person', array['uuid', 'uuid'],

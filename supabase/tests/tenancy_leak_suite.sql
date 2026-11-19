@@ -124,6 +124,10 @@ begin
   insert into public.prayer_responses (org_id, group_id, request_id, profile_id)
     select _org, _group, id, _owner from public.prayer_requests
       where org_id = _org and author_id = _owner limit 1;
+  -- Service-role-only: sealed text the server writes, so the fixture writes it as postgres.
+  insert into public.prayer_comments (id, org_id, request_id, writer_id, body_ciphertext)
+    select gen_random_uuid(), _org, id, _owner, 'v1.k.a.b' from public.prayer_requests
+      where org_id = _org and author_id = _owner limit 1;
 
   insert into public.team_members (org_id, profile_id, team_id)
     values (_org, _owner, _serving_group);
@@ -355,12 +359,12 @@ begin
     if error_states[i] = '42501'
        and tables[i] in ('org_email_usage', 'org_email_limits', 'org_domain_worker_events',
                          'serving_reminder_passes', 'serving_reminder_sends',
-                         'event_reminder_passes', 'event_reminder_sends') then
+                         'event_reminder_passes', 'event_reminder_sends', 'prayer_comments') then
       -- Service-role-only tables (restrictive policy, ALL privileges
       -- revoked — org_email_usage / org_email_limits /
       -- org_domain_worker_events / serving_reminder_passes /
       -- serving_reminder_sends / event_reminder_passes /
-      -- event_reminder_sends): a privilege denial is the intended,
+      -- event_reminder_sends / prayer_comments): a privilege denial is the intended,
       -- stronger-than-row-filtering isolation outcome, not a broken check.
       -- Scoped to exactly those tables so a normal tenant table losing
       -- authenticated read access still fails.
