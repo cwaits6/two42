@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.33.0](https://github.com/cwaits6/two42/compare/v0.32.0...v0.33.0) (2026-11-20)
+
+
+### Features
+
+* **admin:** show church admins anonymous usage counts, kept inside the app ([#786](https://github.com/cwaits6/two42/issues/786)) ([5f6b046](https://github.com/cwaits6/two42/commit/5f6b04697cf6156a5b972bd5298573c2fefdb337))
+* **auth:** let a person with an account join a household from its invite ([#785](https://github.com/cwaits6/two42/issues/785)) ([34e4bc2](https://github.com/cwaits6/two42/commit/34e4bc2e0b86c56ee7f7b8781f77282e1f8f622c))
+* **directory:** let people edit their details from their own directory entry ([#818](https://github.com/cwaits6/two42/issues/818)) ([243176d](https://github.com/cwaits6/two42/commit/243176d088bab7daf9e1d9acd5b0674b5d28ba5e))
+* **giving:** let people enter an amount before opening Venmo from Give ([#819](https://github.com/cwaits6/two42/issues/819)) ([9f2cc4e](https://github.com/cwaits6/two42/commit/9f2cc4e4cc9df89c51c0edc98c4365d101d28f49))
+* **lessons:** play lesson videos on the lesson page ([#817](https://github.com/cwaits6/two42/issues/817)) ([c3c47d8](https://github.com/cwaits6/two42/commit/c3c47d8ff362e96cdf5a50276895f00b19790a76))
+* **prayer:** let people comment on a prayer request, publicly, privately or without their name ([#822](https://github.com/cwaits6/two42/issues/822)) ([7c1c346](https://github.com/cwaits6/two42/commit/7c1c3468677f7f4bfd9e36c6f290a70e140825ef))
+* **profile:** let people crop their profile photo ([#763](https://github.com/cwaits6/two42/issues/763)) ([c0002f0](https://github.com/cwaits6/two42/commit/c0002f037f572ebac3eef07695c1d365feab7b70))
+
+
+### Bug Fixes
+
+* **admin:** capitalize names, lowercase emails and send the first admin's invite when a church is added ([#765](https://github.com/cwaits6/two42/issues/765)) ([3643798](https://github.com/cwaits6/two42/commit/364379808d9284bc9ff96338de8b0a6424bbcf58))
+* **auth:** sign new members in as soon as they set a password ([#764](https://github.com/cwaits6/two42/issues/764)) ([bfa3b5c](https://github.com/cwaits6/two42/commit/bfa3b5c3cc2aca76fd42b257a640d831db0aaf6a))
+* **auth:** sign this device out when the server can't be told ([#772](https://github.com/cwaits6/two42/issues/772)) ([0a76226](https://github.com/cwaits6/two42/commit/0a76226f7a6aab534a873d1f5a037cf617ce0e6c))
+* **calendar:** keep the meeting ID and passcode on events added to Apple Calendar ([#820](https://github.com/cwaits6/two42/issues/820)) ([0fa3744](https://github.com/cwaits6/two42/commit/0fa37447ad42330bc763d544b75766b5ec09900b))
+* **db:** show a group's own color in Find a group and remove retired fields ([#766](https://github.com/cwaits6/two42/issues/766)) ([fd49df4](https://github.com/cwaits6/two42/commit/fd49df4b2af3832a08aa40f241955522d9629f1b))
+* **directory:** clear the Semgrep finding in the hidden-household test ([#816](https://github.com/cwaits6/two42/issues/816)) ([5c33d83](https://github.com/cwaits6/two42/commit/5c33d83ca10884c67c451bc1ea5a0702af905875)), closes [#815](https://github.com/cwaits6/two42/issues/815)
+* **directory:** hide a household from the directory when every adult in it is hidden ([#823](https://github.com/cwaits6/two42/issues/823)) ([7393f65](https://github.com/cwaits6/two42/commit/7393f6562ff8c1c4a53fca888e29842ec4ee88a3))
+* **directory:** keep a person hidden from the directory out of the Households tab ([#810](https://github.com/cwaits6/two42/issues/810)) ([47c7228](https://github.com/cwaits6/two42/commit/47c722880634293b4022ce4acee7f9865ae45c0a))
+* **directory:** show Edit and Remove only in an edit mode, and one Add announcement button ([#762](https://github.com/cwaits6/two42/issues/762)) ([6b8444a](https://github.com/cwaits6/two42/commit/6b8444a58a00170ee9ff48952d8fd7459ba4941a))
+* **profile:** keep the capitals people type in names like DeSantis and Mack ([#778](https://github.com/cwaits6/two42/issues/778)) ([30e6e95](https://github.com/cwaits6/two42/commit/30e6e954906f6135534d3b1d755de1c7d97357e9))
+* **profile:** let members add their own household during profile setup ([#821](https://github.com/cwaits6/two42/issues/821)) ([9a51806](https://github.com/cwaits6/two42/commit/9a51806b3e8d7971526c7b93d24f119416e51dd9))
+
 ## [0.32.0](https://github.com/cwaits6/two42/compare/v0.31.0...v0.32.0) (2026-11-11)
 
 
