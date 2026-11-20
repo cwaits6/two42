@@ -4,17 +4,24 @@
 -- send an invite; a unique index makes the second wait, then fail.
 
 -- ── 1. Existing duplicates ────────────────────────────────────────────────
--- Two approved founding requests for one email already fail that admin's
--- signup as ambiguous (TN002), so neither church can onboard them. Denying
--- all but the newest lets the newest church do so, and is the state Send
--- invite already refuses to re-approve.
+-- The index cannot be built over two approved founding requests for one
+-- email, so all but one are denied. Each church's setup link carries its own
+-- org hint, so either row may be the one the admin claimed: keep the row
+-- whose church already has their profile, otherwise the newest. A denied
+-- row's setup link stops working, and Send invite refuses to re-approve it.
 with ranked as (
-  select id,
+  select ar.id,
          row_number() over (
-           partition by lower(email) order by created_at desc, id desc
+           partition by lower(ar.email)
+           order by exists (
+                      select 1 from public.profiles p
+                      where p.org_id = ar.org_id
+                        and lower(p.email) = lower(ar.email)
+                    ) desc,
+                    ar.created_at desc, ar.id desc
          ) as rn
-  from public.access_requests
-  where approved_role = 'admin' and status = 'approved'
+  from public.access_requests ar
+  where ar.approved_role = 'admin' and ar.status = 'approved'
 )
 update public.access_requests ar
 set status = 'denied', signup_token = null, token_expires_at = null
