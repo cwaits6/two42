@@ -144,6 +144,42 @@ describe("POST /api/platform/organizations", () => {
     expect(send).toHaveBeenCalledTimes(1);
   });
 
+  it("sends one invite when the same church is added twice at once", async () => {
+    // The first provisioning answers only once the second has reached the
+    // database; the second then gets the TN005 the founding-admin index raises.
+    let releaseFirst!: () => void;
+    const secondArrived = new Promise<void>((resolve) => (releaseFirst = resolve));
+    let calls = 0;
+    const fake = fakeFirstAdminService({
+      rows: [ADMIN_ROW],
+      rpc: async () => {
+        calls += 1;
+        if (calls === 1) {
+          await secondArrived;
+          return { data: ORG, error: null };
+        }
+        releaseFirst();
+        return { data: null, error: { code: "TN005" } };
+      },
+    });
+    createServiceClient.mockResolvedValue(fake.client);
+
+    const responses = await Promise.all([
+      POST(addRequest("admin@hillside.example")),
+      POST(addRequest("admin@hillside.example")),
+    ]);
+
+    expect(calls).toBe(2);
+    expect(responses.map((r) => r.status).sort()).toEqual([200, 409]);
+    const refused = responses.find((r) => r.status === 409)!;
+    expect(await refused.json()).toEqual({
+      error: "That email already has an invite or an approved request in another organization.",
+    });
+    expect(reserveEmailQuota).toHaveBeenCalledTimes(1);
+    expect(fake.calls.filter((c) => c.op === "update")).toHaveLength(1);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
   it("adds the church and says the invite wasn't sent when the send fails", async () => {
     const fake = fakeFirstAdminService({ rows: [ADMIN_ROW] });
     createServiceClient.mockResolvedValue(fake.client);

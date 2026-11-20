@@ -75,11 +75,10 @@ export async function POST(request: Request) {
       throw error;
     }
 
-    // A repeat or a retry that starts after this request committed is refused
-    // above with TN005. Two requests for the same email at the same moment can
-    // both pass that check and both send: closing that needs a lock or unique
-    // index in provision_organization(). The church is added whatever the
-    // invite's outcome; its page offers Send invite when it wasn't sent.
+    // A second request for the same email is refused above with TN005, even
+    // one racing this request: a unique index on the approved founding request
+    // makes it wait for this commit, then fail. The church is added whatever
+    // the invite's outcome; its page offers Send invite when it wasn't sent.
     const invite = await sendFirstAdminInvite({
       orgId,
       email: ownerEmail,

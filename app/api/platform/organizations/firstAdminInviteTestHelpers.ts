@@ -9,9 +9,11 @@ export interface RecordedChain {
   filters: [string, unknown][];
 }
 
+type RpcResult = { data: unknown; error: unknown };
+
 export interface FakeServiceOptions {
   /** What provision_organization answers. */
-  rpc?: () => { data: unknown; error: unknown };
+  rpc?: () => RpcResult | Promise<RpcResult>;
   /** The founding requests the read returns. */
   rows?: { id: string; email: string; status?: string }[];
   /** Rows the token update reports as written. */
@@ -43,7 +45,7 @@ export function fakeFirstAdminService(options: FakeServiceOptions = {}) {
   const client = {
     async rpc(name: string, args: Record<string, unknown>) {
       calls.push({ table: name, op: "rpc", payload: args, filters: [] });
-      return options.rpc ? options.rpc() : { data: "org-new", error: null };
+      return options.rpc ? await options.rpc() : { data: "org-new", error: null };
     },
     from(table: string) {
       return {
