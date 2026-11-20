@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Copy, ExternalLink } from "lucide-react";
 import { PayQrCode } from "@/components/giving/PayQrCode";
@@ -11,7 +11,9 @@ import { Label } from "@/components/ui/label";
 import {
   methodHref,
   parseGiveAmount,
+  venmoAppHref,
   venmoPayHref,
+  venmoWebPayHref,
   type ResolvedMethod,
 } from "@/lib/giving/methods";
 
@@ -124,7 +126,7 @@ export function MethodButton({
 
 /**
  * Venmo's website can't start a payment, so a phone or tablet gets an
- * optional amount and a link into the app, and a computer gets the handle and
+ * optional amount and the app link, and a computer gets the handle and
  * a QR code of the same link to scan with a phone. The amount is never stored.
  */
 function VenmoMethod({ resolved, fundName }: { resolved: ResolvedMethod; fundName: string }) {
@@ -148,6 +150,39 @@ function VenmoPhoneAction({ resolved, fundName }: { resolved: ResolvedMethod; fu
   const [showError, setShowError] = useState(false);
   const parsed = parseGiveAmount(typed);
   const error = showError && !parsed.ok ? parsed.error : undefined;
+  const [notOpened, setNotOpened] = useState(false);
+  function flagAmount() {
+    setShowError(true);
+    document.getElementById(id)?.focus();
+  }
+  const stopWatching = useRef<(() => void) | null>(null);
+  useEffect(() => () => stopWatching.current?.(), []);
+
+  // A page that is still in front a moment after the tap means the app
+  // didn't take it, most often because Venmo isn't installed on this phone.
+  function watchForApp() {
+    stopWatching.current?.();
+    setNotOpened(false);
+    const timer = window.setTimeout(() => {
+      stop();
+      if (document.visibilityState === "visible") setNotOpened(true);
+    }, 2500);
+    const left = () => stop();
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") stop();
+    };
+    function stop() {
+      window.clearTimeout(timer);
+      window.removeEventListener("pagehide", left);
+      window.removeEventListener("blur", left);
+      document.removeEventListener("visibilitychange", onVisibility);
+      stopWatching.current = null;
+    }
+    window.addEventListener("pagehide", left);
+    window.addEventListener("blur", left);
+    document.addEventListener("visibilitychange", onVisibility);
+    stopWatching.current = stop;
+  }
 
   return (
     <div className="mt-3 space-y-3">
@@ -179,9 +214,8 @@ function VenmoPhoneAction({ resolved, fundName }: { resolved: ResolvedMethod; fu
       </div>
       {parsed.ok ? (
         <a
-          href={venmoPayHref(resolved.handle, fundName, parsed.amount)}
-          target="_blank"
-          rel="noopener noreferrer"
+          href={venmoAppHref(resolved.handle, fundName, parsed.amount)}
+          onClick={watchForApp}
           className={`min-h-11 ${ACTION} hover:underline`}
         >
           {resolved.meta.verb}
@@ -191,15 +225,44 @@ function VenmoPhoneAction({ resolved, fundName }: { resolved: ResolvedMethod; fu
         // A button, not a link, so a middle-click or long-press can't open Venmo with the bad amount dropped.
         <button
           type="button"
-          onClick={() => {
-            setShowError(true);
-            document.getElementById(id)?.focus();
-          }}
+          onClick={flagAmount}
           className={`min-h-11 ${ACTION} hover:underline`}
         >
           {resolved.meta.verb}
           <ExternalLink className="h-4 w-4" aria-hidden="true" />
         </button>
+      )}
+      {notOpened && (
+        <div role="status" className="space-y-1">
+          <p className="text-base text-muted-foreground">
+            Venmo didn&apos;t open. If the app isn&apos;t on this phone, pay on Venmo&apos;s website
+            instead, or copy {resolved.handle}.
+          </p>
+          <div className="flex flex-wrap gap-x-5">
+            {parsed.ok ? (
+              <a
+                href={venmoWebPayHref(resolved.handle, fundName, parsed.amount)}
+                className={`min-h-11 ${ACTION} hover:underline`}
+              >
+                Pay on Venmo&apos;s website
+                <ExternalLink className="h-4 w-4" aria-hidden="true" />
+              </a>
+            ) : (
+              <button type="button" onClick={flagAmount} className={`min-h-11 ${ACTION} hover:underline`}>
+                Pay on Venmo&apos;s website
+                <ExternalLink className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => copyHandle(resolved)}
+              className={`min-h-11 ${ACTION} hover:underline`}
+            >
+              <Copy className="h-4 w-4" aria-hidden="true" />
+              Copy
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
