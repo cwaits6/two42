@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Home, Search } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -62,29 +62,25 @@ function FamiliesTabInner() {
     currentFamilyId,
   } = useDirectory();
   const [query, setQuery] = useState("");
-  const [panel, setPanel] = useState<Panel | null>(null);
   const searchParams = useSearchParams();
-  // Where "Back to the list" leads from a deep-linked panel; a panel opened
-  // from this list leads back to it.
-  const [listHref, setListHref] = useState<string | null>(null);
 
-  // Deep links: ?family=<id> opens a household, ?person=<id> opens a person
+  // The URL owns the open panel: ?family=<id> opens a household, ?person=<id>
+  // a person. Back, reload and deep links all reopen it from there.
   const familyParam = searchParams.get("family");
   const personParam = searchParams.get("person");
-  const celebrationList = celebrationBackHref(basePath, searchParams);
-  useEffect(() => {
-    setListHref(celebrationList);
-    if (personParam && profileMap[personParam]) {
-      const profile = profileMap[personParam];
-      setPanel({
+  const personProfile = personParam ? profileMap[personParam] : undefined;
+  const panel: Panel | null = personProfile
+    ? {
         kind: "person",
-        profile,
-        fromFamily: profile.family_id ? (familyMap[profile.family_id] ?? null) : null,
-      });
-    } else if (familyParam && familyMap[familyParam]) {
-      setPanel({ kind: "family", family: familyMap[familyParam] });
-    }
-  }, [familyParam, personParam, profileMap, familyMap, celebrationList]);
+        profile: personProfile,
+        fromFamily: personProfile.family_id ? (familyMap[personProfile.family_id] ?? null) : null,
+      }
+    : familyParam && familyMap[familyParam]
+      ? { kind: "family", family: familyMap[familyParam] }
+      : null;
+  // Where "Back to the list" leads from a deep-linked panel; a panel opened
+  // from this list leads back to it.
+  const listHref = celebrationBackHref(basePath, searchParams);
 
   // Households plus members without a family, within the scope, filtered by search
   const entries = useMemo<ListEntry[]>(() => {
@@ -135,11 +131,9 @@ function FamiliesTabInner() {
     return map;
   }, [entries]);
 
-  // The open panel is written to the URL so that Back from a page it links to,
-  // and a reload, reopen it. Replacing the entry keeps Back leaving the tab
-  // rather than stepping through every panel opened.
+  // Replacing the entry keeps Back leaving the tab rather than stepping
+  // through every panel opened.
   function showPanel(next: Panel | null, keep: URLSearchParams | null) {
-    setPanel(next);
     window.history.replaceState(null, "", panelHref(basePath, next, keep));
   }
 
@@ -149,7 +143,6 @@ function FamiliesTabInner() {
   }
 
   function openFromList(next: Panel) {
-    setListHref(null);
     showPanel(next, null);
     scrollToPanel();
   }
@@ -284,10 +277,7 @@ function FamiliesTabInner() {
               <PersonCard
                 profile={panel.profile}
                 viewerId={currentUserId}
-                family={
-                  panel.fromFamily ??
-                  (panel.profile.family_id ? (familyMap[panel.profile.family_id] ?? null) : null)
-                }
+                family={panel.fromFamily}
               />
             </>
           )
