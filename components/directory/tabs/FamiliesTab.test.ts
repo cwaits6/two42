@@ -4,10 +4,26 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DirectoryProfile, FamilyDirectoryFull } from "@/lib/types";
 
-const search = vi.hoisted(() => ({ query: "" }));
-vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams(search.query),
-}));
+// The app router feeds history.replaceState into useSearchParams; this stands in for that.
+const urlListeners = vi.hoisted(() => new Set<() => void>());
+vi.mock("next/navigation", async () => {
+  const { useMemo, useSyncExternalStore } = await import("react");
+  const subscribe = (listener: () => void) => {
+    urlListeners.add(listener);
+    return () => urlListeners.delete(listener);
+  };
+  return {
+    useSearchParams: () => {
+      const query = useSyncExternalStore(subscribe, () => window.location.search);
+      return useMemo(() => new URLSearchParams(query), [query]);
+    },
+  };
+});
+const replaceState = window.history.replaceState.bind(window.history);
+window.history.replaceState = (...args: Parameters<History["replaceState"]>) => {
+  replaceState(...args);
+  urlListeners.forEach((listener) => listener());
+};
 vi.mock("next/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: unknown }) =>
     createElement("a", { href, ...rest }, children as never),
@@ -47,13 +63,13 @@ const hidden = {
 const solo = { id: "solo", first_name: "Ava", last_name: "Sampleton", family_id: null } as unknown as DirectoryProfile;
 const inMiller = { id: "in-miller", first_name: "Ben", last_name: "Miller", family_id: "miller" } as unknown as DirectoryProfile;
 
-// One value across renders, as the provider gives: the deep-link effect re-runs on a new map.
+// One value across renders, as the provider gives.
 const directory = {
   members: [],
   families: [family, mockingham, hidden],
   memberships: [{ id: "g" }],
   profileMap: { [solo.id]: solo, [inMiller.id]: inMiller },
-  familyMap: { [family.id]: family },
+  familyMap: { [family.id]: family, [mockingham.id]: mockingham },
   basePath: "/directory",
   loading: false,
   error: false,
@@ -83,7 +99,7 @@ afterEach(async () => {
 });
 
 async function open(query: string) {
-  search.query = query;
+  window.history.replaceState(null, "", query ? `/directory/families?${query}` : "/directory/families");
   host = document.body.appendChild(document.createElement("div"));
   root = createRoot(host);
   await act(async () => root.render(createElement(FamiliesTab)));
@@ -153,14 +169,12 @@ describe("FamiliesTab's open household in the URL", () => {
   });
 
   it("writes the person opened inside a household", async () => {
-    window.history.replaceState(null, "", "/");
     await open("family=miller");
     await act(async () => row("Open Ben").click());
     expect(window.location.pathname + window.location.search).toBe("/directory/families?person=in-miller");
   });
 
   it("writes the household on Back from a person in it", async () => {
-    window.history.replaceState(null, "", "/");
     await open("person=in-miller");
     await act(async () => row("Back to Miller").click());
     expect(window.location.pathname + window.location.search).toBe("/directory/families?family=miller");
