@@ -107,6 +107,21 @@ describe("Venmo on a phone or tablet", () => {
       );
     });
 
+    it("keeps the website closed and shows the error for a bad amount", () => {
+      render();
+      click(payLink());
+      act(() => vi.advanceTimersByTime(2500));
+      const input = container.querySelector("input")!;
+      type(input, "25.123");
+      expect(status()?.querySelector("a")).toBeNull();
+      const website = [...status()!.querySelectorAll("button")].find((b) =>
+        b.textContent?.startsWith("Pay on Venmo")
+      )!;
+      click(website);
+      expect(document.activeElement).toBe(input);
+      expect(input.getAttribute("aria-invalid")).toBe("true");
+    });
+
     it("stays quiet when the page leaves for the app", () => {
       render();
       click(payLink());

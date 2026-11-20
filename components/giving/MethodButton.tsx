@@ -151,6 +151,10 @@ function VenmoPhoneAction({ resolved, fundName }: { resolved: ResolvedMethod; fu
   const parsed = parseGiveAmount(typed);
   const error = showError && !parsed.ok ? parsed.error : undefined;
   const [notOpened, setNotOpened] = useState(false);
+  function flagAmount() {
+    setShowError(true);
+    document.getElementById(id)?.focus();
+  }
   const stopWatching = useRef<(() => void) | null>(null);
   useEffect(() => () => stopWatching.current?.(), []);
 
@@ -221,10 +225,7 @@ function VenmoPhoneAction({ resolved, fundName }: { resolved: ResolvedMethod; fu
         // A button, not a link, so a middle-click or long-press can't open Venmo with the bad amount dropped.
         <button
           type="button"
-          onClick={() => {
-            setShowError(true);
-            document.getElementById(id)?.focus();
-          }}
+          onClick={flagAmount}
           className={`min-h-11 ${ACTION} hover:underline`}
         >
           {resolved.meta.verb}
@@ -238,13 +239,20 @@ function VenmoPhoneAction({ resolved, fundName }: { resolved: ResolvedMethod; fu
             instead, or copy {resolved.handle}.
           </p>
           <div className="flex flex-wrap gap-x-5">
-            <a
-              href={venmoWebPayHref(resolved.handle, fundName, parsed.ok ? parsed.amount : null)}
-              className={`min-h-11 ${ACTION} hover:underline`}
-            >
-              Pay on Venmo&apos;s website
-              <ExternalLink className="h-4 w-4" aria-hidden="true" />
-            </a>
+            {parsed.ok ? (
+              <a
+                href={venmoWebPayHref(resolved.handle, fundName, parsed.amount)}
+                className={`min-h-11 ${ACTION} hover:underline`}
+              >
+                Pay on Venmo&apos;s website
+                <ExternalLink className="h-4 w-4" aria-hidden="true" />
+              </a>
+            ) : (
+              <button type="button" onClick={flagAmount} className={`min-h-11 ${ACTION} hover:underline`}>
+                Pay on Venmo&apos;s website
+                <ExternalLink className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => copyHandle(resolved)}
