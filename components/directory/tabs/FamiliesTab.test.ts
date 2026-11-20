@@ -126,6 +126,45 @@ describe("FamiliesTab's way back to the list", () => {
   });
 });
 
+describe("FamiliesTab's open household in the URL", () => {
+  const row = (name: string) =>
+    [...host.querySelectorAll("button")].find((el) => el.textContent?.includes(name))!;
+
+  it("reopens a household picked from the list when the page is opened again, as after Back", async () => {
+    await open("");
+    await act(async () => row("Miller").click());
+    expect(window.location.pathname + window.location.search).toBe("/directory/families?family=miller");
+
+    const written = window.location.search.slice(1);
+    await act(async () => root.unmount());
+    host.remove();
+    await open(written);
+    expect(backToList()).toBeDefined();
+    expect(host.textContent).not.toContain("Choose a household from the list");
+  });
+
+  it("writes the household without the deep link's way back when picked from the list", async () => {
+    await open("family=miller&from=birthdays&when=week");
+    await act(async () => row("Miller").click());
+    expect(window.location.search).toBe("?family=miller");
+  });
+
+  it("clears the household from the URL on Back to the list", async () => {
+    await open("family=miller");
+    await act(async () => (backToList() as HTMLButtonElement).click());
+    expect(window.location.pathname + window.location.search).toBe("/directory/families");
+  });
+
+  it("does not add a history entry for each household opened", async () => {
+    const pushState = vi.spyOn(window.history, "pushState");
+    await open("");
+    await act(async () => row("Miller").click());
+    await act(async () => row("Mockingham").click());
+    expect(pushState).not.toHaveBeenCalled();
+    pushState.mockRestore();
+  });
+});
+
 describe("FamiliesTab and people hidden from the directory", () => {
   const typeSearch = async (value: string) => {
     const input = host.querySelector<HTMLInputElement>('input[type="search"]')!;

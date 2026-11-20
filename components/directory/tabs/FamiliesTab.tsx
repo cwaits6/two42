@@ -36,6 +36,20 @@ function adultNames(family: FamilyDirectoryFull): string {
     .join(" & ");
 }
 
+/**
+ * Households with `next` open. `keep` carries the query a deep link arrived
+ * with, so a panel opened inside it still leads back to that list.
+ */
+function panelHref(basePath: string, next: Panel | null, keep: URLSearchParams | null): string {
+  const params = new URLSearchParams(keep ?? undefined);
+  params.delete("family");
+  params.delete("person");
+  if (next?.kind === "family") params.set("family", next.family.id);
+  if (next?.kind === "person") params.set("person", next.profile.id);
+  const query = params.toString();
+  return query ? `${basePath}/families?${query}` : `${basePath}/families`;
+}
+
 function FamiliesTabInner() {
   const {
     members,
@@ -121,14 +135,23 @@ function FamiliesTabInner() {
     return map;
   }, [entries]);
 
-  function openPanel(next: Panel) {
+  // The open panel is written to the URL so that Back from a page it links to,
+  // and a reload, reopen it. Replacing the entry keeps Back leaving the tab
+  // rather than stepping through every panel opened.
+  function showPanel(next: Panel | null, keep: URLSearchParams | null) {
     setPanel(next);
+    window.history.replaceState(null, "", panelHref(basePath, next, keep));
+  }
+
+  function openPanel(next: Panel) {
+    showPanel(next, searchParams);
     scrollToPanel();
   }
 
   function openFromList(next: Panel) {
     setListHref(null);
-    openPanel(next);
+    showPanel(next, null);
+    scrollToPanel();
   }
 
   const selectedFamilyId =
@@ -231,7 +254,7 @@ function FamiliesTabInner() {
             <>
               <BackLink
                 href={listHref ?? undefined}
-                onClick={() => setPanel(null)}
+                onClick={() => showPanel(null, null)}
                 className="mb-4"
               >
                 Back to the list
@@ -250,9 +273,9 @@ function FamiliesTabInner() {
               <BackLink
                 href={panel.fromFamily ? undefined : (listHref ?? undefined)}
                 onClick={() =>
-                  setPanel(
-                    panel.fromFamily ? { kind: "family", family: panel.fromFamily } : null,
-                  )
+                  panel.fromFamily
+                    ? showPanel({ kind: "family", family: panel.fromFamily }, searchParams)
+                    : showPanel(null, null)
                 }
                 className="mb-4"
               >
