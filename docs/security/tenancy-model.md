@@ -896,6 +896,14 @@ onboarding by adding a fallback branch to `handle_new_user()`. Nothing
 routes by slug any more, so provisioning takes none, and
 `organizations.slug` is dropped (`20261028000000_drop_org_slug.sql`).
 
+An email founds at most one church: the partial unique index
+`access_requests_one_founding_admin` on `lower(email)`, over requests with
+`approved_role = 'admin'` and `status = 'approved'`, makes a concurrent second
+call for the same owner wait for the first to commit, then fail, and
+`provision_organization()` answers that violation with `TN005`. A denied
+founding request doesn't count. Send invite and its retry update the one
+founding row, so the index never refuses them.
+
 An approved access request may name a `group_id` (and `group_invite_id`):
 the group an invite link admits the person into. `handle_new_user()` enrols
 that group — its composite FK pins it to the signup's org — and stamps the
