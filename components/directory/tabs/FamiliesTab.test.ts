@@ -60,7 +60,10 @@ const directory = {
   reload: () => {},
 };
 vi.mock("@/components/directory/DirectoryContext", () => ({ useDirectory: () => directory }));
-vi.mock("@/components/directory/FamilyCard", () => ({ FamilyCard: () => null }));
+vi.mock("@/components/directory/FamilyCard", () => ({
+  FamilyCard: ({ onOpenPerson }: { onOpenPerson: (profile: DirectoryProfile) => void }) =>
+    createElement("button", { type: "button", onClick: () => onOpenPerson(inMiller) }, "Open Ben"),
+}));
 vi.mock("@/components/directory/PersonCard", () => ({ PersonCard: () => null }));
 
 const { FamiliesTab } = await import("./FamiliesTab");
@@ -147,6 +150,20 @@ describe("FamiliesTab's open household in the URL", () => {
     await open("family=miller&from=birthdays&when=week");
     await act(async () => row("Miller").click());
     expect(window.location.search).toBe("?family=miller");
+  });
+
+  it("writes the person opened inside a household", async () => {
+    window.history.replaceState(null, "", "/");
+    await open("family=miller");
+    await act(async () => row("Open Ben").click());
+    expect(window.location.pathname + window.location.search).toBe("/directory/families?person=in-miller");
+  });
+
+  it("writes the household on Back from a person in it", async () => {
+    window.history.replaceState(null, "", "/");
+    await open("person=in-miller");
+    await act(async () => row("Back to Miller").click());
+    expect(window.location.pathname + window.location.search).toBe("/directory/families?family=miller");
   });
 
   it("clears the household from the URL on Back to the list", async () => {
