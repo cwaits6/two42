@@ -13,6 +13,7 @@ import { TimezoneSettings } from "@/components/admin/TimezoneSettings";
 import { getPrayerRetention } from "@/lib/orgPrayerRetention";
 import { isValidTimeZone } from "@/lib/time/zone";
 import { CUSTOM_SENDING_DOMAINS_ENABLED } from "@/lib/email/sendingDomains";
+import { rockIntegrationEnabled } from "@/lib/integrations/rock/enabled";
 import { OrgGroupControls } from "@/components/admin/OrgGroupControls";
 import { GroupDiscoverySettings } from "@/components/groups/GroupDiscoverySettings";
 import { parseGroupCreationPolicy } from "@/lib/groups/creation";
@@ -101,6 +102,20 @@ export async function ChurchSettings() {
             render={<Link href="/admin/settings/email" />}
           >
             Email sending domain
+          </Button>
+        </>
+      )}
+      {rockIntegrationEnabled() && (
+        <>
+          <h2 className="mb-3 mt-8 text-xl font-bold text-foreground">Rock RMS</h2>
+          <Button
+            size="lg"
+            variant="outline"
+            className="w-full text-lg sm:w-auto"
+            nativeButton={false}
+            render={<Link href="/admin/settings/rock" />}
+          >
+            Rock connection
           </Button>
         </>
       )}

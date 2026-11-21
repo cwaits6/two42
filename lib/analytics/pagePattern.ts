@@ -15,6 +15,7 @@ export const PAGE_PATTERNS: readonly string[] = [
   "/admin/requests",
   "/admin/settings",
   "/admin/settings/email",
+  "/admin/settings/rock",
   "/admin/usage",
   "/calendar",
   "/dashboard",

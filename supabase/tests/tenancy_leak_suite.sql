@@ -168,6 +168,11 @@ begin
     values (_org, _event, current_date, _owner);
   insert into public.usage_counts (org_id, usage_date, kind, pattern, total)
     values (_org, current_date, 'view', '/dashboard', 1);
+  -- Service-role-only: a sealed key and the links a church admin confirmed through the server.
+  insert into public.rock_connections (org_id, base_url, key_ciphertext, key_hint, connected_by)
+    values (_org, 'https://rock.' || _tag || '.example', 'r1.k.a.b', 'abcd', _owner);
+  insert into public.rock_person_links (org_id, profile_id, rock_person_id, linked_by)
+    values (_org, _owner, 1, _owner);
 end;
 $$;
 
@@ -359,12 +364,14 @@ begin
     if error_states[i] = '42501'
        and tables[i] in ('org_email_usage', 'org_email_limits', 'org_domain_worker_events',
                          'serving_reminder_passes', 'serving_reminder_sends',
-                         'event_reminder_passes', 'event_reminder_sends', 'prayer_comments') then
+                         'event_reminder_passes', 'event_reminder_sends', 'prayer_comments',
+                         'rock_connections', 'rock_person_links') then
       -- Service-role-only tables (restrictive policy, ALL privileges
       -- revoked — org_email_usage / org_email_limits /
       -- org_domain_worker_events / serving_reminder_passes /
       -- serving_reminder_sends / event_reminder_passes /
-      -- event_reminder_sends / prayer_comments): a privilege denial is the intended,
+      -- event_reminder_sends / prayer_comments / rock_connections /
+      -- rock_person_links): a privilege denial is the intended,
       -- stronger-than-row-filtering isolation outcome, not a broken check.
       -- Scoped to exactly those tables so a normal tenant table losing
       -- authenticated read access still fails.
