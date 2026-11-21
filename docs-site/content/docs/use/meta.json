@@ -1,0 +1,6 @@
+{
+  "title": "Use two42",
+  "description": "For members and leaders",
+  "root": true,
+  "pages": ["index", "sign-in", "joining", "group-home", "calendar", "serving", "directory", "announcements", "prayer", "lessons", "giving", "profile", "settings", "delete-account"]
+}

@@ -1,0 +1,42 @@
+name: Docs site
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# No paths: filter, for the reason test.yml gives: a check that is skipped by
+# not touching a listed path is not a gate. The build takes about a minute.
+
+jobs:
+  build:
+    name: Docs site build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: docs-site
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: docs-site/package-lock.json
+
+      - run: npm ci
+
+      - name: Type check
+        run: npm run types:check
+
+      - name: Check internal links
+        run: npm run check:links
+
+      - name: Build
+        run: npm run build
