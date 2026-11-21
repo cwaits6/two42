@@ -65,6 +65,14 @@ CI runs the same three steps in the `deno-test` job. After changing an edge func
 
 ## Run the browser specs
 
+The first time, install the Chromium browser the specs use:
+
+```bash
+npx playwright install --with-deps chromium
+```
+
+Then run them:
+
 ```bash
 npm run test:e2e
 ```
