@@ -11,7 +11,13 @@ Nothing. two42 has no backup tooling of its own. Every church's data lives in yo
 
 Use your Supabase project's own database backups. What they cover, how often they run and how long they are kept depend on your Supabase plan; check the backup settings in your project's dashboard.
 
-The Supabase CLI can also dump a linked project's database to a file with `npx supabase db dump`. This repository's CI uses `npx supabase db dump --remote --schema public -f supabase/schema.sql` to record the schema after each deploy; that file holds the schema only, not any church's data, and is not a backup.
+A database backup holds Storage's records of each file, not the files themselves. Restoring it does not bring back a deleted photo.
+
+## Back up Storage
+
+Back up the files in the `avatars` and `event-images` buckets separately, for example by downloading them from the Storage page of your project's dashboard or through Storage's S3-compatible API. To restore, upload them to the same paths in the same buckets.
+
+The Supabase CLI can also dump a linked project's database to files: `npx supabase db dump --remote -f schema.sql` saves the schema only, and `npx supabase db dump --remote --data-only -f data.sql` saves the rows. Without `--remote` the command dumps the local database. This repository's CI uses `npx supabase db dump --remote --schema public -f supabase/schema.sql` to record the schema after each deploy; that file holds the schema only, not any church's data, and is not a backup.
 
 ## Keep the prayer keys
 

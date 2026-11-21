@@ -18,21 +18,22 @@ two42 is still on 0.x versions. While it is, a `feat` commit or a breaking chang
 
 1. Read the release notes for every version between yours and the new one. Some releases need an extra step, as described below.
 2. Check out the new release's tag in your copy, for example `git fetch --tags` and `git checkout v0.32.0`, or merge it into your fork.
-3. Deploy the edge functions:
+3. Install that release's dependencies with `npm ci`, so `npx supabase` runs the CLI version it pins.
+4. Deploy the edge functions:
 
    ```bash
    npx supabase functions deploy send-event-reminders send-serving-reminders clean-up-expired-data
    ```
 
-4. Apply the migrations:
+5. Apply the migrations:
 
    ```bash
    npx supabase db push --remote
    ```
 
-5. Deploy the app from the same commit.
+6. Deploy the app from the same commit.
 
-Deploy the functions before applying the migrations. That is the order this repository's own CI uses, and the functions are written to keep working in the window before their migration lands. If you deploy from GitHub Actions, steps 3 and 4 run on each push to `main`; see [Deploy from GitHub Actions](/docs/run/deploy#deploy-from-github-actions).
+Deploy the functions before applying the migrations. That is the order this repository's own CI uses, and the functions are written to keep working in the window before their migration lands. If you deploy from GitHub Actions, steps 4 and 5 run on each push to `main`; see [Deploy from GitHub Actions](/docs/run/deploy#deploy-from-github-actions).
 
 `db push` applies every pending migration in order, so taking several releases at once needs one run, after you have read each release's notes.
 
