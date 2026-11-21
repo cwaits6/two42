@@ -30,6 +30,7 @@ two42 also has a full member file: one row per person with their contact details
 
 - **Export.** A church admin who is signed in can download it by opening `/api/admin/members/export` on the church's two42 address. The file is named for the church and the date.
 - **Import.** `/api/admin/members/import` takes the same file back. It checks every row before writing any, and with `?mode=validate` it reports what each row would change without writing anything; `?mode=apply` writes. It updates people it matches and adds people without an account to households. It can't create an account: a new row marked as having a sign-in is an error. Files are limited to 5 MB and 5,000 rows, and a file with an `org_id` column is refused. It is a request with no form in the app, so it is for people comfortable sending one with their signed-in session.
+- **An import that stops partway.** Checking first doesn't make the write all-or-nothing. If writing fails, the response says `Import partially applied`, with the line it stopped at in `failedAtLine` and the lines already written in `appliedLines`. Keep that response; it is the only record of what was written. Delete the `appliedLines` rows from your file, check the `failedAtLine` row, and import the rest. Importing the written lines again can create duplicate households.
 
 The columns are listed in `MEMBER_CSV_COLUMNS` in [`lib/members/format.ts`](https://github.com/cwaits6/two42/blob/main/lib/members/format.ts). A file must have `first_name`, `last_name`, `email` and `has_login`.
 

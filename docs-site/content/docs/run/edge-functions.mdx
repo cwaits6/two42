@@ -69,8 +69,9 @@ Run these in the SQL editor:
 select name from vault.decrypted_secrets
  where name in ('cron_project_url', 'cron_service_role_key');   -- expect both rows
 
-select jobname, status, return_message, start_time
-  from cron.job_run_details order by start_time desc limit 10;   -- did each job run?
+select j.jobname, d.status, d.return_message, d.start_time
+  from cron.job_run_details d join cron.job j using (jobid)
+ order by d.start_time desc limit 10;                            -- did each job run?
 
 select status_code, created
   from net._http_response order by created desc limit 10;       -- expect 200s

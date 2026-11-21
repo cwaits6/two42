@@ -22,7 +22,9 @@ for await (const path of glob(`${CONTENT}/**/*.mdx`)) {
   const url = ['/docs', ...slugs].join('/');
   // The validator skips a link with no pathname, so a same-page #anchor is
   // only checked once it names its own page.
-  const content = source.replaceAll('](#', `](${url}#`).replaceAll('href="#', `href="${url}#`);
+  const content = source
+    .replace(/\]\(\s*#/g, `](${url}#`)
+    .replace(/href=(["'])\s*#/g, `href=$1${url}#`);
   files.push({ path, content, slugs, url, hashes: headingIds(source) });
 }
 
