@@ -39,6 +39,7 @@ const results = await validateFiles(
   files.map(({ path, content, url }) => ({ path, content, url })),
   {
     scanned,
+    checkRelativePaths: 'exists',
     markdown: { components: { Card: { attributes: ['href'] } } },
   },
 );
