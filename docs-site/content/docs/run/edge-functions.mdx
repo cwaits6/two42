@@ -1,0 +1,89 @@
+---
+title: Edge functions
+description: The three scheduled edge functions, their pg_cron schedules, the Vault secrets they need, and how to check they ran.
+---
+
+## What runs on a schedule
+
+The source lives in `supabase/functions/`. Each function is called by a `pg_cron` job that posts to it over `pg_net`. The schedules are defined in `supabase/migrations/`, so applying the migrations creates them; you do not schedule anything by hand.
+
+| Job | When (UTC) | Function |
+|---|---|---|
+| `send-event-reminders-daily` | 15:00, 16:00 and 17:00 daily | `send-event-reminders` |
+| `send-serving-reminders-hourly` | Every hour, on the hour | `send-serving-reminders` |
+| `send-serving-monthly-broadcast` | 15:00 on the 1st | `send-serving-reminders` |
+| `clean-up-expired-data-nightly` | 09:00 daily | `clean-up-expired-data` |
+
+Each function works through every active church in turn and filters every query on that church. A church an operator has suspended gets no reminders and no clean-up; see [Add a church](/docs/run/add-a-church#suspend-a-church).
+
+### send-event-reminders
+
+Emails the people who replied Yes or Maybe to an event, before each date of the event, as many days ahead as the event chose. It records what it sent, so a rerun never sends twice. The 15:00 firing sends; the 16:00 and 17:00 firings finish what a failed or cut-off firing left.
+
+### send-serving-reminders
+
+Runs in two modes, one per job:
+
+- **Hourly.** Reminds the people on a team's next service date once the team's reminder day and hour have come in the church's time zone. It records what it sent, so a rerun never sends twice.
+- **Monthly**, on the 1st. Emails each team the service dates that still need people. A team whose dates are all covered gets nothing.
+
+Serving emails carry links that act without signing in when `SERVING_LINK_SECRET` is set and the link mode is `signed`. See [Environment variables](/docs/run/environment#edge-function-secrets).
+
+### clean-up-expired-data
+
+Deletes data that has expired, one church at a time. It never deletes a church.
+
+| What | When it is deleted |
+|---|---|
+| Declined access requests | 90 days after they were declined |
+| Approved access requests whose setup link was never used | 90 days after the link expired. A church's first admin's request is kept. |
+| Household invites never accepted | 90 days after they were sent, or created if never sent, unless a pending request or a live setup link still uses them |
+| Group invite links | 90 days after they were revoked or expired |
+| Feedback | 12 months after it was sent |
+| Prayer requests | Only when the church admin has chosen a period under **Old prayer requests** in the church settings: 6, 12 or 24 months after posting. Unset, prayer requests are kept. |
+| Serving and event reminder records | 35 days after the date they cover |
+| Usage counts | 13 months after the day they count |
+
+## Set the function secrets
+
+The functions read their own secrets, set with `npx supabase secrets set NAME=value` or under Edge Functions → Secrets in the dashboard. The full list is in [Environment variables](/docs/run/environment#edge-function-secrets). Supabase injects `SUPABASE_URL` and the service key; do not set them.
+
+## Create the Vault secrets
+
+The `pg_cron` jobs read the project URL and a service key from Supabase Vault by name, because neither can be committed. **Both are required.** Until they exist, every job still runs on schedule and fails, and nothing in the app shows it.
+
+Create them once, in the SQL editor:
+
+```sql
+select vault.create_secret('https://<project-ref>.supabase.co', 'cron_project_url');
+select vault.create_secret('<the secret key>', 'cron_service_role_key');
+```
+
+The functions answer `401` to any caller whose `Authorization: Bearer` header is not one of the project's service keys, so the Vault key must be one of them.
+
+## Check that the jobs ran
+
+Run these in the SQL editor:
+
+```sql
+select name from vault.decrypted_secrets
+ where name in ('cron_project_url', 'cron_service_role_key');   -- expect both rows
+
+select jobname, status, return_message, start_time
+  from cron.job_run_details order by start_time desc limit 10;   -- did each job run?
+
+select status_code, created
+  from net._http_response order by created desc limit 10;       -- expect 200s
+```
+
+A `401` means the Vault key is not one of the function's service keys.
+
+The same check, as one query, is [`scripts/check-scheduled-jobs.sql`](https://github.com/cwaits6/two42/blob/main/scripts/check-scheduled-jobs.sql). It covers every firing in the six hours before it runs, because `pg_net` keeps responses for six hours. This repository runs it against its hosted project every six hours, at 03:30, 09:30, 15:30 and 21:30 UTC, from [`.github/workflows/scheduled-jobs-check.yml`](https://github.com/cwaits6/two42/blob/main/.github/workflows/scheduled-jobs-check.yml), which uses the same `SUPABASE_PROJECT_REF`, `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` secrets as the deploy workflow. The workflow fails, which sends GitHub's failed-run notification, when a job did not run, a response was not a 200, or a firing's responses are missing.
+
+## Deploy the functions
+
+```bash
+npx supabase functions deploy send-event-reminders send-serving-reminders clean-up-expired-data
+```
+
+Deploy them on every update, before applying the migrations. That is the order this repository's CI uses; see [Deploy from GitHub Actions](/docs/run/deploy#deploy-from-github-actions).

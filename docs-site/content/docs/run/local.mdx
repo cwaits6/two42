@@ -1,0 +1,67 @@
+---
+title: Run it locally
+description: Start the Supabase stack and the app on your own machine, with sample data and logins.
+---
+
+You need Node.js 26, npm, git and Docker. See [Requirements](/docs/run/requirements).
+
+## Start the database
+
+```bash
+git clone https://github.com/cwaits6/two42.git
+cd two42
+npm install
+npx supabase start
+```
+
+The first start pulls the container images, then applies every migration and `supabase/seed.sql` and prints the stack's URLs and keys.
+
+## Set the environment
+
+Copy the example file:
+
+```bash
+cp .env.example .env.local
+```
+
+Then set six values and clear two.
+
+| Set | To |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | the printed Project URL, `http://127.0.0.1:54321` |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | the printed Publishable key |
+| `SUPABASE_SECRET_KEY` | the printed Secret key |
+| `SERVING_LINK_SECRET` | any random string, for example `openssl rand -hex 32` |
+| `PRAYER_BODY_KEY` | `openssl rand -base64 32` |
+| `PRAYER_AUTHOR_KEY` | another `openssl rand -base64 32` |
+
+| Clear | Why |
+|---|---|
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | the example sets a placeholder, and any non-empty value loads Google Maps with it, so event maps show an error instead of staying out |
+| `RESEND_API_KEY` | the example sets a placeholder; the app does not need Resend locally |
+
+Leave the rest as it is. The app runs without Resend or Google Maps: without a Resend key, invite emails fail with "We couldn't send the email", and with the Maps key empty the event location is a plain text field and event maps are left out.
+
+Every variable is described in [Environment variables](/docs/run/environment).
+
+## Start the app
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) and sign in as `admin@local.dev` with the password `password123`. That is the seed's church admin, who leads one of the three sample groups.
+
+- `platform@local.dev`, with the same password, is the seed's operator account. It opens the platform pages described in [Add a church](/docs/run/add-a-church).
+- The other sample members are listed at the top of `supabase/seed.sql`.
+
+## Read the email the stack sends
+
+Everything the local stack mails, such as a password reset, lands in Mailpit at [http://127.0.0.1:54324](http://127.0.0.1:54324). Nothing leaves the machine.
+
+## Stop and restart the stack
+
+- `npx supabase status` prints the URLs and keys again.
+- `npx supabase stop` stops the stack and keeps its data.
+
+The checks CI runs, and how to run each one locally, are in [Local workflow](/docs/develop/local-workflow).

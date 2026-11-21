@@ -1,0 +1,72 @@
+---
+title: Add a church
+description: The operator pages under /platform, how to become an operator, and how to add a church and invite its first admin.
+---
+
+One install can hold more than one church. Each church's people, groups and content are kept apart from every other church's by the database. An operator manages the churches themselves from the platform pages at `/platform`.
+
+## Make an account an operator
+
+An operator is an account listed in the `platform_admins` table. There is no page that adds one. Insert the account's Auth user id in the SQL editor:
+
+```sql
+insert into public.platform_admins (profile_id) values ('<your auth user id>');
+```
+
+An operator does not need to belong to any church. Signed in, an operator who belongs to no church lands on `/platform`; an operator who is also a member finds **Platform** in the account menu.
+
+Locally, `platform@local.dev` (password `password123`) is the seed's operator.
+
+## Find your way around the platform pages
+
+The platform pages have three sections:
+
+- **Overview** (`/platform`): counts of active and suspended organizations, with links to **Manage organizations** and **Change password or email**.
+- **Organizations** (`/platform/organizations`): every church, with its status and the date it was added.
+- **Usage** (`/platform/usage`): page views and errors in every organization, added together.
+
+The platform pages use the word organization for a church.
+
+## Add a church
+
+1. Open **Organizations** and select **Add organization**.
+2. Enter the church's **Name** and the **First admin's email**. That person becomes the church's church admin.
+3. Select **Add organization**.
+
+The church is created, and the first admin is emailed a setup link that is good for seven days. If the email could not be sent, the church is still added; send the invite again from the church's page.
+
+Adding fails when the first admin's email already belongs to an account in another church, or already has an invite or approved request in another church.
+
+A new church starts with no groups. Its first admin adds them; see [Groups](/docs/administer/groups).
+
+## Manage a church
+
+On **Organizations**, select **Manage** next to a church.
+
+### Send the first admin's invite
+
+Under **First admin**, the page shows the first admin's email and whether the invite was sent, is outstanding, or was used. Select **Send invite**, or **Resend invite** while one is outstanding. Sending again invalidates the previous link.
+
+### Set a church's branding
+
+Under **Branding**:
+
+- **Display name**: the church's name in the app and on its emails.
+- **Accent color**: a 6-digit hex color such as `#B85C38`. The page shows whether it passes the contrast check against white text. Leave it empty to use the platform default.
+- **Reply-to email**: where replies to the church's emails go.
+
+Select **Save branding**. How branding reaches email is described in [Email](/docs/run/email#what-an-email-looks-like).
+
+### Set the daily email limit
+
+Under **Daily email limit**, see [Set a church's daily email limit](/docs/run/email#set-a-churchs-daily-email-limit).
+
+### Suspend a church
+
+Under **Status**, select **Suspend organization** and confirm. Reminder emails stop for that church, and the nightly clean-up skips it. Members can still sign in.
+
+To undo it, select **Reactivate organization**.
+
+### Custom email domain
+
+The **Custom email domain** section turns per-church sending domains on or off. Church admins cannot claim a domain in this release; see [Custom sending domains](/docs/run/email#custom-sending-domains).
