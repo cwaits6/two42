@@ -1,48 +1,50 @@
 import { readFile } from 'node:fs/promises';
 import { glob } from 'node:fs/promises';
-import GithubSlugger from 'github-slugger';
+import { getTableOfContents } from 'fumadocs-core/content/toc';
 import { printErrors, scanURLs, validateFiles } from 'next-validate-link';
 
 const CONTENT = 'content/docs';
+const LANDING = 'app/(home)/page.tsx';
 
 function slugsOf(path) {
   const parts = path.slice(CONTENT.length + 1, -'.mdx'.length).split('/');
   return parts.at(-1) === 'index' ? parts.slice(0, -1) : parts;
 }
 
-// Mirrors the heading ids Fumadocs renders: plain heading text through
-// github-slugger, with inline Markdown removed.
 function headingIds(content) {
-  const slugger = new GithubSlugger();
-  const ids = [];
-  let inFence = false;
-  for (const line of content.split('\n')) {
-    if (line.startsWith('```')) inFence = !inFence;
-    const match = !inFence && /^#{2,6}\s+(.+)$/.exec(line);
-    if (!match) continue;
-    const text = match[1].replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[*`_]/g, '');
-    ids.push(slugger.slug(text));
-  }
-  return ids;
+  const body = content.replace(/^---\n[\s\S]*?\n---\n/, '');
+  return getTableOfContents(body).map((item) => item.url.slice(1));
 }
 
 const files = [];
 for await (const path of glob(`${CONTENT}/**/*.mdx`)) {
-  const content = await readFile(path, 'utf8');
+  const source = await readFile(path, 'utf8');
   const slugs = slugsOf(path);
-  files.push({ path, content, slugs, url: ['/docs', ...slugs].join('/') });
+  const url = ['/docs', ...slugs].join('/');
+  // The validator skips a link with no pathname, so a same-page #anchor is
+  // only checked once it names its own page.
+  const content = source.replaceAll('](#', `](${url}#`).replaceAll('href="#', `href="${url}#`);
+  files.push({ path, content, slugs, url, hashes: headingIds(source) });
 }
+
+// The validator reads only Markdown, so the landing page's section hrefs go
+// through it as Markdown links under a .md name.
+const landing = await readFile(LANDING, 'utf8');
+const landingLinks = [...landing.matchAll(/href: '([^']+)'/g)].map((match) => `[link](${match[1]})`);
 
 const scanned = await scanURLs({
   preset: 'next',
   populate: {
-    'docs/[[...slug]]': files.map((file) => ({ value: file.slugs, hashes: headingIds(file.content) })),
+    'docs/[[...slug]]': files.map((file) => ({ value: file.slugs, hashes: file.hashes })),
   },
 });
 
-const results = await validateFiles(files, {
-  scanned,
-  markdown: { components: { Card: { attributes: ['href'] } } },
-});
+const results = await validateFiles(
+  [...files.map(({ path, content, url }) => ({ path, content, url })), { path: `${LANDING}.md`, content: landingLinks.join('\n') }],
+  {
+    scanned,
+    markdown: { components: { Card: { attributes: ['href'] } } },
+  },
+);
 
 printErrors(results, true);
