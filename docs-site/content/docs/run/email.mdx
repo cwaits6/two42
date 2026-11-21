@@ -1,0 +1,43 @@
+---
+title: Email
+description: How two42 sends email through Resend, which address it sends from, and the per-church daily limit.
+---
+
+## Who sends what
+
+Two senders are involved.
+
+- **Resend**, from the app and the edge functions: invites, setup links, approvals, serving emails, and event and serving reminders.
+- **Supabase Auth**, through the SMTP sender configured in the Supabase dashboard: password-reset emails. See [Configure Supabase Auth](/docs/run/deploy#configure-supabase-auth).
+
+## Set up Resend
+
+1. Create a [Resend](https://resend.com) account and verify your sending domain there.
+2. Create an API key and set it as `RESEND_API_KEY` in the app's environment and in the edge function secrets.
+3. Set the sending address, in the form `Name <address>`, on a domain you verified: `NEXT_PUBLIC_EMAIL_FROM` in the app, and `EMAIL_FROM` in the edge function secrets.
+
+Both sending addresses default to `two42 <noreply@two42.io>`, which Resend refuses for any account but the hosted service's. Locally the app runs without Resend, and invite emails fail with "We couldn't send the email".
+
+The variables are listed in [Environment variables](/docs/run/environment).
+
+## What an email looks like
+
+Every email a church's people get carries that church's branding:
+
+- **From:** the church's display name, then the sending address. The display name is set per church by an operator on the platform pages; `NEXT_PUBLIC_APP_NAME` (`APP_NAME` in the edge functions) is used when it is empty. The address is always `NEXT_PUBLIC_EMAIL_FROM`'s (or `EMAIL_FROM`'s in the edge functions), unless the church has a verified custom sending domain.
+- **Reply-To:** the church's **Reply-to email**, when an operator has set one. Without it, the email has no Reply-To header and replies go to the sending address.
+- **Links:** always built on the one origin, `NEXT_PUBLIC_SITE_URL` in the app and `SITE_URL` in the edge functions, never on a per-church address.
+
+To set a church's display name and reply-to address, see [Add a church](/docs/run/add-a-church#set-a-churchs-branding).
+
+## Custom sending domains
+
+The database and the send path support a per-church sending domain: when a church has a domain in `org_email_domains` whose status is `verified`, its email is sent from `noreply@<that domain>`. Any other status, or a domain that fails the address check at send time, falls back to the platform sending address.
+
+In this release church admins cannot claim a domain. The page that does it is turned off in code (`CUSTOM_SENDING_DOMAINS_ENABLED` in `lib/email/sendingDomains.ts` is `false`), so every church sends from the platform address. The operator's **Enable custom domains** button on a church's page still sets the per-church toggle, but has no visible effect while the page is off.
+
+## Set a church's daily email limit
+
+Each church can send a limited number of emails a day. The default is 500. An operator changes it on the church's page under **Daily email limit**: enter a number in **Emails per day** and select **Save limit**. Setting 0 stops the counted emails.
+
+Not counted against the limit: invites a church admin or a household member sends, approval emails, and the confirmation sent when someone signs up to serve.

@@ -1,0 +1,58 @@
+---
+title: Events
+description: How a leader adds, edits and deletes a group's events, including repeating events, online meetings and reminders.
+---
+
+## Who adds events
+
+Only a group's leaders add, edit and delete its events. A church admin adds events only in a group they lead. Members see the events, answer RSVPs and subscribe to the calendar; see [Calendar](/docs/use/calendar).
+
+Every event time is entered and shown in the church's time zone, set by a church admin in [Church settings](/docs/administer/church-admin#events).
+
+## Add an event
+
+1. Choose **Add event**. It is on the Calendar page and on the group's Home. If you lead more than one group shown on the calendar, choose the group under **Add to**. If you lead one, you can also choose a date on the calendar to start an event on it.
+2. Enter a **Title**, and if you like a **Description** and a **Location**.
+3. Set the **Start time** and **End time**.
+4. Turn on **Ask for RSVPs** to let members answer.
+5. Choose when to **Send a reminder**. See [Set a reminder](#set-a-reminder).
+6. Fill in the optional sections below if you need them.
+7. Choose **Save event**.
+
+### Make it repeat
+
+Turn on **Repeats**, then choose:
+
+- **How often**: **Daily**, **Weekly**, **Monthly** or **Yearly**.
+- **Ends**: **Never**, **After a number of times** (2 to 999, entered in **Number of times**), or **On a date** (entered in **Repeat until**).
+
+### Add an online meeting
+
+Under **Online meeting**, paste the **Meeting link** so members can join with one tap. If you don't have a link, enter the **Meeting ID** and **Passcode**. A meeting link must start with `https://`.
+
+Once you enter a link or an ID, two more fields appear. **Show the Join button on Home** puts a Join button on Home as well as on the event page. **Join opens before start** sets how early the button appears: **5 minutes**, **15 minutes**, **30 minutes** or **1 hour**. A repeating event has one meeting for every date.
+
+### Choose what calendar apps get
+
+Under **Calendar subscriptions**, an event uses the group's settings from **Group settings** → **Details**. Choose **Choose for this event** to set **Join details**, **Notes** and **Location** for this event alone. Anything left out of a member's calendar app is replaced by a link to the event page.
+
+## Set a reminder
+
+An event reminder is an email sent before a date of the event to the members who answered Yes or Maybe for that date. **Send a reminder** offers **1 day before**, **2 days before**, **1 week before** or **No reminder**. It starts on the group's **Default for new events**.
+
+If the group's **Send event reminders** is off, the field says "Event reminders are off for this group." and no reminder goes out, whatever the event says. Each member can also stop getting reminders in their own Settings. See [Settings](/docs/use/settings).
+
+Reminders are sent by a scheduled job; see [Edge functions](/docs/run/edge-functions).
+
+## Edit an event
+
+1. Open the event and choose **Edit event**.
+2. For a repeating event opened from one of its dates, choose whether to save the changes for **This date only** or **Every date**.
+3. Choose **Save changes**.
+
+## Delete an event
+
+1. Open the event, choose **Edit event**, then **Delete event**.
+2. For a repeating event opened from one of its dates, choose **This date only** or **Delete all dates**. Otherwise, confirm with **Delete event**.
+
+Deleting can't be undone.

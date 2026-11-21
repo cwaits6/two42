@@ -1,0 +1,6 @@
+{
+  "title": "Run two42",
+  "description": "For operators",
+  "root": true,
+  "pages": ["index", "requirements", "local", "deploy", "edge-functions", "environment", "email", "add-a-church", "backups", "upgrading", "troubleshooting"]
+}

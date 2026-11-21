@@ -1,0 +1,31 @@
+---
+title: Contributor docs
+description: The documents in the repository that contributors work from, and what each one covers.
+---
+
+These documents live in the repository and change with the code. Read them there rather than copies.
+
+## Start here
+
+- [`CONTRIBUTING.md`](https://github.com/cwaits6/two42/blob/main/CONTRIBUTING.md): opening an issue first, the license, conventional commits, additive migrations, and the design rules.
+- [`CLAUDE.md`](https://github.com/cwaits6/two42/blob/main/CLAUDE.md): the working rules for contributors and coding agents, including the tenancy rules every migration must meet and how to run each CI check locally.
+- [`docs/contributing/issues-and-prs.md`](https://github.com/cwaits6/two42/blob/main/docs/contributing/issues-and-prs.md): how to title and label issues, name projects, and write pull requests, with the template to use for each kind of change.
+- [`CONTEXT.md`](https://github.com/cwaits6/two42/blob/main/CONTEXT.md): the words the product uses with its people, such as church, household and church admin, and the alternatives to avoid.
+
+## Design
+
+- [`docs/design/DESIGN.md`](https://github.com/cwaits6/two42/blob/main/docs/design/DESIGN.md): the design system: the wordmark, type, colors, page frame, voice and the accessibility floor.
+
+## Security
+
+- [`docs/security/tenancy-model.md`](https://github.com/cwaits6/two42/blob/main/docs/security/tenancy-model.md): how `org_id` keeps one church's data from another's, the pieces that enforce it, storage tenancy, the checks CI runs, and the known limits.
+- [`docs/security/service-role-inventory.md`](https://github.com/cwaits6/two42/blob/main/docs/security/service-role-inventory.md): every place the code bypasses row-level security, and the `org_id` filter that stands in for it at each one. A new service-client call site gets a row here in the same pull request.
+- [`docs/security/roles-and-permissions.md`](https://github.com/cwaits6/two42/blob/main/docs/security/roles-and-permissions.md): what each role, flag and capability can see and do, with recommendations for each role.
+- [`docs/security/logging.md`](https://github.com/cwaits6/two42/blob/main/docs/security/logging.md): what a log line contains, and what is never logged.
+- [`docs/security/prayer-encryption.md`](https://github.com/cwaits6/two42/blob/main/docs/security/prayer-encryption.md): how prayer request text and anonymous authors are sealed, and how to convert, rotate or recover the keys.
+- [`docs/security/domains.md`](https://github.com/cwaits6/two42/blob/main/docs/security/domains.md): the one host the app serves, how a request finds its church, and how emailed links are built.
+
+## Scripts and tests
+
+- [`scripts/README.md`](https://github.com/cwaits6/two42/blob/main/scripts/README.md): the tenancy guard and its tiers, the scheduled-jobs check, and the operator scripts.
+- [`e2e/README.md`](https://github.com/cwaits6/two42/blob/main/e2e/README.md): the Playwright specs, the boundaries they assert, and how to run them.

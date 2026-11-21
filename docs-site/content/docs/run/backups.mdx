@@ -1,0 +1,35 @@
+---
+title: Backups
+description: What two42 does and does not back up, and what you need to keep yourself.
+---
+
+## What two42 backs up
+
+Nothing. two42 has no backup tooling of its own. Every church's data lives in your Supabase project's Postgres database and Storage, so backing it up is a matter of backing up that project.
+
+## Back up the database
+
+Use your Supabase project's own database backups. What they cover, how often they run and how long they are kept depend on your Supabase plan; check the backup settings in your project's dashboard.
+
+A database backup holds Storage's records of each file, not the files themselves. Restoring it does not bring back a deleted photo.
+
+## Back up Storage
+
+Back up the files in the `avatars` and `event-images` buckets separately, for example by downloading them from the Storage page of your project's dashboard or through Storage's S3-compatible API. To restore, upload them to the same paths in the same buckets.
+
+The Supabase CLI can also dump a linked project's database to files: `npx supabase db dump --remote -f schema.sql` saves the schema only, and `npx supabase db dump --remote --data-only -f data.sql` saves the rows. Without `--remote` the command dumps the local database. This repository's CI uses `npx supabase db dump --remote --schema public -f supabase/schema.sql` to record the schema after each deploy; that file holds the schema only, not any church's data, and is not a backup.
+
+## Keep the prayer keys
+
+Prayer request text is stored sealed with `PRAYER_BODY_KEY`, and anonymous authors are stored as a hash keyed with `PRAYER_AUTHOR_KEY`. A database backup is only as readable as the keys you keep for it.
+
+- Keep two copies of each key outside the host, for example in a password manager and an offline copy.
+- After rotating a key, keep the old one for as long as you keep backups taken before the rotation; they hold text sealed with it.
+
+Text sealed with a lost body key cannot be recovered from any backup. See [`docs/security/prayer-encryption.md`](https://github.com/cwaits6/two42/blob/main/docs/security/prayer-encryption.md).
+
+## What a restore brings back
+
+The scheduled jobs are defined in the migrations, so applying them to a new project recreates the jobs. The edge function secrets are project settings, not database rows. After restoring into a new project, deploy the functions, set their secrets as in [Deploy](/docs/run/deploy), create the `cron_project_url` and `cron_service_role_key` Vault secrets with the new project's URL and service key as in [Create the Vault secrets](/docs/run/edge-functions#create-the-vault-secrets), and run the checks in [Check that the jobs ran](/docs/run/edge-functions#check-that-the-jobs-ran).
+
+Data the nightly clean-up deleted stays in any backup taken before it ran, for as long as that backup is kept. See [clean-up-expired-data](/docs/run/edge-functions#clean-up-expired-data).

@@ -1,0 +1,91 @@
+---
+title: Local workflow
+description: The checks to run before you push, and how to run each one against your local stack.
+---
+
+Start the local stack and the app first, as in [Run it locally](/docs/run/local).
+
+## Keep the local database intact
+
+- Apply new migrations with `npx supabase migration up`. Do not use `supabase db reset` or `supabase test db` on a stack whose data you want to keep: both reset the database.
+- Run the CLI as `npx supabase`, the version pinned in `package.json`. Its database commands target the local stack unless told otherwise.
+- Never pass `--remote` (or `--linked`, `--project-ref`, or a non-local `--db-url`) while developing. Migrations reach the hosted project only through CI; see [Deploy from GitHub Actions](/docs/run/deploy#deploy-from-github-actions).
+
+## Run the app checks
+
+```bash
+npm run lint            # ESLint with --max-warnings=0, so a warning fails it
+npx tsc --noEmit        # type check
+npm run test:run        # Vitest unit tests, once
+npm run build           # production build
+npm run guard:tenancy   # service-role org_id guard and profile email reads
+```
+
+`npm run lint`, `npm run test:run` and `npm run guard:tenancy` run on every pull request in [`.github/workflows/test.yml`](https://github.com/cwaits6/two42/blob/main/.github/workflows/test.yml), and `Lint` is a required check. Run the type check and the build yourself before pushing.
+
+`npm run guard:tenancy` takes under a second. It reads only files git tracks, so `git add` a new file before trusting a pass. What it checks, and its three tiers, are in [`scripts/README.md`](https://github.com/cwaits6/two42/blob/main/scripts/README.md). It also fails a request-client read of all of a person's profile columns or of their email address; select `PROFILE_COLUMNS` from `lib/profileColumns.ts` instead.
+
+## Regenerate the database types
+
+After a schema change:
+
+```bash
+npm run db:types
+```
+
+It reads the local stack and writes `lib/supabase/database.types.ts`. CI regenerates the types from the migrations and fails when the committed file differs.
+
+## Run the pgTAP suites
+
+The suites live in `supabase/tests/`. Run one through the stack's database container. Each file is wrapped in `begin;` and `rollback;`, so it never keeps anything:
+
+```bash
+docker exec -i supabase_db_small-group-hub \
+  psql -U postgres -d postgres -f - < supabase/tests/<file>.sql
+```
+
+CI runs every suite with `supabase test db` against a fresh database in the `pgtap` job of [`.github/workflows/supabase.yml`](https://github.com/cwaits6/two42/blob/main/.github/workflows/supabase.yml). A local stack that has drifted from the migrations can pass a suite that CI fails.
+
+`supabase/tests/schema_tenancy_lint.sql` checks the tenancy rules across the whole `public` schema. It fails when a table lacks row-level security, lacks an `org_id` column that is `not null default public.app_current_org_id()`, or lacks exactly one restrictive isolation policy; when a policy on a church-owned table is a bare `true`; when a foreign key into a church-owned table is not composite on `org_id`; or when a `SECURITY DEFINER` function that reads a church-owned table never mentions `org_id`. The rules are in the repository's `CLAUDE.md` and [`docs/security/tenancy-model.md`](https://github.com/cwaits6/two42/blob/main/docs/security/tenancy-model.md).
+
+## Run the edge function checks
+
+You need Deno 2. Run the commands exactly as written: `DENO_NO_PACKAGE_JSON=1` keeps Deno from copying `package.json` into `deno.lock`.
+
+```bash
+export DENO_NO_PACKAGE_JSON=1
+deno check --lock=deno.lock --frozen supabase/functions/_shared/*.ts
+deno test --lock=deno.lock --frozen --allow-env supabase/functions/tests/
+deno check --lock=deno.lock --frozen supabase/functions/send-event-reminders/index.ts \
+           supabase/functions/send-serving-reminders/index.ts \
+           supabase/functions/clean-up-expired-data/index.ts
+```
+
+CI runs the same three steps in the `deno-test` job. After changing an edge function's imports, refresh the lock by running them once with `--frozen=false`.
+
+## Run the browser specs
+
+The first time, install the Chromium browser the specs use:
+
+```bash
+npx playwright install --with-deps chromium
+```
+
+Then run them:
+
+```bash
+npm run test:e2e
+```
+
+The Playwright specs build the app (`next build && next start`) on port 3142 and run against the Supabase stack the build's environment points at. Locally that is your stack on `:54321`, with its seed already applied; nothing is reset. Set `E2E_PORT` if 3142 is taken, or `E2E_BASE_URL` to use a server that is already up. `npx playwright show-report` opens the last report.
+
+The specs that change settings set them back in `beforeAll` and `afterAll`. See [`e2e/README.md`](https://github.com/cwaits6/two42/blob/main/e2e/README.md).
+
+## Build the docs site
+
+This documentation site lives in `docs-site/` and builds separately from the app:
+
+```bash
+cd docs-site
+npm ci && npm run build
+```

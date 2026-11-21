@@ -1,0 +1,6 @@
+{
+  "title": "Develop",
+  "description": "For contributors",
+  "root": true,
+  "pages": ["index", "local-workflow", "contributor-docs"]
+}

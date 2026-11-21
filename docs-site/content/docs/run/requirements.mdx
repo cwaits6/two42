@@ -1,0 +1,30 @@
+---
+title: Requirements
+description: The tools and accounts you need to run two42 locally and in production.
+---
+
+## Run it locally
+
+- [Node.js](https://nodejs.org/) 26. `package.json` sets `"engines": { "node": "26.x" }`.
+- npm and git.
+- [Docker](https://docs.docker.com/get-started/get-docker/). The Supabase CLI uses it to run the database and the rest of the Supabase stack on your machine.
+
+The Supabase CLI is a dev dependency, so `npx supabase` runs the version pinned in `package.json` and there is nothing else to install. Use `npx supabase` rather than a globally installed CLI, whose version may differ.
+
+Resend and Google Maps are not needed locally. See [Run it locally](/docs/run/local).
+
+## Run it in production
+
+- A [Supabase](https://supabase.com/dashboard) project.
+- A [Resend](https://resend.com) account with a verified sending domain.
+- A host for the Next.js app that runs Node.js 26. The hosted service uses Vercel; `vercel.json` in the repository is that host's configuration.
+- A domain. The app serves one origin, set in `NEXT_PUBLIC_SITE_URL`.
+- An SMTP sender for Supabase Auth's password-reset emails. Supabase's built-in sender is rate-limited and meant for testing.
+
+Optional:
+
+- A Google Maps Platform API key, for address suggestions and event maps. Google requires a billing account on the project. See [Event locations](/docs/run/deploy#set-up-event-locations).
+
+## Run the checks a contributor runs
+
+Contributors also need [Deno](https://deno.com/) 2 for the edge function checks. See [Local workflow](/docs/develop/local-workflow).
