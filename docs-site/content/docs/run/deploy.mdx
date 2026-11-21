@@ -1,0 +1,116 @@
+---
+title: Deploy
+description: Set up the Supabase project, deploy the app, and create the first church admin.
+---
+
+You need a Supabase project, a Resend account with a verified sending domain, a host for the Next.js app, and a domain. See [Requirements](/docs/run/requirements).
+
+## Set up the database and functions
+
+From a checkout, link the project, apply the migrations, deploy the functions and set their secrets:
+
+```bash
+npx supabase login
+npx supabase link --project-ref <project-ref>
+npx supabase db push --remote
+npx supabase functions deploy send-event-reminders send-serving-reminders clean-up-expired-data
+npx supabase secrets set RESEND_API_KEY=<key> SITE_URL=https://your.domain \
+  SERVING_LINK_SECRET=<secret> EMAIL_FROM='Your Church <noreply@your.domain>'
+```
+
+`db push` and `functions deploy` each ask before they change the project, unless `--yes` is passed or `SUPABASE_YES` is exported in the shell. Repeat both after every update; see [Upgrading](/docs/run/upgrading).
+
+The function secrets are listed in [Environment variables](/docs/run/environment#edge-function-secrets).
+
+## Create the Vault secrets
+
+The scheduled jobs read the project URL and a service key from Supabase Vault. Create both once in the SQL editor, as described in [Create the Vault secrets](/docs/run/edge-functions#create-the-vault-secrets). Until they exist, every job runs on schedule and fails, and nothing in the app shows it.
+
+## Configure Supabase Auth
+
+Under Authentication in the Supabase dashboard:
+
+1. Set the Site URL to your origin.
+2. Add `https://your.domain/api/auth/callback` to the redirect URLs.
+3. Configure a [custom SMTP sender](https://supabase.com/docs/guides/auth/auth-smtp) for password-reset emails. Supabase's built-in sender is rate-limited and meant for testing.
+
+Accounts are created on the server, already confirmed, from the setup link, so setup signs the person in whatever "Confirm email" is set to. Turning "Confirm email" off is still recommended, so no other path sends a second confirmation message.
+
+## Deploy the app
+
+1. Import the repository at [vercel.com/new](https://vercel.com/new), or into any host that runs a Next.js server on Node.js 26.
+2. Set the app variables from [Environment variables](/docs/run/environment#app-variables), with `NEXT_PUBLIC_SITE_URL` set to your production origin.
+3. Deploy, and attach your domain.
+
+The app answers only on the `NEXT_PUBLIC_SITE_URL` host, plus `localhost`, `127.0.0.1` and any `*.vercel.app` host. Every other host gets a 404.
+
+`vercel.json` sets the framework to Next.js and the Vercel region to `pdx1`.
+
+<Callout type="warn">
+Keep two copies of the prayer keys outside the host. Prayer request text sealed with a lost `PRAYER_BODY_KEY` cannot be recovered.
+</Callout>
+
+## Add the first church admin
+
+The migrations create one church with one group. Approve your own email in the SQL editor, as a church admin:
+
+```sql
+insert into public.access_requests (org_id, name, email, status, reviewed_at, approved_role)
+values ((select id from public.organizations), 'Your Name', 'you@example.com', 'approved', now(), 'admin');
+```
+
+Then, under Authentication → Users, add a user with that email and a password, with auto-confirm on. The sign-up trigger creates your profile as a church admin, and you can sign in at `/login`.
+
+Without the approved request first, creating the user fails with `signup rejected: no approved access request or invite`.
+
+## Make your account an operator
+
+To rename the church, set its accent color and reply-to address, or add more churches, make your account an operator and open `/platform`:
+
+```sql
+insert into public.platform_admins (profile_id) values ('<your auth user id>');
+```
+
+There is no page that adds an operator; this insert is the only way. See [Add a church](/docs/run/add-a-church).
+
+## Set up event locations
+
+Optional. Without a key, people type a location as plain text, and the calendar's list view still links it to Google Maps. With one, the location field suggests addresses, and the event page draws a map when Google can find the location.
+
+1. In the [Google Cloud Console](https://console.cloud.google.com/), create or choose a project and attach a billing account, which Google Maps Platform requires.
+2. Enable the **Maps JavaScript API**, **Places API (New)** and **Geocoding API**. Suggestions use Places, and the event map uses the other two.
+3. Create an API key under **Credentials**, and set it as `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`.
+4. Restrict the key, because it is sent to every browser that loads the app. Limit it to those three APIs, and under **Application restrictions** to your domain, plus `http://localhost:*/*` if you use the same key locally.
+
+A person can always keep what they typed instead of picking a suggestion.
+
+## Deploy from GitHub Actions
+
+This repository's own CI applies migrations and deploys the functions on each push to `main` that touches the migrations, tests, seed or functions under `supabase/`, the database types, `package.json`, `package-lock.json`, `deno.lock` or the workflow itself ([`.github/workflows/supabase.yml`](https://github.com/cwaits6/two42/blob/main/.github/workflows/supabase.yml)). A fork can set the same secrets and use it.
+
+| Repository secret | Used for |
+|---|---|
+| `SUPABASE_PROJECT_REF` | `supabase link` |
+| `SUPABASE_ACCESS_TOKEN` | every remote CLI command |
+| `SUPABASE_DB_PASSWORD` | linking, migrations and the schema dump |
+| `APP_CLIENT_ID`, `APP_PRIVATE_KEY` | a GitHub App that commits the schema dump |
+
+On a push to `main`, the `migrate` job waits for the edge function checks to pass, then:
+
+1. Links the project.
+2. Runs `supabase functions deploy send-event-reminders send-serving-reminders clean-up-expired-data --yes`.
+3. Runs `supabase db push --remote --yes`.
+4. Dumps the `public` schema to `supabase/schema.sql` and commits it through the GitHub App.
+
+Functions deploy before migrations, so a function that fails to compile blocks every migration behind it. On pull requests the same workflow lints the migrations against the linked project and lists what a merge would push, without changing anything.
+
+The workflow does not set the function secrets or the Vault secrets. Set those yourself once, as above.
+
+## Make it yours
+
+Before offering your install to others, replace:
+
+- the two42 name and the files in `public/brand/` ([`TRADEMARK.md`](https://github.com/cwaits6/two42/blob/main/TRADEMARK.md));
+- the security contact in [`SECURITY.md`](https://github.com/cwaits6/two42/blob/main/SECURITY.md) and `public/.well-known/security.txt`;
+- the GitHub and contact links in `components/landing/sections.ts`;
+- the `/privacy` and `/terms` pages, whose text in `components/legal/privacy.ts` and `terms.ts` describes the hosted service at two42.io and names its operator ([`docs/legal/README.md`](https://github.com/cwaits6/two42/blob/main/docs/legal/README.md)).

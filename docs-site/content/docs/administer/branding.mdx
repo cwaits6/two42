@@ -1,0 +1,32 @@
+---
+title: Branding
+description: What a church's branding changes in two42, and who can change it.
+---
+
+## Who changes branding
+
+A church's branding is set by an operator on the **Platform** pages, not by a church admin. There is no branding control in the church admin pages. A church admin who wants a change asks whoever runs their two42 service. See [Add a church](/docs/run/add-a-church).
+
+## What branding covers
+
+Branding has three settings, in the **Branding** section of the church's page on **Platform**:
+
+| Setting | What it changes |
+|---|---|
+| **Display name** | The church's name in the browser tab title, in the sidebar, and as the sender name on the church's emails. It can't be empty. |
+| **Accent color** | The main color of the app for the church's signed-in people: buttons, links and focus rings. A 6-digit hex color such as `#B85C38`. It must reach a 4.5:1 contrast ratio against white text; the form shows whether it passes. Leave it empty to use the platform default. |
+| **Reply-to email** | Where replies to the church's emails go. Leave it empty to send without one. |
+
+Choose **Save branding** to save.
+
+There is no logo setting.
+
+## Where branding doesn't show
+
+- Pages a person sees before signing in, such as the sign-in page, carry two42's own branding. An invite page names the church in its text.
+- Links in emails always point to the one address two42 runs on. A church has no web address of its own.
+- Branding doesn't change the address emails are sent from. That is the platform's address unless the church has a verified sending domain; see [Email](/docs/run/email).
+
+## Rules on what branding accepts
+
+The display name and accent color reach page styles and email headers, so the server checks them on save and again when it reads them. A display name has control characters removed, and an accent that isn't a valid 6-digit hex color falls back to the default. These checks are deliberate; see [`CLAUDE.md`](https://github.com/cwaits6/two42/blob/main/CLAUDE.md) under UI conventions before changing them.

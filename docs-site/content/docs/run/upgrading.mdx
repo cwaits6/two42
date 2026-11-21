@@ -1,0 +1,50 @@
+---
+title: Upgrading
+description: How two42 releases are made, and how to take a new release on your own install.
+---
+
+## How releases are made
+
+Releases are automated with release-please from conventional commit messages.
+
+- On every push to `main`, the `Release` workflow ([`.github/workflows/release.yml`](https://github.com/cwaits6/two42/blob/main/.github/workflows/release.yml)) opens or updates a pull request titled `chore: release <version>`, holding the next version and its release notes.
+- Merging that pull request tags the release, as `v<version>`, and publishes it on [GitHub Releases](https://github.com/cwaits6/two42/releases). The notes are added to [`CHANGELOG.md`](https://github.com/cwaits6/two42/blob/main/CHANGELOG.md).
+
+Only `feat`, `fix` and `perf` commits and breaking changes make a release. The changelog lists them under Features, Bug Fixes and Performance, along with dependency updates and reverts; `chore`, `docs`, `ci`, `refactor`, `test`, `build` and `style` commits are left out. The configuration is in [`release-please-config.json`](https://github.com/cwaits6/two42/blob/main/release-please-config.json).
+
+two42 is still on 0.x versions. While it is, a `feat` commit or a breaking change raises the minor version (0.31.0 to 0.32.0), and a `fix` raises the patch version.
+
+## Take a new release
+
+1. Read the release notes for every version between yours and the new one. Some releases need an extra step, as described below.
+2. Check out the new release's tag in your copy, for example `git fetch --tags` and `git checkout v0.32.0`, or merge it into your fork.
+3. Deploy the edge functions:
+
+   ```bash
+   npx supabase functions deploy send-event-reminders send-serving-reminders clean-up-expired-data
+   ```
+
+4. Apply the migrations:
+
+   ```bash
+   npx supabase db push --remote
+   ```
+
+5. Deploy the app from the same commit.
+
+Deploy the functions before applying the migrations. That is the order this repository's own CI uses, and the functions are written to keep working in the window before their migration lands. If you deploy from GitHub Actions, steps 3 and 4 run on each push to `main`; see [Deploy from GitHub Actions](/docs/run/deploy#deploy-from-github-actions).
+
+`db push` applies every pending migration in order, so taking several releases at once needs one run, after you have read each release's notes.
+
+## Upgrade an install that already has prayer requests
+
+Prayer requests posted before the release that seals prayer text stay in plaintext until you convert them:
+
+1. Set the two prayer keys, `PRAYER_BODY_KEY` and `PRAYER_AUTHOR_KEY`.
+2. Deploy.
+3. Apply the migrations.
+4. Run `scripts/encrypt-prayer-requests.mjs` as described in "Converting existing rows" in [`docs/security/prayer-encryption.md`](https://github.com/cwaits6/two42/blob/main/docs/security/prayer-encryption.md).
+
+<Callout type="warn">
+Once that release's migration is applied, do not roll the app back to a build from before it. Posting, editing, marking answered and deleting prayer requests would fail. See "Rolling back" in the same document.
+</Callout>

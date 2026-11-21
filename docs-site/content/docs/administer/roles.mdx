@@ -1,0 +1,91 @@
+---
+title: Roles
+description: What a church admin, a leader, a team lead and a member can and cannot do in two42.
+---
+
+## The roles
+
+Each role covers one layer of the church:
+
+- **Church admin**: runs the church's people, households, groups and settings. Set on the person's profile.
+- **Leader**: runs one group. Set per group, so a person can lead one group and be a plain member of another. A group can have several leaders, each with the same rights.
+- **Team lead**: leads one serving team within a group.
+- **Member**: an approved person in the church. Inside a group, a member is anyone on its roster who is not a leader.
+- **Pending**: someone who has signed in but whom the church has not approved yet, or whom a church admin moved back to pending.
+
+There is no role above church admin inside a church. The people who run the two42 service, called operators, set up churches and change their branding, but being an operator grants nothing inside a church. See [Add a church](/docs/run/add-a-church).
+
+## Church admin and leader compared
+
+The church admin and leader roles don't overlap. A church admin sees every group's roster but none of its content, and a leader runs everything inside their group but nothing outside it. A person who is both has both sets of rights.
+
+| Task | Church admin | Leader |
+|---|---|---|
+| Open the **Church admin** pages | Yes | No |
+| Approve or decline access requests to join the church | Yes | No |
+| Invite people to the church, one at a time or from a CSV file | Yes | No |
+| Change a person's role, move them back to pending, or delete their account | Yes, for anyone but themselves | No |
+| Add, edit and delete households, and move people between them | Yes | No |
+| Change church settings: directory, finding groups, who can add groups, giving, time zone, old prayer requests | Yes | No |
+| See **Usage** | Yes | No |
+| See every group and its roster | Yes, from **Groups** | Only groups they're in |
+| Add a group and name its leader | Yes, always | Only when the church lets members add groups, and they lead it themselves |
+| Approve or decline requests for a new group | Yes | No |
+| Name, replace and remove a group's leaders | Yes, for any group, from **Manage leaders** | Yes, in their own group, from the roster |
+| Approve or decline requests to join a group | Yes, for any group, from **Requests** | Yes, in their own group, from **Group settings** |
+| Open **Group settings** | Only for a group they lead | Yes |
+| Add and remove members of a group, and apply labels | Only in a group they lead | Yes |
+| Add and revoke invite links | Only in a group they lead | Yes |
+| Add and edit teams and team leads | Only in a group they lead | Yes |
+| Read a group's events, announcements, lessons, prayer requests and funds | Only in a group they're in | Yes |
+| Add events, announcements, lessons and series, and edit the About page | Only in a group they lead | Yes |
+| Moderate prayer requests and comments | Only in a group they lead | Yes |
+| Confirm a fund in "Needs review" or choose who receives one in "Needs a recipient" | Only in a group they lead | Yes |
+| Change the church's branding | No | No |
+
+A church admin who opens a group they aren't in from **Groups** sees its name, description and roster, with the note that its calendar, lessons and other pages stay with its members. To read or post in a group, a church admin joins it or makes themselves a leader of it from **Manage leaders**.
+
+## What a leader can't do
+
+A leader can't:
+
+- Approve people into the church or change anyone's church role.
+- Edit or delete anyone's profile or household.
+- See groups they aren't in, or the usage counts.
+- Change church settings.
+- Change their own role in their group. Another leader, or a church admin, can.
+- Remove themselves from the roster in **Edit members**. Another leader can.
+- Learn who wrote an anonymous prayer request, or read a comment left only for the person who asked.
+
+## Team leads
+
+A team lead runs one team's serving schedule. From the team's page under **Serving**, a team lead can:
+
+- Turn sign-ups on and set the team's dates and reminder emails, with **Team settings**.
+- Add members of the group to the team and remove members who aren't team leads.
+- Add and remove people on the team's dates.
+- Email the team.
+
+A team lead can't make anyone a team lead or remove a team lead. A leader does that in **Group settings**. A leader has every team lead's rights on every team in their group. See [Teams](/docs/administer/teams).
+
+## Household primary and spouse
+
+A household's primary person and the spouse listed in it can edit the profiles of the others in their household, add and remove people listed in it, update its address and home phone, and invite household members to set up their own account. A church admin can do all of this for any household. See [Directory](/docs/use/directory).
+
+## Pending people
+
+A pending person sees only their own profile and their own requests, and gets no group emails. A person a church admin moves back to pending keeps their groups, teams and leader roles, and gets them back when they are approved again. See [Approve people](/docs/administer/approving-people#approve-a-pending-person).
+
+## Settings that widen or narrow a role
+
+| Setting | Where | Who changes it | Effect |
+|---|---|---|---|
+| **Directory visible to the whole church** | Church settings | Church admin | Whether members see everyone in the church or only people who share a group with them |
+| **Members can find and request to join groups** | Church settings | Church admin | Whether members can find groups they aren't in |
+| **Who can add groups** | Church settings | Church admin | **Open**, **Approval required** or **Church admins only** |
+| **Members can add their own funds** | Church settings | Church admin | Whether the person a fund goes to can add and edit it |
+| **Private group** | Group settings, Privacy and joining | Leader | Hides the group from Find a group and the Directory |
+| **How people join** | Group settings, Privacy and joining | Leader | Whether a member who finds the group joins at once or asks |
+| **People can sign up** | Team settings | Leader or team lead | Whether members of a team can take dates |
+
+The database enforces each of these, not only the screens. The full inventory, with the policies behind it, is in [`docs/security/roles-and-permissions.md`](https://github.com/cwaits6/two42/blob/main/docs/security/roles-and-permissions.md).

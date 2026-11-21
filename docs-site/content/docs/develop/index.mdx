@@ -1,0 +1,58 @@
+---
+title: Develop
+description: How two42 is built, in plain words, and where each part lives in the repository.
+---
+
+## The stack
+
+two42 is a Next.js 16 app (App Router) in TypeScript, styled with Tailwind CSS 4, on Supabase: Postgres with row-level security, Auth, Storage, and three edge functions that `pg_cron` runs on a schedule. Email goes out through Resend.
+
+## Churches are kept apart by the database
+
+One install holds many churches. In the database a church is an organization, and every row a church owns carries its `org_id`.
+
+- **Row-level security isolates churches.** Every table a church owns has a restrictive policy that limits each request to rows whose `org_id` is the signed-in person's own church. Other policies decide what a person may see within their church, on top of that floor. A signed-in person's church comes from their profile, never from the request's host or body.
+- **Foreign keys stay inside one church.** A reference into a church-owned table is a composite key on `(id, org_id)`, so a row cannot point at another church's row.
+- **Storage keys start with the church.** Every uploaded file's key begins with its `org_id`.
+
+The rules, and the checks that enforce them, are in [`docs/security/tenancy-model.md`](https://github.com/cwaits6/two42/blob/main/docs/security/tenancy-model.md).
+
+## Two kinds of database client
+
+- **The request client** (`createClient()` in `lib/supabase/server.ts`) carries the signed-in person's session, so row-level security applies to everything it reads and writes.
+- **The service client** (`createServiceClient()`) uses the secret key and bypasses row-level security. It is used where no session exists yet, such as an invite link, or where a job must see a whole church. Every query on it filters on an `org_id` the code has already validated, and every call site is listed in [`docs/security/service-role-inventory.md`](https://github.com/cwaits6/two42/blob/main/docs/security/service-role-inventory.md). A script in CI, `npm run guard:tenancy`, fails a service-client query that has no `org_id` filter.
+
+## Scheduled jobs
+
+The edge functions in `supabase/functions/` run with the service key, so each one works through the churches one at a time and filters every query on that church's `org_id`. Code that can be unit tested lives in `supabase/functions/_shared/`. The jobs and their schedules are described in [Edge functions](/docs/run/edge-functions).
+
+## Requests
+
+`proxy.ts` runs on every request. It refreshes the session and returns a 404 for any host other than the one the app serves. The rest is ordinary App Router routes and route handlers.
+
+## Logging
+
+Every log line in `app/`, `lib/`, `components/` and `supabase/functions/` goes through `lib/log`, which never writes an error's message, details or hint. Lint refuses a direct `console` call. Nothing checks what a call site passes in, so never log a path read from the request, an invite token, or anything a person entered. See [`docs/security/logging.md`](https://github.com/cwaits6/two42/blob/main/docs/security/logging.md).
+
+## Where things live
+
+- `app/`: the routes. `app/g/[groupId]/` is a group's screens, `app/admin/` the church admin's, `app/platform/` the operator's.
+- `app/(auth)/` and `app/api/auth/`: sign-in, account setup and password reset.
+- `components/`: UI. `components/ui/` is the shadcn and Base UI set, `components/landing/` the public page.
+- `lib/`: shared logic. `lib/supabase/` holds the clients and generated types, `lib/email/` the Resend senders.
+- `supabase/migrations/`: schema, policies, functions and the cron schedules. `supabase/schema.sql` is the dump CI commits after each deploy.
+- `supabase/functions/`: the three scheduled edge functions.
+- `supabase/tests/`: pgTAP suites for tenancy and policies.
+- `supabase/seed.sql`: local sample data and logins.
+- `e2e/`: Playwright specs for what a signed-in member can see.
+- `scripts/`: the tenancy guard, the scheduled-jobs check and one-off operator scripts, described in `scripts/README.md`.
+- `docs/`: security, design and contributing documents; see [Contributor docs](/docs/develop/contributor-docs).
+
+<Cards>
+  <Card title="Local workflow" href="/docs/develop/local-workflow">
+    The checks to run before you push.
+  </Card>
+  <Card title="Contributor docs" href="/docs/develop/contributor-docs">
+    The documents in the repository and what each covers.
+  </Card>
+</Cards>

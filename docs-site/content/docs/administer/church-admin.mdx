@@ -1,0 +1,73 @@
+---
+title: Church admin pages
+description: The pages a church admin uses to run the church's space, and the church settings on them.
+---
+
+## Open the church admin pages
+
+1. Open the account menu at the bottom of the sidebar. On a phone, open **Menu** and find it at the bottom of the drawer.
+2. Choose **Church admin**.
+
+The item shows only for church admins. Anyone else who opens a church admin address is sent to Home. The pages open on **Members**, and **Back to Home** at the top of the page list leads out.
+
+| Page | What it's for |
+|---|---|
+| **Members** | Everyone in the church, people invited who haven't signed up, and pending people. See [Members and households](/docs/administer/members-and-households). |
+| **Households** | The church's households and the people listed in them without an account. See [Members and households](/docs/administer/members-and-households#households). |
+| **Groups** | Every group, its leaders and member count. See [Groups](/docs/administer/groups). |
+| **Requests** | Requests waiting on a church admin. The number waiting shows beside it in the page list. See [Approve people](/docs/administer/approving-people). |
+| **Usage** | How often each page was opened. See [Read usage counts](#read-usage-counts). |
+| **Church settings** | Settings for the whole church, below. |
+
+## Change church settings
+
+**Church settings** holds the settings that apply to every group in the church. Each one saves as soon as you change it.
+
+### Directory
+
+**Directory visible to the whole church**. When on, members see everyone in the church in the Directory. When off, they see only people who share a group with them. It starts off.
+
+### Groups
+
+- **Members can find and request to join groups**. When on, members can find groups they aren't in, through **Find a group** and the Directory, and join or ask to join them. When off, members see only the groups they belong to, and leaders can still add people directly. A group a leader marks private stays hidden either way. It starts on.
+- **Who can add groups**:
+  - **Open**: any member can add a group. It goes live at once, with them as its leader.
+  - **Approval required**: a member asks for a group, and a church admin approves it on **Requests**. This is where it starts.
+  - **Church admins only**: only church admins add groups.
+
+A church admin can always add a group from **Groups**. See [Groups](/docs/administer/groups#add-a-group).
+
+### Giving
+
+**Members can add their own funds**. When off, only leaders can add and edit funds. When on, members can also add and edit a fund that goes to them. Existing funds stay visible either way. It starts on. See [Giving](/docs/use/giving).
+
+### Events
+
+**Time zone**. Every event time is entered and shown in this zone, and serving reminders go out by it. Zones in the United States are listed first, then the others. It starts on Eastern Time.
+
+### Prayer requests
+
+**Old prayer requests** chooses whether prayer requests are deleted once they reach an age:
+
+- **Keep prayer requests** (where it starts)
+- **Delete after 6 months**
+- **Delete after 1 year**
+- **Delete after 2 years**
+
+The age counts from the day a request was posted, so editing a request or marking it answered doesn't keep it longer. Deleting happens each night.
+
+<Callout type="warn">
+Choosing a period asks you to confirm first. That night, every prayer request in the church older than the period is permanently deleted, along with its prayer responses. Deleted prayer requests can't be brought back.
+</Callout>
+
+## Read usage counts
+
+**Usage** shows, for the whole church, how often each kind of page was opened and how often one showed an error, in two lists: **Most opened pages** and **Pages with errors**. Choose **Last 7 days**, **Last 30 days** or **Last 90 days**.
+
+Counts are per day for the whole church. They record the kind of page only, never who opened it or its address. A count under 5 shows as "fewer than 5".
+
+## What isn't on these pages
+
+- Branding (the church's display name, accent color and reply-to address) is set by an operator, not a church admin. See [Branding](/docs/administer/branding).
+- A custom sending domain for email has a page in the code, but it is turned off in this version and doesn't show. Email goes out from the platform's address. See [Email](/docs/run/email).
+- Group-level settings, such as event reminders and whether a group is private, live in each group's [Group settings](/docs/administer/group-settings), which only its leaders open.

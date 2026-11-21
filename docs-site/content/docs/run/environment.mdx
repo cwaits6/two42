@@ -1,0 +1,105 @@
+---
+title: Environment variables
+description: Every variable the app and the edge functions read, what each does, and what breaks without it.
+---
+
+Configuration lives in three places: the app's environment, the edge function secrets, and two Supabase Vault secrets. Never commit a value. `.env.local` is ignored by git, and `.env.example` holds placeholders only.
+
+Any variable whose name starts with `NEXT_PUBLIC_` is built into the code sent to the browser, so it is public. Everything else stays on the server.
+
+## App variables
+
+Set them in `.env.local` locally and in the host's environment in production. The operator scripts under `scripts/` take their own values on the command line; see [`scripts/README.md`](https://github.com/cwaits6/two42/blob/main/scripts/README.md).
+
+### Supabase
+
+| Variable | Kind | Required | What it does, and what breaks without it |
+|---|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | public | yes | The Supabase project's API URL. Without it the app cannot reach the database or sign anyone in. |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | public | yes | The publishable (anon) key. Same failure without it. |
+| `SUPABASE_SECRET_KEY` | secret | yes | The secret (service role) key. It bypasses row-level security, so keep it on the server. Without it every route that uses the service client fails: invite and setup links, emails, the platform pages and more. |
+
+### Site
+
+| Variable | Kind | Required | What it does, and what breaks without it |
+|---|---|---|---|
+| `NEXT_PUBLIC_SITE_URL` | public | yes | The one origin the app serves. Requests for any other host get a 404, except `localhost`, `127.0.0.1` and `*.vercel.app`. Every link in an email is built on it. Unset, it falls back to `http://localhost:3000`, so a production site returns 404 on its own domain. |
+| `NEXT_PUBLIC_TIME_ZONE` | public | no | The IANA time zone used when a church's own time zone cannot be read. Default `America/New_York`. |
+
+### Email
+
+| Variable | Kind | Required | What it does, and what breaks without it |
+|---|---|---|---|
+| `RESEND_API_KEY` | secret | in production | Sends invite, setup, approval and serving emails. The app starts without it, and every send fails. |
+| `NEXT_PUBLIC_EMAIL_FROM` | public | in production | The `From:` address, in the form `Name <address>`. Defaults to `two42 <noreply@two42.io>`, which Resend refuses for any other account. Use an address on a domain you have verified in Resend. See [Email](/docs/run/email). |
+| `ORG_EMAIL_DOMAIN_CAP` | secret | no | Platform-wide cap on claimed custom sending domains. Default 8. Keep it below your Resend plan's domain limit. Church admins cannot claim a domain in this release, so it has no effect yet; see [Email](/docs/run/email#custom-sending-domains). |
+
+### Prayer requests
+
+| Variable | Kind | Required | What it does, and what breaks without it |
+|---|---|---|---|
+| `PRAYER_BODY_KEY` | secret | yes | Seals and opens prayer request text: 32 random bytes in base64 (`openssl rand -base64 32`). Without it the prayer page and Home's prayer section show their failed state, posting fails, and account download and account deletion fail. |
+| `PRAYER_AUTHOR_KEY` | secret | yes | Keys the hash that stands in for an anonymous prayer request's author: 32 random bytes in base64. Same failure without it. |
+| `PRAYER_BODY_KEY_PREVIOUS`, `PRAYER_AUTHOR_KEY_PREVIOUS` | secret | no | The old key, set only while rotating a key. A value that is set but malformed fails every prayer page, the same as a missing key. |
+
+Keep two copies of each prayer key outside the host. Text sealed with a lost body key cannot be recovered. Rotation and recovery are described in [`docs/security/prayer-encryption.md`](https://github.com/cwaits6/two42/blob/main/docs/security/prayer-encryption.md).
+
+### Serving
+
+| Variable | Kind | Required | What it does, and what breaks without it |
+|---|---|---|---|
+| `SERVING_LINK_SECRET` | secret | yes | The HMAC key for serving links that act straight from an email (`openssl rand -hex 32`). Use the same value in the edge function secrets. Without it the app cannot create or check those links. |
+| `SERVING_LINK_MODE` | secret | no | `signed` (the default) lets serving email links act without signing in; `login` sends people through sign-in. A group's own setting overrides it. |
+
+### Maps
+
+| Variable | Kind | Required | What it does, and what breaks without it |
+|---|---|---|---|
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | public | no | Address suggestions and event maps. Empty or unset leaves them out and the location is a plain text field. Any other value loads Google Maps with it, so a placeholder shows a map error. See [Set up event locations](/docs/run/deploy#set-up-event-locations). |
+
+### Branding fallbacks
+
+All optional, and all public. A church's display name and accent color are set per church by an operator on the platform pages; these values are used only when that church's branding is empty or cannot be read.
+
+| Variable | Default | Overridden per church |
+|---|---|---|
+| `NEXT_PUBLIC_APP_NAME` | `two42` | yes, by the church's display name |
+| `NEXT_PUBLIC_COLOR_PRIMARY` | `#B85C38` | yes, by the church's accent color |
+| `NEXT_PUBLIC_APP_DESCRIPTION` | a one-line description of two42 | no |
+| `NEXT_PUBLIC_COLOR_PRIMARY_LIGHT` | `#C97A54` | no |
+| `NEXT_PUBLIC_COLOR_ACCENT` | `#E8A33D` | no |
+| `NEXT_PUBLIC_COLOR_WARM` | `#F3E7D9` | no |
+| `NEXT_PUBLIC_COLOR_BG_LIGHT` | `#FAEBC2` | no |
+| `NEXT_PUBLIC_COLOR_BG_MUTED` | `#E8DECF` | no |
+
+A church's accent color replaces `NEXT_PUBLIC_COLOR_PRIMARY`, not `NEXT_PUBLIC_COLOR_ACCENT`.
+
+### Measurement and tracing
+
+| Variable | Kind | Required | What it does |
+|---|---|---|---|
+| `THIRD_PARTY_PAGE_VIEWS` | secret | no | `on` also loads the hosting provider's page-view script, which is sent route patterns only. Unset keeps only the app's own usage counts. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | secret | no | Turns on OpenTelemetry tracing to any OTLP/HTTP receiver. Unset, tracing is off and nothing is loaded. |
+| `OTEL_EXPORTER_OTLP_HEADERS` | secret | no | Headers for the receiver, as comma-separated `key=value` pairs. |
+| `OTEL_SERVICE_NAME` | secret | no | The service name on spans. Defaults to the `package.json` name. |
+
+Spans hold timings, route patterns and status codes, never a real page address, query value or error text. A span for an outgoing request keeps the server it called. Details: [`docs/security/logging.md`](https://github.com/cwaits6/two42/blob/main/docs/security/logging.md).
+
+## Edge function secrets
+
+Set once per Supabase project with `npx supabase secrets set NAME=value`, or under Edge Functions → Secrets in the dashboard.
+
+| Secret | Required | What it does |
+|---|---|---|
+| `RESEND_API_KEY` | yes | Sends the reminder emails. |
+| `SITE_URL` | yes | The origin for every link in a reminder, the same origin as `NEXT_PUBLIC_SITE_URL`. Unset, it falls back to `https://two42.io`. |
+| `SERVING_LINK_SECRET` | yes | The same value as the app's. Without it, serving emails carry links that require sign-in instead. |
+| `EMAIL_FROM` | in production | The `From:` address, same rule as the app's `NEXT_PUBLIC_EMAIL_FROM`. Defaults to `two42 <noreply@two42.io>`. |
+| `SERVING_LINK_MODE` | no | Same meaning as the app's. |
+| `APP_NAME`, `BRAND_COLOR` | no | Fallbacks for the email branding when a church's branding is empty. |
+
+Supabase injects `SUPABASE_URL` and the service key (`SUPABASE_SECRET_KEYS` on hosted projects, `SUPABASE_SERVICE_ROLE_KEY` on the local stack). Do not set them.
+
+## Vault secrets
+
+The scheduled jobs need two Vault secrets, `cron_project_url` and `cron_service_role_key`. See [Create the Vault secrets](/docs/run/edge-functions#create-the-vault-secrets).

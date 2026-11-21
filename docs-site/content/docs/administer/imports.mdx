@@ -1,0 +1,38 @@
+---
+title: Imports
+description: How a church admin invites many people at once from a CSV file, and what import tools exist beyond that.
+---
+
+## Invite people from a CSV file
+
+**Import members** sends an invite to each new address in a CSV file. Only church admins open it.
+
+1. On **Members**, choose **Import members**.
+2. Choose **Choose a CSV file**, or drag the file onto it. The file needs a column with "email" in its name, such as **Email**. A column with "name" in its name is shown beside each address; without one, the first column is used.
+3. Check the list. It shows how many contacts were found, how many are new and how many already joined. People who already joined are marked **Already a member** and can't be selected. New people are selected to start.
+4. Clear the ones you don't want to invite, or use **Select all new members**.
+5. Choose **Send** with the number of invites, for example **Send 12 invites**.
+
+Each person gets the same email as an [invite from Members](/docs/administer/members-and-households#invite-a-person): a link to set up their account that works for 14 days. When they set it up, they are a member of the church. They enter their own name then; the name in your file isn't sent with the invite.
+
+After sending, the page says how many invites went out, how many were skipped because the person already joined or was already invited, and which addresses couldn't be sent to.
+
+If the file can't be read, the page says why and lists the columns it found. Fix the file and choose it again.
+
+### What the import doesn't do
+
+- It doesn't add anyone to a group or household. Add people to a household from **Members** after they sign up, and to a group from the group's roster or with an [invite link](/docs/administer/invite-links).
+- It doesn't send a second invite to an address that already has one.
+
+## The member file, with no page yet
+
+two42 also has a full member file: one row per person with their contact details, household, role, groups and directory settings. It has no page in the app.
+
+- **Export.** A church admin who is signed in can download it by opening `/api/admin/members/export` on the church's two42 address. The file is named for the church and the date.
+- **Import.** `/api/admin/members/import` takes the same file back. It checks every row before writing any, and with `?mode=validate` it reports what each row would change without writing anything; `?mode=apply` writes. It updates people it matches and adds people without an account to households. It can't create an account: a new row marked as having a sign-in is an error. Files are limited to 5 MB and 5,000 rows, and a file with an `org_id` column is refused. It is a request with no form in the app, so it is for people comfortable sending one with their signed-in session.
+
+The columns are listed in `MEMBER_CSV_COLUMNS` in [`lib/members/format.ts`](https://github.com/cwaits6/two42/blob/main/lib/members/format.ts). A file must have `first_name`, `last_name`, `email` and `has_login`.
+
+<Callout type="info">
+There is no sync with a church management system. A design for pulling people from Rock RMS is written down in [`docs/integrations/rock-rms.md`](https://github.com/cwaits6/two42/blob/main/docs/integrations/rock-rms.md), but none of it is built.
+</Callout>
