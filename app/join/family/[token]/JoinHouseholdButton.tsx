@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { failureMessage } from "@/lib/errorCopy";
 import { HOUSEHOLD_INVITE_INVALID_TEXT } from "@/lib/groups/invites";
-import { HOUSEHOLD_TAB } from "@/lib/profileTabs";
+import { profileHouseholdHref } from "@/lib/profileTabs";
 import { DIFFERENT_ACCOUNT_TEXT } from "./joinVerdict";
 
 const ACTION = "join this household";
@@ -48,7 +48,7 @@ export function JoinHouseholdButton({ token, familyName }: JoinHouseholdButtonPr
       return;
     }
     toast.success(`You joined the ${familyName} household.`);
-    router.replace(`/profile?tab=${HOUSEHOLD_TAB}`);
+    router.replace(profileHouseholdHref());
     router.refresh();
   }
 

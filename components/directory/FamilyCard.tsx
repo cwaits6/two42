@@ -8,7 +8,8 @@ import { formatPhone } from "@/lib/sanitize";
 import { isChildWithoutAccount } from "@/lib/household";
 import { displayName, initials } from "@/lib/names";
 import { DirRow, PhoneText } from "@/components/directory/DirRow";
-import { EDIT_HOUSEHOLD_HREF, isOwnHousehold } from "@/components/directory/ownEntry";
+import { isOwnHousehold } from "@/components/directory/ownEntry";
+import { profileHouseholdHref } from "@/lib/profileTabs";
 import { formatAnniversary, householdPhoneLabel, relLabel } from "@/components/directory/utils";
 import type {
   DirectoryProfile,
@@ -158,7 +159,7 @@ export function FamilyCard({ family, profileMap, onOpenPerson, viewerFamilyId }:
 
       {isOwnHousehold(family, viewerFamilyId) && (
         <div className="pt-3 border-t border-border">
-          <Link href={EDIT_HOUSEHOLD_HREF} className={buttonVariants()}>
+          <Link href={profileHouseholdHref()} className={buttonVariants()}>
             <Pencil aria-hidden="true" />
             Edit household
           </Link>
