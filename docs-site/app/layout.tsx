@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Fraunces, Inter, JetBrains_Mono } from 'next/font/google';
-import { Provider } from '@/components/provider';
+import { RootProvider } from 'fumadocs-ui/provider/next';
 import './global.css';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
@@ -20,7 +20,7 @@ export default function Layout({ children }: LayoutProps<'/'>) {
       suppressHydrationWarning
     >
       <body className="flex flex-col min-h-screen">
-        <Provider>{children}</Provider>
+        <RootProvider search={{ options: { type: 'static' } }}>{children}</RootProvider>
       </body>
     </html>
   );

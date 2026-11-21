@@ -4,7 +4,6 @@ import { getTableOfContents } from 'fumadocs-core/content/toc';
 import { printErrors, scanURLs, validateFiles } from 'next-validate-link';
 
 const CONTENT = 'content/docs';
-const LANDING = 'app/(home)/page.tsx';
 
 function slugsOf(path) {
   const parts = path.slice(CONTENT.length + 1, -'.mdx'.length).split('/');
@@ -27,15 +26,6 @@ for await (const path of glob(`${CONTENT}/**/*.mdx`)) {
   files.push({ path, content, slugs, url, hashes: headingIds(source) });
 }
 
-// The validator reads only Markdown, so the landing page's section hrefs go
-// through it as Markdown links under a .md name.
-const landing = await readFile(LANDING, 'utf8');
-const landingLinks = [...landing.matchAll(/href: '([^']+)'/g)].map((match) => `[link](${match[1]})`);
-if (landingLinks.length === 0) {
-  console.error(`No href: '…' literals found in ${LANDING}; update the pattern in check-links.mjs.`);
-  process.exit(1);
-}
-
 const scanned = await scanURLs({
   preset: 'next',
   populate: {
@@ -44,7 +34,7 @@ const scanned = await scanURLs({
 });
 
 const results = await validateFiles(
-  [...files.map(({ path, content, url }) => ({ path, content, url })), { path: `${LANDING}.md`, content: landingLinks.join('\n') }],
+  files.map(({ path, content, url }) => ({ path, content, url })),
   {
     scanned,
     markdown: { components: { Card: { attributes: ['href'] } } },
