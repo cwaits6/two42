@@ -31,6 +31,10 @@ for await (const path of glob(`${CONTENT}/**/*.mdx`)) {
 // through it as Markdown links under a .md name.
 const landing = await readFile(LANDING, 'utf8');
 const landingLinks = [...landing.matchAll(/href: '([^']+)'/g)].map((match) => `[link](${match[1]})`);
+if (landingLinks.length === 0) {
+  console.error(`No href: '…' literals found in ${LANDING}; update the pattern in check-links.mjs.`);
+  process.exit(1);
+}
 
 const scanned = await scanURLs({
   preset: 'next',
