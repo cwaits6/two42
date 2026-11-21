@@ -17,7 +17,7 @@ Pick any free port above 3800, then open `http://localhost:3801/docs`.
 
 ```bash
 npm run types:check   # TypeScript
-npm run check:links   # every internal link and #heading in the content
+npm run check:links   # every internal link and #heading in the content and the landing page
 npm run build         # static export to out/
 ```
 
@@ -27,4 +27,4 @@ CI runs all three in `.github/workflows/docs-site.yml`.
 
 - `content/docs/` holds the pages as MDX, one folder per section (`use`, `administer`, `run`, `develop`). Each folder's `meta.json` sets the page order.
 - `app/global.css` maps the two42 palette from `docs/design/DESIGN.md` onto the Fumadocs theme, light and dark.
-- `public/brand/` holds copies of the app's wordmark and mark SVGs; `app/icon.svg` is the app's icon.
+- `public/brand/` holds copies of the app's wordmark and mark SVGs (`public/brand/` in the app), and `app/icon.svg` is a copy of the app's `app/icon.svg`. Nothing keeps them in step: when the app's brand files or the palette in `docs/design/DESIGN.md` change, update these copies and `app/global.css` in the same change.
