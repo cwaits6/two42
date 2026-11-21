@@ -1225,6 +1225,82 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"rock_connections": {
+                  Row: {
+                    "base_url": string,"connected_at": string,"connected_by": string | null,"key_ciphertext": string,"key_hint": string,"org_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "base_url": string,"connected_at"?: string,"connected_by"?: string | null,"key_ciphertext": string,"key_hint": string,"org_id"?: string
+                  }
+                  Update: {
+                    "base_url"?: string,"connected_at"?: string,"connected_by"?: string | null,"key_ciphertext"?: string,"key_hint"?: string,"org_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "rock_connections_connected_by_fkey"
+      columns: ["connected_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "rock_connections_connected_by_fkey"
+      columns: ["connected_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "rock_connections_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: true
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"rock_person_links": {
+                  Row: {
+                    "linked_at": string,"linked_by": string | null,"org_id": string,"profile_id": string,"rock_person_id": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "linked_at"?: string,"linked_by"?: string | null,"org_id"?: string,"profile_id": string,"rock_person_id": number
+                  }
+                  Update: {
+                    "linked_at"?: string,"linked_by"?: string | null,"org_id"?: string,"profile_id"?: string,"rock_person_id"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "rock_person_links_linked_by_fkey"
+      columns: ["linked_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "rock_person_links_linked_by_fkey"
+      columns: ["linked_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "rock_person_links_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "rock_connections"
+      referencedColumns: ["org_id"]
+    },{
+      foreignKeyName: "rock_person_links_profile_id_fkey"
+      columns: ["profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "rock_person_links_profile_id_fkey"
+      columns: ["profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
                 },"rsvps": {
                   Row: {
                     "created_at": string,"event_id": string,"id": string,"occurrence_date": string,"org_id": string,"status": string,"user_id": string
