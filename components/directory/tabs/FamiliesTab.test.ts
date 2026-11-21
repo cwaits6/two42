@@ -180,6 +180,13 @@ describe("FamiliesTab's open household in the URL", () => {
     expect(window.location.pathname + window.location.search).toBe("/directory/families?family=miller");
   });
 
+  it("keeps a deep link's way back through a person and Back to the household", async () => {
+    await open("family=miller&from=birthdays&when=week");
+    await act(async () => row("Open Ben").click());
+    await act(async () => row("Back to Miller").click());
+    expect(backToList().getAttribute("href")).toBe("/directory/birthdays?when=week");
+  });
+
   it("clears the household from the URL on Back to the list", async () => {
     await open("family=miller");
     await act(async () => (backToList() as HTMLButtonElement).click());
