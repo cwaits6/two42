@@ -3,15 +3,10 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { create as createQr } from "qrcode";
 import { MethodButton } from "@/components/giving/MethodButton";
 import { PAYMENT_METHODS, type ResolvedMethod } from "@/lib/giving/methods";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-vi.mock("qrcode", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("qrcode")>();
-  return { ...actual, create: vi.fn(actual.create) };
-});
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -74,16 +69,63 @@ describe("Venmo on a phone or tablet", () => {
   it("opens a payment with the fund name and no amount when the amount is blank", () => {
     render();
     expect(container.querySelector("input")?.inputMode).toBe("decimal");
-    expect(payLink().href).toBe(
-      "https://venmo.com/gracechurch?txn=pay&note=Meals%20%26%20Care"
+    expect(payLink().getAttribute("href")).toBe(
+      "venmo://paycharge?txn=pay&recipients=gracechurch&note=Meals%20%26%20Care"
     );
+    expect(payLink().target).toBe("");
     expect(container.querySelector("svg[role=img]")).toBeNull();
   });
 
   it("puts the typed amount in the link", () => {
     render();
     type(container.querySelector("input")!, "25");
-    expect(new URL(payLink().href).searchParams.get("amount")).toBe("25.00");
+    expect(new URL(payLink().getAttribute("href")!).searchParams.get("amount")).toBe("25.00");
+  });
+
+  describe("when the app doesn't open", () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    function status() {
+      return container.querySelector("[role=status]");
+    }
+
+    it("offers Venmo's website once the page is still in front", () => {
+      render();
+      click(payLink());
+      expect(status()).toBeNull();
+      act(() => vi.advanceTimersByTime(2500));
+      expect(status()?.textContent).toContain("Venmo didn't open");
+      expect(status()?.querySelector("button")).toBeNull();
+      expect(status()?.querySelector("a")?.getAttribute("href")).toBe(
+        "https://account.venmo.com/pay?recipients=gracechurch&note=Meals%20%26%20Care"
+      );
+    });
+
+    it("keeps the website closed and shows the error for a bad amount", () => {
+      render();
+      click(payLink());
+      act(() => vi.advanceTimersByTime(2500));
+      const input = container.querySelector("input")!;
+      type(input, "25.123");
+      expect(status()?.querySelector("a")).toBeNull();
+      const website = [...status()!.querySelectorAll("button")].find((b) =>
+        b.textContent?.startsWith("Open Venmo's website")
+      )!;
+      click(website);
+      expect(document.activeElement).toBe(input);
+      expect(input.getAttribute("aria-invalid")).toBe("true");
+    });
+
+    it("stays quiet when the page leaves for the app", () => {
+      render();
+      click(payLink());
+      act(() => {
+        window.dispatchEvent(new Event("blur"));
+        vi.advanceTimersByTime(2500);
+      });
+      expect(status()).toBeNull();
+    });
   });
 
   it.each([
@@ -116,26 +158,23 @@ describe("Venmo on a phone or tablet", () => {
 describe("Venmo on a computer", () => {
   beforeEach(() => pointer(false));
 
-  it("shows the handle, Copy and a QR code, with no amount field", () => {
+  it("links the whole card to Venmo's website, with no amount field or Copy", () => {
     render();
     expect(container.querySelector("input")).toBeNull();
-    expect(container.querySelector("a")).toBeNull();
     expect(container.textContent).toContain("@gracechurch");
-    expect(container.querySelector("button")?.textContent).toBe("Copy");
-    expect(container.querySelector("svg[role=img] path")?.getAttribute("d")).toMatch(/^M/);
-  });
-
-  it("encodes the payment link with the fund name and no amount in the QR code", () => {
-    vi.mocked(createQr).mockClear();
-    render();
-    expect(vi.mocked(createQr).mock.calls.map(([value]) => value)).toEqual([
-      "https://venmo.com/gracechurch?txn=pay&note=Meals%20%26%20Care",
-    ]);
+    expect(payLink().getAttribute("href")).toBe(
+      "https://account.venmo.com/pay?recipients=gracechurch&note=Meals%20%26%20Care"
+    );
+    expect(payLink().target).toBe("_blank");
+    expect(payLink().textContent).toContain("Open Venmo");
+    expect(payLink().textContent).toContain("@gracechurch");
+    expect(container.querySelector("button")).toBeNull();
+    expect(container.querySelector("svg[role=img]")).toBeNull();
   });
 });
 
 describe("Venmo before the pointer is known", () => {
-  it("renders neither the amount field nor the QR code on the server", () => {
+  it("renders neither the amount field nor a link on the server", () => {
     const html = renderToString(
       createElement(MethodButton, { resolved: venmo, fundName: "Meals & Care" })
     );

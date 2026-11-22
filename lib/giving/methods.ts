@@ -8,12 +8,11 @@ import type { PaymentMethodKey } from "@/lib/types";
  * the payer's app; "copy" methods (Zelle, Apple/Google Pay) have no public
  * profile URLs, so the handle is copied to the clipboard instead.
  *
- * Text chips only: no trademarked logos or brand colors.
+ * Names and words only: no company logos or brand colors.
  */
 export interface PaymentMethodMeta {
   key: PaymentMethodKey;
   name: string;
-  glyph: string;
   kind: "pay" | "link" | "copy";
   verb: string;
   /** Shown before the handle for context, e.g. "paypal.me/" */
@@ -25,7 +24,6 @@ export const PAYMENT_METHODS: Record<PaymentMethodKey, PaymentMethodMeta> = {
   venmo: {
     key: "venmo",
     name: "Venmo",
-    glyph: "V",
     kind: "pay",
     verb: "Open Venmo",
     prefix: "",
@@ -34,7 +32,6 @@ export const PAYMENT_METHODS: Record<PaymentMethodKey, PaymentMethodMeta> = {
   paypal: {
     key: "paypal",
     name: "PayPal",
-    glyph: "P",
     kind: "link",
     verb: "Open PayPal",
     prefix: "paypal.me/",
@@ -43,7 +40,6 @@ export const PAYMENT_METHODS: Record<PaymentMethodKey, PaymentMethodMeta> = {
   cashapp: {
     key: "cashapp",
     name: "Cash App",
-    glyph: "$",
     kind: "link",
     verb: "Open Cash App",
     prefix: "",
@@ -52,7 +48,6 @@ export const PAYMENT_METHODS: Record<PaymentMethodKey, PaymentMethodMeta> = {
   zelle: {
     key: "zelle",
     name: "Zelle",
-    glyph: "Z",
     kind: "copy",
     verb: "Tap to copy",
     prefix: "",
@@ -61,7 +56,6 @@ export const PAYMENT_METHODS: Record<PaymentMethodKey, PaymentMethodMeta> = {
   wallet: {
     key: "wallet",
     name: "Apple / Google Pay",
-    glyph: "◑",
     kind: "copy",
     verb: "Tap to copy",
     prefix: "",
@@ -95,18 +89,30 @@ export function methodHref(
 }
 
 /**
- * Venmo's documented payment link (venmo.com/paymentlinks): opens a payment
- * to `handle` with the note, and the amount when one is given, filled in.
- * `amount` must come from parseGiveAmount.
+ * Venmo's app link: opens the payment in the installed app directly. A phone
+ * uses it because a venmo.com link opened in the browser can stop short of
+ * the app. `amount` must come from parseGiveAmount.
  */
-export function venmoPayHref(handle: string, note: string, amount: string | null): string {
-  const params = new URLSearchParams({ txn: "pay" });
+export function venmoAppHref(handle: string, note: string, amount: string | null): string {
+  const params = new URLSearchParams({
+    txn: "pay",
+    recipients: handle.trim().replace(/^@/, ""),
+  });
   if (amount) params.set("amount", amount);
   params.set("note", note);
-  const recipient = encodeURIComponent(handle.trim().replace(/^@/, ""));
-  // URLSearchParams writes a space as "+"; a literal "+" is already "%2B", so
-  // every "+" left is a space, spelled %20 for apps that don't decode "+".
-  return `https://venmo.com/${recipient}?${params.toString().replace(/\+/g, "%20")}`;
+  return `venmo://paycharge?${params.toString().replace(/\+/g, "%20")}`;
+}
+
+/**
+ * Venmo's web payment page, for a phone without the app: it stays in the
+ * browser, asks the person to sign in, and keeps the recipient, amount and
+ * note through sign-in. `amount` must come from parseGiveAmount.
+ */
+export function venmoWebPayHref(handle: string, note: string, amount: string | null): string {
+  const params = new URLSearchParams({ recipients: handle.trim().replace(/^@/, "") });
+  if (amount) params.set("amount", amount);
+  params.set("note", note);
+  return `https://account.venmo.com/pay?${params.toString().replace(/\+/g, "%20")}`;
 }
 
 export type GiveAmount =
