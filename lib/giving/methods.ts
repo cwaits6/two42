@@ -95,21 +95,6 @@ export function methodHref(
 }
 
 /**
- * Venmo's documented payment link (venmo.com/paymentlinks): opens a payment
- * to `handle` with the note, and the amount when one is given, filled in.
- * `amount` must come from parseGiveAmount.
- */
-export function venmoPayHref(handle: string, note: string, amount: string | null): string {
-  const params = new URLSearchParams({ txn: "pay" });
-  if (amount) params.set("amount", amount);
-  params.set("note", note);
-  const recipient = encodeURIComponent(handle.trim().replace(/^@/, ""));
-  // URLSearchParams writes a space as "+"; a literal "+" is already "%2B", so
-  // every "+" left is a space, spelled %20 for apps that don't decode "+".
-  return `https://venmo.com/${recipient}?${params.toString().replace(/\+/g, "%20")}`;
-}
-
-/**
  * Venmo's app link: opens the payment in the installed app directly. A phone
  * uses it because a venmo.com link opened in the browser can stop short of
  * the app. `amount` must come from parseGiveAmount.

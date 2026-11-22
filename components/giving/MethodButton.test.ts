@@ -3,15 +3,10 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { create as createQr } from "qrcode";
 import { MethodButton } from "@/components/giving/MethodButton";
 import { PAYMENT_METHODS, type ResolvedMethod } from "@/lib/giving/methods";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-vi.mock("qrcode", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("qrcode")>();
-  return { ...actual, create: vi.fn(actual.create) };
-});
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -163,26 +158,21 @@ describe("Venmo on a phone or tablet", () => {
 describe("Venmo on a computer", () => {
   beforeEach(() => pointer(false));
 
-  it("shows the handle, Copy and a QR code, with no amount field", () => {
+  it("shows the handle, Venmo's website and Copy, with no amount field", () => {
     render();
     expect(container.querySelector("input")).toBeNull();
-    expect(container.querySelector("a")).toBeNull();
     expect(container.textContent).toContain("@gracechurch");
+    expect(payLink().getAttribute("href")).toBe(
+      "https://account.venmo.com/pay?recipients=gracechurch&note=Meals%20%26%20Care"
+    );
+    expect(payLink().target).toBe("_blank");
     expect(container.querySelector("button")?.textContent).toBe("Copy");
-    expect(container.querySelector("svg[role=img] path")?.getAttribute("d")).toMatch(/^M/);
-  });
-
-  it("encodes the payment link with the fund name and no amount in the QR code", () => {
-    vi.mocked(createQr).mockClear();
-    render();
-    expect(vi.mocked(createQr).mock.calls.map(([value]) => value)).toEqual([
-      "https://venmo.com/gracechurch?txn=pay&note=Meals%20%26%20Care",
-    ]);
+    expect(container.querySelector("svg[role=img]")).toBeNull();
   });
 });
 
 describe("Venmo before the pointer is known", () => {
-  it("renders neither the amount field nor the QR code on the server", () => {
+  it("renders neither the amount field nor a link on the server", () => {
     const html = renderToString(
       createElement(MethodButton, { resolved: venmo, fundName: "Meals & Care" })
     );

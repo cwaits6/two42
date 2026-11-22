@@ -3,7 +3,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Copy, ExternalLink } from "lucide-react";
-import { PayQrCode } from "@/components/giving/PayQrCode";
 import { useCoarsePointer } from "@/components/giving/useCoarsePointer";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { Input } from "@/components/ui/input";
@@ -12,7 +11,6 @@ import {
   methodHref,
   parseGiveAmount,
   venmoAppHref,
-  venmoPayHref,
   venmoWebPayHref,
   type ResolvedMethod,
 } from "@/lib/giving/methods";
@@ -125,9 +123,9 @@ export function MethodButton({
 }
 
 /**
- * Venmo's website can't start a payment, so a phone or tablet gets an
- * optional amount and the app link, and a computer gets the handle and
- * a QR code of the same link to scan with a phone. The amount is never stored.
+ * A phone or tablet gets an optional amount and the app link, falling back
+ * to Venmo's web payment page; a computer gets that page directly. The amount
+ * is never stored.
  */
 function VenmoMethod({ resolved, fundName }: { resolved: ResolvedMethod; fundName: string }) {
   const coarse = useCoarsePointer();
@@ -270,7 +268,16 @@ function VenmoPhoneAction({ resolved, fundName }: { resolved: ResolvedMethod; fu
 
 function VenmoComputerAction({ resolved, fundName }: { resolved: ResolvedMethod; fundName: string }) {
   return (
-    <div className="mt-1 space-y-3">
+    <div className="mt-1 flex flex-wrap gap-x-5">
+      <a
+        href={venmoWebPayHref(resolved.handle, fundName, null)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`min-h-11 ${ACTION} hover:underline`}
+      >
+        Pay on Venmo&apos;s website
+        <ExternalLink className="h-4 w-4" aria-hidden="true" />
+      </a>
       <button
         type="button"
         onClick={() => copyHandle(resolved)}
@@ -279,15 +286,6 @@ function VenmoComputerAction({ resolved, fundName }: { resolved: ResolvedMethod;
         <Copy className="h-4 w-4" aria-hidden="true" />
         Copy
       </button>
-      <div className="flex flex-wrap items-center gap-4">
-        <PayQrCode
-          value={venmoPayHref(resolved.handle, fundName, null)}
-          label={`QR code to pay ${resolved.handle} in Venmo for ${fundName}`}
-        />
-        <p className="max-w-56 text-base text-muted-foreground">
-          Scan with your phone&apos;s camera to pay in Venmo.
-        </p>
-      </div>
     </div>
   );
 }

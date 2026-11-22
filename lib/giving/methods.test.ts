@@ -4,51 +4,8 @@ import {
   parseGiveAmount,
   PAYMENT_METHODS,
   venmoAppHref,
-  venmoPayHref,
   venmoWebPayHref,
 } from "@/lib/giving/methods";
-
-describe("venmoPayHref", () => {
-  it("builds the payment link on the bare handle path", () => {
-    expect(venmoPayHref("gracechurch", "Missions", "25.00")).toBe(
-      "https://venmo.com/gracechurch?txn=pay&amount=25.00&note=Missions"
-    );
-  });
-
-  it("builds the same link with or without a leading @", () => {
-    expect(venmoPayHref("@gracechurch", "Missions", "25.00")).toBe(
-      venmoPayHref("gracechurch", "Missions", "25.00")
-    );
-    expect(venmoPayHref("  @gracechurch ", "Missions", null)).toBe(
-      venmoPayHref("gracechurch", "Missions", null)
-    );
-  });
-
-  it("leaves the amount out when none is given", () => {
-    const href = venmoPayHref("gracechurch", "Missions", null);
-    expect(href).toBe("https://venmo.com/gracechurch?txn=pay&note=Missions");
-    expect(new URL(href).searchParams.has("amount")).toBe(false);
-  });
-
-  it.each([
-    ["Building Fund", "Building%20Fund"],
-    ["Meals & Care", "Meals%20%26%20Care"],
-    ["Youth trip 🚌", "Youth%20trip%20%F0%9F%9A%8C"],
-    ["A+B=C?", "A%2BB%3DC%3F"],
-  ])("keeps the note %j intact", (note, encoded) => {
-    const href = venmoPayHref("gracechurch", note, "10.00");
-    expect(href).toContain(`note=${encoded}`);
-    expect(new URL(href).searchParams.get("note")).toBe(note);
-    expect(decodeURIComponent(href.split("note=")[1])).toBe(note);
-    expect(new URL(href).searchParams.get("amount")).toBe("10.00");
-  });
-
-  it("escapes characters in the handle", () => {
-    expect(venmoPayHref("a/b?c", "Missions", null)).toBe(
-      "https://venmo.com/a%2Fb%3Fc?txn=pay&note=Missions"
-    );
-  });
-});
 
 describe("methodHref", () => {
   it("keeps the PayPal and Cash App links", () => {
@@ -141,6 +98,30 @@ describe("venmoAppHref", () => {
 });
 
 describe("venmoWebPayHref", () => {
+  it("builds the same link with or without a leading @", () => {
+    expect(venmoWebPayHref("  @gracechurch ", "Missions", null)).toBe(
+      venmoWebPayHref("gracechurch", "Missions", null)
+    );
+  });
+
+  it.each([
+    ["Building Fund", "Building%20Fund"],
+    ["Meals & Care", "Meals%20%26%20Care"],
+    ["Youth trip 🚌", "Youth%20trip%20%F0%9F%9A%8C"],
+    ["A+B=C?", "A%2BB%3DC%3F"],
+  ])("keeps the note %j intact", (note, encoded) => {
+    const href = venmoWebPayHref("gracechurch", note, "10.00");
+    expect(href).toContain(`note=${encoded}`);
+    expect(new URL(href).searchParams.get("note")).toBe(note);
+    expect(new URL(href).searchParams.get("amount")).toBe("10.00");
+  });
+
+  it("keeps a handle with odd characters inside the recipients value", () => {
+    const href = venmoWebPayHref("a/b?c&d", "Missions", null);
+    expect(new URL(href).pathname).toBe("/pay");
+    expect(new URL(href).searchParams.get("recipients")).toBe("a/b?c&d");
+  });
+
   it("opens Venmo's web payment page with the recipient, amount and note", () => {
     expect(venmoWebPayHref("@gracechurch", "Meals & Care", "25.00")).toBe(
       "https://account.venmo.com/pay?recipients=gracechurch&amount=25.00&note=Meals%20%26%20Care"
