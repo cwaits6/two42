@@ -90,13 +90,13 @@ describe("Venmo on a phone or tablet", () => {
       return container.querySelector("[role=status]");
     }
 
-    it("offers Copy once the page is still in front", () => {
+    it("offers Venmo's website once the page is still in front", () => {
       render();
       click(payLink());
       expect(status()).toBeNull();
       act(() => vi.advanceTimersByTime(2500));
       expect(status()?.textContent).toContain("Venmo didn't open");
-      expect(status()?.querySelector("button")?.textContent).toBe("Copy");
+      expect(status()?.querySelector("button")).toBeNull();
       expect(status()?.querySelector("a")?.getAttribute("href")).toBe(
         "https://account.venmo.com/pay?recipients=gracechurch&note=Meals%20%26%20Care"
       );
@@ -158,7 +158,7 @@ describe("Venmo on a phone or tablet", () => {
 describe("Venmo on a computer", () => {
   beforeEach(() => pointer(false));
 
-  it("links the whole card to Venmo's website and keeps Copy, with no amount field", () => {
+  it("links the whole card to Venmo's website, with no amount field or Copy", () => {
     render();
     expect(container.querySelector("input")).toBeNull();
     expect(container.textContent).toContain("@gracechurch");
@@ -166,10 +166,9 @@ describe("Venmo on a computer", () => {
       "https://account.venmo.com/pay?recipients=gracechurch&note=Meals%20%26%20Care"
     );
     expect(payLink().target).toBe("_blank");
-    expect(payLink().textContent).toBe("Open Venmo");
-    expect(payLink().className).toContain("after:absolute");
-    expect(container.querySelector("button")?.textContent).toBe("Copy");
-    expect(container.querySelector("button")?.className).toContain("z-10");
+    expect(payLink().textContent).toContain("Open Venmo");
+    expect(payLink().textContent).toContain("@gracechurch");
+    expect(container.querySelector("button")).toBeNull();
     expect(container.querySelector("svg[role=img]")).toBeNull();
   });
 });

@@ -69,22 +69,7 @@ export function MethodButton({
   }
 
   if (meta.kind === "link") {
-    return (
-      <a
-        href={methodHref(meta.key, handle)}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={`${FRAME} ${HOVER}`}
-      >
-        <span className="min-w-0 flex-1 text-left">
-          <MethodDetails resolved={resolved} />
-          <span className={`mt-1 ${ACTION}`}>
-            {meta.verb}
-            <ExternalLink className="h-4 w-4" aria-hidden="true" />
-          </span>
-        </span>
-      </a>
-    );
+    return <LinkCard resolved={resolved} href={methodHref(meta.key, handle)} />;
   }
 
   return (
@@ -100,6 +85,21 @@ export function MethodButton({
   );
 }
 
+/** A whole-card link that opens the method's site or app in a new tab. */
+function LinkCard({ resolved, href }: { resolved: ResolvedMethod; href: string | undefined }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className={`${FRAME} ${HOVER}`}>
+      <span className="min-w-0 flex-1 text-left">
+        <MethodDetails resolved={resolved} />
+        <span className={`mt-1 ${ACTION}`}>
+          {resolved.meta.verb}
+          <ExternalLink className="h-4 w-4" aria-hidden="true" />
+        </span>
+      </span>
+    </a>
+  );
+}
+
 /**
  * A phone or tablet gets an optional amount and the app link, falling back
  * to Venmo's web payment page; a computer gets that page directly. The amount
@@ -108,14 +108,14 @@ export function MethodButton({
 function VenmoMethod({ resolved, fundName }: { resolved: ResolvedMethod; fundName: string }) {
   const coarse = useCoarsePointer();
 
-  // On a computer the whole card opens Venmo's website, the way PayPal's and
-  // Cash App's do; Copy sits above that link so it stays its own button.
+  if (coarse === false) {
+    return <LinkCard resolved={resolved} href={venmoWebPayHref(resolved.handle, fundName, null)} />;
+  }
   return (
-    <div className={coarse === false ? `relative ${FRAME} ${HOVER}` : FRAME}>
+    <div className={FRAME}>
       <div className="min-w-0 flex-1 text-left">
         <MethodDetails resolved={resolved} />
         {coarse === true && <VenmoPhoneAction resolved={resolved} fundName={fundName} />}
-        {coarse === false && <VenmoComputerAction resolved={resolved} fundName={fundName} />}
       </div>
     </div>
   );
@@ -213,58 +213,24 @@ function VenmoPhoneAction({ resolved, fundName }: { resolved: ResolvedMethod; fu
         <div role="status" className="space-y-1">
           <p className="text-base text-muted-foreground">
             Venmo didn&apos;t open. If the app isn&apos;t on this phone, use Venmo&apos;s website
-            instead, or copy {resolved.handle}.
+            instead.
           </p>
-          <div className="flex flex-wrap gap-x-5">
-            {parsed.ok ? (
-              <a
-                href={venmoWebPayHref(resolved.handle, fundName, parsed.amount)}
-                className={`min-h-11 ${ACTION} hover:underline`}
-              >
-                Open Venmo&apos;s website
-                <ExternalLink className="h-4 w-4" aria-hidden="true" />
-              </a>
-            ) : (
-              <button type="button" onClick={flagAmount} className={`min-h-11 ${ACTION} hover:underline`}>
-                Open Venmo&apos;s website
-                <ExternalLink className="h-4 w-4" aria-hidden="true" />
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => copyHandle(resolved)}
+          {parsed.ok ? (
+            <a
+              href={venmoWebPayHref(resolved.handle, fundName, parsed.amount)}
               className={`min-h-11 ${ACTION} hover:underline`}
             >
-              <Copy className="h-4 w-4" aria-hidden="true" />
-              Copy
+              Open Venmo&apos;s website
+              <ExternalLink className="h-4 w-4" aria-hidden="true" />
+            </a>
+          ) : (
+            <button type="button" onClick={flagAmount} className={`min-h-11 ${ACTION} hover:underline`}>
+              Open Venmo&apos;s website
+              <ExternalLink className="h-4 w-4" aria-hidden="true" />
             </button>
-          </div>
+          )}
         </div>
       )}
-    </div>
-  );
-}
-
-function VenmoComputerAction({ resolved, fundName }: { resolved: ResolvedMethod; fundName: string }) {
-  return (
-    <div className="mt-1 flex flex-wrap items-center gap-x-5">
-      <a
-        href={venmoWebPayHref(resolved.handle, fundName, null)}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={`min-h-11 ${ACTION} after:absolute after:inset-0 after:rounded-xl`}
-      >
-        {resolved.meta.verb}
-        <ExternalLink className="h-4 w-4" aria-hidden="true" />
-      </a>
-      <button
-        type="button"
-        onClick={() => copyHandle(resolved)}
-        className={`relative z-10 min-h-11 ${ACTION} hover:underline`}
-      >
-        <Copy className="h-4 w-4" aria-hidden="true" />
-        Copy
-      </button>
     </div>
   );
 }
