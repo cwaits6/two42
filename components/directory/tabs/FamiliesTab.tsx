@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Home, Search } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -36,6 +36,20 @@ function adultNames(family: FamilyDirectoryFull): string {
     .join(" & ");
 }
 
+/**
+ * Households with `next` open. `keep` carries the query a deep link arrived
+ * with, so a panel opened inside it still leads back to that list.
+ */
+function panelHref(basePath: string, next: Panel | null, keep: URLSearchParams | null): string {
+  const params = new URLSearchParams(keep ?? undefined);
+  params.delete("family");
+  params.delete("person");
+  if (next?.kind === "family") params.set("family", next.family.id);
+  if (next?.kind === "person") params.set("person", next.profile.id);
+  const query = params.toString();
+  return query ? `${basePath}/families?${query}` : `${basePath}/families`;
+}
+
 function FamiliesTabInner() {
   const {
     members,
@@ -48,29 +62,25 @@ function FamiliesTabInner() {
     currentFamilyId,
   } = useDirectory();
   const [query, setQuery] = useState("");
-  const [panel, setPanel] = useState<Panel | null>(null);
   const searchParams = useSearchParams();
-  // Where "Back to the list" leads from a deep-linked panel; a panel opened
-  // from this list leads back to it.
-  const [listHref, setListHref] = useState<string | null>(null);
 
-  // Deep links: ?family=<id> opens a household, ?person=<id> opens a person
+  // The URL owns the open panel: ?family=<id> opens a household, ?person=<id>
+  // a person. Back, reload and deep links all reopen it from there.
   const familyParam = searchParams.get("family");
   const personParam = searchParams.get("person");
-  const celebrationList = celebrationBackHref(basePath, searchParams);
-  useEffect(() => {
-    setListHref(celebrationList);
-    if (personParam && profileMap[personParam]) {
-      const profile = profileMap[personParam];
-      setPanel({
+  const personProfile = personParam ? profileMap[personParam] : undefined;
+  const panel: Panel | null = personProfile
+    ? {
         kind: "person",
-        profile,
-        fromFamily: profile.family_id ? (familyMap[profile.family_id] ?? null) : null,
-      });
-    } else if (familyParam && familyMap[familyParam]) {
-      setPanel({ kind: "family", family: familyMap[familyParam] });
-    }
-  }, [familyParam, personParam, profileMap, familyMap, celebrationList]);
+        profile: personProfile,
+        fromFamily: personProfile.family_id ? (familyMap[personProfile.family_id] ?? null) : null,
+      }
+    : familyParam && familyMap[familyParam]
+      ? { kind: "family", family: familyMap[familyParam] }
+      : null;
+  // Where "Back to the list" leads from a deep-linked panel; a panel opened
+  // from this list leads back to it.
+  const listHref = celebrationBackHref(basePath, searchParams);
 
   // Households plus members without a family, within the scope, filtered by search
   const entries = useMemo<ListEntry[]>(() => {
@@ -121,14 +131,20 @@ function FamiliesTabInner() {
     return map;
   }, [entries]);
 
+  // Replacing the entry keeps Back leaving the tab rather than stepping
+  // through every panel opened.
+  function showPanel(next: Panel | null, keep: URLSearchParams | null) {
+    window.history.replaceState(null, "", panelHref(basePath, next, keep));
+  }
+
   function openPanel(next: Panel) {
-    setPanel(next);
+    showPanel(next, searchParams);
     scrollToPanel();
   }
 
   function openFromList(next: Panel) {
-    setListHref(null);
-    openPanel(next);
+    showPanel(next, null);
+    scrollToPanel();
   }
 
   const selectedFamilyId =
@@ -231,7 +247,7 @@ function FamiliesTabInner() {
             <>
               <BackLink
                 href={listHref ?? undefined}
-                onClick={() => setPanel(null)}
+                onClick={() => showPanel(null, null)}
                 className="mb-4"
               >
                 Back to the list
@@ -250,9 +266,9 @@ function FamiliesTabInner() {
               <BackLink
                 href={panel.fromFamily ? undefined : (listHref ?? undefined)}
                 onClick={() =>
-                  setPanel(
-                    panel.fromFamily ? { kind: "family", family: panel.fromFamily } : null,
-                  )
+                  panel.fromFamily
+                    ? showPanel({ kind: "family", family: panel.fromFamily }, searchParams)
+                    : showPanel(null, null)
                 }
                 className="mb-4"
               >
@@ -261,10 +277,7 @@ function FamiliesTabInner() {
               <PersonCard
                 profile={panel.profile}
                 viewerId={currentUserId}
-                family={
-                  panel.fromFamily ??
-                  (panel.profile.family_id ? (familyMap[panel.profile.family_id] ?? null) : null)
-                }
+                family={panel.fromFamily}
               />
             </>
           )
