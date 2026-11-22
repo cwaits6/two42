@@ -22,7 +22,7 @@ import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
 import { AvatarCluster } from "@/components/directory/AvatarCluster";
 import { PostingTo } from "@/components/groups/PostingTo";
-import { MethodButton, MethodChip } from "@/components/giving/MethodButton";
+import { MethodButton } from "@/components/giving/MethodButton";
 import {
   FUND_NAME_FIELD,
   FUND_RECIPIENT_FIELD,
@@ -489,7 +489,6 @@ export function FundForm({
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <MethodChip method={meta} size="sm" />
                     <span className="flex-1 text-base font-semibold">{meta.name}</span>
                     <span aria-hidden="true" className="text-base text-muted-foreground">
                       {m.enabled ? "On" : "Off"}

@@ -110,7 +110,7 @@ describe("Venmo on a phone or tablet", () => {
       type(input, "25.123");
       expect(status()?.querySelector("a")).toBeNull();
       const website = [...status()!.querySelectorAll("button")].find((b) =>
-        b.textContent?.startsWith("Pay on Venmo")
+        b.textContent?.startsWith("Open Venmo's website")
       )!;
       click(website);
       expect(document.activeElement).toBe(input);
@@ -158,7 +158,7 @@ describe("Venmo on a phone or tablet", () => {
 describe("Venmo on a computer", () => {
   beforeEach(() => pointer(false));
 
-  it("shows the handle, Venmo's website and Copy, with no amount field", () => {
+  it("links the whole card to Venmo's website and keeps Copy, with no amount field", () => {
     render();
     expect(container.querySelector("input")).toBeNull();
     expect(container.textContent).toContain("@gracechurch");
@@ -166,7 +166,10 @@ describe("Venmo on a computer", () => {
       "https://account.venmo.com/pay?recipients=gracechurch&note=Meals%20%26%20Care"
     );
     expect(payLink().target).toBe("_blank");
+    expect(payLink().textContent).toBe("Open Venmo");
+    expect(payLink().className).toContain("after:absolute");
     expect(container.querySelector("button")?.textContent).toBe("Copy");
+    expect(container.querySelector("button")?.className).toContain("z-10");
     expect(container.querySelector("svg[role=img]")).toBeNull();
   });
 });

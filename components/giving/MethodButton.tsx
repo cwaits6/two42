@@ -15,26 +15,6 @@ import {
   type ResolvedMethod,
 } from "@/lib/giving/methods";
 
-/** Text chip for a payment method (no trademarked logos) */
-export function MethodChip({
-  method,
-  size = "md",
-}: {
-  method: ResolvedMethod["meta"];
-  size?: "sm" | "md";
-}) {
-  return (
-    <span
-      aria-hidden="true"
-      className={`flex shrink-0 items-center justify-center rounded-lg bg-brand-warm font-bold text-brand-primary-text ${
-        size === "sm" ? "h-7 w-7 text-sm" : "h-10 w-10 text-lg"
-      }`}
-    >
-      {method.glyph}
-    </span>
-  );
-}
-
 const ACTION = "flex items-center gap-1.5 text-base font-semibold text-brand-primary-text";
 const FRAME =
   "flex min-h-11 w-full items-start gap-3.5 rounded-xl border border-border bg-card px-4 py-3";
@@ -96,7 +76,6 @@ export function MethodButton({
         rel="noopener noreferrer"
         className={`${FRAME} ${HOVER}`}
       >
-        <MethodChip method={meta} />
         <span className="min-w-0 flex-1 text-left">
           <MethodDetails resolved={resolved} />
           <span className={`mt-1 ${ACTION}`}>
@@ -110,7 +89,6 @@ export function MethodButton({
 
   return (
     <button type="button" className={`${FRAME} ${HOVER}`} onClick={() => copyHandle(resolved)}>
-      <MethodChip method={meta} />
       <span className="min-w-0 flex-1 text-left">
         <MethodDetails resolved={resolved} />
         <span className={`mt-1 ${ACTION}`}>
@@ -130,9 +108,10 @@ export function MethodButton({
 function VenmoMethod({ resolved, fundName }: { resolved: ResolvedMethod; fundName: string }) {
   const coarse = useCoarsePointer();
 
+  // On a computer the whole card opens Venmo's website, the way PayPal's and
+  // Cash App's do; Copy sits above that link so it stays its own button.
   return (
-    <div className={FRAME}>
-      <MethodChip method={resolved.meta} />
+    <div className={coarse === false ? `relative ${FRAME} ${HOVER}` : FRAME}>
       <div className="min-w-0 flex-1 text-left">
         <MethodDetails resolved={resolved} />
         {coarse === true && <VenmoPhoneAction resolved={resolved} fundName={fundName} />}
@@ -233,7 +212,7 @@ function VenmoPhoneAction({ resolved, fundName }: { resolved: ResolvedMethod; fu
       {notOpened && (
         <div role="status" className="space-y-1">
           <p className="text-base text-muted-foreground">
-            Venmo didn&apos;t open. If the app isn&apos;t on this phone, pay on Venmo&apos;s website
+            Venmo didn&apos;t open. If the app isn&apos;t on this phone, use Venmo&apos;s website
             instead, or copy {resolved.handle}.
           </p>
           <div className="flex flex-wrap gap-x-5">
@@ -242,12 +221,12 @@ function VenmoPhoneAction({ resolved, fundName }: { resolved: ResolvedMethod; fu
                 href={venmoWebPayHref(resolved.handle, fundName, parsed.amount)}
                 className={`min-h-11 ${ACTION} hover:underline`}
               >
-                Pay on Venmo&apos;s website
+                Open Venmo&apos;s website
                 <ExternalLink className="h-4 w-4" aria-hidden="true" />
               </a>
             ) : (
               <button type="button" onClick={flagAmount} className={`min-h-11 ${ACTION} hover:underline`}>
-                Pay on Venmo&apos;s website
+                Open Venmo&apos;s website
                 <ExternalLink className="h-4 w-4" aria-hidden="true" />
               </button>
             )}
@@ -268,20 +247,20 @@ function VenmoPhoneAction({ resolved, fundName }: { resolved: ResolvedMethod; fu
 
 function VenmoComputerAction({ resolved, fundName }: { resolved: ResolvedMethod; fundName: string }) {
   return (
-    <div className="mt-1 flex flex-wrap gap-x-5">
+    <div className="mt-1 flex flex-wrap items-center gap-x-5">
       <a
         href={venmoWebPayHref(resolved.handle, fundName, null)}
         target="_blank"
         rel="noopener noreferrer"
-        className={`min-h-11 ${ACTION} hover:underline`}
+        className={`min-h-11 ${ACTION} after:absolute after:inset-0 after:rounded-xl`}
       >
-        Pay on Venmo&apos;s website
+        {resolved.meta.verb}
         <ExternalLink className="h-4 w-4" aria-hidden="true" />
       </a>
       <button
         type="button"
         onClick={() => copyHandle(resolved)}
-        className={`min-h-11 ${ACTION} hover:underline`}
+        className={`relative z-10 min-h-11 ${ACTION} hover:underline`}
       >
         <Copy className="h-4 w-4" aria-hidden="true" />
         Copy

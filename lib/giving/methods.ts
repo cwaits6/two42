@@ -8,12 +8,11 @@ import type { PaymentMethodKey } from "@/lib/types";
  * the payer's app; "copy" methods (Zelle, Apple/Google Pay) have no public
  * profile URLs, so the handle is copied to the clipboard instead.
  *
- * Text chips only: no trademarked logos or brand colors.
+ * Names and words only: no company logos or brand colors.
  */
 export interface PaymentMethodMeta {
   key: PaymentMethodKey;
   name: string;
-  glyph: string;
   kind: "pay" | "link" | "copy";
   verb: string;
   /** Shown before the handle for context, e.g. "paypal.me/" */
@@ -25,7 +24,6 @@ export const PAYMENT_METHODS: Record<PaymentMethodKey, PaymentMethodMeta> = {
   venmo: {
     key: "venmo",
     name: "Venmo",
-    glyph: "V",
     kind: "pay",
     verb: "Open Venmo",
     prefix: "",
@@ -34,7 +32,6 @@ export const PAYMENT_METHODS: Record<PaymentMethodKey, PaymentMethodMeta> = {
   paypal: {
     key: "paypal",
     name: "PayPal",
-    glyph: "P",
     kind: "link",
     verb: "Open PayPal",
     prefix: "paypal.me/",
@@ -43,7 +40,6 @@ export const PAYMENT_METHODS: Record<PaymentMethodKey, PaymentMethodMeta> = {
   cashapp: {
     key: "cashapp",
     name: "Cash App",
-    glyph: "$",
     kind: "link",
     verb: "Open Cash App",
     prefix: "",
@@ -52,7 +48,6 @@ export const PAYMENT_METHODS: Record<PaymentMethodKey, PaymentMethodMeta> = {
   zelle: {
     key: "zelle",
     name: "Zelle",
-    glyph: "Z",
     kind: "copy",
     verb: "Tap to copy",
     prefix: "",
@@ -61,7 +56,6 @@ export const PAYMENT_METHODS: Record<PaymentMethodKey, PaymentMethodMeta> = {
   wallet: {
     key: "wallet",
     name: "Apple / Google Pay",
-    glyph: "◑",
     kind: "copy",
     verb: "Tap to copy",
     prefix: "",
