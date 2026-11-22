@@ -106,6 +106,23 @@ describe("POST /api/platform/organizations/[id]/invite-owner", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it("sends to the approved request when an older denied one shares its address", async () => {
+    const fake = fakeFirstAdminService({
+      rows: [
+        { id: "ar-old", email: "Admin@Hillside.example", status: "denied" },
+        { id: "ar-kept", email: "admin@hillside.example", status: "approved" },
+      ],
+    });
+    createServiceClient.mockResolvedValue(fake.client);
+
+    const res = await sendInvite("admin@hillside.example");
+
+    expect(res.status).toBe(200);
+    const update = fake.calls.find((c) => c.op === "update");
+    expect(update?.filters).toContainEqual(["id", "ar-kept"]);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
   it("answers 404 when the church's first admin has another email", async () => {
     const fake = fakeFirstAdminService({ rows: [{ id: "ar-1", email: "someone@else.example" }] });
     createServiceClient.mockResolvedValue(fake.client);
