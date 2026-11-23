@@ -26,9 +26,10 @@ export type FirstAdminInviteResult =
 type ServiceClient = Awaited<ReturnType<typeof createServiceClient>>;
 
 /**
- * The founding request: the church's earliest admin-role access request.
- * The church page reads it with this same query, so the admin it shows is
- * the one Send invite mails. `orgId` must already be validated.
+ * The church's admin-role access requests, earliest first; pick the founding
+ * one with pickFoundingRequest. The church page reads through this same pair,
+ * so the admin it shows is the one Send invite mails. `orgId` must already be
+ * validated.
  */
 export function foundingRequestQuery(service: ServiceClient, orgId: string) {
   return service
@@ -38,7 +39,16 @@ export function foundingRequestQuery(service: ServiceClient, orgId: string) {
     .eq("approved_role", "admin")
     .order("created_at", { ascending: true })
     .order("id", { ascending: true })
-    .limit(1);
+    .limit(20);
+}
+
+/**
+ * The approved request when there is one, otherwise the earliest. The
+ * one-founding-request migration can leave an older denied row beside the
+ * approved row it kept for the same address.
+ */
+export function pickFoundingRequest<T extends { status: string }>(rows: T[] | null): T | null {
+  return rows?.find((r) => r.status === "approved") ?? rows?.[0] ?? null;
 }
 
 export async function sendFirstAdminInvite(opts: {
@@ -63,7 +73,7 @@ export async function sendFirstAdminInvite(opts: {
 
     // Compared here rather than in the query: rows added before emails were
     // lowercased on save can hold the address in mixed case.
-    const row = rows?.[0];
+    const row = pickFoundingRequest(rows);
     const email = row ? normalizeEmail(row.email) : null;
     // A church admin can deny the request and leave its admin role in place;
     // sending must not approve it again.

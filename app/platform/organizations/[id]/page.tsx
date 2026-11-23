@@ -14,7 +14,7 @@ import {
   type OrgDetail,
   type OwnerRequest,
 } from "./OrganizationDetail";
-import { foundingRequestQuery } from "@/app/api/platform/organizations/firstAdminInvite";
+import { foundingRequestQuery, pickFoundingRequest } from "@/app/api/platform/organizations/firstAdminInvite";
 import { pageTitle } from "@/lib/pageTitle";
 import { logError } from "@/lib/log";
 
@@ -154,7 +154,7 @@ export default async function PlatformOrganizationPage({ params, searchParams }:
     });
   }
 
-  const ownerRow = ownerRequests?.[0] ?? null;
+  const ownerRow = pickFoundingRequest(ownerRequests);
   const owner: OwnerRequest | null = ownerRow
     ? {
         name: ownerRow.name,

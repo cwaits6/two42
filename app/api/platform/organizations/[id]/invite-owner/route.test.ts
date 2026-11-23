@@ -106,6 +106,23 @@ describe("POST /api/platform/organizations/[id]/invite-owner", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it("sends to the approved request when an older denied one shares its address", async () => {
+    const fake = fakeFirstAdminService({
+      rows: [
+        { id: "ar-old", email: "Admin@Hillside.example", status: "denied" },
+        { id: "ar-kept", email: "admin@hillside.example", status: "approved" },
+      ],
+    });
+    createServiceClient.mockResolvedValue(fake.client);
+
+    const res = await sendInvite("admin@hillside.example");
+
+    expect(res.status).toBe(200);
+    const update = fake.calls.find((c) => c.op === "update");
+    expect(update?.filters).toContainEqual(["id", "ar-kept"]);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
   it("answers 404 when the church's first admin has another email", async () => {
     const fake = fakeFirstAdminService({ rows: [{ id: "ar-1", email: "someone@else.example" }] });
     createServiceClient.mockResolvedValue(fake.client);
@@ -144,6 +161,24 @@ describe("POST /api/platform/organizations/[id]/invite-owner", () => {
     const updates = fake.calls.filter((c) => c.op === "update");
     expect(updates).toHaveLength(2);
     expect(updates[1].payload).toEqual({ signup_token: null, token_expires_at: null });
+  });
+
+  it("sends the invite on a retry after a failed send", async () => {
+    const fake = fakeFirstAdminService({ rows: [{ id: "ar-1", email: "admin@hillside.example" }] });
+    createServiceClient.mockResolvedValue(fake.client);
+    send.mockResolvedValueOnce({ data: null, error: { message: "provider down" } });
+
+    expect((await sendInvite("admin@hillside.example")).status).toBe(500);
+    const retry = await sendInvite("admin@hillside.example");
+
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toEqual({ success: true });
+    expect(send).toHaveBeenCalledTimes(2);
+    const [mint, rollback, again] = fake.calls.filter((c) => c.op === "update");
+    expect(rollback.payload).toEqual({ signup_token: null, token_expires_at: null });
+    expect(again.payload?.signup_token).toEqual(expect.stringMatching(/^[0-9a-f]{64}$/));
+    expect(again.payload?.signup_token).not.toBe(mint.payload?.signup_token);
+    expect(send.mock.calls[1][0].html).toContain(`token=${again.payload?.signup_token}`);
   });
 
   it("does not report a send when the token update wrote nothing", async () => {
