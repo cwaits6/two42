@@ -1,0 +1,60 @@
+---
+title: Troubleshooting
+description: Known failures when running two42, what causes each, and how to fix it.
+---
+
+## The site returns 404 on its own domain
+
+The app answers only on the `NEXT_PUBLIC_SITE_URL` host, plus `localhost`, `127.0.0.1` and `*.vercel.app`. Every other host gets a bare 404.
+
+Set `NEXT_PUBLIC_SITE_URL` to your production origin and redeploy. A malformed value 404s the whole site and logs `isExpectedHost: malformed NEXT_PUBLIC_SITE_URL`.
+
+## Invite emails fail with "We couldn't send the email"
+
+`RESEND_API_KEY` is missing or wrong. Locally this is expected: the app runs without Resend. In production, set the key; see [Email](/docs/run/email#set-up-resend).
+
+If the key is set and Resend still refuses the send, check `NEXT_PUBLIC_EMAIL_FROM`. Its default, `two42 <noreply@two42.io>`, is refused for any account but the hosted service's. Use an address on a domain you have verified in Resend, and set the same rule for `EMAIL_FROM` in the edge function secrets.
+
+## Event maps show an error
+
+`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` holds a placeholder, such as the one in `.env.example`. Any non-empty value loads Google Maps with it. Clear it to leave maps out, or set a real key as in [Set up event locations](/docs/run/deploy#set-up-event-locations).
+
+## Creating the first user fails with "signup rejected"
+
+Adding a user under Authentication → Users fails with `signup rejected: no approved access request or invite` when there is no approved access request for that email. A trigger on new Auth users refuses any email without one. Insert the approved request first, as in [Add the first church admin](/docs/run/deploy#add-the-first-church-admin).
+
+## Reminder emails are not sent
+
+Check, in order:
+
+1. **The Vault secrets.** Without `cron_project_url` and `cron_service_role_key`, every job runs on schedule and fails, and nothing in the app shows it. Run the checks in [Check that the jobs ran](/docs/run/edge-functions#check-that-the-jobs-ran).
+2. **A `401` in `net._http_response`.** The Vault key is not one of the project's service keys. Replace it with one that is.
+3. **The function secrets.** `RESEND_API_KEY` must be set in the edge function secrets as well as the app.
+4. **The church's status.** A suspended church gets no reminders. Reactivate it on its platform page; see [Suspend a church](/docs/run/add-a-church#suspend-a-church).
+5. **The daily email limit.** A church that has reached its limit skips further counted emails that day. See [Set a church's daily email limit](/docs/run/email#set-a-churchs-daily-email-limit).
+
+## Links in reminder emails point to the wrong site
+
+The edge functions build links on the `SITE_URL` function secret, which falls back to `https://two42.io`. Set it to your origin with `npx supabase secrets set SITE_URL=https://your.domain`.
+
+## Serving email links ask people to sign in
+
+The edge functions need `SERVING_LINK_SECRET` set to the same value as the app's. Without it, serving emails carry links that require sign-in. A group's own setting, or `SERVING_LINK_MODE=login`, also sends people through sign-in on purpose.
+
+## The prayer page shows its failed state
+
+A prayer key is missing or malformed. Each key must be exactly 32 bytes of base64. `PRAYER_BODY_KEY_PREVIOUS` and `PRAYER_AUTHOR_KEY_PREVIOUS` may be left unset, but one that is set and malformed fails every prayer page the same way. A wrong body key also fails any page holding a request it cannot open.
+
+If authors no longer see "You" on their anonymous requests, the author key is wrong. Restore the right `PRAYER_AUTHOR_KEY`.
+
+If you keep service secrets out of preview deployments, the prayer page and Home's prayer section show their failed state there too, and every route that needs the service key fails. That is expected on a preview.
+
+Recovery and rotation: [`docs/security/prayer-encryption.md`](https://github.com/cwaits6/two42/blob/main/docs/security/prayer-encryption.md).
+
+## Password-reset emails stop arriving
+
+Supabase's built-in email sender is rate-limited and meant for testing. Configure a custom SMTP sender under Authentication in the Supabase dashboard. See [Configure Supabase Auth](/docs/run/deploy#configure-supabase-auth).
+
+## An attach-org-domains function is still deployed
+
+Installs that ran an earlier release may still have an `attach-org-domains` edge function. Deploys no longer include it, but they do not remove the copy already deployed, and its schedule is removed by a migration. Delete the function, and remove the secrets only it read: `VERCEL_API_TOKEN`, `VERCEL_PROJECT_ID`, `VERCEL_TEAM_ID` and `PLATFORM_APEX`. The app no longer reads `NEXT_PUBLIC_PLATFORM_APEX`, `NEXT_PUBLIC_VERCEL_CNAME_TARGET` or `NEXT_PUBLIC_VERCEL_APEX_A_RECORD`, so they can be deleted from the host's environment.

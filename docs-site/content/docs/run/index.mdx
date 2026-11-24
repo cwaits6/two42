@@ -1,0 +1,50 @@
+---
+title: Run two42
+description: What you host when you run your own copy of two42, and where each part is set up.
+---
+
+## What you run
+
+two42 is open source under AGPL-3.0, so a church can host its own copy. A running install has four parts:
+
+- **The app.** A Next.js server, built from this repository. The hosted service runs on Vercel; any host that runs a Next.js server will do.
+- **A Supabase project.** Postgres with row-level security, Auth for sign-in, and Storage for photos. The schema, its policies and the job schedules all come from the migrations in `supabase/migrations/`.
+- **Three edge functions.** Event reminders, serving reminders and a nightly clean-up, run on a schedule by `pg_cron` inside the database.
+- **Resend.** Sends the app's email: invites, setup links, approvals, serving emails and reminders. Password-reset emails come from Supabase Auth instead, through the SMTP sender you configure there.
+
+Google Maps is optional. Without a key, event locations are plain text.
+
+## Where to start
+
+<Cards>
+  <Card title="Requirements" href="/docs/run/requirements">
+    What you need before you start, locally and in production.
+  </Card>
+  <Card title="Run it locally" href="/docs/run/local">
+    Start the database and the app on your own machine.
+  </Card>
+  <Card title="Deploy" href="/docs/run/deploy">
+    Set up the Supabase project, the app host and the first church admin.
+  </Card>
+  <Card title="Edge functions" href="/docs/run/edge-functions">
+    The scheduled jobs, when they run, and how to check them.
+  </Card>
+  <Card title="Environment variables" href="/docs/run/environment">
+    Every variable the app and the edge functions read.
+  </Card>
+  <Card title="Email" href="/docs/run/email">
+    Resend, the sending address, reply-to and the daily limit.
+  </Card>
+  <Card title="Add a church" href="/docs/run/add-a-church">
+    The operator pages and adding another church.
+  </Card>
+  <Card title="Backups" href="/docs/run/backups">
+    What two42 does and does not back up for you.
+  </Card>
+  <Card title="Upgrading" href="/docs/run/upgrading">
+    How releases are made and how to take one.
+  </Card>
+  <Card title="Troubleshooting" href="/docs/run/troubleshooting">
+    Known failures and their fixes.
+  </Card>
+</Cards>
