@@ -253,20 +253,30 @@ function sameTable(input: ShuffleInput, rng: () => number): DraftTable[] {
 
   // Hosts take turns: every host is dealt round-robin, so each table starts
   // with one, and the search keeps at least one at every table.
-  const slots: Slot[] = Array.from({ length: n }, () => ({ fixed: [], members: [] }));
-  hosts.forEach((h, i) => slots[i % n].members.push(h.id));
   const hostIds = new Set(hosts.map((h) => h.id));
   const capacity = (ids: string[]) => {
     const seats = ids.filter((id) => hostIds.has(id)).map((id) => byId.get(id)?.seats ?? 0);
     return seats.length > 0 ? Math.min(...seats) : input.tableSize.max;
   };
   const allowed = (ids: string[]) => hosts.length === 0 || ids.some((id) => hostIds.has(id));
-  const seated = seat(
-    slots,
-    input.parties.filter((p) => !hostIds.has(p.id)).map((p) => p.id),
-    { byId, capacity, allowed, seenPairs },
-    rng
-  );
+  const seatWith = (count: number) => {
+    const slots: Slot[] = Array.from({ length: count }, () => ({ fixed: [], members: [] }));
+    hosts.forEach((h, i) => slots[i % count].members.push(h.id));
+    return seat(
+      slots,
+      input.parties.filter((p) => !hostIds.has(p.id)).map((p) => p.id),
+      { byId, capacity, allowed, seenPairs },
+      rng
+    );
+  };
+  const fits = (slots: Slot[]) => slots.every((slot) => people(slot.members, byId) <= capacity(slot.members));
+  // Every host at a table takes a turn, so a table holds its smallest host's
+  // seats; when it can't, more tables spread the small hosts out.
+  let seated = seatWith(n);
+  for (let more = n + 1; !fits(seated) && more <= hosts.length; more++) {
+    const next = seatWith(more);
+    if (fits(next)) seated = next;
+  }
 
   return seated.map((slot, i) => {
     const partyIds = [...slot.members];

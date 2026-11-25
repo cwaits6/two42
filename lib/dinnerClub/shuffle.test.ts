@@ -199,6 +199,16 @@ describe("shuffle, same table with hosts taking turns", () => {
     expect(Object.values(warnings.tables).some((w) => w.overSeats)).toBe(false);
   });
 
+  it("adds tables when a small host would take a turn at a table too big for them", () => {
+    const hosts = [party("h1", 2, { seats: 6 }), party("h2", 2, { seats: 2 }), party("h3", 2, { seats: 2 })];
+    for (const seed of [1, 7, 42]) {
+      const over = { format: "same_table_rotating" as const, dateIds: ["d1", "d2", "d3"], seed };
+      const draft = shuffle(input(hosts, over));
+      seatedOnce(draft, hosts);
+      expect(Object.values(draftWarnings(draft, input(hosts, over)).tables).some((w) => w.overSeats)).toBe(false);
+    }
+  });
+
   it("gives a host the turn they asked for when it is theirs to take", () => {
     const two = [party("h1", 2, { seats: 8, preferredDateId: "d2" }), party("h2", 2, { seats: 8, preferredDateId: "d1" }), party("c1", 2)];
     const draft = shuffle(input(two, { format: "same_table_rotating", dateIds: ["d1", "d2"] }));
