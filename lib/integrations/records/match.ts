@@ -54,9 +54,10 @@ function namesAgree(profile: ProfileForMatch, person: RecordsPerson): boolean {
 
 /** null when the birthdays disagree; otherwise whether they agree on at least month and day. */
 function birthdayFact(profile: ProfileForMatch, person: RecordsPerson): boolean | null {
+  // A year can be stored without a month or day, and a year that disagrees rules a person out on its own.
+  if (profile.birthYear && person.birthYear && profile.birthYear !== person.birthYear) return null;
   if (!profile.birthMonth || !profile.birthDay || !person.birthMonth || !person.birthDay) return false;
   if (profile.birthMonth !== person.birthMonth || profile.birthDay !== person.birthDay) return null;
-  if (profile.birthYear && person.birthYear && profile.birthYear !== person.birthYear) return null;
   return true;
 }
 
@@ -77,12 +78,16 @@ export function displayName(person: RecordsPerson): string {
 /**
  * Suggestions for profiles not yet linked, best first for each profile.
  * People already linked to another profile are never suggested again.
+ * `incompleteLastNames` holds normalized last names whose people couldn't all
+ * be read; a competitor may be missing, so those pairs are never bulk-confirmable.
  */
 export function suggest(
   profiles: readonly ProfileForMatch[],
   people: readonly RecordsPerson[],
   alreadyLinked: ReadonlySet<string>,
+  incompleteLastNames: ReadonlySet<string> = new Set(),
 ): Suggestion[] {
+  const lastNameOf = new Map(profiles.map((p) => [p.id, normalizeName(p.lastName)]));
   const pairs: Omit<Suggestion, "confirmableInBulk">[] = [];
   for (const profile of profiles) {
     for (const person of people) {
@@ -102,7 +107,10 @@ export function suggest(
     .map((pair) => ({
       ...pair,
       confirmableInBulk:
-        score(pair.matched) > 0 && perProfile.get(pair.profileId) === 1 && perPerson.get(pair.personId) === 1,
+        score(pair.matched) > 0 &&
+        perProfile.get(pair.profileId) === 1 &&
+        perPerson.get(pair.personId) === 1 &&
+        !incompleteLastNames.has(lastNameOf.get(pair.profileId) ?? ""),
     }))
     .sort((a, b) => a.profileId.localeCompare(b.profileId) || score(b.matched) - score(a.matched));
 }

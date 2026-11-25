@@ -22,6 +22,15 @@ export interface RecordsPerson {
   linkable: boolean;
 }
 
+export interface PeopleFound {
+  people: RecordsPerson[];
+  /**
+   * Normalized last names (normalizeName()) whose people couldn't all be read,
+   * so a competing candidate may be missing from `people`.
+   */
+  incompleteLastNames: Set<string>;
+}
+
 /** One kind of church records two42 can read. Every call only reads. */
 export interface RecordsProvider {
   id: RecordsProviderId;
@@ -30,7 +39,7 @@ export interface RecordsProvider {
   /** Proves the address is this provider and the key can read people. */
   checkConnection(creds: RecordsCredentials): Promise<void>;
   /** People who are linkable and have one of these last names. */
-  findByLastNames(creds: RecordsCredentials, lastNames: readonly string[]): Promise<RecordsPerson[]>;
+  findByLastNames(creds: RecordsCredentials, lastNames: readonly string[]): Promise<PeopleFound>;
   /** The people with these ids that exist, linkable or not; a missing id is left out. */
   findByIds(creds: RecordsCredentials, ids: readonly string[]): Promise<RecordsPerson[]>;
   /** Where a church admin opens the person in the provider's own app. */

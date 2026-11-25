@@ -55,6 +55,11 @@ describe("compare", () => {
     expect(compare(profile({ birthYear: 1962 }), person())).toBeNull();
   });
 
+  it("rules out a birth year that disagrees even when the month and day are missing", () => {
+    const yearOnly = person({ birthMonth: null, birthDay: null, birthYear: 1961 });
+    expect(compare(profile({ birthMonth: 4, birthDay: 12, birthYear: 1962 }), yearOnly)).toBeNull();
+  });
+
   it("treats a missing birthday on either side as no evidence, not a mismatch", () => {
     expect(compare(profile({ birthMonth: null, birthDay: null }), person())).toEqual({ email: true, birthday: false });
   });
@@ -76,6 +81,11 @@ describe("suggest", () => {
     expect(twoPeople.every((s) => !s.confirmableInBulk)).toBe(true);
     const twoProfiles = suggest([profile(), profile({ id: "p2" })], [person()], new Set());
     expect(twoProfiles.every((s) => !s.confirmableInBulk)).toBe(true);
+  });
+
+  it("keeps out of bulk a match whose last name couldn't be read in full", () => {
+    const [s] = suggest([profile()], [person()], new Set(), new Set([normalizeName("OBrien")]));
+    expect(s.confirmableInBulk).toBe(false);
   });
 
   it("never suggests a person already linked or not linkable", () => {

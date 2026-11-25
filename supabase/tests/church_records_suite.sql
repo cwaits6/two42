@@ -16,7 +16,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(19);
+select plan(25);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -84,8 +84,9 @@ select is(
 
 insert into public.records_connections (org_id, provider, base_url, key_ciphertext, key_hint, connected_by)
   values (pg_temp.fx('org'), 'rock', 'https://rock.example.org', 'k1.kid.iv.sealed', '9012', pg_temp.fx('admin'));
-insert into public.records_person_links (org_id, profile_id, external_person_id, linked_by)
-  values (pg_temp.fx('org'), pg_temp.fx('member'), '100', pg_temp.fx('admin'));
+insert into public.records_person_links (org_id, connection_id, profile_id, external_person_id, linked_by)
+  values (pg_temp.fx('org'), (select connection_id from public.records_connections where org_id = pg_temp.fx('org')),
+          pg_temp.fx('member'), '100', pg_temp.fx('admin'));
 
 -- ── No client reaches either table ──────────────────────────────────────────
 select is(
@@ -95,8 +96,8 @@ select is(
        ('select * from public.records_connections'),
        ('select key_ciphertext from public.records_connections'),
        ('select * from public.records_person_links'),
-       (format('insert into public.records_person_links (org_id, profile_id, external_person_id) values (%L, %L, %L)',
-               pg_temp.fx('org'), pg_temp.fx('member2'), '200')),
+       (format('insert into public.records_person_links (org_id, connection_id, profile_id, external_person_id) values (%L, %L, %L, %L)',
+               pg_temp.fx('org'), gen_random_uuid(), pg_temp.fx('member2'), '200')),
        (format('update public.records_connections set base_url = %L', 'https://evil.example')),
        ('delete from public.records_person_links'),
        ('delete from public.records_connections')
@@ -144,18 +145,18 @@ select is(
   '23514', 'the key hint holds at most four characters');
 
 select is(
-  pg_temp.run(format('insert into public.records_person_links (org_id, profile_id, external_person_id) values (%L, %L, %L)',
-    pg_temp.fx('org'), pg_temp.fx('member'), '101')),
+  pg_temp.run(format('insert into public.records_person_links (org_id, connection_id, profile_id, external_person_id) values (%L, (select connection_id from public.records_connections where org_id = %L), %L, %L)',
+    pg_temp.fx('org'), pg_temp.fx('org'), pg_temp.fx('member'), '101')),
   '23505', 'a profile links to one person in the records');
 
 select is(
-  pg_temp.run(format('insert into public.records_person_links (org_id, profile_id, external_person_id) values (%L, %L, %L)',
-    pg_temp.fx('org'), pg_temp.fx('member2'), '100')),
+  pg_temp.run(format('insert into public.records_person_links (org_id, connection_id, profile_id, external_person_id) values (%L, (select connection_id from public.records_connections where org_id = %L), %L, %L)',
+    pg_temp.fx('org'), pg_temp.fx('org'), pg_temp.fx('member2'), '100')),
   '23505', 'a person in the records links to one profile');
 
 select is(
-  pg_temp.run(format('insert into public.records_person_links (org_id, profile_id, external_person_id) values (%L, %L, %L)',
-    pg_temp.fx('org'), pg_temp.fx('member2'), '1/../2')),
+  pg_temp.run(format('insert into public.records_person_links (org_id, connection_id, profile_id, external_person_id) values (%L, (select connection_id from public.records_connections where org_id = %L), %L, %L)',
+    pg_temp.fx('org'), pg_temp.fx('org'), pg_temp.fx('member2'), '1/../2')),
   '23514', 'a person id is only letters, digits, dashes and underscores');
 
 -- ── Church boundary ─────────────────────────────────────────────────────────
@@ -167,16 +168,16 @@ begin
 end $$;
 
 select is(
-  pg_temp.run(format('insert into public.records_person_links (org_id, profile_id, external_person_id) values (%L, %L, %L)',
-    pg_temp.fx('other_org'), pg_temp.fx('member2'), '300')),
+  pg_temp.run(format('insert into public.records_person_links (org_id, connection_id, profile_id, external_person_id) values (%L, %L, %L, %L)',
+    pg_temp.fx('other_org'), gen_random_uuid(), pg_temp.fx('member2'), '300')),
   '23503', 'a church without a connection can''t hold links');
 
 insert into public.records_connections (org_id, provider, base_url, key_ciphertext, key_hint)
   values (pg_temp.fx('other_org'), 'rock', 'https://rock.other.example', 'k1.kid.iv.other', 'abcd');
 
 select is(
-  pg_temp.run(format('insert into public.records_person_links (org_id, profile_id, external_person_id) values (%L, %L, %L)',
-    pg_temp.fx('other_org'), pg_temp.fx('member2'), '300')),
+  pg_temp.run(format('insert into public.records_person_links (org_id, connection_id, profile_id, external_person_id) values (%L, (select connection_id from public.records_connections where org_id = %L), %L, %L)',
+    pg_temp.fx('other_org'), pg_temp.fx('other_org'), pg_temp.fx('member2'), '300')),
   '23503', 'another church can''t link a profile from this one');
 
 select is(
@@ -184,9 +185,58 @@ select is(
     pg_temp.fx('admin'), pg_temp.fx('other_org'))),
   '23503', 'a connection can''t name a church admin from another church');
 
+-- ── Saving a connection ─────────────────────────────────────────────────────
+insert into fx select 'conn1', connection_id from public.records_connections where org_id = pg_temp.fx('org');
+
+select public.records_save_connection(
+  pg_temp.fx('org'), 'rock', 'https://rock.example.org', 'k1.kid.iv.rotated', '5678', pg_temp.fx('admin'));
+select is(
+  (select (count(l.*)::int, c.connection_id = pg_temp.fx('conn1'), c.key_hint)::text
+     from public.records_connections c
+     left join public.records_person_links l on l.org_id = c.org_id and l.connection_id = c.connection_id
+    where c.org_id = pg_temp.fx('org')
+    group by c.connection_id, c.key_hint),
+  '(1,t,5678)', 'a new key for the same records keeps the connection and its links');
+
+select public.records_save_connection(
+  pg_temp.fx('org'), 'rock', 'https://rock-moved.example.org', 'k1.kid.iv.moved', '4321', pg_temp.fx('admin'));
+select is(
+  (select (c.connection_id <> pg_temp.fx('conn1'),
+           (select count(*)::int from public.records_person_links l where l.org_id = c.org_id))::text
+     from public.records_connections c where c.org_id = pg_temp.fx('org')),
+  '(t,0)', 'pointing the connection at other records gives it a new id and removes its links');
+
+select is(
+  pg_temp.run(format('insert into public.records_person_links (org_id, connection_id, profile_id, external_person_id) values (%L, %L, %L, %L)',
+    pg_temp.fx('org'), pg_temp.fx('conn1'), pg_temp.fx('member'), '100')),
+  '23503', 'a link checked against the replaced connection is refused');
+
+insert into public.records_person_links (org_id, connection_id, profile_id, external_person_id)
+  values (pg_temp.fx('org'), (select connection_id from public.records_connections where org_id = pg_temp.fx('org')),
+          pg_temp.fx('member'), '100');
+
+select is(
+  pg_temp.run(format('select public.records_save_connection(%L, %L, %L, %L, %L, %L)',
+    pg_temp.fx('org'), 'rock', 'http://insecure.example.org', 'k1.kid.iv.bad', '0000', pg_temp.fx('admin'))),
+  '23514', 'saving an address the table refuses fails');
+select is(
+  (select (c.base_url, (select count(*)::int from public.records_person_links l where l.org_id = c.org_id))::text
+     from public.records_connections c where c.org_id = pg_temp.fx('org')),
+  '(https://rock-moved.example.org,1)', 'a failed save changes nothing: the connection and its links stay');
+
+select is(
+  array[
+    has_function_privilege('anon', 'public.records_save_connection(uuid, text, text, text, text, uuid)', 'execute'),
+    has_function_privilege('authenticated', 'public.records_save_connection(uuid, text, text, text, text, uuid)', 'execute'),
+    has_function_privilege('service_role', 'public.records_save_connection(uuid, text, text, text, text, uuid)', 'execute')
+  ],
+  array[false, false, true],
+  'only the service role can save a connection');
+
 -- ── What goes with what ─────────────────────────────────────────────────────
-insert into public.records_person_links (org_id, profile_id, external_person_id)
-  values (pg_temp.fx('org'), pg_temp.fx('member2'), '101');
+insert into public.records_person_links (org_id, connection_id, profile_id, external_person_id)
+  values (pg_temp.fx('org'), (select connection_id from public.records_connections where org_id = pg_temp.fx('org')),
+          pg_temp.fx('member2'), '101');
 
 delete from public.profiles where id = pg_temp.fx('member2');
 select is(

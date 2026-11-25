@@ -18,30 +18,38 @@ create table public.records_connections (
   key_hint text not null check (char_length(key_hint) between 1 and 4),
   connected_by uuid,
   connected_at timestamptz not null default now(),
+  -- Changes whenever the church points at other records, so links checked
+  -- against the old ones can't be filed under the new.
+  connection_id uuid not null default gen_random_uuid(),
+  constraint records_connections_connection_key unique (org_id, connection_id),
   constraint records_connections_connected_by_fkey
     foreign key (connected_by, org_id) references public.profiles (id, org_id) on delete set null (connected_by)
 );
 
 create index records_connections_connected_by_idx on public.records_connections (connected_by) where connected_by is not null;
 
--- Disconnecting removes every link with the connection; the profiles stay as they are.
--- external_person_id is the provider's own id for the person, as text, since
--- providers differ in what an id looks like (Rock's is a number).
+-- Disconnecting, or pointing the connection at other records, removes every
+-- link with it; the profiles stay as they are. external_person_id is the
+-- provider's own id for the person, as text, since providers differ in what an
+-- id looks like (Rock's is a number).
 create table public.records_person_links (
-  org_id uuid not null default public.app_current_org_id()
-    references public.records_connections (org_id) on delete cascade,
+  org_id uuid not null default public.app_current_org_id(),
+  connection_id uuid not null,
   profile_id uuid not null,
   external_person_id text not null check (external_person_id ~ '^[A-Za-z0-9_-]{1,64}$'),
   linked_by uuid,
   linked_at timestamptz not null default now(),
   primary key (org_id, profile_id),
   constraint records_person_links_one_profile_per_person unique (org_id, external_person_id),
+  constraint records_person_links_connection_fkey
+    foreign key (org_id, connection_id) references public.records_connections (org_id, connection_id) on delete cascade,
   constraint records_person_links_profile_id_fkey
     foreign key (profile_id, org_id) references public.profiles (id, org_id) on delete cascade,
   constraint records_person_links_linked_by_fkey
     foreign key (linked_by, org_id) references public.profiles (id, org_id) on delete set null (linked_by)
 );
 
+create index records_person_links_connection_idx on public.records_person_links (org_id, connection_id);
 create index records_person_links_profile_id_idx on public.records_person_links (profile_id);
 create index records_person_links_linked_by_idx on public.records_person_links (linked_by) where linked_by is not null;
 
@@ -62,6 +70,57 @@ create policy "org isolation" on public.records_person_links
 -- authenticated; neither gets anything here.
 revoke all on public.records_connections from anon, authenticated;
 revoke all on public.records_person_links from anon, authenticated;
+
+-- Saves a church's connection in one transaction, so a failed save changes
+-- nothing. A new key for the same records keeps the connection id and its
+-- links; other records (provider or address) replace the row, which gives a
+-- new connection id and removes the links through the cascade. A link insert
+-- checked against the old connection then fails its foreign key instead of
+-- landing under the new one.
+--
+-- SECURITY INVOKER and executable by the service role only: the caller is
+-- server code that has checked the church admin and passes that admin's org.
+create function public.records_save_connection(
+  _org_id uuid,
+  _provider text,
+  _base_url text,
+  _key_ciphertext text,
+  _key_hint text,
+  _connected_by uuid
+) returns void
+  language plpgsql
+  security invoker
+  set search_path = ''
+as $$
+declare
+  _existing public.records_connections%rowtype;
+begin
+  select * into _existing
+    from public.records_connections
+   where org_id = _org_id
+     for update;
+
+  if found and _existing.provider = _provider and _existing.base_url = _base_url then
+    update public.records_connections
+       set key_ciphertext = _key_ciphertext,
+           key_hint = _key_hint,
+           connected_by = _connected_by,
+           connected_at = now()
+     where org_id = _org_id;
+    return;
+  end if;
+
+  if found then
+    delete from public.records_connections where org_id = _org_id;
+  end if;
+
+  insert into public.records_connections (org_id, provider, base_url, key_ciphertext, key_hint, connected_by)
+  values (_org_id, _provider, _base_url, _key_ciphertext, _key_hint, _connected_by);
+end;
+$$;
+
+revoke execute on function public.records_save_connection(uuid, text, text, text, text, uuid) from public, anon, authenticated;
+grant execute on function public.records_save_connection(uuid, text, text, text, text, uuid) to service_role;
 
 comment on table public.records_connections is
   'A church''s connection to its church records: which provider, its address, and its key sealed by the server with RECORDS_KEY_SECRET. One row per church. Read and written by the service key only, after a church admin check; the key never leaves the server.';

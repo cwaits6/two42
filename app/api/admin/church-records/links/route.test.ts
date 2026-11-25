@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const PROFILE_A = "11111111-1111-4111-8111-111111111111";
 const PROFILE_B = "22222222-2222-4222-8222-222222222222";
+const PROFILE_C = "44444444-4444-4444-8444-444444444444";
+const CONNECTION = "55555555-5555-4555-8555-555555555555";
 
-const profiles = [
+const profiles: Record<string, unknown>[] = [
   { id: PROFILE_A, first_name: "Margaret", preferred_name: null, last_name: "Obrien", birth_month: 4, birth_day: 12, birth_year: null },
   { id: PROFILE_B, first_name: "Tom", preferred_name: null, last_name: "Obrien", birth_month: null, birth_day: null, birth_year: null },
 ];
-const emails = [
+const emails: { profile_id: string; email: string }[] = [
   { profile_id: PROFILE_A, email: "obriens@example.org" },
   { profile_id: PROFILE_B, email: "obriens@example.org" },
 ];
@@ -54,11 +56,15 @@ beforeEach(() => {
   filters.length = 0;
   process.env.RECORDS_KEY_SECRET = randomBytes(32).toString("base64");
   requireOrgAdmin.mockResolvedValue({ ok: true, orgId: "org-1", user: { id: "admin-1" }, supabase: requestClient() });
-  store.loadCredentials.mockResolvedValue({ provider: rockProvider, creds: { baseUrl: "https://rock.example.org", key: "k" } });
+  store.loadCredentials.mockResolvedValue({
+    provider: rockProvider,
+    creds: { baseUrl: "https://rock.example.org", key: "k" },
+    connectionId: CONNECTION,
+  });
   store.readLinks.mockResolvedValue([]);
   store.insertLinks.mockResolvedValue("inserted");
   rock.definedValueIds.mockResolvedValue(IDS);
-  rock.peopleByLastName.mockResolvedValue([peggy, tom]);
+  rock.peopleByLastName.mockResolvedValue({ people: [peggy, tom], truncated: [] });
   rock.peopleByIds.mockImplementation(async (_c: unknown, ids: number[]) => [peggy, tom].filter((p) => ids.includes(p.id)));
 });
 
@@ -94,7 +100,7 @@ describe("POST /api/admin/church-records/links", () => {
   it("links a pair after checking it with the records again", async () => {
     const res = await post({ links: [{ profileId: PROFILE_A, personId: "100" }] });
     expect(res.status).toBe(200);
-    expect(store.insertLinks).toHaveBeenCalledWith("org-1", "admin-1", [{ profileId: PROFILE_A, personId: "100" }]);
+    expect(store.insertLinks).toHaveBeenCalledWith("org-1", CONNECTION, "admin-1", [{ profileId: PROFILE_A, personId: "100" }]);
   });
 
   it("refuses a pair whose names don't agree, as with a spouse who shares the email", async () => {
@@ -127,6 +133,68 @@ describe("POST /api/admin/church-records/links", () => {
     expect(
       (await post({ links: [{ profileId: PROFILE_A, personId: "100" }, { profileId: PROFILE_A, personId: "101" }] })).status,
     ).toBe(400);
+  });
+
+  it("links several bulk-confirmable suggestions together", async () => {
+    tom.email = "tom@example.org";
+    emails[1] = { profile_id: PROFILE_B, email: "tom@example.org" };
+    try {
+      const res = await post({
+        links: [
+          { profileId: PROFILE_A, personId: "100" },
+          { profileId: PROFILE_B, personId: "101" },
+        ],
+      });
+      expect(res.status).toBe(200);
+      expect(store.insertLinks).toHaveBeenCalledTimes(1);
+    } finally {
+      emails[1] = { profile_id: PROFILE_B, email: "obriens@example.org" };
+    }
+  });
+
+  it("refuses a bulk pair with a competing candidate, even one left out of the request", async () => {
+    // A second Margaret O'Brien profile with the same email: Peggy is no longer the only candidate.
+    profiles.push({ id: PROFILE_C, first_name: "Margaret", preferred_name: null, last_name: "OBrien", birth_month: null, birth_day: null, birth_year: null });
+    emails.push({ profile_id: PROFILE_C, email: "obriens@example.org" });
+    tom.email = "tom@example.org";
+    emails[1] = { profile_id: PROFILE_B, email: "tom@example.org" };
+    try {
+      const res = await post({
+        links: [
+          { profileId: PROFILE_A, personId: "100" },
+          { profileId: PROFILE_B, personId: "101" },
+        ],
+      });
+      expect(res.status).toBe(409);
+      expect(store.insertLinks).not.toHaveBeenCalled();
+    } finally {
+      profiles.pop();
+      emails.pop();
+      emails[1] = { profile_id: PROFILE_B, email: "obriens@example.org" };
+    }
+  });
+
+  it("refuses bulk pairs whose last name couldn't be read in full", async () => {
+    emails[1] = { profile_id: PROFILE_B, email: "tom@example.org" };
+    rock.peopleByLastName.mockResolvedValue({ people: [peggy, tom], truncated: ["Obrien"] });
+    try {
+      const res = await post({
+        links: [
+          { profileId: PROFILE_A, personId: "100" },
+          { profileId: PROFILE_B, personId: "101" },
+        ],
+      });
+      expect(res.status).toBe(409);
+    } finally {
+      emails[1] = { profile_id: PROFILE_B, email: "obriens@example.org" };
+    }
+  });
+
+  it("refuses links when the connection changed after they were checked", async () => {
+    store.insertLinks.mockResolvedValue("connection_changed");
+    const res = await post({ links: [{ profileId: PROFILE_A, personId: "100" }] });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/connection changed/);
   });
 
   it("reports an existing link as a conflict", async () => {

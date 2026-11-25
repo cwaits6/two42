@@ -171,8 +171,8 @@ begin
   -- Service-role-only: a sealed key and the links a church admin confirmed through the server.
   insert into public.records_connections (org_id, provider, base_url, key_ciphertext, key_hint, connected_by)
     values (_org, 'rock', 'https://rock.' || _tag || '.example', 'k1.k.a.b', 'abcd', _owner);
-  insert into public.records_person_links (org_id, profile_id, external_person_id, linked_by)
-    values (_org, _owner, '1', _owner);
+  insert into public.records_person_links (org_id, connection_id, profile_id, external_person_id, linked_by)
+    values (_org, (select connection_id from public.records_connections where org_id = _org), _owner, '1', _owner);
 end;
 $$;
 

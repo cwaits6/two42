@@ -6,8 +6,8 @@ import { logError } from "@/lib/log";
 import { RecordsCryptoError } from "@/lib/integrations/records/crypto";
 import { RecordsError } from "@/lib/integrations/records/errors";
 import { gateError, hidden, recordsFailure, recordsSecretOrNull } from "@/lib/integrations/records/http";
-import { compare, suggest, type ProfileForMatch } from "@/lib/integrations/records/match";
-import { insertLinks, loadCredentials, readLinks } from "@/lib/integrations/records/store";
+import { compare, suggest, type ProfileForMatch, type Suggestion } from "@/lib/integrations/records/match";
+import { insertLinks, loadCredentials, readLinks, type PersonLink } from "@/lib/integrations/records/store";
 import type { RecordsCredentials, RecordsProvider } from "@/lib/integrations/records/types";
 
 /**
@@ -21,7 +21,9 @@ import type { RecordsCredentials, RecordsProvider } from "@/lib/integrations/rec
  *   POST  confirm links. Every pair is checked again against the records
  *         here, so a link the browser sends is made only if the names agree
  *         and the birthdays don't disagree. Confirming more than one at a
- *         time also needs an email or birthday to agree for each.
+ *         time needs each pair to be a suggestion that can be confirmed in
+ *         bulk, worked out again here exactly as GET does, so a competing
+ *         candidate the browser left out still blocks it.
  *
  * Profiles and their addresses are read on the admin's own request client,
  * so RLS decides who is in the church; the records are read with the church's key.
@@ -62,7 +64,7 @@ async function churchProfiles(supabase: Client, orgId: string): Promise<ChurchPr
 }
 
 type Loaded =
-  | { ok: true; provider: RecordsProvider; creds: RecordsCredentials }
+  | { ok: true; provider: RecordsProvider; creds: RecordsCredentials; connectionId: string }
   | { ok: false; response: NextResponse };
 
 async function credentials(orgId: string, secret: Buffer): Promise<Loaded> {
@@ -86,6 +88,26 @@ async function credentials(orgId: string, secret: Buffer): Promise<Loaded> {
   }
 }
 
+interface Matching {
+  profiles: ChurchProfile[];
+  links: PersonLink[];
+  unlinked: ChurchProfile[];
+  suggestions: Suggestion[];
+}
+
+/** Every suggestion for the church's unlinked profiles, from the records as they are now. */
+async function matching(supabase: Client, orgId: string, provider: RecordsProvider, creds: RecordsCredentials): Promise<Matching> {
+  const [profiles, links] = await Promise.all([churchProfiles(supabase, orgId), readLinks(orgId)]);
+  const linkedIds = new Set(links.map((l) => l.profileId));
+  const unlinked = profiles.filter((p) => !linkedIds.has(p.id));
+  const found = await provider.findByLastNames(
+    creds,
+    unlinked.map((p) => p.lastName ?? ""),
+  );
+  const suggestions = suggest(unlinked, found.people, new Set(links.map((l) => l.personId)), found.incompleteLastNames);
+  return { profiles, links, unlinked, suggestions };
+}
+
 export async function GET() {
   const secret = recordsSecretOrNull();
   if (!secret) return hidden();
@@ -96,38 +118,9 @@ export async function GET() {
   if (!loaded.ok) return loaded.response;
   const { provider, creds } = loaded;
 
-  let profiles: ChurchProfile[];
-  let links: Awaited<ReturnType<typeof readLinks>>;
+  let result: Matching;
   try {
-    [profiles, links] = await Promise.all([churchProfiles(supabase, orgId), readLinks(orgId)]);
-  } catch (err) {
-    logError("Church records link list read failed", err, {
-      route: "/api/admin/church-records/links",
-      step: "read",
-      ids: { org: orgId },
-    });
-    return NextResponse.json({ error: "Couldn't load people." }, { status: 500 });
-  }
-
-  const nameOf = new Map(profiles.map((p) => [p.id, p.name]));
-  const linkedIds = new Set(links.map((l) => l.profileId));
-  const unlinked = profiles.filter((p) => !linkedIds.has(p.id));
-
-  try {
-    const people = await provider.findByLastNames(
-      creds,
-      unlinked.map((p) => p.lastName ?? ""),
-    );
-    const suggestions = suggest(unlinked, people, new Set(links.map((l) => l.personId)));
-    const suggested = new Set(suggestions.map((s) => s.profileId));
-    return NextResponse.json({
-      linked: links
-        .filter((l) => nameOf.has(l.profileId))
-        .map((l) => ({ ...l, name: nameOf.get(l.profileId)!, personUrl: provider.personUrl(creds.baseUrl, l.personId) }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-      suggestions: suggestions.map((s) => ({ ...s, name: nameOf.get(s.profileId) })),
-      unmatched: unlinked.filter((p) => !suggested.has(p.id)).length,
-    });
+    result = await matching(supabase, orgId, provider, creds);
   } catch (err) {
     if (err instanceof RecordsError) return recordsFailure(err, provider.label);
     logError("Church records suggestions failed", err, {
@@ -137,6 +130,18 @@ export async function GET() {
     });
     return NextResponse.json({ error: `Couldn't load suggestions from ${provider.label}.` }, { status: 500 });
   }
+
+  const { profiles, links, unlinked, suggestions } = result;
+  const nameOf = new Map(profiles.map((p) => [p.id, p.name]));
+  const suggested = new Set(suggestions.map((s) => s.profileId));
+  return NextResponse.json({
+    linked: links
+      .filter((l) => nameOf.has(l.profileId))
+      .map((l) => ({ ...l, name: nameOf.get(l.profileId)!, personUrl: provider.personUrl(creds.baseUrl, l.personId) }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    suggestions: suggestions.map((s) => ({ ...s, name: nameOf.get(s.profileId) })),
+    unmatched: unlinked.filter((p) => !suggested.has(p.id)).length,
+  });
 }
 
 function parseLinks(body: unknown): { profileId: string; personId: string }[] | null {
@@ -166,36 +171,24 @@ export async function POST(request: Request) {
   if (!links) return NextResponse.json({ error: "Choose who to link." }, { status: 400 });
   const loaded = await credentials(orgId, secret);
   if (!loaded.ok) return loaded.response;
-  const { provider, creds } = loaded;
-
-  let profiles: ChurchProfile[];
-  try {
-    profiles = await churchProfiles(supabase, orgId);
-  } catch (err) {
-    logError("Church records link profiles read failed", err, {
-      route: "/api/admin/church-records/links",
-      step: "read",
-      ids: { org: orgId },
-    });
-    return NextResponse.json({ error: "Couldn't load people." }, { status: 500 });
-  }
-  const profileById = new Map(profiles.map((p) => [p.id, p]));
+  const { provider, creds, connectionId } = loaded;
+  const noLongerMatches = NextResponse.json(
+    { error: `One of these no longer matches its ${provider.label} record. Reload and check the suggestions.` },
+    { status: 409 },
+  );
 
   try {
-    const people = new Map(
-      (await provider.findByIds(creds, links.map((l) => l.personId))).map((p) => [p.id, p]),
-    );
-    for (const link of links) {
-      const profile = profileById.get(link.profileId);
-      const person = people.get(link.personId);
-      const facts = profile && person?.linkable ? compare(profile, person) : null;
-      const enough = facts && (links.length === 1 || facts.email || facts.birthday);
-      if (!enough) {
-        return NextResponse.json(
-          { error: `One of these no longer matches its ${provider.label} record. Reload and check the suggestions.` },
-          { status: 409 },
-        );
-      }
+    if (links.length === 1) {
+      // One pair an admin confirmed by hand may be a name-only match.
+      const [link] = links;
+      const profile = (await churchProfiles(supabase, orgId)).find((p) => p.id === link.profileId);
+      const [person] = await provider.findByIds(creds, [link.personId]);
+      const facts = profile && person?.id === link.personId && person.linkable ? compare(profile, person) : null;
+      if (!facts) return noLongerMatches;
+    } else {
+      const { suggestions } = await matching(supabase, orgId, provider, creds);
+      const bulk = new Set(suggestions.filter((s) => s.confirmableInBulk).map((s) => `${s.profileId} ${s.personId}`));
+      if (!links.every((l) => bulk.has(`${l.profileId} ${l.personId}`))) return noLongerMatches;
     }
   } catch (err) {
     if (err instanceof RecordsError) return recordsFailure(err, provider.label);
@@ -208,7 +201,13 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await insertLinks(orgId, user.id, links);
+    const result = await insertLinks(orgId, connectionId, user.id, links);
+    if (result === "connection_changed") {
+      return NextResponse.json(
+        { error: "The connection changed while you were linking. Reload and try again." },
+        { status: 409 },
+      );
+    }
     if (result === "conflict") {
       return NextResponse.json(
         { error: "Someone here is already linked. Reload to see the current links." },

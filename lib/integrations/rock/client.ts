@@ -5,6 +5,7 @@
 //
 // Every call is a GET: two42 never writes to Rock.
 import { RecordsError } from "@/lib/integrations/records/errors";
+import { safeFetch } from "@/lib/integrations/records/safeFetch";
 import type { RecordsCredentials } from "@/lib/integrations/records/types";
 
 /** A Rock person, holding only what matching needs. Rock's phone, address and family data are never requested. */
@@ -44,7 +45,7 @@ export const ROCK_GUIDS = {
 
 const TIMEOUT_MS = 10_000;
 
-type FetchLike = typeof fetch;
+export type FetchLike = (input: URL, init: RequestInit) => Promise<Response>;
 
 async function getJson(creds: RecordsCredentials, path: string, query: Record<string, string>, fetcher: FetchLike) {
   const url = new URL(path, creds.baseUrl);
@@ -54,7 +55,7 @@ async function getJson(creds: RecordsCredentials, path: string, query: Record<st
     response = await fetcher(url, {
       method: "GET",
       headers: { "Authorization-Token": creds.key, Accept: "application/json" },
-      // A redirect could carry the key's request to an address parseRockAddress() never saw.
+      // A redirect could carry the key's request to an address the address check never saw.
       redirect: "error",
       cache: "no-store",
       signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -104,7 +105,7 @@ export function parsePerson(value: unknown): RockPerson | null {
  * Proves the address is a Rock and the key can read people. Rock answers a
  * key without that permission with 401, the same as a wrong key.
  */
-export async function checkConnection(creds: RecordsCredentials, fetcher: FetchLike = fetch): Promise<void> {
+export async function checkConnection(creds: RecordsCredentials, fetcher: FetchLike = safeFetch): Promise<void> {
   const body = await getJson(creds, "/api/People", { $top: "1", $select: "Id" }, fetcher);
   if (!Array.isArray(body)) throw new RecordsError("not_provider");
 }
@@ -115,7 +116,7 @@ export interface PersonFilterIds {
 }
 
 /** The install's ids for the defined values matching relies on. */
-export async function definedValueIds(creds: RecordsCredentials, fetcher: FetchLike = fetch): Promise<PersonFilterIds> {
+export async function definedValueIds(creds: RecordsCredentials, fetcher: FetchLike = safeFetch): Promise<PersonFilterIds> {
   const guids = Object.values(ROCK_GUIDS);
   const body = await getJson(
     creds,
@@ -138,29 +139,66 @@ export async function definedValueIds(creds: RecordsCredentials, fetcher: FetchL
 
 const PAGE = 500;
 const NAMES_PER_REQUEST = 15;
-// A last name shared by more people than this in one Rock is skipped rather than paged through.
+// A last name shared by more people than this in one Rock isn't paged through;
+// the caller is told which names were cut short.
 const MAX_PAGES = 4;
 
 /**
+ * The spellings of a last name to ask Rock for. Rock compares names exactly
+ * (apart from case), while matching ignores punctuation, so "OBrien" in two42
+ * has to ask for "O'Brien" too. At most four, so a batch stays bounded.
+ */
+export function lastNameVariants(name: string): string[] {
+  const base = name.trim().replace(/\s+/g, " ");
+  if (!base) return [];
+  const variants = new Set([base]);
+  const stripped = base.replace(/[^\p{L}\p{N}]/gu, "");
+  if (stripped) variants.add(stripped);
+  if (base.includes("-")) variants.add(base.replace(/-/g, " "));
+  if (base.includes(" ")) variants.add(base.replace(/ /g, "-"));
+  if (/^[od][a-z]{2,}$/i.test(base)) variants.add(`${base[0]}'${base.slice(1)}`);
+  return [...variants].slice(0, 4);
+}
+
+export interface PeopleByLastName {
+  people: RockPerson[];
+  /** Last names, as given, whose batch had more people than two42 reads, so some may be missing. */
+  truncated: string[];
+}
+
+/**
  * Living Rock people (not businesses or nameless records, and not inactive)
- * with any of these last names. Rock compares case-insensitively.
+ * with any of these last names, in any spelling lastNameVariants() gives.
+ * Rock compares case-insensitively.
  */
 export async function peopleByLastName(
   creds: RecordsCredentials,
   ids: PersonFilterIds,
   lastNames: readonly string[],
-  fetcher: FetchLike = fetch,
-): Promise<RockPerson[]> {
-  const unique = [...new Set(lastNames.map((n) => n.trim()).filter(Boolean))];
+  fetcher: FetchLike = safeFetch,
+): Promise<PeopleByLastName> {
+  const originals = [...new Set(lastNames.map((n) => n.trim()).filter(Boolean))];
+  const spellings: { original: string; spelling: string }[] = [];
+  const seen = new Set<string>();
+  for (const original of originals) {
+    for (const spelling of lastNameVariants(original)) {
+      const key = spelling.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      spellings.push({ original, spelling });
+    }
+  }
   const found = new Map<number, RockPerson>();
-  for (let i = 0; i < unique.length; i += NAMES_PER_REQUEST) {
-    const names = unique.slice(i, i + NAMES_PER_REQUEST);
+  const truncated = new Set<string>();
+  for (let i = 0; i < spellings.length; i += NAMES_PER_REQUEST) {
+    const batch = spellings.slice(i, i + NAMES_PER_REQUEST);
     const clauses = [
-      `(${names.map((n) => `LastName eq ${odataString(n)}`).join(" or ")})`,
+      `(${batch.map((b) => `LastName eq ${odataString(b.spelling)}`).join(" or ")})`,
       "IsDeceased eq false",
       `RecordTypeValueId eq ${ids.recordTypePerson}`,
     ];
     if (ids.recordStatusInactive) clauses.push(`RecordStatusValueId ne ${ids.recordStatusInactive}`);
+    let complete = false;
     for (let page = 0; page < MAX_PAGES; page++) {
       const body = await getJson(
         creds,
@@ -179,10 +217,14 @@ export async function peopleByLastName(
         const person = parsePerson(row);
         if (person) found.set(person.id, person);
       }
-      if (body.length < PAGE) break;
+      if (body.length < PAGE) {
+        complete = true;
+        break;
+      }
     }
+    if (!complete) for (const b of batch) truncated.add(b.original);
   }
-  return [...found.values()];
+  return { people: [...found.values()], truncated: [...truncated] };
 }
 
 const IDS_PER_REQUEST = 50;
@@ -191,7 +233,7 @@ const IDS_PER_REQUEST = 50;
 export async function peopleByIds(
   creds: RecordsCredentials,
   ids: readonly number[],
-  fetcher: FetchLike = fetch,
+  fetcher: FetchLike = safeFetch,
 ): Promise<RockPerson[]> {
   const unique = [...new Set(ids)].filter((id) => Number.isInteger(id) && id > 0);
   const found: RockPerson[] = [];

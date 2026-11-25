@@ -226,16 +226,17 @@ logged or stored. No phone, address, family, group or giving data is requested.
 
 - `lib/integrations/records/` — provider-neutral: `types.ts` (the
   `RecordsProvider` interface), `providers.ts`, `address.ts` (which addresses
-  may be called), `crypto.ts` (sealing the key), `match.ts` (suggestions),
-  `store.ts` (the two tables, service key only), `errors.ts`, `http.ts` and
-  `enabled.ts`.
+  may be called), `safeFetch.ts` (the only way a key leaves two42),
+  `crypto.ts` (sealing the key), `match.ts` (suggestions), `store.ts` (the two
+  tables, service key only), `errors.ts`, `http.ts` and `enabled.ts`.
 - `lib/integrations/rock/` — `client.ts` (read-only v1 REST calls) and
   `provider.ts` (Rock as a `RecordsProvider`).
 - `app/api/admin/church-records/` — the church admin's routes.
 - `app/admin/settings/church-records/` — the page.
 - `supabase/migrations/20261202000000_church_records_connection.sql` —
-  `records_connections` and `records_person_links`. No client role has any
-  privilege on either; see `docs/security/service-role-inventory.md` ("Lib
+  `records_connections`, `records_person_links` and
+  `records_save_connection()`. No client role has any privilege on either
+  table or the function; see `docs/security/service-role-inventory.md` ("Lib
   helpers").
 - `supabase/tests/church_records_suite.sql` — the database's half of the
   boundary.
@@ -250,10 +251,26 @@ the one link on Church settings.
   text is. Not Supabase Vault: the app reads Vault nowhere else, and a sealed
   column with no client grants keeps the key out of every client role's reach
   without a new definer function.
-- **Addresses.** Only an `https` origin on a public host name or address. The
-  client refuses redirects and gives up after 10 seconds. DNS can still point a
-  public name at a private address; with no redirects that host gets one
-  request, and nothing it returns is shown except as an error.
+- **Addresses.** Only an `https` origin on a public host name or public
+  address: private, loopback, link-local, shared, benchmarking, documentation,
+  multicast and reserved ranges are refused, and so is any IPv6 literal.
+  Because DNS can point a public name at a private address, `safeFetch()`
+  checks every address the name resolves to at the moment it connects, and
+  refuses before the key is sent. It also refuses redirects, gives up after 10
+  seconds and stops reading past 5 MB.
+- **A connection has an id that changes with the records it points at.**
+  Saving runs in one transaction (`records_save_connection()`): a new key for
+  the same records keeps the id and the links; another provider or address
+  replaces the row, so the links go with the old id. Links are written under
+  the id they were checked against, so a save that lands while an admin is
+  linking makes the links fail rather than file them under other records.
+- **Bulk linking is checked by the server.** More than one pair at a time is
+  accepted only if every pair is a suggestion the server itself would mark
+  confirmable in bulk, worked out again from the records. When a last name has
+  more people than two42 reads, its pairs are never bulk-confirmable, since a
+  competing candidate may be unread. Last names are looked up in the spellings
+  matching treats as equal (`O'Brien` and `OBrien`, `Smith-Jones` and `Smith
+  Jones`).
 - **Person ids are text** in `records_person_links.external_person_id`,
   because providers differ in what an id looks like. Rock's is a number,
   stored as its digits.

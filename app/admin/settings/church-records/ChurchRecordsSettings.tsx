@@ -75,6 +75,8 @@ export function ChurchRecordsSettings() {
   const [connection, setConnection] = useState<Connection | null>(null);
 
   const load = useCallback(async () => {
+    // Back to loading on a retry, so an existing connection never shows as the connect form meanwhile.
+    setLoading(true);
     setLoadFailed(false);
     try {
       const { ok, data } = await call("/api/admin/church-records");

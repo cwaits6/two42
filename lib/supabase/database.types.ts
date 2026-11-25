@@ -1227,14 +1227,14 @@ isOneToOne: false
                   ]
                 },"records_connections": {
                   Row: {
-                    "base_url": string,"connected_at": string,"connected_by": string | null,"key_ciphertext": string,"key_hint": string,"org_id": string,"provider": string
+                    "base_url": string,"connected_at": string,"connected_by": string | null,"connection_id": string,"key_ciphertext": string,"key_hint": string,"org_id": string,"provider": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "base_url": string,"connected_at"?: string,"connected_by"?: string | null,"key_ciphertext": string,"key_hint": string,"org_id"?: string,"provider": string
+                    "base_url": string,"connected_at"?: string,"connected_by"?: string | null,"connection_id"?: string,"key_ciphertext": string,"key_hint": string,"org_id"?: string,"provider": string
                   }
                   Update: {
-                    "base_url"?: string,"connected_at"?: string,"connected_by"?: string | null,"key_ciphertext"?: string,"key_hint"?: string,"org_id"?: string,"provider"?: string
+                    "base_url"?: string,"connected_at"?: string,"connected_by"?: string | null,"connection_id"?: string,"key_ciphertext"?: string,"key_hint"?: string,"org_id"?: string,"provider"?: string
                   }
                   Relationships: [
                     {
@@ -1259,17 +1259,23 @@ isOneToOne: true
                   ]
                 },"records_person_links": {
                   Row: {
-                    "external_person_id": string,"linked_at": string,"linked_by": string | null,"org_id": string,"profile_id": string
+                    "connection_id": string,"external_person_id": string,"linked_at": string,"linked_by": string | null,"org_id": string,"profile_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "external_person_id": string,"linked_at"?: string,"linked_by"?: string | null,"org_id"?: string,"profile_id": string
+                    "connection_id": string,"external_person_id": string,"linked_at"?: string,"linked_by"?: string | null,"org_id"?: string,"profile_id": string
                   }
                   Update: {
-                    "external_person_id"?: string,"linked_at"?: string,"linked_by"?: string | null,"org_id"?: string,"profile_id"?: string
+                    "connection_id"?: string,"external_person_id"?: string,"linked_at"?: string,"linked_by"?: string | null,"org_id"?: string,"profile_id"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "records_person_links_connection_fkey"
+      columns: ["org_id","connection_id"]
+isOneToOne: false
+      referencedRelation: "records_connections"
+      referencedColumns: ["org_id","connection_id"]
+    },{
       foreignKeyName: "records_person_links_linked_by_fkey"
       columns: ["linked_by","org_id"]
 isOneToOne: false
@@ -1281,12 +1287,6 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "profiles_directory"
       referencedColumns: ["id","org_id"]
-    },{
-      foreignKeyName: "records_person_links_org_id_fkey"
-      columns: ["org_id"]
-isOneToOne: false
-      referencedRelation: "records_connections"
-      referencedColumns: ["org_id"]
     },{
       foreignKeyName: "records_person_links_profile_id_fkey"
       columns: ["profile_id","org_id"]
@@ -1938,6 +1938,9 @@ isOneToOne: false
                            },
 "provision_organization":
 { Args: { "_name": string,"_owner_email": string }; Returns: string
+                           },
+"records_save_connection":
+{ Args: { "_base_url": string,"_connected_by": string,"_key_ciphertext": string,"_key_hint": string,"_org_id": string,"_provider": string }; Returns: undefined
                            },
 "review_group_join_request":
 { Args: { "_approve": boolean,"_request_id": string }; Returns: string

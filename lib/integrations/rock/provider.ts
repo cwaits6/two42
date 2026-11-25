@@ -1,4 +1,5 @@
 // Rock RMS as a source of church records.
+import { normalizeName } from "@/lib/integrations/records/match";
 import type { RecordsCredentials, RecordsPerson, RecordsProvider } from "@/lib/integrations/records/types";
 import {
   checkConnection,
@@ -39,7 +40,11 @@ export const rockProvider: RecordsProvider = {
   checkConnection: (creds: RecordsCredentials) => checkConnection(creds),
   async findByLastNames(creds, lastNames) {
     const ids = await definedValueIds(creds);
-    return (await peopleByLastName(creds, ids, lastNames)).map((p) => toRecordsPerson(p, ids));
+    const { people, truncated } = await peopleByLastName(creds, ids, lastNames);
+    return {
+      people: people.map((p) => toRecordsPerson(p, ids)),
+      incompleteLastNames: new Set(truncated.map(normalizeName)),
+    };
   },
   async findByIds(creds, personIds) {
     const numeric = personIds.filter((id) => ROCK_ID.test(id)).map(Number);

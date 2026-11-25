@@ -67,6 +67,13 @@ describe("rockProvider", () => {
     expect(people).toEqual([expect.objectContaining({ id: "100", linkable: false })]);
   });
 
+  it("finds people by last name and reports cut-short names normalized", async () => {
+    client.peopleByLastName.mockResolvedValue({ people: [rockPerson()], truncated: ["O'Brien"] });
+    const found = await rockProvider.findByLastNames(creds, ["O'Brien"]);
+    expect(found.people).toEqual([expect.objectContaining({ id: "100", linkable: true })]);
+    expect([...found.incompleteLastNames]).toEqual(["obrien"]);
+  });
+
   it("makes no request for a list with no Rock ids", async () => {
     expect(await rockProvider.findByIds(creds, ["abc"])).toEqual([]);
     expect(client.peopleByIds).not.toHaveBeenCalled();

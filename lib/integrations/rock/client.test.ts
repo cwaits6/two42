@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { RecordsError } from "@/lib/integrations/records/errors";
-import { checkConnection, definedValueIds, odataString, peopleByIds, peopleByLastName } from "./client";
+import { checkConnection, definedValueIds, lastNameVariants, odataString, peopleByIds, peopleByLastName } from "./client";
 
 const creds = { baseUrl: "https://rock.example.org", key: "secret-key-123" };
 
@@ -53,13 +53,37 @@ describe("Rock client", () => {
 
   it("filters people by last name to living, active person records and asks only for matching fields", async () => {
     const fetcher = vi.fn().mockResolvedValue(reply([{ Id: 7, FirstName: "Ann", LastName: "O'Brien" }]));
-    const people = await peopleByLastName(creds, { recordTypePerson: 1, recordStatusInactive: 4 }, ["O'Brien"], fetcher);
+    const { people, truncated } = await peopleByLastName(
+      creds,
+      { recordTypePerson: 1, recordStatusInactive: 4 },
+      ["O'Brien"],
+      fetcher,
+    );
     expect(people.map((p) => p.id)).toEqual([7]);
+    expect(truncated).toEqual([]);
     const url = new URL(String(fetcher.mock.calls[0][0]));
     expect(url.searchParams.get("$filter")).toBe(
-      "(LastName eq 'O''Brien') and IsDeceased eq false and RecordTypeValueId eq 1 and RecordStatusValueId ne 4",
+      "(LastName eq 'O''Brien' or LastName eq 'OBrien') and IsDeceased eq false and RecordTypeValueId eq 1 and RecordStatusValueId ne 4",
     );
     expect(url.searchParams.get("$select")).not.toMatch(/Phone|Address|Family/);
+  });
+
+  it.each([
+    ["O'Brien", ["O'Brien", "OBrien"]],
+    ["OBrien", ["OBrien", "O'Brien"]],
+    ["Smith-Jones", ["Smith-Jones", "SmithJones", "Smith Jones"]],
+    ["Van Dyke", ["Van Dyke", "VanDyke", "Van-Dyke"]],
+    ["Lee", ["Lee"]],
+  ])("asks Rock for the spellings of %s that matching treats as equal", (name, variants) => {
+    expect(lastNameVariants(name)).toEqual(variants);
+  });
+
+  it("reports last names whose batch had more people than it reads", async () => {
+    const page = Array.from({ length: 500 }, (_, i) => ({ Id: i + 1, LastName: "Smith" }));
+    const fetcher = vi.fn().mockImplementation(async () => reply(page));
+    const { truncated } = await peopleByLastName(creds, { recordTypePerson: 1, recordStatusInactive: 4 }, ["Smith"], fetcher);
+    expect(truncated).toEqual(["Smith"]);
+    expect(fetcher).toHaveBeenCalledTimes(4);
   });
 
   it("keeps only the ids it asked for", async () => {
