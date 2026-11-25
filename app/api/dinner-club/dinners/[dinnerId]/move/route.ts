@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { emailOutcome } from "@/lib/dinnerClub/emailOutcome";
 import { notifyDinnersMoved } from "@/lib/dinnerClub/notify";
 import { dinnerClubRefusal, instantFrom, isUuid, serverError } from "@/lib/dinnerClub/routeErrors";
 import { logError } from "@/lib/log";
@@ -51,10 +52,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ din
   if (!moved?.length) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   try {
-    const result = await notifyDinnersMoved(orgId, [{ dinnerId, oldStartsAt: before.starts_at }], user.id);
-    return NextResponse.json(result);
+    return NextResponse.json(
+      emailOutcome(await notifyDinnersMoved(orgId, [{ dinnerId, oldStartsAt: before.starts_at }], user.id)),
+    );
   } catch (err) {
     logError("Failed to email a moved dinner", err, { route: "/api/dinner-club/dinners/[dinnerId]/move" });
-    return NextResponse.json({ sent: 0, failed: 1, capped: false });
+    return NextResponse.json(emailOutcome(null));
   }
 }

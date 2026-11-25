@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { emailOutcome } from "@/lib/dinnerClub/emailOutcome";
 import { notifyTablesPublished } from "@/lib/dinnerClub/notify";
 import { dinnerClubRefusal, isUuid, serverError } from "@/lib/dinnerClub/routeErrors";
 import { logError } from "@/lib/log";
@@ -28,10 +29,9 @@ export async function POST(_request: Request, { params }: { params: Promise<{ se
 
   const changed = ((data ?? []) as { profile_id: string }[]).map((row) => row.profile_id);
   try {
-    const result = await notifyTablesPublished(orgId, seasonId, changed);
-    return NextResponse.json({ changed: changed.length, ...result });
+    return NextResponse.json({ changed: changed.length, ...emailOutcome(await notifyTablesPublished(orgId, seasonId, changed)) });
   } catch (err) {
     logError("Failed to email published dinner club tables", err, { route: "/api/dinner-club/seasons/[seasonId]/publish" });
-    return NextResponse.json({ changed: changed.length, sent: 0, failed: changed.length, capped: false });
+    return NextResponse.json({ changed: changed.length, ...emailOutcome(null) });
   }
 }

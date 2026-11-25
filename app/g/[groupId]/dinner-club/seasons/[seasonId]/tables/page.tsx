@@ -7,7 +7,7 @@ import { MoveDinnerButton } from "@/components/dinnerClub/MoveDinnerButton";
 import { TablesEditor } from "@/components/dinnerClub/TablesEditor";
 import { formatAddress } from "@/lib/dinnerClub/ics";
 import { dinnerWhen, FORMAT_LABELS, partyName } from "@/lib/dinnerClub/labels";
-import { draftFromPublished, type DinnerFormat, type Draft } from "@/lib/dinnerClub/shuffle";
+import { draftFromPublished, fitDraft, parseDraft } from "@/lib/dinnerClub/shuffle";
 import { groupPath, isUuid } from "@/lib/groups/active";
 import { requireGroupLeader } from "@/lib/groups/server";
 import { groupPageTitle } from "@/lib/pageTitle";
@@ -22,10 +22,23 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
   const group = await requireGroupLeader(groupId);
   if (!isUuid(seasonId)) notFound();
   const supabase = await createClient();
-  const season = await loadSeason(supabase, group.id, seasonId);
+  const read = await loadSeason(supabase, group.id, seasonId);
+  if (!read) {
+    return (
+      <PageContainer>
+        <PageHeader
+          title="Tables"
+          backHref={groupPath(group.id, `/dinner-club/seasons/${seasonId}`)}
+          backLabel="Back to the season"
+        />
+        <ErrorState thing="the tables" />
+      </PageContainer>
+    );
+  }
+  const { season } = read;
   if (!season || season.status === "draft") notFound();
   const zone = await getOrgTimeZone();
-  const format = season.format as DinnerFormat;
+  const { format } = season;
   const published = season.status === "published" || season.status === "ended";
   const header = {
     title: `${season.title}: tables`,
@@ -69,7 +82,12 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
         0
       )
     : null;
-  const initialDraft = (stored?.body as Draft | undefined) ?? fromPublished;
+  const saved = stored ? parseDraft(stored.body) : null;
+  const shuffleable = shuffleParties(data);
+  const base = saved ?? fromPublished;
+  const initialDraft = base
+    ? fitDraft(base, format, dates.map((d) => d.value), shuffleable.map((p) => p.id))
+    : null;
   const addressOf = new Map(data.addresses.map((a) => [a.party_id, formatAddress(a)]));
 
   return (
@@ -85,7 +103,7 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
             dates={dates}
             tableSize={{ min: season.table_size_min, max: season.table_size_max }}
             allowBackToBack={season.allow_back_to_back_hosting}
-            parties={shuffleParties(data)}
+            parties={shuffleable}
             names={names}
             initialDraft={initialDraft}
           />

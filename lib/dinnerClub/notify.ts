@@ -17,14 +17,8 @@ import {
   greetingName,
   type RenderedEmail,
 } from "@/supabase/functions/_shared/email-html";
+import type { NotifyResult } from "./emailOutcome";
 import { dinnerWhen, partyName } from "./labels";
-
-export interface NotifyResult {
-  sent: number;
-  failed: number;
-  /** True when the church's daily email cap refused the batch: nothing was sent. */
-  capped: boolean;
-}
 
 const NOTHING: NotifyResult = { sent: 0, failed: 0, capped: false };
 

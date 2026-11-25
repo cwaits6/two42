@@ -44,7 +44,15 @@ describe("POST /api/dinner-club/seasons/[seasonId]/publish", () => {
     const res = await publish();
     expect(rpc).toHaveBeenCalledWith("dinner_tables_publish", { _season_id: SEASON });
     expect(notifyTablesPublished).toHaveBeenCalledWith("org-a", SEASON, ["a", "b"]);
-    expect(await res.json()).toEqual({ changed: 2, sent: 0, failed: 0, capped: true });
+    expect(await res.json()).toEqual({ changed: 2, sent: 0, capped: true, unsent: true });
+  });
+
+  it("still answers that the tables are published when the emails could not be sent, and says they were not", async () => {
+    rpc.mockResolvedValue({ data: [{ profile_id: "a" }], error: null });
+    notifyTablesPublished.mockRejectedValue(new Error("down"));
+    const res = await publish();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ changed: 1, sent: 0, capped: false, unsent: true });
   });
 
   it("404s a malformed season id before any query", async () => {

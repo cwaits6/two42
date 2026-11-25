@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Shuffle, TriangleAlert } from "lucide-react";
@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { publishedNotice, type EmailOutcome } from "@/lib/dinnerClub/emailOutcome";
 import {
+  blocksPublish,
   draftWarnings,
   moveParty,
   partyPeople,
@@ -97,6 +99,8 @@ export function TablesEditor({
   const byId = useMemo(() => new Map(parties.map((p) => [p.id, p])), [parties]);
   const settings = { format, parties, dateIds, tableSize, allowBackToBack, pastPairs: [] };
   const warnings = draft ? draftWarnings(draft, settings) : null;
+  const blocked = warnings ? blocksPublish(warnings) : false;
+  const blockedId = useId();
   const unseated = draft
     ? parties.filter((p) => !draft.tables.some((t) => t.partyIds.includes(p.id)))
     : [];
@@ -124,16 +128,14 @@ export function TablesEditor({
   async function publish() {
     try {
       const res = await fetch(`/api/dinner-club/seasons/${seasonId}/publish`, { method: "POST" });
-      const body = (await res.json().catch(() => null)) as
-        | { error?: string; changed?: number; sent?: number; capped?: boolean }
-        | null;
-      if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as ({ error?: string; changed: number } & EmailOutcome) | null;
+      setPublishing(false);
+      if (!res.ok || !body) {
         toast.error(res.status === 400 ? (body?.error ?? failureMessage("publish the tables")) : failureMessage("publish the tables", res.status));
         return;
       }
-      setPublishing(false);
-      if (body?.capped) toast.warning("Tables published. Today's email limit was reached, so no emails went out.");
-      else toast.success(body?.changed ? `Tables published. ${body.changed} ${body.changed === 1 ? "person was" : "people were"} told.` : "Tables published. No one's table changed.");
+      const notice = publishedNotice(body);
+      toast[notice.kind](notice.text);
       router.refresh();
     } catch {
       toast.error(failureMessage("publish the tables", "network"));
@@ -154,11 +156,29 @@ export function TablesEditor({
           {draft ? "Shuffle again" : "Shuffle"}
         </Button>
         {draft && (
-          <Button size="lg" variant={published ? "outline" : "default"} onClick={() => setPublishing(true)} disabled={saving}>
+          <Button
+            size="lg"
+            variant={published ? "outline" : "default"}
+            onClick={() => setPublishing(true)}
+            disabled={saving || blocked}
+            aria-describedby={blocked ? blockedId : undefined}
+          >
             {published ? "Publish changes" : "Publish tables"}
           </Button>
         )}
       </div>
+      {blocked && (
+        <p id={blockedId} className="text-lg text-muted-foreground">
+          Every dinner needs a host, and every date needs tables, before you can publish.
+        </p>
+      )}
+
+      {warnings && warnings.datesWithoutTables.length > 0 && (
+        <p role="status" className="flex items-start gap-3 rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-lg">
+          <TriangleAlert className="mt-1 size-5 shrink-0 text-destructive" aria-hidden="true" />
+          No tables yet for {warnings.datesWithoutTables.map((d) => dateLabel.get(d)).join("; ")}. Shuffle again to add them.
+        </p>
+      )}
 
       {warnings?.tooFewHosts && (
         <p role="status" className="flex items-start gap-3 rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-lg">

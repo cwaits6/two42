@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { movedNotice } from "@/lib/dinnerClub/emailOutcome";
 import { dinnerWhen, type SeasonStatus } from "@/lib/dinnerClub/labels";
 import { failureMessage } from "@/lib/errorCopy";
 import { createClient } from "@/lib/supabase/client";
@@ -114,7 +115,8 @@ export function SeasonDates({
               toast.error(result.message ?? failureMessage("move the date"));
               return false;
             }
-            toast.success("Date moved.");
+            const notice = movedNotice("Date moved.", result.outcome);
+            toast[notice.kind](notice.text);
             router.refresh();
             return true;
           }}

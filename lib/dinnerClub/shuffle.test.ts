@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  blocksPublish,
   draftFromPublished,
   draftWarnings,
+  fitDraft,
   hostsNeeded,
   moveParty,
   pairKey,
+  parseDraft,
   partyPeople,
   setTableHost,
   shuffle,
@@ -355,5 +358,73 @@ describe("draft warnings and manual changes", () => {
     ]);
     const warnings = draftWarnings(rebuilt, input(parties, { dateIds: ["d1", "d2"] }));
     expect(warnings.tables.T1.noHost).toBe(true);
+  });
+});
+
+describe("a saved draft after the season changed", () => {
+  const table = (key: string, partyIds: string[], hosts: [string, string | null][], seasonDateId: string | null = null) => ({
+    key,
+    tableId: null,
+    seasonDateId,
+    partyIds,
+    hosts: hosts.map(([d, partyId]) => ({ seasonDateId: d, partyId })),
+  });
+  const saved = (tables: Draft["tables"]): Draft => ({ version: 1, seed: 3, tables });
+
+  it("gives a date added since the save the table's one host, and drops a deleted date", () => {
+    const fitted = fitDraft(
+      saved([table("a", ["h1", "c4"], [["d1", "h1"], ["d2", "h1"]])]),
+      "same_table_one_host",
+      ["d2", "d3"],
+      ["h1", "c4"]
+    );
+    expect(fitted.tables[0].hosts).toEqual([
+      { seasonDateId: "d2", partyId: "h1" },
+      { seasonDateId: "d3", partyId: "h1" },
+    ]);
+  });
+
+  it("leaves a new date unhosted when hosts take turns, and warns until one is picked", () => {
+    const parties = [party("h1", 2, { seats: 8 }), party("h2", 2, { seats: 8 })];
+    const fitted = fitDraft(
+      saved([table("a", ["h1", "h2"], [["d1", "h1"], ["d2", "h2"]])]),
+      "same_table_rotating",
+      ["d1", "d2", "d3"],
+      ["h1", "h2"]
+    );
+    expect(fitted.tables[0].hosts.map((h) => h.partyId)).toEqual(["h1", "h2", null]);
+    const warnings = draftWarnings(fitted, input(parties, { format: "same_table_rotating", dateIds: ["d1", "d2", "d3"] }));
+    expect(blocksPublish(warnings)).toBe(true);
+  });
+
+  it("takes a party no longer signed up off its table, and its hosting with it", () => {
+    const fitted = fitDraft(
+      saved([table("a", ["h1", "c4"], [["d1", "h1"]]), table("b", ["gone"], [["d1", "gone"]])]),
+      "same_table_one_host",
+      ["d1"],
+      ["c4"]
+    );
+    expect(fitted.tables).toEqual([table("a", ["c4"], [["d1", null]])]);
+  });
+
+  it("drops a deleted date's tables and warns of a new date with none when tables change each dinner", () => {
+    const parties = [party("h1", 2, { seats: 8 }), party("c4", 2)];
+    const fitted = fitDraft(
+      saved([table("a", ["h1", "c4"], [["d1", "h1"]], "d1"), table("b", ["h1", "c4"], [["d2", "h1"]], "d2")]),
+      "new_tables",
+      ["d2", "d3"],
+      ["h1", "c4"]
+    );
+    expect(fitted.tables.map((t) => t.key)).toEqual(["b"]);
+    const warnings = draftWarnings(fitted, input(parties, { format: "new_tables", allowBackToBack: true, dateIds: ["d2", "d3"] }));
+    expect(warnings.datesWithoutTables).toEqual(["d3"]);
+    expect(blocksPublish(warnings)).toBe(true);
+  });
+
+  it("reads back a draft it wrote and nothing else", () => {
+    const draft = shuffle(input(sevenCouplesThreeSingles()));
+    expect(parseDraft(JSON.parse(JSON.stringify(draft)))).toEqual(draft);
+    expect(parseDraft({})).toBeNull();
+    expect(parseDraft({ version: 1, seed: 1, tables: [{ key: "a", partyIds: "h1" }] })).toBeNull();
   });
 });

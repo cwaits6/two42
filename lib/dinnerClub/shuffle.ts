@@ -366,6 +366,13 @@ export interface TableWarnings {
 export interface DraftWarnings {
   tables: Record<string, TableWarnings>;
   tooFewHosts: boolean;
+  /** Dates with no table, when tables change each dinner. */
+  datesWithoutTables: string[];
+}
+
+/** Whether publish would refuse the draft: a dinner with no host, or a date with no table. */
+export function blocksPublish(warnings: DraftWarnings): boolean {
+  return warnings.datesWithoutTables.length > 0 || Object.values(warnings.tables).some((w) => w.noHost);
 }
 
 export function partyPeople(draftTable: DraftTable, parties: Map<string, ShuffleParty>): number {
@@ -455,6 +462,8 @@ export function draftWarnings(
   return {
     tables,
     tooFewHosts: tooFewHosts(input.format, input.parties, input.dateIds, input.tableSize.max),
+    datesWithoutTables:
+      input.format === "new_tables" ? input.dateIds.filter((d) => !draft.tables.some((t) => t.seasonDateId === d)) : [],
   };
 }
 
@@ -553,3 +562,57 @@ export function draftFromPublished(tables: PublishedTable[], format: DinnerForma
   };
 }
 
+
+function isDraftTable(value: unknown): value is DraftTable {
+  const t = value as DraftTable | null;
+  return (
+    typeof t?.key === "string" &&
+    (t.tableId === null || typeof t.tableId === "string") &&
+    (t.seasonDateId === null || typeof t.seasonDateId === "string") &&
+    Array.isArray(t.partyIds) &&
+    t.partyIds.every((id) => typeof id === "string") &&
+    Array.isArray(t.hosts) &&
+    t.hosts.every((h) => typeof h?.seasonDateId === "string" && (h.partyId === null || typeof h.partyId === "string"))
+  );
+}
+
+/** A stored draft body, or null when it is not one. */
+export function parseDraft(body: unknown): Draft | null {
+  const d = body as Draft | null;
+  if (d?.version !== 1 || typeof d.seed !== "number" || !Array.isArray(d.tables) || !d.tables.every(isDraftTable)) {
+    return null;
+  }
+  return d;
+}
+
+/**
+ * A saved draft brought up to the season as it is now. Dates and parties
+ * change after a draft is saved, and publish refuses a draft naming a date
+ * or party that is gone. Parties no longer signed up leave their tables; a
+ * table kept all season gets one host entry per current date, a new date
+ * taking the table's host when one party hosts all season; a date's tables
+ * go with the date.
+ */
+export function fitDraft(draft: Draft, format: DinnerFormat, dateIds: string[], partyIds: string[]): Draft {
+  const dates = new Set(dateIds);
+  const parties = new Set(partyIds);
+  const tables = draft.tables
+    .filter((t) => (format === "new_tables" ? t.seasonDateId !== null && dates.has(t.seasonDateId) : true))
+    .map((t): DraftTable => {
+      const seated = t.partyIds.filter((id) => parties.has(id));
+      const hostOn = (d: string) => {
+        const partyId = t.hosts.find((h) => h.seasonDateId === d)?.partyId ?? null;
+        return partyId && seated.includes(partyId) ? partyId : null;
+      };
+      const kept = format === "new_tables" ? [t.seasonDateId as string] : dateIds;
+      const tableHost = format === "same_table_one_host" ? (kept.map(hostOn).find((id) => id !== null) ?? null) : null;
+      return {
+        ...t,
+        seasonDateId: format === "new_tables" ? t.seasonDateId : null,
+        partyIds: seated,
+        hosts: kept.map((d) => ({ seasonDateId: d, partyId: hostOn(d) ?? tableHost })),
+      };
+    })
+    .filter((t) => t.partyIds.length > 0);
+  return { ...draft, tables };
+}

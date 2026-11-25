@@ -1482,8 +1482,15 @@ begin
            jsonb_array_elements_text(t -> 'partyIds') pid
       group by t ->> 'seasonDateId', pid
       having count(*) > 1
+    ) or exists (
+      select 1 from public.dinner_season_dates sd
+      where sd.season_id = _season.id and sd.org_id = _org
+        and not exists (
+          select 1 from jsonb_array_elements(_body -> 'tables') t
+          where nullif(t ->> 'seasonDateId', '')::uuid = sd.id
+        )
     ) then
-      raise exception 'each dinner''s tables seat each party once' using errcode = 'DC002';
+      raise exception 'every date has tables, and each date''s tables seat each party once' using errcode = 'DC002';
     end if;
   else
     if exists (

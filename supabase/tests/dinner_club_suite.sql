@@ -649,6 +649,11 @@ select pg_temp.new_tables_draft(jsonb_build_array(
 select is(pg_temp.read_as('l', format('select count(*) from public.dinner_tables_publish(%L)', pg_temp.id('ns'))), 'DC002',
   'a draft seating a party at two tables on one date is refused');
 select pg_temp.new_tables_draft(jsonb_build_array(
+  pg_temp.date_table('a', 'e1', 'nh', array['nh', 'nu']),
+  pg_temp.date_table('b', 'e1', 'nh2', array['nh2', 'nn'])));
+select is(pg_temp.read_as('l', format('select count(*) from public.dinner_tables_publish(%L)', pg_temp.id('ns'))), 'DC002',
+  'a draft that leaves a date with no tables is refused');
+select pg_temp.new_tables_draft(jsonb_build_array(
   pg_temp.date_table('a', 'e1', 'nh', array['nh', 'nu'], 'e2'),
   pg_temp.date_table('b', 'e1', 'nh2', array['nh2', 'nn']),
   pg_temp.date_table('c', 'e2', 'nu', array['nu', 'nn']),

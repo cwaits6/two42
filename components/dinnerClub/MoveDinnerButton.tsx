@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { movedNotice } from "@/lib/dinnerClub/emailOutcome";
 import { failureMessage } from "@/lib/errorCopy";
 import { MoveDialog, postMove } from "./MoveDialog";
 
@@ -29,7 +30,8 @@ export function MoveDinnerButton({ dinnerId, startsAt, zone }: { dinnerId: strin
             toast.error(result.message ?? failureMessage("move the dinner"));
             return false;
           }
-          toast.success("Dinner moved.");
+          const notice = movedNotice("Dinner moved.", result.outcome);
+          toast[notice.kind](notice.text);
           router.refresh();
           return true;
         }}

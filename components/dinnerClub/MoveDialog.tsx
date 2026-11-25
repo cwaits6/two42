@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { EmailOutcome } from "@/lib/dinnerClub/emailOutcome";
 import { isoToLocalInput, localToUTCISO } from "@/lib/time/zone";
 
 /** Asks for a new date and time, in the church's zone, and hands back the instant. */
@@ -67,15 +68,18 @@ export function MoveDialog({
   );
 }
 
-/** POSTs a move to one of the dinner club routes; true when it was saved. */
-export async function postMove(url: string, startsAt: string): Promise<{ ok: boolean; message?: string }> {
+/** POSTs a move to one of the dinner club routes, with what it says about the emails once saved. */
+export async function postMove(
+  url: string,
+  startsAt: string,
+): Promise<{ ok: true; outcome: EmailOutcome | null } | { ok: false; message?: string }> {
   try {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ startsAt }),
     });
-    if (res.ok) return { ok: true };
+    if (res.ok) return { ok: true, outcome: (await res.json().catch(() => null)) as EmailOutcome | null };
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
     return { ok: false, message: res.status === 400 || res.status === 409 ? body?.error : undefined };
   } catch {

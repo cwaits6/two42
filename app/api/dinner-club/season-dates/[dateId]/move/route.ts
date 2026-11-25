@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { emailOutcome } from "@/lib/dinnerClub/emailOutcome";
 import { notifyDinnersMoved } from "@/lib/dinnerClub/notify";
 import { dinnerClubRefusal, instantFrom, isUuid, serverError } from "@/lib/dinnerClub/routeErrors";
 import { logError } from "@/lib/log";
@@ -48,16 +49,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ dat
   const { data: after, error: afterError } = await readDinners();
   if (afterError) {
     logError("Failed to read a moved date's dinners", afterError, { route: "/api/dinner-club/season-dates/[dateId]/move" });
-    return NextResponse.json({ sent: 0, failed: 0, capped: false });
+    return NextResponse.json(emailOutcome(null));
   }
   const was = new Map((before ?? []).map((d) => [d.id, d.starts_at]));
   const moves = (after ?? [])
     .filter((d) => was.has(d.id) && was.get(d.id) !== d.starts_at)
     .map((d) => ({ dinnerId: d.id, oldStartsAt: was.get(d.id) as string }));
   try {
-    return NextResponse.json(await notifyDinnersMoved(orgId, moves, user.id));
+    return NextResponse.json(emailOutcome(await notifyDinnersMoved(orgId, moves, user.id)));
   } catch (err) {
     logError("Failed to email moved dinners", err, { route: "/api/dinner-club/season-dates/[dateId]/move" });
-    return NextResponse.json({ sent: 0, failed: moves.length, capped: false });
+    return NextResponse.json(emailOutcome(null));
   }
 }
