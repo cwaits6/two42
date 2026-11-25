@@ -95,6 +95,7 @@ beforeEach(async () => {
           color: "#B85C38",
           calendar: { calendar_meeting_details: true, calendar_event_notes: true, calendar_event_location: true },
           reminders: { enabled: true, defaultDays: 1 },
+          dinnerClub: false,
         },
       }),
     ),

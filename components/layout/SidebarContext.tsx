@@ -7,6 +7,8 @@ interface SidebarContextValue {
   /** Null when signed out. */
   account: Account | null;
   hasServingAccess: boolean;
+  /** The viewer's groups with the dinner club on. */
+  dinnerClubGroupIds: readonly string[];
   orgName: string;
   /** Requests waiting on a church admin; null for anyone else, or when they could not be counted. */
   waitingRequests: number | null;
@@ -19,6 +21,7 @@ interface SidebarContextValue {
 const SidebarContext = createContext<SidebarContextValue | null>(null);
 
 const NO_GROUP_COUNTS: Record<string, number> = {};
+const NO_GROUPS: readonly string[] = [];
 
 export function SidebarProvider({
   account,
@@ -26,12 +29,26 @@ export function SidebarProvider({
   orgName,
   waitingRequests = null,
   groupWaitingRequests = NO_GROUP_COUNTS,
+  dinnerClubGroupIds = NO_GROUPS,
   children,
 }: Pick<SidebarContextValue, "account" | "hasServingAccess" | "orgName"> &
-  Partial<Pick<SidebarContextValue, "waitingRequests" | "groupWaitingRequests">> & { children: React.ReactNode }) {
+  Partial<Pick<SidebarContextValue, "waitingRequests" | "groupWaitingRequests" | "dinnerClubGroupIds">> & {
+    children: React.ReactNode;
+  }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
-    <SidebarContext.Provider value={{ account, hasServingAccess, orgName, waitingRequests, groupWaitingRequests, collapsed, setCollapsed }}>
+    <SidebarContext.Provider
+      value={{
+        account,
+        hasServingAccess,
+        dinnerClubGroupIds,
+        orgName,
+        waitingRequests,
+        groupWaitingRequests,
+        collapsed,
+        setCollapsed,
+      }}
+    >
       {children}
     </SidebarContext.Provider>
   );

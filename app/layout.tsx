@@ -82,6 +82,7 @@ export default async function RootLayout({
   let photoUrl: string | null = null;
   let waitingRequests: number | null = null;
   let groupWaitingRequests: Record<string, number> = {};
+  let dinnerClubGroupIds: string[] = [];
   if (user) {
     const supabase = await createClient();
     const [{ data, error }, { data: groupData, error: groupError }, { data: platformAdmin }] = await Promise.all([
@@ -129,7 +130,28 @@ export default async function RootLayout({
           logError("Layout: failed to load group waiting request counts", e);
           return {};
         });
-    [hasServingAccess, memberships, discoveryOn, creationPolicy, photoUrl, waitingRequests, groupWaitingRequests] = await Promise.all([
+    // A failed read hides the Dinner club item; the page itself still opens.
+    const loadDinnerClubGroupIds = () =>
+      membershipsLoad.then(async (groups) => {
+        if (groups.length === 0) return [];
+        const { data: on, error: onError } = await supabase
+          .from("group_settings")
+          .select("group_id")
+          .eq("dinner_club_enabled", true)
+          .in("group_id", groups.map((g) => g.id));
+        if (onError) logError("Layout: failed to load dinner club groups", onError);
+        return (on ?? []).map((row) => row.group_id);
+      });
+    [
+      hasServingAccess,
+      memberships,
+      discoveryOn,
+      creationPolicy,
+      photoUrl,
+      waitingRequests,
+      groupWaitingRequests,
+      dinnerClubGroupIds,
+    ] = await Promise.all([
       loadServingAccess(),
       membershipsLoad,
       getDiscoveryOn(),
@@ -138,6 +160,7 @@ export default async function RootLayout({
       mintSignedUrl(profile?.avatar_url),
       loadWaitingRequests(),
       loadGroupWaitingRequests(),
+      loadDinnerClubGroupIds(),
     ]);
   }
 
@@ -196,6 +219,7 @@ export default async function RootLayout({
             orgName={b.display_name}
             waitingRequests={waitingRequests}
             groupWaitingRequests={groupWaitingRequests}
+            dinnerClubGroupIds={dinnerClubGroupIds}
           >
             <Header />
             <AppShell>{children}</AppShell>

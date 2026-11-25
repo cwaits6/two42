@@ -1,3 +1,4 @@
+import { formatEventDate, formatEventTime } from "@/lib/time/zone";
 import type { DinnerFormat } from "./shuffle";
 
 export type SeasonStatus = "draft" | "open" | "published" | "ended";
@@ -71,4 +72,9 @@ export function howOftenLabel(season: {
 /** "Henry and Chloe" from the names of a party's one or two people. */
 export function partyName(names: string[]): string {
   return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : (names[0] ?? "");
+}
+
+/** "Saturday, January 9, 2027 at 6:00 PM" in the church's zone. */
+export function dinnerWhen(iso: string, zone: string): string {
+  return `${formatEventDate(iso, zone)} at ${formatEventTime(iso, zone)}`;
 }

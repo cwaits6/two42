@@ -14,6 +14,7 @@ import {
   Megaphone,
   SlidersHorizontal,
   Users,
+  UtensilsCrossed,
 } from "lucide-react";
 import { Fragment, type ComponentType } from "react";
 import type { IconName, SidebarItem, SidebarLink } from "@/lib/groups/nav";
@@ -34,6 +35,7 @@ const ICONS: Record<IconName, ComponentType<{ className?: string }>> = {
   lectures: BookOpen,
   about: Info,
   serving: HandHelping,
+  "dinner-club": UtensilsCrossed,
   prayer: HeartHandshake,
   give: HandCoins,
   "group-settings": SlidersHorizontal,
