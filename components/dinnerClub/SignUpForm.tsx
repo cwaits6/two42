@@ -227,7 +227,10 @@ export function SignUpForm({
                   <Label htmlFor={ids.other} className="text-lg">
                     Signing up with
                   </Label>
-                  <Select items={others} value={other} onValueChange={(next) => setOther(next)}>
+                  <Select items={others} value={other} onValueChange={(next) => {
+                      setOther(next);
+                      setErrors((x) => ({ ...x, other: undefined }));
+                    }}>
                     <SelectTrigger id={ids.other} className={`w-full ${FIELD}`} {...invalidFieldProps(ids.other, errors.other)}>
                       <SelectValue placeholder="Choose someone" />
                     </SelectTrigger>
@@ -269,7 +272,10 @@ export function SignUpForm({
                   max={20}
                   value={seats}
                   className={`${FIELD} sm:w-40`}
-                  onChange={(e) => setSeats(e.target.value)}
+                  onChange={(e) => {
+                    setSeats(e.target.value);
+                    setErrors((x) => ({ ...x, seats: undefined }));
+                  }}
                   {...invalidFieldProps(ids.seats, errors.seats)}
                 />
                 <p className="text-base text-muted-foreground">How many fit at your table, you included.</p>
@@ -281,13 +287,13 @@ export function SignUpForm({
                 <p className="text-base text-muted-foreground">
                   Only the people at your table and the group&apos;s leaders see it, once tables are published.
                 </p>
-                <Input aria-label="Street address" placeholder="Street address" value={address.address_line1} className={FIELD} onChange={setLine("address_line1")} {...invalidFieldProps(`${ids.seats}-line1`, errors.line1)} />
+                <Input aria-label="Street address" placeholder="Street address" maxLength={200} value={address.address_line1} className={FIELD} onChange={setLine("address_line1")} {...invalidFieldProps(`${ids.seats}-line1`, errors.line1)} />
                 <FieldError fieldId={`${ids.seats}-line1`} message={errors.line1} />
-                <Input aria-label="Apartment or unit" placeholder="Apartment or unit" value={address.address_line2} className={FIELD} onChange={setLine("address_line2")} />
+                <Input aria-label="Apartment or unit" placeholder="Apartment or unit" maxLength={200} value={address.address_line2} className={FIELD} onChange={setLine("address_line2")} />
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <Input aria-label="City" placeholder="City" value={address.city} className={FIELD} onChange={setLine("city")} />
-                  <Input aria-label="State" placeholder="State" value={address.state} className={FIELD} onChange={setLine("state")} />
-                  <Input aria-label="ZIP code" placeholder="ZIP code" value={address.postal_code} className={FIELD} onChange={setLine("postal_code")} />
+                  <Input aria-label="City" placeholder="City" maxLength={100} value={address.city} className={FIELD} onChange={setLine("city")} />
+                  <Input aria-label="State" placeholder="State" maxLength={100} value={address.state} className={FIELD} onChange={setLine("state")} />
+                  <Input aria-label="ZIP code" placeholder="ZIP code" maxLength={20} value={address.postal_code} className={FIELD} onChange={setLine("postal_code")} />
                 </div>
               </fieldset>
 

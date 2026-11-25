@@ -666,6 +666,9 @@ update public.dinners set starts_at = now() - interval '1 day' where id = pg_tem
 select is(pg_temp.wrote('h2', format(
     'insert into public.dinner_replies (dinner_id, profile_id, status) values (%L, %L, ''going'')', pg_temp.id('t2d2'), pg_temp.id('h2'))), 'DC003',
   'a dinner that has passed takes no reply');
+select is(pg_temp.wrote('l', format(
+    'update public.dinners set starts_at = ''2031-01-07 17:00-06'' where id = %L', pg_temp.id('t2d2'))), 'DC004',
+  'nor moves to a later date');
 
 -- ── Withdrawal and leaving ──────────────────────────────────────────────────
 select is(pg_temp.wrote('u', format('update public.dinner_parties set status = ''withdrawn'' where id = %L', pg_temp.id('pu'))), '1',

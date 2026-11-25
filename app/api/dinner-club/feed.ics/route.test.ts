@@ -196,6 +196,16 @@ describe("GET /api/dinner-club/feed.ics", () => {
     expect(body).not.toContain("12 Fixture Lane");
   });
 
+  it("keeps the dinner but drops the address once its host has left the table", async () => {
+    const rows = seed();
+    const seat = rows.dinner_seats.find((s) => s.party_id === "p-henry");
+    seat!.left_at = "2030-12-01T00:00:00.000Z";
+    createServiceClient.mockResolvedValue(fakeClient(rows).client);
+    const body = await (await feed(TOKEN)).text();
+    expect(body).toContain("UID:dinner-d1@two42");
+    expect(body).not.toContain("12 Fixture Lane");
+  });
+
   it("drops a group whose leader turned the dinner club off", async () => {
     const rows = seed();
     rows.group_settings[0].dinner_club_enabled = false;

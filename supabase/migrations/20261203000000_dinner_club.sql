@@ -1203,7 +1203,8 @@ begin
   end if;
 
   if new.starts_at is distinct from old.starts_at
-    and (new.starts_at <= pg_catalog.now()
+    and (old.starts_at <= pg_catalog.now()
+      or new.starts_at <= pg_catalog.now()
       or (new.starts_at at time zone _zone)::date not between _starts and _ends) then
     raise exception 'the new date is outside the season or has passed' using errcode = 'DC004';
   end if;
@@ -1432,7 +1433,9 @@ declare
   _group uuid;
   _n integer;
 begin
-  select p.season_id, p.group_id into _season, _group from public.dinner_parties p where p.id = _party_id;
+  -- The lock makes a second save wait and then replace this one's list.
+  select p.season_id, p.group_id into _season, _group from public.dinner_parties p where p.id = _party_id
+  for update;
   if _season is null then
     raise exception 'no party' using errcode = 'DC001';
   end if;
@@ -1706,13 +1709,15 @@ begin
    where dt.season_id = _season.id and dt.org_id = _org
      and not (dt.id = any (_kept));
 
-  -- Someone no longer at a dinner's table has no reply to it.
+  -- Someone no longer at a dinner's table has no reply to it. A dinner that
+  -- has happened keeps its replies, as it does on withdrawal.
   delete from public.dinner_replies r
   using public.dinners d
   where r.dinner_id = d.id
     and r.org_id = _org
     and d.org_id = _org
     and d.season_id = _season.id
+    and d.starts_at > pg_catalog.now()
     and not exists (
       select 1
       from public.dinner_seats st
@@ -1766,7 +1771,8 @@ as $$
 declare
   _dinner public.dinners;
 begin
-  select * into _dinner from public.dinners d where d.id = _dinner_id;
+  -- Held to commit, so a move or rehost waits for the claim rather than racing it.
+  select * into _dinner from public.dinners d where d.id = _dinner_id for share;
   if _dinner.id is null or _dinner.org_id is distinct from _org_id then
     raise exception 'dinner reminder claim rejected: dinner % is not in org %', _dinner_id, _org_id
       using errcode = 'DC010';
@@ -1821,6 +1827,7 @@ begin
   from claimed c
   join public.profiles p on p.id = c.profile_id and p.org_id = _org_id
   where p.email is not null
+    and p.role <> 'pending'
     and p.email_dinner_club
     and exists (
       select 1

@@ -97,8 +97,8 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
     );
   }
 
-  const [data, people] = await Promise.all([loadSeasonData(supabase, season.id), loadGroupPeople(supabase, group.id)]);
-  if (!data || !people) {
+  const data = await loadSeasonData(supabase, season.id);
+  if (!data) {
     return (
       <PageContainer>
         {header}
@@ -114,6 +114,15 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
   if (status === "open") {
     const today = dayKey(new Date().toISOString(), zone);
     const windowOpen = today <= season.signup_closes_on;
+    const people = windowOpen ? await loadGroupPeople(supabase, group.id) : null;
+    if (windowOpen && !people) {
+      return (
+        <PageContainer>
+          {header}
+          <ErrorState thing="this season" />
+        </PageContainer>
+      );
+    }
     return (
       <PageContainer size="reading">
         {header}
@@ -133,7 +142,7 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
             )}
           </CardContent>
         </Card>
-        {windowOpen ? (
+        {people ? (
           <SignUpView
             data={data}
             people={people}

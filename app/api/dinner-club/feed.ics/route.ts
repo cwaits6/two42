@@ -112,7 +112,7 @@ export async function GET(request: Request) {
   const { data: dinners, error: dinnersError } = tableIds.length
     ? await supabase
         .from("dinners")
-        .select("id, season_id, starts_at, host_party_id")
+        .select("id, season_id, table_id, starts_at, host_party_id")
         .eq("org_id", orgId)
         .in("table_id", tableIds)
     : { data: [], error: null };
@@ -122,7 +122,7 @@ export async function GET(request: Request) {
   }
 
   const hostParties = [...new Set((dinners ?? []).map((d) => d.host_party_id).filter((id): id is string => Boolean(id)))];
-  const [addressRead, hostRead] = hostParties.length
+  const [addressRead, hostRead, hostSeatRead] = hostParties.length
     ? await Promise.all([
         supabase
           .from("dinner_party_addresses")
@@ -130,8 +130,15 @@ export async function GET(request: Request) {
           .eq("org_id", orgId)
           .in("party_id", hostParties),
         supabase.from("dinner_party_members").select("party_id, profile_id").eq("org_id", orgId).in("party_id", hostParties),
+        supabase
+          .from("dinner_seats")
+          .select("table_id, party_id")
+          .eq("org_id", orgId)
+          .in("party_id", hostParties)
+          .is("left_at", null),
       ])
     : [
+        { data: [], error: null },
         { data: [], error: null },
         { data: [], error: null },
       ];
@@ -143,6 +150,12 @@ export async function GET(request: Request) {
     logError("Failed to read the dinner feed's hosts", hostRead.error, { route: "/api/dinner-club/feed.ics" });
     return failed();
   }
+  if (hostSeatRead.error) {
+    logError("Failed to read the dinner feed's host seats", hostSeatRead.error, { route: "/api/dinner-club/feed.ics" });
+    return failed();
+  }
+  // The same rule as the address policy: a host who has left the table keeps no address on it.
+  const seatedHost = new Set((hostSeatRead.data ?? []).map((st) => `${st.table_id}:${st.party_id}`));
 
   const hostIds = [...new Set((hostRead.data ?? []).map((m) => m.profile_id))];
   const { data: hostProfiles, error: namesError } = hostIds.length
@@ -167,7 +180,10 @@ export async function GET(request: Request) {
             .filter(Boolean)
         ) || null
       : null,
-    address: d.host_party_id ? (addressOf.get(d.host_party_id) ?? null) : null,
+    address:
+      d.host_party_id && seatedHost.has(`${d.table_id}:${d.host_party_id}`)
+        ? (addressOf.get(d.host_party_id) ?? null)
+        : null,
   }));
 
   let body: string;
