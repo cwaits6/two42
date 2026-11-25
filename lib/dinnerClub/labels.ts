@@ -105,8 +105,12 @@ export function howOftenLabel(season: {
   return `${nth} ${day} of each month`;
 }
 
-
 /** "Saturday, January 9, 2027 at 6:00 PM" in the church's zone. */
 export function dinnerWhen(iso: string, zone: string): string {
   return `${formatEventDate(iso, zone)} at ${formatEventTime(iso, zone)}`;
+}
+
+/** Whether a dinner still takes replies and changes: its season is running and it has not started. */
+export function dinnerOpen(status: SeasonStatus, startsAt: string, now: Date): boolean {
+  return status === "published" && new Date(startsAt).getTime() > now.getTime();
 }

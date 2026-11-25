@@ -17,6 +17,8 @@ export interface SeasonValues {
   sizeMax: string;
   closesOn: string;
   backToBack: boolean;
+  /** Hosts say what each guest party brings. */
+  bringList: boolean;
 }
 
 export const NEW_SEASON: SeasonValues = {
@@ -35,10 +37,10 @@ export const NEW_SEASON: SeasonValues = {
   sizeMax: "8",
   closesOn: "",
   backToBack: false,
+  bringList: true,
 };
 
-/** A saved season as the form's values. */
-export function valuesFromSeason(row: {
+type SeasonRow = {
   title: string;
   format: DinnerFormat;
   starts_on: string;
@@ -53,7 +55,11 @@ export function valuesFromSeason(row: {
   table_size_max: number;
   signup_closes_on: string;
   allow_back_to_back_hosting: boolean;
-}): SeasonValues {
+  bring_list_enabled: boolean;
+};
+
+/** A saved season as the form's values. */
+export function valuesFromSeason(row: SeasonRow): SeasonValues {
   return {
     title: row.title,
     format: row.format,
@@ -70,5 +76,33 @@ export function valuesFromSeason(row: {
     sizeMax: String(row.table_size_max),
     closesOn: row.signup_closes_on,
     backToBack: row.allow_back_to_back_hosting,
+    bringList: row.bring_list_enabled,
+  };
+}
+
+function addDays(day: string, days: number): string {
+  const d = new Date(`${day}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function daysBetween(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86_400_000);
+}
+
+/**
+ * The next season's values from an ended one: the same format, how often,
+ * table size and settings, starting the day after it ended and running as
+ * long. The title and sign-up close date are the leader's to set.
+ */
+export function nextSeasonValues(previous: SeasonRow): SeasonValues {
+  const values = valuesFromSeason(previous);
+  const startsOn = addDays(previous.ends_on, 1);
+  return {
+    ...values,
+    title: "",
+    startsOn,
+    endsOn: values.lengthMode === "end" ? addDays(startsOn, daysBetween(previous.starts_on, previous.ends_on)) : "",
+    closesOn: "",
   };
 }
