@@ -184,6 +184,18 @@ describe("GET /api/dinner-club/feed.ics", () => {
     expect(await res.text()).not.toContain("VEVENT");
   });
 
+  it("lists nothing once the person's party has left its table", async () => {
+    const rows = seed();
+    const seat = rows.dinner_seats.find((s) => s.party_id === "p-isaac");
+    seat!.left_at = "2030-12-01T00:00:00.000Z";
+    createServiceClient.mockResolvedValue(fakeClient(rows).client);
+    const res = await feed(TOKEN);
+    const body = await res.text();
+    expect(res.status).toBe(200);
+    expect(body).not.toContain("BEGIN:VEVENT");
+    expect(body).not.toContain("12 Fixture Lane");
+  });
+
   it("drops a group whose leader turned the dinner club off", async () => {
     const rows = seed();
     rows.group_settings[0].dinner_club_enabled = false;
