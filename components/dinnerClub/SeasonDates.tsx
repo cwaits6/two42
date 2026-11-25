@@ -35,6 +35,7 @@ export function SeasonDates({
   const router = useRouter();
   const addId = useId();
   const [adding, setAdding] = useState("");
+  const [addPending, setAddPending] = useState(false);
   const [moving, setMoving] = useState<DateRow | null>(null);
   const [deleting, setDeleting] = useState<DateRow | null>(null);
   const [proposing, setProposing] = useState(false);
@@ -42,11 +43,13 @@ export function SeasonDates({
   const published = status === "published";
 
   async function addDate() {
-    if (!adding) return;
+    if (!adding || addPending) return;
+    setAddPending(true);
     const { data, error } = await createClient()
       .from("dinner_season_dates")
       .insert({ season_id: seasonId, group_id: groupId, starts_at: localToUTCISO(adding, zone) })
       .select("id");
+    setAddPending(false);
     if (error?.code === "DC004") return toast.error("Choose a date within the season.");
     if (error || !data?.length) return toast.error(failureMessage("add the date"));
     setAdding("");
@@ -84,10 +87,10 @@ export function SeasonDates({
             <Label htmlFor={addId} className="text-lg">
               New date
             </Label>
-            <Input id={addId} type="datetime-local" value={adding} className="h-12 text-lg" onChange={(e) => setAdding(e.target.value)} />
+            <Input id={addId} type="datetime-local" value={adding} disabled={addPending} className="h-12 text-lg" onChange={(e) => setAdding(e.target.value)} />
           </div>
-          <Button size="lg" variant="outline" onClick={addDate} disabled={!adding}>
-            Add date
+          <Button size="lg" variant="outline" onClick={addDate} disabled={!adding || addPending}>
+            {addPending ? "Adding…" : "Add date"}
           </Button>
           {!published && (
             <Button size="lg" variant="outline" onClick={() => setProposing(true)}>
@@ -99,8 +102,12 @@ export function SeasonDates({
 
       {moving && (
         <MoveDialog
+          key={moving.id}
           open={Boolean(moving)}
-          onOpenChange={(open) => !open && setMoving(null)}
+          onOpenChange={(open) => {
+            const row = moving;
+            if (!open) setMoving((current) => (current === row ? null : current));
+          }}
           title="Move date"
           description={
             published

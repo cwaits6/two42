@@ -608,8 +608,9 @@ create function public.dinner_address_party_ids() returns uuid[]
 as $$
   select coalesce(array_agg(distinct d.host_party_id), '{}')
   from public.dinners d
+  join public.dinner_seats hs on hs.table_id = d.table_id and hs.party_id = d.host_party_id
+   and hs.org_id = d.org_id and hs.left_at is null
   where d.org_id = public.app_current_org_id()
-    and d.host_party_id is not null
     and d.table_id = any (public.dinner_my_table_ids());
 $$;
 
@@ -635,7 +636,7 @@ comment on function public.dinner_my_table_ids() is
 comment on function public.dinner_tablemate_party_ids() is
   'The parties seated at the caller''s tables. Policy helper.';
 comment on function public.dinner_address_party_ids() is
-  'The parties hosting a dinner at one of the caller''s tables: the addresses the caller may read. Policy helper.';
+  'The parties hosting a dinner at one of the caller''s tables and still seated there: the addresses the caller may read. Policy helper.';
 comment on function public.dinner_food_note_party_ids() is
   'The parties seated at a table where the caller''s party hosts a dinner: the food notes the caller may read. Policy helper.';
 
@@ -1382,8 +1383,10 @@ grant execute on function public.dinner_party_create(uuid, uuid[]) to authentica
 comment on function public.dinner_party_create(uuid, uuid[]) is
   'Signs up a party of one or two people for a season. Actor from auth.uid(); tenant anchor: the season row''s org, pinned against app_request_org_id(). A member must be in the party; a leader may sign up any member of the group. Raises DC001, DC002, DC003, or 23505 when someone is already in a party this season.';
 
--- Replacing a list is one statement pair in one transaction, so a failed
--- insert keeps the old rows. Invoker: the table rules and guards apply.
+-- Replacing a list is one transaction, so a failed insert keeps the old rows.
+-- A date kept in the list keeps its id, and with it the preferences and
+-- can't-host dates that point at it. The season row lock serializes two
+-- leaders replacing at once. Invoker: the table rules and guards apply.
 create function public.dinner_season_dates_replace(_season_id uuid, _starts_at timestamptz[])
   returns integer
   language plpgsql security invoker
@@ -1391,16 +1394,30 @@ create function public.dinner_season_dates_replace(_season_id uuid, _starts_at t
 as $$
 declare
   _group uuid;
+  _status text;
+  _list timestamptz[] := coalesce(_starts_at, '{}');
   _n integer;
 begin
-  select s.group_id into _group from public.dinner_seasons s where s.id = _season_id;
+  select s.group_id, s.status into _group, _status
+  from public.dinner_seasons s where s.id = _season_id
+  for update;
   if _group is null then
     raise exception 'no season' using errcode = 'DC001';
   end if;
-  delete from public.dinner_season_dates sd where sd.season_id = _season_id;
+  if _status not in ('draft', 'open') then
+    raise exception 'a published season changes one date at a time' using errcode = 'DC003';
+  end if;
+  delete from public.dinner_season_dates sd
+  where sd.season_id = _season_id and not (sd.starts_at = any (_list));
   insert into public.dinner_season_dates (season_id, group_id, starts_at)
-  select _season_id, _group, x from unnest(coalesce(_starts_at, '{}')) as x;
-  get diagnostics _n = row_count;
+  select _season_id, _group, x
+  from (select distinct x from unnest(_list) as x) as l
+  where not exists (
+    select 1 from public.dinner_season_dates sd where sd.season_id = _season_id and sd.starts_at = l.x
+  );
+  select count(*)::integer into _n
+  from public.dinner_season_dates sd
+  where sd.season_id = _season_id and sd.starts_at = any (_list);
   return _n;
 end;
 $$;
@@ -1433,7 +1450,7 @@ revoke execute on function public.dinner_party_unavailable_dates_replace(uuid, u
 grant execute on function public.dinner_party_unavailable_dates_replace(uuid, uuid[]) to authenticated;
 
 comment on function public.dinner_season_dates_replace(uuid, timestamptz[]) is
-  'Replaces a season''s dates in one transaction and returns how many it added. Security invoker: the season dates rules decide who may.';
+  'Replaces a draft or open season''s dates in one transaction, keeping the id of each date still listed, and returns how many dates the season now has from the list. Raises DC003 once the season is published. Security invoker: the season dates rules decide who may.';
 comment on function public.dinner_party_unavailable_dates_replace(uuid, uuid[]) is
   'Replaces the dates a party can''t host in one transaction and returns how many it added. Security invoker: the unavailable dates rules decide who may.';
 
@@ -1812,6 +1829,14 @@ begin
       join public.dinner_party_members pm on pm.party_id = st.party_id and pm.org_id = _org_id
       where st.table_id = _dinner.table_id and st.org_id = _org_id and st.left_at is null
         and pm.profile_id = p.id
+    )
+    and exists (
+      select 1 from public.dinner_seasons s
+      where s.id = _dinner.season_id and s.org_id = _org_id and s.status = 'published'
+    )
+    and exists (
+      select 1 from public.group_settings gs
+      where gs.group_id = _dinner.group_id and gs.org_id = _org_id and gs.dinner_club_enabled
     )
     and not exists (
       select 1 from public.dinner_replies r

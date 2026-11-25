@@ -672,7 +672,8 @@ cannot hide one column:
 
 - **A host's address** (`dinner_party_addresses`): read by the party, the
   group's leaders, and the parties seated at a table one of that party's
-  dinners is at (`dinner_address_party_ids()`). Tables, seats and dinners are
+  dinners is at, while the host is still seated there
+  (`dinner_address_party_ids()`). Tables, seats and dinners are
   written only by `dinner_tables_publish()`, so before publish no guest reads
   any address.
 - **Allergies and food needs** (`dinner_party_notes`): read by the party, the
