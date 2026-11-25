@@ -382,6 +382,7 @@ export function PersonLinks({ label }: { label: string }) {
         title={`Link ${people(toLink.length)}?`}
         description={`Each person here is linked to the one ${label} record their name and an email or birthday agree with. You can unlink anyone later.`}
         confirmLabel={`Link ${people(toLink.length)}`}
+        confirmVariant="default"
         onConfirm={async () => {
           void linkMany(toLink);
         }}
