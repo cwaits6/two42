@@ -377,6 +377,1198 @@ COMMENT ON FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uui
 
 
 
+CREATE OR REPLACE FUNCTION "public"."dinner_address_party_ids"() RETURNS "uuid"[]
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select coalesce(array_agg(distinct d.host_party_id), '{}')
+  from public.dinners d
+  join public.dinner_seats hs on hs.table_id = d.table_id and hs.party_id = d.host_party_id
+   and hs.org_id = d.org_id and hs.left_at is null
+  where d.org_id = public.app_current_org_id()
+    and d.table_id = any (public.dinner_my_table_ids());
+$$;
+
+
+ALTER FUNCTION "public"."dinner_address_party_ids"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."dinner_address_party_ids"() IS 'The parties hosting a dinner at one of the caller''s tables and still seated there: the addresses the caller may read. Policy helper.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_food_note_party_ids"() RETURNS "uuid"[]
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select coalesce(array_agg(distinct s.party_id), '{}')
+  from public.dinners d
+  -- Seated in time for this dinner: a party seated later never ate at it.
+  join public.dinner_seats s on s.table_id = d.table_id and s.org_id = d.org_id and s.left_at is null
+   and s.seated_at <= d.starts_at
+  join public.dinner_seats hs on hs.table_id = d.table_id and hs.party_id = d.host_party_id
+   and hs.org_id = d.org_id and hs.left_at is null
+  where d.org_id = public.app_current_org_id()
+    and d.host_party_id = any (public.dinner_my_party_ids());
+$$;
+
+
+ALTER FUNCTION "public"."dinner_food_note_party_ids"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."dinner_food_note_party_ids"() IS 'The parties seated, in time for it, at a dinner the caller''s party hosts: the food notes the caller may read. Policy helper.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_moved_clear_replies"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+begin
+  delete from public.dinner_replies r
+  where r.dinner_id = new.id
+    and r.org_id = new.org_id;
+  return null;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."dinner_moved_clear_replies"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_my_party_ids"() RETURNS "uuid"[]
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select coalesce(array_agg(pm.party_id), '{}')
+  from public.dinner_party_members pm
+  join public.profiles p on p.id = pm.profile_id and p.org_id = pm.org_id
+  where pm.profile_id = auth.uid()
+    and pm.org_id = public.app_current_org_id()
+    and p.role <> 'pending';
+$$;
+
+
+ALTER FUNCTION "public"."dinner_my_party_ids"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."dinner_my_party_ids"() IS 'The parties the caller is in, in their own org; none while pending. Policy helper.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_my_party_profile_ids"() RETURNS "uuid"[]
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select coalesce(array_agg(distinct pm.profile_id), '{}')
+  from public.dinner_party_members pm
+  where pm.org_id = public.app_current_org_id()
+    and pm.party_id = any (public.dinner_my_party_ids());
+$$;
+
+
+ALTER FUNCTION "public"."dinner_my_party_profile_ids"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."dinner_my_party_profile_ids"() IS 'The caller and their partners: everyone in the caller''s parties. Policy helper.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_my_table_ids"() RETURNS "uuid"[]
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select coalesce(array_agg(distinct s.table_id), '{}')
+  from public.dinner_seats s
+  where s.org_id = public.app_current_org_id()
+    and s.left_at is null
+    and s.party_id = any (public.dinner_my_party_ids());
+$$;
+
+
+ALTER FUNCTION "public"."dinner_my_table_ids"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."dinner_my_table_ids"() IS 'The tables the caller''s parties are seated at and have not left. Policy helper.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_parties_guard"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _row public.dinner_parties := coalesce(new, old);
+  _status text;
+begin
+  if current_user <> 'authenticated' then
+    if tg_op = 'UPDATE' then
+      new.updated_at := pg_catalog.now();
+      return new;
+    end if;
+    return old;
+  end if;
+
+  select s.status into _status from public.dinner_seasons s where s.id = _row.season_id;
+
+  if tg_op = 'UPDATE' then
+    if new.status is distinct from old.status then
+      if new.status <> 'withdrawn' or _status not in ('open', 'published') then
+        raise exception 'a party can only withdraw' using errcode = 'DC003';
+      end if;
+      new.withdrawn_at := pg_catalog.now();
+    elsif public.is_group_leader(old.group_id) then
+      if _status = 'ended' then
+        raise exception 'an ended season keeps its parties' using errcode = 'DC003';
+      end if;
+    elsif not public.dinner_signup_window_open(old.season_id) then
+      raise exception 'sign-ups are closed' using errcode = 'DC003';
+    end if;
+    new.updated_at := pg_catalog.now();
+    return new;
+  end if;
+
+  if public.is_group_leader(old.group_id) then
+    if _status not in ('draft', 'open') then
+      raise exception 'a party at a published table withdraws instead' using errcode = 'DC003';
+    end if;
+  elsif not public.dinner_signup_window_open(old.season_id) then
+    raise exception 'sign-ups are closed' using errcode = 'DC003';
+  end if;
+  return old;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."dinner_parties_guard"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_party_create"("_season_id" "uuid", "_profile_ids" "uuid"[]) RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _org uuid := public.app_request_org_id();
+  _season public.dinner_seasons;
+  _ids uuid[];
+  _leader boolean;
+  _status text;
+  _valid integer;
+  _party uuid;
+begin
+  if _org is null then
+    raise exception 'no season' using errcode = 'DC001';
+  end if;
+
+  -- Conflicts with publish's FOR UPDATE, so the status read is the one that commits.
+  select * into _season from public.dinner_seasons s where s.id = _season_id for share;
+  if _season.id is null or _season.org_id is distinct from _org then
+    raise exception 'no season' using errcode = 'DC001';
+  end if;
+
+  _leader := public.is_group_leader(_season.group_id);
+  if not _leader and not public.is_group_member(_season.group_id) then
+    raise exception 'no season' using errcode = 'DC001';
+  end if;
+
+  _ids := array(select distinct x from unnest(_profile_ids) as x where x is not null);
+  if cardinality(_ids) not between 1 and 2 or cardinality(_ids) <> cardinality(_profile_ids) then
+    raise exception 'a party is one or two people' using errcode = 'DC002';
+  end if;
+  if not _leader and not (auth.uid() = any (_ids)) then
+    raise exception 'sign up a party you are in' using errcode = 'DC001';
+  end if;
+
+  if _season.status = 'open' then
+    if not _leader and not public.dinner_signup_window_open(_season.id) then
+      raise exception 'sign-ups are closed' using errcode = 'DC003';
+    end if;
+    _status := 'signed_up';
+  elsif _season.status = 'published' then
+    _status := 'waitlisted';
+  else
+    raise exception 'the season is not taking sign-ups' using errcode = 'DC003';
+  end if;
+
+  select count(*) into _valid
+  from public.group_members gm
+  join public.profiles p on p.id = gm.profile_id and p.org_id = gm.org_id
+  where gm.org_id = _org
+    and gm.group_id = _season.group_id
+    and gm.profile_id = any (_ids)
+    and p.role <> 'pending';
+  if _valid <> cardinality(_ids) then
+    raise exception 'everyone in a party is in the group' using errcode = 'DC002';
+  end if;
+
+  insert into public.dinner_parties (org_id, season_id, group_id, status, created_by)
+  values (_org, _season.id, _season.group_id, _status, auth.uid())
+  returning id into _party;
+
+  insert into public.dinner_party_members (org_id, party_id, season_id, group_id, profile_id)
+  select _org, _party, _season.id, _season.group_id, x
+  from unnest(_ids) as x;
+
+  return _party;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."dinner_party_create"("_season_id" "uuid", "_profile_ids" "uuid"[]) OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."dinner_party_create"("_season_id" "uuid", "_profile_ids" "uuid"[]) IS 'Signs up a party of one or two people for a season. Actor from auth.uid(); tenant anchor: the season row''s org, pinned against app_request_org_id(). A member must be in the party; a leader may sign up any member of the group. Raises DC001, DC002, DC003, or 23505 when someone is already in a party this season.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_party_detail_guard"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _season uuid := coalesce(new.season_id, old.season_id);
+  _group uuid := coalesce(new.group_id, old.group_id);
+begin
+  if current_user = 'authenticated' then
+    if public.is_group_leader(_group) then
+      if exists (select 1 from public.dinner_seasons s where s.id = _season and s.status = 'ended') then
+        raise exception 'an ended season keeps its parties' using errcode = 'DC003';
+      end if;
+    elsif not public.dinner_signup_window_open(_season) then
+      raise exception 'sign-ups are closed' using errcode = 'DC003';
+    end if;
+  end if;
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  if tg_op = 'UPDATE' and (new.party_id is distinct from old.party_id or new.season_id is distinct from old.season_id) then
+    raise exception 'a detail stays with its party' using errcode = 'DC002';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."dinner_party_detail_guard"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_party_drop_if_empty"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+begin
+  delete from public.dinner_replies r
+  using public.dinners d, public.dinner_seats st
+  where r.dinner_id = d.id
+    and r.org_id = old.org_id
+    and r.profile_id = old.profile_id
+    and d.org_id = old.org_id
+    and d.starts_at > pg_catalog.now()
+    and st.table_id = d.table_id
+    and st.party_id = old.party_id
+    and st.org_id = old.org_id;
+
+  delete from public.dinner_parties p
+  where p.id = old.party_id
+    and p.org_id = old.org_id
+    and not exists (
+      select 1 from public.dinner_party_members m
+      where m.party_id = old.party_id and m.org_id = old.org_id
+    );
+  return null;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."dinner_party_drop_if_empty"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_party_members_guard"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _row public.dinner_party_members := coalesce(new, old);
+  _party_status text;
+  _count integer;
+begin
+  if current_user <> 'authenticated' then
+    return _row;
+  end if;
+
+  if not public.is_group_leader(_row.group_id) and not public.dinner_signup_window_open(_row.season_id) then
+    raise exception 'sign-ups are closed' using errcode = 'DC003';
+  end if;
+
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+
+  select p.status into _party_status
+  from public.dinner_parties p
+  where p.id = new.party_id
+  for update;
+
+  if _party_status is distinct from 'signed_up' and _party_status is distinct from 'waitlisted' then
+    raise exception 'the party has withdrawn' using errcode = 'DC003';
+  end if;
+
+  select count(*) into _count from public.dinner_party_members m where m.party_id = new.party_id;
+  if _count >= 2 then
+    raise exception 'a party is one or two people' using errcode = 'DC002';
+  end if;
+
+  if exists (select 1 from public.profiles p where p.id = new.profile_id and p.role = 'pending') then
+    raise exception 'the person is not approved yet' using errcode = 'DC002';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."dinner_party_members_guard"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_party_unavailable_dates_replace"("_party_id" "uuid", "_season_date_ids" "uuid"[]) RETURNS integer
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _season uuid;
+  _group uuid;
+  _n integer;
+begin
+  -- The lock makes a second save wait and then replace this one's list.
+  select p.season_id, p.group_id into _season, _group from public.dinner_parties p where p.id = _party_id
+  for update;
+  if _season is null then
+    raise exception 'no party' using errcode = 'DC001';
+  end if;
+  delete from public.dinner_party_unavailable_dates u where u.party_id = _party_id;
+  insert into public.dinner_party_unavailable_dates (party_id, season_date_id, season_id, group_id)
+  select _party_id, x, _season, _group from unnest(coalesce(_season_date_ids, '{}')) as x;
+  get diagnostics _n = row_count;
+  return _n;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."dinner_party_unavailable_dates_replace"("_party_id" "uuid", "_season_date_ids" "uuid"[]) OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."dinner_party_unavailable_dates_replace"("_party_id" "uuid", "_season_date_ids" "uuid"[]) IS 'Replaces the dates a party can''t host in one transaction and returns how many it added. Security invoker: the unavailable dates rules decide who may.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_party_withdrawn"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+begin
+  update public.dinner_seats
+     set left_at = pg_catalog.now()
+   where party_id = new.id
+     and org_id = new.org_id
+     and left_at is null;
+
+  delete from public.dinner_replies r
+  using public.dinners d
+  where r.dinner_id = d.id
+    and r.org_id = new.org_id
+    and d.org_id = new.org_id
+    and d.season_id = new.season_id
+    and d.starts_at > pg_catalog.now()
+    and r.profile_id in (
+      select pm.profile_id from public.dinner_party_members pm
+      where pm.party_id = new.id and pm.org_id = new.org_id
+    );
+  return null;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."dinner_party_withdrawn"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_reminder_claim"("_org_id" "uuid", "_dinner_id" "uuid", "_dinner_date" "date", "_starts_at" timestamp with time zone, "_host_party_id" "uuid") RETURNS TABLE("profile_id" "uuid", "email" "text", "first_name" "text", "preferred_name" "text")
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _dinner public.dinners;
+begin
+  -- Held to commit, so a move or rehost waits for the claim rather than racing it.
+  select * into _dinner from public.dinners d where d.id = _dinner_id for share;
+  if _dinner.id is null or _dinner.org_id is distinct from _org_id then
+    raise exception 'dinner reminder claim rejected: dinner % is not in org %', _dinner_id, _org_id
+      using errcode = 'DC010';
+  end if;
+  if _dinner.starts_at is distinct from _starts_at or _dinner.host_party_id is distinct from _host_party_id then
+    return;
+  end if;
+
+  insert into public.dinner_reminder_passes (org_id, dinner_id, dinner_date)
+  values (_org_id, _dinner_id, _dinner_date)
+  on conflict do nothing;
+
+  if found then
+    insert into public.dinner_reminder_sends (org_id, dinner_id, dinner_date, profile_id)
+    select _org_id, _dinner_id, _dinner_date, p.id
+    from public.dinner_seats st
+    join public.dinner_parties pa on pa.id = st.party_id and pa.org_id = _org_id and pa.status <> 'withdrawn'
+    join public.dinner_party_members pm on pm.party_id = st.party_id and pm.org_id = _org_id
+    join public.profiles p on p.id = pm.profile_id and p.org_id = _org_id
+    where st.table_id = _dinner.table_id
+      and st.org_id = _org_id
+      and st.left_at is null
+      and p.email is not null
+      and p.role <> 'pending'
+      and p.email_dinner_club
+      and exists (
+        select 1 from public.dinner_seasons s
+        where s.id = _dinner.season_id and s.org_id = _org_id and s.status = 'published'
+      )
+      and exists (
+        select 1 from public.group_settings gs
+        where gs.group_id = _dinner.group_id and gs.org_id = _org_id and gs.dinner_club_enabled
+      )
+      and not exists (
+        select 1 from public.dinner_replies r
+        where r.org_id = _org_id and r.dinner_id = _dinner_id and r.profile_id = p.id and r.status = 'not_going'
+      );
+  end if;
+
+  return query
+  with claimed as (
+    update public.dinner_reminder_sends x
+       set claimed_at = pg_catalog.now()
+     where x.org_id = _org_id
+       and x.dinner_id = _dinner_id
+       and x.dinner_date = _dinner_date
+       and x.sent_at is null
+       and (x.claimed_at is null or x.claimed_at < pg_catalog.now() - interval '10 minutes')
+    returning x.profile_id
+  )
+  select c.profile_id, p.email, p.first_name, p.preferred_name
+  from claimed c
+  join public.profiles p on p.id = c.profile_id and p.org_id = _org_id
+  where p.email is not null
+    and p.role <> 'pending'
+    and p.email_dinner_club
+    and exists (
+      select 1
+      from public.dinner_seats st
+      join public.dinner_parties pa on pa.id = st.party_id and pa.org_id = _org_id and pa.status <> 'withdrawn'
+      join public.dinner_party_members pm on pm.party_id = st.party_id and pm.org_id = _org_id
+      where st.table_id = _dinner.table_id and st.org_id = _org_id and st.left_at is null
+        and pm.profile_id = p.id
+    )
+    and exists (
+      select 1 from public.dinner_seasons s
+      where s.id = _dinner.season_id and s.org_id = _org_id and s.status = 'published'
+    )
+    and exists (
+      select 1 from public.group_settings gs
+      where gs.group_id = _dinner.group_id and gs.org_id = _org_id and gs.dinner_club_enabled
+    )
+    and not exists (
+      select 1 from public.dinner_replies r
+      where r.org_id = _org_id and r.dinner_id = _dinner_id and r.profile_id = p.id and r.status = 'not_going'
+    );
+end;
+$$;
+
+
+ALTER FUNCTION "public"."dinner_reminder_claim"("_org_id" "uuid", "_dinner_id" "uuid", "_dinner_date" "date", "_starts_at" timestamp with time zone, "_host_party_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."dinner_reminder_claim"("_org_id" "uuid", "_dinner_id" "uuid", "_dinner_date" "date", "_starts_at" timestamp with time zone, "_host_party_id" "uuid") IS 'Starts the reminder pass for one dinner on one local date when it has none, unless its start or host differs from the caller''s _starts_at and _host_party_id, fixing its recipients (the people seated at its table who have not said Not going and get dinner club email), then claims every unsent reminder in it and returns the people to mail who are still seated there. Tenant anchor: the dinner''s own org_id, compared with _org_id; a mismatch raises DC010. service_role only.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_reminder_passes_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) RETURNS integer
+    LANGUAGE "sql"
+    SET "search_path" TO ''
+    AS $$
+  with doomed as (
+    select p.dinner_id, p.dinner_date
+    from public.dinner_reminder_passes p
+    where p.org_id = _org_id and p.dinner_date < _before
+    order by p.dinner_date
+    limit _limit
+  ),
+  gone as (
+    delete from public.dinner_reminder_passes p
+    using doomed d
+    where p.org_id = _org_id and p.dinner_id = d.dinner_id and p.dinner_date = d.dinner_date
+    returning 1
+  )
+  select count(*)::integer from gone;
+$$;
+
+
+ALTER FUNCTION "public"."dinner_reminder_passes_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."dinner_reminder_passes_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) IS 'Deletes at most _limit of one church''s dinner reminder passes with a dinner_date before _before, oldest first, and returns how many went. Tenant anchor: the _org_id predicate on every row it reads and deletes. service_role only.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_replies_guard"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _dinner uuid := coalesce(new.dinner_id, old.dinner_id);
+  _profile uuid := coalesce(new.profile_id, old.profile_id);
+begin
+  if tg_op = 'UPDATE' and (new.dinner_id is distinct from old.dinner_id or new.profile_id is distinct from old.profile_id) then
+    raise exception 'a reply stays with its dinner and person' using errcode = 'DC002';
+  end if;
+  if tg_op <> 'DELETE' then
+    new.replied_by := auth.uid();
+    new.updated_at := pg_catalog.now();
+  end if;
+
+  if current_user <> 'authenticated' then
+    return coalesce(new, old);
+  end if;
+
+  if not exists (
+    select 1
+    from public.dinners d
+    join public.dinner_seats st on st.table_id = d.table_id and st.left_at is null
+    join public.dinner_parties p on p.id = st.party_id and p.status <> 'withdrawn'
+    join public.dinner_party_members pm on pm.party_id = st.party_id
+    join public.dinner_party_members me on me.party_id = st.party_id
+    where d.id = _dinner
+      and pm.profile_id = _profile
+      and me.profile_id = auth.uid()
+  ) then
+    raise exception 'the person is not at this table' using errcode = 'DC001';
+  end if;
+
+  if not exists (
+    select 1
+    from public.dinners d
+    join public.dinner_seasons s on s.id = d.season_id
+    where d.id = _dinner
+      and s.status = 'published'
+      and d.starts_at > pg_catalog.now()
+  ) then
+    raise exception 'the dinner is not taking replies' using errcode = 'DC003';
+  end if;
+
+  return coalesce(new, old);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."dinner_replies_guard"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_season_dates_carry"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  update public.dinners d
+     set starts_at = new.starts_at
+   where d.season_date_id = new.id
+     and d.org_id = new.org_id
+     and d.follows_season_date;
+  return null;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."dinner_season_dates_carry"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_season_dates_guard"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _season uuid := coalesce(new.season_id, old.season_id);
+  _status text;
+  _starts date;
+  _ends date;
+  _zone text;
+begin
+  select s.status, s.starts_on, s.ends_on, o.timezone into _status, _starts, _ends, _zone
+  from public.dinner_seasons s
+  join public.organizations o on o.id = s.org_id
+  where s.id = _season;
+
+  if _status = 'ended' then
+    raise exception 'an ended season keeps its dates' using errcode = 'DC003';
+  end if;
+  if tg_op = 'DELETE' then
+    -- Deleting the date deletes its dinners and their replies. A season being
+    -- deleted is already gone here, so its dates still go with it.
+    if _status is not null and exists (
+      select 1 from public.dinners d
+      where d.season_date_id = old.id and d.org_id = old.org_id and d.starts_at <= pg_catalog.now()
+    ) then
+      raise exception 'a date whose dinners have happened stays' using errcode = 'DC005';
+    end if;
+    return old;
+  end if;
+  if tg_op = 'UPDATE' and new.season_id is distinct from old.season_id then
+    raise exception 'a date stays in its season' using errcode = 'DC002';
+  end if;
+  if (new.starts_at at time zone _zone)::date not between _starts and _ends then
+    raise exception 'the date is outside the season' using errcode = 'DC004';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."dinner_season_dates_guard"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_season_dates_replace"("_season_id" "uuid", "_starts_at" timestamp with time zone[]) RETURNS integer
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _group uuid;
+  _status text;
+  _list timestamptz[] := coalesce(_starts_at, '{}');
+  _n integer;
+begin
+  select s.group_id, s.status into _group, _status
+  from public.dinner_seasons s where s.id = _season_id
+  for update;
+  if _group is null then
+    raise exception 'no season' using errcode = 'DC001';
+  end if;
+  if _status not in ('draft', 'open') then
+    raise exception 'a published season changes one date at a time' using errcode = 'DC003';
+  end if;
+  delete from public.dinner_season_dates sd
+  where sd.season_id = _season_id and not (sd.starts_at = any (_list));
+  insert into public.dinner_season_dates (season_id, group_id, starts_at)
+  select _season_id, _group, x
+  from (select distinct x from unnest(_list) as x) as l
+  where not exists (
+    select 1 from public.dinner_season_dates sd where sd.season_id = _season_id and sd.starts_at = l.x
+  );
+  select count(*)::integer into _n
+  from public.dinner_season_dates sd
+  where sd.season_id = _season_id and sd.starts_at = any (_list);
+  return _n;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."dinner_season_dates_replace"("_season_id" "uuid", "_starts_at" timestamp with time zone[]) OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."dinner_season_dates_replace"("_season_id" "uuid", "_starts_at" timestamp with time zone[]) IS 'Replaces a draft or open season''s dates in one transaction, keeping the id of each date still listed, and returns how many dates the season now has from the list. Raises DC003 once the season is published. Security invoker: the season dates rules decide who may.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_seasons_guard"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  if tg_op = 'INSERT' then
+    if current_user = 'authenticated' and new.status <> 'draft' then
+      raise exception 'a season starts as a draft' using errcode = 'DC003';
+    end if;
+    return new;
+  end if;
+
+  if new.group_id is distinct from old.group_id or new.org_id is distinct from old.org_id then
+    raise exception 'a season stays in its group' using errcode = 'DC002';
+  end if;
+
+  if new.status is distinct from old.status then
+    if current_user = 'authenticated'
+      and not ((old.status = 'draft' and new.status = 'open') or (old.status = 'published' and new.status = 'ended')) then
+      raise exception 'a season cannot go from % to %', old.status, new.status using errcode = 'DC003';
+    end if;
+    if new.status = 'ended' then
+      new.ended_at := pg_catalog.now();
+    end if;
+  end if;
+
+  if old.status in ('published', 'ended') and (
+    new.format is distinct from old.format
+    or new.starts_on is distinct from old.starts_on
+    or new.ends_on is distinct from old.ends_on
+    or new.length_months is distinct from old.length_months
+    or new.repeat_kind is distinct from old.repeat_kind
+    or new.repeat_weeks is distinct from old.repeat_weeks
+    or new.repeat_week_of_month is distinct from old.repeat_week_of_month
+    or new.weekday is distinct from old.weekday
+    or new.table_size_min is distinct from old.table_size_min
+    or new.table_size_max is distinct from old.table_size_max
+  ) then
+    raise exception 'a published season keeps its format, dates and table size' using errcode = 'DC003';
+  end if;
+
+  new.updated_at := pg_catalog.now();
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."dinner_seasons_guard"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_seat_signatures"("_season_id" "uuid", "_org_id" "uuid") RETURNS "jsonb"
+    LANGUAGE "sql" STABLE
+    SET "search_path" TO ''
+    AS $$
+  select coalesce(jsonb_object_agg(x.profile_id, x.sig), '{}'::jsonb)
+  from (
+    select pm.profile_id,
+           string_agg(
+             d.season_date_id::text || ':' || coalesce(d.host_party_id::text, '-') || ':' || (
+               select string_agg(st2.party_id::text, ',' order by st2.party_id)
+               from public.dinner_seats st2
+               where st2.table_id = d.table_id and st2.org_id = _org_id and st2.left_at is null
+             ),
+             ';' order by d.season_date_id
+           ) as sig
+    from public.dinner_party_members pm
+    join public.dinner_seats st on st.party_id = pm.party_id and st.org_id = _org_id and st.left_at is null
+    join public.dinners d on d.table_id = st.table_id and d.org_id = _org_id
+    where pm.season_id = _season_id
+      and pm.org_id = _org_id
+    group by pm.profile_id
+  ) x;
+$$;
+
+
+ALTER FUNCTION "public"."dinner_seat_signatures"("_season_id" "uuid", "_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_signup_window_open"("_season_id" "uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE
+    SET "search_path" TO ''
+    AS $$
+  select exists (
+    select 1
+    from public.dinner_seasons s
+    join public.organizations o on o.id = s.org_id
+    where s.id = _season_id
+      and s.status = 'open'
+      and (pg_catalog.now() at time zone o.timezone)::date <= s.signup_closes_on
+  );
+$$;
+
+
+ALTER FUNCTION "public"."dinner_signup_window_open"("_season_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_tablemate_party_ids"() RETURNS "uuid"[]
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select coalesce(array_agg(distinct s.party_id), '{}')
+  from public.dinner_seats s
+  where s.org_id = public.app_current_org_id()
+    and s.left_at is null
+    and s.table_id = any (public.dinner_my_table_ids());
+$$;
+
+
+ALTER FUNCTION "public"."dinner_tablemate_party_ids"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."dinner_tablemate_party_ids"() IS 'The parties seated at the caller''s tables. Policy helper.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."dinner_tables_publish"("_season_id" "uuid") RETURNS TABLE("profile_id" "uuid")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $_$
+declare
+  _org uuid := public.app_request_org_id();
+  _season public.dinner_seasons;
+  _body jsonb;
+  _entry jsonb;
+  _ord bigint;
+  _table uuid;
+  _party_ids uuid[];
+  _host_dates uuid[];
+  _kept uuid[] := '{}';
+  _before jsonb;
+  _after jsonb;
+  _n integer;
+begin
+  if _org is null then
+    raise exception 'no season' using errcode = 'DC001';
+  end if;
+
+  select * into _season from public.dinner_seasons s where s.id = _season_id for update;
+  if _season.id is null or _season.org_id is distinct from _org or not public.is_group_leader(_season.group_id) then
+    raise exception 'no season' using errcode = 'DC001';
+  end if;
+  if _season.status not in ('open', 'published') then
+    raise exception 'the season is not ready for tables' using errcode = 'DC003';
+  end if;
+
+  -- A withdrawal updates its party row, so it either lands before the checks
+  -- below or waits for publish and then closes the seats it wrote.
+  perform 1 from public.dinner_parties p
+   where p.season_id = _season.id and p.org_id = _org
+   order by p.id
+   for share;
+
+  select d.body into _body from public.dinner_drafts d
+   where d.season_id = _season.id and d.org_id = _org
+   for update;
+  if _body is null or jsonb_typeof(_body -> 'tables') is distinct from 'array'
+    or jsonb_array_length(_body -> 'tables') = 0 then
+    raise exception 'there is no draft to publish' using errcode = 'DC002';
+  end if;
+
+  -- Postgres may evaluate OR arms in any order, so the lists are known to be
+  -- arrays before any array-only function reads them.
+  if exists (
+    select 1 from jsonb_array_elements(_body -> 'tables') t
+    where jsonb_typeof(t -> 'partyIds') is distinct from 'array'
+      or jsonb_typeof(t -> 'hosts') is distinct from 'array'
+  ) then
+    raise exception 'a table has a malformed party or host list' using errcode = 'DC002';
+  end if;
+
+  -- Every table lists parties of this season that have not withdrawn. Ids
+  -- are checked before anything below casts them.
+  if exists (
+    select 1
+    from jsonb_array_elements(_body -> 'tables') t
+    where jsonb_typeof(t -> 'partyIds') is distinct from 'array'
+      or jsonb_array_length(t -> 'partyIds') = 0
+      or jsonb_typeof(t -> 'hosts') is distinct from 'array'
+      or coalesce(t ->> 'tableId', '') !~* '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$'
+      or coalesce(t ->> 'seasonDateId', '') !~* '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$'
+      or exists (
+        select 1 from jsonb_array_elements(t -> 'partyIds') pid
+        where jsonb_typeof(pid) is distinct from 'string'
+          or (pid #>> '{}') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      )
+      or exists (
+        select 1 from jsonb_array_elements(t -> 'hosts') h
+        where coalesce(h ->> 'seasonDateId', '') !~* '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$'
+          or coalesce(h ->> 'partyId', '') !~* '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$'
+      )
+  ) or exists (
+    select 1
+    from jsonb_array_elements(_body -> 'tables') t,
+         jsonb_array_elements_text(t -> 'partyIds') pid
+    where not exists (
+      select 1 from public.dinner_parties p
+      where p.id = pid::uuid and p.season_id = _season.id and p.org_id = _org
+        and p.status in ('signed_up', 'waitlisted')
+    )
+  ) then
+    raise exception 'a table lists a party not signed up this season' using errcode = 'DC002';
+  end if;
+
+  -- A table already published keeps its date.
+  if exists (
+    select 1
+    from jsonb_array_elements(_body -> 'tables') t
+    where nullif(t ->> 'tableId', '') is not null
+      and not exists (
+        select 1 from public.dinner_tables dt
+        where dt.id = (t ->> 'tableId')::uuid and dt.season_id = _season.id and dt.org_id = _org
+          and dt.season_date_id is not distinct from nullif(t ->> 'seasonDateId', '')::uuid
+      )
+  ) then
+    raise exception 'a table is not one of this season''s' using errcode = 'DC002';
+  end if;
+  if exists (
+    select 1
+    from jsonb_array_elements(_body -> 'tables') t
+    where nullif(t ->> 'tableId', '') is not null
+    group by (t ->> 'tableId')::uuid
+    having count(*) > 1
+  ) then
+    raise exception 'a table is listed twice' using errcode = 'DC002';
+  end if;
+
+  if _season.format = 'new_tables' then
+    if exists (
+      select 1 from jsonb_array_elements(_body -> 'tables') t
+      where not exists (
+        select 1 from public.dinner_season_dates sd
+        where sd.id = nullif(t ->> 'seasonDateId', '')::uuid and sd.season_id = _season.id and sd.org_id = _org
+      )
+    ) or exists (
+      select 1
+      from jsonb_array_elements(_body -> 'tables') t,
+           jsonb_array_elements_text(t -> 'partyIds') pid
+      group by nullif(t ->> 'seasonDateId', '')::uuid, pid::uuid
+      having count(*) > 1
+    ) or exists (
+      select 1 from public.dinner_season_dates sd
+      where sd.season_id = _season.id and sd.org_id = _org
+        and not exists (
+          select 1 from jsonb_array_elements(_body -> 'tables') t
+          where nullif(t ->> 'seasonDateId', '')::uuid = sd.id
+        )
+    ) then
+      raise exception 'every date has tables, and each date''s tables seat each party once' using errcode = 'DC002';
+    end if;
+  else
+    if exists (
+      select 1 from jsonb_array_elements(_body -> 'tables') t
+      where nullif(t ->> 'seasonDateId', '') is not null
+    ) or exists (
+      select 1
+      from jsonb_array_elements(_body -> 'tables') t,
+           jsonb_array_elements_text(t -> 'partyIds') pid
+      group by pid::uuid
+      having count(*) > 1
+    ) then
+      raise exception 'each party sits at one table all season' using errcode = 'DC002';
+    end if;
+  end if;
+
+  if not exists (select 1 from public.dinner_season_dates sd where sd.season_id = _season.id and sd.org_id = _org) then
+    raise exception 'the season has no dates' using errcode = 'DC002';
+  end if;
+
+  -- Each table has exactly one host for each of its dates: every season date
+  -- for a table kept all season, its own date otherwise. The host is a party
+  -- at the table that offered to host. A dinner already held keeps the host
+  -- it had, who may since have withdrawn, so the draft's entry for it is
+  -- neither required nor checked.
+  if exists (
+    select 1
+    from jsonb_array_elements(_body -> 'tables') t
+    join public.dinner_season_dates sd
+      on sd.season_id = _season.id and sd.org_id = _org
+     and (_season.format <> 'new_tables' or sd.id = nullif(t ->> 'seasonDateId', '')::uuid)
+    where (
+      select count(*) from jsonb_array_elements(t -> 'hosts') h
+      where nullif(h ->> 'seasonDateId', '')::uuid = sd.id and nullif(h ->> 'partyId', '') is not null
+    ) <> 1
+      and not exists (
+        select 1 from public.dinners d
+        where d.table_id = nullif(t ->> 'tableId', '')::uuid and d.season_date_id = sd.id
+          and d.org_id = _org and d.starts_at <= pg_catalog.now()
+      )
+  ) or exists (
+    select 1
+    from jsonb_array_elements(_body -> 'tables') t,
+         jsonb_array_elements(t -> 'hosts') h
+    where nullif(h ->> 'partyId', '') is not null
+      and not exists (
+        select 1 from public.dinners d
+        where d.table_id = nullif(t ->> 'tableId', '')::uuid
+          and d.season_date_id = nullif(h ->> 'seasonDateId', '')::uuid
+          and d.org_id = _org and d.starts_at <= pg_catalog.now()
+      )
+      and (
+        not ((t -> 'partyIds') ? (h ->> 'partyId'))
+        or not exists (
+          select 1 from public.dinner_parties p
+          where p.id = (h ->> 'partyId')::uuid and p.season_id = _season.id and p.org_id = _org and p.can_host
+        )
+        or not exists (
+          select 1 from public.dinner_season_dates sd
+          where sd.id = nullif(h ->> 'seasonDateId', '')::uuid and sd.season_id = _season.id and sd.org_id = _org
+            and (_season.format <> 'new_tables' or sd.id = nullif(t ->> 'seasonDateId', '')::uuid)
+        )
+      )
+  ) then
+    raise exception 'each dinner needs one host from its table' using errcode = 'DC002';
+  end if;
+
+  -- A dinner that has happened keeps its table: dropping the table would
+  -- delete the dinner and its replies. Its host is left as it was below.
+  if exists (
+    select 1 from public.dinners d
+    where d.season_id = _season.id and d.org_id = _org and d.starts_at <= pg_catalog.now()
+      and not exists (
+        select 1 from jsonb_array_elements(_body -> 'tables') t
+        where nullif(t ->> 'tableId', '')::uuid = d.table_id
+      )
+  ) then
+    raise exception 'a dinner that has happened keeps its table' using errcode = 'DC005';
+  end if;
+
+  _before := public.dinner_seat_signatures(_season.id, _org);
+
+  update public.dinner_seasons
+     set status = 'published', published_at = coalesce(published_at, pg_catalog.now())
+   where id = _season.id and org_id = _org;
+  get diagnostics _n = row_count;
+  if _n <> 1 then
+    raise exception 'the season could not be published' using errcode = 'DC003';
+  end if;
+
+  for _entry, _ord in
+    select t, o from jsonb_array_elements(_body -> 'tables') with ordinality as x(t, o)
+  loop
+    _table := nullif(_entry ->> 'tableId', '')::uuid;
+    if _table is null then
+      insert into public.dinner_tables (org_id, season_id, group_id, season_date_id, position)
+      values (_org, _season.id, _season.group_id, nullif(_entry ->> 'seasonDateId', '')::uuid, _ord)
+      returning id into _table;
+    else
+      update public.dinner_tables set position = _ord
+       where id = _table and season_id = _season.id and org_id = _org;
+      get diagnostics _n = row_count;
+      if _n <> 1 then
+        raise exception 'a table is not one of this season''s' using errcode = 'DC002';
+      end if;
+    end if;
+    _kept := _kept || _table;
+
+    _party_ids := array(select x::uuid from jsonb_array_elements_text(_entry -> 'partyIds') as x);
+    -- The host of a dinner already held leaves rather than losing the seat,
+    -- which would clear that dinner's host.
+    update public.dinner_seats st
+       set left_at = pg_catalog.now()
+     where st.table_id = _table and st.org_id = _org and st.left_at is null
+       and not (st.party_id = any (_party_ids))
+       and exists (
+         select 1 from public.dinners d
+         where d.table_id = _table and d.org_id = _org and d.host_party_id = st.party_id
+           and d.starts_at <= pg_catalog.now()
+       );
+    delete from public.dinner_seats st
+     where st.table_id = _table and st.org_id = _org and st.left_at is null
+       and not (st.party_id = any (_party_ids));
+    insert into public.dinner_seats as ds (org_id, table_id, party_id, season_id, group_id)
+    select _org, _table, x, _season.id, _season.group_id from unnest(_party_ids) as x
+    on conflict (table_id, party_id) do update
+      set left_at = null, seated_at = pg_catalog.now()
+      where ds.left_at is not null;
+
+    _host_dates := array(
+      select (h ->> 'seasonDateId')::uuid from jsonb_array_elements(_entry -> 'hosts') h
+      where nullif(h ->> 'partyId', '') is not null
+    );
+    insert into public.dinners as dn (org_id, season_id, group_id, table_id, season_date_id, starts_at, host_party_id)
+    select _org, _season.id, _season.group_id, _table, sd.id, sd.starts_at, (h ->> 'partyId')::uuid
+    from jsonb_array_elements(_entry -> 'hosts') h
+    join public.dinner_season_dates sd
+      on sd.id = (h ->> 'seasonDateId')::uuid and sd.season_id = _season.id and sd.org_id = _org
+    where nullif(h ->> 'partyId', '') is not null
+    on conflict (table_id, season_date_id) do update
+      set host_party_id = excluded.host_party_id, host_unavailable = false
+      where dn.host_party_id is distinct from excluded.host_party_id
+        and dn.starts_at > pg_catalog.now();
+    delete from public.dinners d
+     where d.table_id = _table and d.org_id = _org
+       and d.starts_at > pg_catalog.now()
+       and not (d.season_date_id = any (_host_dates));
+  end loop;
+
+  delete from public.dinner_tables dt
+   where dt.season_id = _season.id and dt.org_id = _org
+     and not (dt.id = any (_kept));
+
+  -- Someone no longer at a dinner's table has no reply to it. A dinner that
+  -- has happened keeps its replies, as it does on withdrawal.
+  delete from public.dinner_replies r
+  using public.dinners d
+  where r.dinner_id = d.id
+    and r.org_id = _org
+    and d.org_id = _org
+    and d.season_id = _season.id
+    and d.starts_at > pg_catalog.now()
+    and not exists (
+      select 1
+      from public.dinner_seats st
+      join public.dinner_party_members pm on pm.party_id = st.party_id and pm.org_id = _org
+      where st.table_id = d.table_id and st.org_id = _org and st.left_at is null
+        and pm.profile_id = r.profile_id
+    );
+
+  update public.dinner_parties p
+     set status = 'signed_up'
+   where p.season_id = _season.id and p.org_id = _org and p.status = 'waitlisted'
+     and exists (
+       select 1 from public.dinner_seats st
+       where st.party_id = p.id and st.org_id = _org and st.left_at is null
+     );
+
+  delete from public.dinner_drafts d where d.season_id = _season.id and d.org_id = _org;
+
+  _after := public.dinner_seat_signatures(_season.id, _org);
+
+  return query
+  select k.key::uuid
+  from (
+    select jsonb_object_keys(_before) as key
+    union
+    select jsonb_object_keys(_after)
+  ) k
+  where (_before ->> k.key) is distinct from (_after ->> k.key);
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."dinner_tables_publish"("_season_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."dinner_tables_publish"("_season_id" "uuid") IS 'Publishes the season''s stored draft (dinner_drafts) as its tables, seats and dinners in one transaction, and returns the people whose tables or hosts changed. Actor from auth.uid(), who must lead the group; tenant anchor: the season row''s org, pinned against app_request_org_id(). Raises DC001, DC002, DC003, or DC005 when the draft drops the table of a dinner that has happened; a held dinner keeps its host whatever the draft says.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."dinners_guard"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _status text;
+  _starts date;
+  _ends date;
+  _zone text;
+begin
+  if new.table_id is distinct from old.table_id
+    or new.season_date_id is distinct from old.season_date_id
+    or new.season_id is distinct from old.season_id
+    or new.group_id is distinct from old.group_id then
+    raise exception 'a dinner stays at its table and date' using errcode = 'DC002';
+  end if;
+  new.updated_at := pg_catalog.now();
+  -- Depth 1 is a move of this dinner itself; the season-date carry runs nested.
+  if new.starts_at is distinct from old.starts_at and pg_catalog.pg_trigger_depth() = 1 then
+    new.follows_season_date := false;
+  end if;
+
+  if current_user <> 'authenticated' then
+    return new;
+  end if;
+
+  select s.status, s.starts_on, s.ends_on, o.timezone into _status, _starts, _ends, _zone
+  from public.dinner_seasons s
+  join public.organizations o on o.id = s.org_id
+  where s.id = new.season_id;
+
+  if _status is distinct from 'published' then
+    raise exception 'only a running season''s dinners change' using errcode = 'DC003';
+  end if;
+
+  if new.starts_at is distinct from old.starts_at
+    and (old.starts_at <= pg_catalog.now()
+      or new.starts_at <= pg_catalog.now()
+      or (new.starts_at at time zone _zone)::date not between _starts and _ends) then
+    raise exception 'the new date is outside the season or has passed' using errcode = 'DC004';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."dinners_guard"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."directory_retire_hidden_values"() RETURNS "jsonb"
     LANGUAGE "plpgsql"
     SET "search_path" TO ''
@@ -2549,6 +3741,23 @@ COMMENT ON FUNCTION "public"."profiles_keep_one_church_admin"() IS 'Trigger func
 
 
 
+CREATE OR REPLACE FUNCTION "public"."profiles_own_dinner_club_email"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  if auth.uid() is not null and auth.uid() is distinct from old.id then
+    raise exception 'only the person can change their own dinner club email setting'
+      using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."profiles_own_dinner_club_email"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."profiles_own_event_reminders"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     SET "search_path" TO ''
@@ -3563,6 +4772,11 @@ CREATE OR REPLACE FUNCTION "public"."usage_page_patterns"() RETURNS "text"[]
     '/g/[groupId]/calendar/[id]/edit',
     '/g/[groupId]/calendar/new',
     '/g/[groupId]/dashboard',
+    '/g/[groupId]/dinner-club',
+    '/g/[groupId]/dinner-club/seasons/[seasonId]',
+    '/g/[groupId]/dinner-club/seasons/[seasonId]/edit',
+    '/g/[groupId]/dinner-club/seasons/[seasonId]/tables',
+    '/g/[groupId]/dinner-club/seasons/new',
     '/g/[groupId]/directory',
     '/g/[groupId]/directory/anniversaries',
     '/g/[groupId]/directory/birthdays',
@@ -3707,6 +4921,375 @@ CREATE TABLE IF NOT EXISTS "public"."class_teachers" (
 
 
 ALTER TABLE "public"."class_teachers" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."dinner_contributions" (
+    "dinner_id" "uuid" NOT NULL,
+    "party_id" "uuid" NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "season_id" "uuid" NOT NULL,
+    "group_id" "uuid" NOT NULL,
+    "table_id" "uuid" NOT NULL,
+    "item" "text" NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "dinner_contributions_item_check" CHECK ((("char_length"("btrim"("item")) >= 1) AND ("char_length"("btrim"("item")) <= 60)))
+);
+
+
+ALTER TABLE "public"."dinner_contributions" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."dinner_contributions" IS 'What a guest party brings to one dinner, set by its host or a leader. The party is always seated at the dinner''s table.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."dinner_drafts" (
+    "season_id" "uuid" NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "group_id" "uuid" NOT NULL,
+    "body" "jsonb" NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."dinner_drafts" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."dinner_drafts" IS 'The leaders'' unpublished tables for a season, in the shape lib/dinnerClub/shuffle.ts builds. dinner_tables_publish() reads this row, never a payload from the caller, and deletes it.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."dinner_feed_tokens" (
+    "profile_id" "uuid" NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "token_hash" "text" NOT NULL,
+    "expires_at" timestamp with time zone NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."dinner_feed_tokens" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."dinner_feed_tokens" IS 'A person''s private dinner club calendar link: the SHA-256 of its token. Minting again replaces the hash, which ends the old link.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."dinner_parties" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "season_id" "uuid" NOT NULL,
+    "group_id" "uuid" NOT NULL,
+    "status" "text" DEFAULT 'signed_up'::"text" NOT NULL,
+    "can_host" boolean DEFAULT false NOT NULL,
+    "seats" smallint,
+    "preferred_season_date_id" "uuid",
+    "kids_welcome" boolean,
+    "access_notes" "text",
+    "pets" "text",
+    "withdrawn_at" timestamp with time zone,
+    "created_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "dinner_parties_access_notes_check" CHECK (("char_length"("access_notes") <= 500)),
+    CONSTRAINT "dinner_parties_host_seats_check" CHECK (((NOT "can_host") OR ("seats" IS NOT NULL))),
+    CONSTRAINT "dinner_parties_pets_check" CHECK (("char_length"("pets") <= 200)),
+    CONSTRAINT "dinner_parties_seats_check" CHECK ((("seats" >= 2) AND ("seats" <= 20))),
+    CONSTRAINT "dinner_parties_status_check" CHECK (("status" = ANY (ARRAY['signed_up'::"text", 'waitlisted'::"text", 'withdrawn'::"text"])))
+);
+
+
+ALTER TABLE "public"."dinner_parties" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."dinner_parties" IS 'One or two members who sign up together and are always seated together. A sign-up made after the tables are published is waitlisted; a withdrawn party keeps its past seats.';
+
+
+
+COMMENT ON COLUMN "public"."dinner_parties"."seats" IS 'How many people fit at the host''s table, their own party included.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."dinner_party_addresses" (
+    "party_id" "uuid" NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "season_id" "uuid" NOT NULL,
+    "group_id" "uuid" NOT NULL,
+    "address_line1" "text" NOT NULL,
+    "address_line2" "text",
+    "city" "text",
+    "state" "text",
+    "postal_code" "text",
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "dinner_party_addresses_city_check" CHECK (("char_length"("city") <= 100)),
+    CONSTRAINT "dinner_party_addresses_line1_check" CHECK ((("char_length"("btrim"("address_line1")) >= 1) AND ("char_length"("btrim"("address_line1")) <= 200))),
+    CONSTRAINT "dinner_party_addresses_line2_check" CHECK (("char_length"("address_line2") <= 200)),
+    CONSTRAINT "dinner_party_addresses_postal_code_check" CHECK (("char_length"("postal_code") <= 20)),
+    CONSTRAINT "dinner_party_addresses_state_check" CHECK (("char_length"("state") <= 100))
+);
+
+
+ALTER TABLE "public"."dinner_party_addresses" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."dinner_party_addresses" IS 'Where a hosting party''s dinners are. Private: readable by the party, the group''s leaders and the parties seated at a table one of its dinners is at, never before publish.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."dinner_party_members" (
+    "party_id" "uuid" NOT NULL,
+    "profile_id" "uuid" NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "season_id" "uuid" NOT NULL,
+    "group_id" "uuid" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."dinner_party_members" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."dinner_party_members" IS 'The people in a party: one or two members of the group, each in one party per season. Leaving the group removes the person; a party left with nobody is deleted.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."dinner_party_notes" (
+    "party_id" "uuid" NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "season_id" "uuid" NOT NULL,
+    "group_id" "uuid" NOT NULL,
+    "food_notes" "text" NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "dinner_party_notes_food_notes_check" CHECK ((("char_length"("btrim"("food_notes")) >= 1) AND ("char_length"("btrim"("food_notes")) <= 500)))
+);
+
+
+ALTER TABLE "public"."dinner_party_notes" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."dinner_party_notes" IS 'A party''s allergies and food needs. Private: readable by the party, the group''s leaders and the host of a dinner the party is seated at.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."dinner_party_unavailable_dates" (
+    "party_id" "uuid" NOT NULL,
+    "season_date_id" "uuid" NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "season_id" "uuid" NOT NULL,
+    "group_id" "uuid" NOT NULL
+);
+
+
+ALTER TABLE "public"."dinner_party_unavailable_dates" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."dinner_party_unavailable_dates" IS 'Dates a hosting party can''t host, for a season whose tables change each dinner.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."dinner_reminder_passes" (
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "dinner_id" "uuid" NOT NULL,
+    "dinner_date" "date" NOT NULL,
+    "started_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."dinner_reminder_passes" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."dinner_reminder_passes" IS 'One dinner reminder pass per dinner and local date. Its existence means that reminder is handled. Read and written by the service key only.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."dinner_reminder_sends" (
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "dinner_id" "uuid" NOT NULL,
+    "dinner_date" "date" NOT NULL,
+    "profile_id" "uuid" NOT NULL,
+    "claimed_at" timestamp with time zone,
+    "sent_at" timestamp with time zone
+);
+
+
+ALTER TABLE "public"."dinner_reminder_sends" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."dinner_reminder_sends" IS 'One person''s dinner reminder in a pass: claimed_at while a send is in flight, sent_at once Resend accepted it. Read and written by the service key only.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."dinner_replies" (
+    "dinner_id" "uuid" NOT NULL,
+    "profile_id" "uuid" NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "status" "text" NOT NULL,
+    "replied_by" "uuid",
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "dinner_replies_status_check" CHECK (("status" = ANY (ARRAY['going'::"text", 'not_going'::"text"])))
+);
+
+
+ALTER TABLE "public"."dinner_replies" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."dinner_replies" IS 'Each person''s Going or Not going for one dinner, given by them or their partner, until the dinner starts.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."dinner_season_dates" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "season_id" "uuid" NOT NULL,
+    "group_id" "uuid" NOT NULL,
+    "starts_at" timestamp with time zone NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."dinner_season_dates" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."dinner_season_dates" IS 'The season''s dinner dates. Each table''s dinner takes its date''s time when published and can move on its own afterwards.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."dinner_seasons" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "group_id" "uuid" NOT NULL,
+    "title" "text" NOT NULL,
+    "format" "text" NOT NULL,
+    "status" "text" DEFAULT 'draft'::"text" NOT NULL,
+    "starts_on" "date" NOT NULL,
+    "ends_on" "date" NOT NULL,
+    "length_months" smallint,
+    "repeat_kind" "text" NOT NULL,
+    "repeat_weeks" smallint,
+    "repeat_week_of_month" smallint,
+    "weekday" smallint NOT NULL,
+    "default_start_time" time without time zone DEFAULT '18:00:00'::time without time zone NOT NULL,
+    "table_size_min" smallint DEFAULT 6 NOT NULL,
+    "table_size_max" smallint DEFAULT 8 NOT NULL,
+    "signup_closes_on" "date" NOT NULL,
+    "allow_back_to_back_hosting" boolean DEFAULT false NOT NULL,
+    "bring_list_enabled" boolean DEFAULT true NOT NULL,
+    "previous_season_id" "uuid",
+    "published_at" timestamp with time zone,
+    "ended_at" timestamp with time zone,
+    "created_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "dinner_seasons_ends_after_start" CHECK (("ends_on" >= "starts_on")),
+    CONSTRAINT "dinner_seasons_format_check" CHECK (("format" = ANY (ARRAY['same_table_one_host'::"text", 'same_table_rotating'::"text", 'new_tables'::"text"]))),
+    CONSTRAINT "dinner_seasons_length_months_check" CHECK ((("length_months" >= 1) AND ("length_months" <= 24))),
+    CONSTRAINT "dinner_seasons_repeat_kind_check" CHECK (("repeat_kind" = ANY (ARRAY['weeks'::"text", 'monthly_weekday'::"text"]))),
+    CONSTRAINT "dinner_seasons_repeat_shape_check" CHECK (((("repeat_kind" = 'weeks'::"text") AND ("repeat_weeks" IS NOT NULL) AND ("repeat_week_of_month" IS NULL)) OR (("repeat_kind" = 'monthly_weekday'::"text") AND ("repeat_week_of_month" IS NOT NULL) AND ("repeat_weeks" IS NULL)))),
+    CONSTRAINT "dinner_seasons_repeat_week_of_month_check" CHECK ((("repeat_week_of_month" >= 1) AND ("repeat_week_of_month" <= 5))),
+    CONSTRAINT "dinner_seasons_repeat_weeks_check" CHECK ((("repeat_weeks" >= 1) AND ("repeat_weeks" <= 12))),
+    CONSTRAINT "dinner_seasons_status_check" CHECK (("status" = ANY (ARRAY['draft'::"text", 'open'::"text", 'published'::"text", 'ended'::"text"]))),
+    CONSTRAINT "dinner_seasons_table_size_check" CHECK ((("table_size_min" >= 2) AND ("table_size_min" <= "table_size_max") AND ("table_size_max" <= 20))),
+    CONSTRAINT "dinner_seasons_title_check" CHECK ((("char_length"("btrim"("title")) >= 1) AND ("char_length"("btrim"("title")) <= 80))),
+    CONSTRAINT "dinner_seasons_weekday_check" CHECK ((("weekday" >= 0) AND ("weekday" <= 6)))
+);
+
+
+ALTER TABLE "public"."dinner_seasons" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."dinner_seasons" IS 'One run of a group''s dinner club. Status runs draft, open (sign-ups), published (tables), ended; only dinner_tables_publish() sets published. Members read every season but a draft; only the group''s leaders write.';
+
+
+
+COMMENT ON COLUMN "public"."dinner_seasons"."length_months" IS 'Set when the leader gave the length in months; ends_on is always stored.';
+
+
+
+COMMENT ON COLUMN "public"."dinner_seasons"."repeat_week_of_month" IS 'For a monthly season: which weekday of the month, 1 to 4, or 5 for the last.';
+
+
+
+COMMENT ON COLUMN "public"."dinner_seasons"."weekday" IS '0 is Sunday.';
+
+
+
+COMMENT ON COLUMN "public"."dinner_seasons"."bring_list_enabled" IS 'Whether a dinner''s host gives each guest party something to bring (dinner_contributions).';
+
+
+
+COMMENT ON COLUMN "public"."dinner_seasons"."previous_season_id" IS 'The season this one was started from, whose parties are invited again and whose tables the shuffle keeps apart.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."dinner_seats" (
+    "table_id" "uuid" NOT NULL,
+    "party_id" "uuid" NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "season_id" "uuid" NOT NULL,
+    "group_id" "uuid" NOT NULL,
+    "seated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "left_at" timestamp with time zone
+);
+
+
+ALTER TABLE "public"."dinner_seats" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."dinner_seats" IS 'A party seated at a table. left_at is set when the party withdraws: it frees the party''s place at later dinners and keeps the record of who shared a table.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."dinner_tables" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "season_id" "uuid" NOT NULL,
+    "group_id" "uuid" NOT NULL,
+    "season_date_id" "uuid",
+    "position" smallint NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."dinner_tables" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."dinner_tables" IS 'A published table. season_date_id is set when the season''s tables change each dinner, and null when a table keeps its parties all season. Written only by dinner_tables_publish().';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."dinners" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "season_id" "uuid" NOT NULL,
+    "group_id" "uuid" NOT NULL,
+    "table_id" "uuid" NOT NULL,
+    "season_date_id" "uuid" NOT NULL,
+    "starts_at" timestamp with time zone NOT NULL,
+    "host_party_id" "uuid",
+    "host_unavailable" boolean DEFAULT false NOT NULL,
+    "follows_season_date" boolean DEFAULT true NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."dinners" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."dinners" IS 'One table''s one date. Not an events row, so it never reaches the group calendar. The host of the dinner or a leader can move it within the season; moving it clears its replies.';
+
+
+
+COMMENT ON COLUMN "public"."dinners"."host_party_id" IS 'Who hosts this one dinner. Set per dinner, so another party at the table can host one date.';
+
+
+
+COMMENT ON COLUMN "public"."dinners"."host_unavailable" IS 'The host said they can''t host this dinner.';
+
+
+
+COMMENT ON COLUMN "public"."dinners"."follows_season_date" IS 'False once the dinner is moved on its own; moving its season date then leaves it where it is.';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."event_calendars" (
@@ -3891,6 +5474,7 @@ CREATE TABLE IF NOT EXISTS "public"."profiles" (
     "email_announcements" boolean DEFAULT true NOT NULL,
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
     "email_event_reminders" boolean DEFAULT true NOT NULL,
+    "email_dinner_club" boolean DEFAULT true NOT NULL,
     CONSTRAINT "profiles_birth_day_check" CHECK ((("birth_day" >= 1) AND ("birth_day" <= 31))),
     CONSTRAINT "profiles_birth_month_check" CHECK ((("birth_month" >= 1) AND ("birth_month" <= 12))),
     CONSTRAINT "profiles_birth_year_check" CHECK ((("birth_year" >= 1900) AND ("birth_year" <= 2100))),
@@ -3903,6 +5487,10 @@ ALTER TABLE "public"."profiles" OWNER TO "postgres";
 
 
 COMMENT ON COLUMN "public"."profiles"."email_event_reminders" IS 'False stops event reminder emails to this person. Separate from email_announcements; only the person can change it.';
+
+
+
+COMMENT ON COLUMN "public"."profiles"."email_dinner_club" IS 'False stops every dinner club email to this person: tables, moved dinners and reminders. Only the person can change it.';
 
 
 
@@ -4288,6 +5876,7 @@ CREATE TABLE IF NOT EXISTS "public"."group_settings" (
     "calendar_event_location" boolean DEFAULT true NOT NULL,
     "event_reminders_enabled" boolean DEFAULT true NOT NULL,
     "event_reminder_default_days" smallint DEFAULT 1 NOT NULL,
+    "dinner_club_enabled" boolean DEFAULT false NOT NULL,
     CONSTRAINT "group_settings_event_reminder_default_days_check" CHECK (("event_reminder_default_days" = ANY (ARRAY[1, 2, 7]))),
     CONSTRAINT "group_settings_serving_link_mode_check" CHECK (("serving_link_mode" = ANY (ARRAY['signed'::"text", 'login'::"text"])))
 );
@@ -4296,7 +5885,7 @@ CREATE TABLE IF NOT EXISTS "public"."group_settings" (
 ALTER TABLE "public"."group_settings" OWNER TO "postgres";
 
 
-COMMENT ON TABLE "public"."group_settings" IS 'Per-group settings: the serving email link mode, what a calendar event shows, and event reminders. One row per group, created on first save; an absent row means the defaults.';
+COMMENT ON TABLE "public"."group_settings" IS 'Per-group settings: the serving email link mode, what a calendar event shows, event reminders and the dinner club. One row per group, created on first save; an absent row means the defaults.';
 
 
 
@@ -4317,6 +5906,10 @@ COMMENT ON COLUMN "public"."group_settings"."event_reminders_enabled" IS 'False 
 
 
 COMMENT ON COLUMN "public"."group_settings"."event_reminder_default_days" IS 'What Add event starts on for reminder_days_before. Changing it changes no existing event.';
+
+
+
+COMMENT ON COLUMN "public"."group_settings"."dinner_club_enabled" IS 'Shows the Dinner club page in the group. Off hides it and sends no dinner emails; every season and its rows stay.';
 
 
 
@@ -4933,6 +6526,146 @@ ALTER TABLE ONLY "public"."class_teachers"
 
 
 
+ALTER TABLE ONLY "public"."dinner_contributions"
+    ADD CONSTRAINT "dinner_contributions_pkey" PRIMARY KEY ("dinner_id", "party_id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_drafts"
+    ADD CONSTRAINT "dinner_drafts_pkey" PRIMARY KEY ("season_id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_feed_tokens"
+    ADD CONSTRAINT "dinner_feed_tokens_pkey" PRIMARY KEY ("profile_id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_feed_tokens"
+    ADD CONSTRAINT "dinner_feed_tokens_token_hash_key" UNIQUE ("token_hash");
+
+
+
+ALTER TABLE ONLY "public"."dinner_parties"
+    ADD CONSTRAINT "dinner_parties_id_season_org_unique" UNIQUE ("id", "season_id", "org_id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_parties"
+    ADD CONSTRAINT "dinner_parties_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_party_addresses"
+    ADD CONSTRAINT "dinner_party_addresses_pkey" PRIMARY KEY ("party_id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_party_members"
+    ADD CONSTRAINT "dinner_party_members_one_party_per_season" UNIQUE ("season_id", "profile_id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_party_members"
+    ADD CONSTRAINT "dinner_party_members_pkey" PRIMARY KEY ("party_id", "profile_id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_party_notes"
+    ADD CONSTRAINT "dinner_party_notes_pkey" PRIMARY KEY ("party_id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_party_unavailable_dates"
+    ADD CONSTRAINT "dinner_party_unavailable_dates_pkey" PRIMARY KEY ("party_id", "season_date_id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_reminder_passes"
+    ADD CONSTRAINT "dinner_reminder_passes_dinner_id_dinner_date_org_id_key" UNIQUE ("dinner_id", "dinner_date", "org_id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_reminder_passes"
+    ADD CONSTRAINT "dinner_reminder_passes_pkey" PRIMARY KEY ("dinner_id", "dinner_date");
+
+
+
+ALTER TABLE ONLY "public"."dinner_reminder_sends"
+    ADD CONSTRAINT "dinner_reminder_sends_pkey" PRIMARY KEY ("dinner_id", "dinner_date", "profile_id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_replies"
+    ADD CONSTRAINT "dinner_replies_pkey" PRIMARY KEY ("dinner_id", "profile_id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_season_dates"
+    ADD CONSTRAINT "dinner_season_dates_id_season_org_unique" UNIQUE ("id", "season_id", "org_id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_season_dates"
+    ADD CONSTRAINT "dinner_season_dates_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_seasons"
+    ADD CONSTRAINT "dinner_seasons_id_group_org_unique" UNIQUE ("id", "group_id", "org_id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_seasons"
+    ADD CONSTRAINT "dinner_seasons_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_seats"
+    ADD CONSTRAINT "dinner_seats_pkey" PRIMARY KEY ("table_id", "party_id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_seats"
+    ADD CONSTRAINT "dinner_seats_table_party_org_unique" UNIQUE ("table_id", "party_id", "org_id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_tables"
+    ADD CONSTRAINT "dinner_tables_id_season_org_unique" UNIQUE ("id", "season_id", "org_id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_tables"
+    ADD CONSTRAINT "dinner_tables_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."dinners"
+    ADD CONSTRAINT "dinners_id_org_unique" UNIQUE ("id", "org_id");
+
+
+
+ALTER TABLE ONLY "public"."dinners"
+    ADD CONSTRAINT "dinners_id_table_org_unique" UNIQUE ("id", "table_id", "org_id");
+
+
+
+ALTER TABLE ONLY "public"."dinners"
+    ADD CONSTRAINT "dinners_id_table_season_org_unique" UNIQUE ("id", "table_id", "season_id", "group_id", "org_id");
+
+
+
+ALTER TABLE ONLY "public"."dinners"
+    ADD CONSTRAINT "dinners_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."dinners"
+    ADD CONSTRAINT "dinners_table_date_unique" UNIQUE ("table_id", "season_date_id");
+
+
+
 ALTER TABLE ONLY "public"."event_calendars"
     ADD CONSTRAINT "event_calendars_id_org_group_unique" UNIQUE ("id", "org_id", "group_id");
 
@@ -5090,6 +6823,11 @@ ALTER TABLE ONLY "public"."group_member_labels"
 
 ALTER TABLE ONLY "public"."group_members"
     ADD CONSTRAINT "group_members_group_profile_key" UNIQUE ("group_id", "profile_id");
+
+
+
+ALTER TABLE ONLY "public"."group_members"
+    ADD CONSTRAINT "group_members_group_profile_org_unique" UNIQUE ("group_id", "profile_id", "org_id");
 
 
 
@@ -5350,6 +7088,170 @@ CREATE INDEX "calendar_subscription_tokens_org_id_idx" ON "public"."calendar_sub
 
 
 CREATE INDEX "class_teachers_group_id_idx" ON "public"."class_teachers" USING "btree" ("group_id");
+
+
+
+CREATE INDEX "dinner_contributions_dinner_idx" ON "public"."dinner_contributions" USING "btree" ("dinner_id", "table_id", "season_id", "group_id", "org_id");
+
+
+
+CREATE INDEX "dinner_contributions_season_idx" ON "public"."dinner_contributions" USING "btree" ("season_id", "group_id", "org_id");
+
+
+
+CREATE INDEX "dinner_contributions_seat_idx" ON "public"."dinner_contributions" USING "btree" ("table_id", "party_id", "org_id");
+
+
+
+CREATE INDEX "dinner_drafts_season_group_idx" ON "public"."dinner_drafts" USING "btree" ("season_id", "group_id", "org_id");
+
+
+
+CREATE INDEX "dinner_feed_tokens_org_idx" ON "public"."dinner_feed_tokens" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "dinner_feed_tokens_profile_org_idx" ON "public"."dinner_feed_tokens" USING "btree" ("profile_id", "org_id");
+
+
+
+CREATE INDEX "dinner_parties_created_by_idx" ON "public"."dinner_parties" USING "btree" ("created_by");
+
+
+
+CREATE INDEX "dinner_parties_preferred_date_idx" ON "public"."dinner_parties" USING "btree" ("preferred_season_date_id");
+
+
+
+CREATE INDEX "dinner_parties_season_idx" ON "public"."dinner_parties" USING "btree" ("season_id", "group_id", "org_id");
+
+
+
+CREATE INDEX "dinner_party_addresses_party_season_idx" ON "public"."dinner_party_addresses" USING "btree" ("party_id", "season_id", "org_id");
+
+
+
+CREATE INDEX "dinner_party_addresses_season_idx" ON "public"."dinner_party_addresses" USING "btree" ("season_id", "group_id", "org_id");
+
+
+
+CREATE INDEX "dinner_party_members_group_member_idx" ON "public"."dinner_party_members" USING "btree" ("group_id", "profile_id", "org_id");
+
+
+
+CREATE INDEX "dinner_party_members_profile_idx" ON "public"."dinner_party_members" USING "btree" ("profile_id");
+
+
+
+CREATE INDEX "dinner_party_members_season_group_idx" ON "public"."dinner_party_members" USING "btree" ("season_id", "group_id", "org_id");
+
+
+
+CREATE INDEX "dinner_party_notes_party_season_idx" ON "public"."dinner_party_notes" USING "btree" ("party_id", "season_id", "org_id");
+
+
+
+CREATE INDEX "dinner_party_notes_season_idx" ON "public"."dinner_party_notes" USING "btree" ("season_id", "group_id", "org_id");
+
+
+
+CREATE INDEX "dinner_party_unavailable_dates_date_idx" ON "public"."dinner_party_unavailable_dates" USING "btree" ("season_date_id", "season_id", "org_id");
+
+
+
+CREATE INDEX "dinner_party_unavailable_dates_party_idx" ON "public"."dinner_party_unavailable_dates" USING "btree" ("party_id", "season_id", "org_id");
+
+
+
+CREATE INDEX "dinner_party_unavailable_dates_season_idx" ON "public"."dinner_party_unavailable_dates" USING "btree" ("season_id", "group_id", "org_id");
+
+
+
+CREATE INDEX "dinner_reminder_passes_dinner_org_idx" ON "public"."dinner_reminder_passes" USING "btree" ("dinner_id", "org_id");
+
+
+
+CREATE INDEX "dinner_reminder_passes_org_date_idx" ON "public"."dinner_reminder_passes" USING "btree" ("org_id", "dinner_date");
+
+
+
+CREATE INDEX "dinner_reminder_sends_profile_idx" ON "public"."dinner_reminder_sends" USING "btree" ("profile_id", "org_id");
+
+
+
+CREATE INDEX "dinner_replies_dinner_org_idx" ON "public"."dinner_replies" USING "btree" ("dinner_id", "org_id");
+
+
+
+CREATE INDEX "dinner_replies_profile_idx" ON "public"."dinner_replies" USING "btree" ("profile_id", "org_id");
+
+
+
+CREATE INDEX "dinner_replies_replied_by_idx" ON "public"."dinner_replies" USING "btree" ("replied_by", "org_id");
+
+
+
+CREATE INDEX "dinner_season_dates_season_idx" ON "public"."dinner_season_dates" USING "btree" ("season_id", "group_id", "org_id", "starts_at");
+
+
+
+CREATE INDEX "dinner_seasons_created_by_idx" ON "public"."dinner_seasons" USING "btree" ("created_by");
+
+
+
+CREATE INDEX "dinner_seasons_group_idx" ON "public"."dinner_seasons" USING "btree" ("group_id", "org_id");
+
+
+
+CREATE UNIQUE INDEX "dinner_seasons_one_running" ON "public"."dinner_seasons" USING "btree" ("group_id") WHERE ("status" = ANY (ARRAY['open'::"text", 'published'::"text"]));
+
+
+
+CREATE INDEX "dinner_seasons_previous_idx" ON "public"."dinner_seasons" USING "btree" ("previous_season_id");
+
+
+
+CREATE INDEX "dinner_seats_party_idx" ON "public"."dinner_seats" USING "btree" ("party_id", "season_id", "org_id");
+
+
+
+CREATE INDEX "dinner_seats_season_idx" ON "public"."dinner_seats" USING "btree" ("season_id", "group_id", "org_id");
+
+
+
+CREATE INDEX "dinner_seats_table_season_idx" ON "public"."dinner_seats" USING "btree" ("table_id", "season_id", "org_id");
+
+
+
+CREATE INDEX "dinner_tables_date_idx" ON "public"."dinner_tables" USING "btree" ("season_date_id", "season_id", "org_id");
+
+
+
+CREATE INDEX "dinner_tables_season_idx" ON "public"."dinner_tables" USING "btree" ("season_id", "group_id", "org_id");
+
+
+
+CREATE INDEX "dinners_date_idx" ON "public"."dinners" USING "btree" ("season_date_id", "season_id", "org_id");
+
+
+
+CREATE INDEX "dinners_host_idx" ON "public"."dinners" USING "btree" ("table_id", "host_party_id", "org_id");
+
+
+
+CREATE INDEX "dinners_org_starts_idx" ON "public"."dinners" USING "btree" ("org_id", "starts_at");
+
+
+
+CREATE INDEX "dinners_season_group_idx" ON "public"."dinners" USING "btree" ("season_id", "group_id", "org_id");
+
+
+
+CREATE INDEX "dinners_season_starts_idx" ON "public"."dinners" USING "btree" ("season_id", "starts_at");
+
+
+
+CREATE INDEX "dinners_table_season_idx" ON "public"."dinners" USING "btree" ("table_id", "season_id", "org_id");
 
 
 
@@ -5743,6 +7645,74 @@ CREATE OR REPLACE VIEW "public"."profiles_directory" WITH ("security_invoker"='t
 
 
 
+CREATE OR REPLACE TRIGGER "dinner_contributions_touch_updated_at" BEFORE UPDATE ON "public"."dinner_contributions" FOR EACH ROW EXECUTE FUNCTION "public"."touch_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "dinner_drafts_touch_updated_at" BEFORE UPDATE ON "public"."dinner_drafts" FOR EACH ROW EXECUTE FUNCTION "public"."touch_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "dinner_moved_clear_replies" AFTER UPDATE OF "starts_at" ON "public"."dinners" FOR EACH ROW WHEN (("old"."starts_at" IS DISTINCT FROM "new"."starts_at")) EXECUTE FUNCTION "public"."dinner_moved_clear_replies"();
+
+
+
+CREATE OR REPLACE TRIGGER "dinner_parties_guard" BEFORE DELETE OR UPDATE ON "public"."dinner_parties" FOR EACH ROW EXECUTE FUNCTION "public"."dinner_parties_guard"();
+
+
+
+CREATE OR REPLACE TRIGGER "dinner_party_addresses_guard" BEFORE INSERT OR DELETE OR UPDATE ON "public"."dinner_party_addresses" FOR EACH ROW EXECUTE FUNCTION "public"."dinner_party_detail_guard"();
+
+
+
+CREATE OR REPLACE TRIGGER "dinner_party_addresses_touch_updated_at" BEFORE UPDATE ON "public"."dinner_party_addresses" FOR EACH ROW EXECUTE FUNCTION "public"."touch_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "dinner_party_drop_if_empty" AFTER DELETE ON "public"."dinner_party_members" FOR EACH ROW EXECUTE FUNCTION "public"."dinner_party_drop_if_empty"();
+
+
+
+CREATE OR REPLACE TRIGGER "dinner_party_members_guard" BEFORE INSERT OR DELETE ON "public"."dinner_party_members" FOR EACH ROW EXECUTE FUNCTION "public"."dinner_party_members_guard"();
+
+
+
+CREATE OR REPLACE TRIGGER "dinner_party_notes_guard" BEFORE INSERT OR DELETE OR UPDATE ON "public"."dinner_party_notes" FOR EACH ROW EXECUTE FUNCTION "public"."dinner_party_detail_guard"();
+
+
+
+CREATE OR REPLACE TRIGGER "dinner_party_notes_touch_updated_at" BEFORE UPDATE ON "public"."dinner_party_notes" FOR EACH ROW EXECUTE FUNCTION "public"."touch_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "dinner_party_unavailable_dates_guard" BEFORE INSERT OR DELETE OR UPDATE ON "public"."dinner_party_unavailable_dates" FOR EACH ROW EXECUTE FUNCTION "public"."dinner_party_detail_guard"();
+
+
+
+CREATE OR REPLACE TRIGGER "dinner_party_withdrawn" AFTER UPDATE OF "status" ON "public"."dinner_parties" FOR EACH ROW WHEN ((("new"."status" = 'withdrawn'::"text") AND ("old"."status" IS DISTINCT FROM 'withdrawn'::"text"))) EXECUTE FUNCTION "public"."dinner_party_withdrawn"();
+
+
+
+CREATE OR REPLACE TRIGGER "dinner_replies_guard" BEFORE INSERT OR DELETE OR UPDATE ON "public"."dinner_replies" FOR EACH ROW EXECUTE FUNCTION "public"."dinner_replies_guard"();
+
+
+
+CREATE OR REPLACE TRIGGER "dinner_season_dates_carry" AFTER UPDATE OF "starts_at" ON "public"."dinner_season_dates" FOR EACH ROW WHEN (("old"."starts_at" IS DISTINCT FROM "new"."starts_at")) EXECUTE FUNCTION "public"."dinner_season_dates_carry"();
+
+
+
+CREATE OR REPLACE TRIGGER "dinner_season_dates_guard" BEFORE INSERT OR DELETE OR UPDATE ON "public"."dinner_season_dates" FOR EACH ROW EXECUTE FUNCTION "public"."dinner_season_dates_guard"();
+
+
+
+CREATE OR REPLACE TRIGGER "dinner_seasons_guard" BEFORE INSERT OR UPDATE ON "public"."dinner_seasons" FOR EACH ROW EXECUTE FUNCTION "public"."dinner_seasons_guard"();
+
+
+
+CREATE OR REPLACE TRIGGER "dinners_guard" BEFORE UPDATE ON "public"."dinners" FOR EACH ROW EXECUTE FUNCTION "public"."dinners_guard"();
+
+
+
 CREATE OR REPLACE TRIGGER "family_invites_refuse_child" BEFORE INSERT OR UPDATE OF "family_member_id", "family_id", "org_id" ON "public"."family_invites" FOR EACH ROW EXECUTE FUNCTION "public"."family_invites_refuse_child"();
 
 
@@ -5808,6 +7778,10 @@ CREATE OR REPLACE TRIGGER "profiles_keep_id" BEFORE UPDATE OF "id" ON "public"."
 
 
 CREATE OR REPLACE TRIGGER "profiles_keep_one_church_admin" BEFORE DELETE OR UPDATE OF "role" ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."profiles_keep_one_church_admin"();
+
+
+
+CREATE OR REPLACE TRIGGER "profiles_own_dinner_club_email" BEFORE UPDATE OF "email_dinner_club" ON "public"."profiles" FOR EACH ROW WHEN (("old"."email_dinner_club" IS DISTINCT FROM "new"."email_dinner_club")) EXECUTE FUNCTION "public"."profiles_own_dinner_club_email"();
 
 
 
@@ -5908,6 +7882,271 @@ ALTER TABLE ONLY "public"."class_teachers"
 
 ALTER TABLE ONLY "public"."class_teachers"
     ADD CONSTRAINT "class_teachers_profile_id_fkey" FOREIGN KEY ("profile_id", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_contributions"
+    ADD CONSTRAINT "dinner_contributions_dinner_fkey" FOREIGN KEY ("dinner_id", "table_id", "season_id", "group_id", "org_id") REFERENCES "public"."dinners"("id", "table_id", "season_id", "group_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_contributions"
+    ADD CONSTRAINT "dinner_contributions_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_contributions"
+    ADD CONSTRAINT "dinner_contributions_season_fkey" FOREIGN KEY ("season_id", "group_id", "org_id") REFERENCES "public"."dinner_seasons"("id", "group_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_contributions"
+    ADD CONSTRAINT "dinner_contributions_seat_fkey" FOREIGN KEY ("table_id", "party_id", "org_id") REFERENCES "public"."dinner_seats"("table_id", "party_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_drafts"
+    ADD CONSTRAINT "dinner_drafts_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_drafts"
+    ADD CONSTRAINT "dinner_drafts_season_fkey" FOREIGN KEY ("season_id", "group_id", "org_id") REFERENCES "public"."dinner_seasons"("id", "group_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_feed_tokens"
+    ADD CONSTRAINT "dinner_feed_tokens_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_feed_tokens"
+    ADD CONSTRAINT "dinner_feed_tokens_profile_fkey" FOREIGN KEY ("profile_id", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_parties"
+    ADD CONSTRAINT "dinner_parties_created_by_fkey" FOREIGN KEY ("created_by", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE SET NULL ("created_by");
+
+
+
+ALTER TABLE ONLY "public"."dinner_parties"
+    ADD CONSTRAINT "dinner_parties_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_parties"
+    ADD CONSTRAINT "dinner_parties_preferred_date_fkey" FOREIGN KEY ("preferred_season_date_id", "season_id", "org_id") REFERENCES "public"."dinner_season_dates"("id", "season_id", "org_id") ON DELETE SET NULL ("preferred_season_date_id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_parties"
+    ADD CONSTRAINT "dinner_parties_season_fkey" FOREIGN KEY ("season_id", "group_id", "org_id") REFERENCES "public"."dinner_seasons"("id", "group_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_party_addresses"
+    ADD CONSTRAINT "dinner_party_addresses_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_party_addresses"
+    ADD CONSTRAINT "dinner_party_addresses_party_fkey" FOREIGN KEY ("party_id", "season_id", "org_id") REFERENCES "public"."dinner_parties"("id", "season_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_party_addresses"
+    ADD CONSTRAINT "dinner_party_addresses_season_fkey" FOREIGN KEY ("season_id", "group_id", "org_id") REFERENCES "public"."dinner_seasons"("id", "group_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_party_members"
+    ADD CONSTRAINT "dinner_party_members_group_member_fkey" FOREIGN KEY ("group_id", "profile_id", "org_id") REFERENCES "public"."group_members"("group_id", "profile_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_party_members"
+    ADD CONSTRAINT "dinner_party_members_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_party_members"
+    ADD CONSTRAINT "dinner_party_members_party_fkey" FOREIGN KEY ("party_id", "season_id", "org_id") REFERENCES "public"."dinner_parties"("id", "season_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_party_members"
+    ADD CONSTRAINT "dinner_party_members_season_fkey" FOREIGN KEY ("season_id", "group_id", "org_id") REFERENCES "public"."dinner_seasons"("id", "group_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_party_notes"
+    ADD CONSTRAINT "dinner_party_notes_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_party_notes"
+    ADD CONSTRAINT "dinner_party_notes_party_fkey" FOREIGN KEY ("party_id", "season_id", "org_id") REFERENCES "public"."dinner_parties"("id", "season_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_party_notes"
+    ADD CONSTRAINT "dinner_party_notes_season_fkey" FOREIGN KEY ("season_id", "group_id", "org_id") REFERENCES "public"."dinner_seasons"("id", "group_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_party_unavailable_dates"
+    ADD CONSTRAINT "dinner_party_unavailable_dates_date_fkey" FOREIGN KEY ("season_date_id", "season_id", "org_id") REFERENCES "public"."dinner_season_dates"("id", "season_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_party_unavailable_dates"
+    ADD CONSTRAINT "dinner_party_unavailable_dates_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_party_unavailable_dates"
+    ADD CONSTRAINT "dinner_party_unavailable_dates_party_fkey" FOREIGN KEY ("party_id", "season_id", "org_id") REFERENCES "public"."dinner_parties"("id", "season_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_party_unavailable_dates"
+    ADD CONSTRAINT "dinner_party_unavailable_dates_season_fkey" FOREIGN KEY ("season_id", "group_id", "org_id") REFERENCES "public"."dinner_seasons"("id", "group_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_reminder_passes"
+    ADD CONSTRAINT "dinner_reminder_passes_dinner_fkey" FOREIGN KEY ("dinner_id", "org_id") REFERENCES "public"."dinners"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_reminder_passes"
+    ADD CONSTRAINT "dinner_reminder_passes_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_reminder_sends"
+    ADD CONSTRAINT "dinner_reminder_sends_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_reminder_sends"
+    ADD CONSTRAINT "dinner_reminder_sends_pass_fkey" FOREIGN KEY ("dinner_id", "dinner_date", "org_id") REFERENCES "public"."dinner_reminder_passes"("dinner_id", "dinner_date", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_reminder_sends"
+    ADD CONSTRAINT "dinner_reminder_sends_profile_fkey" FOREIGN KEY ("profile_id", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_replies"
+    ADD CONSTRAINT "dinner_replies_dinner_fkey" FOREIGN KEY ("dinner_id", "org_id") REFERENCES "public"."dinners"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_replies"
+    ADD CONSTRAINT "dinner_replies_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_replies"
+    ADD CONSTRAINT "dinner_replies_profile_fkey" FOREIGN KEY ("profile_id", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_replies"
+    ADD CONSTRAINT "dinner_replies_replied_by_fkey" FOREIGN KEY ("replied_by", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE SET NULL ("replied_by");
+
+
+
+ALTER TABLE ONLY "public"."dinner_season_dates"
+    ADD CONSTRAINT "dinner_season_dates_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_season_dates"
+    ADD CONSTRAINT "dinner_season_dates_season_fkey" FOREIGN KEY ("season_id", "group_id", "org_id") REFERENCES "public"."dinner_seasons"("id", "group_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_seasons"
+    ADD CONSTRAINT "dinner_seasons_created_by_fkey" FOREIGN KEY ("created_by", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE SET NULL ("created_by");
+
+
+
+ALTER TABLE ONLY "public"."dinner_seasons"
+    ADD CONSTRAINT "dinner_seasons_group_id_fkey" FOREIGN KEY ("group_id", "org_id") REFERENCES "public"."groups"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_seasons"
+    ADD CONSTRAINT "dinner_seasons_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_seasons"
+    ADD CONSTRAINT "dinner_seasons_previous_season_id_fkey" FOREIGN KEY ("previous_season_id", "group_id", "org_id") REFERENCES "public"."dinner_seasons"("id", "group_id", "org_id") ON DELETE SET NULL ("previous_season_id");
+
+
+
+ALTER TABLE ONLY "public"."dinner_seats"
+    ADD CONSTRAINT "dinner_seats_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_seats"
+    ADD CONSTRAINT "dinner_seats_party_fkey" FOREIGN KEY ("party_id", "season_id", "org_id") REFERENCES "public"."dinner_parties"("id", "season_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_seats"
+    ADD CONSTRAINT "dinner_seats_season_fkey" FOREIGN KEY ("season_id", "group_id", "org_id") REFERENCES "public"."dinner_seasons"("id", "group_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_seats"
+    ADD CONSTRAINT "dinner_seats_table_fkey" FOREIGN KEY ("table_id", "season_id", "org_id") REFERENCES "public"."dinner_tables"("id", "season_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_tables"
+    ADD CONSTRAINT "dinner_tables_date_fkey" FOREIGN KEY ("season_date_id", "season_id", "org_id") REFERENCES "public"."dinner_season_dates"("id", "season_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_tables"
+    ADD CONSTRAINT "dinner_tables_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinner_tables"
+    ADD CONSTRAINT "dinner_tables_season_fkey" FOREIGN KEY ("season_id", "group_id", "org_id") REFERENCES "public"."dinner_seasons"("id", "group_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinners"
+    ADD CONSTRAINT "dinners_date_fkey" FOREIGN KEY ("season_date_id", "season_id", "org_id") REFERENCES "public"."dinner_season_dates"("id", "season_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinners"
+    ADD CONSTRAINT "dinners_host_seat_fkey" FOREIGN KEY ("table_id", "host_party_id", "org_id") REFERENCES "public"."dinner_seats"("table_id", "party_id", "org_id") ON DELETE SET NULL ("host_party_id");
+
+
+
+ALTER TABLE ONLY "public"."dinners"
+    ADD CONSTRAINT "dinners_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinners"
+    ADD CONSTRAINT "dinners_season_fkey" FOREIGN KEY ("season_id", "group_id", "org_id") REFERENCES "public"."dinner_seasons"("id", "group_id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."dinners"
+    ADD CONSTRAINT "dinners_table_fkey" FOREIGN KEY ("table_id", "season_id", "org_id") REFERENCES "public"."dinner_tables"("id", "season_id", "org_id") ON DELETE CASCADE;
 
 
 
@@ -6531,6 +8770,18 @@ ALTER TABLE ONLY "public"."usage_counts"
 
 
 
+CREATE POLICY "A person keeps their own feed link" ON "public"."dinner_feed_tokens" TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("profile_id" = ( SELECT "auth"."uid"() AS "uid")))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("profile_id" = ( SELECT "auth"."uid"() AS "uid"))));
+
+
+
+CREATE POLICY "A person or their partner replies" ON "public"."dinner_replies" TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("profile_id" = ANY (( SELECT "public"."dinner_my_party_profile_ids"() AS "dinner_my_party_profile_ids")::"uuid"[])))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("profile_id" = ANY (( SELECT "public"."dinner_my_party_profile_ids"() AS "dinner_my_party_profile_ids")::"uuid"[]))));
+
+
+
+CREATE POLICY "Addresses read by party, its guests and leaders" ON "public"."dinner_party_addresses" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("party_id" = ANY (( SELECT "public"."dinner_my_party_ids"() AS "dinner_my_party_ids")::"uuid"[])) OR "public"."is_group_leader"("group_id") OR ("party_id" = ANY (( SELECT "public"."dinner_address_party_ids"() AS "dinner_address_party_ids")::"uuid"[])))));
+
+
+
 CREATE POLICY "Admins and household leaders can delete family members" ON "public"."family_members" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR (("family_id" = ( SELECT "public"."current_family_id"() AS "current_family_id")) AND ( SELECT "public"."is_member"() AS "is_member") AND (EXISTS ( SELECT 1
    FROM "public"."profiles" "self"
   WHERE (("self"."id" = ( SELECT "auth"."uid"() AS "uid")) AND ("self"."relationship" = ANY (ARRAY['primary'::"text", 'spouse'::"text"])))))))));
@@ -6626,6 +8877,20 @@ CREATE POLICY "Anon can read public settings" ON "public"."site_settings" FOR SE
 
 
 CREATE POLICY "Church admins can read usage counts" ON "public"."usage_counts" FOR SELECT TO "authenticated" USING (( SELECT "public"."is_admin"() AS "is_admin"));
+
+
+
+CREATE POLICY "Contributions read with their dinner" ON "public"."dinner_contributions" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (EXISTS ( SELECT 1
+   FROM "public"."dinners" "d"
+  WHERE ("d"."id" = "dinner_contributions"."dinner_id")))));
+
+
+
+CREATE POLICY "Dinners read by their tables and leaders" ON "public"."dinners" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("public"."is_group_leader"("group_id") OR ("table_id" = ANY (( SELECT "public"."dinner_my_table_ids"() AS "dinner_my_table_ids")::"uuid"[])))));
+
+
+
+CREATE POLICY "Food notes read by party, its hosts and leaders" ON "public"."dinner_party_notes" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("party_id" = ANY (( SELECT "public"."dinner_my_party_ids"() AS "dinner_my_party_ids")::"uuid"[])) OR "public"."is_group_leader"("group_id") OR ("party_id" = ANY (( SELECT "public"."dinner_food_note_party_ids"() AS "dinner_food_note_party_ids")::"uuid"[])))));
 
 
 
@@ -6823,6 +9088,26 @@ CREATE POLICY "Group members can view serving signups" ON "public"."serving_sign
 
 
 
+CREATE POLICY "Host or leaders change a dinner" ON "public"."dinners" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("public"."is_group_leader"("group_id") OR ("host_party_id" = ANY (( SELECT "public"."dinner_my_party_ids"() AS "dinner_my_party_ids")::"uuid"[]))))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("public"."is_group_leader"("group_id") OR ("host_party_id" = ANY (( SELECT "public"."dinner_my_party_ids"() AS "dinner_my_party_ids")::"uuid"[])))));
+
+
+
+CREATE POLICY "Host or leaders set contributions" ON "public"."dinner_contributions" TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("public"."is_group_leader"("group_id") OR (EXISTS ( SELECT 1
+   FROM "public"."dinners" "d"
+  WHERE (("d"."id" = "dinner_contributions"."dinner_id") AND ("d"."host_party_id" = ANY (( SELECT "public"."dinner_my_party_ids"() AS "dinner_my_party_ids")::"uuid"[])))))))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("public"."is_group_leader"("group_id") OR (EXISTS ( SELECT 1
+   FROM "public"."dinners" "d"
+  WHERE (("d"."id" = "dinner_contributions"."dinner_id") AND ("d"."host_party_id" = ANY (( SELECT "public"."dinner_my_party_ids"() AS "dinner_my_party_ids")::"uuid"[]))))))));
+
+
+
+CREATE POLICY "Leaders add season dates" ON "public"."dinner_season_dates" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Leaders add seasons" ON "public"."dinner_seasons" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
 CREATE POLICY "Leaders and admins can create group invites" ON "public"."group_invites" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("created_by" = ( SELECT "auth"."uid"() AS "uid")) AND ("revoked_at" IS NULL) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("group_id"))));
 
 
@@ -6892,6 +9177,26 @@ CREATE POLICY "Leaders and admins can view group invite uses" ON "public"."group
 
 
 CREATE POLICY "Leaders and admins can view group invites" ON "public"."group_invites" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (( SELECT "public"."is_admin"() AS "is_admin") OR "public"."is_group_leader"("group_id"))));
+
+
+
+CREATE POLICY "Leaders delete draft seasons" ON "public"."dinner_seasons" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id") AND ("status" = 'draft'::"text")));
+
+
+
+CREATE POLICY "Leaders delete season dates" ON "public"."dinner_season_dates" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Leaders edit season dates" ON "public"."dinner_season_dates" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id"))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Leaders edit seasons" ON "public"."dinner_seasons" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id"))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
+
+
+
+CREATE POLICY "Leaders keep drafts" ON "public"."dinner_drafts" TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id"))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND "public"."is_group_leader"("group_id")));
 
 
 
@@ -6993,6 +9298,16 @@ CREATE POLICY "Members can withdraw own prayer responses" ON "public"."prayer_re
 
 
 
+CREATE POLICY "Members read season dates" ON "public"."dinner_season_dates" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("public"."is_group_leader"("group_id") OR ("public"."is_group_member"("group_id") AND (EXISTS ( SELECT 1
+   FROM "public"."dinner_seasons" "s"
+  WHERE (("s"."id" = "dinner_season_dates"."season_id") AND ("s"."status" <> 'draft'::"text"))))))));
+
+
+
+CREATE POLICY "Members read seasons" ON "public"."dinner_seasons" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("public"."is_group_leader"("group_id") OR (("status" <> 'draft'::"text") AND "public"."is_group_member"("group_id")))));
+
+
+
 CREATE POLICY "Org readable within request org" ON "public"."organizations" FOR SELECT TO "authenticated", "anon" USING (("id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
@@ -7000,6 +9315,42 @@ CREATE POLICY "Org readable within request org" ON "public"."organizations" FOR 
 CREATE POLICY "Owners, attendees, team leads and group leaders can delete serv" ON "public"."serving_signups" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("created_by" = ( SELECT "auth"."uid"() AS "uid")) OR "public"."is_serving_signup_attendee"("id") OR "public"."is_team_lead"("team_id") OR (EXISTS ( SELECT 1
    FROM "public"."teams" "t"
   WHERE (("t"."id" = "serving_signups"."team_id") AND ("t"."org_id" = "serving_signups"."org_id") AND "public"."is_group_leader"("t"."group_id")))))));
+
+
+
+CREATE POLICY "Parties read by party, tablemates and leaders" ON "public"."dinner_parties" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("id" = ANY (( SELECT "public"."dinner_my_party_ids"() AS "dinner_my_party_ids")::"uuid"[])) OR "public"."is_group_leader"("group_id") OR ("id" = ANY (( SELECT "public"."dinner_tablemate_party_ids"() AS "dinner_tablemate_party_ids")::"uuid"[])))));
+
+
+
+CREATE POLICY "Party members read by party, tablemates and leaders" ON "public"."dinner_party_members" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("party_id" = ANY (( SELECT "public"."dinner_my_party_ids"() AS "dinner_my_party_ids")::"uuid"[])) OR "public"."is_group_leader"("group_id") OR ("party_id" = ANY (( SELECT "public"."dinner_tablemate_party_ids"() AS "dinner_tablemate_party_ids")::"uuid"[])))));
+
+
+
+CREATE POLICY "Party or leaders add a party member" ON "public"."dinner_party_members" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("party_id" = ANY (( SELECT "public"."dinner_my_party_ids"() AS "dinner_my_party_ids")::"uuid"[])) OR "public"."is_group_leader"("group_id"))));
+
+
+
+CREATE POLICY "Party or leaders delete a party" ON "public"."dinner_parties" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("id" = ANY (( SELECT "public"."dinner_my_party_ids"() AS "dinner_my_party_ids")::"uuid"[])) OR "public"."is_group_leader"("group_id"))));
+
+
+
+CREATE POLICY "Party or leaders edit a party" ON "public"."dinner_parties" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("id" = ANY (( SELECT "public"."dinner_my_party_ids"() AS "dinner_my_party_ids")::"uuid"[])) OR "public"."is_group_leader"("group_id")))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("id" = ANY (( SELECT "public"."dinner_my_party_ids"() AS "dinner_my_party_ids")::"uuid"[])) OR "public"."is_group_leader"("group_id"))));
+
+
+
+CREATE POLICY "Party or leaders remove a party member" ON "public"."dinner_party_members" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("party_id" = ANY (( SELECT "public"."dinner_my_party_ids"() AS "dinner_my_party_ids")::"uuid"[])) OR "public"."is_group_leader"("group_id"))));
+
+
+
+CREATE POLICY "Party or leaders write an address" ON "public"."dinner_party_addresses" TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("party_id" = ANY (( SELECT "public"."dinner_my_party_ids"() AS "dinner_my_party_ids")::"uuid"[])) OR "public"."is_group_leader"("group_id")))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("party_id" = ANY (( SELECT "public"."dinner_my_party_ids"() AS "dinner_my_party_ids")::"uuid"[])) OR "public"."is_group_leader"("group_id"))));
+
+
+
+CREATE POLICY "Party or leaders write food notes" ON "public"."dinner_party_notes" TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("party_id" = ANY (( SELECT "public"."dinner_my_party_ids"() AS "dinner_my_party_ids")::"uuid"[])) OR "public"."is_group_leader"("group_id")))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("party_id" = ANY (( SELECT "public"."dinner_my_party_ids"() AS "dinner_my_party_ids")::"uuid"[])) OR "public"."is_group_leader"("group_id"))));
+
+
+
+CREATE POLICY "Party or leaders write unavailable dates" ON "public"."dinner_party_unavailable_dates" TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("party_id" = ANY (( SELECT "public"."dinner_my_party_ids"() AS "dinner_my_party_ids")::"uuid"[])) OR "public"."is_group_leader"("group_id")))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("party_id" = ANY (( SELECT "public"."dinner_my_party_ids"() AS "dinner_my_party_ids")::"uuid"[])) OR "public"."is_group_leader"("group_id"))));
 
 
 
@@ -7011,6 +9362,12 @@ CREATE POLICY "Profiles are visible per access rules" ON "public"."profiles" FOR
 
 
 
+CREATE POLICY "Replies read with their dinner" ON "public"."dinner_replies" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (EXISTS ( SELECT 1
+   FROM "public"."dinners" "d"
+  WHERE ("d"."id" = "dinner_replies"."dinner_id")))));
+
+
+
 CREATE POLICY "Requesters and admins can view group requests" ON "public"."group_requests" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("requested_by" = ( SELECT "auth"."uid"() AS "uid")) OR ( SELECT "public"."is_admin"() AS "is_admin"))));
 
 
@@ -7019,11 +9376,19 @@ CREATE POLICY "Requesters, leaders and admins can view join requests" ON "public
 
 
 
+CREATE POLICY "Seats read by their tables and leaders" ON "public"."dinner_seats" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("public"."is_group_leader"("group_id") OR ("table_id" = ANY (( SELECT "public"."dinner_my_table_ids"() AS "dinner_my_table_ids")::"uuid"[])))));
+
+
+
 CREATE POLICY "Signup owners can remove attendees" ON "public"."serving_signup_attendees" FOR DELETE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (EXISTS ( SELECT 1
    FROM "public"."serving_signups" "s"
   WHERE (("s"."id" = "serving_signup_attendees"."signup_id") AND ("s"."org_id" = "serving_signup_attendees"."org_id") AND (("s"."created_by" = ( SELECT "auth"."uid"() AS "uid")) OR "public"."is_team_lead"("s"."team_id") OR (EXISTS ( SELECT 1
            FROM "public"."teams" "t"
           WHERE (("t"."id" = "s"."team_id") AND ("t"."org_id" = "s"."org_id") AND "public"."is_group_leader"("t"."group_id"))))))))));
+
+
+
+CREATE POLICY "Tables read by their parties and leaders" ON "public"."dinner_tables" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("public"."is_group_leader"("group_id") OR ("id" = ANY (( SELECT "public"."dinner_my_table_ids"() AS "dinner_my_table_ids")::"uuid"[])))));
 
 
 
@@ -7053,6 +9418,10 @@ CREATE POLICY "Team leads and group leaders can view serving broadcasts" ON "pub
 
 
 
+CREATE POLICY "Unavailable dates read by party, tablemates and leaders" ON "public"."dinner_party_unavailable_dates" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("party_id" = ANY (( SELECT "public"."dinner_my_party_ids"() AS "dinner_my_party_ids")::"uuid"[])) OR "public"."is_group_leader"("group_id") OR ("party_id" = ANY (( SELECT "public"."dinner_tablemate_party_ids"() AS "dinner_tablemate_party_ids")::"uuid"[])))));
+
+
+
 ALTER TABLE "public"."about_page" ENABLE ROW LEVEL SECURITY;
 
 
@@ -7066,6 +9435,54 @@ ALTER TABLE "public"."calendar_subscription_tokens" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."class_teachers" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."dinner_contributions" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."dinner_drafts" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."dinner_feed_tokens" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."dinner_parties" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."dinner_party_addresses" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."dinner_party_members" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."dinner_party_notes" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."dinner_party_unavailable_dates" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."dinner_reminder_passes" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."dinner_reminder_sends" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."dinner_replies" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."dinner_season_dates" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."dinner_seasons" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."dinner_seats" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."dinner_tables" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."dinners" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."event_calendars" ENABLE ROW LEVEL SECURITY;
@@ -7148,6 +9565,70 @@ CREATE POLICY "org isolation" ON "public"."calendar_subscription_tokens" AS REST
 
 
 CREATE POLICY "org isolation" ON "public"."class_teachers" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."dinner_contributions" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."dinner_drafts" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."dinner_feed_tokens" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."dinner_parties" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."dinner_party_addresses" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."dinner_party_members" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."dinner_party_notes" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."dinner_party_unavailable_dates" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."dinner_reminder_passes" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."dinner_reminder_sends" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."dinner_replies" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."dinner_season_dates" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."dinner_seasons" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."dinner_seats" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."dinner_tables" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."dinners" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
 
@@ -7441,6 +9922,150 @@ GRANT ALL ON FUNCTION "public"."current_family_id"() TO "service_role";
 
 REVOKE ALL ON FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid", "_anonymous_request_ids" "uuid"[], "_hidden_comment_ids" "uuid"[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."delete_person"("_person_id" "uuid", "_org_id" "uuid", "_anonymous_request_ids" "uuid"[], "_hidden_comment_ids" "uuid"[]) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."dinner_address_party_ids"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."dinner_address_party_ids"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."dinner_address_party_ids"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."dinner_food_note_party_ids"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."dinner_food_note_party_ids"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."dinner_food_note_party_ids"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."dinner_moved_clear_replies"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."dinner_moved_clear_replies"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."dinner_my_party_ids"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."dinner_my_party_ids"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."dinner_my_party_ids"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."dinner_my_party_profile_ids"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."dinner_my_party_profile_ids"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."dinner_my_party_profile_ids"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."dinner_my_table_ids"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."dinner_my_table_ids"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."dinner_my_table_ids"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."dinner_parties_guard"() TO "anon";
+GRANT ALL ON FUNCTION "public"."dinner_parties_guard"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."dinner_parties_guard"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."dinner_party_create"("_season_id" "uuid", "_profile_ids" "uuid"[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."dinner_party_create"("_season_id" "uuid", "_profile_ids" "uuid"[]) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."dinner_party_create"("_season_id" "uuid", "_profile_ids" "uuid"[]) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."dinner_party_detail_guard"() TO "anon";
+GRANT ALL ON FUNCTION "public"."dinner_party_detail_guard"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."dinner_party_detail_guard"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."dinner_party_drop_if_empty"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."dinner_party_drop_if_empty"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."dinner_party_members_guard"() TO "anon";
+GRANT ALL ON FUNCTION "public"."dinner_party_members_guard"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."dinner_party_members_guard"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."dinner_party_unavailable_dates_replace"("_party_id" "uuid", "_season_date_ids" "uuid"[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."dinner_party_unavailable_dates_replace"("_party_id" "uuid", "_season_date_ids" "uuid"[]) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."dinner_party_unavailable_dates_replace"("_party_id" "uuid", "_season_date_ids" "uuid"[]) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."dinner_party_withdrawn"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."dinner_party_withdrawn"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."dinner_reminder_claim"("_org_id" "uuid", "_dinner_id" "uuid", "_dinner_date" "date", "_starts_at" timestamp with time zone, "_host_party_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."dinner_reminder_claim"("_org_id" "uuid", "_dinner_id" "uuid", "_dinner_date" "date", "_starts_at" timestamp with time zone, "_host_party_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."dinner_reminder_passes_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."dinner_reminder_passes_prune"("_org_id" "uuid", "_before" "date", "_limit" integer) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."dinner_replies_guard"() TO "anon";
+GRANT ALL ON FUNCTION "public"."dinner_replies_guard"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."dinner_replies_guard"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."dinner_season_dates_carry"() TO "anon";
+GRANT ALL ON FUNCTION "public"."dinner_season_dates_carry"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."dinner_season_dates_carry"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."dinner_season_dates_guard"() TO "anon";
+GRANT ALL ON FUNCTION "public"."dinner_season_dates_guard"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."dinner_season_dates_guard"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."dinner_season_dates_replace"("_season_id" "uuid", "_starts_at" timestamp with time zone[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."dinner_season_dates_replace"("_season_id" "uuid", "_starts_at" timestamp with time zone[]) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."dinner_season_dates_replace"("_season_id" "uuid", "_starts_at" timestamp with time zone[]) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."dinner_seasons_guard"() TO "anon";
+GRANT ALL ON FUNCTION "public"."dinner_seasons_guard"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."dinner_seasons_guard"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."dinner_seat_signatures"("_season_id" "uuid", "_org_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."dinner_seat_signatures"("_season_id" "uuid", "_org_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."dinner_signup_window_open"("_season_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."dinner_signup_window_open"("_season_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."dinner_signup_window_open"("_season_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."dinner_tablemate_party_ids"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."dinner_tablemate_party_ids"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."dinner_tablemate_party_ids"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."dinner_tables_publish"("_season_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."dinner_tables_publish"("_season_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."dinner_tables_publish"("_season_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."dinners_guard"() TO "anon";
+GRANT ALL ON FUNCTION "public"."dinners_guard"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."dinners_guard"() TO "service_role";
 
 
 
@@ -7744,6 +10369,12 @@ GRANT ALL ON FUNCTION "public"."profiles_keep_one_church_admin"() TO "service_ro
 
 
 
+GRANT ALL ON FUNCTION "public"."profiles_own_dinner_club_email"() TO "anon";
+GRANT ALL ON FUNCTION "public"."profiles_own_dinner_club_email"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."profiles_own_dinner_club_email"() TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."profiles_own_event_reminders"() TO "anon";
 GRANT ALL ON FUNCTION "public"."profiles_own_event_reminders"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."profiles_own_event_reminders"() TO "service_role";
@@ -7893,6 +10524,124 @@ GRANT ALL ON TABLE "public"."calendar_subscription_tokens" TO "service_role";
 GRANT ALL ON TABLE "public"."class_teachers" TO "anon";
 GRANT ALL ON TABLE "public"."class_teachers" TO "authenticated";
 GRANT ALL ON TABLE "public"."class_teachers" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."dinner_contributions" TO "authenticated";
+GRANT ALL ON TABLE "public"."dinner_contributions" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."dinner_drafts" TO "authenticated";
+GRANT ALL ON TABLE "public"."dinner_drafts" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."dinner_feed_tokens" TO "authenticated";
+GRANT ALL ON TABLE "public"."dinner_feed_tokens" TO "service_role";
+
+
+
+GRANT SELECT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."dinner_parties" TO "authenticated";
+GRANT ALL ON TABLE "public"."dinner_parties" TO "service_role";
+
+
+
+GRANT UPDATE("status") ON TABLE "public"."dinner_parties" TO "authenticated";
+
+
+
+GRANT UPDATE("can_host") ON TABLE "public"."dinner_parties" TO "authenticated";
+
+
+
+GRANT UPDATE("seats") ON TABLE "public"."dinner_parties" TO "authenticated";
+
+
+
+GRANT UPDATE("preferred_season_date_id") ON TABLE "public"."dinner_parties" TO "authenticated";
+
+
+
+GRANT UPDATE("kids_welcome") ON TABLE "public"."dinner_parties" TO "authenticated";
+
+
+
+GRANT UPDATE("access_notes") ON TABLE "public"."dinner_parties" TO "authenticated";
+
+
+
+GRANT UPDATE("pets") ON TABLE "public"."dinner_parties" TO "authenticated";
+
+
+
+GRANT ALL ON TABLE "public"."dinner_party_addresses" TO "authenticated";
+GRANT ALL ON TABLE "public"."dinner_party_addresses" TO "service_role";
+
+
+
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."dinner_party_members" TO "authenticated";
+GRANT ALL ON TABLE "public"."dinner_party_members" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."dinner_party_notes" TO "authenticated";
+GRANT ALL ON TABLE "public"."dinner_party_notes" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."dinner_party_unavailable_dates" TO "authenticated";
+GRANT ALL ON TABLE "public"."dinner_party_unavailable_dates" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."dinner_reminder_passes" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."dinner_reminder_sends" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."dinner_replies" TO "authenticated";
+GRANT ALL ON TABLE "public"."dinner_replies" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."dinner_season_dates" TO "authenticated";
+GRANT ALL ON TABLE "public"."dinner_season_dates" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."dinner_seasons" TO "authenticated";
+GRANT ALL ON TABLE "public"."dinner_seasons" TO "service_role";
+
+
+
+GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."dinner_seats" TO "authenticated";
+GRANT ALL ON TABLE "public"."dinner_seats" TO "service_role";
+
+
+
+GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."dinner_tables" TO "authenticated";
+GRANT ALL ON TABLE "public"."dinner_tables" TO "service_role";
+
+
+
+GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."dinners" TO "authenticated";
+GRANT ALL ON TABLE "public"."dinners" TO "service_role";
+
+
+
+GRANT UPDATE("starts_at") ON TABLE "public"."dinners" TO "authenticated";
+
+
+
+GRANT UPDATE("host_party_id") ON TABLE "public"."dinners" TO "authenticated";
+
+
+
+GRANT UPDATE("host_unavailable") ON TABLE "public"."dinners" TO "authenticated";
 
 
 
@@ -8135,6 +10884,11 @@ GRANT SELECT("org_id") ON TABLE "public"."profiles" TO "authenticated";
 
 GRANT SELECT("email_event_reminders") ON TABLE "public"."profiles" TO "anon";
 GRANT SELECT("email_event_reminders") ON TABLE "public"."profiles" TO "authenticated";
+
+
+
+GRANT SELECT("email_dinner_club") ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT("email_dinner_club") ON TABLE "public"."profiles" TO "authenticated";
 
 
 
