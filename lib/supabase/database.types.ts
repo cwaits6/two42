@@ -2396,6 +2396,9 @@ isOneToOne: false
               "email": string,"first_name": string,"preferred_name": string,"profile_id": string
             }[]
                            },
+"dinner_reminder_passes_prune":
+{ Args: { "_before": string,"_limit": number,"_org_id": string }; Returns: number
+                           },
 "dinner_seat_signatures":
 { Args: { "_org_id": string,"_season_id": string }; Returns: Json
                            },
