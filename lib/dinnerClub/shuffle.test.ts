@@ -317,6 +317,20 @@ describe("draft warnings and manual changes", () => {
     expect(draftWarnings(fixed, settings).tables[a.key].noHost).toBe(false);
   });
 
+  it("drops a table its last party moves away from", () => {
+    const one: Draft = {
+      version: 1,
+      seed: 1,
+      tables: [
+        { key: "x", tableId: null, seasonDateId: null, partyIds: ["s1"], hosts: [{ seasonDateId: "d1", partyId: null }] },
+        { key: "y", tableId: null, seasonDateId: null, partyIds: ["h1"], hosts: [{ seasonDateId: "d1", partyId: "h1" }] },
+      ],
+    };
+    const moved = moveParty(one, "x", "s1", "y");
+    expect(moved.tables.map((t) => t.key)).toEqual(["y"]);
+    expect(moved.tables[0].partyIds).toEqual(["h1", "s1"]);
+  });
+
   it("swaps two parties, hosting included", () => {
     const hostA = a.hosts[0].partyId!;
     const guestB = b.partyIds.find((id) => id !== b.hosts[0].partyId)!;
@@ -377,7 +391,7 @@ describe("a saved draft after the season changed", () => {
       "same_table_one_host",
       ["d2", "d3"],
       ["h1", "c4"]
-    );
+    )!;
     expect(fitted.tables[0].hosts).toEqual([
       { seasonDateId: "d2", partyId: "h1" },
       { seasonDateId: "d3", partyId: "h1" },
@@ -391,7 +405,7 @@ describe("a saved draft after the season changed", () => {
       "same_table_rotating",
       ["d1", "d2", "d3"],
       ["h1", "h2"]
-    );
+    )!;
     expect(fitted.tables[0].hosts.map((h) => h.partyId)).toEqual(["h1", "h2", null]);
     const warnings = draftWarnings(fitted, input(parties, { format: "same_table_rotating", dateIds: ["d1", "d2", "d3"] }));
     expect(blocksPublish(warnings)).toBe(true);
@@ -403,7 +417,7 @@ describe("a saved draft after the season changed", () => {
       "same_table_one_host",
       ["d1"],
       ["c4"]
-    );
+    )!;
     expect(fitted.tables).toEqual([table("a", ["c4"], [["d1", null]])]);
   });
 
@@ -414,11 +428,44 @@ describe("a saved draft after the season changed", () => {
       "new_tables",
       ["d2", "d3"],
       ["h1", "c4"]
-    );
+    )!;
     expect(fitted.tables.map((t) => t.key)).toEqual(["b"]);
     const warnings = draftWarnings(fitted, input(parties, { format: "new_tables", allowBackToBack: true, dateIds: ["d2", "d3"] }));
     expect(warnings.datesWithoutTables).toEqual(["d3"]);
     expect(blocksPublish(warnings)).toBe(true);
+  });
+
+  it("hosts a date added after publishing with the table's one host, so the tables can be published again", () => {
+    const parties = [party("h1", 2, { seats: 8 }), party("c5", 2)];
+    const published = draftFromPublished(
+      [{ id: "T1", seasonDateId: null, position: 1, partyIds: ["h1", "c5"], hosts: [{ seasonDateId: "d1", partyId: "h1" }] }],
+      "same_table_one_host",
+      ["d1", "d2"],
+      0
+    );
+    const fitted = fitDraft(published, "same_table_one_host", ["d1", "d2"], ["h1", "c5"])!;
+    expect(fitted.tables[0].hosts).toEqual([
+      { seasonDateId: "d1", partyId: "h1" },
+      { seasonDateId: "d2", partyId: "h1" },
+    ]);
+    expect(blocksPublish(draftWarnings(fitted, input(parties, { dateIds: ["d1", "d2"] })))).toBe(false);
+  });
+
+  it("gives every date the first host when the format changes to one host all season", () => {
+    const fitted = fitDraft(
+      saved([table("a", ["h1", "h2"], [["d1", "h1"], ["d2", "h2"]])]),
+      "same_table_one_host",
+      ["d1", "d2"],
+      ["h1", "h2"]
+    )!;
+    expect(fitted.tables[0].hosts.map((h) => h.partyId)).toEqual(["h1", "h1"]);
+  });
+
+  it("drops a draft saved with the other table shape when the format changed", () => {
+    const perDate = saved([table("a", ["h1", "c4"], [["d1", "h1"]], "d1"), table("b", ["h1", "c4"], [["d2", "h1"]], "d2")]);
+    expect(fitDraft(perDate, "same_table_one_host", ["d1", "d2"], ["h1", "c4"])).toBeNull();
+    const allSeason = saved([table("a", ["h1", "c4"], [["d1", "h1"]])]);
+    expect(fitDraft(allSeason, "new_tables", ["d1"], ["h1", "c4"])).toBeNull();
   });
 
   it("reads back a draft it wrote and nothing else", () => {

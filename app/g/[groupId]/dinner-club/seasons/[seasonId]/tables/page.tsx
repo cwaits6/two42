@@ -7,7 +7,7 @@ import { MoveDinnerButton } from "@/components/dinnerClub/MoveDinnerButton";
 import { TablesEditor } from "@/components/dinnerClub/TablesEditor";
 import { formatAddress } from "@/lib/dinnerClub/ics";
 import { dinnerWhen, FORMAT_LABELS, partyName } from "@/lib/dinnerClub/labels";
-import { draftFromPublished, fitDraft, parseDraft } from "@/lib/dinnerClub/shuffle";
+import { draftFromPublished, fitDraft, parseDraft, type Draft } from "@/lib/dinnerClub/shuffle";
 import { groupPath, isUuid } from "@/lib/groups/active";
 import { requireGroupLeader } from "@/lib/groups/server";
 import { groupPageTitle } from "@/lib/pageTitle";
@@ -84,10 +84,9 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
     : null;
   const saved = stored ? parseDraft(stored.body) : null;
   const shuffleable = shuffleParties(data);
-  const base = saved ?? fromPublished;
-  const initialDraft = base
-    ? fitDraft(base, format, dates.map((d) => d.value), shuffleable.map((p) => p.id))
-    : null;
+  const fit = (draft: Draft | null) =>
+    draft && fitDraft(draft, format, dates.map((d) => d.value), shuffleable.map((p) => p.id));
+  const initialDraft = fit(saved) ?? fit(fromPublished);
   const addressOf = new Map(data.addresses.map((a) => [a.party_id, formatAddress(a)]));
 
   return (

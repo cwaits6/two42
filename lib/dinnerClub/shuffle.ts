@@ -482,7 +482,10 @@ function without(t: DraftTable, partyId: string): DraftTable {
   };
 }
 
-/** Moves a party to another table. A host who moves leaves their dates with no host. */
+/**
+ * Moves a party to another table. A host who moves leaves their dates with no
+ * host; a table the last party leaves is gone, since publish refuses an empty one.
+ */
 export function moveParty(draft: Draft, fromKey: string, partyId: string, toKey: string): Draft {
   if (fromKey === toKey) return draft;
   const to = draft.tables.find((t) => t.key === toKey);
@@ -490,11 +493,13 @@ export function moveParty(draft: Draft, fromKey: string, partyId: string, toKey:
   if (!to || !from || !from.partyIds.includes(partyId) || to.seasonDateId !== from.seasonDateId) return draft;
   return withTables(
     draft,
-    draft.tables.map((t) => {
-      if (t.key === fromKey) return without(t, partyId);
-      if (t.key === toKey) return { ...t, partyIds: [...t.partyIds, partyId] };
-      return t;
-    })
+    draft.tables
+      .map((t) => {
+        if (t.key === fromKey) return without(t, partyId);
+        if (t.key === toKey) return { ...t, partyIds: [...t.partyIds, partyId] };
+        return t;
+      })
+      .filter((t) => t.partyIds.length > 0)
   );
 }
 
@@ -587,31 +592,32 @@ export function parseDraft(body: unknown): Draft | null {
 }
 
 /**
- * A saved draft brought up to the season as it is now. Dates and parties
- * change after a draft is saved, and publish refuses a draft naming a date
- * or party that is gone. Parties no longer signed up leave their tables; a
- * table kept all season gets one host entry per current date, a new date
- * taking the table's host when one party hosts all season; a date's tables
- * go with the date.
+ * A saved draft brought up to the season as it is now, or null when it was
+ * saved under a format with the other table shape. Dates and parties change
+ * after a draft is saved, and publish refuses a draft naming a date or party
+ * that is gone. Parties no longer signed up leave their tables; a table kept
+ * all season gets one host entry per current date, and with one host all
+ * season every date takes that host; a date's tables go with the date.
  */
-export function fitDraft(draft: Draft, format: DinnerFormat, dateIds: string[], partyIds: string[]): Draft {
+export function fitDraft(draft: Draft, format: DinnerFormat, dateIds: string[], partyIds: string[]): Draft | null {
+  const perDate = format === "new_tables";
+  if (draft.tables.some((t) => (t.seasonDateId !== null) !== perDate)) return null;
   const dates = new Set(dateIds);
   const parties = new Set(partyIds);
   const tables = draft.tables
-    .filter((t) => (format === "new_tables" ? t.seasonDateId !== null && dates.has(t.seasonDateId) : true))
+    .filter((t) => !perDate || dates.has(t.seasonDateId as string))
     .map((t): DraftTable => {
       const seated = t.partyIds.filter((id) => parties.has(id));
       const hostOn = (d: string) => {
         const partyId = t.hosts.find((h) => h.seasonDateId === d)?.partyId ?? null;
         return partyId && seated.includes(partyId) ? partyId : null;
       };
-      const kept = format === "new_tables" ? [t.seasonDateId as string] : dateIds;
-      const tableHost = format === "same_table_one_host" ? (kept.map(hostOn).find((id) => id !== null) ?? null) : null;
+      const kept = perDate ? [t.seasonDateId as string] : dateIds;
+      const tableHost = format === "same_table_one_host" ? (kept.map(hostOn).find((id) => id !== null) ?? null) : undefined;
       return {
         ...t,
-        seasonDateId: format === "new_tables" ? t.seasonDateId : null,
         partyIds: seated,
-        hosts: kept.map((d) => ({ seasonDateId: d, partyId: hostOn(d) ?? tableHost })),
+        hosts: kept.map((d) => ({ seasonDateId: d, partyId: tableHost === undefined ? hostOn(d) : tableHost })),
       };
     })
     .filter((t) => t.partyIds.length > 0);

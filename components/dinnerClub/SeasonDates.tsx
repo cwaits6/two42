@@ -50,7 +50,7 @@ export function SeasonDates({
     if (error?.code === "DC004") return toast.error("Choose a date within the season.");
     if (error || !data?.length) return toast.error(failureMessage("add the date"));
     setAdding("");
-    toast.success(published ? "Date added. Publish tables again to give it a host." : "Date added.");
+    toast.success(published ? "Date added. Publish the tables again to add its dinners." : "Date added.");
     router.refresh();
   }
 

@@ -533,6 +533,24 @@ select is((select count(*)::int from public.dinners where season_id = pg_temp.id
 select is((select starts_at from public.dinners where id = pg_temp.id('t1d2')), '2031-02-02 18:00-06'::timestamptz,
   'and keeps its moved time');
 
+select is(pg_temp.wrote('l', format(
+    'insert into public.dinner_season_dates (season_id, group_id, starts_at) values (%L, %L, ''2031-03-01 18:00-06'')',
+    pg_temp.id('season'), pg_temp.id('grp'))), '1',
+  'a leader adds a date after publishing');
+select pg_temp.keep('d3', (select id::text from public.dinner_season_dates where season_id = pg_temp.id('season') order by starts_at desc limit 1));
+select pg_temp.draft(jsonb_build_array(
+  pg_temp.one_host_table('a', current_setting('dc.t1'), 'ph', array['ph', 'pg'])
+    || jsonb_build_object('hosts', pg_temp.one_host_table('a', null, 'ph', array['ph']) -> 'hosts'
+      || jsonb_build_array(jsonb_build_object('seasonDateId', pg_temp.id('d3'), 'partyId', pg_temp.id('ph')))),
+  pg_temp.one_host_table('b', current_setting('dc.t2'), 'ph2', array['ph2', 'pu', 'pn'])
+    || jsonb_build_object('hosts', pg_temp.one_host_table('b', null, 'ph2', array['ph2']) -> 'hosts'
+      || jsonb_build_array(jsonb_build_object('seasonDateId', pg_temp.id('d3'), 'partyId', pg_temp.id('ph2'))))));
+select is(pg_temp.read_as('l', format('select count(*) from public.dinner_tables_publish(%L)', pg_temp.id('season'))), '6',
+  'publishing the tables again with the new date''s hosts names everyone, since every table has a new dinner');
+select is((select count(*)::int from public.dinners where season_date_id = pg_temp.id('d3') and host_party_id in (pg_temp.id('ph'), pg_temp.id('ph2'))), 2,
+  'and gives each table a dinner on the new date, at its own host''s');
+delete from public.dinner_season_dates where id = pg_temp.id('d3');
+
 -- ── The reminder ────────────────────────────────────────────────────────────
 insert into public.group_settings (org_id, group_id, dinner_club_enabled) values (pg_temp.id('org_a'), pg_temp.id('grp'), true);
 select is(pg_temp.wrote('g1', format(

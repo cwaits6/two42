@@ -126,6 +126,12 @@ export function TablesEditor({
   }
 
   async function publish() {
+    // Publish reads the stored draft, and the one on screen may have been
+    // fitted to dates and parties that changed since it was saved.
+    if (!draft || !(await save(draft))) {
+      setPublishing(false);
+      return;
+    }
     try {
       const res = await fetch(`/api/dinner-club/seasons/${seasonId}/publish`, { method: "POST" });
       const body = (await res.json().catch(() => null)) as ({ error?: string; changed: number } & EmailOutcome) | null;
