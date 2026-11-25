@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { checkConnection, definedValueIds, odataString, peopleByIds, peopleByLastName, RockError } from "./client";
+import { RecordsError } from "@/lib/integrations/records/errors";
+import { checkConnection, definedValueIds, odataString, peopleByIds, peopleByLastName } from "./client";
 
-const creds = { baseUrl: "https://rock.example.org", restKey: "secret-key-123" };
+const creds = { baseUrl: "https://rock.example.org", key: "secret-key-123" };
 
 function reply(body: unknown, init: { status?: number; type?: string } = {}) {
   return new Response(JSON.stringify(body), {
@@ -24,8 +25,8 @@ describe("Rock client", () => {
   it.each([
     [reply({ Message: "Authorization has been denied" }, { status: 401 }), "unauthorized"],
     [reply("oops", { status: 500 }), "rejected"],
-    [reply("<html>", { type: "text/html" }), "not_rock"],
-    [reply({ not: "an array" }), "not_rock"],
+    [reply("<html>", { type: "text/html" }), "not_provider"],
+    [reply({ not: "an array" }), "not_provider"],
   ])("reports a failure by kind", async (response, kind) => {
     const fetcher = vi.fn().mockResolvedValue(response);
     await expect(checkConnection(creds, fetcher)).rejects.toMatchObject({ kind });
@@ -33,7 +34,7 @@ describe("Rock client", () => {
 
   it("reports an unreachable host", async () => {
     const fetcher = vi.fn().mockRejectedValue(new TypeError("fetch failed"));
-    await expect(checkConnection(creds, fetcher)).rejects.toBeInstanceOf(RockError);
+    await expect(checkConnection(creds, fetcher)).rejects.toBeInstanceOf(RecordsError);
   });
 
   it("escapes quotes in OData strings", () => {

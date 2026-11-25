@@ -4,23 +4,8 @@
 // ad-hoc search needs "Unrestricted Read", which skips Rock's own security.
 //
 // Every call is a GET: two42 never writes to Rock.
-
-export interface RockCredentials {
-  /** An origin accepted by parseRockAddress(). */
-  baseUrl: string;
-  restKey: string;
-}
-
-export type RockFailure = "unauthorized" | "unreachable" | "not_rock" | "rejected";
-
-export class RockError extends Error {
-  constructor(
-    readonly kind: RockFailure,
-    readonly status?: number,
-  ) {
-    super(`Rock request failed: ${kind}${status ? ` (${status})` : ""}`);
-  }
-}
+import { RecordsError } from "@/lib/integrations/records/errors";
+import type { RecordsCredentials } from "@/lib/integrations/records/types";
 
 /** A Rock person, holding only what matching needs. Rock's phone, address and family data are never requested. */
 export interface RockPerson {
@@ -61,29 +46,29 @@ const TIMEOUT_MS = 10_000;
 
 type FetchLike = typeof fetch;
 
-async function getJson(creds: RockCredentials, path: string, query: Record<string, string>, fetcher: FetchLike) {
+async function getJson(creds: RecordsCredentials, path: string, query: Record<string, string>, fetcher: FetchLike) {
   const url = new URL(path, creds.baseUrl);
   for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
   let response: Response;
   try {
     response = await fetcher(url, {
       method: "GET",
-      headers: { "Authorization-Token": creds.restKey, Accept: "application/json" },
+      headers: { "Authorization-Token": creds.key, Accept: "application/json" },
       // A redirect could carry the key's request to an address parseRockAddress() never saw.
       redirect: "error",
       cache: "no-store",
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch {
-    throw new RockError("unreachable");
+    throw new RecordsError("unreachable");
   }
-  if (response.status === 401 || response.status === 403) throw new RockError("unauthorized", response.status);
-  if (!response.ok) throw new RockError("rejected", response.status);
-  if (!(response.headers.get("content-type") ?? "").includes("json")) throw new RockError("not_rock", response.status);
+  if (response.status === 401 || response.status === 403) throw new RecordsError("unauthorized", response.status);
+  if (!response.ok) throw new RecordsError("rejected", response.status);
+  if (!(response.headers.get("content-type") ?? "").includes("json")) throw new RecordsError("not_provider", response.status);
   try {
     return (await response.json()) as unknown;
   } catch {
-    throw new RockError("not_rock", response.status);
+    throw new RecordsError("not_provider", response.status);
   }
 }
 
@@ -119,9 +104,9 @@ export function parsePerson(value: unknown): RockPerson | null {
  * Proves the address is a Rock and the key can read people. Rock answers a
  * key without that permission with 401, the same as a wrong key.
  */
-export async function checkConnection(creds: RockCredentials, fetcher: FetchLike = fetch): Promise<void> {
+export async function checkConnection(creds: RecordsCredentials, fetcher: FetchLike = fetch): Promise<void> {
   const body = await getJson(creds, "/api/People", { $top: "1", $select: "Id" }, fetcher);
-  if (!Array.isArray(body)) throw new RockError("not_rock");
+  if (!Array.isArray(body)) throw new RecordsError("not_provider");
 }
 
 export interface PersonFilterIds {
@@ -130,7 +115,7 @@ export interface PersonFilterIds {
 }
 
 /** The install's ids for the defined values matching relies on. */
-export async function definedValueIds(creds: RockCredentials, fetcher: FetchLike = fetch): Promise<PersonFilterIds> {
+export async function definedValueIds(creds: RecordsCredentials, fetcher: FetchLike = fetch): Promise<PersonFilterIds> {
   const guids = Object.values(ROCK_GUIDS);
   const body = await getJson(
     creds,
@@ -138,7 +123,7 @@ export async function definedValueIds(creds: RockCredentials, fetcher: FetchLike
     { $filter: guids.map((g) => `Guid eq guid'${g}'`).join(" or "), $select: "Id,Guid" },
     fetcher,
   );
-  if (!Array.isArray(body)) throw new RockError("not_rock");
+  if (!Array.isArray(body)) throw new RecordsError("not_provider");
   const byGuid = new Map<string, number>();
   for (const row of body) {
     if (typeof row !== "object" || row === null) continue;
@@ -147,7 +132,7 @@ export async function definedValueIds(creds: RockCredentials, fetcher: FetchLike
     if (id && typeof Guid === "string") byGuid.set(Guid.toLowerCase(), id);
   }
   const recordTypePerson = byGuid.get(ROCK_GUIDS.recordTypePerson);
-  if (!recordTypePerson) throw new RockError("not_rock");
+  if (!recordTypePerson) throw new RecordsError("not_provider");
   return { recordTypePerson, recordStatusInactive: byGuid.get(ROCK_GUIDS.recordStatusInactive) ?? null };
 }
 
@@ -161,7 +146,7 @@ const MAX_PAGES = 4;
  * with any of these last names. Rock compares case-insensitively.
  */
 export async function peopleByLastName(
-  creds: RockCredentials,
+  creds: RecordsCredentials,
   ids: PersonFilterIds,
   lastNames: readonly string[],
   fetcher: FetchLike = fetch,
@@ -189,7 +174,7 @@ export async function peopleByLastName(
         },
         fetcher,
       );
-      if (!Array.isArray(body)) throw new RockError("not_rock");
+      if (!Array.isArray(body)) throw new RecordsError("not_provider");
       for (const row of body) {
         const person = parsePerson(row);
         if (person) found.set(person.id, person);
@@ -204,7 +189,7 @@ const IDS_PER_REQUEST = 50;
 
 /** The Rock people with these ids that exist; a missing id is left out. */
 export async function peopleByIds(
-  creds: RockCredentials,
+  creds: RecordsCredentials,
   ids: readonly number[],
   fetcher: FetchLike = fetch,
 ): Promise<RockPerson[]> {
@@ -222,7 +207,7 @@ export async function peopleByIds(
       },
       fetcher,
     );
-    if (!Array.isArray(body)) throw new RockError("not_rock");
+    if (!Array.isArray(body)) throw new RecordsError("not_provider");
     for (const row of body) {
       const person = parsePerson(row);
       if (person && chunk.includes(person.id)) found.push(person);

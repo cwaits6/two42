@@ -35,5 +35,5 @@ two42 also has a full member file: one row per person with their contact details
 The columns are listed in `MEMBER_CSV_COLUMNS` in [`lib/members/format.ts`](https://github.com/cwaits6/two42/blob/main/lib/members/format.ts). A file must have `first_name`, `last_name`, `email` and `has_login`.
 
 <Callout type="info">
-There is no sync with a church management system. A design for pulling people from Rock RMS is written down in [`docs/integrations/rock-rms.md`](https://github.com/cwaits6/two42/blob/main/docs/integrations/rock-rms.md), but none of it is built.
+There is no sync with a church management system yet. two42 can connect to a church's Rock RMS and link people to their records there, but it copies nothing from it, and it stays off unless the operator sets `RECORDS_KEY_SECRET`. The design for the rest is in [`docs/integrations/church-records.md`](https://github.com/cwaits6/two42/blob/main/docs/integrations/church-records.md).
 </Callout>

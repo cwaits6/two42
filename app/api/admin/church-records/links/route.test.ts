@@ -27,7 +27,7 @@ const requireOrgAdmin = vi.fn();
 vi.mock("@/lib/members/access", () => ({ requireOrgAdmin: () => requireOrgAdmin() }));
 
 const store = vi.hoisted(() => ({ loadCredentials: vi.fn(), readLinks: vi.fn(), insertLinks: vi.fn() }));
-vi.mock("@/lib/integrations/rock/store", () => store);
+vi.mock("@/lib/integrations/records/store", () => store);
 
 const rock = vi.hoisted(() => ({ definedValueIds: vi.fn(), peopleByLastName: vi.fn(), peopleByIds: vi.fn() }));
 vi.mock("@/lib/integrations/rock/client", async (original) => ({
@@ -35,6 +35,7 @@ vi.mock("@/lib/integrations/rock/client", async (original) => ({
   ...rock,
 }));
 
+import { rockProvider } from "@/lib/integrations/rock/provider";
 import { GET, POST } from "./route";
 
 const IDS = { recordTypePerson: 1, recordStatusInactive: 4 };
@@ -45,15 +46,15 @@ const peggy = {
 const tom = { ...peggy, id: 101, firstName: "Thomas", nickName: "Tom", email: "tom@example.org", birthMonth: null, birthDay: null };
 
 function post(body: unknown) {
-  return POST(new Request("http://test/api/admin/rock/links", { method: "POST", body: JSON.stringify(body) }));
+  return POST(new Request("http://test/api/admin/church-records/links", { method: "POST", body: JSON.stringify(body) }));
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
   filters.length = 0;
-  process.env.ROCK_KEY_SECRET = randomBytes(32).toString("base64");
+  process.env.RECORDS_KEY_SECRET = randomBytes(32).toString("base64");
   requireOrgAdmin.mockResolvedValue({ ok: true, orgId: "org-1", user: { id: "admin-1" }, supabase: requestClient() });
-  store.loadCredentials.mockResolvedValue({ baseUrl: "https://rock.example.org", restKey: "k" });
+  store.loadCredentials.mockResolvedValue({ provider: rockProvider, creds: { baseUrl: "https://rock.example.org", key: "k" } });
   store.readLinks.mockResolvedValue([]);
   store.insertLinks.mockResolvedValue("inserted");
   rock.definedValueIds.mockResolvedValue(IDS);
@@ -61,18 +62,26 @@ beforeEach(() => {
   rock.peopleByIds.mockImplementation(async (_c: unknown, ids: number[]) => [peggy, tom].filter((p) => ids.includes(p.id)));
 });
 
-describe("GET /api/admin/rock/links", () => {
-  it("reads this church's people and shows Rock names and what matched, never Rock's values", async () => {
+describe("GET /api/admin/church-records/links", () => {
+  it("reads this church's people and shows names from the records and what matched, never their values", async () => {
     const res = await GET();
     const body = await res.json();
     expect(filters).toContainEqual(["org_id", "org-1"]);
     expect(body.suggestions).toEqual([
-      expect.objectContaining({ profileId: PROFILE_A, rockPersonId: 100, rockName: "Peggy O'Brien", confirmableInBulk: true }),
-      expect.objectContaining({ profileId: PROFILE_B, rockPersonId: 101, rockName: "Tom O'Brien" }),
+      expect.objectContaining({ profileId: PROFILE_A, personId: "100", personName: "Peggy O'Brien", confirmableInBulk: true }),
+      expect.objectContaining({ profileId: PROFILE_B, personId: "101", personName: "Tom O'Brien" }),
     ]);
     const text = JSON.stringify(body);
     expect(text).not.toContain("obriens@example.org");
     expect(text).not.toContain("1961");
+  });
+
+  it("gives each linked person a link to open them in Rock", async () => {
+    store.readLinks.mockResolvedValue([{ profileId: PROFILE_A, personId: "100", linkedAt: "2026-11-20T00:00:00Z" }]);
+    const body = await (await GET()).json();
+    expect(body.linked).toEqual([
+      expect.objectContaining({ profileId: PROFILE_A, personUrl: "https://rock.example.org/Person/100" }),
+    ]);
   });
 
   it("asks to connect first when there is no connection", async () => {
@@ -81,15 +90,15 @@ describe("GET /api/admin/rock/links", () => {
   });
 });
 
-describe("POST /api/admin/rock/links", () => {
-  it("links a pair after checking it with Rock again", async () => {
-    const res = await post({ links: [{ profileId: PROFILE_A, rockPersonId: 100 }] });
+describe("POST /api/admin/church-records/links", () => {
+  it("links a pair after checking it with the records again", async () => {
+    const res = await post({ links: [{ profileId: PROFILE_A, personId: "100" }] });
     expect(res.status).toBe(200);
-    expect(store.insertLinks).toHaveBeenCalledWith("org-1", "admin-1", [{ profileId: PROFILE_A, rockPersonId: 100 }]);
+    expect(store.insertLinks).toHaveBeenCalledWith("org-1", "admin-1", [{ profileId: PROFILE_A, personId: "100" }]);
   });
 
   it("refuses a pair whose names don't agree, as with a spouse who shares the email", async () => {
-    const res = await post({ links: [{ profileId: PROFILE_B, rockPersonId: 100 }] });
+    const res = await post({ links: [{ profileId: PROFILE_B, personId: "100" }] });
     expect(res.status).toBe(409);
     expect(store.insertLinks).not.toHaveBeenCalled();
   });
@@ -97,8 +106,8 @@ describe("POST /api/admin/rock/links", () => {
   it("refuses a name-only match in a group of links", async () => {
     const res = await post({
       links: [
-        { profileId: PROFILE_A, rockPersonId: 100 },
-        { profileId: PROFILE_B, rockPersonId: 101 },
+        { profileId: PROFILE_A, personId: "100" },
+        { profileId: PROFILE_B, personId: "101" },
       ],
     });
     expect(res.status).toBe(409);
@@ -106,20 +115,22 @@ describe("POST /api/admin/rock/links", () => {
   });
 
   it("refuses a profile outside the church", async () => {
-    const res = await post({ links: [{ profileId: "33333333-3333-4333-8333-333333333333", rockPersonId: 100 }] });
+    const res = await post({ links: [{ profileId: "33333333-3333-4333-8333-333333333333", personId: "100" }] });
     expect(res.status).toBe(409);
   });
 
   it("refuses malformed or repeated pairs", async () => {
     expect((await post({ links: [] })).status).toBe(400);
-    expect((await post({ links: [{ profileId: "x", rockPersonId: 1 }] })).status).toBe(400);
+    expect((await post({ links: [{ profileId: "x", personId: "1" }] })).status).toBe(400);
+    expect((await post({ links: [{ profileId: PROFILE_A, personId: 100 }] })).status).toBe(400);
+    expect((await post({ links: [{ profileId: PROFILE_A, personId: "1/../2" }] })).status).toBe(400);
     expect(
-      (await post({ links: [{ profileId: PROFILE_A, rockPersonId: 100 }, { profileId: PROFILE_A, rockPersonId: 101 }] })).status,
+      (await post({ links: [{ profileId: PROFILE_A, personId: "100" }, { profileId: PROFILE_A, personId: "101" }] })).status,
     ).toBe(400);
   });
 
   it("reports an existing link as a conflict", async () => {
     store.insertLinks.mockResolvedValue("conflict");
-    expect((await post({ links: [{ profileId: PROFILE_A, rockPersonId: 100 }] })).status).toBe(409);
+    expect((await post({ links: [{ profileId: PROFILE_A, personId: "100" }] })).status).toBe(409);
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { parseRockAddress } from "./address";
+import { parseRecordsAddress } from "./address";
 
-describe("parseRockAddress", () => {
+describe("parseRecordsAddress", () => {
   it.each([
     ["https://rock.example.org", "https://rock.example.org"],
     ["rock.example.org", "https://rock.example.org"],
@@ -9,7 +9,7 @@ describe("parseRockAddress", () => {
     ["https://ROCK.Example.org:8443/", "https://rock.example.org:8443"],
     ["https://203.0.113.10", "https://203.0.113.10"],
   ])("accepts %s as %s", (input, origin) => {
-    expect(parseRockAddress(input)).toEqual({ ok: true, origin });
+    expect(parseRecordsAddress(input, "Rock RMS")).toEqual({ ok: true, origin });
   });
 
   it.each([
@@ -32,6 +32,13 @@ describe("parseRockAddress", () => {
     "https://[fd00::1]",
     "not a url at all",
   ])("refuses %s", (input) => {
-    expect(parseRockAddress(input).ok).toBe(false);
+    expect(parseRecordsAddress(input, "Rock RMS").ok).toBe(false);
+  });
+
+  it("names the product in the reason", () => {
+    expect(parseRecordsAddress("https://localhost", "Rock RMS")).toEqual({
+      ok: false,
+      reason: "Use your Rock RMS's public address.",
+    });
   });
 });
