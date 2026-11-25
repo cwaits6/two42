@@ -2667,6 +2667,41 @@ COMMENT ON FUNCTION "public"."provision_organization"("_name" "text", "_owner_em
 
 
 
+CREATE OR REPLACE FUNCTION "public"."records_save_connection"("_org_id" "uuid", "_provider" "text", "_base_url" "text", "_key_ciphertext" "text", "_key_hint" "text", "_connected_by" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _existing public.records_connections%rowtype;
+begin
+  select * into _existing
+    from public.records_connections
+   where org_id = _org_id
+     for update;
+
+  if found and _existing.provider = _provider and _existing.base_url = _base_url then
+    update public.records_connections
+       set key_ciphertext = _key_ciphertext,
+           key_hint = _key_hint,
+           connected_by = _connected_by,
+           connected_at = now()
+     where org_id = _org_id;
+    return;
+  end if;
+
+  if found then
+    delete from public.records_connections where org_id = _org_id;
+  end if;
+
+  insert into public.records_connections (org_id, provider, base_url, key_ciphertext, key_hint, connected_by)
+  values (_org_id, _provider, _base_url, _key_ciphertext, _key_hint, _connected_by);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_save_connection"("_org_id" "uuid", "_provider" "text", "_base_url" "text", "_key_ciphertext" "text", "_key_hint" "text", "_connected_by" "uuid") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."review_group_join_request"("_request_id" "uuid", "_approve" boolean) RETURNS "text"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO ''
@@ -3506,6 +3541,7 @@ CREATE OR REPLACE FUNCTION "public"."usage_page_patterns"() RETURNS "text"[]
     '/admin/members/invite',
     '/admin/requests',
     '/admin/settings',
+    '/admin/settings/church-records',
     '/admin/settings/email',
     '/admin/usage',
     '/calendar',
@@ -4583,6 +4619,46 @@ SELECT
 ALTER VIEW "public"."profiles_directory" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."records_connections" (
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "provider" "text" NOT NULL,
+    "base_url" "text" NOT NULL,
+    "key_ciphertext" "text" NOT NULL,
+    "key_hint" "text" NOT NULL,
+    "connected_by" "uuid",
+    "connected_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "connection_id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    CONSTRAINT "records_connections_base_url_check" CHECK ((("base_url" ~ '^https://[^/?#@]+$'::"text") AND ("char_length"("base_url") <= 300))),
+    CONSTRAINT "records_connections_key_hint_check" CHECK ((("char_length"("key_hint") >= 1) AND ("char_length"("key_hint") <= 4))),
+    CONSTRAINT "records_connections_provider_check" CHECK (("provider" = 'rock'::"text"))
+);
+
+
+ALTER TABLE "public"."records_connections" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."records_connections" IS 'A church''s connection to its church records: which provider, its address, and its key sealed by the server with RECORDS_KEY_SECRET. One row per church. Read and written by the service key only, after a church admin check; the key never leaves the server.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."records_person_links" (
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "connection_id" "uuid" NOT NULL,
+    "profile_id" "uuid" NOT NULL,
+    "external_person_id" "text" NOT NULL,
+    "linked_by" "uuid",
+    "linked_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "records_person_links_external_person_id_check" CHECK (("external_person_id" ~ '^[A-Za-z0-9_-]{1,64}$'::"text"))
+);
+
+
+ALTER TABLE "public"."records_person_links" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."records_person_links" IS 'Which person in the church''s records a two42 profile is, as a church admin confirmed it. Goes with the profile, and with the connection when the records are disconnected. Read and written by the service key only.';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."rsvps" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "event_id" "uuid" NOT NULL,
@@ -5137,6 +5213,26 @@ ALTER TABLE ONLY "public"."profiles"
 
 
 
+ALTER TABLE ONLY "public"."records_connections"
+    ADD CONSTRAINT "records_connections_connection_key" UNIQUE ("org_id", "connection_id");
+
+
+
+ALTER TABLE ONLY "public"."records_connections"
+    ADD CONSTRAINT "records_connections_pkey" PRIMARY KEY ("org_id");
+
+
+
+ALTER TABLE ONLY "public"."records_person_links"
+    ADD CONSTRAINT "records_person_links_one_profile_per_person" UNIQUE ("org_id", "external_person_id");
+
+
+
+ALTER TABLE ONLY "public"."records_person_links"
+    ADD CONSTRAINT "records_person_links_pkey" PRIMARY KEY ("org_id", "profile_id");
+
+
+
 ALTER TABLE ONLY "public"."rsvps"
     ADD CONSTRAINT "rsvps_event_id_user_id_occurrence_date_key" UNIQUE ("event_id", "user_id", "occurrence_date");
 
@@ -5494,6 +5590,22 @@ CREATE INDEX "profiles_family_id_idx" ON "public"."profiles" USING "btree" ("fam
 
 
 CREATE INDEX "profiles_org_id_last_first_idx" ON "public"."profiles" USING "btree" ("org_id", "last_name", "first_name");
+
+
+
+CREATE INDEX "records_connections_connected_by_idx" ON "public"."records_connections" USING "btree" ("connected_by") WHERE ("connected_by" IS NOT NULL);
+
+
+
+CREATE INDEX "records_person_links_connection_idx" ON "public"."records_person_links" USING "btree" ("org_id", "connection_id");
+
+
+
+CREATE INDEX "records_person_links_linked_by_idx" ON "public"."records_person_links" USING "btree" ("linked_by") WHERE ("linked_by" IS NOT NULL);
+
+
+
+CREATE INDEX "records_person_links_profile_id_idx" ON "public"."records_person_links" USING "btree" ("profile_id");
 
 
 
@@ -6236,6 +6348,31 @@ ALTER TABLE ONLY "public"."profiles"
 
 ALTER TABLE ONLY "public"."profiles"
     ADD CONSTRAINT "profiles_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."records_connections"
+    ADD CONSTRAINT "records_connections_connected_by_fkey" FOREIGN KEY ("connected_by", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE SET NULL ("connected_by");
+
+
+
+ALTER TABLE ONLY "public"."records_connections"
+    ADD CONSTRAINT "records_connections_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."records_person_links"
+    ADD CONSTRAINT "records_person_links_connection_fkey" FOREIGN KEY ("org_id", "connection_id") REFERENCES "public"."records_connections"("org_id", "connection_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."records_person_links"
+    ADD CONSTRAINT "records_person_links_linked_by_fkey" FOREIGN KEY ("linked_by", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE SET NULL ("linked_by");
+
+
+
+ALTER TABLE ONLY "public"."records_person_links"
+    ADD CONSTRAINT "records_person_links_profile_id_fkey" FOREIGN KEY ("profile_id", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE CASCADE;
 
 
 
@@ -7138,6 +7275,14 @@ CREATE POLICY "org isolation" ON "public"."profiles" AS RESTRICTIVE TO "authenti
 
 
 
+CREATE POLICY "org isolation" ON "public"."records_connections" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."records_person_links" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
 CREATE POLICY "org isolation" ON "public"."rsvps" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
@@ -7217,6 +7362,12 @@ ALTER TABLE "public"."prayer_responses" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."profiles" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."records_connections" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."records_person_links" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."rsvps" ENABLE ROW LEVEL SECURITY;
@@ -7601,6 +7752,11 @@ GRANT ALL ON FUNCTION "public"."profiles_own_event_reminders"() TO "service_role
 
 REVOKE ALL ON FUNCTION "public"."provision_organization"("_name" "text", "_owner_email" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."provision_organization"("_name" "text", "_owner_email" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_save_connection"("_org_id" "uuid", "_provider" "text", "_base_url" "text", "_key_ciphertext" "text", "_key_hint" "text", "_connected_by" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_save_connection"("_org_id" "uuid", "_provider" "text", "_base_url" "text", "_key_ciphertext" "text", "_key_hint" "text", "_connected_by" "uuid") TO "service_role";
 
 
 
@@ -8246,6 +8402,14 @@ GRANT ALL ON TABLE "public"."prayer_wall" TO "service_role";
 GRANT ALL ON TABLE "public"."profiles_directory" TO "anon";
 GRANT ALL ON TABLE "public"."profiles_directory" TO "authenticated";
 GRANT ALL ON TABLE "public"."profiles_directory" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."records_connections" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."records_person_links" TO "service_role";
 
 
 
