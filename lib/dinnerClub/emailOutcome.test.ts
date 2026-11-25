@@ -17,7 +17,8 @@ describe("movedNotice", () => {
       text: "Dinner moved.",
     });
     expect(movedNotice("Dinner moved.", emailOutcome({ sent: 3, failed: 1, capped: false })).kind).toBe("warning");
-    expect(movedNotice("Date moved.", emailOutcome(null)).text).toContain("Let the table know");
+    expect(movedNotice("Date moved.", emailOutcome(null)).text).toBe("Date moved. No emails went out. Let the table know the new date.");
+    expect(movedNotice("Dinner moved.", emailOutcome({ sent: 3, failed: 1, capped: false })).text).toContain("Some emails didn't go out.");
     expect(movedNotice("Dinner moved.", emailOutcome({ sent: 0, failed: 0, capped: true })).text).toContain("email limit");
   });
 });

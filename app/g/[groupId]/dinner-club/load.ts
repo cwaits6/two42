@@ -5,6 +5,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isDinnerFormat, isSeasonStatus, type SeasonStatus } from "@/lib/dinnerClub/labels";
 import type { DinnerFormat, ShuffleParty } from "@/lib/dinnerClub/shuffle";
+import { logError } from "@/lib/log";
 import { displayName } from "@/lib/names";
 import type { Database, Tables } from "@/lib/supabase/database.types";
 import { readList } from "@/lib/supabase/readList";
@@ -49,9 +50,14 @@ export interface SeasonData {
 }
 
 function seasonRows(rows: Tables<"dinner_seasons">[]): SeasonRow[] {
-  return rows.flatMap(({ format, status, ...row }) =>
-    isDinnerFormat(format) && isSeasonStatus(status) ? [{ ...row, format, status }] : []
-  );
+  return rows.flatMap(({ format, status, ...row }) => {
+    if (isDinnerFormat(format) && isSeasonStatus(status)) return [{ ...row, format, status }];
+    logError("Dinner club season has a format or status the app does not know", undefined, {
+      route: "/g/[groupId]/dinner-club",
+      ids: { seasonId: row.id },
+    });
+    return [];
+  });
 }
 
 /** The group's seasons, newest first; a member's read leaves out drafts. */

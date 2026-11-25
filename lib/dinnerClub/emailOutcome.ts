@@ -31,13 +31,17 @@ function people(n: number): string {
   return `${n} ${n === 1 ? "person was" : "people were"}`;
 }
 
+function unsentCount(outcome: EmailOutcome): string {
+  return outcome.sent === 0 ? "No emails went out." : "Some emails didn't go out.";
+}
+
 /** After a dinner or a season date moved. */
 export function movedNotice(saved: string, outcome: EmailOutcome | null): Notice {
   if (!outcome || !outcome.unsent) return { kind: "success", text: saved };
   if (outcome.capped) {
     return { kind: "warning", text: `${saved} Today's email limit was reached, so no emails went out. Let the table know the new date.` };
   }
-  return { kind: "warning", text: `${saved} Some emails didn't go out. Let the table know the new date.` };
+  return { kind: "warning", text: `${saved} ${unsentCount(outcome)} Let the table know the new date.` };
 }
 
 /** After tables were published. */
@@ -46,7 +50,7 @@ export function publishedNotice(outcome: EmailOutcome & { changed: number }): No
     return { kind: "warning", text: "Tables published. Today's email limit was reached, so no emails went out." };
   }
   if (outcome.unsent) {
-    return { kind: "warning", text: "Tables published. Some emails didn't go out. Let the people at the tables know." };
+    return { kind: "warning", text: `Tables published. ${unsentCount(outcome)} Let the people at the tables know.` };
   }
   if (outcome.changed === 0) return { kind: "success", text: "Tables published. No one's table changed." };
   if (outcome.sent === 0) return { kind: "success", text: "Tables published." };
