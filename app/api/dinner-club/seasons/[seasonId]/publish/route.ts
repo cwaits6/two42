@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { emailOutcome } from "@/lib/dinnerClub/emailOutcome";
 import { notifyTablesPublished } from "@/lib/dinnerClub/notify";
-import { dinnerClubRefusal, isUuid, serverError } from "@/lib/dinnerClub/routeErrors";
+import { isUuid } from "@/lib/groups/active";
+import { dinnerClubRefusal, serverError } from "@/lib/dinnerClub/routeErrors";
 import { logError } from "@/lib/log";
 import { resolveRequestOrgId } from "@/lib/org";
 import { createClient } from "@/lib/supabase/server";

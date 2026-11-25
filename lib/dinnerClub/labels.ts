@@ -1,6 +1,8 @@
 import { formatEventDate, formatEventTime } from "@/lib/time/zone";
 import { DINNER_FORMATS, type DinnerFormat } from "./shuffle";
 
+export { partyName } from "@/supabase/functions/_shared/dinner-labels";
+
 // Each value set below is the CHECK constraint on its column in the dinner
 // club migration; the type and the options derive from the one tuple.
 export const SEASON_STATUSES = ["draft", "open", "published", "ended"] as const;
@@ -103,10 +105,6 @@ export function howOftenLabel(season: {
   return `${nth} ${day} of each month`;
 }
 
-/** "Henry and Chloe" from the names of a party's one or two people. */
-export function partyName(names: string[]): string {
-  return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : (names[0] ?? "");
-}
 
 /** "Saturday, January 9, 2027 at 6:00 PM" in the church's zone. */
 export function dinnerWhen(iso: string, zone: string): string {

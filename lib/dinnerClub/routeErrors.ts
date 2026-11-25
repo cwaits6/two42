@@ -1,11 +1,5 @@
 import { NextResponse } from "next/server";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export function isUuid(value: string | null | undefined): value is string {
-  return Boolean(value && UUID.test(value));
-}
-
 /**
  * The answer for a refusal the dinner club migration raises, by its SQLSTATE,
  * or null for any other failure, which the caller logs as a server error.

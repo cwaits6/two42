@@ -10,6 +10,7 @@
 // resolved. Free of any supabase-js import so it can be unit tested offline.
 
 import { chunk } from "./chunk.ts";
+import { formatAddress, partyName } from "./dinner-labels.ts";
 import { type DueDinner, dinnerReadWindow, dueDinners, type ReminderDinnerRow } from "./dinner-reminder-due.ts";
 import { greetingName } from "./email-html.ts";
 import { reserveEmailQuota } from "./quota.ts";
@@ -108,16 +109,6 @@ export interface DinnerRemindersSummary extends ReturnType<typeof summarize> {
 
 const SETTLE_CHUNK = 100;
 
-function names(list: string[]): string | null {
-  if (list.length === 0) return null;
-  return list.length > 1 ? `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}` : list[0];
-}
-
-function addressLine(a: AddressRow): string {
-  const cityLine = [a.city, [a.state, a.postal_code].filter(Boolean).join(" ")].filter(Boolean).join(", ");
-  return [a.address_line1, a.address_line2, cityLine].filter((part) => part && part.trim()).join(", ");
-}
-
 function failed(what: string, error: { message: string }, orgId: string): never {
   logError("dinner reminder query failed", error, { step: what, ids: { org: orgId } });
   throw new Error(`${what} query failed: ${error.message}`);
@@ -214,15 +205,16 @@ async function readDetails(
       .eq("org_id", orgId)
       .eq("party_id", dinner.hostPartyId);
     if (addressError) failed("dinner_party_addresses", addressError, orgId);
-    address = rows?.[0] ? addressLine(rows[0]) : null;
+    address = rows?.[0] ? formatAddress(rows[0]) : null;
   }
 
   const ordered = members ?? [];
   return {
     seasonTitle,
-    hostNames: names(
-      ordered.filter((m) => m.party_id === dinner.hostPartyId).map((m) => nameOf.get(m.profile_id) ?? "").filter(Boolean),
-    ),
+    hostNames:
+      partyName(
+        ordered.filter((m) => m.party_id === dinner.hostPartyId).map((m) => nameOf.get(m.profile_id) ?? "").filter(Boolean),
+      ) || null,
     address,
     coming: ordered
       .filter((m) => !away.has(m.profile_id))

@@ -2,6 +2,8 @@ import { createEvents, type EventAttributes } from "ics";
 import { EMPTY_CALENDAR } from "@/lib/ics-utils";
 import { formatEventDate, formatEventTime } from "@/lib/time/zone";
 
+export { formatAddress } from "@/supabase/functions/_shared/dinner-labels";
+
 /** How long a dinner lasts in a calendar: dinners carry no end time. */
 export const DINNER_HOURS = 3;
 
@@ -47,14 +49,3 @@ export function dinnersICS(entries: DinnerCalendarEntry[], zone: string): string
   return value;
 }
 
-/** One address line from its parts, skipping the empty ones. */
-export function formatAddress(a: {
-  address_line1: string;
-  address_line2?: string | null;
-  city?: string | null;
-  state?: string | null;
-  postal_code?: string | null;
-}): string {
-  const cityLine = [a.city, [a.state, a.postal_code].filter(Boolean).join(" ")].filter(Boolean).join(", ");
-  return [a.address_line1, a.address_line2, cityLine].filter((part) => part && part.trim()).join(", ");
-}

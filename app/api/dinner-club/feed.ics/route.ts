@@ -1,7 +1,7 @@
 import { hashSubscriptionToken, subscriptionTokenExpiryDate } from "@/lib/calendar/subscription-token";
 import { dinnersICS, formatAddress, type DinnerCalendarEntry } from "@/lib/dinnerClub/ics";
 import { partyName } from "@/lib/dinnerClub/labels";
-import { isUuid } from "@/lib/dinnerClub/routeErrors";
+import { isUuid } from "@/lib/groups/active";
 import { logError } from "@/lib/log";
 import { isMemberRole } from "@/lib/roles";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -20,7 +20,7 @@ function failed(): Response {
 /** One person's dinners at their own tables, by the token in their private calendar link. */
 export async function GET(request: Request) {
   const token = new URL(request.url).searchParams.get("token");
-  if (!isUuid(token)) return unauthorized();
+  if (!token || !isUuid(token)) return unauthorized();
 
   const supabase = await createServiceClient();
 
