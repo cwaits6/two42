@@ -75,6 +75,7 @@ const FANOUTS = [
   { file: "app/api/serving/broadcast/route.ts", fn: null, table: "team_members" },
   { file: "lib/serving/server.ts", fn: "notifyLeadersOfCancel", table: "team_members" },
   { file: "supabase/functions/_shared/event-reminders.ts", fn: "readEvents", table: "events" },
+  { file: "supabase/functions/_shared/dinner-reminders.ts", fn: "readDinners", table: "dinners" },
 ];
 
 const INVENTORY = "docs/security/service-role-inventory.md";

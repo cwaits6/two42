@@ -4,6 +4,9 @@
 
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 import {
+  dinnerMovedEmail,
+  dinnerReminderEmail,
+  dinnerTablesEmail,
   emailLayout,
   escapeHtml,
   eventReminderEmail,
@@ -34,6 +37,28 @@ const reminders = [
     dateLabel: "Monday, November 9 at 7:00 PM",
     location: "Hall <u>B</u>",
     eventUrl: "https://two42.example/g/g1/calendar/e1",
+  }),
+  dinnerReminderEmail({
+    ...BASE,
+    seasonTitle: "Supper <u>Club</u>",
+    dateLabel: "Monday, November 9 at 6:00 PM",
+    hostNames: "Henry and <b>Chloe</b>",
+    address: "12 <i>Fixture</i> Lane",
+    coming: ["Isaac", "<u>Ruth</u>"],
+    pageUrl: "https://two42.example/g/g1/dinner-club",
+  }),
+  dinnerTablesEmail({
+    ...BASE,
+    seasonTitle: "Supper <u>Club</u>",
+    dinners: [{ dateLabel: "Monday, November 9 at 6:00 PM", hostNames: "Henry and <b>Chloe</b>" }],
+    pageUrl: "https://two42.example/g/g1/dinner-club",
+  }),
+  dinnerMovedEmail({
+    ...BASE,
+    seasonTitle: "Supper <u>Club</u>",
+    oldDateLabel: "Saturday, November 7 at 6:00 PM",
+    newDateLabel: "Monday, November 9 at 6:00 PM",
+    pageUrl: "https://two42.example/g/g1/dinner-club",
   }),
 ];
 
@@ -115,5 +140,27 @@ Deno.test("a greeting with no name leaves no dangling comma or double space", ()
     assert(!html.includes("Hi ,"));
     assert(!/Friend/.test(html));
     assert(!/Hi,\s{2}/.test(html));
+  }
+});
+
+Deno.test("the dinner reminder carries the time, host, address and who is coming", () => {
+  const { subject, html } = dinnerReminderEmail({
+    ...BASE,
+    seasonTitle: "Supper Club",
+    dateLabel: "Saturday, January 9 at 6:00 PM",
+    hostNames: "Henry and Chloe",
+    address: "12 Fixture Lane",
+    coming: ["Isaac", "Ruth"],
+    pageUrl: "https://two42.example/g/g1/dinner-club",
+  });
+  assertEquals(subject, "Reminder: Supper Club dinner on Saturday, January 9 at 6:00 PM");
+  for (const part of ["Henry and Chloe", "12 Fixture Lane", "Isaac, Ruth", "https://two42.example/g/g1/dinner-club"]) {
+    assertStringIncludes(html, part);
+  }
+});
+
+Deno.test("dinner emails never call a table a group", () => {
+  for (const { subject, html } of reminders.slice(3)) {
+    assert(!/group/i.test(`${subject} ${html.replaceAll("/g/g1/", "/")}`), subject);
   }
 });

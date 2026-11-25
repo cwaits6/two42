@@ -204,3 +204,77 @@ ${button(opts.eventUrl, "View event", opts.accent)}`,
     ),
   };
 }
+
+export function dinnerReminderEmail(opts: {
+  orgName: string;
+  accent: string;
+  name: string | null;
+  seasonTitle: string;
+  dateLabel: string;
+  hostNames: string | null;
+  address: string | null;
+  coming: string[];
+  pageUrl: string;
+}): RenderedEmail {
+  const facts: [string, string][] = [["When", opts.dateLabel]];
+  if (opts.hostNames) facts.push(["Host", opts.hostNames]);
+  if (opts.address) facts.push(["Where", opts.address]);
+  if (opts.coming.length > 0) facts.push(["Who's coming", opts.coming.join(", ")]);
+  return {
+    subject: `Reminder: ${opts.seasonTitle} dinner on ${opts.dateLabel}`,
+    html: emailLayout(
+      opts.orgName,
+      `${heading("Dinner tomorrow")}
+${paragraph(`${greeting(opts.name)} your ${strong(opts.seasonTitle)} dinner is tomorrow.`)}
+${panel(factLines(facts))}
+${paragraph("Can&#39;t make it? Say Not going so your host knows.")}
+${button(opts.pageUrl, "View dinner", opts.accent)}`,
+    ),
+  };
+}
+
+export function dinnerTablesEmail(opts: {
+  orgName: string;
+  accent: string;
+  name: string | null;
+  seasonTitle: string;
+  dinners: { dateLabel: string; hostNames: string | null }[];
+  pageUrl: string;
+}): RenderedEmail {
+  const rows = opts.dinners
+    .map((d) => `${strong(d.dateLabel)}${d.hostNames ? `, host: ${escapeHtml(d.hostNames)}` : ""}`)
+    .join("<br />");
+  return {
+    subject: `${opts.seasonTitle}: your table`,
+    html: emailLayout(
+      opts.orgName,
+      `${heading("Your table")}
+${paragraph(`${greeting(opts.name)} the tables for ${strong(opts.seasonTitle)} are ready. Your dinners:`)}
+${panel(rows)}
+${paragraph("See who is at your table and the host&#39;s address on the dinner club page.")}
+${button(opts.pageUrl, "View my table", opts.accent)}`,
+    ),
+  };
+}
+
+export function dinnerMovedEmail(opts: {
+  orgName: string;
+  accent: string;
+  name: string | null;
+  seasonTitle: string;
+  oldDateLabel: string;
+  newDateLabel: string;
+  pageUrl: string;
+}): RenderedEmail {
+  return {
+    subject: `${opts.seasonTitle}: your dinner moved to ${opts.newDateLabel}`,
+    html: emailLayout(
+      opts.orgName,
+      `${heading("Your dinner moved")}
+${paragraph(`${greeting(opts.name)} your ${strong(opts.seasonTitle)} dinner has a new date.`)}
+${panel(factLines([["Was", opts.oldDateLabel], ["Now", opts.newDateLabel]]))}
+${paragraph("Please say again whether you&#39;re going.")}
+${button(opts.pageUrl, "Reply", opts.accent)}`,
+    ),
+  };
+}
