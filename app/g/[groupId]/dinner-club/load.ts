@@ -8,6 +8,7 @@ import type { DinnerFormat, ShuffleParty } from "@/lib/dinnerClub/shuffle";
 import { logError } from "@/lib/log";
 import { displayName } from "@/lib/names";
 import type { Database, Tables } from "@/lib/supabase/database.types";
+import { fetchAll } from "@/lib/supabase/fetchAll";
 import { readList } from "@/lib/supabase/readList";
 
 type Client = SupabaseClient<Database>;
@@ -105,12 +106,25 @@ export async function loadSeasonData(supabase: Client, seasonId: string): Promis
     supabase.from("dinner_party_notes").select("party_id, food_notes").eq("season_id", seasonId),
     supabase.from("dinner_party_unavailable_dates").select("party_id, season_date_id").eq("season_id", seasonId),
     supabase.from("dinner_tables").select("id, season_date_id, position").eq("season_id", seasonId).order("position"),
-    supabase.from("dinner_seats").select("table_id, party_id, left_at").eq("season_id", seasonId),
-    supabase
-      .from("dinners")
-      .select("id, table_id, season_date_id, starts_at, host_party_id, host_unavailable")
-      .eq("season_id", seasonId)
-      .order("starts_at"),
+    // Seats, dinners and replies grow with parties times dates, so they page.
+    fetchAll((from, to) =>
+      supabase
+        .from("dinner_seats")
+        .select("table_id, party_id, left_at")
+        .eq("season_id", seasonId)
+        .order("table_id")
+        .order("party_id")
+        .range(from, to)
+    ),
+    fetchAll((from, to) =>
+      supabase
+        .from("dinners")
+        .select("id, table_id, season_date_id, starts_at, host_party_id, host_unavailable")
+        .eq("season_id", seasonId)
+        .order("starts_at")
+        .order("id")
+        .range(from, to)
+    ),
   ]);
   const read = {
     dates: readList(dates, "dinner club dates"),
@@ -128,7 +142,15 @@ export async function loadSeasonData(supabase: Client, seasonId: string): Promis
   const dinnerIds = read.dinners!.map((d) => d.id);
   const replies = dinnerIds.length
     ? readList(
-        await supabase.from("dinner_replies").select("dinner_id, profile_id, status").in("dinner_id", dinnerIds),
+        await fetchAll((from, to) =>
+          supabase
+            .from("dinner_replies")
+            .select("dinner_id, profile_id, status")
+            .in("dinner_id", dinnerIds)
+            .order("dinner_id")
+            .order("profile_id")
+            .range(from, to)
+        ),
         "dinner replies"
       )
     : [];

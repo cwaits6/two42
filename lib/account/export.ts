@@ -140,18 +140,26 @@ export async function buildAccountExport(orgId: string, personId: string) {
           .order("created_at", { ascending: false })
       : { data: [], error: null },
     // Their own party's answers; a partner's name is theirs, not this person's.
-    service
-      .from("dinner_party_members")
-      .select(
-        "dinner_parties(status, can_host, seats, kids_welcome, access_notes, pets, dinner_seasons(title), dinner_party_addresses(address_line1, address_line2, city, state, postal_code), dinner_party_notes(food_notes))",
-      )
-      .eq("org_id", orgId)
-      .eq("profile_id", personId),
-    service
-      .from("dinner_replies")
-      .select("status, updated_at, dinners(starts_at)")
-      .eq("org_id", orgId)
-      .eq("profile_id", personId),
+    fetchAll((from, to) =>
+      service
+        .from("dinner_party_members")
+        .select(
+          "dinner_parties(status, can_host, seats, kids_welcome, access_notes, pets, dinner_seasons(title), dinner_party_addresses(address_line1, address_line2, city, state, postal_code), dinner_party_notes(food_notes))",
+        )
+        .eq("org_id", orgId)
+        .eq("profile_id", personId)
+        .order("party_id")
+        .range(from, to),
+    ),
+    fetchAll((from, to) =>
+      service
+        .from("dinner_replies")
+        .select("status, updated_at, dinners(starts_at)")
+        .eq("org_id", orgId)
+        .eq("profile_id", personId)
+        .order("dinner_id")
+        .range(from, to),
+    ),
   ]);
 
   const named = (row: { name?: string } | null | undefined) => row?.name ?? null;

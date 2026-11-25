@@ -27,7 +27,12 @@ interface Chain<T> extends Result<T> {
   is(column: string, value: null): Chain<T>;
   gte(column: string, value: string): Chain<T>;
   lt(column: string, value: string): Chain<T>;
+  order(column: string): Chain<T>;
+  range(from: number, to: number): Chain<T>;
 }
+
+/** PostgREST truncates a response at max_rows without an error. */
+const PAGE = 1000;
 
 interface SettleChain extends PromiseLike<{ error: QueryError }> {
   eq(column: string, value: unknown): SettleChain;
@@ -141,15 +146,21 @@ export async function readDinners(
   if (titles.size === 0) return none;
 
   const window = dinnerReadWindow(now);
-  const { data: dinners, error: dinnersError } = await supabase
-    .from("dinners")
-    .select("id, group_id, season_id, table_id, starts_at, host_party_id")
-    .eq("org_id", orgId)
-    .in("season_id", [...titles.keys()])
-    .gte("starts_at", window.from)
-    .lt("starts_at", window.to);
-  if (dinnersError) failed("dinners", dinnersError, orgId);
-  return { rows: dinners ?? [], titles };
+  const rows: ReminderDinnerRow[] = [];
+  for (let from = 0;; from += PAGE) {
+    const { data: dinners, error: dinnersError } = await supabase
+      .from("dinners")
+      .select("id, group_id, season_id, table_id, starts_at, host_party_id")
+      .eq("org_id", orgId)
+      .in("season_id", [...titles.keys()])
+      .gte("starts_at", window.from)
+      .lt("starts_at", window.to)
+      .order("id")
+      .range(from, from + PAGE - 1);
+    if (dinnersError) failed("dinners", dinnersError, orgId);
+    rows.push(...(dinners ?? []));
+    if ((dinners ?? []).length < PAGE) return { rows, titles };
+  }
 }
 
 /** Who is at the dinner's table, who hosts it and where. */

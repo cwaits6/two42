@@ -139,7 +139,14 @@ export function SignUpList({
               <Label htmlFor={firstId} className="text-lg">
                 Person
               </Label>
-              <Select items={personItems} value={first} onValueChange={(next) => setFirst(next)}>
+              <Select
+                items={personItems}
+                value={first}
+                onValueChange={(next) => {
+                  setFirst(next);
+                  if (next === second) setSecond(NO_ONE);
+                }}
+              >
                 <SelectTrigger id={firstId} className="h-12 w-full text-lg">
                   <SelectValue placeholder="Choose someone" />
                 </SelectTrigger>

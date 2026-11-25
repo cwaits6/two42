@@ -77,6 +77,8 @@ function fakeClient(options: FakeOptions = {}) {
       is: (column: string, value: null) => filter(`${column} is ${String(value)}`),
       gte: (column: string, value: string) => filter(`${column}>=${value}`),
       lt: (column: string, value: string) => filter(`${column}<${value}`),
+      order: () => chain,
+      range: (from: number, to: number) => filter(`range ${from}-${to}`),
       in: (column: string, values: readonly unknown[]) => filter(`${column} in ${JSON.stringify(values)}`),
       then(resolve: (v: unknown) => unknown) {
         const org = recorded.filters.find((f) => f.startsWith("org_id="))?.slice("org_id=".length) ?? "";

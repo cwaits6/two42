@@ -75,6 +75,9 @@ export function SignUpForm({
   const [who, setWho] = useState(ME);
   const [other, setOther] = useState<string | null>(null);
   const createdPartyId = useRef<string | undefined>(undefined);
+  // Once the party is saved, a retry saves only its details, so who is in it
+  // can no longer change here.
+  const [partySaved, setPartySaved] = useState(false);
   const [canHost, setCanHost] = useState(existing?.canHost ?? false);
   const [seats, setSeats] = useState(String(existing?.seats ?? 8));
   const [address, setAddress] = useState<AddressFields>(existing?.address ?? prefill);
@@ -131,6 +134,7 @@ export function SignUpForm({
       if (error || !data) return fail("sign up", error);
       partyId = data as string;
       createdPartyId.current = partyId;
+      setPartySaved(true);
     }
 
     const { data: updated, error: updateError } = await supabase
@@ -208,7 +212,7 @@ export function SignUpForm({
                 <Label htmlFor={ids.who} className="text-lg">
                   Who&apos;s coming
                 </Label>
-                <Select items={whoItems} value={who} onValueChange={(next) => next && setWho(next)}>
+                <Select items={whoItems} value={who} disabled={partySaved} onValueChange={(next) => next && setWho(next)}>
                   <SelectTrigger id={ids.who} className={`w-full ${FIELD}`}>
                     <SelectValue />
                   </SelectTrigger>
@@ -227,7 +231,7 @@ export function SignUpForm({
                   <Label htmlFor={ids.other} className="text-lg">
                     Signing up with
                   </Label>
-                  <Select items={others} value={other} onValueChange={(next) => {
+                  <Select items={others} value={other} disabled={partySaved} onValueChange={(next) => {
                       setOther(next);
                       setErrors((x) => ({ ...x, other: undefined }));
                     }}>
@@ -285,7 +289,7 @@ export function SignUpForm({
               <fieldset className="space-y-3">
                 <legend className="text-lg font-medium">Address for the dinners</legend>
                 <p className="text-base text-muted-foreground">
-                  Only the people at your table and the group&apos;s leaders see it, once tables are published.
+                  The group&apos;s leaders see it. The people at your table see it once the tables are published.
                 </p>
                 <Input aria-label="Street address" placeholder="Street address" maxLength={200} value={address.address_line1} className={FIELD} onChange={setLine("address_line1")} {...invalidFieldProps(`${ids.seats}-line1`, errors.line1)} />
                 <FieldError fieldId={`${ids.seats}-line1`} message={errors.line1} />

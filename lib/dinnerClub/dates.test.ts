@@ -107,3 +107,27 @@ describe("seasonDateStarts", () => {
     ).toEqual(["2027-01-10T00:00:00.000Z", "2027-02-07T00:00:00.000Z"]);
   });
 });
+
+describe("weekly dates at the edges of the calendar", () => {
+  const rule = (startsOn: string, endsOn: string) => ({
+    startsOn,
+    endsOn,
+    repeat: { kind: "weeks" as const, everyWeeks: 1 },
+    weekday: 5,
+    startTime: "18:00",
+  });
+
+  it("carries on from December into January", () => {
+    expect(proposeDinnerDates(rule("2030-12-20", "2031-01-10"))).toEqual([
+      "2030-12-20T18:00",
+      "2030-12-27T18:00",
+      "2031-01-03T18:00",
+      "2031-01-10T18:00",
+    ]);
+  });
+
+  it("stops at a season ending on the last day of year 9999", () => {
+    expect(proposeDinnerDates(rule("9999-12-20", "9999-12-31"))).toEqual(["9999-12-24T18:00", "9999-12-31T18:00"]);
+  });
+});
+

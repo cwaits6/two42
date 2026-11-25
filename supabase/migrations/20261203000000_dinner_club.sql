@@ -620,7 +620,9 @@ create function public.dinner_food_note_party_ids() returns uuid[]
 as $$
   select coalesce(array_agg(distinct s.party_id), '{}')
   from public.dinners d
+  -- Seated in time for this dinner: a party seated later never ate at it.
   join public.dinner_seats s on s.table_id = d.table_id and s.org_id = d.org_id and s.left_at is null
+   and s.seated_at <= d.starts_at
   join public.dinner_seats hs on hs.table_id = d.table_id and hs.party_id = d.host_party_id
    and hs.org_id = d.org_id and hs.left_at is null
   where d.org_id = public.app_current_org_id()
@@ -638,7 +640,7 @@ comment on function public.dinner_tablemate_party_ids() is
 comment on function public.dinner_address_party_ids() is
   'The parties hosting a dinner at one of the caller''s tables and still seated there: the addresses the caller may read. Policy helper.';
 comment on function public.dinner_food_note_party_ids() is
-  'The parties seated at a table where the caller''s party hosts a dinner: the food notes the caller may read. Policy helper.';
+  'The parties seated, in time for it, at a dinner the caller''s party hosts: the food notes the caller may read. Policy helper.';
 
 do $$
 declare f text;
@@ -1101,13 +1103,26 @@ create trigger dinner_party_members_guard
   before insert or delete on public.dinner_party_members
   for each row execute function public.dinner_party_members_guard();
 
--- A party with nobody left in it goes, whoever removed the last person:
--- their partner, a leader, leaving the group or deleting the account.
+-- A person who leaves a party takes their replies to its dinners still to
+-- come with them, and a party with nobody left in it goes, whoever removed
+-- the last person: their partner, a leader, leaving the group or deleting
+-- the account.
 create function public.dinner_party_drop_if_empty() returns trigger
   language plpgsql security definer
   set search_path = ''
 as $$
 begin
+  delete from public.dinner_replies r
+  using public.dinners d, public.dinner_seats st
+  where r.dinner_id = d.id
+    and r.org_id = old.org_id
+    and r.profile_id = old.profile_id
+    and d.org_id = old.org_id
+    and d.starts_at > pg_catalog.now()
+    and st.table_id = d.table_id
+    and st.party_id = old.party_id
+    and st.org_id = old.org_id;
+
   delete from public.dinner_parties p
   where p.id = old.party_id
     and p.org_id = old.org_id
@@ -1540,6 +1555,16 @@ begin
     raise exception 'there is no draft to publish' using errcode = 'DC002';
   end if;
 
+  -- Postgres may evaluate OR arms in any order, so the lists are known to be
+  -- arrays before any array-only function reads them.
+  if exists (
+    select 1 from jsonb_array_elements(_body -> 'tables') t
+    where jsonb_typeof(t -> 'partyIds') is distinct from 'array'
+      or jsonb_typeof(t -> 'hosts') is distinct from 'array'
+  ) then
+    raise exception 'a table has a malformed party or host list' using errcode = 'DC002';
+  end if;
+
   -- Every table lists parties of this season that have not withdrawn. Ids
   -- are checked before anything below casts them.
   if exists (
@@ -1640,7 +1665,9 @@ begin
 
   -- Each table has exactly one host for each of its dates: every season date
   -- for a table kept all season, its own date otherwise. The host is a party
-  -- at the table that offered to host.
+  -- at the table that offered to host. A dinner already held keeps the host
+  -- it had, who may since have withdrawn, so the draft's entry for it is
+  -- neither required nor checked.
   if exists (
     select 1
     from jsonb_array_elements(_body -> 'tables') t
@@ -1651,11 +1678,22 @@ begin
       select count(*) from jsonb_array_elements(t -> 'hosts') h
       where nullif(h ->> 'seasonDateId', '')::uuid = sd.id and nullif(h ->> 'partyId', '') is not null
     ) <> 1
+      and not exists (
+        select 1 from public.dinners d
+        where d.table_id = nullif(t ->> 'tableId', '')::uuid and d.season_date_id = sd.id
+          and d.org_id = _org and d.starts_at <= pg_catalog.now()
+      )
   ) or exists (
     select 1
     from jsonb_array_elements(_body -> 'tables') t,
          jsonb_array_elements(t -> 'hosts') h
     where nullif(h ->> 'partyId', '') is not null
+      and not exists (
+        select 1 from public.dinners d
+        where d.table_id = nullif(t ->> 'tableId', '')::uuid
+          and d.season_date_id = nullif(h ->> 'seasonDateId', '')::uuid
+          and d.org_id = _org and d.starts_at <= pg_catalog.now()
+      )
       and (
         not ((t -> 'partyIds') ? (h ->> 'partyId'))
         or not exists (
@@ -1672,21 +1710,17 @@ begin
     raise exception 'each dinner needs one host from its table' using errcode = 'DC002';
   end if;
 
-  -- A dinner that has happened keeps its table and host: dropping the table
-  -- would delete the dinner and its replies.
+  -- A dinner that has happened keeps its table: dropping the table would
+  -- delete the dinner and its replies. Its host is left as it was below.
   if exists (
     select 1 from public.dinners d
     where d.season_id = _season.id and d.org_id = _org and d.starts_at <= pg_catalog.now()
       and not exists (
-        select 1
-        from jsonb_array_elements(_body -> 'tables') t,
-             jsonb_array_elements(t -> 'hosts') h
+        select 1 from jsonb_array_elements(_body -> 'tables') t
         where nullif(t ->> 'tableId', '')::uuid = d.table_id
-          and nullif(h ->> 'seasonDateId', '')::uuid = d.season_date_id
-          and nullif(h ->> 'partyId', '')::uuid is not distinct from d.host_party_id
       )
   ) then
-    raise exception 'a dinner that has happened keeps its table and host' using errcode = 'DC005';
+    raise exception 'a dinner that has happened keeps its table' using errcode = 'DC005';
   end if;
 
   _before := public.dinner_seat_signatures(_season.id, _org);
@@ -1718,12 +1752,25 @@ begin
     _kept := _kept || _table;
 
     _party_ids := array(select x::uuid from jsonb_array_elements_text(_entry -> 'partyIds') as x);
+    -- The host of a dinner already held leaves rather than losing the seat,
+    -- which would clear that dinner's host.
+    update public.dinner_seats st
+       set left_at = pg_catalog.now()
+     where st.table_id = _table and st.org_id = _org and st.left_at is null
+       and not (st.party_id = any (_party_ids))
+       and exists (
+         select 1 from public.dinners d
+         where d.table_id = _table and d.org_id = _org and d.host_party_id = st.party_id
+           and d.starts_at <= pg_catalog.now()
+       );
     delete from public.dinner_seats st
      where st.table_id = _table and st.org_id = _org and st.left_at is null
        and not (st.party_id = any (_party_ids));
-    insert into public.dinner_seats (org_id, table_id, party_id, season_id, group_id)
+    insert into public.dinner_seats as ds (org_id, table_id, party_id, season_id, group_id)
     select _org, _table, x, _season.id, _season.group_id from unnest(_party_ids) as x
-    on conflict (table_id, party_id) do nothing;
+    on conflict (table_id, party_id) do update
+      set left_at = null, seated_at = pg_catalog.now()
+      where ds.left_at is not null;
 
     _host_dates := array(
       select (h ->> 'seasonDateId')::uuid from jsonb_array_elements(_entry -> 'hosts') h
@@ -1737,9 +1784,11 @@ begin
     where nullif(h ->> 'partyId', '') is not null
     on conflict (table_id, season_date_id) do update
       set host_party_id = excluded.host_party_id, host_unavailable = false
-      where dn.host_party_id is distinct from excluded.host_party_id;
+      where dn.host_party_id is distinct from excluded.host_party_id
+        and dn.starts_at > pg_catalog.now();
     delete from public.dinners d
      where d.table_id = _table and d.org_id = _org
+       and d.starts_at > pg_catalog.now()
        and not (d.season_date_id = any (_host_dates));
   end loop;
 
@@ -1791,7 +1840,7 @@ revoke execute on function public.dinner_tables_publish(uuid) from public, anon;
 grant execute on function public.dinner_tables_publish(uuid) to authenticated;
 
 comment on function public.dinner_tables_publish(uuid) is
-  'Publishes the season''s stored draft (dinner_drafts) as its tables, seats and dinners in one transaction, and returns the people whose tables or hosts changed. Actor from auth.uid(), who must lead the group; tenant anchor: the season row''s org, pinned against app_request_org_id(). Raises DC001, DC002, DC003, or DC005 when the draft drops or rehosts a dinner that has happened.';
+  'Publishes the season''s stored draft (dinner_drafts) as its tables, seats and dinners in one transaction, and returns the people whose tables or hosts changed. Actor from auth.uid(), who must lead the group; tenant anchor: the season row''s org, pinned against app_request_org_id(). Raises DC001, DC002, DC003, or DC005 when the draft drops the table of a dinner that has happened; a held dinner keeps its host whatever the draft says.';
 
 -- ── Reminder ────────────────────────────────────────────────────────────────
 -- Starts the reminder pass for a dinner's local date when it has none,

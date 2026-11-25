@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Shuffle, TriangleAlert } from "lucide-react";
@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { publishedNotice, type EmailOutcome } from "@/lib/dinnerClub/emailOutcome";
 import {
   blocksPublish,
+  dinnerKey,
   draftWarnings,
   moveParty,
   partyPeople,
@@ -35,6 +36,7 @@ function OptionSelect({
   items,
   value,
   placeholder,
+  disabled,
   onChange,
 }: {
   id: string;
@@ -42,6 +44,7 @@ function OptionSelect({
   items: Option[];
   value: string | null;
   placeholder?: string;
+  disabled: boolean;
   onChange: (value: string) => void;
 }) {
   return (
@@ -49,7 +52,7 @@ function OptionSelect({
       <Label htmlFor={id} className="text-base text-muted-foreground">
         {label}
       </Label>
-      <Select items={items} value={value} onValueChange={(next) => next && onChange(next)}>
+      <Select items={items} value={value} disabled={disabled} onValueChange={(next) => next && onChange(next)}>
         <SelectTrigger id={id} className="h-12 w-full text-base sm:w-72">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
@@ -76,6 +79,7 @@ export function TablesEditor({
   parties,
   names,
   initialDraft,
+  heldDinners,
 }: {
   groupId: string;
   seasonId: string;
@@ -88,6 +92,8 @@ export function TablesEditor({
   /** Each party's people, by party id. */
   names: Record<string, string>;
   initialDraft: Draft | null;
+  /** Dinners already held, as `dinnerKey(tableId, seasonDateId)`. */
+  heldDinners: string[];
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft | null>(initialDraft);
@@ -98,20 +104,27 @@ export function TablesEditor({
   const dateLabel = new Map(dates.map((d) => [d.value, d.label]));
   const byId = useMemo(() => new Map(parties.map((p) => [p.id, p])), [parties]);
   const settings = { format, parties, dateIds, tableSize, allowBackToBack, pastPairs: [] };
-  const warnings = draft ? draftWarnings(draft, settings) : null;
+  const held = useMemo(() => new Set(heldDinners), [heldDinners]);
+  const warnings = draft ? draftWarnings(draft, settings, held) : null;
   const blocked = warnings ? blocksPublish(warnings) : false;
   const blockedId = useId();
   const unseated = draft
     ? parties.filter((p) => !draft.tables.some((t) => t.partyIds.includes(p.id)))
     : [];
 
+  // One save at a time: publish reads the stored draft, so an earlier save
+  // landing after a later one would publish tables the leader no longer sees.
+  const inFlight = useRef(false);
   async function save(next: Draft): Promise<boolean> {
+    if (inFlight.current) return false;
+    inFlight.current = true;
     setDraft(next);
     setSaving(true);
     const { data, error } = await createClient()
       .from("dinner_drafts")
       .upsert({ season_id: seasonId, group_id: groupId, body: JSON.parse(JSON.stringify(next)) }, { onConflict: "season_id" })
       .select("season_id");
+    inFlight.current = false;
     setSaving(false);
     if (error || !data?.length) {
       toast.error(failureMessage("save the tables"));
@@ -215,7 +228,12 @@ export function TablesEditor({
               const hostItems = t.partyIds
                 .filter((id) => byId.get(id)?.canHost)
                 .map((id) => ({ value: id, label: names[id] ?? "Party" }));
-              const hostDates = format === "same_table_rotating" ? t.hosts : t.hosts.slice(0, 1);
+              // A held dinner keeps its host, so only a rotating table's
+              // dinners still to come offer a host to pick.
+              const hostDates =
+                format === "same_table_rotating"
+                  ? t.hosts.filter((h) => !(t.tableId && held.has(dinnerKey(t.tableId, h.seasonDateId))))
+                  : t.hosts.slice(0, 1);
               return (
                 <Card key={t.key}>
                   <CardHeader>
@@ -264,6 +282,7 @@ export function TablesEditor({
                                 items={moves}
                                 value={null}
                                 placeholder="Choose"
+                                disabled={saving || publishing}
                                 onChange={(choice) => {
                                   const [kind, key, other] = choice.split(":");
                                   void save(
@@ -285,6 +304,7 @@ export function TablesEditor({
                           items={hostItems}
                           value={h.partyId}
                           placeholder="Choose a host"
+                          disabled={saving || publishing}
                           onChange={(partyId) =>
                             void save(setTableHost(draft!, t.key, partyId, format === "same_table_rotating" ? h.seasonDateId : undefined))
                           }

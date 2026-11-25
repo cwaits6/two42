@@ -31,7 +31,6 @@ const FIELDS: Record<keyof ProfileColumns, true> = {
   relationship: true,
   email_announcements: true,
   email_event_reminders: true,
-  email_dinner_club: true,
   setup_completed: true,
   approved_at: true,
   approved_by: true,

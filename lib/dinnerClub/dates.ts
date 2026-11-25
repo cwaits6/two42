@@ -69,10 +69,13 @@ export function proposeDinnerDates(rule: DateRule): string[] {
   if (rule.repeat.kind === "weeks") {
     const step = Math.max(1, Math.floor(rule.repeat.everyWeeks)) * 7;
     const start = toUTC(rule.startsOn);
-    let day = addDays(rule.startsOn, (rule.weekday - start.getUTCDay() + 7) % 7);
-    while (day <= rule.endsOn) {
-      days.push(day);
-      day = addDays(day, step);
+    const end = toUTC(rule.endsOn).getTime();
+    // Compared as times, not strings: a day past year 9999 formats as
+    // "+010000-…", which sorts before the end date.
+    let time = start.getTime() + ((rule.weekday - start.getUTCDay() + 7) % 7) * DAY_MS;
+    while (time <= end) {
+      days.push(toDay(new Date(time)));
+      time += step * DAY_MS;
     }
   } else {
     const start = toUTC(rule.startsOn);

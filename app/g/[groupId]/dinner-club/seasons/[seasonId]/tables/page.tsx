@@ -7,7 +7,7 @@ import { MoveDinnerButton } from "@/components/dinnerClub/MoveDinnerButton";
 import { TablesEditor } from "@/components/dinnerClub/TablesEditor";
 import { formatAddress } from "@/lib/dinnerClub/ics";
 import { dinnerWhen, FORMAT_LABELS, partyName } from "@/lib/dinnerClub/labels";
-import { draftFromPublished, fitDraft, parseDraft, type Draft } from "@/lib/dinnerClub/shuffle";
+import { dinnerKey, draftFromPublished, fitDraft, parseDraft, type Draft } from "@/lib/dinnerClub/shuffle";
 import { groupPath, isUuid } from "@/lib/groups/active";
 import { requireGroupLeader } from "@/lib/groups/server";
 import { groupPageTitle } from "@/lib/pageTitle";
@@ -88,6 +88,10 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
     draft && fitDraft(draft, format, dates.map((d) => d.value), shuffleable.map((p) => p.id));
   const initialDraft = fit(saved) ?? fit(fromPublished);
   const addressOf = new Map(data.addresses.map((a) => [a.party_id, formatAddress(a)]));
+  const now = new Date();
+  const heldDinners = data.dinners
+    .filter((d) => new Date(d.starts_at) <= now)
+    .map((d) => dinnerKey(d.table_id, d.season_date_id));
 
   return (
     <PageContainer size="wide">
@@ -95,6 +99,9 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
       <div className="space-y-10">
         {season.status !== "ended" && (
           <TablesEditor
+            // A publish that adds tables gives them new ids; remounting drops
+            // the pre-publish draft, whose tables would publish as new again.
+            key={data.tables.map((t) => t.id).join(",")}
             groupId={group.id}
             seasonId={season.id}
             format={format}
@@ -105,6 +112,7 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
             parties={shuffleable}
             names={names}
             initialDraft={initialDraft}
+            heldDinners={heldDinners}
           />
         )}
 

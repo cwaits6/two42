@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   blocksPublish,
+  dinnerKey,
   draftFromPublished,
   draftWarnings,
   fitDraft,
@@ -327,6 +328,21 @@ describe("draft warnings and manual changes", () => {
     expect(draftWarnings(fixed, settings).tables[a.key].noHost).toBe(false);
   });
 
+  it("asks for no host at a dinner already held, which keeps the host it had", () => {
+    const rotating = input(parties, { format: "same_table_rotating" });
+    const published: Draft = {
+      ...draft,
+      tables: draft.tables.map((t, i) => ({
+        ...t,
+        tableId: `table-${i}`,
+        hosts: t.hosts.map((h) => (h.seasonDateId === "d1" ? { ...h, partyId: null } : h)),
+      })),
+    };
+    expect(blocksPublish(draftWarnings(published, rotating))).toBe(true);
+    const held = new Set(published.tables.map((t) => dinnerKey(t.tableId!, "d1")));
+    expect(blocksPublish(draftWarnings(published, rotating, held))).toBe(false);
+  });
+
   it("drops a table its last party moves away from", () => {
     const one: Draft = {
       version: 1,
@@ -483,5 +499,45 @@ describe("a saved draft after the season changed", () => {
     expect(parseDraft(JSON.parse(JSON.stringify(draft)))).toEqual(draft);
     expect(parseDraft({})).toBeNull();
     expect(parseDraft({ version: 1, seed: 1, tables: [{ key: "a", partyIds: "h1" }] })).toBeNull();
+  });
+});
+
+describe("shuffle, hosts whose seats add up but don't fit whole parties", () => {
+  // Five couples, tables of up to 6, hosts with 5, 5 and 4 seats: two hosts
+  // have 10 seats between them, but a five-seat table takes only two couples.
+  const fiveCouples = () => [
+    party("h1", 2, { seats: 5 }),
+    party("h2", 2, { seats: 5 }),
+    party("h3", 2, { seats: 4 }),
+    party("c4", 2),
+    party("c5", 2),
+  ];
+  const byId = new Map(fiveCouples().map((p) => [p.id, p]));
+
+  it("adds a host so no table has more people than its host's seats", () => {
+    for (const seed of [1, 2, 3, 42, 99]) {
+      const draft = shuffle(input(fiveCouples(), { tableSize: { min: 4, max: 6 }, seed }));
+      expect(draft.tables).toHaveLength(3);
+      for (const t of draft.tables) {
+        const host = byId.get(t.hosts[0].partyId!)!;
+        expect(partyPeople(t, byId)).toBeLessThanOrEqual(host.seats!);
+      }
+    }
+  });
+
+  it("adds a host at a dinner when tables change each dinner", () => {
+    // Any two of these hosts have the 10 seats between them.
+    const parties = fiveCouples().map((p) => (p.canHost ? { ...p, seats: 5 } : p));
+    const seats = new Map(parties.map((p) => [p.id, p]));
+    for (const seed of [1, 2, 3, 42, 99]) {
+      const draft = shuffle(
+        input(parties, { format: "new_tables", dateIds: ["d1"], tableSize: { min: 4, max: 6 }, allowBackToBack: true, seed })
+      );
+      expect(draft.tables).toHaveLength(3);
+      for (const t of draft.tables) {
+        const host = seats.get(t.hosts[0].partyId!)!;
+        expect(partyPeople(t, seats)).toBeLessThanOrEqual(host.seats!);
+      }
+    }
   });
 });

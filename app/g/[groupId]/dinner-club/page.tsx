@@ -67,10 +67,13 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
   }
 
   const { status, format } = season;
+  const today = dayKey(new Date().toISOString(), zone);
+  // Sign-ups stay open through the close date, as the sign-up form does.
+  const statusLabel = status === "open" && today > season.signup_closes_on ? "Sign-ups closed" : STATUS_LABELS[status];
   const header = (
     <PageHeader
       title={season.title}
-      subtitle={`${STATUS_LABELS[status]} · ${FORMAT_LABELS[format]}`}
+      subtitle={`${statusLabel} · ${FORMAT_LABELS[format]}`}
       actions={
         isLeader ? (
           <div className="flex flex-col gap-3 sm:flex-row">
@@ -112,7 +115,6 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
   const partnerId = myPartyId ? peopleOf(data, myPartyId).find((id) => id !== user.id) ?? null : null;
 
   if (status === "open") {
-    const today = dayKey(new Date().toISOString(), zone);
     const windowOpen = today <= season.signup_closes_on;
     const people = windowOpen ? await loadGroupPeople(supabase, group.id) : null;
     if (windowOpen && !people) {
@@ -177,6 +179,8 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
     );
   }
   const nameOf = new Map(tablePeople.map((p) => [p.id, p.name]));
+  // A name the viewer can't read, such as someone who has left the group.
+  const UNNAMED = "A member";
   const firstNameOf = new Map(tablePeople.map((p) => [p.id, p.firstName]));
   const { data: feedToken } = await supabase.from("dinner_feed_tokens").select("profile_id").eq("profile_id", user.id).maybeSingle();
 
@@ -205,7 +209,7 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
 
   const card = (d: SeasonData["dinners"][number], heading: string) => {
     const seated = data.seats.filter((s) => s.table_id === d.table_id && !s.left_at).map((s) => s.party_id);
-    const atTable = seated.flatMap((partyId) => peopleOf(data, partyId)).map((id) => ({ id, name: nameOf.get(id) ?? "" }));
+    const atTable = seated.flatMap((partyId) => peopleOf(data, partyId)).map((id) => ({ id, name: nameOf.get(id) ?? UNNAMED }));
     const isHost = d.host_party_id === myPartyId;
     const address = data.addresses.find((a) => a.party_id === d.host_party_id);
     const replies = Object.fromEntries(
@@ -219,7 +223,7 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
           .flatMap((partyId) => {
             const note = data.notes.find((n) => n.party_id === partyId);
             return note
-              ? [{ names: partyName(peopleOf(data, partyId).map((id) => firstNameOf.get(id) ?? "")), notes: note.food_notes }]
+              ? [{ names: partyName(peopleOf(data, partyId).map((id) => firstNameOf.get(id) ?? UNNAMED)), notes: note.food_notes }]
               : [];
           })
       : [];
@@ -232,11 +236,11 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
         zone={zone}
         seasonTitle={season.title}
         heading={heading}
-        hostNames={d.host_party_id ? partyName(peopleOf(data, d.host_party_id).map((id) => firstNameOf.get(id) ?? "")) : null}
+        hostNames={d.host_party_id ? partyName(peopleOf(data, d.host_party_id).map((id) => firstNameOf.get(id) ?? UNNAMED)) : null}
         address={address ? formatAddress(address) : null}
         atTable={atTable}
         replies={replies}
-        mine={[user.id, ...(partnerId ? [partnerId] : [])].map((id) => ({ id, name: firstNameOf.get(id) ?? "" }))}
+        mine={[user.id, ...(partnerId ? [partnerId] : [])].map((id) => ({ id, name: firstNameOf.get(id) ?? UNNAMED }))}
         open={open}
         isHost={isHost}
         canMove={open && (isHost || isLeader)}

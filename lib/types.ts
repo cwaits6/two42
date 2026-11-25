@@ -36,8 +36,6 @@ export interface Profile {
   email_announcements: boolean;
   /** Event reminder emails; only the person changes it. */
   email_event_reminders: boolean;
-  /** Dinner club emails: tables, moved dinners and reminders; only the person changes it. */
-  email_dinner_club: boolean;
   setup_completed: boolean;
   approved_at: string | null;
   approved_by: string | null;

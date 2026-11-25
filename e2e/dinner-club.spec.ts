@@ -104,8 +104,12 @@ test.describe("a guest at a published table", () => {
   });
 
   test("finds no dinner on the group calendar", async ({ page }) => {
+    // At phone width the calendar opens in List, which shows every upcoming
+    // event, so the dinner 10 days out would be on screen if it leaked.
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/g/${GROUP_B}/calendar`);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.getByRole("radio", { name: "List" })).toBeChecked();
     await expect(page.getByText(TITLE)).toHaveCount(0);
     await expect(page.getByText(OWN_ADDRESS)).toHaveCount(0);
   });

@@ -73,6 +73,7 @@ async function mount() {
         ],
         names: { h1: "Hosts", c1: "Guests" },
         initialDraft: fitted,
+        heldDinners: [],
       }),
     ),
   );

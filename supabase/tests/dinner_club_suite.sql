@@ -616,6 +616,16 @@ select is(
 select is(
   (select count(*)::int from pg_temp.claim(pg_temp.id('org_a'), pg_temp.id('t1d1'), '2031-01-05')), 0,
   'a second claim sends nothing: a dinner is reminded once');
+update public.dinner_reminder_sends set claimed_at = now() - interval '11 minutes'
+ where dinner_id = pg_temp.id('t1d1') and dinner_date = '2031-01-05';
+select is(
+  (select count(*)::int from pg_temp.claim(pg_temp.id('org_a'), pg_temp.id('t1d1'), '2031-01-05')), 1,
+  'a claim left unsent for ten minutes is taken again');
+update public.dinner_reminder_sends set claimed_at = now() - interval '11 minutes', sent_at = now()
+ where dinner_id = pg_temp.id('t1d1') and dinner_date = '2031-01-05';
+select is(
+  (select count(*)::int from pg_temp.claim(pg_temp.id('org_a'), pg_temp.id('t1d1'), '2031-01-05')), 0,
+  'but a sent reminder is never sent again, however old its claim');
 update public.dinners set starts_at = '2031-01-12 17:00-06' where id = pg_temp.id('t1d1');
 insert into public.dinner_replies (org_id, dinner_id, profile_id, status)
 values (pg_temp.id('org_a'), pg_temp.id('t1d1'), pg_temp.id('g2'), 'not_going');
@@ -696,9 +706,19 @@ select is(pg_temp.count_as('u', 'dinner_party_addresses', format('party_id = %L'
 select is(pg_temp.wrote('u', format('update public.dinner_parties set status = ''signed_up'' where id = %L', pg_temp.id('pu'))), 'DC003',
   'nor can it take its seat back');
 
+select pg_temp.keep('g2_future_replies', (
+  select count(*)::text from public.dinner_replies r join public.dinners d on d.id = r.dinner_id
+  where r.profile_id = pg_temp.id('g2') and d.starts_at > now()));
+select pg_temp.keep('g1_replies', (select count(*)::text from public.dinner_replies where profile_id = pg_temp.id('g1')));
 delete from public.group_members where group_id = pg_temp.id('grp') and profile_id = pg_temp.id('g2');
 select is((select count(*)::int from public.dinner_party_members where party_id = pg_temp.id('pg')), 1,
   'leaving the group takes the person out of their party and leaves their partner in it');
+select ok(current_setting('dc.g2_future_replies')::int > 0
+  and (select count(*)::int from public.dinner_replies r join public.dinners d on d.id = r.dinner_id
+       where r.profile_id = pg_temp.id('g2') and d.starts_at > now()) = 0,
+  'and their replies to the party''s dinners still to come');
+select is((select count(*)::text from public.dinner_replies where profile_id = pg_temp.id('g1')), current_setting('dc.g1_replies'),
+  'while their partner''s replies stay');
 delete from public.group_members where group_id = pg_temp.id('grp') and profile_id = pg_temp.id('g1');
 select is((select count(*)::int from public.dinner_parties where id = pg_temp.id('pg')), 0,
   'a party left with nobody is deleted');
@@ -821,6 +841,79 @@ select is((select count(*)::int from public.dinner_season_dates where season_id 
 select ok(not has_function_privilege('anon', 'public.dinner_season_dates_replace(uuid, timestamptz[])', 'execute')
   and not has_function_privilege('anon', 'public.dinner_party_unavailable_dates_replace(uuid, uuid[])', 'execute'),
   'anon replaces no dates');
+
+-- ── Hosts taking turns, after a dinner has been held ────────────────────────
+-- One table: h (rh) hosts the first dinner, h2 (rh2) the second. The first
+-- is then held, and u (ru) is seated after it. A group runs one season at a
+-- time, so the season above ends first.
+update public.dinner_seasons set status = 'ended' where id = pg_temp.id('ns');
+do $$
+declare s uuid; r1 uuid; r2 uuid;
+begin
+  insert into public.dinner_seasons (org_id, group_id, title, format, status, starts_on, ends_on, repeat_kind, repeat_weeks, weekday, signup_closes_on)
+  values (pg_temp.id('org_a'), pg_temp.id('grp'), 'Turns', 'same_table_rotating', 'open', '2031-09-01', '2031-11-30', 'weeks', 4, 6, '2031-08-31')
+  returning id into s;
+  insert into public.dinner_season_dates (org_id, season_id, group_id, starts_at)
+  values (pg_temp.id('org_a'), s, pg_temp.id('grp'), '2031-09-06 18:00-05') returning id into r1;
+  insert into public.dinner_season_dates (org_id, season_id, group_id, starts_at)
+  values (pg_temp.id('org_a'), s, pg_temp.id('grp'), '2031-10-04 18:00-05') returning id into r2;
+  perform pg_temp.keep('rs', s::text);
+  perform pg_temp.keep('r1', r1::text);
+  perform pg_temp.keep('r2', r2::text);
+  perform pg_temp.keep('rh', pg_temp.party_of(s, array['h'], true));
+  perform pg_temp.keep('rh2', pg_temp.party_of(s, array['h2'], true));
+end $$;
+
+create function pg_temp.turns_draft(_table text, _parties text[], _host1 text, _host2 text) returns void language sql as $$
+  insert into public.dinner_drafts (org_id, season_id, group_id, body)
+  values (pg_temp.id('org_a'), pg_temp.id('rs'), pg_temp.id('grp'), jsonb_build_object('version', 1, 'seed', 1, 'tables', jsonb_build_array(
+    jsonb_build_object(
+      'key', 't', 'tableId', _table, 'seasonDateId', null,
+      'partyIds', to_jsonb(array(select pg_temp.id(p)::text from unnest(_parties) p)),
+      'hosts', jsonb_build_array(
+        jsonb_build_object('seasonDateId', pg_temp.id('r1'), 'partyId', case when _host1 is null then null else pg_temp.id(_host1) end),
+        jsonb_build_object('seasonDateId', pg_temp.id('r2'), 'partyId', pg_temp.id(_host2)))))))
+  on conflict (season_id) do update set body = excluded.body;
+$$;
+
+select pg_temp.turns_draft(null, array['rh', 'rh2'], 'rh', 'rh2');
+select ok(pg_temp.read_as('l', format('select count(*) from public.dinner_tables_publish(%L)', pg_temp.id('rs'))) ~ '^[0-9]+$',
+  'a table whose hosts take turns publishes');
+select pg_temp.keep('rt', (select id::text from public.dinner_tables where season_id = pg_temp.id('rs')));
+select pg_temp.keep('rd1', (select id::text from public.dinners where season_id = pg_temp.id('rs') and season_date_id = pg_temp.id('r1')));
+update public.dinners set starts_at = now() - interval '1 day' where id = pg_temp.id('rd1');
+
+select pg_temp.keep('ru', pg_temp.party_of(pg_temp.id('rs'), array['u'], false));
+insert into public.dinner_party_notes (org_id, party_id, season_id, group_id, food_notes)
+values (pg_temp.id('org_a'), pg_temp.id('ru'), pg_temp.id('rs'), pg_temp.id('grp'), 'No eggs');
+select pg_temp.turns_draft(current_setting('dc.rt'), array['rh', 'rh2', 'ru'], 'rh', 'rh2');
+select ok(pg_temp.read_as('l', format('select count(*) from public.dinner_tables_publish(%L)', pg_temp.id('rs'))) ~ '^[0-9]+$',
+  'a party seated after the first dinner joins the table');
+select is(pg_temp.count_as('h', 'dinner_party_notes', format('party_id = %L', pg_temp.id('ru'))), '0',
+  'the host of a dinner held before a party was seated does not read its food needs');
+select is(pg_temp.count_as('h2', 'dinner_party_notes', format('party_id = %L', pg_temp.id('ru'))), '1',
+  'the host of a dinner still to come does');
+
+select pg_temp.turns_draft(current_setting('dc.rt'), array['rh2', 'ru'], 'rh2', 'rh2');
+select ok(pg_temp.read_as('l', format('select count(*) from public.dinner_tables_publish(%L)', pg_temp.id('rs'))) ~ '^[0-9]+$',
+  'a draft that moves a held dinner''s host off the table publishes');
+select is((select host_party_id from public.dinners where id = pg_temp.id('rd1')), pg_temp.id('rh'),
+  'and the held dinner keeps the host it had, whatever the draft names');
+select isnt((select left_at from public.dinner_seats where table_id = pg_temp.id('rt') and party_id = pg_temp.id('rh')), null,
+  'whose seat is kept as left');
+select pg_temp.turns_draft(current_setting('dc.rt'), array['rh', 'rh2', 'ru'], 'rh', 'rh2');
+select ok(pg_temp.read_as('l', format('select count(*) from public.dinner_tables_publish(%L)', pg_temp.id('rs'))) ~ '^[0-9]+$',
+  'seating that host again publishes');
+select is((select left_at from public.dinner_seats where table_id = pg_temp.id('rt') and party_id = pg_temp.id('rh')), null,
+  'and gives them their seat back');
+
+select is(pg_temp.wrote('h', format('update public.dinner_parties set status = ''withdrawn'' where id = %L', pg_temp.id('rh'))), '1',
+  'the held dinner''s host withdraws');
+select pg_temp.turns_draft(current_setting('dc.rt'), array['rh2', 'ru'], null, 'rh2');
+select ok(pg_temp.read_as('l', format('select count(*) from public.dinner_tables_publish(%L)', pg_temp.id('rs'))) ~ '^[0-9]+$',
+  'and the tables publish again without them');
+select is((select host_party_id from public.dinners where id = pg_temp.id('rd1')), pg_temp.id('rh'),
+  'with the held dinner still theirs');
 
 select throws_ok(
   format('insert into public.dinner_contributions (org_id, dinner_id, party_id, season_id, group_id, table_id, item) values (%L, %L, %L, %L, %L, %L, ''Bread'')',

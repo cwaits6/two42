@@ -211,6 +211,14 @@ function tableCount(totalPeople: number, max: number, hostSeats: number[]): numb
   return Math.min(n, sorted.length);
 }
 
+/** Whether every table holds no more people than its seats. */
+function fitsSeats(slots: Slot[], byId: Map<string, ShuffleParty>, capacity: (ids: string[]) => number): boolean {
+  return slots.every((slot) => {
+    const ids = [...slot.fixed, ...slot.members];
+    return people(ids, byId) <= capacity(ids);
+  });
+}
+
 function seenFrom(pastPairs: [string, string][]): Set<string> {
   return new Set(pastPairs.map(([a, b]) => pairKey(a, b)));
 }
@@ -226,23 +234,33 @@ function sameTable(input: ShuffleInput, rng: () => number): DraftTable[] {
   const seenPairs = seenFrom(input.pastPairs);
 
   if (input.format === "same_table_one_host") {
-    const chosen = hosts.slice(0, n);
-    const chosenIds = new Set(chosen.map((h) => h.id));
-    const slots: Slot[] =
-      chosen.length > 0
-        ? chosen.map((h) => ({ fixed: [h.id], members: [] }))
-        : Array.from({ length: n }, () => ({ fixed: [], members: [] }));
-    const capacity = (ids: string[]) => {
-      const host = ids.map((id) => byId.get(id)).find((p) => p && chosenIds.has(p.id));
-      return host?.seats ?? input.tableSize.max;
+    const seatWith = (count: number) => {
+      const chosen = hosts.slice(0, count);
+      const chosenIds = new Set(chosen.map((h) => h.id));
+      const slots: Slot[] =
+        chosen.length > 0
+          ? chosen.map((h) => ({ fixed: [h.id], members: [] }))
+          : Array.from({ length: count }, () => ({ fixed: [], members: [] }));
+      const capacity = (ids: string[]) => {
+        const host = ids.map((id) => byId.get(id)).find((p) => p && chosenIds.has(p.id));
+        return host?.seats ?? input.tableSize.max;
+      };
+      const seated = seat(
+        slots,
+        input.parties.filter((p) => !chosenIds.has(p.id)).map((p) => p.id),
+        { byId, capacity, allowed: () => true, seenPairs },
+        rng
+      );
+      return { seated, capacity };
     };
-    const seated = seat(
-      slots,
-      input.parties.filter((p) => !chosenIds.has(p.id)).map((p) => p.id),
-      { byId, capacity, allowed: () => true, seenPairs },
-      rng
-    );
-    return seated.map((slot, i) => ({
+    // Seats add up without fitting when parties can't split across tables
+    // (two five-seat tables can't take three couples), so try another host.
+    let pick = seatWith(n);
+    for (let more = n + 1; !fitsSeats(pick.seated, byId, pick.capacity) && more <= hosts.length; more++) {
+      const next = seatWith(more);
+      if (fitsSeats(next.seated, byId, next.capacity)) pick = next;
+    }
+    return pick.seated.map((slot, i) => ({
       key: `t${i + 1}`,
       tableId: null,
       seasonDateId: null,
@@ -317,27 +335,35 @@ function newTables(input: ShuffleInput, rng: () => number): DraftTable[] {
     const needed = tableCount(total, input.tableSize.max, free.map((p) => p.seats ?? 0));
     // Someone hosts two in a row only when there are too few hosts otherwise.
     const ranked = [...fair(rested), ...fair(free.filter((p) => !rested.includes(p)))];
-    let chosen = ranked.slice(0, needed);
-    while (chosen.length < ranked.length && chosen.reduce((a, p) => a + (p.seats ?? 0), 0) < total) {
-      chosen = ranked.slice(0, chosen.length + 1);
+    let count = Math.min(needed, ranked.length);
+    while (count < ranked.length && ranked.slice(0, count).reduce((a, p) => a + (p.seats ?? 0), 0) < total) count += 1;
+    const seatWith = (n: number) => {
+      const chosen = ranked.slice(0, n);
+      const chosenIds = new Set(chosen.map((h) => h.id));
+      const slots: Slot[] =
+        chosen.length > 0
+          ? chosen.map((h) => ({ fixed: [h.id], members: [] }))
+          : [{ fixed: [], members: [] }];
+      const capacity = (ids: string[]) => {
+        const host = ids.find((id) => chosenIds.has(id));
+        return (host && byId.get(host)?.seats) || input.tableSize.max;
+      };
+      const seated = seat(
+        slots,
+        input.parties.filter((p) => !chosenIds.has(p.id)).map((p) => p.id),
+        { byId, capacity, allowed: () => true, seenPairs },
+        rng
+      );
+      return { chosen, chosenIds, seated, capacity };
+    };
+    let pick = seatWith(count);
+    for (let more = count + 1; !fitsSeats(pick.seated, byId, pick.capacity) && more <= ranked.length; more++) {
+      const next = seatWith(more);
+      if (fitsSeats(next.seated, byId, next.capacity)) pick = next;
     }
-    const chosenIds = new Set(chosen.map((h) => h.id));
+    const { chosen, chosenIds, seated } = pick;
     chosen.forEach((h) => hosted.set(h.id, (hosted.get(h.id) ?? 0) + 1));
 
-    const slots: Slot[] =
-      chosen.length > 0
-        ? chosen.map((h) => ({ fixed: [h.id], members: [] }))
-        : [{ fixed: [], members: [] }];
-    const capacity = (ids: string[]) => {
-      const host = ids.find((id) => chosenIds.has(id));
-      return (host && byId.get(host)?.seats) || input.tableSize.max;
-    };
-    const seated = seat(
-      slots,
-      input.parties.filter((p) => !chosenIds.has(p.id)).map((p) => p.id),
-      { byId, capacity, allowed: () => true, seenPairs },
-      rng
-    );
     seated.forEach((slot, i) => {
       const partyIds = [...slot.fixed, ...slot.members];
       for (let a = 0; a < partyIds.length; a++) {
@@ -420,9 +446,16 @@ export function tooFewHosts(
   return dateIds.some((d) => hosts.filter((p) => !p.unavailableDateIds.includes(d)).length < needed);
 }
 
+/** The key of a published table's dinner on one date, as in `heldDinners`. */
+export function dinnerKey(tableId: string, seasonDateId: string): string {
+  return `${tableId}:${seasonDateId}`;
+}
+
 export function draftWarnings(
   draft: Draft,
-  input: Pick<ShuffleInput, "format" | "parties" | "dateIds" | "tableSize" | "allowBackToBack" | "pastPairs">
+  input: Pick<ShuffleInput, "format" | "parties" | "dateIds" | "tableSize" | "allowBackToBack" | "pastPairs">,
+  /** Dinners already held: they keep the host they had, so need none here. */
+  heldDinners: ReadonlySet<string> = new Set()
 ): DraftWarnings {
   const parties = new Map(input.parties.map((p) => [p.id, p]));
   const seen = seenFrom(input.pastPairs);
@@ -443,7 +476,8 @@ export function draftWarnings(
   for (const t of ordered) {
     const seats = tableSeats(t, parties);
     const expected = input.format === "new_tables" ? (t.seasonDateId ? [t.seasonDateId] : []) : input.dateIds;
-    const noHost = expected.some((d) => !t.hosts.some((h) => h.seasonDateId === d && h.partyId));
+    const held = (d: string) => t.tableId !== null && heldDinners.has(dinnerKey(t.tableId, d));
+    const noHost = expected.some((d) => !held(d) && !t.hosts.some((h) => h.seasonDateId === d && h.partyId));
     const repeatPairs: [string, string][] = [];
     for (let a = 0; a < t.partyIds.length; a++) {
       for (let b = a + 1; b < t.partyIds.length; b++) {
