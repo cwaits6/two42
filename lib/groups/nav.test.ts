@@ -226,3 +226,30 @@ describe("buildSidebar: the Group settings count", () => {
     expect(settingsRow(items)).toBeUndefined();
   });
 });
+
+describe("buildSidebar: the dinner club", () => {
+  const labels = (items: SidebarItem[]) => outline(items);
+
+  it("shows no Dinner club page until the group turns it on", () => {
+    const items = buildSidebar(input({ memberships: [A], activeGroup: A, hasServingAccess: true }));
+    expect(labels(items).some((line) => line.startsWith("Dinner club"))).toBe(false);
+  });
+
+  it("lists it after Serving in a group that turned it on", () => {
+    const items = labels(
+      buildSidebar(input({ memberships: [A], activeGroup: A, hasServingAccess: true, dinnerClubGroupIds: [A_ID] }))
+    );
+    expect(items[items.indexOf(`Serving /g/${A_ID}/serving`) + 1]).toBe(`Dinner club /g/${A_ID}/dinner-club`);
+  });
+
+  it("shows it only inside the group that turned it on", () => {
+    const two = { memberships: [A, B], dinnerClubGroupIds: [A_ID] };
+    expect(labels(buildSidebar(input({ ...two, activeGroup: A })))).toContain(`Dinner club /g/${A_ID}/dinner-club`);
+    expect(labels(buildSidebar(input({ ...two, activeGroup: B }))).some((line) => line.startsWith("Dinner club"))).toBe(
+      false
+    );
+    expect(labels(buildSidebar(input({ ...two, activeGroup: null }))).some((line) => line.startsWith("Dinner club"))).toBe(
+      false
+    );
+  });
+});

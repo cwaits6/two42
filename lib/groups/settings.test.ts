@@ -87,6 +87,7 @@ describe("getGroupSettings", () => {
         calendar_event_location: true,
         event_reminders_enabled: false,
         event_reminder_default_days: 7,
+        dinner_club_enabled: true,
       },
       error: null,
     });
@@ -98,6 +99,7 @@ describe("getGroupSettings", () => {
       calendar_event_location: true,
       event_reminders_enabled: false,
       event_reminder_default_days: 7,
+      dinner_club_enabled: true,
     });
   });
 

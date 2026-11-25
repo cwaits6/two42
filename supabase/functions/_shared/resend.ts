@@ -36,6 +36,11 @@ export function eventReminderIdempotencyKey(r: { eventId: string; occurrenceDate
   return `event-reminder/${r.eventId}/${r.occurrenceDate}/${r.profileId}`;
 }
 
+/** The key under which Resend deduplicates one person's reminder for one dinner on one date. */
+export function dinnerReminderIdempotencyKey(r: { dinnerId: string; dinnerDate: string; profileId: string }): string {
+  return `dinner-reminder/${r.dinnerId}/${r.dinnerDate}/${r.profileId}`;
+}
+
 /** Maps Resend's answer to what the caller does next. */
 export function resendOutcome(status: number, body: string): SendOutcome {
   if (status >= 200 && status < 300) return "sent";

@@ -43,6 +43,11 @@ declare
   _group_member uuid;
   _label uuid;
   _invite_link uuid;
+  _dinner_season uuid;
+  _dinner_date uuid;
+  _dinner_party uuid;
+  _dinner_table uuid;
+  _dinner uuid;
 begin
   -- provisioning already seeded: organizations, site_settings,
   -- access_requests (owner), and the owner's profiles row via signup.
@@ -168,6 +173,44 @@ begin
     values (_org, _event, current_date, _owner);
   insert into public.usage_counts (org_id, usage_date, kind, pattern, total)
     values (_org, current_date, 'view', '/dashboard', 1);
+  -- A published dinner club season with one table, one dinner and its reply.
+  -- The reminder record is service-role-only, like the other reminders.
+  insert into public.dinner_seasons (org_id, group_id, title, format, status, starts_on, ends_on,
+      repeat_kind, repeat_weeks, weekday, signup_closes_on)
+    values (_org, _group, _tag || ' season', 'same_table_one_host', 'published', current_date, current_date + 60,
+      'weeks', 4, 6, current_date)
+    returning id into _dinner_season;
+  insert into public.dinner_season_dates (org_id, season_id, group_id, starts_at)
+    values (_org, _dinner_season, _group, now() + interval '7 days') returning id into _dinner_date;
+  insert into public.dinner_parties (org_id, season_id, group_id, can_host, seats)
+    values (_org, _dinner_season, _group, true, 6) returning id into _dinner_party;
+  insert into public.dinner_party_members (org_id, party_id, profile_id, season_id, group_id)
+    values (_org, _dinner_party, _owner, _dinner_season, _group);
+  insert into public.dinner_party_addresses (org_id, party_id, season_id, group_id, address_line1)
+    values (_org, _dinner_party, _dinner_season, _group, _tag || ' lane');
+  insert into public.dinner_party_notes (org_id, party_id, season_id, group_id, food_notes)
+    values (_org, _dinner_party, _dinner_season, _group, _tag || ' food notes');
+  insert into public.dinner_party_unavailable_dates (org_id, party_id, season_date_id, season_id, group_id)
+    values (_org, _dinner_party, _dinner_date, _dinner_season, _group);
+  insert into public.dinner_drafts (org_id, season_id, group_id, body)
+    values (_org, _dinner_season, _group, '{"tables": []}'::jsonb);
+  insert into public.dinner_tables (org_id, season_id, group_id, position)
+    values (_org, _dinner_season, _group, 1) returning id into _dinner_table;
+  insert into public.dinner_seats (org_id, table_id, party_id, season_id, group_id)
+    values (_org, _dinner_table, _dinner_party, _dinner_season, _group);
+  insert into public.dinners (org_id, season_id, group_id, table_id, season_date_id, starts_at, host_party_id)
+    values (_org, _dinner_season, _group, _dinner_table, _dinner_date, now() + interval '7 days', _dinner_party)
+    returning id into _dinner;
+  insert into public.dinner_replies (org_id, dinner_id, profile_id, status)
+    values (_org, _dinner, _owner, 'going');
+  insert into public.dinner_contributions (org_id, dinner_id, party_id, season_id, group_id, table_id, item)
+    values (_org, _dinner, _dinner_party, _dinner_season, _group, _dinner_table, 'Bread');
+  insert into public.dinner_feed_tokens (org_id, profile_id, token_hash, expires_at)
+    values (_org, _owner, _tag || '-dinner-token-hash', now() + interval '30 days');
+  insert into public.dinner_reminder_passes (org_id, dinner_id, dinner_date)
+    values (_org, _dinner, current_date);
+  insert into public.dinner_reminder_sends (org_id, dinner_id, dinner_date, profile_id)
+    values (_org, _dinner, current_date, _owner);
   -- Service-role-only: a sealed key and the links a church admin confirmed through the server.
   insert into public.records_connections (org_id, provider, base_url, key_ciphertext, key_hint, connected_by)
     values (_org, 'rock', 'https://rock.' || _tag || '.example', 'k1.k.a.b', 'abcd', _owner);
@@ -365,13 +408,15 @@ begin
        and tables[i] in ('org_email_usage', 'org_email_limits', 'org_domain_worker_events',
                          'serving_reminder_passes', 'serving_reminder_sends',
                          'event_reminder_passes', 'event_reminder_sends', 'prayer_comments',
-                         'records_connections', 'records_person_links') then
+                         'records_connections', 'records_person_links',
+                         'dinner_reminder_passes', 'dinner_reminder_sends') then
       -- Service-role-only tables (restrictive policy, ALL privileges
       -- revoked — org_email_usage / org_email_limits /
       -- org_domain_worker_events / serving_reminder_passes /
       -- serving_reminder_sends / event_reminder_passes /
       -- event_reminder_sends / prayer_comments / records_connections /
-      -- records_person_links): a privilege denial is the intended,
+      -- records_person_links / dinner_reminder_passes /
+      -- dinner_reminder_sends): a privilege denial is the intended,
       -- stronger-than-row-filtering isolation outcome, not a broken check.
       -- Scoped to exactly those tables so a normal tenant table losing
       -- authenticated read access still fails.

@@ -25,7 +25,7 @@ export default async function SettingsPage() {
 
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("role, email_announcements, email_event_reminders")
+    .select("role, email_announcements, email_event_reminders, email_dinner_club")
     .eq("id", user.id)
     .single();
 
@@ -55,6 +55,7 @@ export default async function SettingsPage() {
               initial={{
                 email_announcements: member.email_announcements ?? true,
                 email_event_reminders: member.email_event_reminders ?? true,
+                email_dinner_club: member.email_dinner_club ?? true,
               }}
             />
             <FeedbackCard />

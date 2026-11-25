@@ -46,7 +46,11 @@ export interface CleanupClient {
     select(columns: string, options?: { count: "exact" }): ReadChain;
   };
   rpc(
-    fn: "serving_reminder_passes_prune" | "event_reminder_passes_prune" | "usage_counts_prune",
+    fn:
+      | "serving_reminder_passes_prune"
+      | "event_reminder_passes_prune"
+      | "dinner_reminder_passes_prune"
+      | "usage_counts_prune",
     args: { _org_id: string; _before: string; _limit: number },
   ): PromiseLike<{ data: number | null; error: QueryError }>;
 }
@@ -59,6 +63,7 @@ export interface RemovedCounts {
   prayerRequests: number;
   reminderPasses: number;
   eventReminderPasses: number;
+  dinnerReminderPasses: number;
   usageCounts: number;
 }
 
@@ -136,6 +141,7 @@ export async function cleanUpOrg(
     prayerRequests: 0,
     reminderPasses: 0,
     eventReminderPasses: 0,
+    dinnerReminderPasses: 0,
     usageCounts: 0,
   };
   const failures: OrgCleanupResult["failures"] = [];
@@ -258,8 +264,8 @@ export async function cleanUpOrg(
   // night after a gap never deletes everything in one statement. The
   // database API cannot limit a delete, so the bound lives in the function.
   function prune(
-    key: "reminderPasses" | "eventReminderPasses" | "usageCounts",
-    table: "serving_reminder_passes" | "event_reminder_passes" | "usage_counts",
+    key: "reminderPasses" | "eventReminderPasses" | "dinnerReminderPasses" | "usageCounts",
+    table: "serving_reminder_passes" | "event_reminder_passes" | "dinner_reminder_passes" | "usage_counts",
     before: string,
   ) {
     return attempt(table, async () => {
@@ -280,6 +286,7 @@ export async function cleanUpOrg(
 
   await prune("reminderPasses", "serving_reminder_passes", reminderCutoff(now));
   await prune("eventReminderPasses", "event_reminder_passes", reminderCutoff(now));
+  await prune("dinnerReminderPasses", "dinner_reminder_passes", reminderCutoff(now));
   await prune("usageCounts", "usage_counts", usageCutoff(now));
 
   return { orgId, removed, failures };

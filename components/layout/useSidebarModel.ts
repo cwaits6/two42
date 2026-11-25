@@ -10,7 +10,7 @@ import { useGroupWaitingRequests, useSidebar } from "./SidebarContext";
 
 /** The page list for the current viewer and path. */
 export function useSidebarModel(): SidebarItem[] {
-  const { hasServingAccess, orgName } = useSidebar();
+  const { hasServingAccess, dinnerClubGroupIds, orgName } = useSidebar();
   const memberships = useGroupMemberships();
   const activeGroup = useActiveGroup();
   const discoveryOn = useDiscoveryOn();
@@ -23,6 +23,7 @@ export function useSidebarModel(): SidebarItem[] {
     isLeader,
     waitingRequests,
     hasServingAccess,
+    dinnerClubGroupIds,
     orgName,
   });
 }

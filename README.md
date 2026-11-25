@@ -204,6 +204,7 @@ repository's CI runs it against the hosted project every six hours.
 | Job | When (UTC) | Function |
 |---|---|---|
 | `send-event-reminders-daily` | 15:00, 16:00 and 17:00 daily | `send-event-reminders` |
+| `send-dinner-reminders-daily` | 15:00, 16:00 and 17:00 daily | `send-dinner-reminders` |
 | `send-serving-reminders-hourly` | Every hour, on the hour | `send-serving-reminders` |
 | `send-serving-monthly-broadcast` | 15:00 on the 1st | `send-serving-reminders` |
 | `clean-up-expired-data-nightly` | 09:00 daily | `clean-up-expired-data` |
@@ -221,7 +222,7 @@ migrations, deploy the functions and set their secrets:
 npx supabase login
 npx supabase link --project-ref <project-ref>
 npx supabase db push --remote
-npx supabase functions deploy send-event-reminders send-serving-reminders clean-up-expired-data
+npx supabase functions deploy send-event-reminders send-serving-reminders clean-up-expired-data send-dinner-reminders
 npx supabase secrets set RESEND_API_KEY=<key> SITE_URL=https://your.domain \
   SERVING_LINK_SECRET=<secret> EMAIL_FROM='Your Church <noreply@your.domain>'
 ```

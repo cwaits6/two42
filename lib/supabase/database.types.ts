@@ -177,6 +177,584 @@ isOneToOne: false
       referencedColumns: ["id","org_id"]
     }
                   ]
+                },"dinner_contributions": {
+                  Row: {
+                    "dinner_id": string,"group_id": string,"item": string,"org_id": string,"party_id": string,"season_id": string,"table_id": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "dinner_id": string,"group_id": string,"item": string,"org_id"?: string,"party_id": string,"season_id": string,"table_id": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "dinner_id"?: string,"group_id"?: string,"item"?: string,"org_id"?: string,"party_id"?: string,"season_id"?: string,"table_id"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "dinner_contributions_dinner_fkey"
+      columns: ["dinner_id","table_id","season_id","group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinners"
+      referencedColumns: ["id","table_id","season_id","group_id","org_id"]
+    },{
+      foreignKeyName: "dinner_contributions_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "dinner_contributions_season_fkey"
+      columns: ["season_id","group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_seasons"
+      referencedColumns: ["id","group_id","org_id"]
+    },{
+      foreignKeyName: "dinner_contributions_seat_fkey"
+      columns: ["table_id","party_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_seats"
+      referencedColumns: ["table_id","party_id","org_id"]
+    }
+                  ]
+                },"dinner_drafts": {
+                  Row: {
+                    "body": NonNullable<Json>,"group_id": string,"org_id": string,"season_id": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "body": NonNullable<Json>,"group_id": string,"org_id"?: string,"season_id": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "body"?: NonNullable<Json>,"group_id"?: string,"org_id"?: string,"season_id"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "dinner_drafts_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "dinner_drafts_season_fkey"
+      columns: ["season_id","group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_seasons"
+      referencedColumns: ["id","group_id","org_id"]
+    }
+                  ]
+                },"dinner_feed_tokens": {
+                  Row: {
+                    "created_at": string,"expires_at": string,"org_id": string,"profile_id": string,"token_hash": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"expires_at": string,"org_id"?: string,"profile_id": string,"token_hash": string
+                  }
+                  Update: {
+                    "created_at"?: string,"expires_at"?: string,"org_id"?: string,"profile_id"?: string,"token_hash"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "dinner_feed_tokens_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "dinner_feed_tokens_profile_fkey"
+      columns: ["profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "dinner_feed_tokens_profile_fkey"
+      columns: ["profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
+                },"dinner_parties": {
+                  Row: {
+                    "access_notes": string | null,"can_host": boolean,"created_at": string,"created_by": string | null,"group_id": string,"id": string,"kids_welcome": boolean | null,"org_id": string,"pets": string | null,"preferred_season_date_id": string | null,"season_id": string,"seats": number | null,"status": string,"updated_at": string,"withdrawn_at": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "access_notes"?: string | null,"can_host"?: boolean,"created_at"?: string,"created_by"?: string | null,"group_id": string,"id"?: string,"kids_welcome"?: boolean | null,"org_id"?: string,"pets"?: string | null,"preferred_season_date_id"?: string | null,"season_id": string,"seats"?: number | null,"status"?: string,"updated_at"?: string,"withdrawn_at"?: string | null
+                  }
+                  Update: {
+                    "access_notes"?: string | null,"can_host"?: boolean,"created_at"?: string,"created_by"?: string | null,"group_id"?: string,"id"?: string,"kids_welcome"?: boolean | null,"org_id"?: string,"pets"?: string | null,"preferred_season_date_id"?: string | null,"season_id"?: string,"seats"?: number | null,"status"?: string,"updated_at"?: string,"withdrawn_at"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "dinner_parties_created_by_fkey"
+      columns: ["created_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "dinner_parties_created_by_fkey"
+      columns: ["created_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "dinner_parties_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "dinner_parties_preferred_date_fkey"
+      columns: ["preferred_season_date_id","season_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_season_dates"
+      referencedColumns: ["id","season_id","org_id"]
+    },{
+      foreignKeyName: "dinner_parties_season_fkey"
+      columns: ["season_id","group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_seasons"
+      referencedColumns: ["id","group_id","org_id"]
+    }
+                  ]
+                },"dinner_party_addresses": {
+                  Row: {
+                    "address_line1": string,"address_line2": string | null,"city": string | null,"group_id": string,"org_id": string,"party_id": string,"postal_code": string | null,"season_id": string,"state": string | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "address_line1": string,"address_line2"?: string | null,"city"?: string | null,"group_id": string,"org_id"?: string,"party_id": string,"postal_code"?: string | null,"season_id": string,"state"?: string | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "address_line1"?: string,"address_line2"?: string | null,"city"?: string | null,"group_id"?: string,"org_id"?: string,"party_id"?: string,"postal_code"?: string | null,"season_id"?: string,"state"?: string | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "dinner_party_addresses_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "dinner_party_addresses_party_fkey"
+      columns: ["party_id","season_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_parties"
+      referencedColumns: ["id","season_id","org_id"]
+    },{
+      foreignKeyName: "dinner_party_addresses_season_fkey"
+      columns: ["season_id","group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_seasons"
+      referencedColumns: ["id","group_id","org_id"]
+    }
+                  ]
+                },"dinner_party_members": {
+                  Row: {
+                    "created_at": string,"group_id": string,"org_id": string,"party_id": string,"profile_id": string,"season_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"group_id": string,"org_id"?: string,"party_id": string,"profile_id": string,"season_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"group_id"?: string,"org_id"?: string,"party_id"?: string,"profile_id"?: string,"season_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "dinner_party_members_group_member_fkey"
+      columns: ["group_id","profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "group_members"
+      referencedColumns: ["group_id","profile_id","org_id"]
+    },{
+      foreignKeyName: "dinner_party_members_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "dinner_party_members_party_fkey"
+      columns: ["party_id","season_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_parties"
+      referencedColumns: ["id","season_id","org_id"]
+    },{
+      foreignKeyName: "dinner_party_members_season_fkey"
+      columns: ["season_id","group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_seasons"
+      referencedColumns: ["id","group_id","org_id"]
+    }
+                  ]
+                },"dinner_party_notes": {
+                  Row: {
+                    "food_notes": string,"group_id": string,"org_id": string,"party_id": string,"season_id": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "food_notes": string,"group_id": string,"org_id"?: string,"party_id": string,"season_id": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "food_notes"?: string,"group_id"?: string,"org_id"?: string,"party_id"?: string,"season_id"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "dinner_party_notes_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "dinner_party_notes_party_fkey"
+      columns: ["party_id","season_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_parties"
+      referencedColumns: ["id","season_id","org_id"]
+    },{
+      foreignKeyName: "dinner_party_notes_season_fkey"
+      columns: ["season_id","group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_seasons"
+      referencedColumns: ["id","group_id","org_id"]
+    }
+                  ]
+                },"dinner_party_unavailable_dates": {
+                  Row: {
+                    "group_id": string,"org_id": string,"party_id": string,"season_date_id": string,"season_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "group_id": string,"org_id"?: string,"party_id": string,"season_date_id": string,"season_id": string
+                  }
+                  Update: {
+                    "group_id"?: string,"org_id"?: string,"party_id"?: string,"season_date_id"?: string,"season_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "dinner_party_unavailable_dates_date_fkey"
+      columns: ["season_date_id","season_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_season_dates"
+      referencedColumns: ["id","season_id","org_id"]
+    },{
+      foreignKeyName: "dinner_party_unavailable_dates_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "dinner_party_unavailable_dates_party_fkey"
+      columns: ["party_id","season_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_parties"
+      referencedColumns: ["id","season_id","org_id"]
+    },{
+      foreignKeyName: "dinner_party_unavailable_dates_season_fkey"
+      columns: ["season_id","group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_seasons"
+      referencedColumns: ["id","group_id","org_id"]
+    }
+                  ]
+                },"dinner_reminder_passes": {
+                  Row: {
+                    "dinner_date": string,"dinner_id": string,"org_id": string,"started_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "dinner_date": string,"dinner_id": string,"org_id"?: string,"started_at"?: string
+                  }
+                  Update: {
+                    "dinner_date"?: string,"dinner_id"?: string,"org_id"?: string,"started_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "dinner_reminder_passes_dinner_fkey"
+      columns: ["dinner_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinners"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "dinner_reminder_passes_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"dinner_reminder_sends": {
+                  Row: {
+                    "claimed_at": string | null,"dinner_date": string,"dinner_id": string,"org_id": string,"profile_id": string,"sent_at": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "claimed_at"?: string | null,"dinner_date": string,"dinner_id": string,"org_id"?: string,"profile_id": string,"sent_at"?: string | null
+                  }
+                  Update: {
+                    "claimed_at"?: string | null,"dinner_date"?: string,"dinner_id"?: string,"org_id"?: string,"profile_id"?: string,"sent_at"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "dinner_reminder_sends_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "dinner_reminder_sends_pass_fkey"
+      columns: ["dinner_id","dinner_date","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_reminder_passes"
+      referencedColumns: ["dinner_id","dinner_date","org_id"]
+    },{
+      foreignKeyName: "dinner_reminder_sends_profile_fkey"
+      columns: ["profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "dinner_reminder_sends_profile_fkey"
+      columns: ["profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
+                },"dinner_replies": {
+                  Row: {
+                    "dinner_id": string,"org_id": string,"profile_id": string,"replied_by": string | null,"status": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "dinner_id": string,"org_id"?: string,"profile_id": string,"replied_by"?: string | null,"status": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "dinner_id"?: string,"org_id"?: string,"profile_id"?: string,"replied_by"?: string | null,"status"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "dinner_replies_dinner_fkey"
+      columns: ["dinner_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinners"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "dinner_replies_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "dinner_replies_profile_fkey"
+      columns: ["profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "dinner_replies_profile_fkey"
+      columns: ["profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "dinner_replies_replied_by_fkey"
+      columns: ["replied_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "dinner_replies_replied_by_fkey"
+      columns: ["replied_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
+                },"dinner_season_dates": {
+                  Row: {
+                    "created_at": string,"group_id": string,"id": string,"org_id": string,"season_id": string,"starts_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"group_id": string,"id"?: string,"org_id"?: string,"season_id": string,"starts_at": string
+                  }
+                  Update: {
+                    "created_at"?: string,"group_id"?: string,"id"?: string,"org_id"?: string,"season_id"?: string,"starts_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "dinner_season_dates_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "dinner_season_dates_season_fkey"
+      columns: ["season_id","group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_seasons"
+      referencedColumns: ["id","group_id","org_id"]
+    }
+                  ]
+                },"dinner_seasons": {
+                  Row: {
+                    "allow_back_to_back_hosting": boolean,"bring_list_enabled": boolean,"created_at": string,"created_by": string | null,"default_start_time": string,"ended_at": string | null,"ends_on": string,"format": string,"group_id": string,"id": string,"length_months": number | null,"org_id": string,"previous_season_id": string | null,"published_at": string | null,"repeat_kind": string,"repeat_week_of_month": number | null,"repeat_weeks": number | null,"signup_closes_on": string,"starts_on": string,"status": string,"table_size_max": number,"table_size_min": number,"title": string,"updated_at": string,"weekday": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "allow_back_to_back_hosting"?: boolean,"bring_list_enabled"?: boolean,"created_at"?: string,"created_by"?: string | null,"default_start_time"?: string,"ended_at"?: string | null,"ends_on": string,"format": string,"group_id": string,"id"?: string,"length_months"?: number | null,"org_id"?: string,"previous_season_id"?: string | null,"published_at"?: string | null,"repeat_kind": string,"repeat_week_of_month"?: number | null,"repeat_weeks"?: number | null,"signup_closes_on": string,"starts_on": string,"status"?: string,"table_size_max"?: number,"table_size_min"?: number,"title": string,"updated_at"?: string,"weekday": number
+                  }
+                  Update: {
+                    "allow_back_to_back_hosting"?: boolean,"bring_list_enabled"?: boolean,"created_at"?: string,"created_by"?: string | null,"default_start_time"?: string,"ended_at"?: string | null,"ends_on"?: string,"format"?: string,"group_id"?: string,"id"?: string,"length_months"?: number | null,"org_id"?: string,"previous_season_id"?: string | null,"published_at"?: string | null,"repeat_kind"?: string,"repeat_week_of_month"?: number | null,"repeat_weeks"?: number | null,"signup_closes_on"?: string,"starts_on"?: string,"status"?: string,"table_size_max"?: number,"table_size_min"?: number,"title"?: string,"updated_at"?: string,"weekday"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "dinner_seasons_created_by_fkey"
+      columns: ["created_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "dinner_seasons_created_by_fkey"
+      columns: ["created_by","org_id"]
+isOneToOne: false
+      referencedRelation: "profiles_directory"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "dinner_seasons_group_id_fkey"
+      columns: ["group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["id","org_id"]
+    },{
+      foreignKeyName: "dinner_seasons_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "dinner_seasons_previous_season_id_fkey"
+      columns: ["previous_season_id","group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_seasons"
+      referencedColumns: ["id","group_id","org_id"]
+    }
+                  ]
+                },"dinner_seats": {
+                  Row: {
+                    "group_id": string,"left_at": string | null,"org_id": string,"party_id": string,"season_id": string,"seated_at": string,"table_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "group_id": string,"left_at"?: string | null,"org_id"?: string,"party_id": string,"season_id": string,"seated_at"?: string,"table_id": string
+                  }
+                  Update: {
+                    "group_id"?: string,"left_at"?: string | null,"org_id"?: string,"party_id"?: string,"season_id"?: string,"seated_at"?: string,"table_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "dinner_seats_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "dinner_seats_party_fkey"
+      columns: ["party_id","season_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_parties"
+      referencedColumns: ["id","season_id","org_id"]
+    },{
+      foreignKeyName: "dinner_seats_season_fkey"
+      columns: ["season_id","group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_seasons"
+      referencedColumns: ["id","group_id","org_id"]
+    },{
+      foreignKeyName: "dinner_seats_table_fkey"
+      columns: ["table_id","season_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_tables"
+      referencedColumns: ["id","season_id","org_id"]
+    }
+                  ]
+                },"dinner_tables": {
+                  Row: {
+                    "created_at": string,"group_id": string,"id": string,"org_id": string,"position": number,"season_date_id": string | null,"season_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"group_id": string,"id"?: string,"org_id"?: string,"position": number,"season_date_id"?: string | null,"season_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"group_id"?: string,"id"?: string,"org_id"?: string,"position"?: number,"season_date_id"?: string | null,"season_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "dinner_tables_date_fkey"
+      columns: ["season_date_id","season_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_season_dates"
+      referencedColumns: ["id","season_id","org_id"]
+    },{
+      foreignKeyName: "dinner_tables_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "dinner_tables_season_fkey"
+      columns: ["season_id","group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_seasons"
+      referencedColumns: ["id","group_id","org_id"]
+    }
+                  ]
+                },"dinners": {
+                  Row: {
+                    "created_at": string,"follows_season_date": boolean,"group_id": string,"host_party_id": string | null,"host_unavailable": boolean,"id": string,"org_id": string,"season_date_id": string,"season_id": string,"starts_at": string,"table_id": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"follows_season_date"?: boolean,"group_id": string,"host_party_id"?: string | null,"host_unavailable"?: boolean,"id"?: string,"org_id"?: string,"season_date_id": string,"season_id": string,"starts_at": string,"table_id": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"follows_season_date"?: boolean,"group_id"?: string,"host_party_id"?: string | null,"host_unavailable"?: boolean,"id"?: string,"org_id"?: string,"season_date_id"?: string,"season_id"?: string,"starts_at"?: string,"table_id"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "dinners_date_fkey"
+      columns: ["season_date_id","season_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_season_dates"
+      referencedColumns: ["id","season_id","org_id"]
+    },{
+      foreignKeyName: "dinners_host_seat_fkey"
+      columns: ["table_id","host_party_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_seats"
+      referencedColumns: ["table_id","party_id","org_id"]
+    },{
+      foreignKeyName: "dinners_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "dinners_season_fkey"
+      columns: ["season_id","group_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_seasons"
+      referencedColumns: ["id","group_id","org_id"]
+    },{
+      foreignKeyName: "dinners_table_fkey"
+      columns: ["table_id","season_id","org_id"]
+isOneToOne: false
+      referencedRelation: "dinner_tables"
+      referencedColumns: ["id","season_id","org_id"]
+    }
+                  ]
                 },"event_calendars": {
                   Row: {
                     "color": string | null,"created_at": string,"created_by": string | null,"group_id": string,"id": string,"name": string,"org_id": string
@@ -813,14 +1391,14 @@ isOneToOne: false
                   ]
                 },"group_settings": {
                   Row: {
-                    "calendar_event_location": boolean,"calendar_event_notes": boolean,"calendar_meeting_details": boolean,"event_reminder_default_days": number,"event_reminders_enabled": boolean,"group_id": string,"org_id": string,"serving_link_mode": string | null,"updated_at": string,"updated_by": string | null
+                    "calendar_event_location": boolean,"calendar_event_notes": boolean,"calendar_meeting_details": boolean,"dinner_club_enabled": boolean,"event_reminder_default_days": number,"event_reminders_enabled": boolean,"group_id": string,"org_id": string,"serving_link_mode": string | null,"updated_at": string,"updated_by": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "calendar_event_location"?: boolean,"calendar_event_notes"?: boolean,"calendar_meeting_details"?: boolean,"event_reminder_default_days"?: number,"event_reminders_enabled"?: boolean,"group_id": string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null
+                    "calendar_event_location"?: boolean,"calendar_event_notes"?: boolean,"calendar_meeting_details"?: boolean,"dinner_club_enabled"?: boolean,"event_reminder_default_days"?: number,"event_reminders_enabled"?: boolean,"group_id": string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null
                   }
                   Update: {
-                    "calendar_event_location"?: boolean,"calendar_event_notes"?: boolean,"calendar_meeting_details"?: boolean,"event_reminder_default_days"?: number,"event_reminders_enabled"?: boolean,"group_id"?: string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null
+                    "calendar_event_location"?: boolean,"calendar_event_notes"?: boolean,"calendar_meeting_details"?: boolean,"dinner_club_enabled"?: boolean,"event_reminder_default_days"?: number,"event_reminders_enabled"?: boolean,"group_id"?: string,"org_id"?: string,"serving_link_mode"?: string | null,"updated_at"?: string,"updated_by"?: string | null
                   }
                   Relationships: [
                     {
@@ -1189,14 +1767,14 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"approved_at": string | null,"approved_by": string | null,"avatar_url": string | null,"bio": string | null,"birth_day": number | null,"birth_month": number | null,"birth_year": number | null,"city": string | null,"created_at": string,"email": string | null,"email_announcements": boolean,"email_event_reminders": boolean,"employer": string | null,"family_id": string | null,"first_name": string | null,"hide_address": boolean,"hide_anniversary": boolean,"hide_birth_year": boolean,"hide_birthday": boolean,"hide_email": boolean,"hide_occupation": boolean,"hide_phone_home": boolean,"hide_phone_mobile": boolean,"hide_phone_work": boolean,"id": string,"is_unlisted": boolean,"last_name": string | null,"occupation": string | null,"org_id": string,"phone": string | null,"phone_home": string | null,"phone_mobile": string | null,"phone_work": string | null,"postal_code": string | null,"preferred_name": string | null,"relationship": string,"role": string,"setup_completed": boolean,"state": string | null,"updated_at": string
+                    "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"approved_at": string | null,"approved_by": string | null,"avatar_url": string | null,"bio": string | null,"birth_day": number | null,"birth_month": number | null,"birth_year": number | null,"city": string | null,"created_at": string,"email": string | null,"email_announcements": boolean,"email_dinner_club": boolean,"email_event_reminders": boolean,"employer": string | null,"family_id": string | null,"first_name": string | null,"hide_address": boolean,"hide_anniversary": boolean,"hide_birth_year": boolean,"hide_birthday": boolean,"hide_email": boolean,"hide_occupation": boolean,"hide_phone_home": boolean,"hide_phone_mobile": boolean,"hide_phone_work": boolean,"id": string,"is_unlisted": boolean,"last_name": string | null,"occupation": string | null,"org_id": string,"phone": string | null,"phone_home": string | null,"phone_mobile": string | null,"phone_work": string | null,"postal_code": string | null,"preferred_name": string | null,"relationship": string,"role": string,"setup_completed": boolean,"state": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "address_line1"?: string | null,"address_line2"?: string | null,"anniversary"?: string | null,"approved_at"?: string | null,"approved_by"?: string | null,"avatar_url"?: string | null,"bio"?: string | null,"birth_day"?: number | null,"birth_month"?: number | null,"birth_year"?: number | null,"city"?: string | null,"created_at"?: string,"email"?: string | null,"email_announcements"?: boolean,"email_event_reminders"?: boolean,"employer"?: string | null,"family_id"?: string | null,"first_name"?: string | null,"hide_address"?: boolean,"hide_anniversary"?: boolean,"hide_birth_year"?: boolean,"hide_birthday"?: boolean,"hide_email"?: boolean,"hide_occupation"?: boolean,"hide_phone_home"?: boolean,"hide_phone_mobile"?: boolean,"hide_phone_work"?: boolean,"id": string,"is_unlisted"?: boolean,"last_name"?: string | null,"occupation"?: string | null,"org_id"?: string,"phone"?: string | null,"phone_home"?: string | null,"phone_mobile"?: string | null,"phone_work"?: string | null,"postal_code"?: string | null,"preferred_name"?: string | null,"relationship"?: string,"role"?: string,"setup_completed"?: boolean,"state"?: string | null,"updated_at"?: string
+                    "address_line1"?: string | null,"address_line2"?: string | null,"anniversary"?: string | null,"approved_at"?: string | null,"approved_by"?: string | null,"avatar_url"?: string | null,"bio"?: string | null,"birth_day"?: number | null,"birth_month"?: number | null,"birth_year"?: number | null,"city"?: string | null,"created_at"?: string,"email"?: string | null,"email_announcements"?: boolean,"email_dinner_club"?: boolean,"email_event_reminders"?: boolean,"employer"?: string | null,"family_id"?: string | null,"first_name"?: string | null,"hide_address"?: boolean,"hide_anniversary"?: boolean,"hide_birth_year"?: boolean,"hide_birthday"?: boolean,"hide_email"?: boolean,"hide_occupation"?: boolean,"hide_phone_home"?: boolean,"hide_phone_mobile"?: boolean,"hide_phone_work"?: boolean,"id": string,"is_unlisted"?: boolean,"last_name"?: string | null,"occupation"?: string | null,"org_id"?: string,"phone"?: string | null,"phone_home"?: string | null,"phone_mobile"?: string | null,"phone_work"?: string | null,"postal_code"?: string | null,"preferred_name"?: string | null,"relationship"?: string,"role"?: string,"setup_completed"?: boolean,"state"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "address_line1"?: string | null,"address_line2"?: string | null,"anniversary"?: string | null,"approved_at"?: string | null,"approved_by"?: string | null,"avatar_url"?: string | null,"bio"?: string | null,"birth_day"?: number | null,"birth_month"?: number | null,"birth_year"?: number | null,"city"?: string | null,"created_at"?: string,"email"?: string | null,"email_announcements"?: boolean,"email_event_reminders"?: boolean,"employer"?: string | null,"family_id"?: string | null,"first_name"?: string | null,"hide_address"?: boolean,"hide_anniversary"?: boolean,"hide_birth_year"?: boolean,"hide_birthday"?: boolean,"hide_email"?: boolean,"hide_occupation"?: boolean,"hide_phone_home"?: boolean,"hide_phone_mobile"?: boolean,"hide_phone_work"?: boolean,"id"?: string,"is_unlisted"?: boolean,"last_name"?: string | null,"occupation"?: string | null,"org_id"?: string,"phone"?: string | null,"phone_home"?: string | null,"phone_mobile"?: string | null,"phone_work"?: string | null,"postal_code"?: string | null,"preferred_name"?: string | null,"relationship"?: string,"role"?: string,"setup_completed"?: boolean,"state"?: string | null,"updated_at"?: string
+                    "address_line1"?: string | null,"address_line2"?: string | null,"anniversary"?: string | null,"approved_at"?: string | null,"approved_by"?: string | null,"avatar_url"?: string | null,"bio"?: string | null,"birth_day"?: number | null,"birth_month"?: number | null,"birth_year"?: number | null,"city"?: string | null,"created_at"?: string,"email"?: string | null,"email_announcements"?: boolean,"email_dinner_club"?: boolean,"email_event_reminders"?: boolean,"employer"?: string | null,"family_id"?: string | null,"first_name"?: string | null,"hide_address"?: boolean,"hide_anniversary"?: boolean,"hide_birth_year"?: boolean,"hide_birthday"?: boolean,"hide_email"?: boolean,"hide_occupation"?: boolean,"hide_phone_home"?: boolean,"hide_phone_mobile"?: boolean,"hide_phone_work"?: boolean,"id"?: string,"is_unlisted"?: boolean,"last_name"?: string | null,"occupation"?: string | null,"org_id"?: string,"phone"?: string | null,"phone_home"?: string | null,"phone_mobile"?: string | null,"phone_work"?: string | null,"postal_code"?: string | null,"preferred_name"?: string | null,"relationship"?: string,"role"?: string,"setup_completed"?: boolean,"state"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -1794,6 +2372,52 @@ isOneToOne: false
                            },
 "delete_person":
 { Args: { "_anonymous_request_ids"?: (string)[],"_hidden_comment_ids"?: (string)[],"_org_id": string,"_person_id": string }; Returns: Json
+                           },
+"dinner_address_party_ids":
+{ Args: Record<PropertyKey, never>; Returns: (string)[]
+                           },
+"dinner_food_note_party_ids":
+{ Args: Record<PropertyKey, never>; Returns: (string)[]
+                           },
+"dinner_my_party_ids":
+{ Args: Record<PropertyKey, never>; Returns: (string)[]
+                           },
+"dinner_my_party_profile_ids":
+{ Args: Record<PropertyKey, never>; Returns: (string)[]
+                           },
+"dinner_my_table_ids":
+{ Args: Record<PropertyKey, never>; Returns: (string)[]
+                           },
+"dinner_party_create":
+{ Args: { "_profile_ids": (string)[],"_season_id": string }; Returns: string
+                           },
+"dinner_party_unavailable_dates_replace":
+{ Args: { "_party_id": string,"_season_date_ids": (string)[] }; Returns: number
+                           },
+"dinner_reminder_claim":
+{ Args: { "_dinner_date": string,"_dinner_id": string,"_host_party_id": string,"_org_id": string,"_starts_at": string }; Returns: {
+              "email": string,"first_name": string,"preferred_name": string,"profile_id": string
+            }[]
+                           },
+"dinner_reminder_passes_prune":
+{ Args: { "_before": string,"_limit": number,"_org_id": string }; Returns: number
+                           },
+"dinner_season_dates_replace":
+{ Args: { "_season_id": string,"_starts_at": (string)[] }; Returns: number
+                           },
+"dinner_seat_signatures":
+{ Args: { "_org_id": string,"_season_id": string }; Returns: Json
+                           },
+"dinner_signup_window_open":
+{ Args: { "_season_id": string }; Returns: boolean
+                           },
+"dinner_tablemate_party_ids":
+{ Args: Record<PropertyKey, never>; Returns: (string)[]
+                           },
+"dinner_tables_publish":
+{ Args: { "_season_id": string }; Returns: {
+              "profile_id": string
+            }[]
                            },
 "directory_retire_hidden_values":
 { Args: Record<PropertyKey, never>; Returns: Json

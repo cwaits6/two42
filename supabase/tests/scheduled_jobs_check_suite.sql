@@ -73,6 +73,8 @@ begin
   perform pg_temp.ran('send-event-reminders-daily', '2031-03-05T15:00:00Z');
   perform pg_temp.answered('2031-03-05T15:00:00Z', 200);
   perform pg_temp.answered('2031-03-05T15:00:00Z', null, true);
+  perform pg_temp.ran('send-dinner-reminders-daily', '2031-03-05T15:00:00Z');
+  perform pg_temp.answered('2031-03-05T15:00:00Z', 200);
 end $$;
 
 select is(
@@ -89,14 +91,16 @@ select is(
   'a missing run, a 500, a missing response, a 401, a failed run and a timeout are each named with their hour');
 select is(
   private.scheduled_jobs_check('2031-03-05T15:30:00Z') -> 'responses' -> '15:00',
-  '{"200": 1, "timed out": 1}'::jsonb, 'a timed-out response is counted as such');
+  '{"200": 2, "timed out": 1}'::jsonb, 'a timed-out response is counted as such');
 
 -- The 1st of the month at 15:00 expects the monthly broadcast too.
 do $$
 begin
   perform pg_temp.ran('send-serving-reminders-hourly', '2031-04-01T15:00:00Z');
   perform pg_temp.ran('send-event-reminders-daily', '2031-04-01T15:00:00Z');
+  perform pg_temp.ran('send-dinner-reminders-daily', '2031-04-01T15:00:00Z');
   perform pg_temp.ran('send-serving-monthly-broadcast', '2031-04-01T15:00:00Z');
+  perform pg_temp.answered('2031-04-01T15:00:00Z', 200);
   perform pg_temp.answered('2031-04-01T15:00:00Z', 200);
   perform pg_temp.answered('2031-04-01T15:00:00Z', 200);
 end $$;
@@ -109,14 +113,14 @@ select is(
     'expected 1 response(s) at 12:00, found 0',
     'expected 1 response(s) at 13:00, found 0',
     'expected 1 response(s) at 14:00, found 0',
-    'expected 3 response(s) at 15:00, found 2',
+    'expected 4 response(s) at 15:00, found 3',
     'send-serving-reminders-hourly at 10:00: job run is missing',
     'send-serving-reminders-hourly at 11:00: job run is missing',
     'send-serving-reminders-hourly at 12:00: job run is missing',
     'send-serving-reminders-hourly at 13:00: job run is missing',
     'send-serving-reminders-hourly at 14:00: job run is missing'
   ),
-  'on the 1st, three responses are expected at 15:00, and every hour with nothing is named');
+  'on the 1st, four responses are expected at 15:00, and every hour with nothing is named');
 
 -- A job scheduled partway through a window: the hours before its first run
 -- are not expected, on a day earlier than any other run.

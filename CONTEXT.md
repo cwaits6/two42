@@ -26,7 +26,7 @@ _Avoid_: family (as the name of the thing)
 
 **Leader**:
 A member who runs a group: approves requests to join it, publishes its content, and manages its teams. Say "group leader" only where "leader" alone is ambiguous. A group can have several leaders, each with the same rights; "co-leader" describes one of them, not a separate role.
-_Avoid_: group admin, organizer, host, teacher
+_Avoid_: group admin, organizer, host, teacher. In a dinner club, host means the member whose home a table meets at; see **Host**.
 
 **Church admin**:
 A person who manages the church's whole two42 space — its people, households, groups, and settings.
@@ -77,6 +77,31 @@ _Avoid_: speaker, lecturer
 **Fund**:
 A named way for members to give money to a person or cause in the group. A fund goes to someone, named on the fund as "Goes to {name}".
 _Avoid_: collection, donation page; steward and co-collector (for the person it goes to)
+
+### Dinner club
+
+**Dinner club**:
+A group's dinners in members' homes, run as seasons. The leader gives it its own title.
+_Avoid_: supper club (as the product term), dinner ministry
+
+**Season**:
+One run of a dinner club, with a start, an end, a format and its tables.
+_Avoid_: round, term, session
+
+**Table**:
+The parties who eat together, at one host's home. Nothing inside a dinner club is called a group: "group" is the level under the church.
+_Avoid_: group, dinner group, supper club group, pod, circle
+
+**Dinner**:
+One date of one table.
+_Avoid_: event, meeting, night (in copy)
+
+**Host**:
+The member whose home a table meets at for a dinner. Not a leader.
+
+**Party**:
+One or two members who sign up together and are always seated together. Each person replies to each dinner on their own.
+_Avoid_: couple (as the name of the thing), unit, family
 
 ### Church admin pages
 

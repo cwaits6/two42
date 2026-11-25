@@ -923,7 +923,77 @@ has nothing to check there. The grant matrix, every refusal, the org taken from
 the profile and the state left when the member later joins another household are
 pinned by `supabase/tests/create_own_household_suite.sql`.
 
-## App routes and pages (32 sites)
+## Dinner club RPCs and policy helpers — definer-function bypass surfaces
+
+`supabase/migrations/20261203000000_dinner_club.sql` adds two callable
+`SECURITY DEFINER` functions, three definer triggers and six definer policy
+helpers. Each sets `search_path = ''`, schema-qualifies everything, and is
+revoked from `public` and `anon`; none takes an org.
+
+- `dinner_party_create(_season_id, _profile_ids)` — signs up a party of one
+  or two. The org is the season row's own, compared with
+  `app_request_org_id()` (NULL fails closed, `DC001`). A member must be in the
+  party; a leader of the group may sign up anyone in it. Every person must be
+  a non-pending `group_members` row of that group in that org, or `DC002`.
+  The party and its people insert in one transaction; `(season_id,
+  profile_id)` is unique, so a second party for a person is `23505`. Granted
+  to `authenticated`.
+- `dinner_tables_publish(_season_id)` — publishes the season's stored draft.
+  The org is the season row's own, compared with `app_request_org_id()`; the
+  caller must lead the group. It reads the `dinner_drafts` row, never a
+  payload, and checks every party, table, date and host id in it against the
+  season and org before writing (`DC002`). Tables, seats and dinners are
+  written in one transaction under locks on the season, its parties and the
+  draft, so a sign-up, withdrawal or draft save waits for it or lands before
+  its checks; the season's status update must touch exactly one row, and it returns the people whose tables or hosts changed, for the
+  publish route's email. Granted to `authenticated`.
+- Triggers: `dinner_party_withdrawn()` (marks a withdrawn party's seats left
+  and deletes its replies to dinners not yet held), `dinner_party_drop_if_empty()`
+  (deletes a party left with nobody) and `dinner_moved_clear_replies()`
+  (clears a moved dinner's replies, which a host could not delete through row
+  security). Each writes only rows of the triggering row's own `org_id` and
+  party or dinner, and is revoked from every client role.
+- Policy helpers, zero-argument and `stable`, each filtered on
+  `app_current_org_id()` and the caller's `auth.uid()`:
+  `dinner_my_party_ids()`, `dinner_my_party_profile_ids()`,
+  `dinner_my_table_ids()`, `dinner_tablemate_party_ids()`,
+  `dinner_address_party_ids()` and `dinner_food_note_party_ids()`. They let
+  the policies on parties, seats, dinners, addresses and food notes read each
+  other without a policy cycle. Granted to `authenticated` only.
+
+The two private tables, `dinner_party_addresses` and `dinner_party_notes`,
+have no church-admin arm: a church admin outside the group reads neither. All
+of it is pinned by `supabase/tests/dinner_club_suite.sql`, with a second
+church, a member of another group, an unseated member of the same group and a
+church admin in the fixture.
+
+## Dinner reminder claim — service-key only, SECURITY INVOKER
+
+`dinner_reminder_claim(_org_id, _dinner_id, _dinner_date, _starts_at, _host_party_id)`
+(`20261203000000_dinner_club.sql`) is what the `send-dinner-reminders` job
+calls, once per dinner due, before it mails anyone. It is a copy of
+`event_reminder_claim()`: the dinner's own `org_id` is compared with
+`_org_id` and a mismatch raises `DC010` before any write; it starts the pass
+for that dinner and local date when there is none, fixing the recipients, and
+then claims every unsent reminder atomically. **It is the recipient query of
+an email that carries a home address**, so its body is the boundary: the
+recipients are the people in parties with an active seat at that dinner's
+table, in a party that has not withdrawn, not pending, with an email and
+`profiles.email_dinner_club` on, with no Not going reply, while the season is
+published and the group's dinner club is on — every table it joins filtered on
+`_org_id`. A dinner whose start or host differs from the `_starts_at` and
+`_host_party_id` the job read claims nothing, so the email's host and address
+describe the dinner the recipients are seated at, and a retried claim returns
+only recipients who still hold that active seat. EXECUTE: `service_role` only. `dinner_reminder_passes` and
+`dinner_reminder_sends` carry the restrictive isolation floor and no permissive
+policy or client grant.
+
+`dinner_reminder_passes_prune(_org_id, _before, _limit)` (same migration) is
+the nightly job's bounded delete for those passes, a copy of
+`event_reminder_passes_prune()` on `dinner_date`, with the same grant and the
+same `_org_id` filter on every row it reads and deletes.
+
+## App routes and pages (33 sites)
 
 | File | Why service-role is used | Org derived from | Scoped queries |
 |------|--------------------------|------------------|----------------|
@@ -945,6 +1015,7 @@ pinned by `supabase/tests/create_own_household_suite.sql`.
 | `app/api/serving/link-action/route.ts` | Same HMAC signed-link pattern as `serving/go`; no session | HMAC-validated `teams` row (`org_id` and `group_id`); link rejected when `profiles.org_id` disagrees | `group_settings` (link mode), `serving_team_settings`, `team_members`, `serving_signups` (read/delete — cancel path; all on `team_id`), `rpc(serving_signup_apply)` (once per date; the signup + attendee insert pair, one transaction; the function re-derives the org from the `teams` row and enforces it internally — CWA-47 / #313), `team_members` with embedded `profiles` through `findSpouse()` (spouse, on `org_id` and `team_id`), `organizations` `.eq("id", org_id)` (the time zone that decides which dates have passed) |
 | `app/api/serving/broadcast/route.ts` | Fans out email to all team members regardless of caller's RLS visibility | RLS-scoped `teams` row (`org_id` and `group_id`); the caller must lead the team or its group (a `group_members` read on the request client) | `team_members` (recipients, on `team_id`), `group_settings` (link mode, on `org_id` + `group_id`) |
 | `app/api/calendar/feed.ics/route.ts` | Bearer-token calendar subscription; no session | `calendar_subscription_tokens` row (`org_id` stamped at issuance); owner role re-checked; the owner's `group_members` rows are the group boundary | `group_members` (the owner's groups), `events` `.in("group_id", …)` (every repeating series whatever its start, and exception rows, cancelled ones included, by the original slot `series_occurrence_date` — they remove deleted and moved dates), `organizations` `.eq("id", org_id)` (the time zone series dates are expanded in), `group_settings` `.in("group_id", …)` (each group's calendar sharing defaults — join details, notes, location — which an event or series may override on its own row; a failed read is a 500), `serving_signups` `.in("teams.group_id", …)`, `profiles` (owner), token expiry update. A `?group=` outside the owner's groups yields an empty 200; a failed membership read is a 500 |
+| `app/api/dinner-club/feed.ics/route.ts` | Bearer-token dinner club calendar link; no session. The one unscoped read is the token lookup, because the token row is what resolves the person and their org | `dinner_feed_tokens` row (the SHA-256 of the token; `org_id` stamped at issuance by the cookie client's DEFAULT); owner role re-checked; the owner's own `dinner_party_members` rows and their seats are the boundary | `profiles` (owner role), token expiry update, `dinner_party_members` `.eq("profile_id", owner)`, `dinner_seats` `.in("party_id", the owner's parties)` with `left_at` null, `group_settings` (dinner club on), `dinner_seasons` (published or ended), `dinners` `.in("table_id", the owner's tables)`, `dinner_party_addresses` and `dinner_party_members` `.in("party_id", those dinners' hosts)`, `profiles` (host names), `organizations` (time zone) — every chain `.eq("org_id", token row's org)`. A missing, unknown, replaced or expired token, and a failed token read, all get the same `401` with `Cache-Control: private, no-store`; the feed itself is `private, max-age=300`. The token is never logged |
 | `app/api/auth/setup-account/route.ts` | Pre-login account creation; no session yet, and the `auth.admin` API needs the service key | The `access_requests` token row looked up by `signup_token` alone (unscoped — the row is what resolves the org; `org_id` required non-null); a lookup error and no row each take the one invalid answer | `auth.admin` `getUserById` / `createUser` (the row's email and name, `email_confirm`, `app_metadata.org_id` from the row) / `updateUserById` (retry of an unfinished setup only), all under the id derived from the token; `family_invites` select by the row's `invite_token` and update, `family_members` select (an invite whose member has moved to another household is skipped), `profiles` `family_id` update (zero rows fatal) and `family_members` update on the invite's `family_id`, all `.eq("org_id", row.org_id)`; `access_requests` consume on `(id, org_id, signup_token)`, then on `(id, org_id)` when that changed no row, so a token that replaced this one mid-request is retired too |
 | `app/api/auth/verify-token/route.ts` | Pre-login token flow; no session yet | The `access_requests` token row itself (`org_id` selected and required non-null) | Token row is the anchor; for a link with no live row, `auth.admin.getUserById` under the id derived from the token answers "already set up" |
 | `app/api/feedback/route.ts` | Rate-limit count and admin email fan-out (RLS exposes feedback only to admins) | Caller's own RLS-scoped profile | `feedback` (count), `profiles` (admin recipients — was a latent cross-tenant email leak; a correctness-under-change risk, not a live one at single-org scale) |
@@ -960,7 +1031,7 @@ pinned by `supabase/tests/create_own_household_suite.sql`.
 | `app/g/[groupId]/prayer/requests/route.ts` | POST posts a prayer request. Only server code holding the prayer keys can seal the text and hash an anonymous author, so no client role writes `prayer_requests` at all | Caller's own RLS-scoped profile (`prayerWriter()` in `requests/context.ts`); the group from `getGroupMemberships()`, which 404s a non-member | `prayer_requests` insert carrying `org_id` and the verified `group_id`; the id is generated here and bound into the ciphertext |
 | `app/g/[groupId]/prayer/requests/[requestId]/route.ts` | PATCH (mark answered, edit the text, switch between by-name and anonymous) and DELETE. The author of a hashed anonymous request is recognised only by recomputing the hash with the key, and the rewrite reseals the text | Caller's own RLS-scoped profile, as above; the author or a group leader may write, only the author may change `is_anonymous`, and anyone else gets the same 404 as a missing request | `prayer_requests` read, update and delete on `(id, org_id, group_id)`; the update is also guarded on the `updated_at` it read, so a write that read the row before a switch to anonymous cannot undo it |
 
-## Lib helpers (7 sites)
+## Lib helpers (8 sites)
 
 Unlike the rows above — inherited from Phase 2 with their mitigations still
 outstanding — this site was introduced *during* Phase 3 with its mitigation
@@ -976,6 +1047,7 @@ column below describes what a regression would cost, not a pending work item.
 | `lib/email/quota.ts` | `reserveEmailQuota(orgId, n)` calls `email_quota_consume()` — a `service_role`-only RPC (see the "Email quota RPC" section above), so the service client is the only client that can execute it | The `.rpc()` call is invisible to the guard (it walks `.from()` chains only), so a refactor could silently pass an unvalidated org id | `orgId` must come from an anchor the caller already validated — the caller's RLS-scoped profile (`app/api/feedback`), the RLS-checked group row (`app/api/serving/broadcast`), the already-authorized `opts.orgId` both `notifyLeadersOfCancel` callers hold, or the org id `sendFirstAdminInvite()` (`app/api/platform/organizations/firstAdminInvite.ts`) holds: the id `provision_organization()` returned, or the route param behind `requirePlatformAdmin()` — never a header or body field. Fail-closed: any RPC error or throw is a refusal, never "send anyway" |
 | `lib/integrations/records/store.ts` | A church's connection to its records (its church management software, such as Rock RMS) and its person links, for the church admin's church records routes (`app/api/admin/church-records`, `app/api/admin/church-records/links`, `app/api/admin/church-records/links/[profileId]`). `records_connections` holds the provider's key sealed with `RECORDS_KEY_SECRET` (`lib/integrations/records/crypto.ts`), and no client role has any privilege on it or on `records_person_links`, so the key and its ciphertext never reach a browser. The module owns its client and accepts none | A dropped filter would show or replace another church's connection, open another church's key for this church's requests, or link or unlink another church's people | `orgId` is always `requireOrgAdmin()`'s, the admin's own RLS-scoped profile, never the request. Every read and delete filters `.eq("org_id", orgId)`, every insert carries `org_id: orgId`, and saving goes through `records_save_connection(_org_id => orgId, …)`, a `SECURITY INVOKER` function only the service role may execute, which touches only that church's row in one transaction; the sealed key is bound to its church and provider, so one copied onto another church's row fails to open. The links' composite `(profile_id, org_id)` key refuses a profile from another church, and their `(org_id, connection_id)` key into `records_connections` refuses links for a church with no connection, or for a connection replaced since the links were checked |
 | `lib/members/invite.ts` | `findExistingInvitees(orgId, emails)` and `sendMemberInvite(invite)` — the one path a church admin's invitations take, one person from `/admin/members/invite` (`app/api/admin/members/invite`) or many from the importer (`app/api/admin/invite-bulk`). `access_requests` has no INSERT policy for any client role, so the approved request carrying the signup token can only be written server-side; the household rows (`family_members`, `family_invites`) and every rollback delete use the same client so a failed send leaves nothing behind (`family_invites` has no DELETE policy) | An unscoped existing-account read would report, or skip, another org's people; an insert without `org_id`, or a household id from another org, would admit the invitee to the wrong church | `orgId` is the caller's `requireOrgAdmin()` result — the admin's own RLS-scoped profile row — never a body field. The `profiles` / `access_requests` reads filter `.eq("org_id", orgId)`; every insert carries `org_id: orgId`; every rollback delete is on `(id or signup_token, org_id)`. The body's household id reaches only the `family_members` insert, whose composite `(family_id, org_id)` FK rejects a household outside `orgId` |
+| `lib/dinnerClub/notify.ts` | `notifyTablesPublished(orgId, seasonId, profileIds)` and `notifyDinnersMoved(orgId, moves, actorId)` — the dinner club emails sent from the app (a person's tables once published, a dinner's new date once moved). The recipients' addresses are readable only on the service client | An email fan-out: an unscoped read here would mail another church's members, and the moved-dinner email names a table's dates | `orgId` comes only from `resolveRequestOrgId()` on the cookie client in the publish and move routes, after the write itself passed row security. Every chain is `.eq("org_id", orgId)`; recipients come only from the seats of the tables concerned (`dinner_seats` of the season, or of the moved dinners' tables) and from the profile ids `dinner_tables_publish()` returned, then drop pending people, no address and `email_dinner_club` off. One `reserveEmailQuota(orgId, n)` per batch, which sends nothing when refused. Pinned as a Tier A fan-out (`dinner_party_members`) in `scripts/check-service-role-org-scope.mjs` |
 
 `lib/branding.ts` is deliberately **not** a service-role site: `getOrgBranding()`
 uses the request-scoped `createClient()`, so RLS narrows `organizations` to the
@@ -987,15 +1059,15 @@ whatever the session resolves, and an anonymous request resolves none.
 authenticated session before ever calling `getOrgBranding()` so an anonymous
 request is branded with the platform defaults without a query.
 
-## Edge Functions (3 sites)
+## Edge Functions (4 sites)
 
-All three run with no session context and resolve the service key
+All four run with no session context and resolve the service key
 from configured environment variables: a manual `SUPABASE_SECRET_KEY` override
 (local/self-host only — the hosted platform reserves the prefix), then the
 platform-injected `SUPABASE_SECRET_KEYS` map, then the legacy
 `SUPABASE_SERVICE_ROLE_KEY` (see `resolveServiceKey()` in
-`supabase/functions/_shared/service-key.ts`, shared by all three), not
-`createServiceClient()`. All three are cron-triggered.
+`supabase/functions/_shared/service-key.ts`, shared by all four), not
+`createServiceClient()`. All four are cron-triggered.
 
 Tenant iteration is `listActiveOrgs()` (`supabase/functions/_shared/orgs.ts`),
 with `forEachOrg()` for the reminder functions. `listActiveOrgs()` filters
@@ -1097,9 +1169,10 @@ outside its scan set entirely, so these calls are covered by review and by
 |------|--------------------------|-------------------------|------------|
 | `supabase/functions/send-event-reminders/index.ts` | Cron job; reads events and sends reminders with no user session | Reminder fan-out iterates all rows across orgs | Refuses any caller but a service key. **Implemented (Phase 3, #212):** iterates active orgs via `_shared/orgs.ts`, every query filtered on `org_id`, per-org failures isolated so one org cannot suppress another's send. **Dates mode:** events read on `org_id`, the dates due worked out in pure code, and each date's recipients chosen and claimed in `event_reminder_claim()` with `_org_id` from the same iteration; per-event failures in `failedItems[]`. **Deploy-window mode** (a body with no mode): org → group iteration, events on `group_id`, recipients gated on current group membership, per-group failures in `failedItems[]`. **Branding (CWA-56, #322):** `organizations.branding` rides along on the already-org-anchored `listActiveOrgs()` select — no new service-role call site, no new unscoped query — and is validated by `_shared/branding.ts` (a mirror of `lib/branding.ts` + `lib/email/identity.ts`) before reaching any CSS or RFC 5322 sink. **Link origin:** every link is built on the one canonical host (the `SITE_URL` function secret) — no query. **Time zone:** `organizations.timezone` rides along on the same `listActiveOrgs()` select and formats the reminder's event time |
 | `supabase/functions/send-serving-reminders/index.ts` | Cron job; reads serving signups and emails assignees with no user session | Same as `send-event-reminders` | Refuses any caller but a service key. **Implemented (Phase 3, #212):** same per-org iteration and `org_id` filters; `resolveCanSign` org-scoped; `serving_broadcasts` audit rows stamped with the processed row's org, not a constant. **Branding (CWA-56, #322):** same `listActiveOrgs()` ride-along, validated by `_shared/branding.ts`. **Link origin:** the same canonical `SITE_URL`, threaded into every cancel/signup/team-page link. **Per-team isolation (CWA-50, #316):** a failing team is recorded in the run summary's `failedItems[]` keyed by `team_id` — ids, never org-defined team names, in operator diagnostics. **Group scope:** the link mode is per group (`group_settings` through `_shared/groups.ts`), every `serving_*` query is on `team_id`, and links open `/g/<group_id>/serving/<team_id>` |
-| `supabase/functions/clean-up-expired-data/index.ts` | Cron job; deletes expired requests, invites, feedback, serving and event reminder passes older than 35 days (through `serving_reminder_passes_prune()` and `event_reminder_passes_prune()`, at most 500 per call, their sends through the foreign key), usage counts older than 13 months (through `usage_counts_prune()`, the same way) and, for a church that opted in, prayer requests, with no user session | A delete missing its filter removes another church's data for good | Refuses any caller but a service key. Iterates active orgs, one org-filtered delete per rule, failures isolated per step and per org. The rules and their boundaries are unit-tested in `tests/retention_test.ts` and `tests/cleanup_test.ts` |
+| `supabase/functions/clean-up-expired-data/index.ts` | Cron job; deletes expired requests, invites, feedback, serving, event and dinner reminder passes older than 35 days (through `serving_reminder_passes_prune()`, `event_reminder_passes_prune()` and `dinner_reminder_passes_prune()`, at most 500 per call, their sends through the foreign key), usage counts older than 13 months (through `usage_counts_prune()`, the same way) and, for a church that opted in, prayer requests, with no user session | A delete missing its filter removes another church's data for good | Refuses any caller but a service key. Iterates active orgs, one org-filtered delete per rule, failures isolated per step and per org. The rules and their boundaries are unit-tested in `tests/retention_test.ts` and `tests/cleanup_test.ts` |
+| `supabase/functions/send-dinner-reminders/index.ts` | Cron job; emails each dinner club table the day before its dinner, with no user session | The email carries the host's address, so a recipient from the wrong table or church would learn a home address | Refuses any caller but a service key. Iterates active orgs through `forEachOrg()`; `_shared/dinner-reminders.ts` reads `group_settings` (dinner club on), `dinner_seasons` (published) and `dinners` in a UTC window, each `.eq("org_id", org.id)` — the `dinners` read is pinned as a Tier A fan-out. Recipients come only from `dinner_reminder_claim()`, called with the same `_org_id`, which reads the seats of that dinner's table in that org. The email's details (`dinner_seats`, `dinner_party_members`, `profiles`, `dinner_replies`, `dinner_party_addresses`) are each `.eq("org_id", org.id)` and keyed on the claimed dinner. Settles `dinner_reminder_sends` on `org_id` plus its key. One `reserveEmailQuota` per send. Links use `SITE_URL` only. Pure due-date logic in `_shared/dinner-reminder-due.ts` |
 
-All three check their own caller first, because each acts unattended: the
+All four check their own caller first, because each acts unattended: the
 reminder jobs send email that cannot be recalled, and the cleanup job deletes
 data that cannot be restored. The gateway's JWT check does not stand in for this,
 since it also passes tokens that are not the scheduler's. Each handler is wrapped in

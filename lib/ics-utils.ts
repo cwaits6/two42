@@ -88,7 +88,7 @@ export function eventToICSAttributes(
   return attrs;
 }
 
-const EMPTY_CALENDAR =
+export const EMPTY_CALENDAR =
   "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Small Group Hub//EN\r\nEND:VCALENDAR\r\n";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
