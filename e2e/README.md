@@ -91,10 +91,12 @@ pages it opens add to the church's counts for the day, as every visit does.
 another church, their records in the Seedly household and an invite for each
 through the same container, and deletes them in `beforeAll` and `afterAll`.
 `dinner-club.spec.ts` turns Group B's dinner club on and builds a published
-season (Henry and Chloe hosting Isaac at one table, Leo hosting his own, the
-church admin at none) through the same container in `beforeAll`; `afterAll`
-deletes the season, which takes every row under it, turns the switch back off
-and removes Isaac's calendar link.
+season (Henry and Chloe hosting Isaac at one table, Leo hosting Zoe at another,
+Isaac's party bringing Dessert and Zoe's Bread, the church admin at none)
+through the same container in `beforeAll`; one test puts the church admin on
+the waiting list and deletes that party when it ends. `afterAll` deletes the
+season, which takes every row under it, turns the switch back off and removes
+Isaac's calendar link.
 
 ## Personas
 
@@ -156,7 +158,7 @@ not covered here.
 | `usage-counts.spec.ts`               | A member who opens Usage lands on Home; opening an invite page and a group page adds to their patterns' counts and stores no token or id; a church admin sees the church's counts at 390 and 1280, a count under 5 as "fewer than 5", and the 7-day list leaves out an older count |
 | `household-invite-existing-account.spec.ts` | A person with an account who opens a household invite signs in and is returned to it, and is listed under Members with an account in the household only after pressing Join household, once, with their record gone from Others; a repeat join answers success; the same invite is refused, on the page and by the API, to someone signed in with another address as a different account, and to the invited address in another church as a dead link, and neither appears in the household; the people, records and invites created are deleted in afterAll |
 | `profile-setup.spec.ts`             | A member who hasn't finished setup is sent from sign-in and from Home, the directory, a group page and My profile to profile setup; with no household under their last name they add one, finish, land on Home and are no longer sent back, and their household is listed under Households with their name; they are removed in afterAll |
-| `dinner-club.spec.ts`               | A guest at a published table sees their own host's address and not another table's; the group calendar shows no dinner; their calendar link carries their own dinner's address and not another table's, privately, and once reset the old link returns nothing; a member of the group at no table sees no address; someone outside the group gets a 404; Dinner club is in the menu only of the group that turned it on, and turned off the page is a 404 while the season is kept |
+| `dinner-club.spec.ts`               | A guest at a published table sees their own host's address and not another table's; the group calendar shows no dinner; their calendar link carries their own dinner's address and not another table's, privately, and once reset the old link returns nothing; a guest sees what their own party brings and not another table's; a member of the group at no table sees no address; a waitlisted party sees no table, no address and no list; someone outside the group gets a 404; Dinner club is in the menu only of the group that turned it on, and turned off the page is a 404 while the season is kept |
 
 ## Adding a spec
 

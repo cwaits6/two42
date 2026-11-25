@@ -297,6 +297,7 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
       <PageContainer size="reading">
         {header}
         {leaderNotice}
+        <p className="mb-6 text-lg">You&apos;re not at a table this season.</p>
         {people ? (
           <WaitlistForm
             seasonId={season.id}

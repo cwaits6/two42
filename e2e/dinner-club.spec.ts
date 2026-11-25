@@ -4,8 +4,8 @@ import { GROUP_B, GROUP_C, PERSONAS } from "./fixtures/personas";
 
 // The seed has no dinner club, so the hooks turn Group B's on and build a
 // published season through the stack's own Postgres container: Henry and
-// Chloe host Isaac at one table, Leo hosts his own, and the church admin, a
-// member of Group B, is at none. afterAll deletes the season, which takes
+// Chloe host Isaac at one table, Leo hosts Zoe at another, and the church
+// admin, a member of Group B, is at none. Isaac brings Dessert and Zoe Bread. afterAll deletes the season, which takes
 // every row under it, and turns the switch back off.
 test.describe.configure({ mode: "serial" });
 
@@ -15,11 +15,15 @@ const DATE = "d1000000-0000-4000-8000-000000000002";
 const HOSTS = "d1000000-0000-4000-8000-000000000011";
 const GUEST = "d1000000-0000-4000-8000-000000000012";
 const OTHER_HOST = "d1000000-0000-4000-8000-000000000013";
+const OTHER_GUEST = "d1000000-0000-4000-8000-000000000014";
+const WAITING = "d1000000-0000-4000-8000-000000000015";
 const TABLE_ONE = "d1000000-0000-4000-8000-000000000021";
 const TABLE_TWO = "d1000000-0000-4000-8000-000000000022";
 const TITLE = "Fixture Supper Club";
 const OWN_ADDRESS = "12 Fixture Lane";
 const OTHER_ADDRESS = "48 Sample Row";
+const OWN_ITEM = "Dessert";
+const OTHER_ITEM = "Bread";
 const PAGE = `/g/${GROUP_B}/dinner-club`;
 
 const DROP_SQL = `
@@ -45,7 +49,7 @@ const SETUP_SQL = `
   insert into public.dinner_parties (id, org_id, season_id, group_id, can_host, seats)
     select v.id::uuid, s.org_id, s.id, s.group_id, v.host, case when v.host then 8 end
     from public.dinner_seasons s
-    cross join (values ('${HOSTS}', true), ('${GUEST}', false), ('${OTHER_HOST}', true)) v(id, host)
+    cross join (values ('${HOSTS}', true), ('${GUEST}', false), ('${OTHER_HOST}', true), ('${OTHER_GUEST}', false)) v(id, host)
     where s.id = '${SEASON}';
   insert into public.dinner_party_members (org_id, party_id, profile_id, season_id, group_id)
     select s.org_id, v.party::uuid, p.id, s.id, s.group_id
@@ -54,7 +58,8 @@ const SETUP_SQL = `
       ('${HOSTS}', '${PERSONAS.householdPrimary.email}'),
       ('${HOSTS}', '${PERSONAS.spouse.email}'),
       ('${GUEST}', '${PERSONAS.oneGroup.email}'),
-      ('${OTHER_HOST}', '${PERSONAS.twoGroups.email}')) v(party, email)
+      ('${OTHER_HOST}', '${PERSONAS.twoGroups.email}'),
+      ('${OTHER_GUEST}', '${PERSONAS.leadsB.email}')) v(party, email)
     join public.profiles p on p.email = v.email and p.org_id = s.org_id
     where s.id = '${SEASON}';
   insert into public.dinner_party_addresses (org_id, party_id, season_id, group_id, address_line1, city)
@@ -70,13 +75,32 @@ const SETUP_SQL = `
   insert into public.dinner_seats (org_id, table_id, party_id, season_id, group_id)
     select s.org_id, v.tbl::uuid, v.party::uuid, s.id, s.group_id
     from public.dinner_seasons s
-    cross join (values ('${TABLE_ONE}', '${HOSTS}'), ('${TABLE_ONE}', '${GUEST}'), ('${TABLE_TWO}', '${OTHER_HOST}')) v(tbl, party)
+    cross join (values
+      ('${TABLE_ONE}', '${HOSTS}'), ('${TABLE_ONE}', '${GUEST}'),
+      ('${TABLE_TWO}', '${OTHER_HOST}'), ('${TABLE_TWO}', '${OTHER_GUEST}')) v(tbl, party)
     where s.id = '${SEASON}';
   insert into public.dinners (org_id, season_id, group_id, table_id, season_date_id, starts_at, host_party_id)
     select s.org_id, s.id, s.group_id, v.tbl::uuid, d.id, d.starts_at, v.host::uuid
     from public.dinner_seasons s
     join public.dinner_season_dates d on d.season_id = s.id
     cross join (values ('${TABLE_ONE}', '${HOSTS}'), ('${TABLE_TWO}', '${OTHER_HOST}')) v(tbl, host)
+    where s.id = '${SEASON}';
+  insert into public.dinner_contributions (org_id, dinner_id, party_id, season_id, group_id, table_id, item)
+    select d.org_id, d.id, v.party::uuid, d.season_id, d.group_id, d.table_id, v.item
+    from public.dinners d
+    join (values ('${TABLE_ONE}', '${GUEST}', '${OWN_ITEM}'), ('${TABLE_TWO}', '${OTHER_GUEST}', '${OTHER_ITEM}')) v(tbl, party, item)
+      on d.table_id = v.tbl::uuid
+    where d.season_id = '${SEASON}';
+`;
+
+// A waiting party for the church admin, seated nowhere.
+const WAITLIST_SQL = `
+  insert into public.dinner_parties (id, org_id, season_id, group_id, status)
+    select '${WAITING}', org_id, id, group_id, 'waitlisted' from public.dinner_seasons where id = '${SEASON}';
+  insert into public.dinner_party_members (org_id, party_id, profile_id, season_id, group_id)
+    select s.org_id, '${WAITING}', p.id, s.id, s.group_id
+    from public.dinner_seasons s
+    join public.profiles p on p.email = '${PERSONAS.admin.email}' and p.org_id = s.org_id
     where s.id = '${SEASON}';
 `;
 
@@ -101,6 +125,13 @@ test.describe("a guest at a published table", () => {
     await expect(page.getByText(/^(Henry and Chloe|Chloe and Henry)$/)).toBeVisible();
     await expect(page.getByText(OTHER_ADDRESS)).toHaveCount(0);
     await expect(page.getByText(PERSONAS.twoGroups.name)).toHaveCount(0);
+  });
+
+  test("sees what their own party brings and not another table's list", async ({ page }) => {
+    await page.goto(PAGE);
+    await expect(page.getByText("You're bringing")).toBeVisible();
+    await expect(page.getByText(OWN_ITEM, { exact: true })).toBeVisible();
+    await expect(page.getByText(OTHER_ITEM)).toHaveCount(0);
   });
 
   test("finds no dinner on the group calendar", async ({ page }) => {
@@ -149,6 +180,21 @@ test.describe("a member of the group at no table", () => {
     await expect(page.getByText("You're not at a table this season.")).toBeVisible();
     await expect(page.getByText(OWN_ADDRESS)).toHaveCount(0);
     await expect(page.getByText(OTHER_ADDRESS)).toHaveCount(0);
+  });
+
+  test("on the waiting list, sees no table, no address and no list until seated", async ({ page }) => {
+    runSql(WAITLIST_SQL);
+    try {
+      await page.goto(PAGE);
+      await expect(page.getByText("You're on the waiting list. The leader will find you a table.")).toBeVisible();
+      await expect(page.getByText("At the table")).toHaveCount(0);
+      await expect(page.getByText(OWN_ADDRESS)).toHaveCount(0);
+      await expect(page.getByText(OTHER_ADDRESS)).toHaveCount(0);
+      await expect(page.getByText(OWN_ITEM)).toHaveCount(0);
+      await expect(page.getByText(OTHER_ITEM)).toHaveCount(0);
+    } finally {
+      runSql(`delete from public.dinner_parties where id = '${WAITING}';`);
+    }
   });
 });
 
