@@ -3,14 +3,18 @@
 // tables while a leader reads the whole season. Nothing here widens that.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ShuffleParty } from "@/lib/dinnerClub/shuffle";
+import { isDinnerFormat, isSeasonStatus, type SeasonStatus } from "@/lib/dinnerClub/labels";
+import type { DinnerFormat, ShuffleParty } from "@/lib/dinnerClub/shuffle";
 import { displayName } from "@/lib/names";
 import type { Database, Tables } from "@/lib/supabase/database.types";
 import { readList } from "@/lib/supabase/readList";
 
 type Client = SupabaseClient<Database>;
 
-export type SeasonRow = Tables<"dinner_seasons">;
+export type SeasonRow = Omit<Tables<"dinner_seasons">, "format" | "status"> & {
+  format: DinnerFormat;
+  status: SeasonStatus;
+};
 export type PartyRow = Tables<"dinner_parties">;
 export type AddressRow = Pick<
   Tables<"dinner_party_addresses">,
@@ -44,22 +48,32 @@ export interface SeasonData {
   replies: { dinner_id: string; profile_id: string; status: string }[];
 }
 
-/** The group's seasons, newest first; a member's read leaves out drafts. */
-export async function loadSeasons(supabase: Client, groupId: string): Promise<SeasonRow[] | null> {
-  return readList(
-    await supabase.from("dinner_seasons").select("*").eq("group_id", groupId).order("created_at", { ascending: false }),
-    "dinner club seasons"
+function seasonRows(rows: Tables<"dinner_seasons">[]): SeasonRow[] {
+  return rows.flatMap(({ format, status, ...row }) =>
+    isDinnerFormat(format) && isSeasonStatus(status) ? [{ ...row, format, status }] : []
   );
 }
 
-export async function loadSeason(supabase: Client, groupId: string, seasonId: string): Promise<SeasonRow | null> {
-  const { data } = await supabase
-    .from("dinner_seasons")
-    .select("*")
-    .eq("group_id", groupId)
-    .eq("id", seasonId)
-    .maybeSingle();
-  return data;
+/** The group's seasons, newest first; a member's read leaves out drafts. */
+export async function loadSeasons(supabase: Client, groupId: string): Promise<SeasonRow[] | null> {
+  const rows = readList(
+    await supabase.from("dinner_seasons").select("*").eq("group_id", groupId).order("created_at", { ascending: false }),
+    "dinner club seasons"
+  );
+  return rows && seasonRows(rows);
+}
+
+/** One season: `{ season: null }` when the caller has no such season, null when the read failed. */
+export async function loadSeason(
+  supabase: Client,
+  groupId: string,
+  seasonId: string
+): Promise<{ season: SeasonRow | null } | null> {
+  const rows = readList(
+    await supabase.from("dinner_seasons").select("*").eq("group_id", groupId).eq("id", seasonId).limit(1),
+    "dinner club season"
+  );
+  return rows && { season: seasonRows(rows)[0] ?? null };
 }
 
 /** The season the dinner club page is about: one taking sign-ups or running, then a leader's draft, then the last ended. */

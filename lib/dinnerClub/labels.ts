@@ -1,7 +1,32 @@
 import { formatEventDate, formatEventTime } from "@/lib/time/zone";
 import type { DinnerFormat } from "./shuffle";
 
-export type SeasonStatus = "draft" | "open" | "published" | "ended";
+// Each value set below is the CHECK constraint on its column in the dinner
+// club migration; the type and the options derive from the one tuple.
+export const SEASON_STATUSES = ["draft", "open", "published", "ended"] as const;
+export type SeasonStatus = (typeof SEASON_STATUSES)[number];
+
+export const REPEAT_KINDS = ["weeks", "monthly_weekday"] as const;
+export type RepeatKind = (typeof REPEAT_KINDS)[number];
+
+export const REPLY_STATUSES = ["going", "not_going"] as const;
+export type ReplyStatus = (typeof REPLY_STATUSES)[number];
+
+function oneOf<T extends string>(values: readonly T[], value: string): value is T {
+  return (values as readonly string[]).includes(value);
+}
+
+export function isSeasonStatus(value: string): value is SeasonStatus {
+  return oneOf(SEASON_STATUSES, value);
+}
+
+export function isRepeatKind(value: string): value is RepeatKind {
+  return oneOf(REPEAT_KINDS, value);
+}
+
+export function isReplyStatus(value: string): value is ReplyStatus {
+  return oneOf(REPLY_STATUSES, value);
+}
 
 export const FORMAT_LABELS: Record<DinnerFormat, string> = {
   same_table_one_host: "Same table, one host",
@@ -39,10 +64,19 @@ export const WEEK_OF_MONTH_OPTIONS = [
   { value: "5", label: "Last" },
 ];
 
-export const REPEAT_OPTIONS = [
-  { value: "weeks", label: "Every few weeks" },
-  { value: "monthly_weekday", label: "Monthly" },
-];
+const REPEAT_LABELS: Record<RepeatKind, string> = {
+  weeks: "Every few weeks",
+  monthly_weekday: "Monthly",
+};
+
+export const REPEAT_OPTIONS = REPEAT_KINDS.map((value) => ({ value, label: REPEAT_LABELS[value] }));
+
+const REPLY_LABELS: Record<ReplyStatus, string> = {
+  going: "Going",
+  not_going: "Not going",
+};
+
+export const REPLY_OPTIONS = REPLY_STATUSES.map((value) => ({ value, label: REPLY_LABELS[value] }));
 
 export const LENGTH_OPTIONS = [
   { value: "months", label: "Number of months" },

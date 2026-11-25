@@ -8,8 +8,8 @@ import { SeasonDates } from "@/components/dinnerClub/SeasonDates";
 import { SignUpList, type SignUpRow } from "@/components/dinnerClub/SignUpList";
 import { seasonDateStarts } from "@/lib/dinnerClub/dates";
 import { formatAddress } from "@/lib/dinnerClub/ics";
-import { FORMAT_LABELS, howOftenLabel, partyName, STATUS_LABELS, type SeasonStatus } from "@/lib/dinnerClub/labels";
-import { hostsNeeded, tooFewHosts, type DinnerFormat } from "@/lib/dinnerClub/shuffle";
+import { FORMAT_LABELS, howOftenLabel, partyName, STATUS_LABELS } from "@/lib/dinnerClub/labels";
+import { hostsNeeded, tooFewHosts } from "@/lib/dinnerClub/shuffle";
 import { groupPath, isUuid } from "@/lib/groups/active";
 import { requireGroupLeader } from "@/lib/groups/server";
 import { groupPageTitle } from "@/lib/pageTitle";
@@ -29,13 +29,21 @@ export default async function SeasonPage({ params }: { params: Promise<{ groupId
   const group = await requireGroupLeader(groupId);
   if (!isUuid(seasonId)) notFound();
   const supabase = await createClient();
-  const season = await loadSeason(supabase, group.id, seasonId);
+  const read = await loadSeason(supabase, group.id, seasonId);
+  const back = { backHref: groupPath(group.id, "/dinner-club"), backLabel: "Back to Dinner club" };
+  if (!read) {
+    return (
+      <PageContainer>
+        <PageHeader title="Season" {...back} />
+        <ErrorState thing="this season" />
+      </PageContainer>
+    );
+  }
+  const { season } = read;
   if (!season) notFound();
   const zone = await getOrgTimeZone();
   const [data, people] = await Promise.all([loadSeasonData(supabase, season.id), loadGroupPeople(supabase, group.id)]);
-  const status = season.status as SeasonStatus;
-  const format = season.format as DinnerFormat;
-  const back = { backHref: groupPath(group.id, "/dinner-club"), backLabel: "Back to Dinner club" };
+  const { status, format } = season;
 
   if (!data || !people) {
     return (

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ErrorState } from "@/components/states/ErrorState";
 import { SeasonForm } from "@/components/dinnerClub/SeasonForm";
 import { valuesFromSeason } from "@/lib/dinnerClub/seasonValues";
 import { groupPath, isUuid } from "@/lib/groups/active";
@@ -20,7 +21,17 @@ export default async function EditSeasonPage({
   const { groupId, seasonId } = await params;
   const group = await requireGroupLeader(groupId);
   if (!isUuid(seasonId)) notFound();
-  const season = await loadSeason(await createClient(), group.id, seasonId);
+  const read = await loadSeason(await createClient(), group.id, seasonId);
+  const back = { backHref: groupPath(group.id, `/dinner-club/seasons/${seasonId}`), backLabel: "Back to the season" };
+  if (!read) {
+    return (
+      <PageContainer size="reading">
+        <PageHeader title="Edit season" {...back} />
+        <ErrorState thing="this season" />
+      </PageContainer>
+    );
+  }
+  const { season } = read;
   if (!season || season.status === "ended") notFound();
   const locked = season.status === "published";
   return (
@@ -28,8 +39,7 @@ export default async function EditSeasonPage({
       <PageHeader
         title="Edit season"
         subtitle={locked ? "Tables are published, so only the title and sign-up close date can change." : undefined}
-        backHref={groupPath(group.id, `/dinner-club/seasons/${season.id}`)}
-        backLabel="Back to the season"
+        {...back}
       />
       <SeasonForm
         groupId={group.id}

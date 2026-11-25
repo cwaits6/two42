@@ -174,10 +174,8 @@ export async function GET(request: Request) {
   try {
     body = dinnersICS(entries, await orgTimeZoneById(supabase, orgId));
   } catch (err) {
-    {
     logError("Failed to build the dinner feed", err, { route: "/api/dinner-club/feed.ics" });
     return failed();
-  }
   }
   return new Response(body, {
     status: 200,

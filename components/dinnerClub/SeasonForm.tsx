@@ -17,6 +17,7 @@ import {
   FORMAT_LABELS,
   FORMAT_OPTIONS,
   isDinnerFormat,
+  isRepeatKind,
   LENGTH_OPTIONS,
   REPEAT_OPTIONS,
   WEEK_OF_MONTH_OPTIONS,
@@ -240,7 +241,7 @@ export function SeasonForm({
                 items={REPEAT_OPTIONS}
                 value={values.repeatKind}
                 disabled={locked}
-                onValueChange={(next) => (next === "weeks" || next === "monthly_weekday") && set("repeatKind", next)}
+                onValueChange={(next) => next && isRepeatKind(next) && set("repeatKind", next)}
               >
                 <SelectTrigger id="season-repeatKind" className={`w-full ${FIELD}`}>
                   <SelectValue />

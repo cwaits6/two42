@@ -7,12 +7,10 @@ import { AddToCalendarButton } from "@/components/events/AddToCalendarButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Segmented } from "@/components/ui/segmented";
 import { DINNER_HOURS } from "@/lib/dinnerClub/ics";
-import { dinnerWhen } from "@/lib/dinnerClub/labels";
+import { dinnerWhen, REPLY_OPTIONS, type ReplyStatus } from "@/lib/dinnerClub/labels";
 import { failureMessage } from "@/lib/errorCopy";
 import { createClient } from "@/lib/supabase/client";
 import { MoveDinnerButton } from "./MoveDinnerButton";
-
-type Reply = "going" | "not_going";
 
 export interface DinnerCardProps {
   dinnerId: string;
@@ -24,7 +22,7 @@ export interface DinnerCardProps {
   address: string | null;
   /** Everyone seated at the table. */
   atTable: { id: string; name: string }[];
-  replies: Record<string, Reply>;
+  replies: Record<string, ReplyStatus>;
   /** The person and their partner, who each answer for themselves or each other. */
   mine: { id: string; name: string }[];
   /** The dinner has not started and the season is running. */
@@ -35,11 +33,6 @@ export interface DinnerCardProps {
   foodNotes: { names: string; notes: string }[];
 }
 
-const REPLY_OPTIONS = [
-  { value: "going" as const, label: "Going" },
-  { value: "not_going" as const, label: "Not going" },
-];
-
 export function DinnerCard(props: DinnerCardProps) {
   const router = useRouter();
   const [replies, setReplies] = useState(props.replies);
@@ -48,7 +41,7 @@ export function DinnerCard(props: DinnerCardProps) {
   const notGoing = props.atTable.filter((p) => replies[p.id] === "not_going");
   const noReply = props.atTable.length - going.length - notGoing.length;
 
-  async function reply(profileId: string, status: Reply) {
+  async function reply(profileId: string, status: ReplyStatus) {
     setSaving(true);
     const before = replies;
     setReplies((r) => ({ ...r, [profileId]: status }));
@@ -98,7 +91,7 @@ export function DinnerCard(props: DinnerCardProps) {
               <Segmented
                 label={index === 0 ? "Your reply" : `${person.name}'s reply`}
                 options={REPLY_OPTIONS}
-                value={replies[person.id] ?? ("" as Reply)}
+                value={replies[person.id] ?? ("" as ReplyStatus)}
                 onChange={(status) => !saving && reply(person.id, status)}
               />
             </div>

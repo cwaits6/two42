@@ -1,3 +1,4 @@
+import type { RepeatKind } from "./labels";
 import type { DinnerFormat } from "./shuffle";
 
 export interface SeasonValues {
@@ -7,7 +8,7 @@ export interface SeasonValues {
   lengthMode: "months" | "end";
   lengthMonths: string;
   endsOn: string;
-  repeatKind: "weeks" | "monthly_weekday";
+  repeatKind: RepeatKind;
   repeatWeeks: string;
   weekOfMonth: string;
   weekday: string;
@@ -39,7 +40,7 @@ export const NEW_SEASON: SeasonValues = {
 /** A saved season as the form's values. */
 export function valuesFromSeason(row: {
   title: string;
-  format: string;
+  format: DinnerFormat;
   starts_on: string;
   ends_on: string;
   length_months: number | null;
@@ -55,7 +56,7 @@ export function valuesFromSeason(row: {
 }): SeasonValues {
   return {
     title: row.title,
-    format: row.format as DinnerFormat,
+    format: row.format,
     startsOn: row.starts_on,
     lengthMode: row.length_months ? "months" : "end",
     lengthMonths: String(row.length_months ?? 4),

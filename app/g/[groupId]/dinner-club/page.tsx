@@ -11,7 +11,7 @@ import { CalendarLinkCard } from "@/components/dinnerClub/CalendarLinkCard";
 import { DinnerCard } from "@/components/dinnerClub/DinnerCard";
 import { SignUpForm, type AddressFields, type ExistingSignUp } from "@/components/dinnerClub/SignUpForm";
 import { formatAddress } from "@/lib/dinnerClub/ics";
-import { dinnerWhen, FORMAT_LABELS, partyName, STATUS_LABELS, type SeasonStatus } from "@/lib/dinnerClub/labels";
+import { dinnerWhen, FORMAT_HELP, FORMAT_LABELS, isReplyStatus, partyName, STATUS_LABELS } from "@/lib/dinnerClub/labels";
 import type { DinnerFormat } from "@/lib/dinnerClub/shuffle";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
@@ -19,7 +19,7 @@ import { groupPageTitle } from "@/lib/pageTitle";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
-import { dayKey } from "@/lib/time/zone";
+import { dayKey, formatEventDate } from "@/lib/time/zone";
 import { currentSeason, loadGroupPeople, loadPeople, loadSeasonData, loadSeasons, peopleOf, type SeasonData } from "./load";
 
 export const generateMetadata = groupPageTitle("Dinner club");
@@ -66,8 +66,7 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
     );
   }
 
-  const status = season.status as SeasonStatus;
-  const format = season.format as DinnerFormat;
+  const { status, format } = season;
   const header = (
     <PageHeader
       title={season.title}
@@ -118,6 +117,22 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
     return (
       <PageContainer size="reading">
         {header}
+        <Card className="mb-6">
+          <CardContent className="space-y-3 pt-6 text-lg">
+            <p>{FORMAT_HELP[format]}</p>
+            {windowOpen && <p>Sign up by {formatEventDate(`${season.signup_closes_on}T12:00:00Z`, "UTC")}.</p>}
+            {data.dates.length > 0 && (
+              <div>
+                <p className="font-semibold">Dinners</p>
+                <ul className="list-disc pl-6">
+                  {data.dates.map((d) => (
+                    <li key={d.id}>{dinnerWhen(d.starts_at, zone)}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </CardContent>
+        </Card>
         {windowOpen ? (
           <SignUpView
             data={data}
@@ -185,7 +200,9 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
     const isHost = d.host_party_id === myPartyId;
     const address = data.addresses.find((a) => a.party_id === d.host_party_id);
     const replies = Object.fromEntries(
-      data.replies.filter((r) => r.dinner_id === d.id).map((r) => [r.profile_id, r.status as "going" | "not_going"])
+      data.replies
+        .filter((r) => r.dinner_id === d.id)
+        .flatMap((r) => (isReplyStatus(r.status) ? [[r.profile_id, r.status] as const] : []))
     );
     const foodNotes = isHost
       ? seated
