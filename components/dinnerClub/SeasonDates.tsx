@@ -152,22 +152,13 @@ export function SeasonDates({
         pendingLabel="Proposing…"
         confirmVariant="default"
         onConfirm={async () => {
-          const supabase = createClient();
-          const { error: deleteError } = await supabase.from("dinner_season_dates").delete().eq("season_id", seasonId);
-          if (deleteError) {
+          const { data, error } = await createClient().rpc("dinner_season_dates_replace", {
+            _season_id: seasonId,
+            _starts_at: proposed,
+          });
+          if (error || data !== proposed.length) {
             toast.error(failureMessage("replace the dates"));
             return;
-          }
-          if (proposed.length > 0) {
-            const { data, error } = await supabase
-              .from("dinner_season_dates")
-              .insert(proposed.map((starts_at) => ({ season_id: seasonId, group_id: groupId, starts_at })))
-              .select("id");
-            if (error || data?.length !== proposed.length) {
-              toast.error(failureMessage("add the proposed dates"));
-              router.refresh();
-              return;
-            }
           }
           setProposing(false);
           toast.success("Dates proposed.");

@@ -943,8 +943,9 @@ revoked from `public` and `anon`; none takes an org.
   caller must lead the group. It reads the `dinner_drafts` row, never a
   payload, and checks every party, table, date and host id in it against the
   season and org before writing (`DC002`). Tables, seats and dinners are
-  written in one transaction, the season's status update must touch exactly
-  one row, and it returns the people whose tables or hosts changed, for the
+  written in one transaction under locks on the season, its parties and the
+  draft, so a sign-up, withdrawal or draft save waits for it or lands before
+  its checks; the season's status update must touch exactly one row, and it returns the people whose tables or hosts changed, for the
   publish route's email. Granted to `authenticated`.
 - Triggers: `dinner_party_withdrawn()` (marks a withdrawn party's seats left
   and deletes its replies to dinners not yet held), `dinner_party_drop_if_empty()`
@@ -968,7 +969,7 @@ church admin in the fixture.
 
 ## Dinner reminder claim — service-key only, SECURITY INVOKER
 
-`dinner_reminder_claim(_org_id, _dinner_id, _dinner_date)`
+`dinner_reminder_claim(_org_id, _dinner_id, _dinner_date, _starts_at, _host_party_id)`
 (`20261203000000_dinner_club.sql`) is what the `send-dinner-reminders` job
 calls, once per dinner due, before it mails anyone. It is a copy of
 `event_reminder_claim()`: the dinner's own `org_id` is compared with
@@ -980,7 +981,10 @@ recipients are the people in parties with an active seat at that dinner's
 table, in a party that has not withdrawn, not pending, with an email and
 `profiles.email_dinner_club` on, with no Not going reply, while the season is
 published and the group's dinner club is on — every table it joins filtered on
-`_org_id`. EXECUTE: `service_role` only. `dinner_reminder_passes` and
+`_org_id`. A dinner whose start or host differs from the `_starts_at` and
+`_host_party_id` the job read claims nothing, so the email's host and address
+describe the dinner the recipients are seated at, and a retried claim returns
+only recipients who still hold that active seat. EXECUTE: `service_role` only. `dinner_reminder_passes` and
 `dinner_reminder_sends` carry the restrictive isolation floor and no permissive
 policy or client grant.
 

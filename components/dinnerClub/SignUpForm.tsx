@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -74,6 +74,7 @@ export function SignUpForm({
   const ids = { who: useId(), other: useId(), seats: useId(), pref: useId(), food: useId(), access: useId(), pets: useId() };
   const [who, setWho] = useState(ME);
   const [other, setOther] = useState<string | null>(null);
+  const createdPartyId = useRef<string | undefined>(undefined);
   const [canHost, setCanHost] = useState(existing?.canHost ?? false);
   const [seats, setSeats] = useState(String(existing?.seats ?? 8));
   const [address, setAddress] = useState<AddressFields>(existing?.address ?? prefill);
@@ -118,7 +119,9 @@ export function SignUpForm({
       );
     };
 
-    let partyId = existing?.partyId;
+    // A party saved on an earlier try whose details were not: trying again
+    // saves the details instead of signing up a second time.
+    let partyId = existing?.partyId ?? createdPartyId.current;
     if (!partyId) {
       const partner = who === ME ? null : who === OTHER ? other : who;
       const { data, error } = await supabase.rpc("dinner_party_create", {
@@ -127,6 +130,7 @@ export function SignUpForm({
       });
       if (error || !data) return fail("sign up", error);
       partyId = data as string;
+      createdPartyId.current = partyId;
     }
 
     const { data: updated, error: updateError } = await supabase
@@ -171,16 +175,12 @@ export function SignUpForm({
     if (notesResult.error || (foodNotes.trim() && !notesResult.data?.length)) return fail("save your food needs", notesResult.error);
 
     if (format === "new_tables") {
-      const { error: clearError } = await supabase.from("dinner_party_unavailable_dates").delete().eq("party_id", partyId);
-      if (clearError) return fail("save the dates you can't host", clearError);
       const chosen = canHost ? unavailable : [];
-      if (chosen.length > 0) {
-        const { data, error } = await supabase
-          .from("dinner_party_unavailable_dates")
-          .insert(chosen.map((season_date_id) => ({ ...keys, season_date_id })))
-          .select("party_id");
-        if (error || data?.length !== chosen.length) return fail("save the dates you can't host", error);
-      }
+      const { data, error } = await supabase.rpc("dinner_party_unavailable_dates_replace", {
+        _party_id: partyId,
+        _season_date_ids: chosen,
+      });
+      if (error || data !== chosen.length) return fail("save the dates you can't host", error);
     }
 
     setSaving(false);

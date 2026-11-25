@@ -372,11 +372,13 @@ create table public.dinners (
   starts_at timestamptz not null,
   host_party_id uuid,
   host_unavailable boolean not null default false,
+  follows_season_date boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint dinners_table_date_unique unique (table_id, season_date_id),
   constraint dinners_id_org_unique unique (id, org_id),
   constraint dinners_id_table_org_unique unique (id, table_id, org_id),
+  constraint dinners_id_table_season_org_unique unique (id, table_id, season_id, group_id, org_id),
   constraint dinners_table_fkey
     foreign key (table_id, season_id, org_id) references public.dinner_tables (id, season_id, org_id) on delete cascade,
   constraint dinners_date_fkey
@@ -395,6 +397,8 @@ comment on column public.dinners.host_party_id is
   'Who hosts this one dinner. Set per dinner, so another party at the table can host one date.';
 comment on column public.dinners.host_unavailable is
   'The host said they can''t host this dinner.';
+comment on column public.dinners.follows_season_date is
+  'False once the dinner is moved on its own; moving its season date then leaves it where it is.';
 
 create index dinners_season_starts_idx on public.dinners (season_id, starts_at);
 create index dinners_season_group_idx on public.dinners (season_id, group_id, org_id);
@@ -440,8 +444,10 @@ create table public.dinner_contributions (
     constraint dinner_contributions_item_check check (char_length(btrim(item)) between 1 and 60),
   updated_at timestamptz not null default now(),
   primary key (dinner_id, party_id),
+  -- Ties season_id and group_id to the dinner's own, which the leader policy trusts.
   constraint dinner_contributions_dinner_fkey
-    foreign key (dinner_id, table_id, org_id) references public.dinners (id, table_id, org_id) on delete cascade,
+    foreign key (dinner_id, table_id, season_id, group_id, org_id)
+    references public.dinners (id, table_id, season_id, group_id, org_id) on delete cascade,
   constraint dinner_contributions_seat_fkey
     foreign key (table_id, party_id, org_id) references public.dinner_seats (table_id, party_id, org_id) on delete cascade,
   constraint dinner_contributions_season_fkey
@@ -451,7 +457,7 @@ create table public.dinner_contributions (
 comment on table public.dinner_contributions is
   'What a guest party brings to one dinner, set by its host or a leader. The party is always seated at the dinner''s table.';
 
-create index dinner_contributions_dinner_idx on public.dinner_contributions (dinner_id, table_id, org_id);
+create index dinner_contributions_dinner_idx on public.dinner_contributions (dinner_id, table_id, season_id, group_id, org_id);
 create index dinner_contributions_seat_idx on public.dinner_contributions (table_id, party_id, org_id);
 create index dinner_contributions_season_idx on public.dinner_contributions (season_id, group_id, org_id);
 
@@ -614,6 +620,8 @@ as $$
   select coalesce(array_agg(distinct s.party_id), '{}')
   from public.dinners d
   join public.dinner_seats s on s.table_id = d.table_id and s.org_id = d.org_id and s.left_at is null
+  join public.dinner_seats hs on hs.table_id = d.table_id and hs.party_id = d.host_party_id
+   and hs.org_id = d.org_id and hs.left_at is null
   where d.org_id = public.app_current_org_id()
     and d.host_party_id = any (public.dinner_my_party_ids());
 $$;
@@ -931,8 +939,8 @@ create trigger dinner_season_dates_guard
   before insert or update or delete on public.dinner_season_dates
   for each row execute function public.dinner_season_dates_guard();
 
--- Moving a season date moves each table's dinner on it, except one its host
--- already moved on its own. Runs as the leader, through the dinners rules.
+-- Moving a season date moves each table's dinner on it, except one already
+-- moved on its own. Runs as the leader, through the dinners rules.
 create function public.dinner_season_dates_carry() returns trigger
   language plpgsql
   set search_path = ''
@@ -942,7 +950,7 @@ begin
      set starts_at = new.starts_at
    where d.season_date_id = new.id
      and d.org_id = new.org_id
-     and d.starts_at = old.starts_at;
+     and d.follows_season_date;
   return null;
 end;
 $$;
@@ -1175,6 +1183,10 @@ begin
     raise exception 'a dinner stays at its table and date' using errcode = 'DC002';
   end if;
   new.updated_at := pg_catalog.now();
+  -- Depth 1 is a move of this dinner itself; the season-date carry runs nested.
+  if new.starts_at is distinct from old.starts_at and pg_catalog.pg_trigger_depth() = 1 then
+    new.follows_season_date := false;
+  end if;
 
   if current_user <> 'authenticated' then
     return new;
@@ -1311,7 +1323,8 @@ begin
     raise exception 'no season' using errcode = 'DC001';
   end if;
 
-  select * into _season from public.dinner_seasons s where s.id = _season_id;
+  -- Conflicts with publish's FOR UPDATE, so the status read is the one that commits.
+  select * into _season from public.dinner_seasons s where s.id = _season_id for share;
   if _season.id is null or _season.org_id is distinct from _org then
     raise exception 'no season' using errcode = 'DC001';
   end if;
@@ -1368,6 +1381,61 @@ grant execute on function public.dinner_party_create(uuid, uuid[]) to authentica
 
 comment on function public.dinner_party_create(uuid, uuid[]) is
   'Signs up a party of one or two people for a season. Actor from auth.uid(); tenant anchor: the season row''s org, pinned against app_request_org_id(). A member must be in the party; a leader may sign up any member of the group. Raises DC001, DC002, DC003, or 23505 when someone is already in a party this season.';
+
+-- Replacing a list is one statement pair in one transaction, so a failed
+-- insert keeps the old rows. Invoker: the table rules and guards apply.
+create function public.dinner_season_dates_replace(_season_id uuid, _starts_at timestamptz[])
+  returns integer
+  language plpgsql security invoker
+  set search_path = ''
+as $$
+declare
+  _group uuid;
+  _n integer;
+begin
+  select s.group_id into _group from public.dinner_seasons s where s.id = _season_id;
+  if _group is null then
+    raise exception 'no season' using errcode = 'DC001';
+  end if;
+  delete from public.dinner_season_dates sd where sd.season_id = _season_id;
+  insert into public.dinner_season_dates (season_id, group_id, starts_at)
+  select _season_id, _group, x from unnest(coalesce(_starts_at, '{}')) as x;
+  get diagnostics _n = row_count;
+  return _n;
+end;
+$$;
+
+create function public.dinner_party_unavailable_dates_replace(_party_id uuid, _season_date_ids uuid[])
+  returns integer
+  language plpgsql security invoker
+  set search_path = ''
+as $$
+declare
+  _season uuid;
+  _group uuid;
+  _n integer;
+begin
+  select p.season_id, p.group_id into _season, _group from public.dinner_parties p where p.id = _party_id;
+  if _season is null then
+    raise exception 'no party' using errcode = 'DC001';
+  end if;
+  delete from public.dinner_party_unavailable_dates u where u.party_id = _party_id;
+  insert into public.dinner_party_unavailable_dates (party_id, season_date_id, season_id, group_id)
+  select _party_id, x, _season, _group from unnest(coalesce(_season_date_ids, '{}')) as x;
+  get diagnostics _n = row_count;
+  return _n;
+end;
+$$;
+
+revoke execute on function public.dinner_season_dates_replace(uuid, timestamptz[]) from public, anon;
+grant execute on function public.dinner_season_dates_replace(uuid, timestamptz[]) to authenticated;
+revoke execute on function public.dinner_party_unavailable_dates_replace(uuid, uuid[]) from public, anon;
+grant execute on function public.dinner_party_unavailable_dates_replace(uuid, uuid[]) to authenticated;
+
+comment on function public.dinner_season_dates_replace(uuid, timestamptz[]) is
+  'Replaces a season''s dates in one transaction and returns how many it added. Security invoker: the season dates rules decide who may.';
+comment on function public.dinner_party_unavailable_dates_replace(uuid, uuid[]) is
+  'Replaces the dates a party can''t host in one transaction and returns how many it added. Security invoker: the unavailable dates rules decide who may.';
 
 -- ── Publish ─────────────────────────────────────────────────────────────────
 -- For each person seated this season, what their dinners look like: each
@@ -1429,7 +1497,16 @@ begin
     raise exception 'the season is not ready for tables' using errcode = 'DC003';
   end if;
 
-  select d.body into _body from public.dinner_drafts d where d.season_id = _season.id and d.org_id = _org;
+  -- A withdrawal updates its party row, so it either lands before the checks
+  -- below or waits for publish and then closes the seats it wrote.
+  perform 1 from public.dinner_parties p
+   where p.season_id = _season.id and p.org_id = _org
+   order by p.id
+   for share;
+
+  select d.body into _body from public.dinner_drafts d
+   where d.season_id = _season.id and d.org_id = _org
+   for update;
   if _body is null or jsonb_typeof(_body -> 'tables') is distinct from 'array'
     or jsonb_array_length(_body -> 'tables') = 0 then
     raise exception 'there is no draft to publish' using errcode = 'DC002';
@@ -1468,6 +1545,15 @@ begin
   ) then
     raise exception 'a table is not one of this season''s' using errcode = 'DC002';
   end if;
+  if exists (
+    select 1
+    from jsonb_array_elements(_body -> 'tables') t
+    where nullif(t ->> 'tableId', '') is not null
+    group by (t ->> 'tableId')::uuid
+    having count(*) > 1
+  ) then
+    raise exception 'a table is listed twice' using errcode = 'DC002';
+  end if;
 
   if _season.format = 'new_tables' then
     if exists (
@@ -1480,7 +1566,7 @@ begin
       select 1
       from jsonb_array_elements(_body -> 'tables') t,
            jsonb_array_elements_text(t -> 'partyIds') pid
-      group by t ->> 'seasonDateId', pid
+      group by nullif(t ->> 'seasonDateId', '')::uuid, pid::uuid
       having count(*) > 1
     ) or exists (
       select 1 from public.dinner_season_dates sd
@@ -1500,7 +1586,7 @@ begin
       select 1
       from jsonb_array_elements(_body -> 'tables') t,
            jsonb_array_elements_text(t -> 'partyIds') pid
-      group by pid
+      group by pid::uuid
       having count(*) > 1
     ) then
       raise exception 'each party sits at one table all season' using errcode = 'DC002';
@@ -1650,8 +1736,12 @@ comment on function public.dinner_tables_publish(uuid) is
 -- ── Reminder ────────────────────────────────────────────────────────────────
 -- Starts the reminder pass for a dinner's local date when it has none,
 -- fixing its recipients, then claims every unsent reminder in it. Runs on
--- the service key only.
-create function public.dinner_reminder_claim(_org_id uuid, _dinner_id uuid, _dinner_date date)
+-- the service key only. The caller passes the start and host it read; a
+-- dinner moved or rehosted since claims nothing, and the next firing reads
+-- it again.
+create function public.dinner_reminder_claim(
+  _org_id uuid, _dinner_id uuid, _dinner_date date, _starts_at timestamptz, _host_party_id uuid
+)
   returns table (profile_id uuid, email text, first_name text, preferred_name text)
   language plpgsql
   set search_path = ''
@@ -1663,6 +1753,9 @@ begin
   if _dinner.id is null or _dinner.org_id is distinct from _org_id then
     raise exception 'dinner reminder claim rejected: dinner % is not in org %', _dinner_id, _org_id
       using errcode = 'DC010';
+  end if;
+  if _dinner.starts_at is distinct from _starts_at or _dinner.host_party_id is distinct from _host_party_id then
+    return;
   end if;
 
   insert into public.dinner_reminder_passes (org_id, dinner_id, dinner_date)
@@ -1712,6 +1805,14 @@ begin
   join public.profiles p on p.id = c.profile_id and p.org_id = _org_id
   where p.email is not null
     and p.email_dinner_club
+    and exists (
+      select 1
+      from public.dinner_seats st
+      join public.dinner_parties pa on pa.id = st.party_id and pa.org_id = _org_id and pa.status <> 'withdrawn'
+      join public.dinner_party_members pm on pm.party_id = st.party_id and pm.org_id = _org_id
+      where st.table_id = _dinner.table_id and st.org_id = _org_id and st.left_at is null
+        and pm.profile_id = p.id
+    )
     and not exists (
       select 1 from public.dinner_replies r
       where r.org_id = _org_id and r.dinner_id = _dinner_id and r.profile_id = p.id and r.status = 'not_going'
@@ -1719,11 +1820,11 @@ begin
 end;
 $$;
 
-revoke execute on function public.dinner_reminder_claim(uuid, uuid, date) from public, anon, authenticated;
-grant execute on function public.dinner_reminder_claim(uuid, uuid, date) to service_role;
+revoke execute on function public.dinner_reminder_claim(uuid, uuid, date, timestamptz, uuid) from public, anon, authenticated;
+grant execute on function public.dinner_reminder_claim(uuid, uuid, date, timestamptz, uuid) to service_role;
 
-comment on function public.dinner_reminder_claim(uuid, uuid, date) is
-  'Starts the reminder pass for one dinner on one local date when it has none, fixing its recipients (the people seated at its table who have not said Not going and get dinner club email), then claims every unsent reminder in it and returns the people to mail. Tenant anchor: the dinner''s own org_id, compared with _org_id; a mismatch raises DC010. service_role only.';
+comment on function public.dinner_reminder_claim(uuid, uuid, date, timestamptz, uuid) is
+  'Starts the reminder pass for one dinner on one local date when it has none, unless its start or host differs from the caller''s _starts_at and _host_party_id, fixing its recipients (the people seated at its table who have not said Not going and get dinner club email), then claims every unsent reminder in it and returns the people to mail who are still seated there. Tenant anchor: the dinner''s own org_id, compared with _org_id; a mismatch raises DC010. service_role only.';
 
 -- The nightly cleanup deletes a church's passes past their retention through
 -- this, a bounded set per call: the database API cannot limit a delete.

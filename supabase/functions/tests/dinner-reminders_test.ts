@@ -166,7 +166,13 @@ Deno.test("every chain and every call carries the church being run", async () =>
   assertEquals(queries.slice(firstB).every((q) => orgOf(q) === "org-b"), true);
   assertEquals(
     queries.find((q) => q.rpc === "dinner_reminder_claim" && q.args!._dinner_id === "b1")!.args,
-    { _org_id: "org-b", _dinner_id: "b1", _dinner_date: "2027-01-09" },
+    {
+      _org_id: "org-b",
+      _dinner_id: "b1",
+      _dinner_date: "2027-01-09",
+      _starts_at: "2027-01-10T01:00:00Z",
+      _host_party_id: "host",
+    },
   );
 });
 

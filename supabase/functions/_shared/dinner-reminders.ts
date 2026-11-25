@@ -64,7 +64,7 @@ export interface DinnerRemindersClient {
   from(table: "dinner_reminder_sends"): { update(values: Record<string, unknown>): SettleChain };
   rpc(
     fn: "dinner_reminder_claim",
-    args: { _org_id: string; _dinner_id: string; _dinner_date: string },
+    args: { _org_id: string; _dinner_id: string; _dinner_date: string; _starts_at: string; _host_party_id: string | null },
   ): PromiseLike<{ data: DinnerClaimRow[] | null; error: QueryError }>;
   rpc(fn: "email_quota_consume", args: { _org_id: string; _n: number }): PromiseLike<{
     data: boolean | null;
@@ -258,6 +258,8 @@ export async function runDinnerReminders(
         _org_id: org.id,
         _dinner_id: dinner.dinnerId,
         _dinner_date: dinner.dinnerDate,
+        _starts_at: dinner.startIso,
+        _host_party_id: dinner.hostPartyId,
       });
       if (claimError) {
         itemFailures.push({ item: dinner.dinnerId, error: `dinner_reminder_claim failed: ${claimError.message}` });

@@ -152,8 +152,8 @@ select ok(not has_function_privilege('anon', 'public.dinner_my_party_ids()', 'ex
 select ok(not has_function_privilege('anon', 'public.dinner_party_create(uuid, uuid[])', 'execute')
   and not has_function_privilege('anon', 'public.dinner_tables_publish(uuid)', 'execute'),
   'anon runs neither sign-up nor publish');
-select ok(not has_function_privilege('authenticated', 'public.dinner_reminder_claim(uuid, uuid, date)', 'execute')
-  and has_function_privilege('service_role', 'public.dinner_reminder_claim(uuid, uuid, date)', 'execute'),
+select ok(not has_function_privilege('authenticated', 'public.dinner_reminder_claim(uuid, uuid, date, timestamptz, uuid)', 'execute')
+  and has_function_privilege('service_role', 'public.dinner_reminder_claim(uuid, uuid, date, timestamptz, uuid)', 'execute'),
   'only the service key claims reminders');
 select is(pg_temp.wrote('l', 'select * from public.dinner_reminder_passes'), '42501',
   'a signed-in person cannot read the reminder record');
@@ -513,6 +513,14 @@ select is((select starts_at from public.dinners where id = pg_temp.id('t2d2')), 
   'the other table''s dinner moves with it');
 select is((select starts_at from public.dinners where id = pg_temp.id('t1d2')), '2031-02-02 18:00-06'::timestamptz,
   'the dinner its host moved stays');
+select is(pg_temp.wrote('l', format(
+    'update public.dinner_season_dates set starts_at = ''2031-02-02 18:00-06'' where id = %L', pg_temp.id('d2'))), '1',
+  'a leader moves the date onto the moved dinner''s time');
+select is(pg_temp.wrote('l', format(
+    'update public.dinner_season_dates set starts_at = ''2031-02-08 18:00-06'' where id = %L', pg_temp.id('d2'))), '1',
+  'and then away from it');
+select is((select starts_at from public.dinners where id = pg_temp.id('t1d2')), '2031-02-02 18:00-06'::timestamptz,
+  'a dinner moved on its own stays even when its date passed through its time');
 
 -- ── Changing published tables ───────────────────────────────────────────────
 select pg_temp.keep('pn', pg_temp.read_as('n', format(
@@ -533,6 +541,20 @@ select is((select count(*)::int from public.dinners where season_id = pg_temp.id
 select is((select starts_at from public.dinners where id = pg_temp.id('t1d2')), '2031-02-02 18:00-06'::timestamptz,
   'and keeps its moved time');
 
+select pg_temp.draft(jsonb_build_array(
+  pg_temp.one_host_table('a', current_setting('dc.t1'), 'ph', array['ph', 'pg']),
+  pg_temp.one_host_table('b', current_setting('dc.t1'), 'ph2', array['ph2', 'pu', 'pn'])));
+select is(pg_temp.read_as('l', format('select count(*) from public.dinner_tables_publish(%L)', pg_temp.id('season'))), 'DC002',
+  'a draft listing one published table twice is refused');
+select pg_temp.draft(jsonb_build_array(
+  pg_temp.one_host_table('a', current_setting('dc.t1'), 'ph', array['ph', 'pg']),
+  pg_temp.one_host_table('b', current_setting('dc.t2'), 'ph2', array['ph2', 'pu', 'pn'])
+    || jsonb_build_object('partyIds', jsonb_build_array(
+      pg_temp.id('ph2')::text, pg_temp.id('pu')::text, upper(pg_temp.id('pg')::text)))));
+select is(pg_temp.read_as('l', format('select count(*) from public.dinner_tables_publish(%L)', pg_temp.id('season'))), 'DC002',
+  'a party written in capitals at a second table is still seen twice');
+delete from public.dinner_drafts where season_id = pg_temp.id('season');
+
 select is(pg_temp.wrote('l', format(
     'insert into public.dinner_season_dates (season_id, group_id, starts_at) values (%L, %L, ''2031-03-01 18:00-06'')',
     pg_temp.id('season'), pg_temp.id('grp'))), '1',
@@ -552,23 +574,47 @@ select is((select count(*)::int from public.dinners where season_date_id = pg_te
 delete from public.dinner_season_dates where id = pg_temp.id('d3');
 
 -- ── The reminder ────────────────────────────────────────────────────────────
+-- Claims as the worker does, passing the start and host it read.
+create function pg_temp.claim(_org uuid, _dinner uuid, _date date) returns setof uuid language sql as $$
+  select c.profile_id
+  from public.dinners d,
+       public.dinner_reminder_claim(_org, _dinner, _date, d.starts_at, d.host_party_id) c
+  where d.id = _dinner;
+$$;
 insert into public.group_settings (org_id, group_id, dinner_club_enabled) values (pg_temp.id('org_a'), pg_temp.id('grp'), true);
 select is(pg_temp.wrote('g1', format(
     'insert into public.dinner_replies (dinner_id, profile_id, status) values (%L, %L, ''not_going'')', pg_temp.id('t1d1'), pg_temp.id('g2'))), '1',
   'after the move the partner says not going again');
 update public.profiles set email_dinner_club = false where id = pg_temp.id('h');
 select is(
-  (select string_agg(profile_id::text, ',') from public.dinner_reminder_claim(pg_temp.id('org_a'), pg_temp.id('t1d1'), '2031-01-05')),
+  (select string_agg(c::text, ',') from pg_temp.claim(pg_temp.id('org_a'), pg_temp.id('t1d1'), '2031-01-05') c),
   current_setting('dc.g1'),
   'the reminder goes to the table, leaving out who said not going and who turned dinner emails off');
 select is(
-  (select count(*)::int from public.dinner_reminder_claim(pg_temp.id('org_a'), pg_temp.id('t1d1'), '2031-01-05')), 0,
+  (select count(*)::int from pg_temp.claim(pg_temp.id('org_a'), pg_temp.id('t1d1'), '2031-01-05')), 0,
   'a second claim sends nothing: a dinner is reminded once');
 select is(
-  (select count(*)::int from public.dinner_reminder_claim(pg_temp.id('org_a'), pg_temp.id('t1d1'), '2031-01-12')), 1,
+  (select count(*)::int from pg_temp.claim(pg_temp.id('org_a'), pg_temp.id('t1d1'), '2031-01-12')), 1,
   'a dinner moved to a new date is reminded on it');
+update public.dinner_reminder_sends set claimed_at = null
+ where dinner_id = pg_temp.id('t1d1') and dinner_date = '2031-01-12';
+update public.dinner_seats set left_at = now() where party_id = pg_temp.id('pg');
+select is(
+  (select count(*)::int from pg_temp.claim(pg_temp.id('org_a'), pg_temp.id('t1d1'), '2031-01-12')), 0,
+  'a retried reminder leaves out someone no longer seated at the table');
+update public.dinner_seats set left_at = null where party_id = pg_temp.id('pg');
+select is(
+  (select count(*)::int from public.dinner_reminder_claim(pg_temp.id('org_a'), pg_temp.id('t1d1'), '2031-01-19',
+    '2031-01-19 17:00-06', pg_temp.id('ph'))), 0,
+  'a claim for a start the dinner no longer has sends nothing');
+select is((select count(*)::int from public.dinner_reminder_passes where dinner_id = pg_temp.id('t1d1') and dinner_date = '2031-01-19'), 0,
+  'and starts no pass');
+select is(
+  (select count(*)::int from public.dinner_reminder_claim(pg_temp.id('org_a'), pg_temp.id('t1d1'), '2031-01-19',
+    (select starts_at from public.dinners where id = pg_temp.id('t1d1')), pg_temp.id('pg'))), 0,
+  'nor does a claim for a host the dinner no longer has');
 select throws_ok(
-  format('select * from public.dinner_reminder_claim(%L, %L, ''2031-01-05'')', pg_temp.id('org_b'), pg_temp.id('t1d1')),
+  format('select * from public.dinner_reminder_claim(%L, %L, ''2031-01-05'', now(), null)', pg_temp.id('org_b'), pg_temp.id('t1d1')),
   'DC010', null, 'a claim for another church''s dinner is refused');
 select ok(not has_function_privilege('authenticated', 'public.dinner_reminder_passes_prune(uuid, date, integer)', 'execute')
   and not has_function_privilege('anon', 'public.dinner_reminder_passes_prune(uuid, date, integer)', 'execute')
@@ -582,7 +628,7 @@ select is((select count(*)::int from public.dinner_reminder_sends where dinner_i
   'its sends go with it and the later pass keeps its own');
 update public.group_settings set dinner_club_enabled = false where group_id = pg_temp.id('grp');
 select is(
-  (select count(*)::int from public.dinner_reminder_claim(pg_temp.id('org_a'), pg_temp.id('t2d1'), '2031-01-05')), 0,
+  (select count(*)::int from pg_temp.claim(pg_temp.id('org_a'), pg_temp.id('t2d1'), '2031-01-05')), 0,
   'with the dinner club off nobody is reminded');
 select is(pg_temp.count_as('u', 'dinner_party_addresses', format('party_id = %L', pg_temp.id('ph2'))), '1',
   'and turning it off keeps every row');
@@ -695,6 +741,37 @@ select is(pg_temp.count_as('u', 'dinner_party_notes', format('party_id = %L', pg
   'and a host does not read the food needs of a party seated with them only on a date they do not host');
 select is(pg_temp.count_as('h', 'dinner_party_notes', format('party_id = %L', pg_temp.id('nh'))), '1',
   'which that party itself still reads');
+
+insert into public.dinner_party_notes (org_id, party_id, season_id, group_id, food_notes)
+values (pg_temp.id('org_a'), pg_temp.id('nn'), pg_temp.id('ns'), pg_temp.id('grp'), 'No gluten');
+select is(pg_temp.count_as('h2', 'dinner_party_notes', format('party_id = %L', pg_temp.id('nn'))), '1',
+  'a host reads the food needs of a guest at their dinner');
+select is(pg_temp.wrote('h2', format('update public.dinner_parties set status = ''withdrawn'' where id = %L', pg_temp.id('nh2'))), '1',
+  'and withdraws');
+select is(pg_temp.count_as('h2', 'dinner_party_notes', format('party_id = %L', pg_temp.id('nn'))), '0',
+  'after which they no longer read them');
+
+select is(pg_temp.read_as('l', format('select public.dinner_party_unavailable_dates_replace(%L, array[%L]::uuid[])',
+    pg_temp.id('nu'), pg_temp.id('e1'))), '1',
+  'a leader replaces the dates a party can''t host');
+select is(pg_temp.read_as('l', format('select public.dinner_party_unavailable_dates_replace(%L, array[%L]::uuid[])',
+    pg_temp.id('nu'), gen_random_uuid())), '23503',
+  'a replacement that fails');
+select is((select count(*)::int from public.dinner_party_unavailable_dates where party_id = pg_temp.id('nu')), 1,
+  'keeps the dates it was replacing');
+select is(pg_temp.read_as('l', format('select public.dinner_season_dates_replace(%L, array[''2031-06-07 18:00-05'', ''2040-01-01 18:00-06'']::timestamptz[])',
+    pg_temp.id('ns'))), 'DC004',
+  'replacing a season''s dates with one outside it is refused');
+select is((select count(*)::int from public.dinner_season_dates where season_id = pg_temp.id('ns')), 2,
+  'and keeps the dates it had');
+select ok(not has_function_privilege('anon', 'public.dinner_season_dates_replace(uuid, timestamptz[])', 'execute')
+  and not has_function_privilege('anon', 'public.dinner_party_unavailable_dates_replace(uuid, uuid[])', 'execute'),
+  'anon replaces no dates');
+
+select throws_ok(
+  format('insert into public.dinner_contributions (org_id, dinner_id, party_id, season_id, group_id, table_id, item) values (%L, %L, %L, %L, %L, %L, ''Bread'')',
+    pg_temp.id('org_a'), pg_temp.id('t1d1'), pg_temp.id('ph'), pg_temp.id('ns'), pg_temp.id('grp'), pg_temp.id('t1')),
+  '23503', null, 'a contribution carries its dinner''s own season');
 
 select * from finish();
 rollback;
