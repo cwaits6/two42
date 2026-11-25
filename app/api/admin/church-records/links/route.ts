@@ -6,7 +6,7 @@ import { logError } from "@/lib/log";
 import { RecordsCryptoError } from "@/lib/integrations/records/crypto";
 import { RecordsError } from "@/lib/integrations/records/errors";
 import { gateError, hidden, recordsFailure, recordsSecretOrNull } from "@/lib/integrations/records/http";
-import { compare, suggest, type ProfileForMatch, type Suggestion } from "@/lib/integrations/records/match";
+import { compare, normalizeName, suggest, type ProfileForMatch, type Suggestion } from "@/lib/integrations/records/match";
 import { insertLinks, loadCredentials, readLinks, type PersonLink } from "@/lib/integrations/records/store";
 import type { RecordsCredentials, RecordsProvider } from "@/lib/integrations/records/types";
 
@@ -14,10 +14,10 @@ import type { RecordsCredentials, RecordsProvider } from "@/lib/integrations/rec
  * /api/admin/church-records/links — which two42 profiles are which people in
  * the church's records.
  *
- *   GET   the profiles already linked, and suggested people for the rest. A
- *         suggestion carries only the person's id and name and which facts
- *         agreed, never the records' values: matching is not a way to browse
- *         the records.
+ *   GET   the profiles already linked, suggested people for the rest, and
+ *         the profiles with no suggestion. A suggestion carries only the
+ *         person's id, name and page address and which facts agreed, never
+ *         the records' values: matching is not a way to browse the records.
  *   POST  confirm links. Every pair is checked again against the records
  *         here, so a link the browser sends is made only if the names agree
  *         and the birthdays don't disagree. Confirming more than one at a
@@ -95,11 +95,29 @@ interface Matching {
   suggestions: Suggestion[];
 }
 
-/** Every suggestion for the church's unlinked profiles, from the records as they are now. */
-async function matching(supabase: Client, orgId: string, provider: RecordsProvider, creds: RecordsCredentials): Promise<Matching> {
+/**
+ * Every suggestion for the church's unlinked profiles, from the records as
+ * they are now. With `sameLastNameAs`, only profiles sharing a last name with
+ * those profiles are considered. Every competitor for one of their pairs is
+ * among them, since a suggestion needs the last names to agree, so their
+ * pairs come out exactly as in the full list.
+ */
+async function matching(
+  supabase: Client,
+  orgId: string,
+  provider: RecordsProvider,
+  creds: RecordsCredentials,
+  sameLastNameAs?: ReadonlySet<string>,
+): Promise<Matching> {
   const [profiles, links] = await Promise.all([churchProfiles(supabase, orgId), readLinks(orgId)]);
   const linkedIds = new Set(links.map((l) => l.profileId));
-  const unlinked = profiles.filter((p) => !linkedIds.has(p.id));
+  let unlinked = profiles.filter((p) => !linkedIds.has(p.id));
+  if (sameLastNameAs) {
+    const lastNames = new Set(
+      profiles.filter((p) => sameLastNameAs.has(p.id)).map((p) => normalizeName(p.lastName)),
+    );
+    unlinked = unlinked.filter((p) => lastNames.has(normalizeName(p.lastName)));
+  }
   const found = await provider.findByLastNames(
     creds,
     unlinked.map((p) => p.lastName ?? ""),
@@ -139,8 +157,16 @@ export async function GET() {
       .filter((l) => nameOf.has(l.profileId))
       .map((l) => ({ ...l, name: nameOf.get(l.profileId)!, personUrl: provider.personUrl(creds.baseUrl, l.personId) }))
       .sort((a, b) => a.name.localeCompare(b.name)),
-    suggestions: suggestions.map((s) => ({ ...s, name: nameOf.get(s.profileId) })),
-    unmatched: unlinked.filter((p) => !suggested.has(p.id)).length,
+    suggestions: suggestions.map((s) => ({
+      ...s,
+      name: nameOf.get(s.profileId),
+      personUrl: provider.personUrl(creds.baseUrl, s.personId),
+    })),
+    // two42's own names for the people with no suggestion; nothing from the records.
+    unmatched: unlinked
+      .filter((p) => !suggested.has(p.id))
+      .map((p) => ({ profileId: p.id, name: p.name }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
   });
 }
 
@@ -186,7 +212,7 @@ export async function POST(request: Request) {
       const facts = profile && person?.id === link.personId && person.linkable ? compare(profile, person) : null;
       if (!facts) return noLongerMatches;
     } else {
-      const { suggestions } = await matching(supabase, orgId, provider, creds);
+      const { suggestions } = await matching(supabase, orgId, provider, creds, new Set(links.map((l) => l.profileId)));
       const bulk = new Set(suggestions.filter((s) => s.confirmableInBulk).map((s) => `${s.profileId} ${s.personId}`));
       if (!links.every((l) => bulk.has(`${l.profileId} ${l.personId}`))) return noLongerMatches;
     }

@@ -187,8 +187,18 @@ unreadable, and each church admin has to connect again; the links stay.
    shown again; the page shows its last four characters.
 2. **Link people.** two42 suggests a person from the records for each approved
    two42 profile without a link. A suggestion shows the person's name in the
-   records and which facts agreed, never the records' values. Link one at a
-   time, or select several and link them together.
+   records and which facts agreed, never the records' values. The page is
+   built for churches with thousands of people, so every list is searched by
+   name and shown 25 at a time:
+   - **Ready to link:** the name and an email or birthday agree, with only one
+     possible match on each side. Link them all at once, or review the list
+     and untick anyone first. two42 sends them 100 at a time, shows its
+     progress, and stops at the first batch the server refuses.
+   - **Check first:** only the name agrees, or there's more than one possible
+     match. Each is linked by hand; a profile with several possible matches
+     shows them all to choose from.
+   - **No match found:** usually not in the records yet, or spelled
+     differently.
 3. **Unlink** a person, **change the key**, or **disconnect**. Disconnecting
    removes the key and every link; profiles are unchanged. Connecting a
    different address or provider removes the old links, because a person id

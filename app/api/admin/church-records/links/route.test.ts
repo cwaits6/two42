@@ -77,6 +77,8 @@ describe("GET /api/admin/church-records/links", () => {
       expect.objectContaining({ profileId: PROFILE_A, personId: "100", personName: "Peggy O'Brien", confirmableInBulk: true }),
       expect.objectContaining({ profileId: PROFILE_B, personId: "101", personName: "Tom O'Brien" }),
     ]);
+    expect(body.suggestions[0].personUrl).toBe("https://rock.example.org/Person/100");
+    expect(body.unmatched).toEqual([]);
     const text = JSON.stringify(body);
     expect(text).not.toContain("obriens@example.org");
     expect(text).not.toContain("1961");
@@ -88,6 +90,12 @@ describe("GET /api/admin/church-records/links", () => {
     expect(body.linked).toEqual([
       expect.objectContaining({ profileId: PROFILE_A, personUrl: "https://rock.example.org/Person/100" }),
     ]);
+  });
+
+  it("lists by two42 name the people with no suggestion", async () => {
+    rock.peopleByLastName.mockResolvedValue({ people: [peggy], truncated: [] });
+    const body = await (await GET()).json();
+    expect(body.unmatched).toEqual([{ profileId: PROFILE_B, name: "Tom Obrien" }]);
   });
 
   it("asks to connect first when there is no connection", async () => {
