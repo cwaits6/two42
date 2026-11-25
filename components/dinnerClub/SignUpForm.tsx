@@ -38,6 +38,18 @@ export interface ExistingSignUp {
   unavailable: string[];
 }
 
+/** The person's own party last season, for Sign up again. */
+export interface LastSeasonPrefill {
+  partnerId: string | null;
+  canHost: boolean;
+  seats: number | null;
+  kidsWelcome: boolean;
+  accessNotes: string;
+  pets: string;
+  address: AddressFields | null;
+  foodNotes: string;
+}
+
 type Option = { value: string; label: string };
 
 const ME = "me";
@@ -56,6 +68,7 @@ export function SignUpForm({
   dates,
   existing,
   prefill,
+  lastSeason,
 }: {
   seasonId: string;
   groupId: string;
@@ -69,24 +82,49 @@ export function SignUpForm({
   existing: ExistingSignUp | null;
   /** The household's directory address, to start a host's address from. */
   prefill: AddressFields;
+  /** Sign up again: last season's answers, kept only for a party of the same people. */
+  lastSeason?: LastSeasonPrefill | null;
 }) {
   const router = useRouter();
   const ids = { who: useId(), other: useId(), seats: useId(), pref: useId(), food: useId(), access: useId(), pets: useId() };
-  const [who, setWho] = useState(ME);
-  const [other, setOther] = useState<string | null>(null);
+  const lastPartner = lastSeason?.partnerId ?? null;
+  const startWho = !lastPartner
+    ? ME
+    : household.some((o) => o.value === lastPartner)
+      ? lastPartner
+      : others.some((o) => o.value === lastPartner)
+        ? OTHER
+        : ME;
+  const startPartner = startWho === ME ? null : lastPartner;
+  // Last season's address, food needs and home notes were that party's, so
+  // they carry over only while the same people sign up together.
+  const kept = lastSeason && startPartner === lastPartner ? lastSeason : null;
+  const [who, setWho] = useState(startWho);
+  const [other, setOther] = useState<string | null>(startWho === OTHER ? lastPartner : null);
   const createdPartyId = useRef<string | undefined>(undefined);
   // Once the party is saved, a retry saves only its details, so who is in it
   // can no longer change here.
   const [partySaved, setPartySaved] = useState(false);
-  const [canHost, setCanHost] = useState(existing?.canHost ?? false);
-  const [seats, setSeats] = useState(String(existing?.seats ?? 8));
-  const [address, setAddress] = useState<AddressFields>(existing?.address ?? prefill);
+  const [canHost, setCanHost] = useState(existing?.canHost ?? lastSeason?.canHost ?? false);
+  const [seats, setSeats] = useState(String(existing?.seats ?? lastSeason?.seats ?? 8));
+  const [address, setAddress] = useState<AddressFields>(existing?.address ?? kept?.address ?? prefill);
   const [preferred, setPreferred] = useState(existing?.preferredDateId ?? NO_PREFERENCE);
   const [unavailable, setUnavailable] = useState<string[]>(existing?.unavailable ?? []);
-  const [kidsWelcome, setKidsWelcome] = useState(existing?.kidsWelcome ?? false);
-  const [accessNotes, setAccessNotes] = useState(existing?.accessNotes ?? "");
-  const [pets, setPets] = useState(existing?.pets ?? "");
-  const [foodNotes, setFoodNotes] = useState(existing?.foodNotes ?? "");
+  const [kidsWelcome, setKidsWelcome] = useState(existing?.kidsWelcome ?? lastSeason?.kidsWelcome ?? false);
+  const [accessNotes, setAccessNotes] = useState(existing?.accessNotes ?? kept?.accessNotes ?? "");
+  const [pets, setPets] = useState(existing?.pets ?? kept?.pets ?? "");
+  const [foodNotes, setFoodNotes] = useState(existing?.foodNotes ?? kept?.foodNotes ?? "");
+
+  function choosePartner(nextWho: string, nextOther: string | null) {
+    setWho(nextWho);
+    setOther(nextOther);
+    if (!lastSeason) return;
+    const same = (nextWho === ME ? null : nextWho === OTHER ? nextOther : nextWho) === lastPartner;
+    setAddress(same ? (lastSeason.address ?? prefill) : prefill);
+    setAccessNotes(same ? lastSeason.accessNotes : "");
+    setPets(same ? lastSeason.pets : "");
+    setFoodNotes(same ? lastSeason.foodNotes : "");
+  }
   const [errors, setErrors] = useState<{ seats?: string; line1?: string; other?: string }>({});
   const [saving, setSaving] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
@@ -201,9 +239,12 @@ export function SignUpForm({
     <form onSubmit={submit} noValidate className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl font-bold">{existing ? "Your sign-up" : "Sign up"}</CardTitle>
+          <CardTitle className="text-2xl font-bold">{existing ? "Your sign-up" : lastSeason ? "Sign up again" : "Sign up"}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
+          {!existing && lastSeason && (
+            <p className="text-lg">Your answers from last season are filled in. Change anything before you sign up.</p>
+          )}
           {existing ? (
             <p className="text-lg">{existing.partnerName ? `You and ${existing.partnerName}` : "Just you"}</p>
           ) : (
@@ -212,7 +253,7 @@ export function SignUpForm({
                 <Label htmlFor={ids.who} className="text-lg">
                   Who&apos;s coming
                 </Label>
-                <Select items={whoItems} value={who} disabled={partySaved} onValueChange={(next) => next && setWho(next)}>
+                <Select items={whoItems} value={who} disabled={partySaved} onValueChange={(next) => next && choosePartner(next, next === OTHER ? other : null)}>
                   <SelectTrigger id={ids.who} className={`w-full ${FIELD}`}>
                     <SelectValue />
                   </SelectTrigger>
@@ -232,7 +273,7 @@ export function SignUpForm({
                     Signing up with
                   </Label>
                   <Select items={others} value={other} disabled={partySaved} onValueChange={(next) => {
-                      setOther(next);
+                      choosePartner(OTHER, next);
                       setErrors((x) => ({ ...x, other: undefined }));
                     }}>
                     <SelectTrigger id={ids.other} className={`w-full ${FIELD}`} {...invalidFieldProps(ids.other, errors.other)}>

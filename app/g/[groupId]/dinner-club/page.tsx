@@ -9,9 +9,25 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CalendarLinkCard } from "@/components/dinnerClub/CalendarLinkCard";
 import { DinnerCard } from "@/components/dinnerClub/DinnerCard";
-import { SignUpForm, type AddressFields, type ExistingSignUp } from "@/components/dinnerClub/SignUpForm";
+import {
+  SignUpForm,
+  type AddressFields,
+  type ExistingSignUp,
+  type LastSeasonPrefill,
+} from "@/components/dinnerClub/SignUpForm";
+import { WaitlistForm } from "@/components/dinnerClub/WaitlistForm";
+import { WithdrawButton } from "@/components/dinnerClub/WithdrawButton";
+import { seasonAttention } from "@/lib/dinnerClub/attention";
 import { formatAddress } from "@/lib/dinnerClub/ics";
-import { dinnerWhen, FORMAT_HELP, FORMAT_LABELS, isReplyStatus, partyName, STATUS_LABELS } from "@/lib/dinnerClub/labels";
+import {
+  dinnerOpen,
+  dinnerWhen,
+  FORMAT_HELP,
+  FORMAT_LABELS,
+  isReplyStatus,
+  partyName,
+  STATUS_LABELS,
+} from "@/lib/dinnerClub/labels";
 import type { DinnerFormat } from "@/lib/dinnerClub/shuffle";
 import { groupPath } from "@/lib/groups/active";
 import { requireActiveGroup } from "@/lib/groups/server";
@@ -20,7 +36,18 @@ import { getOptionalUser } from "@/lib/supabase/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { dayKey, formatEventDate } from "@/lib/time/zone";
-import { currentSeason, loadGroupPeople, loadPeople, loadSeasonData, loadSeasons, peopleOf, type SeasonData } from "./load";
+import {
+  currentSeason,
+  loadGroupPeople,
+  loadLastSeasonSignUp,
+  loadPeople,
+  loadSeasonData,
+  loadSeasons,
+  peopleOf,
+  shuffleParties,
+  type AddressRow,
+  type SeasonData,
+} from "./load";
 
 export const generateMetadata = groupPageTitle("Dinner club");
 
@@ -29,6 +56,23 @@ const NO_ADDRESS: AddressFields = { address_line1: "", address_line2: "", city: 
 function text(value: string | null | undefined): string {
   return value ?? "";
 }
+
+function addressFields(a: AddressRow): AddressFields {
+  return {
+    address_line1: a.address_line1,
+    address_line2: text(a.address_line2),
+    city: text(a.city),
+    state: text(a.state),
+    postal_code: text(a.postal_code),
+  };
+}
+
+const WITHDRAW = {
+  label: "Withdraw from this season",
+  title: "Withdraw from this season?",
+  description: "Your seats at dinners still to come are freed. Dinners that have happened keep you.",
+  done: "You've withdrawn from this season.",
+};
 
 export default async function DinnerClubPage({ params }: { params: Promise<{ groupId: string }> }) {
   const { groupId } = await params;
@@ -80,6 +124,16 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
             <Button size="lg" variant="outline" nativeButton={false} render={<Link href={seasonPath(season.id)} />}>
               Manage season
             </Button>
+            {season.status === "ended" && (
+              <Button
+                size="lg"
+                variant="outline"
+                nativeButton={false}
+                render={<Link href={`${groupPath(group.id, "/dinner-club/seasons/new")}?from=${season.id}`} />}
+              >
+                Start next season
+              </Button>
+            )}
             {!running && addSeason}
           </div>
         ) : undefined
@@ -117,6 +171,10 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
   if (status === "open") {
     const windowOpen = today <= season.signup_closes_on;
     const people = windowOpen ? await loadGroupPeople(supabase, group.id) : null;
+    const last =
+      windowOpen && !myParty && season.previous_season_id
+        ? await loadLastSeasonSignUp(supabase, season.previous_season_id, user.id)
+        : null;
     if (windowOpen && !people) {
       return (
         <PageContainer>
@@ -156,11 +214,18 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
             format={format}
             zone={zone}
             supabase={supabase}
+            lastSeason={
+              last && {
+                ...last,
+                address: last.address ? addressFields(last.address) : null,
+              }
+            }
           />
         ) : (
           <Card>
-            <CardContent className="pt-6 text-lg">
-              Sign-ups are closed. {myParty ? "You're signed up; " : ""}Tables come next.
+            <CardContent className="space-y-4 pt-6 text-lg">
+              <p>Sign-ups are closed. {myParty ? "You're signed up; " : ""}Tables come next.</p>
+              {myParty && myParty.status !== "withdrawn" && <WithdrawButton partyId={myParty.id} {...WITHDRAW} />}
             </CardContent>
           </Card>
         )}
@@ -184,6 +249,39 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
   const firstNameOf = new Map(tablePeople.map((p) => [p.id, p.firstName]));
   const { data: feedToken } = await supabase.from("dinner_feed_tokens").select("profile_id").eq("profile_id", user.id).maybeSingle();
 
+  const attention = isLeader
+    ? seasonAttention({
+        status,
+        format,
+        parties: data.parties,
+        shuffleParties: shuffleParties(data),
+        tables: data.tables,
+        seats: data.seats,
+        dinners: data.dinners,
+        dateIds: data.dates.map((d) => d.id),
+        tableSizeMax: season.table_size_max,
+        now: new Date(),
+      })
+    : null;
+  const needs = attention
+    ? [
+        attention.waiting.length > 0 &&
+          `${attention.waiting.length} ${attention.waiting.length === 1 ? "party is" : "parties are"} waiting for a table.`,
+        attention.cantHost.length + attention.hostLeft.length > 0 &&
+          `${attention.cantHost.length + attention.hostLeft.length} ${attention.cantHost.length + attention.hostLeft.length === 1 ? "dinner needs" : "dinners need"} a host.`,
+      ].filter((line): line is string => Boolean(line))
+    : [];
+  const leaderNotice = needs.length > 0 && (
+    <Card className="mb-6 border-brand-primary/40">
+      <CardContent className="flex flex-col gap-4 pt-6 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-lg font-semibold">{needs.join(" ")}</p>
+        <Button size="lg" variant="outline" nativeButton={false} render={<Link href={seasonPath(season.id)} />}>
+          Open the season
+        </Button>
+      </CardContent>
+    </Card>
+  );
+
   const myTables = new Set(
     data.seats.filter((s) => s.party_id === myPartyId && !s.left_at).map((s) => s.table_id)
   );
@@ -192,20 +290,62 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
   const upcoming = dinners.filter((d) => new Date(d.starts_at).getTime() > now);
   const past = dinners.filter((d) => new Date(d.starts_at).getTime() <= now);
 
-  if (!myParty || dinners.length === 0) {
+  if (!myParty && status === "published") {
+    const people = await loadGroupPeople(supabase, group.id);
+    const signedUp = new Set(data.members.map((m) => m.profile_id));
     return (
       <PageContainer size="reading">
         {header}
+        {leaderNotice}
+        {people ? (
+          <WaitlistForm
+            seasonId={season.id}
+            meId={user.id}
+            partners={people.filter((p) => p.id !== user.id && !signedUp.has(p.id)).map((p) => ({ value: p.id, label: p.name }))}
+          />
+        ) : (
+          <ErrorState thing="this season" />
+        )}
+      </PageContainer>
+    );
+  }
+
+  if (!myParty || myParty.status !== "signed_up" || dinners.length === 0) {
+    return (
+      <PageContainer size="reading">
+        {header}
+        {leaderNotice}
         <Card>
-          <CardContent className="pt-6 text-lg">
-            {myParty?.status === "waitlisted"
-              ? "You're on the waiting list. The leader will find you a table."
-              : "You're not at a table this season."}
+          <CardContent className="space-y-4 pt-6 text-lg">
+            <p>
+              {myParty?.status === "waitlisted"
+                ? "You're on the waiting list. The leader will find you a table."
+                : myParty?.status === "withdrawn"
+                  ? "You've withdrawn from this season."
+                  : "You're not at a table this season."}
+            </p>
+            {myParty && myParty.status !== "withdrawn" && status === "published" && (
+              <WithdrawButton
+                partyId={myParty.id}
+                {...(myParty.status === "waitlisted"
+                  ? {
+                      label: "Leave the waiting list",
+                      title: "Leave the waiting list?",
+                      description: "You come off the waiting list for this season.",
+                      done: "You've left the waiting list.",
+                    }
+                  : WITHDRAW)}
+              />
+            )}
           </CardContent>
         </Card>
       </PageContainer>
     );
   }
+
+  const dateIndex = new Map(data.dates.map((d, i) => [d.id, i]));
+  const startsOf = new Map(data.dinners.map((d) => [d.id, d.starts_at]));
+  const bringOn = season.bring_list_enabled;
 
   const card = (d: SeasonData["dinners"][number], heading: string) => {
     const seated = data.seats.filter((s) => s.table_id === d.table_id && !s.left_at).map((s) => s.party_id);
@@ -227,7 +367,30 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
               : [];
           })
       : [];
-    const open = status === "published" && new Date(d.starts_at).getTime() > now;
+    const open = dinnerOpen(status, d.starts_at, new Date(now));
+    const items = data.contributions.filter((c) => c.dinner_id === d.id);
+    const guests = seated.filter((partyId) => partyId !== d.host_party_id);
+    const bringList =
+      isHost && open && bringOn
+        ? {
+            dinner: { id: d.id, seasonId: season.id, groupId: group.id, tableId: d.table_id, label: dinnerWhen(d.starts_at, zone) },
+            guests: guests.map((partyId) => ({
+              partyId,
+              names: partyName(peopleOf(data, partyId).map((id) => firstNameOf.get(id) ?? UNNAMED)),
+              item: items.find((c) => c.party_id === partyId)?.item ?? null,
+            })),
+            earlier: Object.fromEntries(
+              guests.map((partyId) => [
+                partyId,
+                data.contributions
+                  .filter((c) => c.party_id === partyId && (startsOf.get(c.dinner_id) ?? "") < d.starts_at)
+                  .sort((a, b) => (startsOf.get(a.dinner_id) ?? "").localeCompare(startsOf.get(b.dinner_id) ?? ""))
+                  .map((c) => c.item),
+              ])
+            ),
+            dinnerIndex: dateIndex.get(d.season_date_id) ?? 0,
+          }
+        : null;
     return (
       <DinnerCard
         key={d.id}
@@ -245,6 +408,9 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
         isHost={isHost}
         canMove={open && (isHost || isLeader)}
         foodNotes={foodNotes}
+        bringing={bringOn && !isHost ? (items.find((c) => c.party_id === myPartyId)?.item ?? null) : null}
+        hostUnavailable={d.host_unavailable}
+        bringList={bringList}
       />
     );
   };
@@ -252,6 +418,7 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
   return (
     <PageContainer size="reading">
       {header}
+      {leaderNotice}
       <div className="space-y-8">
         {upcoming[0] && card(upcoming[0], "Your next dinner")}
         {upcoming.slice(1).map((d) => card(d, "Later"))}
@@ -266,6 +433,7 @@ export default async function DinnerClubPage({ params }: { params: Promise<{ gro
             </ul>
           </section>
         )}
+        {status === "published" && <WithdrawButton partyId={myParty.id} {...WITHDRAW} />}
       </div>
     </PageContainer>
   );
@@ -282,6 +450,7 @@ async function SignUpView({
   format,
   zone,
   supabase,
+  lastSeason,
 }: {
   data: SeasonData;
   people: { id: string; name: string; familyId: string | null }[];
@@ -293,6 +462,7 @@ async function SignUpView({
   format: DinnerFormat;
   zone: string;
   supabase: Awaited<ReturnType<typeof createClient>>;
+  lastSeason: LastSeasonPrefill | null;
 }) {
   const me = people.find((p) => p.id === meId);
   const nameOf = new Map(people.map((p) => [p.id, p.name]));
@@ -336,15 +506,7 @@ async function SignUpView({
         kidsWelcome: myParty.kids_welcome ?? false,
         accessNotes: text(myParty.access_notes),
         pets: text(myParty.pets),
-        address: address
-          ? {
-              address_line1: address.address_line1,
-              address_line2: text(address.address_line2),
-              city: text(address.city),
-              state: text(address.state),
-              postal_code: text(address.postal_code),
-            }
-          : null,
+        address: address ? addressFields(address) : null,
         foodNotes: data.notes.find((n) => n.party_id === myParty.id)?.food_notes ?? "",
         unavailable: data.unavailable.filter((u) => u.party_id === myParty.id).map((u) => u.season_date_id),
       }
@@ -362,6 +524,7 @@ async function SignUpView({
       dates={data.dates.map((d) => ({ value: d.id, label: dinnerWhen(d.starts_at, zone) }))}
       existing={existing}
       prefill={prefill}
+      lastSeason={existing ? null : lastSeason}
     />
   );
 }

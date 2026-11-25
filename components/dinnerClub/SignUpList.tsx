@@ -28,6 +28,7 @@ const NO_ONE = "none";
 export function SignUpList({
   seasonId,
   canChange,
+  published,
   parties,
   available,
   hostsNeeded,
@@ -35,8 +36,10 @@ export function SignUpList({
   perDinner,
 }: {
   seasonId: string;
-  /** A leader adds and removes parties while the season is a draft or taking sign-ups. */
+  /** A leader adds and removes parties while the season takes sign-ups or runs. */
   canChange: boolean;
+  /** Tables are published: an added party waits for a table, and a removed one withdraws. */
+  published: boolean;
   parties: SignUpRow[];
   /** Members of the group in no party yet. */
   available: { id: string; name: string }[];
@@ -72,7 +75,7 @@ export function SignUpList({
     setFirst(null);
     setSecond(NO_ONE);
     setAdding(false);
-    toast.success("Party added.");
+    toast.success(published ? "Party added to the waiting list. Seat them on the Tables page." : "Party added.");
     router.refresh();
   }
 
@@ -122,7 +125,7 @@ export function SignUpList({
                 {p.address && <p className="text-base">{p.address}</p>}
                 {p.foodNotes && <p className="text-base">Food needs: {p.foodNotes}</p>}
               </div>
-              {canChange && (
+              {canChange && p.status !== "withdrawn" && (
                 <Button variant="outline" size="lg" onClick={() => setRemoving(p)}>
                   Remove party
                 </Button>
@@ -195,12 +198,23 @@ export function SignUpList({
         open={Boolean(removing)}
         onOpenChange={(open) => !open && setRemoving(null)}
         title="Remove this party?"
-        description={removing ? `${removing.names}: this party comes off the season's sign-ups.` : undefined}
+        description={
+          removing
+            ? published
+              ? `${removing.names}: their seats at dinners still to come are freed. Dinners that have happened keep them.`
+              : `${removing.names}: this party comes off the season's sign-ups.`
+            : undefined
+        }
         confirmLabel="Remove party"
         pendingLabel="Removing…"
         onConfirm={async () => {
           if (!removing) return;
-          const { data, error } = await createClient().from("dinner_parties").delete().eq("id", removing.id).select("id");
+          // A party at a published table withdraws: the database keeps its
+          // seats at dinners already held, which deleting it would lose.
+          const parties = createClient().from("dinner_parties");
+          const { data, error } = await (published
+            ? parties.update({ status: "withdrawn" }).eq("id", removing.id).select("id")
+            : parties.delete().eq("id", removing.id).select("id"));
           if (error || !data?.length) {
             toast.error(failureMessage("remove the party"));
             return;

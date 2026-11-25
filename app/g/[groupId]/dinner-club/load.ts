@@ -48,6 +48,8 @@ export interface SeasonData {
     host_unavailable: boolean;
   }[];
   replies: { dinner_id: string; profile_id: string; status: string }[];
+  /** What each guest party brings, for the dinners the caller may read. */
+  contributions: { dinner_id: string; party_id: string; item: string }[];
 }
 
 function seasonRows(rows: Tables<"dinner_seasons">[]): SeasonRow[] {
@@ -140,9 +142,9 @@ export async function loadSeasonData(supabase: Client, seasonId: string): Promis
   if (Object.values(read).some((rows) => rows === null)) return null;
 
   const dinnerIds = read.dinners!.map((d) => d.id);
-  const replies = dinnerIds.length
-    ? readList(
-        await fetchAll((from, to) =>
+  const [replies, contributions] = dinnerIds.length
+    ? await Promise.all([
+        fetchAll((from, to) =>
           supabase
             .from("dinner_replies")
             .select("dinner_id, profile_id, status")
@@ -150,12 +152,20 @@ export async function loadSeasonData(supabase: Client, seasonId: string): Promis
             .order("dinner_id")
             .order("profile_id")
             .range(from, to)
-        ),
-        "dinner replies"
-      )
-    : [];
-  if (replies === null) return null;
-  return { ...(read as { [K in keyof typeof read]: NonNullable<(typeof read)[K]> }), replies };
+        ).then((r) => readList(r, "dinner replies")),
+        fetchAll((from, to) =>
+          supabase
+            .from("dinner_contributions")
+            .select("dinner_id, party_id, item")
+            .eq("season_id", seasonId)
+            .order("dinner_id")
+            .order("party_id")
+            .range(from, to)
+        ).then((r) => readList(r, "dinner contributions")),
+      ])
+    : [[], []];
+  if (replies === null || contributions === null) return null;
+  return { ...(read as { [K in keyof typeof read]: NonNullable<(typeof read)[K]> }), replies, contributions };
 }
 
 /** The group's approved members, by name. */
@@ -207,4 +217,115 @@ export function shuffleParties(data: SeasonData): ShuffleParty[] {
       preferredDateId: p.preferred_season_date_id,
       unavailableDateIds: data.unavailable.filter((u) => u.party_id === p.id).map((u) => u.season_date_id),
     }));
+}
+
+/**
+ * The tables of the two seasons before this one, as each table's parties'
+ * people, for the shuffle to keep tablemates apart. A leader reads every
+ * season of the group; a season since deleted ends the chain. Null when a
+ * read failed.
+ */
+export async function loadPastTables(supabase: Client, season: SeasonRow): Promise<string[][][] | null> {
+  const seasonIds: string[] = [];
+  let previous = season.previous_season_id;
+  while (previous && seasonIds.length < 2) {
+    seasonIds.push(previous);
+    const rows = readList(
+      await supabase.from("dinner_seasons").select("previous_season_id").eq("id", previous).limit(1),
+      "dinner club earlier season"
+    );
+    if (!rows) return null;
+    previous = rows[0]?.previous_season_id ?? null;
+  }
+  if (seasonIds.length === 0) return [];
+  const [seats, members] = await Promise.all([
+    fetchAll((from, to) =>
+      supabase
+        .from("dinner_seats")
+        .select("table_id, party_id")
+        .in("season_id", seasonIds)
+        .order("table_id")
+        .order("party_id")
+        .range(from, to)
+    ).then((r) => readList(r, "dinner club earlier seats")),
+    fetchAll((from, to) =>
+      supabase
+        .from("dinner_party_members")
+        .select("party_id, profile_id")
+        .in("season_id", seasonIds)
+        .order("party_id")
+        .order("profile_id")
+        .range(from, to)
+    ).then((r) => readList(r, "dinner club earlier party members")),
+  ]);
+  if (!seats || !members) return null;
+  const tables = new Map<string, string[][]>();
+  for (const seat of seats) {
+    const people = members.filter((m) => m.party_id === seat.party_id).map((m) => m.profile_id);
+    tables.set(seat.table_id, [...(tables.get(seat.table_id) ?? []), people]);
+  }
+  return [...tables.values()];
+}
+
+/** A person's own party last season, to sign up again from. */
+export interface LastSeasonSignUp {
+  partnerId: string | null;
+  canHost: boolean;
+  seats: number | null;
+  kidsWelcome: boolean;
+  accessNotes: string;
+  pets: string;
+  address: AddressRow | null;
+  foodNotes: string;
+}
+
+/**
+ * The caller's party in the season before, unless it withdrew. Row security
+ * gives a member only their own party's rows, so nothing here is anyone
+ * else's. Null when there is none or a read failed: the form then starts empty.
+ */
+export async function loadLastSeasonSignUp(
+  supabase: Client,
+  previousSeasonId: string,
+  meId: string
+): Promise<LastSeasonSignUp | null> {
+  const mine = readList(
+    await supabase
+      .from("dinner_party_members")
+      .select("party_id")
+      .eq("season_id", previousSeasonId)
+      .eq("profile_id", meId)
+      .limit(1),
+    "dinner club last season party"
+  );
+  const partyId = mine?.[0]?.party_id;
+  if (!partyId) return null;
+  const [party, members, address, notes] = await Promise.all([
+    supabase.from("dinner_parties").select("*").eq("id", partyId).limit(1),
+    supabase.from("dinner_party_members").select("profile_id").eq("party_id", partyId),
+    supabase
+      .from("dinner_party_addresses")
+      .select("party_id, address_line1, address_line2, city, state, postal_code")
+      .eq("party_id", partyId)
+      .limit(1),
+    supabase.from("dinner_party_notes").select("food_notes").eq("party_id", partyId).limit(1),
+  ]);
+  const read = {
+    party: readList(party, "dinner club last season party"),
+    members: readList(members, "dinner club last season party members"),
+    address: readList(address, "dinner club last season address"),
+    notes: readList(notes, "dinner club last season food notes"),
+  };
+  const row = read.party?.[0];
+  if (!row || row.status === "withdrawn" || !read.members || !read.address || !read.notes) return null;
+  return {
+    partnerId: read.members.map((m) => m.profile_id).find((id) => id !== meId) ?? null,
+    canHost: row.can_host,
+    seats: row.seats,
+    kidsWelcome: row.kids_welcome ?? false,
+    accessNotes: row.access_notes ?? "",
+    pets: row.pets ?? "",
+    address: read.address[0] ?? null,
+    foodNotes: read.notes[0]?.food_notes ?? "",
+  };
 }

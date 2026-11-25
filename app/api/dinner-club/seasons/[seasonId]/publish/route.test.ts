@@ -38,6 +38,12 @@ describe("POST /api/dinner-club/seasons/[seasonId]/publish", () => {
     expect((await publish()).status).toBe(400);
   });
 
+  it("emails nobody when the season has ended", async () => {
+    rpc.mockResolvedValue({ data: null, error: { code: "DC003", message: "not ready" } });
+    expect((await publish()).status).toBe(409);
+    expect(notifyTablesPublished).not.toHaveBeenCalled();
+  });
+
   it("emails the people whose tables changed, in the caller's church, and reports the daily cap", async () => {
     rpc.mockResolvedValue({ data: [{ profile_id: "a" }, { profile_id: "b" }], error: null });
     notifyTablesPublished.mockResolvedValue({ sent: 0, failed: 0, capped: true });

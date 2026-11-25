@@ -23,6 +23,7 @@ export function SeasonActions({
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
   const [opening, setOpening] = useState(false);
+  const [ending, setEnding] = useState(false);
   const base = groupPath(groupId, `/dinner-club/seasons/${seasonId}`);
 
   async function openSignUps() {
@@ -56,11 +57,48 @@ export function SeasonActions({
           Edit season
         </Button>
       )}
+      {status === "published" && (
+        <Button size="lg" variant="outline" onClick={() => setEnding(true)}>
+          End season
+        </Button>
+      )}
+      {status === "ended" && (
+        <Button
+          size="lg"
+          nativeButton={false}
+          render={<Link href={`${groupPath(groupId, "/dinner-club/seasons/new")}?from=${seasonId}`} />}
+        >
+          Start next season
+        </Button>
+      )}
       {status === "draft" && (
         <Button size="lg" variant="outline" onClick={() => setDeleting(true)}>
           Delete season
         </Button>
       )}
+      <ConfirmDialog
+        open={ending}
+        onOpenChange={setEnding}
+        title="End this season?"
+        description="Members keep seeing their tables. Replies, moves and dinner emails stop. This can't be undone."
+        confirmLabel="End season"
+        pendingLabel="Ending…"
+        confirmVariant="default"
+        onConfirm={async () => {
+          const { data, error } = await createClient()
+            .from("dinner_seasons")
+            .update({ status: "ended" })
+            .eq("id", seasonId)
+            .select("id");
+          if (error || !data?.length) {
+            toast.error(failureMessage("end the season"));
+            return;
+          }
+          setEnding(false);
+          toast.success("Season ended.");
+          router.refresh();
+        }}
+      />
       <ConfirmDialog
         open={deleting}
         onOpenChange={setDeleting}
