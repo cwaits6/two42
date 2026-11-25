@@ -102,6 +102,7 @@ const profile: Profile = {
   relationship: "primary",
   email_announcements: true,
   email_event_reminders: true,
+  email_dinner_club: true,
   setup_completed: true,
   approved_at: null,
   approved_by: null,

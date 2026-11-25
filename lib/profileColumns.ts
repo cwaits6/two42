@@ -7,7 +7,7 @@ import type { Profile } from "@/lib/types";
  * the person's hide_email setting.
  */
 export const PROFILE_COLUMNS =
-  "id, first_name, last_name, preferred_name, role, avatar_url, phone, phone_mobile, phone_home, phone_work, bio, address_line1, address_line2, city, state, postal_code, birth_month, birth_day, birth_year, occupation, employer, family_id, is_unlisted, hide_email, relationship, email_announcements, email_event_reminders, setup_completed, approved_at, approved_by, created_at, updated_at";
+  "id, first_name, last_name, preferred_name, role, avatar_url, phone, phone_mobile, phone_home, phone_work, bio, address_line1, address_line2, city, state, postal_code, birth_month, birth_day, birth_year, occupation, employer, family_id, is_unlisted, hide_email, relationship, email_announcements, email_event_reminders, email_dinner_club, setup_completed, approved_at, approved_by, created_at, updated_at";
 
 export type ProfileColumns = Omit<Profile, "email">;
 
