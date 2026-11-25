@@ -685,7 +685,13 @@ parties at the same table; seasons by the group's members once out of draft.
 The policies reach each other only through the six zero-argument definer
 helpers listed in `service-role-inventory.md`, so there is no policy cycle.
 The per-person calendar link (`dinner_feed_tokens`) follows
-`calendar_subscription_tokens`. Proofs: `supabase/tests/dinner_club_suite.sql`
+`calendar_subscription_tokens`. The reminder's sent record
+(`dinner_reminder_passes`, `dinner_reminder_sends`) is service-key only, like
+the event reminder's, and the nightly `clean-up-expired-data` job deletes a
+church's passes older than 35 days through `dinner_reminder_passes_prune()`.
+A reply is written by the person or the other person in the same party, a
+rule `dinner_replies_guard()` checks on the party seated at that dinner.
+Proofs: `supabase/tests/dinner_club_suite.sql`
 for every viewer, and `e2e/dinner-club.spec.ts` for what a guest, an unseated
 member and someone outside the group see.
 

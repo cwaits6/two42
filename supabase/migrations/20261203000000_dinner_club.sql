@@ -1223,7 +1223,9 @@ create trigger dinner_moved_clear_replies
   execute function public.dinner_moved_clear_replies();
 
 -- A reply is for a person seated at the dinner's table, in a party that has
--- not withdrawn, while the season runs and before the dinner starts.
+-- not withdrawn, given by them or by the other person in that same party,
+-- while the season runs and before the dinner starts. The policy alone would
+-- let someone who shared a party with them in another season reply.
 create function public.dinner_replies_guard() returns trigger
   language plpgsql
   set search_path = ''
@@ -1250,8 +1252,10 @@ begin
     join public.dinner_seats st on st.table_id = d.table_id and st.left_at is null
     join public.dinner_parties p on p.id = st.party_id and p.status <> 'withdrawn'
     join public.dinner_party_members pm on pm.party_id = st.party_id
+    join public.dinner_party_members me on me.party_id = st.party_id
     where d.id = _dinner
       and pm.profile_id = _profile
+      and me.profile_id = auth.uid()
   ) then
     raise exception 'the person is not at this table' using errcode = 'DC001';
   end if;
@@ -1713,6 +1717,35 @@ grant execute on function public.dinner_reminder_claim(uuid, uuid, date) to serv
 
 comment on function public.dinner_reminder_claim(uuid, uuid, date) is
   'Starts the reminder pass for one dinner on one local date when it has none, fixing its recipients (the people seated at its table who have not said Not going and get dinner club email), then claims every unsent reminder in it and returns the people to mail. Tenant anchor: the dinner''s own org_id, compared with _org_id; a mismatch raises DC010. service_role only.';
+
+-- The nightly cleanup deletes a church's passes past their retention through
+-- this, a bounded set per call: the database API cannot limit a delete.
+-- dinner_reminder_sends goes with each pass through its foreign key.
+create function public.dinner_reminder_passes_prune(_org_id uuid, _before date, _limit integer)
+  returns integer
+  language sql security invoker set search_path = ''
+as $$
+  with doomed as (
+    select p.dinner_id, p.dinner_date
+    from public.dinner_reminder_passes p
+    where p.org_id = _org_id and p.dinner_date < _before
+    order by p.dinner_date
+    limit _limit
+  ),
+  gone as (
+    delete from public.dinner_reminder_passes p
+    using doomed d
+    where p.org_id = _org_id and p.dinner_id = d.dinner_id and p.dinner_date = d.dinner_date
+    returning 1
+  )
+  select count(*)::integer from gone;
+$$;
+
+revoke execute on function public.dinner_reminder_passes_prune(uuid, date, integer) from public, anon, authenticated;
+grant execute on function public.dinner_reminder_passes_prune(uuid, date, integer) to service_role;
+
+comment on function public.dinner_reminder_passes_prune(uuid, date, integer) is
+  'Deletes at most _limit of one church''s dinner reminder passes with a dinner_date before _before, oldest first, and returns how many went. Tenant anchor: the _org_id predicate on every row it reads and deletes. service_role only.';
 
 -- ── Usage patterns ──────────────────────────────────────────────────────────
 create or replace function public.usage_page_patterns() returns text[]
