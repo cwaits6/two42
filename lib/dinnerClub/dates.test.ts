@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { endFromMonths, proposeDinnerDates } from "./dates";
+import { endFromMonths, proposeDinnerDates, seasonDateStarts } from "./dates";
 
 describe("proposeDinnerDates", () => {
   it("proposes five Saturdays for a four-month season every 4 weeks from 2027-01-09", () => {
@@ -86,5 +86,24 @@ describe("proposeDinnerDates", () => {
 describe("endFromMonths", () => {
   it("keeps to the end of a shorter month", () => {
     expect(endFromMonths("2027-01-31", 1)).toBe("2027-02-27");
+  });
+});
+
+describe("seasonDateStarts", () => {
+  it("reads each proposed time in the church's zone", () => {
+    expect(
+      seasonDateStarts(
+        {
+          starts_on: "2027-01-09",
+          ends_on: "2027-02-06",
+          repeat_kind: "weeks",
+          repeat_weeks: 4,
+          repeat_week_of_month: null,
+          weekday: 6,
+          default_start_time: "18:00:00",
+        },
+        "America/Chicago"
+      )
+    ).toEqual(["2027-01-10T00:00:00.000Z", "2027-02-07T00:00:00.000Z"]);
   });
 });

@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { notifyDinnersMoved } from "@/lib/dinnerClub/notify";
-import { dinnerClubFailure, instantFrom, isUuid } from "@/lib/dinnerClub/routeErrors";
+import { dinnerClubRefusal, instantFrom, isUuid, serverError } from "@/lib/dinnerClub/routeErrors";
 import { logError } from "@/lib/log";
 import { resolveRequestOrgId } from "@/lib/org";
 import { createClient } from "@/lib/supabase/server";
-
-const ROUTE = "/api/dinner-club/season-dates/[dateId]/move";
 
 /**
  * Moves one of the season's dates, which moves each table's dinner on it
@@ -27,19 +25,29 @@ export async function POST(request: Request, { params }: { params: Promise<{ dat
 
   const readDinners = () => supabase.from("dinners").select("id, starts_at").eq("season_date_id", dateId);
   const { data: before, error: beforeError } = await readDinners();
-  if (beforeError) return dinnerClubFailure(beforeError, ROUTE, "Failed to read a date's dinners");
+  if (beforeError) {
+    const refused = dinnerClubRefusal(beforeError);
+    if (refused) return refused;
+    logError("Failed to read a date's dinners", beforeError, { route: "/api/dinner-club/season-dates/[dateId]/move" });
+    return serverError();
+  }
 
   const { data: updated, error } = await supabase
     .from("dinner_season_dates")
     .update({ starts_at: startsAt })
     .eq("id", dateId)
     .select("id");
-  if (error) return dinnerClubFailure(error, ROUTE, "Failed to move a season date");
+  if (error) {
+    const refused = dinnerClubRefusal(error);
+    if (refused) return refused;
+    logError("Failed to move a season date", error, { route: "/api/dinner-club/season-dates/[dateId]/move" });
+    return serverError();
+  }
   if (!updated?.length) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const { data: after, error: afterError } = await readDinners();
   if (afterError) {
-    logError("Failed to read a moved date's dinners", afterError, { route: ROUTE });
+    logError("Failed to read a moved date's dinners", afterError, { route: "/api/dinner-club/season-dates/[dateId]/move" });
     return NextResponse.json({ sent: 0, failed: 0, capped: false });
   }
   const was = new Map((before ?? []).map((d) => [d.id, d.starts_at]));
@@ -49,7 +57,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ dat
   try {
     return NextResponse.json(await notifyDinnersMoved(orgId, moves, user.id));
   } catch (err) {
-    logError("Failed to email moved dinners", err, { route: ROUTE });
+    logError("Failed to email moved dinners", err, { route: "/api/dinner-club/season-dates/[dateId]/move" });
     return NextResponse.json({ sent: 0, failed: moves.length, capped: false });
   }
 }

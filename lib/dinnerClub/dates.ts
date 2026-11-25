@@ -1,6 +1,8 @@
 // Dinner dates from a season's start, end and how often. Pure: dates are
-// "YYYY-MM-DD" strings, read as calendar days with no zone; the caller turns
-// each proposed wall-clock time into an instant in the church's zone.
+// "YYYY-MM-DD" strings, read as calendar days with no zone, until
+// seasonDateStarts() reads each wall-clock time in the church's zone.
+
+import { localToUTCISO } from "@/lib/time/zone";
 
 export type RepeatRule =
   | { kind: "weeks"; everyWeeks: number }
@@ -88,4 +90,29 @@ export function proposeDinnerDates(rule: DateRule): string[] {
     }
   }
   return days.map((day) => `${day}T${rule.startTime}`);
+}
+
+/** A season's proposed dinner dates, as instants in the church's zone. */
+export function seasonDateStarts(
+  season: {
+    starts_on: string;
+    ends_on: string;
+    repeat_kind: string;
+    repeat_weeks: number | null;
+    repeat_week_of_month: number | null;
+    weekday: number;
+    default_start_time: string;
+  },
+  zone: string
+): string[] {
+  return proposeDinnerDates({
+    startsOn: season.starts_on,
+    endsOn: season.ends_on,
+    repeat:
+      season.repeat_kind === "monthly_weekday"
+        ? { kind: "monthly_weekday", weekOfMonth: season.repeat_week_of_month ?? 1 }
+        : { kind: "weeks", everyWeeks: season.repeat_weeks ?? 1 },
+    weekday: season.weekday,
+    startTime: season.default_start_time.slice(0, 5),
+  }).map((local) => localToUTCISO(local, zone));
 }

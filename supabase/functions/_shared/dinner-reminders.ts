@@ -119,7 +119,7 @@ function addressLine(a: AddressRow): string {
 }
 
 function failed(what: string, error: { message: string }, orgId: string): never {
-  logError(`${what} query failed`, error, { ids: { org: orgId } });
+  logError("dinner reminder query failed", error, { step: what, ids: { org: orgId } });
   throw new Error(`${what} query failed: ${error.message}`);
 }
 
