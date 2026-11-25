@@ -658,6 +658,37 @@ open vs approval joining, who may review, the org switch as a ceiling,
 every direct write path and the cross-org floor;
 `e2e/group-discovery.spec.ts` asserts the rendered consequence.
 
+### Dinner club
+
+A group's dinner club (`20261203000000_dinner_club.sql`) is a set of
+`dinner_*` tables, each with `org_id`, the restrictive floor and a
+`(season_id, group_id, org_id)` key pointing at its season, so the group a
+leader policy reads is always the season's own. A dinner is its own dated
+row in `dinners`, never an `events` row, so nothing reaches the group
+calendar or the group's subscription.
+
+Two things are private, and each lives in its own table because a row policy
+cannot hide one column:
+
+- **A host's address** (`dinner_party_addresses`): read by the party, the
+  group's leaders, and the parties seated at a table one of that party's
+  dinners is at (`dinner_address_party_ids()`). Tables, seats and dinners are
+  written only by `dinner_tables_publish()`, so before publish no guest reads
+  any address.
+- **Allergies and food needs** (`dinner_party_notes`): read by the party, the
+  leaders, and the host of a dinner the party is seated at
+  (`dinner_food_note_party_ids()`).
+
+Neither has a church-admin arm: a church admin outside the group reads
+neither. Parties, seats, tables and dinners are read by the leaders and the
+parties at the same table; seasons by the group's members once out of draft.
+The policies reach each other only through the six zero-argument definer
+helpers listed in `service-role-inventory.md`, so there is no policy cycle.
+The per-person calendar link (`dinner_feed_tokens`) follows
+`calendar_subscription_tokens`. Proofs: `supabase/tests/dinner_club_suite.sql`
+for every viewer, and `e2e/dinner-club.spec.ts` for what a guest, an unseated
+member and someone outside the group see.
+
 ### Group invite links
 
 A group's leaders and the org's admins mint links into that group
