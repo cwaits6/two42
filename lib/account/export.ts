@@ -197,8 +197,10 @@ export async function buildAccountExport(orgId: string, personId: string) {
         access_notes: string | null;
         pets: string | null;
         dinner_seasons: { title: string } | null;
-        dinner_party_addresses: Record<string, unknown> | null;
-        dinner_party_notes: { food_notes: string } | null;
+        // Arrays: their key to the party is (party_id, season_id, org_id),
+        // which no unique constraint matches, so the embed is to-many.
+        dinner_party_addresses: Record<string, unknown>[];
+        dinner_party_notes: { food_notes: string }[];
       } | null;
     }>(dinnerParties, "dinner club sign-ups").map(({ dinner_parties: p }) => ({
       season: p?.dinner_seasons?.title ?? null,
@@ -208,8 +210,8 @@ export async function buildAccountExport(orgId: string, personId: string) {
       kids_welcome: p?.kids_welcome ?? null,
       access_notes: p?.access_notes ?? null,
       pets: p?.pets ?? null,
-      address: p?.dinner_party_addresses ?? null,
-      food_notes: p?.dinner_party_notes?.food_notes ?? null,
+      address: p?.dinner_party_addresses[0] ?? null,
+      food_notes: p?.dinner_party_notes[0]?.food_notes ?? null,
     })),
     dinner_club_replies: rowsOf<{ status: string; updated_at: string; dinners: { starts_at: string } | null }>(
       dinnerReplies,
