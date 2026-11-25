@@ -36,6 +36,12 @@ export interface DinnerCardProps {
 export function DinnerCard(props: DinnerCardProps) {
   const router = useRouter();
   const [replies, setReplies] = useState(props.replies);
+  // A refresh brings everyone's latest replies; take them over what this card holds.
+  const [fromServer, setFromServer] = useState(props.replies);
+  if (props.replies !== fromServer) {
+    setFromServer(props.replies);
+    setReplies(props.replies);
+  }
   const [saving, setSaving] = useState(false);
   const going = props.atTable.filter((p) => replies[p.id] === "going");
   const notGoing = props.atTable.filter((p) => replies[p.id] === "not_going");

@@ -140,6 +140,10 @@ export function SeasonDates({
         onConfirm={async () => {
           if (!deleting) return;
           const { data, error } = await createClient().from("dinner_season_dates").delete().eq("id", deleting.id).select("id");
+          if (error?.code === "DC005") {
+            toast.error("A date whose dinners have happened stays.");
+            return;
+          }
           if (error || !data?.length) {
             toast.error(failureMessage("delete the date"));
             return;

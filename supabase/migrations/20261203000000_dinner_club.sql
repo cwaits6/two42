@@ -924,6 +924,14 @@ begin
     raise exception 'an ended season keeps its dates' using errcode = 'DC003';
   end if;
   if tg_op = 'DELETE' then
+    -- Deleting the date deletes its dinners and their replies. A season being
+    -- deleted is already gone here, so its dates still go with it.
+    if _status is not null and exists (
+      select 1 from public.dinners d
+      where d.season_date_id = old.id and d.org_id = old.org_id and d.starts_at <= pg_catalog.now()
+    ) then
+      raise exception 'a date whose dinners have happened stays' using errcode = 'DC005';
+    end if;
     return old;
   end if;
   if tg_op = 'UPDATE' and new.season_id is distinct from old.season_id then
@@ -1532,13 +1540,26 @@ begin
     raise exception 'there is no draft to publish' using errcode = 'DC002';
   end if;
 
-  -- Every table lists parties of this season that have not withdrawn.
+  -- Every table lists parties of this season that have not withdrawn. Ids
+  -- are checked before anything below casts them.
   if exists (
     select 1
     from jsonb_array_elements(_body -> 'tables') t
     where jsonb_typeof(t -> 'partyIds') is distinct from 'array'
       or jsonb_array_length(t -> 'partyIds') = 0
       or jsonb_typeof(t -> 'hosts') is distinct from 'array'
+      or coalesce(t ->> 'tableId', '') !~* '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$'
+      or coalesce(t ->> 'seasonDateId', '') !~* '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$'
+      or exists (
+        select 1 from jsonb_array_elements(t -> 'partyIds') pid
+        where jsonb_typeof(pid) is distinct from 'string'
+          or (pid #>> '{}') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      )
+      or exists (
+        select 1 from jsonb_array_elements(t -> 'hosts') h
+        where coalesce(h ->> 'seasonDateId', '') !~* '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$'
+          or coalesce(h ->> 'partyId', '') !~* '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$'
+      )
   ) or exists (
     select 1
     from jsonb_array_elements(_body -> 'tables') t,
@@ -1651,6 +1672,23 @@ begin
     raise exception 'each dinner needs one host from its table' using errcode = 'DC002';
   end if;
 
+  -- A dinner that has happened keeps its table and host: dropping the table
+  -- would delete the dinner and its replies.
+  if exists (
+    select 1 from public.dinners d
+    where d.season_id = _season.id and d.org_id = _org and d.starts_at <= pg_catalog.now()
+      and not exists (
+        select 1
+        from jsonb_array_elements(_body -> 'tables') t,
+             jsonb_array_elements(t -> 'hosts') h
+        where nullif(t ->> 'tableId', '')::uuid = d.table_id
+          and nullif(h ->> 'seasonDateId', '')::uuid = d.season_date_id
+          and nullif(h ->> 'partyId', '')::uuid is not distinct from d.host_party_id
+      )
+  ) then
+    raise exception 'a dinner that has happened keeps its table and host' using errcode = 'DC005';
+  end if;
+
   _before := public.dinner_seat_signatures(_season.id, _org);
 
   update public.dinner_seasons
@@ -1753,7 +1791,7 @@ revoke execute on function public.dinner_tables_publish(uuid) from public, anon;
 grant execute on function public.dinner_tables_publish(uuid) to authenticated;
 
 comment on function public.dinner_tables_publish(uuid) is
-  'Publishes the season''s stored draft (dinner_drafts) as its tables, seats and dinners in one transaction, and returns the people whose tables or hosts changed. Actor from auth.uid(), who must lead the group; tenant anchor: the season row''s org, pinned against app_request_org_id(). Raises DC001, DC002 or DC003.';
+  'Publishes the season''s stored draft (dinner_drafts) as its tables, seats and dinners in one transaction, and returns the people whose tables or hosts changed. Actor from auth.uid(), who must lead the group; tenant anchor: the season row''s org, pinned against app_request_org_id(). Raises DC001, DC002, DC003, or DC005 when the draft drops or rehosts a dinner that has happened.';
 
 -- ── Reminder ────────────────────────────────────────────────────────────────
 -- Starts the reminder pass for a dinner's local date when it has none,

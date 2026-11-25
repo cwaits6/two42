@@ -110,14 +110,16 @@ test.describe("a guest at a published table", () => {
     await expect(page.getByText(OWN_ADDRESS)).toHaveCount(0);
   });
 
-  test("gets their own dinners in their calendar link, and nothing once it is reset", async ({ page }) => {
+  test("gets their own dinners in their calendar link, and nothing once it is reset", async ({ page, playwright, baseURL }) => {
     await page.goto(PAGE);
     await page.getByRole("button", { name: "Get calendar link" }).click();
     const link = page.getByRole("textbox", { name: "Your calendar link" });
     await expect(link).toHaveValue(/\/api\/dinner-club\/feed\.ics\?token=/);
     const first = await link.inputValue();
 
-    const feed = await page.request.get(first);
+    // A calendar app fetches the link with no session.
+    const calendar = await playwright.request.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
+    const feed = await calendar.get(first);
     expect(feed.status()).toBe(200);
     expect(feed.headers()["cache-control"]).toMatch(/^private/);
     const body = await feed.text();
@@ -128,9 +130,10 @@ test.describe("a guest at a published table", () => {
     await page.getByRole("dialog").getByRole("button", { name: "Reset link" }).click();
     await expect(link).not.toHaveValue(first);
 
-    const old = await page.request.get(first);
+    const old = await calendar.get(first);
     expect(old.status()).toBe(401);
     expect(await old.text()).not.toContain("VEVENT");
+    await calendar.dispose();
   });
 });
 

@@ -15,10 +15,10 @@ const calls = vi.hoisted(() => [] as string[]);
 const saved = vi.hoisted(() => ({ body: null as unknown, ok: true }));
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
-    from: () => ({
-      upsert: (row: { body: unknown }) => ({
+    from: (relation: string) => ({
+      upsert: (row: { season_id: string; body: unknown }, options: { onConflict: string }) => ({
         select: async () => {
-          calls.push("save");
+          calls.push(`save ${relation} ${row.season_id} ${options.onConflict}`);
           saved.body = row.body;
           return saved.ok ? { data: [{ season_id: "s" }], error: null } : { data: null, error: { message: "down" } };
         },
@@ -88,8 +88,8 @@ beforeEach(() => {
   saved.ok = true;
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => {
-      calls.push("publish");
+    vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push(`${init?.method} ${url}`);
       return Response.json({ changed: 0, sent: 0, capped: false, unsent: false });
     }),
   );
@@ -107,7 +107,7 @@ describe("TablesEditor publish", () => {
     await mount();
     await click("Publish changes");
     await click("Publish changes");
-    expect(calls).toEqual(["save", "publish"]);
+    expect(calls).toEqual(["save dinner_drafts s season_id", "POST /api/dinner-club/seasons/s/publish"]);
     expect(saved.body).toEqual(fitted);
   });
 
@@ -116,7 +116,7 @@ describe("TablesEditor publish", () => {
     await mount();
     await click("Publish changes");
     await click("Publish changes");
-    expect(calls).toEqual(["save"]);
+    expect(calls).toEqual(["save dinner_drafts s season_id"]);
     expect(toast.error).toHaveBeenCalled();
   });
 });

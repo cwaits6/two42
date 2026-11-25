@@ -15,6 +15,8 @@ export function dinnerClubRefusal(error: { code?: string }): NextResponse | null
       return NextResponse.json({ error: "The season has changed. Refresh and try again." }, { status: 409 });
     case "DC004":
       return NextResponse.json({ error: "Choose a date and time within the season that hasn't passed." }, { status: 400 });
+    case "DC005":
+      return NextResponse.json({ error: "Dinners that have happened keep their tables and hosts." }, { status: 400 });
     default:
       return null;
   }

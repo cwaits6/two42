@@ -389,6 +389,12 @@ select pg_temp.draft(jsonb_build_array(
   pg_temp.one_host_table('b', null, 'ph2', array['ph2', 'pu'])));
 select is(pg_temp.read_as('l', format('select count(*) from public.dinner_tables_publish(%L)', pg_temp.id('season'))), 'DC002',
   'a draft whose host did not offer to host is refused');
+select pg_temp.draft(jsonb_build_array(
+  pg_temp.one_host_table('a', null, 'ph', array['ph', 'pg'])
+    || jsonb_build_object('partyIds', jsonb_build_array(pg_temp.id('ph')::text, 'not-a-uuid')),
+  pg_temp.one_host_table('b', null, 'ph2', array['ph2', 'pu'])));
+select is(pg_temp.read_as('l', format('select count(*) from public.dinner_tables_publish(%L)', pg_temp.id('season'))), 'DC002',
+  'a draft naming a party by something other than an id is refused as a bad draft');
 
 select pg_temp.draft(jsonb_build_array(
   pg_temp.one_host_table('a', null, 'ph', array['ph', 'pg']),
@@ -669,6 +675,16 @@ select is(pg_temp.wrote('h2', format(
 select is(pg_temp.wrote('l', format(
     'update public.dinners set starts_at = ''2031-01-07 17:00-06'' where id = %L', pg_temp.id('t2d2'))), 'DC004',
   'nor moves to a later date');
+select pg_temp.draft(jsonb_build_array(
+  pg_temp.one_host_table('a', current_setting('dc.t1'), 'ph', array['ph', 'pg']),
+  pg_temp.one_host_table('b', null, 'ph2', array['ph2', 'pu', 'pn'])));
+select is(pg_temp.read_as('l', format('select count(*) from public.dinner_tables_publish(%L)', pg_temp.id('season'))), 'DC005',
+  'publishing again cannot replace the table of a dinner that has happened');
+select is(pg_temp.count_as('l', 'dinners', format('id = %L', pg_temp.id('t2d2'))), '1',
+  'and that dinner stays');
+delete from public.dinner_drafts where season_id = pg_temp.id('season');
+select is(pg_temp.wrote('l', format('delete from public.dinner_season_dates where id = %L', pg_temp.id('d2'))), 'DC005',
+  'nor can a leader delete the date of a dinner that has happened');
 
 -- ── Withdrawal and leaving ──────────────────────────────────────────────────
 select is(pg_temp.wrote('u', format('update public.dinner_parties set status = ''withdrawn'' where id = %L', pg_temp.id('pu'))), '1',
