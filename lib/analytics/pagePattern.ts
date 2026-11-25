@@ -14,6 +14,7 @@ export const PAGE_PATTERNS: readonly string[] = [
   "/admin/members/invite",
   "/admin/requests",
   "/admin/settings",
+  "/admin/settings/church-records",
   "/admin/settings/email",
   "/admin/usage",
   "/calendar",

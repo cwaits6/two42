@@ -37,7 +37,7 @@ export const PROCESSORS: readonly { name: string; does: string }[] = [
 export const PRIVACY: LegalDocument = {
   title: "Privacy policy",
   summary: "How two42 handles the information a church and its members put into it.",
-  lastUpdated: "2026-11-19",
+  lastUpdated: "2026-11-24",
   sections: [
     {
       heading: "What this policy covers",
@@ -67,6 +67,7 @@ export const PRIVACY: LegalDocument = {
           "Prayer requests you post, by name or anonymous, the requests you say you are praying for, and comments you add to a request. The text of a request or a comment is stored encrypted. An anonymous request, or a comment with your name hidden, stores no author, only a code the app uses to recognize it as yours.",
           "What leaders add for a group: events, announcements, lessons, the group's about page, and funds with their payment handles, such as a Venmo or PayPal name. two42 does not process payments; a gift happens in the payment app.",
           "Requests to join the church or a group, invitations, and feedback you send.",
+          "If your church connects the software it keeps its records in, such as Rock RMS: which person in your church's records is you, once a church admin confirms it, and the key the church uses to reach its records, stored encrypted. To suggest a match, two42 reads names, email addresses and birthdays from your church's records and keeps none of them. two42 never writes to your church's records.",
           "A private calendar link, if you make one. Anyone with that link can see your calendar, so keep it to yourself.",
         ],
         "Your browser keeps a sign-in cookie, a cookie for the last group you opened, and your display choices. two42 sets no advertising or tracking cookies.",
