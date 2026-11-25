@@ -1,5 +1,5 @@
 import { formatEventDate, formatEventTime } from "@/lib/time/zone";
-import type { DinnerFormat } from "./shuffle";
+import { DINNER_FORMATS, type DinnerFormat } from "./shuffle";
 
 // Each value set below is the CHECK constraint on its column in the dinner
 // club migration; the type and the options derive from the one tuple.
@@ -40,7 +40,7 @@ export const FORMAT_HELP: Record<DinnerFormat, string> = {
   new_tables: "New tables for every dinner, from the hosts free that night.",
 };
 
-export const FORMAT_OPTIONS = (Object.keys(FORMAT_LABELS) as DinnerFormat[]).map((value) => ({
+export const FORMAT_OPTIONS = DINNER_FORMATS.map((value) => ({
   value,
   label: FORMAT_LABELS[value],
 }));
@@ -84,7 +84,7 @@ export const LENGTH_OPTIONS = [
 ];
 
 export function isDinnerFormat(value: string): value is DinnerFormat {
-  return value in FORMAT_LABELS;
+  return oneOf(DINNER_FORMATS, value);
 }
 
 /** "Every 4 weeks on Saturday" or "2nd Saturday of each month". */

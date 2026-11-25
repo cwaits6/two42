@@ -3,7 +3,8 @@
 // returns is what dinner_drafts.body stores and dinner_tables_publish()
 // checks.
 
-export type DinnerFormat = "same_table_one_host" | "same_table_rotating" | "new_tables";
+export const DINNER_FORMATS = ["same_table_one_host", "same_table_rotating", "new_tables"] as const;
+export type DinnerFormat = (typeof DINNER_FORMATS)[number];
 
 export interface ShuffleParty {
   id: string;
