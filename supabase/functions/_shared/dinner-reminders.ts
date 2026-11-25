@@ -57,7 +57,9 @@ interface AddressRow {
 /** The narrow slice of the Supabase client this module needs. */
 export interface DinnerRemindersClient {
   from(table: "group_settings"): { select(columns: string): Chain<{ group_id: string }> };
-  from(table: "dinner_seasons"): { select(columns: string): Chain<{ id: string; title: string }> };
+  from(table: "dinner_seasons"): {
+    select(columns: string): Chain<{ id: string; title: string; bring_list_enabled: boolean }>;
+  };
   from(table: "dinners"): { select(columns: string): Chain<ReminderDinnerRow> };
   from(table: "dinner_seats"): { select(columns: string): Chain<{ party_id: string }> };
   from(table: "dinner_party_members"): { select(columns: string): Chain<{ party_id: string; profile_id: string }> };
@@ -66,6 +68,7 @@ export interface DinnerRemindersClient {
   };
   from(table: "dinner_replies"): { select(columns: string): Chain<{ profile_id: string }> };
   from(table: "dinner_party_addresses"): { select(columns: string): Chain<AddressRow> };
+  from(table: "dinner_contributions"): { select(columns: string): Chain<{ party_id: string; item: string }> };
   from(table: "dinner_reminder_sends"): { update(values: Record<string, unknown>): SettleChain };
   rpc(
     fn: "dinner_reminder_claim",
@@ -94,6 +97,13 @@ export interface DinnerReminder {
   email: string;
   firstName: string | null;
   preferredName: string | null;
+  /** What the person's party brings, when the host has said. */
+  bringing: string | null;
+}
+
+interface SeasonInfo {
+  title: string;
+  bringList: boolean;
 }
 
 export interface DinnerRemindersDeps {
@@ -124,8 +134,8 @@ export async function readDinners(
   supabase: DinnerRemindersClient,
   orgId: string,
   now: Date,
-): Promise<{ rows: ReminderDinnerRow[]; titles: Map<string, string> }> {
-  const none = { rows: [], titles: new Map<string, string>() };
+): Promise<{ rows: ReminderDinnerRow[]; seasons: Map<string, SeasonInfo> }> {
+  const none = { rows: [], seasons: new Map<string, SeasonInfo>() };
   const { data: on, error: onError } = await supabase
     .from("group_settings")
     .select("group_id")
@@ -137,13 +147,13 @@ export async function readDinners(
 
   const { data: seasons, error: seasonsError } = await supabase
     .from("dinner_seasons")
-    .select("id, title")
+    .select("id, title, bring_list_enabled")
     .eq("org_id", orgId)
     .eq("status", "published")
     .in("group_id", groupIds);
   if (seasonsError) failed("dinner_seasons", seasonsError, orgId);
-  const titles = new Map((seasons ?? []).map((s) => [s.id, s.title]));
-  if (titles.size === 0) return none;
+  const running = new Map((seasons ?? []).map((s) => [s.id, { title: s.title, bringList: s.bring_list_enabled }]));
+  if (running.size === 0) return none;
 
   const window = dinnerReadWindow(now);
   const rows: ReminderDinnerRow[] = [];
@@ -152,24 +162,24 @@ export async function readDinners(
       .from("dinners")
       .select("id, group_id, season_id, table_id, starts_at, host_party_id")
       .eq("org_id", orgId)
-      .in("season_id", [...titles.keys()])
+      .in("season_id", [...running.keys()])
       .gte("starts_at", window.from)
       .lt("starts_at", window.to)
       .order("id")
       .range(from, from + PAGE - 1);
     if (dinnersError) failed("dinners", dinnersError, orgId);
     rows.push(...(dinners ?? []));
-    if ((dinners ?? []).length < PAGE) return { rows, titles };
+    if ((dinners ?? []).length < PAGE) return { rows, seasons: running };
   }
 }
 
-/** Who is at the dinner's table, who hosts it and where. */
+/** Who is at the dinner's table, who hosts it and where, and what each guest brings. */
 async function readDetails(
   supabase: DinnerRemindersClient,
   orgId: string,
   dinner: DueDinner,
-  seasonTitle: string,
-): Promise<DinnerDetails> {
+  season: SeasonInfo,
+): Promise<{ details: DinnerDetails; bringing: Map<string, string> }> {
   const { data: seats, error: seatsError } = await supabase
     .from("dinner_seats")
     .select("party_id")
@@ -219,9 +229,24 @@ async function readDetails(
     address = rows?.[0] ? formatAddress(rows[0]) : null;
   }
 
+  const bringing = new Map<string, string>();
+  if (season.bringList) {
+    const { data: items, error: itemsError } = await supabase
+      .from("dinner_contributions")
+      .select("party_id, item")
+      .eq("org_id", orgId)
+      .eq("dinner_id", dinner.dinnerId);
+    if (itemsError) failed("dinner_contributions", itemsError, orgId);
+    const itemOf = new Map((items ?? []).map((c) => [c.party_id, c.item]));
+    for (const m of members ?? []) {
+      const item = m.party_id === dinner.hostPartyId ? undefined : itemOf.get(m.party_id);
+      if (item) bringing.set(m.profile_id, item);
+    }
+  }
+
   const ordered = members ?? [];
-  return {
-    seasonTitle,
+  const details = {
+    seasonTitle: season.title,
     hostNames:
       partyName(
         ordered.filter((m) => m.party_id === dinner.hostPartyId).map((m) => nameOf.get(m.profile_id) ?? "").filter(Boolean),
@@ -232,6 +257,7 @@ async function readDetails(
       .map((m) => nameOf.get(m.profile_id) ?? "")
       .filter(Boolean),
   };
+  return { details, bringing };
 }
 
 export async function runDinnerReminders(
@@ -248,7 +274,7 @@ export async function runDinnerReminders(
   const results = await forEachOrg(orgs, async (org): Promise<OrgRunCounts> => {
     if (budgetExhausted || rateLimited) return { sent: 0, sendFailures: 0 };
 
-    const { rows, titles } = await readDinners(supabase, org.id, deps.now);
+    const { rows, seasons } = await readDinners(supabase, org.id, deps.now);
     const dinners = dueDinners(rows, org.timezone, deps.now);
     due += dinners.length;
 
@@ -281,16 +307,16 @@ export async function runDinnerReminders(
 
       const sentIds: string[] = [];
       const releasedIds: string[] = [];
-      let details: DinnerDetails | null = null;
+      let read: { details: DinnerDetails; bringing: Map<string, string> } | null = null;
       try {
-        details = await readDetails(supabase, org.id, dinner, titles.get(dinner.seasonId) ?? "");
+        read = await readDetails(supabase, org.id, dinner, seasons.get(dinner.seasonId) ?? { title: "", bringList: false });
       } catch (err) {
         itemFailures.push({ item: dinner.dinnerId, error: err instanceof Error ? err.message : String(err) });
         releasedIds.push(...queue.map((row) => row.profile_id));
       }
 
       let sendFailed = false;
-      for (const [index, row] of details ? queue.entries() : []) {
+      for (const [index, row] of read ? queue.entries() : []) {
         if (!rateLimited && outOfTime()) budgetExhausted = true;
         if (budgetExhausted || rateLimited) {
           releasedIds.push(row.profile_id);
@@ -312,11 +338,12 @@ export async function runDinnerReminders(
           outcome = await send({
             orgId: org.id,
             dinner,
-            details: details!,
+            details: read!.details,
             profileId: row.profile_id,
             email: row.email,
             firstName: row.first_name,
             preferredName: row.preferred_name,
+            bringing: read!.bringing.get(row.profile_id) ?? null,
           });
         } catch (err) {
           outcome = "retry";
