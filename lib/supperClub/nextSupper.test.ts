@@ -40,13 +40,16 @@ function seed(): Record<string, Row[]> {
     supper_party_addresses: [
       { ...o, party_id: "p-host", address_line1: "12 Fixture Lane", address_line2: null, city: "Springfield", state: null, postal_code: null },
     ],
+    // The rows Home must not show come first, so a dropped filter picks one of them.
     supper_replies: [
-      { ...o, supper_id: "d-next", profile_id: "me", status: "going" },
+      { ...o, supper_id: "d-next", profile_id: "henry", status: "not_going" },
       { ...o, supper_id: "d-later", profile_id: "me", status: "not_going" },
+      { ...o, supper_id: "d-next", profile_id: "me", status: "going" },
     ],
     supper_contributions: [
-      { ...o, supper_id: "d-next", party_id: "p-me", item: "Dessert" },
       { ...o, supper_id: "d-next", party_id: "p-other", item: "Bread" },
+      { ...o, supper_id: "d-later", party_id: "p-me", item: "Salad" },
+      { ...o, supper_id: "d-next", party_id: "p-me", item: "Dessert" },
     ],
     profiles: [
       { ...o, id: "henry", first_name: "Henry", preferred_name: null },
