@@ -37,9 +37,9 @@ jobs:
       # HEAD is the PR merged into its base and HEAD^1 is that base, so the
       # diff is exactly the PR's change even when the event's base.sha is older.
       # --no-renames lists a moved file's old path too, so a page that names it
-      # still hears about the move.
+      # still hears about the move. -z keeps non-ASCII paths unquoted.
       - name: List the changed files
-        run: git diff --name-only --no-renames HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
+        run: git diff --name-only --no-renames -z HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
 
       - name: Check the docs pages for each changed path
         env:

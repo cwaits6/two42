@@ -6,7 +6,14 @@ import { docsRoute } from './shared';
 
 const docs = defineDocs({
   dir: 'content/docs',
-  docs: { schema: pageSchema.extend({ sources: z.array(z.string().min(1)).min(1).optional() }) },
+  docs: {
+    schema: pageSchema.extend({
+      sources: z.array(z.string().min(1)).min(1).optional(),
+      contentSources: z
+        .array(z.object({ glob: z.string().min(1), contains: z.string().min(1) }))
+        .optional(),
+    }),
+  },
   meta: { schema: metaSchema },
 });
 

@@ -50,7 +50,7 @@ export function readPages(root = REPO_ROOT) {
     .map((file) => {
       const page = `${CONTENT_DIR}/${file}`;
       const { data } = frontmatter(readFileSync(posix.join(dir, file), 'utf8'));
-      return { page, sources: data.sources ?? null };
+      return { page, sources: data.sources ?? null, contentSources: data.contentSources ?? [] };
     });
 }
 
@@ -64,7 +64,13 @@ export function trackedFiles(root = REPO_ROOT) {
 // that matches no tracked file.
 export function findSourceProblems(pages, files) {
   const problems = [];
-  for (const { page, sources } of pages) {
+  for (const { page, sources, contentSources = [] } of pages) {
+    for (const { glob } of contentSources) {
+      const re = globToRegExp(glob);
+      if (!files.some((file) => re.test(file))) {
+        problems.push({ page, message: `contentSources glob matches no tracked file: ${glob}` });
+      }
+    }
     if (!sources || sources.length === 0) {
       if (!isIndexPage(page)) problems.push({ page, message: 'has no sources list' });
     } else {
@@ -80,16 +86,23 @@ export function findSourceProblems(pages, files) {
 }
 
 // The pages whose listed paths changed while the page itself did not, each
-// with the changed paths that matched it.
-export function findStalePages(pages, changed, labels = []) {
+// with the changed paths that matched it. A contentSources entry matches a
+// changed file only when that file's diff contains its text, for pages such
+// as the schedules one whose facts live in some files of a broad folder.
+export function findStalePages(pages, changed, labels = [], diffOf = () => '') {
   if (labels.includes(SKIP_LABEL)) return { skipped: true, stale: [] };
   const changedSet = new Set(changed);
   const relevant = changed.filter((file) => !TEST_FILE.test(file));
   const stale = [];
-  for (const { page, sources } of pages) {
+  for (const { page, sources, contentSources = [] } of pages) {
     if (!sources || changedSet.has(page)) continue;
     const res = sources.map(globToRegExp);
-    const matched = relevant.filter((file) => res.some((re) => re.test(file)));
+    const byContent = contentSources.map(({ glob, contains }) => ({ re: globToRegExp(glob), contains }));
+    const matched = relevant.filter(
+      (file) =>
+        res.some((re) => re.test(file)) ||
+        byContent.some(({ re, contains }) => re.test(file) && diffOf(file).includes(contains)),
+    );
     if (matched.length > 0) stale.push({ page, matched });
   }
   return { skipped: false, stale };

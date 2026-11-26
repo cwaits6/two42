@@ -42,6 +42,15 @@ describe('findSourceProblems', () => {
     ]);
   });
 
+  test('names a contentSources glob that matches no tracked file', () => {
+    const pages = [
+      { page: CALENDAR, sources: ['lib/roles.ts'], contentSources: [{ glob: 'supabase/nope/*.sql', contains: 'x' }] },
+    ];
+    assert.deepEqual(findSourceProblems(pages, files), [
+      { page: CALENDAR, message: 'contentSources glob matches no tracked file: supabase/nope/*.sql' },
+    ]);
+  });
+
   test('requires sources on every page except index pages', () => {
     const pages = [
       { page: 'docs-site/content/docs/use/index.mdx', sources: null },
@@ -70,6 +79,25 @@ describe('findStalePages', () => {
       skipped: true,
       stale: [],
     });
+  });
+
+  test('matches a contentSources file only when its diff contains the text', () => {
+    const SCHEDULES = 'docs-site/content/docs/run/edge-functions.mdx';
+    const withContent = [
+      {
+        page: SCHEDULES,
+        sources: ['supabase/functions/send-event-reminders/**'],
+        contentSources: [{ glob: 'supabase/migrations/*.sql', contains: 'cron.schedule' }],
+      },
+    ];
+    const schedule = 'supabase/migrations/20270101000000_new_job.sql';
+    const other = 'supabase/migrations/20270102000000_add_column.sql';
+    const diffs = { [schedule]: "+select cron.schedule('job', '0 * * * *', $$ ... $$);", [other]: '+alter table x add y int;' };
+    const diffOf = (file) => diffs[file] ?? '';
+    assert.deepEqual(findStalePages(withContent, [schedule, other], [], diffOf).stale, [
+      { page: SCHEDULES, matched: [schedule] },
+    ]);
+    assert.deepEqual(findStalePages(withContent, [other], [], diffOf).stale, []);
   });
 
   test('ignores test and snapshot files', () => {

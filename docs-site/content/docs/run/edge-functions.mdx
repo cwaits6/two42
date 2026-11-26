@@ -16,6 +16,11 @@ sources:
   - "supabase/functions/_shared/orgs.ts"
   - "supabase/functions/_shared/caller-auth.ts"
   - "scripts/check-scheduled-jobs.sql"
+contentSources:
+  - glob: "supabase/migrations/*.sql"
+    contains: "cron.schedule"
+  - glob: "supabase/migrations/*.sql"
+    contains: "cron.unschedule"
 ---
 
 ## What runs on a schedule

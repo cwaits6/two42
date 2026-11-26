@@ -38,6 +38,14 @@ sources:
 
 - Globs are relative to the repository root. Only `*` (within one folder) and `**` (any number of folders) are special, so route folders such as `[groupId]` and `(auth)` are written as they are.
 - Keep each glob as narrow as the page: the routes, components, lib modules, edge functions and setup files behind what it describes. Never list `package.json`, a lockfile or anything under `.github/`, so dependency updates pass on their own.
+- When a page's facts live in only some files of a broad folder, add a `contentSources` entry instead of listing the folder. The page is flagged only when a changed file matches the glob and its diff contains the text. The Edge functions page uses this for migrations that add or change a `cron.schedule`:
+
+  ```yaml
+  contentSources:
+    - glob: "supabase/migrations/*.sql"
+      contains: "cron.schedule"
+  ```
+
 - `npm run check:sources` fails when a page has no list or a glob matches no tracked file, naming the page and the glob. The frontmatter schema in `lib/source.ts` type-checks the list in the build.
 
 The **Docs freshness** check (`.github/workflows/docs-freshness.yml`) runs on every pull request. It fails when a changed file matches a page's `sources` and that page did not change, and prints each page to check with the changed paths that matched it. JavaScript and TypeScript test files (`*.test.ts`, `*.test.tsx`, `*.test.mjs` and the like, `*_test.ts`, `__snapshots__/`) never count. The logic is in `scripts/docs-sources.mjs`.
