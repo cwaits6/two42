@@ -53,6 +53,8 @@ function directoryEntry(p: Profile, groups: GroupChip[]): DirectoryProfile {
     employer: p.employer,
     groups,
     created_at: p.created_at,
+    suffix: p.suffix,
+    gender: p.gender,
   };
 }
 

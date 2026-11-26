@@ -125,7 +125,7 @@ export default async function ServingLinkPage({
     service
       .from("serving_signups")
       .select(
-        "id, family_id, created_by, serving_signup_attendees(profiles(id, first_name, last_name, preferred_name))"
+        "id, family_id, created_by, serving_signup_attendees(profiles(id, first_name, last_name, preferred_name, suffix))"
       )
       .eq("team_id", payload.g)
       .eq("service_date", payload.d)

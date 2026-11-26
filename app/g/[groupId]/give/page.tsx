@@ -68,8 +68,8 @@ export default async function GivePage({
       .from("giving_funds")
       .select(
         `*,
-        steward:profiles!giving_funds_steward_id_fkey(id, first_name, last_name, preferred_name, avatar_url),
-        co_steward:profiles!giving_funds_co_steward_id_fkey(id, first_name, last_name, preferred_name, avatar_url)`
+        steward:profiles!giving_funds_steward_id_fkey(id, first_name, last_name, preferred_name, suffix, avatar_url),
+        co_steward:profiles!giving_funds_co_steward_id_fkey(id, first_name, last_name, preferred_name, suffix, avatar_url)`
       )
       .eq("group_id", group.id)
       .eq("is_active", true)
@@ -144,7 +144,7 @@ export default async function GivePage({
         supabase
           .from("giving_funds")
           .select(
-            "*, steward:profiles!giving_funds_steward_id_fkey(first_name, last_name, preferred_name)"
+            "*, steward:profiles!giving_funds_steward_id_fkey(first_name, last_name, preferred_name, suffix)"
           )
           .eq("group_id", group.id)
           .order("is_active", { ascending: false })

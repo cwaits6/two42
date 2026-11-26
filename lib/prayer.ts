@@ -9,7 +9,7 @@ import type { PrayerWallRow } from "@/lib/types";
  * means the author is unlisted in the directory.
  */
 export function prayerAuthorLabel(
-  row: Pick<PrayerWallRow, "is_anonymous" | "first_name" | "last_name" | "preferred_name">
+  row: Pick<PrayerWallRow, "is_anonymous" | "first_name" | "last_name" | "preferred_name" | "suffix">
 ): string {
   if (row.is_anonymous) return "Anonymous";
   const hasName = row.first_name || row.last_name || row.preferred_name;
@@ -54,6 +54,7 @@ export function toWallRow(raw: Record<string, unknown>): PrayerWallRow {
     first_name: textOrNull(raw.first_name),
     last_name: textOrNull(raw.last_name),
     preferred_name: textOrNull(raw.preferred_name),
+    suffix: textOrNull(raw.suffix),
     avatar_url: textOrNull(raw.avatar_url),
     praying_count: count(raw.praying_count),
     i_am_praying: raw.i_am_praying === true,

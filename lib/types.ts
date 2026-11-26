@@ -6,11 +6,16 @@ export type AccessRequestStatus = "pending" | "approved" | "denied";
 
 export type RsvpStatus = "yes" | "no" | "maybe";
 
+export type Gender = "male" | "female";
+
 export interface Profile {
   id: string;
   first_name: string | null;
   last_name: string | null;
   preferred_name: string | null;
+  title: string | null;
+  suffix: string | null;
+  gender: Gender | null;
   role: UserRole;
   avatar_url: string | null;
   email: string | null;
@@ -92,6 +97,8 @@ export interface DirectoryProfile {
   employer: string | null;
   groups: GroupChip[];
   created_at: string;
+  suffix: string | null;
+  gender: Gender | null;
 }
 
 export interface AccessRequest {
@@ -221,6 +228,8 @@ export interface FamilyMember {
   birth_month: number | null;
   birth_day: number | null;
   birth_year: number | null;
+  /** Expected high-school graduation year; shown as a grade for a child. */
+  graduation_year: number | null;
   relationship: FamilyMemberRelationship;
   avatar_url: string | null;
   is_class_member: boolean;
@@ -327,6 +336,7 @@ export interface HouseholdMember {
   first_name: string | null;
   last_name: string | null;
   preferred_name: string | null;
+  suffix: string | null;
   avatar_url: string | null;
   relationship: FamilyMemberRelationship;
   is_class_member: boolean;
@@ -348,6 +358,7 @@ export interface HouseholdFamilyMember {
   birth_month: number | null;
   birth_day: number | null;
   claimed_profile_id: string | null;
+  graduation_year: number | null;
 }
 
 /**
@@ -422,6 +433,7 @@ export interface PrayerWallRow {
   first_name: string | null;
   last_name: string | null;
   preferred_name: string | null;
+  suffix: string | null;
   avatar_url: string | null;
   praying_count: number;
   i_am_praying: boolean;
@@ -491,6 +503,8 @@ export interface ClassTeacherWithProfile extends ClassTeacher {
     first_name: string | null;
     last_name: string | null;
     preferred_name: string | null;
+    title: string | null;
+    suffix: string | null;
     avatar_url: string | null;
   } | null;
 }

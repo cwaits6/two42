@@ -86,7 +86,7 @@ export async function POST(request: Request) {
     // org-anchor: profile org read unscoped so the cross-org pairing check can reject it explicitly
     service
       .from("profiles")
-      .select("id, org_id, first_name, last_name, preferred_name, family_id, relationship, email, role")
+      .select("id, org_id, first_name, last_name, preferred_name, suffix, family_id, relationship, email, role")
       .eq("id", payload.p)
       .maybeSingle(),
     service
@@ -266,7 +266,7 @@ export async function POST(request: Request) {
   const { data: signup, error: cancelLookupError } = await service
     .from("serving_signups")
     .select(
-      "id, family_id, created_by, serving_signup_attendees(profiles(id, first_name, last_name, preferred_name))"
+      "id, family_id, created_by, serving_signup_attendees(profiles(id, first_name, last_name, preferred_name, suffix))"
     )
     .eq("team_id", payload.g)
     .eq("service_date", payload.d)

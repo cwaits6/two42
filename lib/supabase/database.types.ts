@@ -375,14 +375,14 @@ isOneToOne: false
                   ]
                 },"family_members": {
                   Row: {
-                    "avatar_url": string | null,"birth_day": number | null,"birth_month": number | null,"birth_year": number | null,"claimed_profile_id": string | null,"created_at": string,"family_id": string,"first_name": string,"id": string,"is_class_member": boolean,"last_name": string | null,"org_id": string,"preferred_name": string | null,"relationship": string,"updated_at": string
+                    "avatar_url": string | null,"birth_day": number | null,"birth_month": number | null,"birth_year": number | null,"claimed_profile_id": string | null,"created_at": string,"family_id": string,"first_name": string,"graduation_year": number | null,"id": string,"is_class_member": boolean,"last_name": string | null,"org_id": string,"preferred_name": string | null,"relationship": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "avatar_url"?: string | null,"birth_day"?: number | null,"birth_month"?: number | null,"birth_year"?: number | null,"claimed_profile_id"?: string | null,"created_at"?: string,"family_id": string,"first_name": string,"id"?: string,"is_class_member"?: boolean,"last_name"?: string | null,"org_id"?: string,"preferred_name"?: string | null,"relationship": string,"updated_at"?: string
+                    "avatar_url"?: string | null,"birth_day"?: number | null,"birth_month"?: number | null,"birth_year"?: number | null,"claimed_profile_id"?: string | null,"created_at"?: string,"family_id": string,"first_name": string,"graduation_year"?: number | null,"id"?: string,"is_class_member"?: boolean,"last_name"?: string | null,"org_id"?: string,"preferred_name"?: string | null,"relationship": string,"updated_at"?: string
                   }
                   Update: {
-                    "avatar_url"?: string | null,"birth_day"?: number | null,"birth_month"?: number | null,"birth_year"?: number | null,"claimed_profile_id"?: string | null,"created_at"?: string,"family_id"?: string,"first_name"?: string,"id"?: string,"is_class_member"?: boolean,"last_name"?: string | null,"org_id"?: string,"preferred_name"?: string | null,"relationship"?: string,"updated_at"?: string
+                    "avatar_url"?: string | null,"birth_day"?: number | null,"birth_month"?: number | null,"birth_year"?: number | null,"claimed_profile_id"?: string | null,"created_at"?: string,"family_id"?: string,"first_name"?: string,"graduation_year"?: number | null,"id"?: string,"is_class_member"?: boolean,"last_name"?: string | null,"org_id"?: string,"preferred_name"?: string | null,"relationship"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -1189,14 +1189,14 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"approved_at": string | null,"approved_by": string | null,"avatar_url": string | null,"bio": string | null,"birth_day": number | null,"birth_month": number | null,"birth_year": number | null,"city": string | null,"created_at": string,"email": string | null,"email_announcements": boolean,"email_event_reminders": boolean,"email_supper_club": boolean,"employer": string | null,"family_id": string | null,"first_name": string | null,"hide_email": boolean,"id": string,"is_unlisted": boolean,"last_name": string | null,"occupation": string | null,"org_id": string,"phone": string | null,"phone_home": string | null,"phone_mobile": string | null,"phone_work": string | null,"postal_code": string | null,"preferred_name": string | null,"relationship": string,"role": string,"setup_completed": boolean,"state": string | null,"updated_at": string
+                    "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"approved_at": string | null,"approved_by": string | null,"avatar_url": string | null,"bio": string | null,"birth_day": number | null,"birth_month": number | null,"birth_year": number | null,"city": string | null,"created_at": string,"email": string | null,"email_announcements": boolean,"email_event_reminders": boolean,"email_supper_club": boolean,"employer": string | null,"family_id": string | null,"first_name": string | null,"gender": string | null,"hide_email": boolean,"id": string,"is_unlisted": boolean,"last_name": string | null,"occupation": string | null,"org_id": string,"phone": string | null,"phone_home": string | null,"phone_mobile": string | null,"phone_work": string | null,"postal_code": string | null,"preferred_name": string | null,"relationship": string,"role": string,"setup_completed": boolean,"state": string | null,"suffix": string | null,"title": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "address_line1"?: string | null,"address_line2"?: string | null,"anniversary"?: string | null,"approved_at"?: string | null,"approved_by"?: string | null,"avatar_url"?: string | null,"bio"?: string | null,"birth_day"?: number | null,"birth_month"?: number | null,"birth_year"?: number | null,"city"?: string | null,"created_at"?: string,"email"?: string | null,"email_announcements"?: boolean,"email_event_reminders"?: boolean,"email_supper_club"?: boolean,"employer"?: string | null,"family_id"?: string | null,"first_name"?: string | null,"hide_email"?: boolean,"id": string,"is_unlisted"?: boolean,"last_name"?: string | null,"occupation"?: string | null,"org_id"?: string,"phone"?: string | null,"phone_home"?: string | null,"phone_mobile"?: string | null,"phone_work"?: string | null,"postal_code"?: string | null,"preferred_name"?: string | null,"relationship"?: string,"role"?: string,"setup_completed"?: boolean,"state"?: string | null,"updated_at"?: string
+                    "address_line1"?: string | null,"address_line2"?: string | null,"anniversary"?: string | null,"approved_at"?: string | null,"approved_by"?: string | null,"avatar_url"?: string | null,"bio"?: string | null,"birth_day"?: number | null,"birth_month"?: number | null,"birth_year"?: number | null,"city"?: string | null,"created_at"?: string,"email"?: string | null,"email_announcements"?: boolean,"email_event_reminders"?: boolean,"email_supper_club"?: boolean,"employer"?: string | null,"family_id"?: string | null,"first_name"?: string | null,"gender"?: string | null,"hide_email"?: boolean,"id": string,"is_unlisted"?: boolean,"last_name"?: string | null,"occupation"?: string | null,"org_id"?: string,"phone"?: string | null,"phone_home"?: string | null,"phone_mobile"?: string | null,"phone_work"?: string | null,"postal_code"?: string | null,"preferred_name"?: string | null,"relationship"?: string,"role"?: string,"setup_completed"?: boolean,"state"?: string | null,"suffix"?: string | null,"title"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "address_line1"?: string | null,"address_line2"?: string | null,"anniversary"?: string | null,"approved_at"?: string | null,"approved_by"?: string | null,"avatar_url"?: string | null,"bio"?: string | null,"birth_day"?: number | null,"birth_month"?: number | null,"birth_year"?: number | null,"city"?: string | null,"created_at"?: string,"email"?: string | null,"email_announcements"?: boolean,"email_event_reminders"?: boolean,"email_supper_club"?: boolean,"employer"?: string | null,"family_id"?: string | null,"first_name"?: string | null,"hide_email"?: boolean,"id"?: string,"is_unlisted"?: boolean,"last_name"?: string | null,"occupation"?: string | null,"org_id"?: string,"phone"?: string | null,"phone_home"?: string | null,"phone_mobile"?: string | null,"phone_work"?: string | null,"postal_code"?: string | null,"preferred_name"?: string | null,"relationship"?: string,"role"?: string,"setup_completed"?: boolean,"state"?: string | null,"updated_at"?: string
+                    "address_line1"?: string | null,"address_line2"?: string | null,"anniversary"?: string | null,"approved_at"?: string | null,"approved_by"?: string | null,"avatar_url"?: string | null,"bio"?: string | null,"birth_day"?: number | null,"birth_month"?: number | null,"birth_year"?: number | null,"city"?: string | null,"created_at"?: string,"email"?: string | null,"email_announcements"?: boolean,"email_event_reminders"?: boolean,"email_supper_club"?: boolean,"employer"?: string | null,"family_id"?: string | null,"first_name"?: string | null,"gender"?: string | null,"hide_email"?: boolean,"id"?: string,"is_unlisted"?: boolean,"last_name"?: string | null,"occupation"?: string | null,"org_id"?: string,"phone"?: string | null,"phone_home"?: string | null,"phone_mobile"?: string | null,"phone_work"?: string | null,"postal_code"?: string | null,"preferred_name"?: string | null,"relationship"?: string,"role"?: string,"setup_completed"?: boolean,"state"?: string | null,"suffix"?: string | null,"title"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -2300,7 +2300,7 @@ isOneToOne: false
                   ]
                 },"prayer_wall": {
                   Row: {
-                    "author_hash": string | null,"avatar_url": string | null,"body": string | null,"body_ciphertext": string | null,"created_at": string,"first_name": string | null,"group_id": string,"i_am_praying": boolean | null,"id": string,"is_anonymous": boolean,"is_answered": boolean,"last_name": string | null,"mine": boolean | null,"org_id": string,"praying_count": number | null,"preferred_name": string | null
+                    "author_hash": string | null,"avatar_url": string | null,"body": string | null,"body_ciphertext": string | null,"created_at": string,"first_name": string | null,"group_id": string,"i_am_praying": boolean | null,"id": string,"is_anonymous": boolean,"is_answered": boolean,"last_name": string | null,"mine": boolean | null,"org_id": string,"praying_count": number | null,"preferred_name": string | null,"suffix": string | null
                   }
                   ComputedFields: never
                   Relationships: [
@@ -2320,7 +2320,7 @@ isOneToOne: false
                   ]
                 },"profiles_directory": {
                   Row: {
-                    "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"avatar_url": string | null,"bio": string | null,"birth_day": number | null,"birth_month": number | null,"birth_year": number | null,"city": string | null,"created_at": string,"email": string | null,"employer": string | null,"family_id": string | null,"first_name": string | null,"groups": Json | null,"id": string,"last_name": string | null,"occupation": string | null,"org_id": string,"phone_home": string | null,"phone_mobile": string | null,"phone_work": string | null,"postal_code": string | null,"preferred_name": string | null,"relationship": string,"role": string,"state": string | null
+                    "address_line1": string | null,"address_line2": string | null,"anniversary": string | null,"avatar_url": string | null,"bio": string | null,"birth_day": number | null,"birth_month": number | null,"birth_year": number | null,"city": string | null,"created_at": string,"email": string | null,"employer": string | null,"family_id": string | null,"first_name": string | null,"gender": string | null,"groups": Json | null,"id": string,"last_name": string | null,"occupation": string | null,"org_id": string,"phone_home": string | null,"phone_mobile": string | null,"phone_work": string | null,"postal_code": string | null,"preferred_name": string | null,"relationship": string,"role": string,"state": string | null,"suffix": string | null
                   }
                   ComputedFields: never
                   Relationships: [
@@ -2496,7 +2496,7 @@ isOneToOne: false
                            },
 "pending_group_join_requests":
 { Args: { "_group_id": string }; Returns: {
-              "created_at": string,"email": string,"first_name": string,"id": string,"last_name": string,"preferred_name": string
+              "created_at": string,"email": string,"first_name": string,"id": string,"last_name": string,"preferred_name": string,"suffix": string
             }[]
                            },
 "person_deletion_outcomes":

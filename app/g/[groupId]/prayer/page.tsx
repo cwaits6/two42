@@ -78,6 +78,7 @@ async function loadThreads(opts: {
       first_name: name?.first_name ?? null,
       last_name: name?.last_name ?? null,
       preferred_name: name?.preferred_name ?? null,
+      suffix: name?.suffix ?? null,
     });
   }
   return threads;
@@ -96,7 +97,7 @@ export default async function PrayerPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("org_id, role, first_name, last_name, preferred_name, avatar_url")
+    .select("org_id, role, first_name, last_name, preferred_name, suffix, avatar_url")
     .eq("id", user.id)
     .single();
   if (!profile || profile.role === "pending") redirect("/dashboard");

@@ -79,7 +79,7 @@ export default async function ProfilePage() {
             .returns<ProfileColumns[]>()
         : supabase
             .from("profiles")
-            .select("id, first_name, last_name, preferred_name, relationship, role, avatar_url")
+            .select("id, first_name, last_name, preferred_name, suffix, relationship, role, avatar_url")
             .eq("family_id", profile.family_id)
             .neq("id", user.id)
             .order("first_name")

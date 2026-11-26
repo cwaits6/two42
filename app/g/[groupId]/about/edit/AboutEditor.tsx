@@ -113,7 +113,7 @@ export function AboutEditor({
     setCandidatesFailed(false);
     const { data, error } = await supabase
       .from("group_members")
-      .select("profiles!inner(id, first_name, last_name, preferred_name, avatar_url, role)")
+      .select("profiles!inner(id, first_name, last_name, preferred_name, suffix, avatar_url, role)")
       .eq("group_id", groupId)
       .in("profiles.role", STORED_MEMBER_ROLES);
     if (error) {

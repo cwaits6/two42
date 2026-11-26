@@ -21,6 +21,7 @@ const row: PrayerWallRow = {
   first_name: "Ada",
   last_name: "Author",
   preferred_name: null,
+  suffix: null,
   avatar_url: null,
   praying_count: 0,
   i_am_praying: false,
@@ -66,6 +67,7 @@ describe("PrayerCard", () => {
     first_name: "Ben",
     last_name: "Writer",
     preferred_name: null,
+  suffix: null,
   };
 
   it("shows the author's name on a by-name request and nothing else above the text", () => {

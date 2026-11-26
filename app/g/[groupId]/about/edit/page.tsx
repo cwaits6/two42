@@ -27,7 +27,7 @@ export default async function EditAboutPage({
     supabase
       .from("class_teachers")
       .select(
-        "*, profiles(id, first_name, last_name, preferred_name, avatar_url)",
+        "*, profiles(id, first_name, last_name, preferred_name, title, suffix, avatar_url)",
       )
       .eq("group_id", group.id)
       .order("sort_order")

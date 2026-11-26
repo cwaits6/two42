@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   // Load the caller's profile to check their role
   const { data: callerProfile } = await supabase
     .from("profiles")
-    .select("role, first_name, last_name, preferred_name")
+    .select("role, first_name, last_name, preferred_name, suffix")
     .eq("id", user.id)
     .single();
 

@@ -17,7 +17,7 @@ import {
   Phone,
 } from "lucide-react";
 import { formatPhone } from "@/lib/sanitize";
-import { displayName, initials } from "@/lib/names";
+import { displayName, formalName, initials } from "@/lib/names";
 import { GroupBadge } from "@/components/directory/GroupBadge";
 import { EDIT_MY_DETAILS_HREF, isOwnEntry } from "@/components/directory/ownEntry";
 import {
@@ -93,7 +93,7 @@ export function PersonCard({ profile, family, viewerId }: PersonCardProps) {
             profile.first_name &&
             profile.preferred_name !== profile.first_name && (
               <p className="text-base text-muted-foreground">
-                ({profile.first_name} {profile.last_name})
+                ({formalName(profile)})
               </p>
             )}
           {family && (

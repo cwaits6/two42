@@ -23,7 +23,7 @@ import { logError } from "@/lib/log";
 
 type RosterProfile = Pick<
   Profile,
-  "id" | "first_name" | "last_name" | "preferred_name" | "avatar_url"
+  "id" | "first_name" | "last_name" | "preferred_name" | "suffix" | "avatar_url"
 >;
 
 interface TeamRosterDialogProps {
@@ -73,7 +73,7 @@ export function TeamRosterDialog({
             fetchAll((from, to) =>
               supabase
                 .from("group_members")
-                .select("profile_id, profiles(id, first_name, last_name, preferred_name, avatar_url)")
+                .select("profile_id, profiles(id, first_name, last_name, preferred_name, suffix, avatar_url)")
                 .eq("group_id", groupId)
                 .order("id")
                 .range(from, to)

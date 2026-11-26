@@ -38,10 +38,10 @@ export async function GET(
   // FN — formatted display name
   card.set("fn", displayName(p));
 
-  // N — structured name: last;first;;;
+  // N — structured name: last;first;middle;prefix;suffix
   card.set(
     "n",
-    `${p.last_name ?? ""};${p.first_name ?? ""};;;`,
+    `${p.last_name ?? ""};${p.first_name ?? ""};;;${p.suffix?.trim() ?? ""}`,
   );
 
   // PHOTO — embed as URI if avatar_url is set. Private buckets:

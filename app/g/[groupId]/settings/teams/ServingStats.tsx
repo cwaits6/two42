@@ -95,7 +95,7 @@ export function ServingStats({
       let query = supabase
         .from("serving_signups")
         .select(
-          "id, service_date, team_id, serving_signup_attendees(profile_id, profiles(id, first_name, last_name, preferred_name))"
+          "id, service_date, team_id, serving_signup_attendees(profile_id, profiles(id, first_name, last_name, preferred_name, suffix))"
         )
         .in("team_id", teamIds)
         .order("service_date", { ascending: false });

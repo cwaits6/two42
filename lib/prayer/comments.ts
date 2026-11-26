@@ -30,6 +30,7 @@ export interface PrayerCommentView {
   first_name: string | null;
   last_name: string | null;
   preferred_name: string | null;
+  suffix: string | null;
 }
 
 /** 1 to COMMENT_TEXT_MAX characters after trimming, counted as the person sees them. */

@@ -1,10 +1,6 @@
-import { displayName, initials } from "@/lib/names";
+import { displayName, initials, type NameParts } from "@/lib/names";
 
-interface PersonNameParts {
-  first_name: string | null;
-  last_name: string | null;
-  preferred_name?: string | null;
-}
+type PersonNameParts = NameParts;
 
 function hasName(p: PersonNameParts): boolean {
   return [p.preferred_name, p.first_name, p.last_name].some((part) => part?.trim());

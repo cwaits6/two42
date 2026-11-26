@@ -22,5 +22,5 @@ export const CHILD_INVITE_REFUSED =
 /** Fields shown for household members the viewer can't open the edit sheet for. */
 export type HouseholdSummary = Pick<
   Profile,
-  "id" | "first_name" | "last_name" | "preferred_name" | "relationship" | "role" | "avatar_url"
+  "id" | "first_name" | "last_name" | "preferred_name" | "suffix" | "relationship" | "role" | "avatar_url"
 >;

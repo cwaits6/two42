@@ -98,6 +98,7 @@ export function PrayerBoard({
         first_name: null,
         last_name: null,
         preferred_name: me.name,
+        suffix: null,
         avatar_url: me.avatarUrl,
         praying_count: 0,
         i_am_praying: false,
@@ -183,6 +184,7 @@ export function PrayerBoard({
       first_name: null,
       last_name: null,
       preferred_name: draft.hide_name ? null : me.name,
+      suffix: null,
     };
     setComments((prev) => prev && { ...prev, [row.id]: [...(prev[row.id] ?? []), added] });
     return true;

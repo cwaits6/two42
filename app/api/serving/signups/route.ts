@@ -91,7 +91,7 @@ export async function POST(request: Request) {
       .maybeSingle(),
     supabase
       .from("profiles")
-      .select("id, first_name, last_name, preferred_name, family_id, relationship")
+      .select("id, first_name, last_name, preferred_name, suffix, family_id, relationship")
       .eq("id", user.id)
       .single(),
   ]);
@@ -137,7 +137,7 @@ export async function POST(request: Request) {
   // primary or spouse of the same household.
   const { data: attendees } = await supabase
     .from("profiles")
-    .select("id, first_name, last_name, preferred_name, family_id, relationship")
+    .select("id, first_name, last_name, preferred_name, suffix, family_id, relationship")
     .in("id", attendeeIds);
 
   if (!attendees || attendees.length !== attendeeIds.length) {
@@ -282,7 +282,7 @@ export async function PATCH(request: Request) {
   const team = signup.teams as unknown as { name: string; group_id: string } | null;
   const { data: people } = await supabase
     .from("profiles")
-    .select("id, first_name, last_name, preferred_name")
+    .select("id, first_name, last_name, preferred_name, suffix")
     .in("id", attendeeIds);
   if (team) {
     const named = (people ?? []) as NamedProfile[];
@@ -323,7 +323,7 @@ export async function DELETE(request: Request) {
   const { data: signup, error: signupError } = await supabase
     .from("serving_signups")
     .select(
-      "id, org_id, team_id, service_date, created_by, teams(name, group_id), serving_signup_attendees(profiles(id, first_name, last_name, preferred_name))"
+      "id, org_id, team_id, service_date, created_by, teams(name, group_id), serving_signup_attendees(profiles(id, first_name, last_name, preferred_name, suffix))"
     )
     .eq("id", signupId)
     .maybeSingle();

@@ -51,7 +51,7 @@ export async function GET(request: Request) {
   // Search profiles without a household, matching first or last name.
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, first_name, last_name, preferred_name, avatar_url")
+    .select("id, first_name, last_name, preferred_name, suffix, avatar_url")
     .is("family_id", null)
     .neq("id", user.id)
     .in("role", STORED_MEMBER_ROLES)

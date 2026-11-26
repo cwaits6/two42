@@ -81,7 +81,7 @@ export async function loadLeaderRoster(client: Client, groupId: string): Promise
     fetchAll((from, to) =>
       client
         .from("profiles")
-        .select("id, first_name, last_name, preferred_name")
+        .select("id, first_name, last_name, preferred_name, suffix")
         .in("role", STORED_MEMBER_ROLES)
         .order("id")
         .range(from, to),

@@ -78,7 +78,7 @@ const RELATIONSHIPS: { value: FamilyMemberRelationship; label: string }[] = [
 ];
 
 interface FamilyWithMembers extends FamilyUnit {
-  members: Pick<Profile, "id" | "first_name" | "last_name" | "preferred_name">[];
+  members: Pick<Profile, "id" | "first_name" | "last_name" | "preferred_name" | "suffix">[];
 }
 
 const FIELD_IDS: Record<HouseholdField, string> = {
@@ -185,7 +185,7 @@ export function HouseholdsManager() {
       supabase.from("family_units").select("*").order("family_name"),
       supabase
         .from("profiles")
-        .select("id, first_name, last_name, preferred_name, family_id")
+        .select("id, first_name, last_name, preferred_name, suffix, family_id")
         .not("family_id", "is", null),
     ]);
 
@@ -204,6 +204,7 @@ export function HouseholdsManager() {
         id: m.id,
         first_name: m.first_name,
         last_name: m.last_name,
+        suffix: m.suffix,
         preferred_name: m.preferred_name,
       });
     });

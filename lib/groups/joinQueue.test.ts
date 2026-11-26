@@ -13,7 +13,7 @@ function request(id: string, group: { id: string; name: string }): PendingJoinRe
   return {
     id,
     created_at: "2026-10-20T10:00:00Z",
-    requester: { first_name: "Isaac", last_name: "Seedly", preferred_name: null },
+    requester: { first_name: "Isaac", last_name: "Seedly", preferred_name: null, suffix: null },
     email: null,
     group,
   };
@@ -28,11 +28,12 @@ describe("toPendingJoinRequest", () => {
       last_name: "Seedly",
       preferred_name: "Danny",
       email: "danny@example.test",
+      suffix: "Jr.",
     });
     expect(row).toEqual({
       id: "r1",
       created_at: "2026-10-20T10:00:00Z",
-      requester: { first_name: "Daniel", last_name: "Seedly", preferred_name: "Danny" },
+      requester: { first_name: "Daniel", last_name: "Seedly", preferred_name: "Danny", suffix: "Jr." },
       email: "danny@example.test",
       group: groupA,
     });
@@ -46,9 +47,10 @@ describe("toPendingJoinRequest", () => {
       last_name: null,
       preferred_name: null,
       email: null,
+      suffix: null,
     });
     expect(row.email).toBeNull();
-    expect(row.requester).toEqual({ first_name: null, last_name: null, preferred_name: null });
+    expect(row.requester).toEqual({ first_name: null, last_name: null, preferred_name: null, suffix: null });
   });
 });
 

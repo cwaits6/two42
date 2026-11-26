@@ -5,6 +5,7 @@ export interface Requester {
   first_name: string | null;
   last_name: string | null;
   preferred_name: string | null;
+  suffix: string | null;
 }
 
 export interface PendingGroupRequest {
@@ -16,7 +17,7 @@ export interface PendingGroupRequest {
 }
 
 export const PENDING_GROUP_REQUEST_SELECT =
-  "id, name, description, created_at, requester:profiles!group_requests_requested_by_fkey(first_name, last_name, preferred_name)";
+  "id, name, description, created_at, requester:profiles!group_requests_requested_by_fkey(first_name, last_name, preferred_name, suffix)";
 
 /**
  * PostgREST returns a many-to-one embed as one object, but the generated

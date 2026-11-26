@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { requireOrgAdmin } from "@/lib/members/access";
 import { logError } from "@/lib/log";
+import { displayName, hasName } from "@/lib/names";
 import { RecordsCryptoError } from "@/lib/integrations/records/crypto";
 import { RecordsError } from "@/lib/integrations/records/errors";
 import { gateError, hidden, recordsFailure, recordsSecretOrNull } from "@/lib/integrations/records/http";
@@ -43,7 +44,7 @@ interface ChurchProfile extends ProfileForMatch {
 async function churchProfiles(supabase: Client, orgId: string): Promise<ChurchProfile[]> {
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, first_name, preferred_name, last_name, birth_month, birth_day, birth_year")
+    .select("id, first_name, preferred_name, last_name, suffix, birth_month, birth_day, birth_year")
     .eq("org_id", orgId)
     .neq("role", "pending");
   if (error) throw error;
@@ -59,7 +60,7 @@ async function churchProfiles(supabase: Client, orgId: string): Promise<ChurchPr
     birthMonth: row.birth_month,
     birthDay: row.birth_day,
     birthYear: row.birth_year,
-    name: [row.preferred_name || row.first_name, row.last_name].filter(Boolean).join(" ") || "Unnamed person",
+    name: hasName(row) ? displayName(row) : "Unnamed person",
   }));
 }
 

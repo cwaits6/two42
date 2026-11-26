@@ -59,7 +59,7 @@ export async function findSpouse(
   // embed is org-safe by the composite FK from the org-filtered roster row.
   const { data: member, error } = await supabase
     .from("team_members")
-    .select("profiles!inner(id, first_name, last_name, preferred_name, email)")
+    .select("profiles!inner(id, first_name, last_name, preferred_name, suffix, email)")
     .eq("team_id", teamId)
     .eq("org_id", orgId)
     .eq("profiles.family_id", viewer.family_id)
@@ -143,7 +143,7 @@ export async function notifyLeadersOfCancel(
   // service-role client — an unscoped read would mail another org's leaders.
   const { data: leaders, error } = await service
     .from("team_members")
-    .select("profiles(id, first_name, last_name, preferred_name, email, role)")
+    .select("profiles(id, first_name, last_name, preferred_name, suffix, email, role)")
     .eq("team_id", opts.teamId)
     .eq("org_id", opts.orgId)
     .eq("is_leader", true);

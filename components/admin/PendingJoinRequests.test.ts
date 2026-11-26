@@ -17,7 +17,7 @@ const { PendingJoinRequests } = await import("./PendingJoinRequests");
 const request = (id: string, first: string) => ({
   id,
   created_at: "2026-10-01T12:00:00Z",
-  requester: { first_name: first, last_name: "Test", preferred_name: null },
+  requester: { first_name: first, last_name: "Test", preferred_name: null, suffix: null },
   email: null,
   group: { id: "g1", name: "Group C" },
 });
