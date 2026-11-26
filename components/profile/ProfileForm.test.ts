@@ -300,8 +300,28 @@ describe("ProfileForm inline errors", () => {
       .filter((id) => id.startsWith("hide_"));
     expect(hideBoxes).toEqual(["hide_email"]);
     expect(document.body.textContent).toContain(
-      "Everything you add here shows in the directory, except a birth year, which can only go into a phone contact someone saves. Leave out anything you don't want shown.",
+      "Everything you add here shows in the directory, except a birth year, which can only go into a phone contact someone saves. Title and gender aren't shown there. Leave out anything you don't want shown.",
     );
+  });
+
+  it("saves a trimmed title, a suffix as typed and a chosen gender", async () => {
+    const form = await mount();
+    await form.type("title", "  Dr. ");
+    await form.type("suffix", "MD");
+    const female = [...document.querySelectorAll("button[aria-pressed]")].find((b) => b.textContent === "Female");
+    await act(async () => (female as HTMLElement).click());
+    await form.submit();
+
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ title: "Dr.", suffix: "MD", gender: "female" }));
+  });
+
+  it("saves a cleared title and suffix as no value", async () => {
+    const form = await mount({ title: "Pastor", suffix: "Jr." });
+    await form.type("title", "  ");
+    await form.type("suffix", "");
+    await form.submit();
+
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ title: null, suffix: null }));
   });
 
   it("shows the notice to someone editing another household member, not to an admin", async () => {

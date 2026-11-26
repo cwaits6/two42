@@ -559,7 +559,7 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
 
       <Card className="py-6">
         <CardContent className="space-y-6">
-          <DirectoryNotice />
+          <DirectoryNotice notShown="Gender isn't shown there." />
 
           <div ref={headingRef} tabIndex={-1} className="outline-none">
             {current === "About you" && (

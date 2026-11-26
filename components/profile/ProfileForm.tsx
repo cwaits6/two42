@@ -272,7 +272,7 @@ export function ProfileForm({
         ? familySurname
         : titleCaseName(state.last_name);
     const preferredName = titleCaseName(state.preferred_name);
-    // Not title-cased: that would turn "III" into "Iii".
+    // Not title-cased: that would turn "MD" into "Md".
     const title = trimText(state.title);
     const suffix = trimText(state.suffix);
     // Unchecked "different address" means: use the family's address (blank).
@@ -433,7 +433,7 @@ export function ProfileForm({
     <form onSubmit={handleSubmit} noValidate>
       <Card>
         <CardContent className="space-y-5 pt-6">
-          {!isAdmin && <DirectoryNotice />}
+          {!isAdmin && <DirectoryNotice notShown="Title and gender aren't shown there." />}
 
           {/* Photo — hidden for admins editing a profile they have no
               storage write arm for: not themselves, and not a household
