@@ -29,10 +29,10 @@ describe("householdUpdates", () => {
     });
   });
 
-  it("ignores the retired hide settings and the single date", () => {
-    expect(
-      updatesFrom({ hide_address: true, hide_phone_home: true, anniversary: "2009-10-03", city: "Austin" }),
-    ).toEqual({ city: "Austin" });
+  it("ignores the single anniversary date and keys it doesn't name", () => {
+    expect(updatesFrom({ anniversary: "2009-10-03", photo_url: "x.png", city: "Austin" })).toEqual({
+      city: "Austin",
+    });
   });
 
   it("refuses a month with no day, and writes the parts together", () => {

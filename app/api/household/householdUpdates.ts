@@ -66,9 +66,8 @@ export function householdFieldErrors(body: Record<string, unknown>): HouseholdFi
 
 /**
  * A household PATCH body as the columns to write. Keys left out of the body are
- * left alone, so the form can send only the phone choice that changed. Retired
- * keys (the hide flags and the single anniversary date) are ignored: the flags
- * are never written, so a flag set before the migration keeps its gate.
+ * left alone, so the form can send only the phone choice that changed. Keys it
+ * doesn't name, the single anniversary date included, are ignored.
  */
 export function householdUpdates(
   body: Record<string, unknown>,
