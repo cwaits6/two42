@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emailOutcome, movedNotice, publishedNotice } from "./emailOutcome";
+import { deletedNotice, emailOutcome, movedNotice, publishedNotice } from "./emailOutcome";
 
 describe("emailOutcome", () => {
   it("is unsent when a send failed, the cap refused the batch, or the send threw", () => {
@@ -46,5 +46,17 @@ describe("publishedNotice", () => {
     expect(publishedNotice({ changed: 0, ...emailOutcome({ sent: 0, failed: 0, capped: false }) }).text).toBe(
       "Tables published. No one's table changed."
     );
+  });
+});
+
+describe("deletedNotice", () => {
+  it("only succeeds when everyone at the date's suppers was emailed", () => {
+    expect(deletedNotice(emailOutcome({ sent: 3, failed: 0, capped: false }))).toEqual({ kind: "success", text: "Date deleted." });
+    expect(deletedNotice(emailOutcome({ sent: 2, failed: 1, capped: false }))).toEqual({
+      kind: "warning",
+      text: "Date deleted. Some emails didn't go out. Let the tables know their supper is off.",
+    });
+    expect(deletedNotice(emailOutcome(null)).text).toBe("Date deleted. No emails went out. Let the tables know their supper is off.");
+    expect(deletedNotice(emailOutcome({ sent: 0, failed: 0, capped: true })).text).toContain("email limit");
   });
 });

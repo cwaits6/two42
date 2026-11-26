@@ -1,17 +1,19 @@
-// Supper club emails sent from the app: the tables once published, and a
-// supper's new date once moved. The recipients' addresses are readable only
+// Supper club emails sent from the app: the tables once published, a
+// supper's new date once moved, and a supper that is off once its date is
+// deleted. The recipients' addresses are readable only
 // on the service client, so every chain here filters on the orgId the route
 // resolved from the caller's session, and recipients come only from the
 // seats of the tables concerned.
 
-import { Resend } from "resend";
 import { formatFromHeader, resolveEmailBranding } from "@/lib/email/identity";
 import { reserveEmailQuota } from "@/lib/email/quota";
+import { sendEmail } from "@/lib/email/send";
 import { siteConfig } from "@/lib/config";
 import { logError, logWarn } from "@/lib/log";
 import { createServiceClient } from "@/lib/supabase/server";
 import { orgTimeZoneById } from "@/lib/time/orgZone";
 import {
+  supperCancelledEmail,
   supperMovedEmail,
   supperTablesEmail,
   greetingName,
@@ -28,10 +30,6 @@ interface Recipient {
   id: string;
   email: string;
   name: string | null;
-}
-
-function getResend() {
-  return new Resend(process.env.RESEND_API_KEY);
 }
 
 /** The people who get Supper club email, of those named, in this church. */
@@ -92,13 +90,12 @@ async function send(orgId: string, messages: Message[]): Promise<NotifyResult> {
     return { sent: 0, failed: 0, capped: true };
   }
   const b = await resolveEmailBranding(orgId);
-  const resend = getResend();
   let sent = 0;
   let failed = 0;
   for (const { to, build } of messages) {
     const email = build({ orgName: b.orgName, accent: b.accent });
     try {
-      const { error } = await resend.emails.send({
+      const { error } = await sendEmail({
         from: formatFromHeader(b.orgName, b.fromAddress),
         to: to.email,
         ...(b.replyTo ? { replyTo: b.replyTo } : {}),
@@ -283,4 +280,81 @@ export async function notifySuppersMoved(
     });
   });
   return send(orgId, messages);
+}
+
+/**
+ * The emails for a rotation date about to be deleted: one to each person at
+ * each of its suppers, saying it's off, and none to the person deleting it.
+ * Read before the delete, because the date's suppers go with it, and so do
+ * the tables and seats of a rotation whose tables change each supper. Call
+ * the answer once the delete is saved.
+ */
+export async function prepareDateDeletedEmails(
+  orgId: string,
+  dateId: string,
+  actorId: string,
+): Promise<() => Promise<NotifyResult>> {
+  const service = await createServiceClient();
+
+  const { data: suppers, error: suppersError } = await service
+    .from("suppers")
+    .select("id, table_id, rotation_id, group_id, starts_at")
+    .eq("org_id", orgId)
+    .eq("rotation_date_id", dateId)
+    .order("starts_at");
+  if (suppersError) throw new Error("Failed to load suppers");
+  if (!suppers?.length) return async () => NOTHING;
+
+  const { data: rotation, error: rotationError } = await service
+    .from("supper_rotations")
+    .select("id, title")
+    .eq("org_id", orgId)
+    .eq("id", suppers[0].rotation_id)
+    .eq("status", "published")
+    .maybeSingle();
+  if (rotationError) throw new Error("Failed to load the Supper club rotation");
+  // An ended rotation sends no more supper email.
+  if (!rotation) return async () => NOTHING;
+
+  const { data: seats, error: seatsError } = await service
+    .from("supper_seats")
+    .select("table_id, party_id")
+    .eq("org_id", orgId)
+    .is("left_at", null)
+    .in("table_id", [...new Set(suppers.map((d) => d.table_id))]);
+  if (seatsError) throw new Error("Failed to load Supper club seats");
+
+  const people = await partyPeople(service, orgId, [...new Set((seats ?? []).map((s) => s.party_id))]);
+  const to = await recipients(
+    service,
+    orgId,
+    [...people.values()].flat().filter((id) => id !== actorId),
+  );
+  const zone = await orgTimeZoneById(service, orgId);
+
+  const emailed = new Set<string>();
+  const messages = suppers.flatMap((d): Message[] =>
+    (seats ?? [])
+      .filter((s) => s.table_id === d.table_id)
+      .flatMap((s) => people.get(s.party_id) ?? [])
+      .flatMap((id) => {
+        const person = to.get(id);
+        if (!person || emailed.has(id)) return [];
+        emailed.add(id);
+        return [
+          {
+            to: person,
+            build: (brand) =>
+              supperCancelledEmail({
+                ...brand,
+                name: person.name,
+                rotationTitle: rotation.title,
+                dateLabel: supperWhen(d.starts_at, zone),
+                pageUrl: pageUrl(d.group_id),
+              }),
+          },
+        ];
+      }),
+  );
+  return () => send(orgId, messages);
 }

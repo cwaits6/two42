@@ -7,7 +7,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { movedNotice } from "@/lib/supperClub/emailOutcome";
+import { deletedNotice, movedNotice, type EmailOutcome } from "@/lib/supperClub/emailOutcome";
 import { supperWhen, type RotationStatus } from "@/lib/supperClub/labels";
 import { failureMessage } from "@/lib/errorCopy";
 import { createClient } from "@/lib/supabase/client";
@@ -15,6 +15,17 @@ import { localToUTCISO } from "@/lib/time/zone";
 import { MoveDialog, postMove } from "./MoveDialog";
 
 type DateRow = { id: string; startsAt: string };
+
+async function deleteDate(dateId: string): Promise<{ ok: true; outcome: EmailOutcome | null } | { ok: false; message?: string }> {
+  try {
+    const res = await fetch(`/api/supper-club/rotation-dates/${dateId}`, { method: "DELETE" });
+    if (res.ok) return { ok: true, outcome: (await res.json().catch(() => null)) as EmailOutcome | null };
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    return { ok: false, message: res.status === 400 ? body?.error : undefined };
+  } catch {
+    return { ok: false };
+  }
+}
 
 export function RotationDates({
   groupId,
@@ -134,22 +145,23 @@ export function RotationDates({
         open={Boolean(deleting)}
         onOpenChange={(open) => !open && setDeleting(null)}
         title="Delete this date?"
-        description={published ? "Each table's supper on this date is deleted too." : "It comes off the rotation's dates."}
+        description={
+          published
+            ? "Each table's supper on this date is deleted too. The people at those tables get an email saying it's off."
+            : "It comes off the rotation's dates."
+        }
         confirmLabel="Delete date"
         pendingLabel="Deleting…"
         onConfirm={async () => {
           if (!deleting) return;
-          const { data, error } = await createClient().from("supper_rotation_dates").delete().eq("id", deleting.id).select("id");
-          if (error?.code === "SC005") {
-            toast.error("A date whose suppers have happened stays.");
-            return;
-          }
-          if (error || !data?.length) {
-            toast.error(failureMessage("delete the date"));
+          const result = await deleteDate(deleting.id);
+          if (!result.ok) {
+            toast.error(result.message ?? failureMessage("delete the date"));
             return;
           }
           setDeleting(null);
-          toast.success("Date deleted.");
+          const notice = deletedNotice(result.outcome);
+          toast[notice.kind](notice.text);
           router.refresh();
         }}
       />

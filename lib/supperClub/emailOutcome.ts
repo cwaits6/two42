@@ -59,3 +59,13 @@ export function publishedNotice(outcome: EmailOutcome & { changed: number }): No
   if (outcome.sent === 0) return { kind: "success", text: "Tables published." };
   return { kind: "success", text: `Tables published. ${people(outcome.sent)} emailed.` };
 }
+
+/** After a rotation date and its suppers were deleted. */
+export function deletedNotice(outcome: EmailOutcome | null): Notice {
+  const saved = "Date deleted.";
+  if (!outcome || !outcome.unsent) return { kind: "success", text: saved };
+  if (outcome.capped) {
+    return { kind: "warning", text: `${saved} Today's email limit was reached, so no emails went out. Let the tables know their supper is off.` };
+  }
+  return { kind: "warning", text: `${saved} ${unsentCount(outcome)} Let the tables know their supper is off.` };
+}

@@ -281,3 +281,23 @@ ${button(opts.pageUrl, "Reply", opts.accent)}`,
     ),
   };
 }
+
+export function supperCancelledEmail(opts: {
+  orgName: string;
+  accent: string;
+  name: string | null;
+  rotationTitle: string;
+  dateLabel: string;
+  pageUrl: string;
+}): RenderedEmail {
+  return {
+    subject: `${opts.rotationTitle}: your supper on ${opts.dateLabel} is off`,
+    html: emailLayout(
+      opts.orgName,
+      `${heading("Your supper is off")}
+${paragraph(`${greeting(opts.name)} the leader deleted ${strong(opts.dateLabel)} from ${strong(opts.rotationTitle)}, so your supper that day is off.`)}
+${paragraph("Your other suppers stay as they are.")}
+${button(opts.pageUrl, "View my table", opts.accent)}`,
+    ),
+  };
+}
