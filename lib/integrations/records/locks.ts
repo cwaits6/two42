@@ -4,7 +4,6 @@
 // lands.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import { recordsIntegrationEnabled } from "./enabled";
 
 /**
  * The people in `orgId` whose name comes locked from the church's records.
@@ -12,7 +11,6 @@ import { recordsIntegrationEnabled } from "./enabled";
  * filter on it holds whichever client is passed.
  */
 export async function lockedNameProfiles(supabase: SupabaseClient<Database>, orgId: string): Promise<Set<string>> {
-  if (!recordsIntegrationEnabled()) return new Set();
   const { data: setting, error: settingError } = await supabase
     .from("records_field_settings")
     .select("mode")

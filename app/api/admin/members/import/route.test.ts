@@ -71,4 +71,24 @@ describe("POST /api/admin/members/import", () => {
     expect(await res.json()).toEqual({ error: "Failed to load member data" });
     expect(fake.writes).toEqual([]);
   });
+
+  it("leaves a name locked by the church's records alone and says so on the row", async () => {
+    const csv = (await exportedCsv()).replace("Chloe", "Chlo");
+    const fake = fakeRosterClient({
+      tables: HIDDEN_ROSTER,
+      addresses: { data: [HIDDEN_ADDRESS], error: null },
+      records: {
+        records_field_settings: [{ org_id: "org-1", field: "name", mode: "locked" }],
+        records_field_values: [{ org_id: "org-1", profile_id: "p1", field: "name", state: "records" }],
+      },
+    });
+    asAdmin(fake.client);
+
+    const res = await upload(csv, "validate");
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.summary).toMatchObject({ rows: 1, update: 0, noChange: 1 });
+    expect(body.rows[0].warnings).toContain("Name is managed by your church's records; left as it is.");
+  });
 });

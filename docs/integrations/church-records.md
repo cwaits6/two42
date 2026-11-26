@@ -175,8 +175,9 @@ custom fields.
 ### For the operator
 
 The integration is off unless `RECORDS_KEY_SECRET` is set: 32 random bytes,
-base64. Without it every church records route answers 404 and no screen
-mentions it. Generate one with `openssl rand -base64 32` and set it in
+base64. Without it every church records route answers 404 and the settings
+page is gone; details already copied keep their labels, and a locked one stays
+locked, because the database keeps enforcing the settings it holds. Generate one with `openssl rand -base64 32` and set it in
 Production only, like the prayer keys. Changing it makes every saved key
 unreadable, and each church admin has to connect again; the links stay.
 
@@ -319,7 +320,7 @@ and kept up to date.
   `phone_mobile`, `phone_work`, `birthday`, `anniversary` (the household's;
   each linked person's records hold their own, so while two linked people in
   a household differ, the first one copied stands and the other's isn't
-  recorded),
+  recorded, though a member's change or clear of it is kept),
   `photo` and `grade` (the person's own household member row). The preferred
   name follows `name`, and is never locked. Turning a field off removes its
   sources, so its values become ordinary two42 data; any change asks the next

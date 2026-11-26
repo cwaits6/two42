@@ -7,7 +7,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { logError } from "@/lib/log";
 import { agreedAnniversary, type ProfileRecords } from "./labels";
-import { recordsIntegrationEnabled } from "./enabled";
 
 /**
  * Each requested person's records state; every one is present, with no
@@ -21,7 +20,7 @@ export type RecordsRead = { ok: true; byProfile: Record<string, ProfileRecords> 
 /** `noticeFor` is the signed-in person, the only one whose notice anyone reads. */
 export async function readProfileRecords(profileIds: string[], noticeFor?: string): Promise<RecordsRead> {
   const empty = (): ProfileRecords => ({ settings: {}, values: {}, noticeDue: false });
-  if (!recordsIntegrationEnabled() || profileIds.length === 0) {
+  if (profileIds.length === 0) {
     return { ok: true, byProfile: Object.fromEntries(profileIds.map((id) => [id, empty()])) };
   }
   const supabase = await createClient();

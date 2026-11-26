@@ -64,11 +64,9 @@ describe("readProfileRecords", () => {
     expect(await readProfileRecords(["me"], "me")).toEqual({ ok: false });
   });
 
-  it("reads nothing while the integration is off", async () => {
+  it("still reads the sources while the integration is off, since the database keeps enforcing a lock", async () => {
     enabled.mockReturnValue(false);
-    expect(await readProfileRecords(["me"], "me")).toEqual({
-      ok: true,
-      byProfile: { me: { settings: {}, values: {}, noticeDue: false } },
-    });
+    const read = await readProfileRecords(["me"], "me");
+    expect(read.ok && read.byProfile.me.settings).toEqual({ name: "locked" });
   });
 });
