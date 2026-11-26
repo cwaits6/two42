@@ -639,8 +639,9 @@ describe("when plans change after publishing", () => {
       ["d1"],
       0
     );
-    const { draft: moved, unplaced } = moveGuests(draft, "B", byId, 8, []);
+    const { draft: moved, unplaced, noOtherTable } = moveGuests(draft, "B", byId, 8, []);
     expect(unplaced).toEqual(["c1"]);
+    expect(noOtherTable).toBe(false);
     expect(moved).toBe(draft);
   });
 
@@ -653,8 +654,9 @@ describe("when plans change after publishing", () => {
       ["d1"],
       0
     );
-    const { draft: moved, unplaced } = moveGuests(draft, "A", byId, 8, []);
+    const { draft: moved, unplaced, noOtherTable } = moveGuests(draft, "A", byId, 8, []);
     expect(unplaced).toEqual(["c1", "s1"]);
+    expect(noOtherTable).toBe(true);
     expect(moved).toBe(draft);
   });
 

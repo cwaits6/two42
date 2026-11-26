@@ -74,10 +74,17 @@ function OptionSelect({
   );
 }
 
-/** A one-host table's host: the party hosting the most of its dates. */
-function mostHosting(t: DraftTable): string | null {
+/**
+ * A one-host table's host: the party hosting the most of its dates. Dates
+ * whose host can't host are left out, so a one-night stand-in never reads as
+ * the table's host.
+ */
+function mostHosting(t: DraftTable, skip: (seasonDateId: string) => boolean): string | null {
   const counts = new Map<string, number>();
-  for (const h of t.hosts) if (h.partyId) counts.set(h.partyId, (counts.get(h.partyId) ?? 0) + 1);
+  const regular = t.hosts.filter((h) => !skip(h.seasonDateId));
+  for (const h of regular.length > 0 ? regular : t.hosts) {
+    if (h.partyId) counts.set(h.partyId, (counts.get(h.partyId) ?? 0) + 1);
+  }
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 }
 
@@ -113,7 +120,7 @@ export function TablesEditor({
   /** Season dates still to come. */
   futureDateIds: string[];
   /** Dinners still to come whose host said they can't host: the published host, by `dinnerKey(tableId, seasonDateId)`. */
-  cantHost: Record<string, string | null>;
+  cantHost: Record<string, string>;
   /** Parties who shared a table in the last two seasons. */
   pastPairs: [string, string][];
 }) {
@@ -315,13 +322,12 @@ export function TablesEditor({
               // A held dinner keeps its host, so only a rotating table's
               // dinners still to come offer a host to pick.
               const isHeld = (d: string) => Boolean(t.tableId && held.has(dinnerKey(t.tableId, d)));
+              const isCantHost = (d: string) => Boolean(t.tableId && dinnerKey(t.tableId, d) in cantHost);
               const hostDates =
                 format === "same_table_rotating"
                   ? t.hosts.filter((h) => !isHeld(h.seasonDateId))
-                  : [{ seasonDateId: t.hosts[0]?.seasonDateId ?? "", partyId: mostHosting(t) }];
-              const cantHostDates = t.tableId
-                ? t.hosts.filter((h) => dinnerKey(t.tableId!, h.seasonDateId) in cantHost)
-                : [];
+                  : [{ seasonDateId: t.hosts[0]?.seasonDateId ?? "", partyId: mostHosting(t, isCantHost) }];
+              const cantHostDates = t.hosts.filter((h) => isCantHost(h.seasonDateId));
               const needsHost = cantHostDates.length > 0 || Boolean(w?.noHost);
               return (
                 <Card key={t.key}>
@@ -397,13 +403,13 @@ export function TablesEditor({
                             future.has(o.seasonDateId) &&
                             o.partyId &&
                             o.partyId !== absent &&
-                            !(dinnerKey(t.tableId!, o.seasonDateId) in cantHost)
+                            !isCantHost(o.seasonDateId)
                         )
                         .map((o) => ({ value: o.seasonDateId, label: `${dateLabel.get(o.seasonDateId)}: ${names[o.partyId!]}` }));
                       return (
                         <div key={h.seasonDateId} className="space-y-3 rounded-xl border border-destructive/40 bg-destructive/5 p-4">
                           <p className="text-lg font-semibold">
-                            {absent ? names[absent] : "The host"} can&apos;t host on {date}.
+                            {names[absent] ?? "The host"} can&apos;t host on {date}.
                           </p>
                           {standIn && (
                             <p className="text-base">{names[standIn]} hosts instead. Publish to tell the table.</p>
@@ -438,9 +444,9 @@ export function TablesEditor({
                                 const moved = moveGuests(draft!, t.key, byId, tableSize.max, pastPairs);
                                 if (moved.draft === draft) {
                                   toast.error(
-                                    moved.unplaced.length > 0
-                                      ? `Not enough room on ${date} for ${moved.unplaced.map((id) => names[id]).join("; ")}, so nobody was moved. Move or swap guests by hand, or move the dinner.`
-                                      : `No other table on ${date}, so nobody was moved. Move the dinner instead.`
+                                    moved.noOtherTable
+                                      ? `No other table on ${date}, so nobody was moved. Move the dinner instead.`
+                                      : `Not enough room on ${date} for ${moved.unplaced.map((id) => names[id]).join("; ")}, so nobody was moved. Move or swap guests by hand, or move the dinner.`
                                   );
                                   return;
                                 }
