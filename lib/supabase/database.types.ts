@@ -1399,14 +1399,14 @@ isOneToOne: false
                   ]
                 },"records_household_suggestions": {
                   Row: {
-                    "connection_id": string,"created_at": string,"external_family_id": string,"family_name": string | null,"id": string,"org_id": string,"people": NonNullable<Json>,"ready": boolean,"target_family_id": string | null
+                    "basis": NonNullable<Json>,"connection_id": string,"created_at": string,"external_family_id": string,"family_name": string | null,"id": string,"org_id": string,"people": NonNullable<Json>,"ready": boolean,"target_family_id": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "connection_id": string,"created_at"?: string,"external_family_id": string,"family_name"?: string | null,"id"?: string,"org_id"?: string,"people": NonNullable<Json>,"ready": boolean,"target_family_id"?: string | null
+                    "basis"?: NonNullable<Json>,"connection_id": string,"created_at"?: string,"external_family_id": string,"family_name"?: string | null,"id"?: string,"org_id"?: string,"people": NonNullable<Json>,"ready": boolean,"target_family_id"?: string | null
                   }
                   Update: {
-                    "connection_id"?: string,"created_at"?: string,"external_family_id"?: string,"family_name"?: string | null,"id"?: string,"org_id"?: string,"people"?: NonNullable<Json>,"ready"?: boolean,"target_family_id"?: string | null
+                    "basis"?: NonNullable<Json>,"connection_id"?: string,"created_at"?: string,"external_family_id"?: string,"family_name"?: string | null,"id"?: string,"org_id"?: string,"people"?: NonNullable<Json>,"ready"?: boolean,"target_family_id"?: string | null
                   }
                   Relationships: [
                     {
@@ -2794,7 +2794,7 @@ isOneToOne: false
 { Args: { "_expected": Json,"_filled": (string)[],"_grade": Json,"_household": Json,"_org_id": string,"_profile": Json,"_profile_id": string,"_values": Json }; Returns: string
                            },
 "records_apply_household_copy":
-{ Args: { "_expected": Json,"_family_id": string,"_household": Json,"_org_id": string,"_values": Json }; Returns: string
+{ Args: { "_connection_id": string,"_expected": Json,"_family_id": string,"_household": Json,"_org_id": string,"_values": Json }; Returns: string
                            },
 "records_confirm_household":
 { Args: { "_confirmed_by": string,"_org_id": string,"_suggestion_id": string }; Returns: string
@@ -2827,7 +2827,7 @@ isOneToOne: false
 { Args: { "_org_id": string,"_settings": Json,"_updated_by": string }; Returns: string
                            },
 "records_sync_child_suggestions":
-{ Args: { "_children": Json,"_external_family_id": string,"_family_id": string,"_org_id": string }; Returns: number
+{ Args: { "_children": Json,"_connection_id": string,"_external_family_id": string,"_family_id": string,"_org_id": string }; Returns: number
                            },
 "review_group_join_request":
 { Args: { "_approve": boolean,"_request_id": string }; Returns: string

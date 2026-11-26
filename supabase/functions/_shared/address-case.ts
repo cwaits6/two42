@@ -70,8 +70,8 @@ export function normalizeState(raw: string | null | undefined): string | null {
   const upper = trimmed.toUpperCase();
   if (upper.length === 2 && VALID_STATE_ABBRS.has(upper)) return upper;
 
-  const fullMatch = STATE_NAMES[trimmed.toLowerCase()];
-  return fullMatch ?? null;
+  const key = trimmed.toLowerCase();
+  return Object.hasOwn(STATE_NAMES, key) ? STATE_NAMES[key] : null;
 }
 
 /**
@@ -82,8 +82,7 @@ export function normalizePostalCode(
   raw: string | null | undefined,
 ): string | null {
   if (!raw) return null;
-  const digits = raw.replace(/\D/g, "");
-  if (digits.length === 5) return digits;
-  if (digits.length === 9) return `${digits.slice(0, 5)}-${digits.slice(5)}`;
-  return null;
+  const match = /^(\d{5})(?:-?(\d{4}))?$/.exec(raw.replace(/\s/g, ""));
+  if (!match) return null;
+  return match[2] ? `${match[1]}-${match[2]}` : match[1];
 }

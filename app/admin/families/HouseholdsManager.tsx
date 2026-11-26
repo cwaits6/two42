@@ -926,7 +926,7 @@ export function HouseholdsManager() {
                 <FieldError fieldId="f_zip" message={formErrors.postal_code} />
               </div>
             </div>
-            <RecordsNote records={detailRecords} field="address" onUseChurchValue={restoreChurchValue} busy={restoring} />
+            <RecordsNote records={detailRecords} field="address" onUseChurchValue={restoreChurchValue} busy={restoring || saving} />
 
             {form.phone_profile_id ? (
               <div className="space-y-2">
@@ -959,7 +959,7 @@ export function HouseholdsManager() {
                   {...invalidFieldProps("f_phone", formErrors.phone_home)}
                 />
                 <FieldError fieldId="f_phone" message={formErrors.phone_home} />
-                <RecordsNote records={detailRecords} field="phone_home" onUseChurchValue={restoreChurchValue} busy={restoring} />
+                <RecordsNote records={detailRecords} field="phone_home" onUseChurchValue={restoreChurchValue} busy={restoring || saving} />
               </div>
             )}
 
@@ -977,7 +977,7 @@ export function HouseholdsManager() {
                 records={detailRecords}
                 field="anniversary"
                 onUseChurchValue={restoreChurchValue}
-                busy={restoring}
+                busy={restoring || saving}
               />
               <p className="text-base text-muted-foreground">
                 Shown on the household&apos;s directory card only when a spouse is listed.
@@ -1244,7 +1244,7 @@ export function HouseholdsManager() {
               </Button>
               <Button
                 onClick={handleSave}
-                disabled={saving}
+                disabled={saving || restoring}
               >
                 {saving ? "Saving…" : editing ? "Save changes" : "Add household"}
               </Button>

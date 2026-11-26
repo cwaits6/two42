@@ -75,8 +75,11 @@ export function RecordsHouseholds({ label }: { label: string }) {
         setError(errorText("load the household suggestions", res.status, res.data));
         return;
       }
-      setData(res.data as unknown as HouseholdsData);
-      setExcluded(new Set());
+      const loaded = res.data as unknown as HouseholdsData;
+      setData(loaded);
+      // A reload after a stopped batch must not re-select what the admin excluded.
+      const ids = new Set(loaded.suggestions.map((s) => s.id));
+      setExcluded((prev) => new Set([...prev].filter((id) => ids.has(id))));
     } catch (err) {
       logError("Church records households load failed", err, { route: "/admin/settings/church-records" });
       setError(NETWORK_ERROR);

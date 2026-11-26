@@ -17,12 +17,12 @@ const { SuggestedChildren, childDetails } = await import("./SuggestedChildren");
 const LILY = { id: "s-1", first_name: "Lily", last_name: "Mockingham", birth_month: 3, birth_day: 3, graduation_year: 2034 };
 const TODAY = new Date(Date.UTC(2026, 10, 26));
 
-let root: Root;
+let root: Root | undefined;
 async function mount(suggestions = [LILY]) {
   const host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
-  await act(async () => root.render(createElement(SuggestedChildren, { suggestions, today: TODAY })));
+  await act(async () => root!.render(createElement(SuggestedChildren, { suggestions, today: TODAY })));
 }
 const button = (text: string) => [...document.querySelectorAll("button")].find((b) => b.textContent === text)!;
 
@@ -31,7 +31,8 @@ beforeEach(() => {
   rpc.mockResolvedValue({ data: null, error: null });
 });
 afterEach(() => {
-  act(() => root.unmount());
+  if (root) act(() => root!.unmount());
+  root = undefined;
   document.body.innerHTML = "";
 });
 

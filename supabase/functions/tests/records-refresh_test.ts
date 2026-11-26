@@ -686,10 +686,15 @@ Deno.test("no refresh changes a household's people: groupings are only stored as
     target_family_id: H1,
     family_name: null,
     people: [{ profile_id: P4, from_family_id: H2, relationship: "spouse" }],
+    basis: [
+      { profile_id: P1, external_person_id: "100", family_id: H1 },
+      { profile_id: P4, external_person_id: "103", family_id: H2 },
+    ],
     ready: false,
   }]);
-  // The linked household's address is filled through the copy's own check.
+  // The linked household's address is filled through the copy's own check, bound to this refresh's connection.
   const apply = rpcs[fns.indexOf("records_apply_household_copy")];
+  assertEquals(apply._connection_id, CONNECTION);
   assertEquals((apply._household as Record<string, unknown>).address_line1, "12 Oak St");
   assertEquals((apply._expected as { family: string }).family, "500");
   // Home phone is off in the field settings, so the family's home phone isn't copied or tracked.
@@ -770,9 +775,9 @@ Deno.test("a refresh cut short at an added child's photo hasn't finished", async
 Deno.test("records that can't be reached while reading families fail the run instead of blaming the key", async () => {
   const { db, calls } = fakeDb(HOUSEHOLD_FIXTURE);
   const { source } = householdSource({ familyOf: () => Promise.reject(new RecordsError("unreachable")) });
-  await logged(async () => {
-    await assertRejects(() => refreshOrg(db, options(source)), RecordsError);
-  });
+  let thrown: unknown;
+  await logged(() => refreshOrg(db, options(source)).catch((err) => void (thrown = err)));
+  assert(thrown instanceof RecordsError);
   const release = calls.filter((c) => c.table === "records_refresh_state" && c.op === "update").at(-1)!;
   assertEquals((release.values as { running_since: null }).running_since, null);
   assertFalse("last_counts" in (release.values as Record<string, unknown>));
@@ -796,6 +801,7 @@ Deno.test("with the switch on, a linked household's children are suggested witho
   await refreshOrg(db, options(source));
   assertEquals(asked.children, [true]);
   const sync = rpcs[fns.indexOf("records_sync_child_suggestions")];
+  assertEquals(sync._connection_id, CONNECTION);
   assertEquals(sync._children, [{
     external_person_id: "900",
     first_name: "Lily",
@@ -844,6 +850,25 @@ Deno.test("an added child's photo fills an empty photo only, and the token is le
   assertEquals(removed, [MEMBER]);
   const write = calls.find((c) => c.table === "family_members" && c.op === "update+select")!;
   assert(write.filters.some(([op, column]) => op === "is" && column === "avatar_url"));
+  const cleared = calls.filter((c) => c.table === "records_child_suggestions" && c.op === "update");
+  assertEquals(cleared.map((c) => c.filters.find(([, column]) => column === "id")?.[2]), ["c1"]);
+});
+
+Deno.test("a retried child photo already in place is kept", async () => {
+  const removed: string[] = [];
+  const { db, calls } = fakeDb({
+    ...HOUSEHOLD_FIXTURE,
+    childSuggestions: [{ id: "c1", family_member_id: MEMBER, photo: "7" }],
+    familyMembers: [{ id: MEMBER, avatar_url: "https://storage/child.jpg" }],
+    updated: { family_members: [] },
+  });
+  const { source } = householdSource();
+  source.photo = () => Promise.resolve(new Uint8Array([0xff, 0xd8, 0xff, 0x00]));
+  await refreshOrg(db, options(source, {
+    storeChildPhoto: () => Promise.resolve("https://storage/child.jpg"),
+    removeChildPhoto: (_org, id) => (removed.push(id), Promise.resolve()),
+  }));
+  assertEquals(removed, []);
   const cleared = calls.filter((c) => c.table === "records_child_suggestions" && c.op === "update");
   assertEquals(cleared.map((c) => c.filters.find(([, column]) => column === "id")?.[2]), ["c1"]);
 });

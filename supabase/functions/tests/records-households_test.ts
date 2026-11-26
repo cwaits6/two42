@@ -71,6 +71,11 @@ Deno.test("two linked people of one family in different households are one sugge
       { profile_id: "kid", from_family_id: H1, relationship: "child" },
       { profile_id: "cindy", from_family_id: H2, relationship: "spouse" },
     ],
+    basis: [
+      { profile_id: "cindy", external_person_id: "r-cindy", family_id: H2 },
+      { profile_id: "kid", external_person_id: "r-kid", family_id: H1 },
+      { profile_id: "ted", external_person_id: "r-ted", family_id: H1 },
+    ],
     ready: false,
   });
 });
@@ -90,7 +95,17 @@ Deno.test("a family already sharing an unlinked household is a link-only suggest
   const a = profile("a", { family_id: H1 });
   const b = profile("b", { family_id: H1, relationship: "spouse" });
   const [s] = planHouseholdSuggestions(input({ people: [a, b], families: [family("F", [adult("a", true), adult("b", true)])] }));
-  assertEquals(s, { external_family_id: "F", target_family_id: H1, family_name: null, people: [], ready: true });
+  assertEquals(s, {
+    external_family_id: "F",
+    target_family_id: H1,
+    family_name: null,
+    people: [],
+    basis: [
+      { profile_id: "a", external_person_id: "r-a", family_id: H1 },
+      { profile_id: "b", external_person_id: "r-b", family_id: H1 },
+    ],
+    ready: true,
+  });
 });
 
 Deno.test("a household already linked to its family, with nothing to change, isn't suggested", () => {

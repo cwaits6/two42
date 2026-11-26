@@ -243,6 +243,7 @@ export function HouseholdClient({
   // ---- Household info ----
   async function handleSaveInfo(e: React.FormEvent) {
     e.preventDefault();
+    if (restoring) return;
 
     const choice = info.phone_choice === SHARED_PHONE ? null : info.phone_choice;
     const body = {
@@ -515,7 +516,7 @@ export function HouseholdClient({
               records={householdDetailRecords}
               field="address"
               onUseChurchValue={() => restoreChurchValue("address")}
-              busy={restoring}
+              busy={restoring || savingInfo}
             />
 
             <Separator />
@@ -565,7 +566,7 @@ export function HouseholdClient({
                   records={householdDetailRecords}
                   field="phone_home"
                   onUseChurchValue={() => restoreChurchValue("phone_home")}
-                  busy={restoring}
+                  busy={restoring || savingInfo}
                 />
               </div>
             )}
@@ -586,12 +587,12 @@ export function HouseholdClient({
                 records={householdDetailRecords}
                 field="anniversary"
                 onUseChurchValue={() => restoreChurchValue("anniversary")}
-                busy={restoring}
+                busy={restoring || savingInfo}
               />
             </div>
 
             <div className="border-t pt-5">
-              <Button type="submit" size="lg" disabled={savingInfo}>
+              <Button type="submit" size="lg" disabled={savingInfo || restoring}>
                 {savingInfo ? "Saving…" : "Save household"}
               </Button>
             </div>

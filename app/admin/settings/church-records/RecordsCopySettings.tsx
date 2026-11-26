@@ -120,6 +120,7 @@ export function RecordsCopySettings({ label }: { label: string }) {
         failed: counted("failed"),
         photosSkipped: counted("photosSkipped"),
         householdsUnavailable: res.data?.householdsUnavailable === true,
+        stoppedAtBudget: res.data?.stoppedAtBudget === true,
       });
       if (message.tone === "success") toast.success(message.text);
       else toast.warning(message.text);

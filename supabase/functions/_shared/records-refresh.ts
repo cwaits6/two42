@@ -109,6 +109,7 @@ export type ReplaceSuggestionsArgs = {
 
 export type ApplyHouseholdCopyArgs = {
   _org_id: string;
+  _connection_id: string;
   _family_id: string;
   /** The family the copy was read from, the household's columns and each field's state as read. */
   _expected: { family: string; household: Columns; states: Record<string, ValueState | null> };
@@ -118,6 +119,7 @@ export type ApplyHouseholdCopyArgs = {
 
 export type SyncChildrenArgs = {
   _org_id: string;
+  _connection_id: string;
   _family_id: string;
   _external_family_id: string;
   _children: ReturnType<typeof childSuggestionRows>;
@@ -911,6 +913,7 @@ async function householdStep(db: RecordsRefreshClient, options: RefreshOptions, 
     if (householdPlanChanges(plan, prior)) {
       const { data, error } = await db.rpc("records_apply_household_copy", {
         _org_id: orgId,
+        _connection_id: connectionId,
         _family_id: link.family_id,
         _expected: {
           family: link.external_family_id,
@@ -932,6 +935,7 @@ async function householdStep(db: RecordsRefreshClient, options: RefreshOptions, 
     if (suggestChildren) {
       const { error } = await db.rpc("records_sync_child_suggestions", {
         _org_id: orgId,
+        _connection_id: connectionId,
         _family_id: link.family_id,
         _external_family_id: link.external_family_id,
         _children: childSuggestionRows(family.children, {
@@ -988,6 +992,20 @@ async function addedChildPhotos(db: RecordsRefreshClient, options: RefreshOption
         .select("id");
       if (error) throw new Error(`child photo write failed: ${error.message}`);
       if (!data || data.length === 0) {
+        // A retry after the token clear failed writes the key the photo already points at.
+        const { data: member, error: readError } = await db
+          .from("family_members")
+          .select("avatar_url")
+          .eq("org_id", orgId)
+          .eq("id", memberId);
+        if (readError) throw new Error(`child photo read failed: ${readError.message}`);
+        if (member?.some((m) => m.avatar_url === url)) {
+          await must(
+            db.from("records_child_suggestions").update({ photo: null }).eq("org_id", orgId).eq("id", row.id),
+            "child photo token clear",
+          );
+          continue;
+        }
         await options.removeChildPhoto(orgId, memberId).catch((err) =>
           logError("church records copy couldn't remove an unused child photo", err, {
             route: "refresh-church-records",

@@ -72,7 +72,9 @@ create index records_household_values_family_id_idx on public.records_household_
 
 -- The refresh's household suggestions, replaced in full on each refresh that
 -- reads every family. people holds each person whose household or
--- relationship changes: [{profile_id, from_family_id, relationship}].
+-- relationship changes: [{profile_id, from_family_id, relationship}]. basis
+-- holds every linked person it was worked out from, as linked and housed
+-- then: [{profile_id, external_person_id, family_id}].
 create table public.records_household_suggestions (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null default public.app_current_org_id(),
@@ -81,6 +83,7 @@ create table public.records_household_suggestions (
   target_family_id uuid,
   family_name text check (char_length(family_name) between 1 and 200),
   people jsonb not null check (jsonb_typeof(people) = 'array'),
+  basis jsonb not null default '[]'::jsonb check (jsonb_typeof(basis) = 'array'),
   ready boolean not null,
   created_at timestamptz not null default now(),
   unique (org_id, connection_id, external_family_id),
@@ -348,10 +351,11 @@ begin
   delete from public.records_household_suggestions
    where org_id = _org_id and connection_id = _connection_id;
   insert into public.records_household_suggestions
-    (org_id, connection_id, external_family_id, target_family_id, family_name, people, ready)
-  select _org_id, _connection_id, s.external_family_id, s.target_family_id, s.family_name, s.people, s.ready
+    (org_id, connection_id, external_family_id, target_family_id, family_name, people, basis, ready)
+  select _org_id, _connection_id, s.external_family_id, s.target_family_id, s.family_name, s.people,
+         coalesce(s.basis, '[]'::jsonb), s.ready
     from jsonb_to_recordset(coalesce(_suggestions, '[]'::jsonb))
-      as s(external_family_id text, target_family_id uuid, family_name text, people jsonb, ready boolean)
+      as s(external_family_id text, target_family_id uuid, family_name text, people jsonb, basis jsonb, ready boolean)
    where s.target_family_id is null
       or exists (
         select 1 from public.family_units f where f.id = s.target_family_id and f.org_id = _org_id
@@ -370,8 +374,9 @@ grant execute on function public.records_replace_household_suggestions(uuid, uui
 -- new one, and links the household to its family. Whoever stays behind, and
 -- the household they stay in, is left as it is.
 --
--- Answers 'stale', changing nothing, when anyone it names has moved, been
--- unlinked or is no longer approved, or its household is now linked to
+-- Answers 'stale', changing nothing, when anyone it names or was worked out
+-- from has moved, been unlinked or relinked, or is no longer approved, or its
+-- household is now linked to
 -- another family or holds a primary or spouse it didn't; 'gone' for a
 -- suggestion not in this church; and 'busy' while a refresh holds its claim,
 -- since that run is replacing the suggestions. The 15 minutes match the
@@ -409,7 +414,29 @@ begin
   end if;
 
   _ids := array(select (p ->> 'profile_id')::uuid from jsonb_array_elements(_s.people) as p);
-  perform 1 from public.profiles where org_id = _org_id and id = any (_ids) order by id for update;
+  perform 1 from public.profiles where org_id = _org_id
+     and (id = any (_ids) or id in (select (b ->> 'profile_id')::uuid from jsonb_array_elements(_s.basis) as b))
+   order by id for update;
+  -- Locked so none of the links the suggestion rests on can end or change before it is written.
+  perform 1 from public.records_person_links
+   where org_id = _org_id and connection_id = _s.connection_id
+     and profile_id in (select (b ->> 'profile_id')::uuid from jsonb_array_elements(_s.basis) as b)
+   order by profile_id for update;
+  if exists (
+    select 1 from jsonb_array_elements(_s.basis) as b
+     where not exists (
+       select 1 from public.profiles pr
+         join public.records_person_links l
+           on l.org_id = pr.org_id and l.profile_id = pr.id and l.connection_id = _s.connection_id
+        where pr.id = (b ->> 'profile_id')::uuid
+          and pr.org_id = _org_id
+          and pr.role in ('member', 'admin')
+          and l.external_person_id = b ->> 'external_person_id'
+          and pr.family_id is not distinct from (b ->> 'family_id')::uuid
+     )
+  ) then
+    return 'stale';
+  end if;
   if exists (
     select 1 from jsonb_array_elements(_s.people) as p
      where not exists (
@@ -494,6 +521,7 @@ grant execute on function public.records_confirm_household(uuid, uuid, uuid) to 
 -- member's edit.
 create function public.records_apply_household_copy(
   _org_id uuid,
+  _connection_id uuid,
   _family_id uuid,
   _expected jsonb,
   _household jsonb,
@@ -513,11 +541,12 @@ begin
   if not found then
     return 'gone';
   end if;
-  if not exists (
-    select 1 from public.records_household_links
-     where org_id = _org_id and family_id = _family_id
-       and external_family_id = _expected ->> 'family'
-  ) then
+  -- Locked, and the refresh's own connection, so a replaced connection's run can't write.
+  perform 1 from public.records_household_links
+   where org_id = _org_id and family_id = _family_id and connection_id = _connection_id
+     and external_family_id = _expected ->> 'family'
+     for share;
+  if not found then
     return 'unlinked';
   end if;
 
@@ -556,8 +585,8 @@ begin
 end;
 $$;
 
-revoke execute on function public.records_apply_household_copy(uuid, uuid, jsonb, jsonb, jsonb) from public, anon, authenticated;
-grant execute on function public.records_apply_household_copy(uuid, uuid, jsonb, jsonb, jsonb) to service_role;
+revoke execute on function public.records_apply_household_copy(uuid, uuid, uuid, jsonb, jsonb, jsonb) from public, anon, authenticated;
+grant execute on function public.records_apply_household_copy(uuid, uuid, uuid, jsonb, jsonb, jsonb) to service_role;
 
 -- Brings a linked household's suggested children up to date with its family:
 -- a new child is suggested, an open suggestion takes the records' latest
@@ -570,6 +599,7 @@ grant execute on function public.records_apply_household_copy(uuid, uuid, jsonb,
 -- records_save_children_setting().
 create function public.records_sync_child_suggestions(
   _org_id uuid,
+  _connection_id uuid,
   _family_id uuid,
   _external_family_id text,
   _children jsonb
@@ -586,7 +616,8 @@ begin
   end if;
   -- Locked so the link can't end, and its suggestions with it, while they are written.
   perform 1 from public.records_household_links
-   where org_id = _org_id and family_id = _family_id and external_family_id = _external_family_id
+   where org_id = _org_id and family_id = _family_id and connection_id = _connection_id
+     and external_family_id = _external_family_id
      for share;
   if not found then
     return 0;
@@ -627,13 +658,14 @@ begin
 end;
 $$;
 
-revoke execute on function public.records_sync_child_suggestions(uuid, uuid, text, jsonb) from public, anon, authenticated;
-grant execute on function public.records_sync_child_suggestions(uuid, uuid, text, jsonb) to service_role;
+revoke execute on function public.records_sync_child_suggestions(uuid, uuid, uuid, text, jsonb) from public, anon, authenticated;
+grant execute on function public.records_sync_child_suggestions(uuid, uuid, uuid, text, jsonb) to service_role;
 
 -- A household's primary or spouse adds a suggested child to their household,
 -- as a child without an account: first and last name, birthday month and day,
 -- and grade, with no birth year. The photo follows at the next refresh.
--- Returns the new household member's id.
+-- Returns the household member's id: the new one, or the one already in the
+-- household under the child's name.
 --
 -- SECURITY DEFINER because members have no write grant on the suggestions.
 -- The org and household come from auth.uid()'s own profile, never a
@@ -667,12 +699,25 @@ begin
     raise exception 'records_add_suggested_child: no such suggestion' using errcode = 'RC001';
   end if;
 
-  insert into public.family_members
-    (org_id, family_id, first_name, last_name, relationship, birth_month, birth_day, graduation_year, is_class_member)
-  values
-    (_me.org_id, _me.family_id, _s.first_name, _s.last_name, 'child', _s.birth_month, _s.birth_day,
-     _s.graduation_year, false)
-  returning id into _id;
+  -- Someone in the household already under the same name, entered since the
+  -- refresh, is this child: the suggestion is settled by them, not a second
+  -- entry. The name key folds case, Latin accents, spaces and punctuation.
+  select m.id into _id from public.family_members m
+   where m.org_id = _me.org_id and m.family_id = _me.family_id
+     and lower(regexp_replace(normalize(coalesce(m.first_name, ''), NFKD), '[\u0300-\u036f[:space:][:punct:]]', '', 'g'))
+       = lower(regexp_replace(normalize(_s.first_name, NFKD), '[\u0300-\u036f[:space:][:punct:]]', '', 'g'))
+     and lower(regexp_replace(normalize(coalesce(m.last_name, ''), NFKD), '[\u0300-\u036f[:space:][:punct:]]', '', 'g'))
+       = lower(regexp_replace(normalize(_s.last_name, NFKD), '[\u0300-\u036f[:space:][:punct:]]', '', 'g'))
+   order by m.id
+   limit 1;
+  if _id is null then
+    insert into public.family_members
+      (org_id, family_id, first_name, last_name, relationship, birth_month, birth_day, graduation_year, is_class_member)
+    values
+      (_me.org_id, _me.family_id, _s.first_name, _s.last_name, 'child', _s.birth_month, _s.birth_day,
+       _s.graduation_year, false)
+    returning id into _id;
+  end if;
 
   update public.records_child_suggestions
      set state = 'added', family_member_id = _id, decided_by = _me.id, decided_at = now(),

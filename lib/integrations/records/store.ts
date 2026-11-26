@@ -328,12 +328,6 @@ export async function readHouseholdsStatus(orgId: string): Promise<HouseholdsSta
     people: (Array.isArray(row.people) ? row.people : []) as SuggestedPerson[],
   }));
   const profileIds = [...new Set(parsed.flatMap((s) => s.people.map((p) => p.profile_id)))];
-  const familyIds = [
-    ...new Set(
-      parsed.flatMap((s) => [s.row.target_family_id, ...s.people.map((p) => p.from_family_id)]).filter((id): id is string => !!id),
-    ),
-  ];
-
   const profiles = new Map<string, { name: string; family_id: string | null; relationship: string | null }>();
   for (let i = 0; i < profileIds.length; i += 100) {
     const { data, error } = await service
@@ -350,6 +344,17 @@ export async function readHouseholdsStatus(orgId: string): Promise<HouseholdsSta
       });
     }
   }
+  // Current membership, not the stored plan's, so a move since the refresh shows.
+  const familyIds = [
+    ...new Set(
+      parsed
+        .flatMap((s) => [
+          s.row.target_family_id,
+          ...s.people.flatMap((p) => [p.from_family_id, profiles.get(p.profile_id)?.family_id ?? null]),
+        ])
+        .filter((id): id is string => !!id),
+    ),
+  ];
   const families = new Map<string, string>();
   for (let i = 0; i < familyIds.length; i += 100) {
     const { data, error } = await service
@@ -364,15 +369,18 @@ export async function readHouseholdsStatus(orgId: string): Promise<HouseholdsSta
   const suggestions: HouseholdSuggestion[] = [];
   for (const { row, people } of parsed) {
     if (row.target_family_id && !families.has(row.target_family_id)) continue;
+    let moved = false;
     const named = people.flatMap((p): HouseholdSuggestionPerson[] => {
       const profile = profiles.get(p.profile_id);
       if (!profile) return [];
+      if (profile.family_id !== p.from_family_id) moved = true;
+      const from = profile.family_id;
       return [
         {
           profileId: p.profile_id,
           name: profile.name,
-          from: p.from_family_id ? { familyId: p.from_family_id, name: families.get(p.from_family_id) ?? householdName(null) } : null,
-          moves: p.from_family_id !== row.target_family_id || row.target_family_id === null,
+          from: from ? { familyId: from, name: families.get(from) ?? householdName(null) } : null,
+          moves: from !== row.target_family_id || row.target_family_id === null,
           relationship: p.relationship,
           relationshipChanges: p.relationship !== profile.relationship,
         },
@@ -381,8 +389,8 @@ export async function readHouseholdsStatus(orgId: string): Promise<HouseholdsSta
     named.sort((a, b) => a.name.localeCompare(b.name));
     suggestions.push({
       id: row.id,
-      // Someone named who no longer exists makes the stored plan out of date; confirming it answers stale.
-      ready: row.ready && named.length === people.length,
+      // Someone named who no longer exists, or who has changed household, makes the stored plan out of date.
+      ready: row.ready && !moved && named.length === people.length,
       target: row.target_family_id
         ? { familyId: row.target_family_id, name: families.get(row.target_family_id)! }
         : { newName: householdName(row.family_name) },

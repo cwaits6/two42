@@ -150,6 +150,13 @@ export interface SuggestedPerson {
   relationship: Relationship;
 }
 
+/** A linked person the suggestion was worked out from, as linked and housed then. */
+export interface SuggestionBasis {
+  profile_id: string;
+  external_person_id: string;
+  family_id: string | null;
+}
+
 /** What records_confirm_household() answers; its SQL body returns exactly these. */
 export const CONFIRM_HOUSEHOLD_OUTCOMES = ["confirmed", "stale", "gone", "busy"] as const;
 export type ConfirmHouseholdOutcome = (typeof CONFIRM_HOUSEHOLD_OUTCOMES)[number];
@@ -165,6 +172,8 @@ export interface HouseholdSuggestion {
   family_name: string | null;
   /** Everyone whose household or relationship changes; empty when confirming only links the household. */
   people: SuggestedPerson[];
+  /** Every linked person it was worked out from, so confirming refuses it once any of them has moved or been relinked. */
+  basis: SuggestionBasis[];
   /** Nobody leaves a household they're in, so it can be confirmed with others. */
   ready: boolean;
 }
@@ -299,6 +308,9 @@ export function planHouseholdSuggestions(input: SuggestionInput): HouseholdSugge
       target_family_id: target,
       family_name: familyName,
       people,
+      basis: linked
+        .map(({ member, profile }) => ({ profile_id: profile.id, external_person_id: member.id, family_id: profile.family_id }))
+        .sort((a, b) => a.profile_id.localeCompare(b.profile_id)),
       ready: people.every((p) => p.from_family_id === null || p.from_family_id === target),
     });
   }

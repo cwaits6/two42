@@ -56,6 +56,7 @@ export async function POST() {
       photosSkipped: result.photosSkipped,
       failed: result.failed,
       householdsUnavailable: result.householdsUnavailable,
+      stoppedAtBudget: result.stoppedAtBudget,
     } satisfies RefreshCounts);
   } catch (err) {
     if (err instanceof RecordsError) return recordsFailure(err, loaded.provider.label);

@@ -25,7 +25,7 @@ describe("settingsBody", () => {
 });
 
 describe("refreshMessage", () => {
-  const none = { copied: 0, pending: 0, failed: 0, photosSkipped: 0, householdsUnavailable: false };
+  const none = { copied: 0, pending: 0, failed: 0, photosSkipped: 0, householdsUnavailable: false, stoppedAtBudget: false };
 
   it("reports a clean refresh as done", () => {
     expect(refreshMessage(none)).toEqual({ tone: "success", text: "Refreshed. Nothing needed updating." });
@@ -37,6 +37,7 @@ describe("refreshMessage", () => {
     [{ pending: 1 }, "1 person still to copy"],
     [{ photosSkipped: 2 }, "2 photos couldn't be used"],
     [{ householdsUnavailable: true }, "households weren't refreshed"],
+    [{ stoppedAtBudget: true }, "Households weren't all refreshed; the next refresh carries on."],
   ])("warns when %j", (counts, text) => {
     const message = refreshMessage({ ...none, ...counts });
     expect(message.tone).toBe("warning");

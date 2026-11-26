@@ -22,6 +22,7 @@ import {
   type HouseholdValueRow,
   SAVE_SETTING_OUTCOMES,
   type SuggestedPerson,
+  type SuggestionBasis,
 } from "@/supabase/functions/_shared/records-households";
 import {
   APPLY_HOUSEHOLD_OUTCOMES,
@@ -62,11 +63,13 @@ const keysRead = (body: string, name: string) =>
 
 // Typed literals: each lists exactly its type's keys, or the type check fails.
 const SUGGESTED_PERSON: SuggestedPerson = { profile_id: "p", from_family_id: null, relationship: "primary" };
+const SUGGESTION_BASIS: SuggestionBasis = { profile_id: "p", external_person_id: "e", family_id: null };
 const SUGGESTION: HouseholdSuggestion = {
   external_family_id: "f",
   target_family_id: null,
   family_name: null,
   people: [SUGGESTED_PERSON],
+  basis: [SUGGESTION_BASIS],
   ready: true,
 };
 const CHILD: ChildRow = {
@@ -217,6 +220,7 @@ describe("the households migration agrees with the household rules", () => {
     const confirm = between("create function public.records_confirm_household(", "$$;");
     const people = [...recordset(confirm, "p"), ...keysRead(confirm, "p")];
     expect(sorted([...new Set(people)])).toEqual(sorted(Object.keys(SUGGESTED_PERSON)));
+    expect(sorted([...new Set(keysRead(confirm, "b"))])).toEqual(sorted(Object.keys(SUGGESTION_BASIS)));
   });
 
   it("answers a household confirmation with the outcomes the app reads", () => {

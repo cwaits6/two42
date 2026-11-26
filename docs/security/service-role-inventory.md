@@ -1028,8 +1028,8 @@ field turned off, deletes that church's household sources
 `records_save_children_setting(_org_id, _on, _updated_by)`,
 `records_replace_household_suggestions(_org_id, _connection_id, _suggestions)`,
 `records_confirm_household(_org_id, _suggestion_id, _confirmed_by)`,
-`records_apply_household_copy(_org_id, _family_id, _expected, _household, _values)`
-and `records_sync_child_suggestions(_org_id, _family_id, _external_family_id, _children)`
+`records_apply_household_copy(_org_id, _connection_id, _family_id, _expected, _household, _values)`
+and `records_sync_child_suggestions(_org_id, _connection_id, _family_id, _external_family_id, _children)`
 (`20261210000000_church_records_households.sql`) are how server code writes a
 church's children switch, the refresh's household suggestions, a church
 admin's confirmation of one, a linked household's address and home phone and
@@ -1040,12 +1040,14 @@ the settings row; the suggestions it deletes and inserts (a target household
 not in that church is left out); in `records_confirm_household()` the refresh
 claim it locks (`busy` while a refresh runs), the suggestion (`gone` for one
 of another church), the profiles it locks and moves (`id = any(…) and org_id =
-_org_id`, each still linked, approved and in the household the suggestion
-read, else `stale`), the target household and its links, and the household it
+_org_id`, and everyone the suggestion was worked out from, each still linked
+to the same person in the records, approved and in the household the
+suggestion read, else `stale`), the person links it locks, the target household and its links, and the household it
 creates (`org_id = _org_id`); in `records_apply_household_copy()` the
-household it writes (`gone` for another church's, `unlinked` once unlinked,
-`stale` when a member saved since the read); and in
-`records_sync_child_suggestions()` the switch, the household link it locks and
+household it writes (`gone` for another church's, `unlinked` once unlinked or
+linked through another connection, `stale` when a member saved since the
+read); and in `records_sync_child_suggestions()` the switch, the household
+link it locks (on the refresh's own connection) and
 the suggestions it upserts and deletes. Callers pass an org from
 `requireOrgAdmin()` (`lib/integrations/records/store.ts`,
 `lib/integrations/records/refresh.ts`) or from the `forEachOrg()` iteration

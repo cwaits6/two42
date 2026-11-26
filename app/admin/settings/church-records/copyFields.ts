@@ -38,7 +38,7 @@ export function settingsBody(choices: Partial<Record<SettingsField, FieldChoice>
 /** The counts Refresh now answers with. */
 export type RefreshCounts = Pick<
   RefreshResult,
-  "copied" | "pending" | "review" | "failed" | "photosSkipped" | "householdsUnavailable"
+  "copied" | "pending" | "review" | "failed" | "photosSkipped" | "householdsUnavailable" | "stoppedAtBudget"
 >;
 
 const people = (n: number) => (n === 1 ? "1 person" : `${n.toLocaleString("en-US")} people`);
@@ -50,6 +50,7 @@ export function refreshMessage({
   failed,
   photosSkipped,
   householdsUnavailable,
+  stoppedAtBudget,
 }: Omit<RefreshCounts, "review">): {
   tone: "success" | "warning";
   text: string;
@@ -60,6 +61,7 @@ export function refreshMessage({
     pending > 0 && `${people(pending)} still to copy; the next refresh carries on.`,
     photosSkipped > 0 && `${photosSkipped === 1 ? "1 photo" : `${photosSkipped.toLocaleString("en-US")} photos`} couldn't be used.`,
     householdsUnavailable && "Families couldn't be read, so households weren't refreshed; see the Households tab.",
+    stoppedAtBudget && pending === 0 && "Households weren't all refreshed; the next refresh carries on.",
   ].filter((line): line is string => !!line);
   if (problems.length === 0) return { tone: "success", text: `Refreshed. ${updated}` };
   return { tone: "warning", text: [`Refreshed with problems. ${updated}`, ...problems].join(" ") };

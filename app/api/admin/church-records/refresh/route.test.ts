@@ -62,6 +62,7 @@ describe("POST /api/admin/church-records/refresh", () => {
       photosSkipped: 0,
       failed: 0,
       householdsUnavailable: false,
+      stoppedAtBudget: false,
     });
     expect(refresh.refreshNow).toHaveBeenCalledWith("org-1", LOADED);
   });

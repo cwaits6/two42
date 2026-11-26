@@ -14,7 +14,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(83);
+select plan(91);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -171,7 +171,7 @@ select hasnt_column('public', 'records_child_suggestions', 'birth_year', 'a sugg
 
 -- ── Suggested children: nothing while the switch is off ────────────────────
 select is(
-  public.records_sync_child_suggestions(pg_temp.fx('org'), pg_temp.fx('home'), 'F1',
+  public.records_sync_child_suggestions(pg_temp.fx('org'), pg_temp.fx('connection'), pg_temp.fx('home'), 'F1',
     '[{"external_person_id": "200", "first_name": "Lily", "last_name": "Mockingham", "birth_month": 3, "birth_day": 3, "graduation_year": 2034, "photo": "7"}]'),
   0, 'with the switch off (no settings row), no child is suggested');
 select is((select count(*)::int from public.records_child_suggestions where org_id = pg_temp.fx('org')), 0,
@@ -180,13 +180,16 @@ select is((select count(*)::int from public.records_child_suggestions where org_
 select is(public.records_save_children_setting(pg_temp.fx('org'), true, pg_temp.fx('admin')), 'saved',
   'a church admin turns the switch on through the server');
 select is(
-  public.records_sync_child_suggestions(pg_temp.fx('org'), pg_temp.fx('home'), 'F1',
+  public.records_sync_child_suggestions(pg_temp.fx('org'), pg_temp.fx('connection'), pg_temp.fx('home'), 'F1',
     '[{"external_person_id": "200", "first_name": "Lily", "last_name": "Mockingham", "birth_month": 3, "birth_day": 3, "graduation_year": 2034, "photo": "7"},
       {"external_person_id": "201", "first_name": "Max", "last_name": "Mockingham", "birth_month": null, "birth_day": null, "graduation_year": null, "photo": null}]'),
   2, 'with it on, the household''s two children are suggested');
 select is(
-  public.records_sync_child_suggestions(pg_temp.fx('org'), pg_temp.fx('home'), 'F9', '[{"external_person_id": "202", "first_name": "Zed", "last_name": "Other"}]'),
+  public.records_sync_child_suggestions(pg_temp.fx('org'), pg_temp.fx('connection'), pg_temp.fx('home'), 'F9', '[{"external_person_id": "202", "first_name": "Zed", "last_name": "Other"}]'),
   0, 'children of a family the household isn''t linked to are never suggested to it');
+select is(
+  public.records_sync_child_suggestions(pg_temp.fx('org'), gen_random_uuid(), pg_temp.fx('home'), 'F1', '[{"external_person_id": "202", "first_name": "Zed", "last_name": "Other"}]'),
+  0, 'nor by a refresh of another connection linked to the same family');
 
 -- ── Suggested children: who sees them ───────────────────────────────────────
 select is(pg_temp.kids_seen('henry.mockingham@example.test'), 2, 'the household''s primary sees its two suggested children');
@@ -260,7 +263,7 @@ select is(
   row('dismissed', null::text, null::text, null::text)::text, 'his suggestion keeps nothing about him but the decision');
 
 select is(
-  public.records_sync_child_suggestions(pg_temp.fx('org'), pg_temp.fx('home'), 'F1',
+  public.records_sync_child_suggestions(pg_temp.fx('org'), pg_temp.fx('connection'), pg_temp.fx('home'), 'F1',
     '[{"external_person_id": "200", "first_name": "Lily", "last_name": "Mockingham", "birth_month": 3, "birth_day": 3, "graduation_year": 2034, "photo": "7"},
       {"external_person_id": "201", "first_name": "Max", "last_name": "Mockingham", "birth_month": null, "birth_day": null, "graduation_year": null, "photo": null}]'),
   0, 'the next refresh brings neither back');
@@ -270,15 +273,29 @@ select is(
 select is(pg_temp.kids_seen('henry.mockingham@example.test'), 0, 'and are suggested to nobody');
 
 select is(
-  public.records_sync_child_suggestions(pg_temp.fx('org'), pg_temp.fx('home'), 'F1',
+  public.records_sync_child_suggestions(pg_temp.fx('org'), pg_temp.fx('connection'), pg_temp.fx('home'), 'F1',
     '[{"external_person_id": "203", "first_name": "June", "last_name": "Mockingham"}]'),
   1, 'a new child in the family is suggested');
+select is(
+  public.records_sync_child_suggestions(pg_temp.fx('org'), pg_temp.fx('connection'), pg_temp.fx('home'), 'F1',
+    '[{"external_person_id": "203", "first_name": "June", "last_name": "Mockingham"},
+      {"external_person_id": "204", "first_name": "Rosé", "last_name": "Mockingham"}]'),
+  1, 'and another');
+insert into public.family_members (org_id, family_id, first_name, last_name, relationship)
+  values (pg_temp.fx('org'), pg_temp.fx('home'), 'rose', 'Mockingham', 'child');
+select is(
+  pg_temp.call('henry.mockingham@example.test', format('select public.records_add_suggested_child(%L)::text',
+    (select id from public.records_child_suggestions where external_person_id = '204'))),
+  (select id::text from public.family_members where family_id = pg_temp.fx('home') and first_name = 'rose'),
+  'adding a child the household entered meanwhile under the same name settles on that entry');
+select is((select count(*)::int from public.family_members where family_id = pg_temp.fx('home') and first_name ilike 'ros%'), 1,
+  'rather than adding them twice');
 select is(public.records_save_children_setting(pg_temp.fx('org'), false, pg_temp.fx('admin')), 'saved',
   'the church admin turns the switch off');
 select is(
   (select array_agg(state || ':' || coalesce(photo, '-') order by external_person_id)
      from public.records_child_suggestions where family_id = pg_temp.fx('home')),
-  array['added:-', 'dismissed:-'],
+  array['added:-', 'dismissed:-', 'added:-'],
   'turning it off removes the open suggestion and the waiting photo token, keeping the decisions');
 
 -- ── What members can't do ───────────────────────────────────────────────────
@@ -341,6 +358,22 @@ select is(public.records_confirm_household(pg_temp.fx('org'), pg_temp.fx('leo_su
 select is((select family_id from public.profiles where id = pg_temp.fx('leo')), null, 'and nothing moves');
 update public.profiles set family_id = pg_temp.fx('loremsworth') where id = pg_temp.fx('leo');
 
+-- Isaac, already in the household, is what made it this family's.
+update public.records_household_suggestions
+   set basis = jsonb_build_array(
+     jsonb_build_object('profile_id', pg_temp.fx('isaac'), 'external_person_id', '102', 'family_id', pg_temp.fx('seedly')),
+     jsonb_build_object('profile_id', pg_temp.fx('leo'), 'external_person_id', '103', 'family_id', pg_temp.fx('loremsworth')))
+ where id = pg_temp.fx('leo_suggestion');
+update public.records_person_links set external_person_id = '199' where profile_id = pg_temp.fx('leo');
+select is(public.records_confirm_household(pg_temp.fx('org'), pg_temp.fx('leo_suggestion'), pg_temp.fx('admin')), 'stale',
+  'someone relinked to another person in the records since the refresh makes it stale');
+update public.records_person_links set external_person_id = '103' where profile_id = pg_temp.fx('leo');
+update public.profiles set family_id = null where id = pg_temp.fx('isaac');
+select is(public.records_confirm_household(pg_temp.fx('org'), pg_temp.fx('leo_suggestion'), pg_temp.fx('admin')), 'stale',
+  'so does someone leaving the household the suggestion chose because of them');
+select is((select family_id from public.profiles where id = pg_temp.fx('leo')), pg_temp.fx('loremsworth'), 'and nobody moves');
+update public.profiles set family_id = pg_temp.fx('seedly') where id = pg_temp.fx('isaac');
+
 select is(public.records_confirm_household(pg_temp.fx('org'), pg_temp.fx('leo_suggestion'), pg_temp.fx('admin')), 'confirmed',
   'the church admin confirms it');
 select is(
@@ -398,15 +431,19 @@ select is(
 
 -- ── A linked household's address and home phone ─────────────────────────────
 select is(
-  public.records_apply_household_copy(pg_temp.fx('org'), pg_temp.fx('home'),
+  public.records_apply_household_copy(pg_temp.fx('org'), pg_temp.fx('connection'), pg_temp.fx('home'),
     jsonb_build_object('family', 'F9', 'household', '{}'::jsonb, 'states', '{}'::jsonb), '{}', '[]'),
   'unlinked', 'a copy read from another family isn''t written');
 select is(
-  public.records_apply_household_copy(pg_temp.fx('org'), pg_temp.fx('other_home'),
+  public.records_apply_household_copy(pg_temp.fx('org'), gen_random_uuid(), pg_temp.fx('home'),
+    jsonb_build_object('family', 'F1', 'household', '{}'::jsonb, 'states', '{}'::jsonb), '{}', '[]'),
+  'unlinked', 'nor one from a refresh of another connection');
+select is(
+  public.records_apply_household_copy(pg_temp.fx('org'), pg_temp.fx('connection'), pg_temp.fx('other_home'),
     jsonb_build_object('family', 'F1', 'household', '{}'::jsonb, 'states', '{}'::jsonb), '{}', '[]'),
   'gone', 'nor one for another church''s household');
 select is(
-  public.records_apply_household_copy(pg_temp.fx('org'), pg_temp.fx('home'),
+  public.records_apply_household_copy(pg_temp.fx('org'), pg_temp.fx('connection'), pg_temp.fx('home'),
     jsonb_build_object('family', 'F1',
       'household', (select public.records_pick(to_jsonb(f), array['address_line1', 'phone_home']) || '{"address_line1": "Not What It Holds"}'
                       from public.family_units f where f.id = pg_temp.fx('home')),
@@ -415,7 +452,7 @@ select is(
   'stale', 'a copy worked out from values that changed meanwhile isn''t written');
 
 select is(
-  public.records_apply_household_copy(pg_temp.fx('org'), pg_temp.fx('home'),
+  public.records_apply_household_copy(pg_temp.fx('org'), pg_temp.fx('connection'), pg_temp.fx('home'),
     jsonb_build_object('family', 'F1',
       'household', (select public.records_pick(to_jsonb(f), array['address_line1', 'address_line2', 'city', 'state', 'postal_code', 'phone_home', 'phone_profile_id'])
                       from public.family_units f where f.id = pg_temp.fx('home')),

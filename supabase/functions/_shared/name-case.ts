@@ -102,11 +102,14 @@ export const MAX_NAME_LENGTH = 100;
 export const MAX_TITLE_LENGTH = 40;
 export const MAX_SUFFIX_LENGTH = 20;
 
-/** Lowercased, accents and punctuation removed, so "José O'Brien" and "jose obrien" agree. */
+/**
+ * Lowercased, accents and punctuation removed, so "José O'Brien" and "jose obrien" agree.
+ * Only Latin accents fold: in scripts such as Devanagari a vowel sign tells two names apart.
+ */
 export function normalizeName(value: string | null | undefined): string {
   return (value ?? "")
     .normalize("NFKD")
-    .replace(/\p{M}/gu, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}]/gu, "");
+    .replace(/[^\p{L}\p{M}\p{N}]/gu, "");
 }
