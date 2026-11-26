@@ -2,7 +2,6 @@
  * Serving signup emails. Email is the front door for this feature — every
  * message deep-links straight to the action it asks for.
  */
-import { Resend } from "resend";
 import {
   formatFromHeader,
   resolveRequestEmailBranding,
@@ -24,10 +23,7 @@ import {
   viewSchedule,
 } from "@/supabase/functions/_shared/email-html";
 import { logError } from "@/lib/log";
-
-function getResend() {
-  return new Resend(process.env.RESEND_API_KEY);
-}
+import { sendEmail } from "@/lib/email/send";
 
 export async function sendServingConfirmationEmail(opts: {
   to: string;
@@ -41,7 +37,7 @@ export async function sendServingConfirmationEmail(opts: {
 }) {
   const b = opts.branding ?? (await resolveRequestEmailBranding());
   const dateLabel = formatServiceDateWithYear(opts.serviceDate);
-  const { error } = await getResend().emails.send({
+  const { error } = await sendEmail({
     from: formatFromHeader(b.orgName, b.fromAddress),
     to: opts.to,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
@@ -80,7 +76,7 @@ export async function sendServingCancelNoticeEmail(opts: {
 }) {
   const b = opts.branding ?? (await resolveRequestEmailBranding());
   const dateLabel = formatServiceDateWithYear(opts.serviceDate);
-  const { error } = await getResend().emails.send({
+  const { error } = await sendEmail({
     from: formatFromHeader(b.orgName, b.fromAddress),
     to: opts.to,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),
@@ -112,7 +108,7 @@ export async function sendServingBroadcastEmail(opts: {
   branding?: EmailBranding;
 }) {
   const b = opts.branding ?? (await resolveRequestEmailBranding());
-  const { error } = await getResend().emails.send({
+  const { error } = await sendEmail({
     from: formatFromHeader(b.orgName, b.fromAddress),
     to: opts.to,
     ...(b.replyTo ? { replyTo: b.replyTo } : {}),

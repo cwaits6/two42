@@ -113,32 +113,20 @@ const SEND_SPACING_MS = 110;
 async function sendEmail(
   opts: { to: string; subject: string; html: string; refId: string; branding: EmailBranding },
 ): Promise<boolean> {
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      // Raw REST call, so the Reply-To field is snake_case `reply_to` — not
-      // the camelCase `replyTo` the SDK uses in lib/email/resend.ts.
-      body: JSON.stringify({
-        from: formatFromHeader(opts.branding.orgName, opts.branding.fromAddress),
-        to: opts.to,
-        subject: opts.subject,
-        html: opts.html,
-        ...(opts.branding.replyTo ? { reply_to: opts.branding.replyTo } : {}),
-      }),
-    });
-    if (!res.ok) {
-      logError("Resend error for profile", { status: res.status }, { route: "send-event-reminders", ids: { profile: opts.refId } });
-      return false;
-    }
-    return true;
-  } catch (err) {
-    logError("Resend request failed for profile", err, { route: "send-event-reminders", ids: { profile: opts.refId } });
-    return false;
-  }
+  const outcome = await sendThroughResend({
+    apiKey: RESEND_API_KEY,
+    refId: opts.refId,
+    // Raw REST call, so the Reply-To field is snake_case `reply_to` — not
+    // the camelCase `replyTo` the SDK uses in lib/email/resend.ts.
+    payload: {
+      from: formatFromHeader(opts.branding.orgName, opts.branding.fromAddress),
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+      ...(opts.branding.replyTo ? { reply_to: opts.branding.replyTo } : {}),
+    },
+  });
+  return outcome === "sent";
 }
 
 // ── Dates mode: one reminder per person per date of an event ─────────────────

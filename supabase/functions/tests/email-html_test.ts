@@ -4,6 +4,7 @@
 
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 import {
+  supperCancelledEmail,
   supperMovedEmail,
   supperReminderEmail,
   supperTablesEmail,
@@ -59,6 +60,12 @@ const reminders = [
     rotationTitle: "Fall <u>2026</u>",
     oldDateLabel: "Saturday, November 7 at 6:00 PM",
     newDateLabel: "Monday, November 9 at 6:00 PM",
+    pageUrl: "https://two42.example/g/g1/supper-club",
+  }),
+  supperCancelledEmail({
+    ...BASE,
+    rotationTitle: "Fall <u>2026</u>",
+    dateLabel: "Monday, November 9 at 6:00 PM",
     pageUrl: "https://two42.example/g/g1/supper-club",
   }),
 ];

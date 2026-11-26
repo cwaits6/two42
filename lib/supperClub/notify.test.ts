@@ -11,7 +11,7 @@ vi.mock("@/lib/supabase/server", () => ({ createServiceClient: () => createServi
 
 const send = vi.fn();
 vi.mock("resend", () => ({
-  // A regular function: getResend() calls `new Resend(...)`.
+  // A regular function: sendEmail() calls `new Resend(...)`.
   Resend: vi.fn().mockImplementation(function () {
     return { emails: { send } };
   }),
@@ -35,7 +35,7 @@ vi.mock("@/lib/time/orgZone", () => ({ orgTimeZoneById: async () => "America/Chi
 
 vi.mock("@/lib/log", () => ({ logError: () => {}, logWarn: () => {}, logInfo: () => {} }));
 
-const { notifySuppersMoved, notifyTablesPublished } = await import("@/lib/supperClub/notify");
+const { notifySuppersMoved, notifyTablesPublished, prepareDateDeletedEmails } = await import("@/lib/supperClub/notify");
 
 const ORG = "org-a";
 const OTHER_ORG = "org-b";
@@ -62,9 +62,9 @@ function seed(): Record<string, Row[]> {
       { org_id: OTHER_ORG, id: "s1", group_id: "g9", title: "Other Supper", status: "published" },
     ],
     suppers: [
-      { org_id: ORG, id: "d1", table_id: "t1", rotation_id: "s1", group_id: "g1", starts_at: NEW, host_party_id: "p-host" },
-      { org_id: ORG, id: "d2", table_id: "t2", rotation_id: "s1", group_id: "g1", starts_at: NEW, host_party_id: "p-other" },
-      { org_id: OTHER_ORG, id: "d9", table_id: "t1", rotation_id: "s1", group_id: "g9", starts_at: NEW, host_party_id: "p-x" },
+      { org_id: ORG, id: "d1", table_id: "t1", rotation_id: "s1", rotation_date_id: "rd1", group_id: "g1", starts_at: NEW, host_party_id: "p-host" },
+      { org_id: ORG, id: "d2", table_id: "t2", rotation_id: "s1", rotation_date_id: "rd2", group_id: "g1", starts_at: NEW, host_party_id: "p-other" },
+      { org_id: OTHER_ORG, id: "d9", table_id: "t1", rotation_id: "s1", rotation_date_id: "rd1", group_id: "g9", starts_at: NEW, host_party_id: "p-x" },
     ],
     supper_seats: [
       { org_id: ORG, rotation_id: "s1", table_id: "t1", party_id: "p-host", left_at: null },
@@ -253,6 +253,55 @@ describe("notifyTablesPublished", () => {
   it("sends nothing when nobody is named", async () => {
     createServiceClient.mockResolvedValue(fakeClient(seed()).client);
     expect(await notifyTablesPublished(ORG, "s1", [])).toEqual({ sent: 0, failed: 0, capped: false });
+    expect(send).not.toHaveBeenCalled();
+  });
+});
+
+describe("prepareDateDeletedEmails", () => {
+  beforeEach(() => {
+    send.mockReset().mockResolvedValue({ data: { id: "x" }, error: null });
+    reserveEmailQuota.mockReset().mockResolvedValue(true);
+  });
+
+  it("emails everyone still at the date's suppers who wants Supper club email, except the person deleting it, all within the church", async () => {
+    const { client, chains } = fakeClient(seed());
+    createServiceClient.mockResolvedValue(client);
+
+    const deliver = await prepareDateDeletedEmails(ORG, "rd1", "mover");
+    expect(send).not.toHaveBeenCalled();
+    const result = await deliver();
+
+    expect(sentTo()).toEqual(["gina@example.org", "partner@example.org"]);
+    expect(send.mock.calls[0][0]).toMatchObject({ subject: expect.stringContaining("is off") });
+    expect(result).toEqual({ sent: 2, failed: 0, capped: false });
+    expect(reserveEmailQuota).toHaveBeenCalledWith(ORG, 2);
+    for (const chain of chains) expect(chain.orgIds, chain.table).toEqual([ORG]);
+  });
+
+  it("emails a person at two of the date's suppers once", async () => {
+    const rows = seed();
+    rows.suppers = rows.suppers.map((d) => (d.id === "d2" ? { ...d, rotation_date_id: "rd1" } : d));
+    rows.supper_seats.push({ org_id: ORG, rotation_id: "s1", table_id: "t2", party_id: "p-on", left_at: null });
+    createServiceClient.mockResolvedValue(fakeClient(rows).client);
+
+    await (await prepareDateDeletedEmails(ORG, "rd1", "mover"))();
+
+    expect(sentTo()).toEqual(["gina@example.org", "olga@example.org", "partner@example.org"]);
+  });
+
+  it("sends nothing for an ended rotation or a date with no suppers", async () => {
+    createServiceClient.mockResolvedValue(fakeClient(ended()).client);
+    expect(await (await prepareDateDeletedEmails(ORG, "rd1", "mover"))()).toEqual({ sent: 0, failed: 0, capped: false });
+    createServiceClient.mockResolvedValue(fakeClient(seed()).client);
+    expect(await (await prepareDateDeletedEmails(ORG, "rd-none", "mover"))()).toEqual({ sent: 0, failed: 0, capped: false });
+    expect(send).not.toHaveBeenCalled();
+    expect(reserveEmailQuota).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing when the church's daily email cap refuses the batch", async () => {
+    reserveEmailQuota.mockResolvedValue(false);
+    createServiceClient.mockResolvedValue(fakeClient(seed()).client);
+    expect(await (await prepareDateDeletedEmails(ORG, "rd1", "mover"))()).toEqual({ sent: 0, failed: 0, capped: true });
     expect(send).not.toHaveBeenCalled();
   });
 });
