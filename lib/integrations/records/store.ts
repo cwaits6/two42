@@ -1,11 +1,14 @@
-// The church's connection to its records and its person links. No client role
-// has any privilege on either table, so this module owns a service client and
-// never accepts one: every read and write filters on an orgId the caller took
-// from requireOrgAdmin(), and that filter is the tenant boundary here.
+// The church's connection to its records, its person links, and what it
+// copies from them. No client role may write any of these tables, so this
+// module owns a service client and never accepts one: every read and write
+// filters on an orgId the caller took from requireOrgAdmin(), and that filter
+// is the tenant boundary here.
 //
 // Imports next/headers through @/lib/supabase/server; never import it from a
 // "use client" module.
 import { createServiceClient } from "@/lib/supabase/server";
+import { displayName, hasName } from "@/lib/names";
+import type { FieldSettings } from "./settings";
 import { openKey } from "./crypto";
 import { providerFor } from "./providers";
 import type { RecordsCredentials, RecordsProvider } from "./types";
@@ -154,4 +157,100 @@ export async function deleteLink(orgId: string, profileId: string): Promise<bool
     .eq("profile_id", profileId);
   if (error) throw new RecordsStoreError("records link delete failed", { cause: error });
   return (count ?? 0) > 0;
+}
+
+export type { FieldSettings };
+
+export async function readFieldSettings(orgId: string): Promise<FieldSettings> {
+  const service = await createServiceClient();
+  const { data, error } = await service.from("records_field_settings").select("field, mode").eq("org_id", orgId);
+  if (error) throw new RecordsStoreError("records field settings read failed", { cause: error });
+  return Object.fromEntries((data ?? []).map((row) => [row.field, row.mode])) as FieldSettings;
+}
+
+/** Replaces the settings in one transaction; a field turned off loses its sources, and any change asks for a full copy. */
+export async function saveFieldSettings(orgId: string, settings: FieldSettings, updatedBy: string): Promise<void> {
+  const service = await createServiceClient();
+  const { error } = await service.rpc("records_save_field_settings", {
+    _org_id: orgId,
+    _settings: settings,
+    _updated_by: updatedBy,
+  });
+  if (error) throw new RecordsStoreError("records field settings write failed", { cause: error });
+}
+
+export interface ReviewPerson {
+  profileId: string;
+  personId: string;
+  name: string;
+  reason: "inactive" | "missing";
+  since: string | null;
+}
+
+export interface CopyStatus {
+  lastRefreshedAt: string | null;
+  /** Linked people still waiting for their first copy. */
+  pending: number;
+  review: ReviewPerson[];
+}
+
+const PAGE = 1000;
+
+export async function readCopyStatus(orgId: string): Promise<CopyStatus> {
+  const service = await createServiceClient();
+  const [refresh, links] = await Promise.all([
+    service.from("records_refresh_state").select("last_refreshed_at").eq("org_id", orgId).maybeSingle(),
+    service.from("records_person_links").select("profile_id", { count: "exact", head: true }).eq("org_id", orgId),
+  ]);
+  if (refresh.error || links.error) {
+    throw new RecordsStoreError("records copy status read failed", { cause: refresh.error ?? links.error });
+  }
+
+  const states: { profile_id: string; copied_at: string | null; review_reason: string | null; review_since: string | null }[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await service
+      .from("records_person_state")
+      .select("profile_id, copied_at, review_reason, review_since")
+      .eq("org_id", orgId)
+      .or("copied_at.not.is.null,review_reason.not.is.null")
+      .order("profile_id")
+      .range(from, from + PAGE - 1);
+    if (error) throw new RecordsStoreError("records person state read failed", { cause: error });
+    states.push(...(data ?? []));
+    if ((data ?? []).length < PAGE) break;
+  }
+
+  const flagged = states.filter((s) => s.review_reason === "inactive" || s.review_reason === "missing");
+  const review: ReviewPerson[] = [];
+  for (let i = 0; i < flagged.length; i += 100) {
+    const ids = flagged.slice(i, i + 100).map((s) => s.profile_id);
+    const [people, personLinks] = await Promise.all([
+      service.from("profiles").select("id, first_name, preferred_name, last_name, suffix").eq("org_id", orgId).in("id", ids),
+      service.from("records_person_links").select("profile_id, external_person_id").eq("org_id", orgId).in("profile_id", ids),
+    ]);
+    if (people.error || personLinks.error) {
+      throw new RecordsStoreError("records review read failed", { cause: people.error ?? personLinks.error });
+    }
+    const byId = new Map((people.data ?? []).map((p) => [p.id, p]));
+    const personOf = new Map((personLinks.data ?? []).map((l) => [l.profile_id, l.external_person_id]));
+    for (const state of flagged.slice(i, i + 100)) {
+      const profile = byId.get(state.profile_id);
+      const personId = personOf.get(state.profile_id);
+      if (!profile || !personId) continue;
+      review.push({
+        profileId: state.profile_id,
+        personId,
+        name: hasName(profile) ? displayName(profile) : "Unnamed person",
+        reason: state.review_reason as ReviewPerson["reason"],
+        since: state.review_since,
+      });
+    }
+  }
+  review.sort((a, b) => a.name.localeCompare(b.name));
+
+  return {
+    lastRefreshedAt: refresh.data?.last_refreshed_at ?? null,
+    pending: Math.max(0, (links.count ?? 0) - states.length),
+    review,
+  };
 }

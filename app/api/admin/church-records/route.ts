@@ -9,12 +9,13 @@ import { providerFor } from "@/lib/integrations/records/providers";
 import { deleteConnection, readConnection, saveConnection } from "@/lib/integrations/records/store";
 
 /**
- * /api/admin/church-records — the church's connection to its records, such
- * as its Rock RMS.
+ * /api/admin/church-records — the church's connection to its records, in
+ * whichever church software keeps them.
  *
  *   GET     the connection as an admin may see it: the provider, address, the
  *           key's last characters and when it was connected. Never the key.
- *   PUT     connect, or replace the provider, address or key. The key is
+ *   PUT     connect, or replace the provider, address or key. The body names
+ *           the provider; a missing or unknown one is refused. The key is
  *           tried against the provider before it is saved, then sealed; a new
  *           provider or address removes the links made against the old one.
  *   DELETE  disconnect: removes the key and every link. Profiles keep
@@ -28,7 +29,8 @@ const KEY_SHAPE = /^[\x21-\x7e]{8,200}$/;
 
 function summary(connection: Awaited<ReturnType<typeof readConnection>>) {
   if (!connection) return null;
-  return { ...connection, providerLabel: providerFor(connection.provider)?.label ?? connection.provider };
+  const provider = providerFor(connection.provider);
+  return { ...connection, providerLabel: provider?.label ?? connection.provider, canCopy: !!provider?.copy };
 }
 
 export async function GET() {
@@ -51,7 +53,7 @@ export async function PUT(request: Request) {
   const { orgId, user } = gate;
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-  const provider = providerFor(body?.provider ?? "rock");
+  const provider = providerFor(body?.provider);
   if (!provider) return NextResponse.json({ error: "Choose which church software to connect." }, { status: 400 });
   const address = parseRecordsAddress(typeof body?.address === "string" ? body.address : "", provider.label);
   if (!address.ok) return NextResponse.json({ error: address.reason }, { status: 400 });
