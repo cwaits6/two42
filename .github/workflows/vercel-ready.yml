@@ -1,0 +1,63 @@
+name: Vercel build on ready
+
+# Vercel skips preview builds while a PR is a draft (scripts/vercel-ignore-build.sh),
+# and a skipped build still leaves a green "Vercel – two42" status on the commit.
+# Marking a PR ready pushes nothing, so without this job the head a merge relies
+# on would never have been built. This asks Vercel to build that head now.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [ready_for_review]
+
+permissions: {}
+
+concurrency:
+  group: vercel-ready-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build the ready PR's head on Vercel
+    runs-on: ubuntu-latest
+    # Fork PRs get no secrets, and Vercel doesn't build them without approval anyway.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Create a Vercel deployment for the head commit
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+          REPO_ID: ${{ github.event.repository.id }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -eu
+          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "::warning::VERCEL_TOKEN or VERCEL_PROJECT_ID is not set. Push a commit to build this PR on Vercel."
+            exit 0
+          fi
+          team=""
+          if [ -n "$VERCEL_TEAM_ID" ]; then team="?teamId=$VERCEL_TEAM_ID"; fi
+
+          name=$(curl -fsS --max-time 20 --retry 3 --retry-all-errors \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID$team" | jq -r .name)
+
+          body=$(jq -n --arg name "$name" --arg project "$VERCEL_PROJECT_ID" \
+            --arg ref "$HEAD_REF" --arg sha "$HEAD_SHA" --argjson repoId "$REPO_ID" \
+            '{name: $name, project: $project, target: "preview",
+              gitSource: {type: "github", repoId: $repoId, ref: $ref, sha: $sha}}')
+
+          if ! out=$(curl -sS --max-time 30 -w '\n%{http_code}' -X POST \
+              -H "Authorization: Bearer $VERCEL_TOKEN" -H "Content-Type: application/json" \
+              -d "$body" "https://api.vercel.com/v13/deployments$team"); then
+            echo "::error::Couldn't reach Vercel. Push a commit to build this PR."
+            exit 1
+          fi
+          code=$(printf '%s' "$out" | tail -n1)
+          if [ "$code" -ge 300 ]; then
+            printf '%s' "$out" | sed '$d' | jq -r '"::error::Vercel answered \(.error.code // "an error"): \(.error.message // "no message")"' || true
+            exit 1
+          fi
+          printf '%s' "$out" | sed '$d' | jq -r '"Vercel deployment \(.id) started for \(.meta.githubCommitSha // "the head")."'
