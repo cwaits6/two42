@@ -101,3 +101,12 @@ const writtenInCase = (word: string) =>
 export const MAX_NAME_LENGTH = 100;
 export const MAX_TITLE_LENGTH = 40;
 export const MAX_SUFFIX_LENGTH = 20;
+
+/** Lowercased, accents and punctuation removed, so "José O'Brien" and "jose obrien" agree. */
+export function normalizeName(value: string | null | undefined): string {
+  return (value ?? "")
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, "");
+}
