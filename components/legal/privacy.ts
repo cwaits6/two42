@@ -91,7 +91,7 @@ export const PRIVACY: LegalDocument = {
           "A comment on a prayer request is seen by everyone who can see the request, or, if you choose, only by you and the person who posted the request. With your name hidden, a comment shows no name to anyone: not to other members, leaders or church admins. You, the person who posted the request, and the group's leaders can delete a comment.",
           "A Supper club sign-up is seen by the people in it, the group's leaders, and, once a leader publishes the tables, the people seated at the same table. The same goes for each person's Going or Not going for a supper.",
           "A host's address for the Supper club is seen by the host, the group's leaders, and the people seated at a table that host has a supper for, only once a leader publishes the tables. Allergies and food needs are seen by the people who signed up together, the group's leaders, and the host of each supper they are seated at. Being a church admin gives no extra access to the Supper club.",
-          "Which of your details came from your church's records, and your church's value for each, is seen by you and church admins.",
+          "Which of your details came from your church's records, and your church's value for each, is seen by you, church admins, and the household's primary or spouse, who can edit your profile. Everyone in your household sees where the household's anniversary came from.",
           "Email reminders and team messages go only to the people they are for.",
         ],
       ],

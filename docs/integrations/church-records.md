@@ -266,10 +266,13 @@ address, family, group or giving data; copying reads listed phones.
   `lib/integrations/records/` `refresh.ts`, `photo.ts`, `settings.ts`,
   `labels.ts` and `profileRecords.ts`.
 
-The integration stays a leaf: outside these paths only the link on Church
-settings, the profile pages (`app/profile/page.tsx`,
-`app/admin/members/[id]/page.tsx`) and the profile form's labels
-(`lib/integrations/records/labels.ts`) import it.
+Outside these paths, three kinds of code import it: the link on Church
+settings; the pages and forms that show a detail's records state
+(`app/profile/page.tsx`, `app/profile/setup/`, `app/admin/members/[id]/page.tsx`,
+`app/admin/families/HouseholdsManager.tsx`, `components/profile/` and
+`components/household/`); and name saving everywhere, because
+`lib/sanitize.ts` and `lib/nameField.ts` use `_shared/name-case.ts`. Removing
+the integration keeps `name-case.ts`.
 
 ### Baseline decisions
 
@@ -317,7 +320,9 @@ and kept up to date.
   `photo` and `grade` (the person's own household member row). The preferred
   name follows `name`, and is never locked. Turning a field off removes its
   sources, so its values become ordinary two42 data; any change asks the next
-  refresh to copy everyone in full.
+  refresh to copy everyone in full. A save is refused while a refresh holds
+  its claim, because that refresh works from the settings it read when it
+  started.
 - **Where each value came from** (`records_field_values`): per linked person
   and field, `records`, `changed` or `cleared`, with the church's last value.
   It goes with the link, so unlinking or disconnecting leaves the values as
@@ -360,8 +365,21 @@ and kept up to date.
 - **Needs review**: linked people who are inactive (or deceased, or not a
   person record) or can't be found. Nothing happens to them; they aren't
   copied while listed.
+- **Last refreshed** is written only when a refresh finishes; a failed one
+  releases its claim and leaves it as it was. A photo the records can't serve
+  right now (no answer, a timeout, a 5xx or a 429) fails that person's copy, so
+  they are tried again; a photo the records have no usable copy of is
+  skipped.
 - **The one-time notice**: set when a copy first fills a value, shown on
-  **My profile** until the member selects **Got it**, never again.
+  **My profile** until the member selects **Got it**, never again. It links to
+  each filled detail the member can change; the anniversary's link opens the
+  Household tab. A linked person's grade is on no member's form.
+- **Labels on every form that edits a copied detail**: **My profile**, the
+  setup steps, the household edit sheet (a household manager reads the
+  sources of the people they can edit), the household's anniversary (everyone
+  in the household reads its source) and the church admin's member and
+  household pages. When the sources can't be read, the page shows its error
+  state rather than a form that would offer a locked detail.
 - **Providers.** Copying is the optional `copy` capability of
   `RecordsProvider`; the shared code asks whether a provider has it and never
   names one. Each provider also describes its own connect step. The nightly
@@ -408,9 +426,6 @@ with a 500 if it doesn't.
   counts it as skipped. Check on a real install.
 - **The hosted Edge Runtime**: the loopback check above, and the time a first
   copy of a large church takes.
-- **Labels on the household screens.** The anniversary and a child's grade
-  are marked by the triggers, and a locked grade is kept, but the household
-  forms don't show the labels yet.
 
 ## Rock RMS
 

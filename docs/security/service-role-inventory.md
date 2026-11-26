@@ -1003,14 +1003,17 @@ for a profile of another church), the link it requires (`unlinked`
 otherwise), the household and household member rows it writes, and the
 sources and person state it upserts. A copy whose `_expected` values no longer
 match the rows writes nothing and answers `stale`, so a member's edit that
-landed after the refresh read is never overwritten. Callers pass an org from
+landed after the refresh read is never overwritten. `records_save_field_settings()`
+first locks that church's `records_refresh_state` row and answers `busy`,
+saving nothing, while a refresh holds its claim. Callers pass an org from
 `requireOrgAdmin()` (`lib/integrations/records/store.ts`,
 `lib/integrations/records/refresh.ts`) or from the `forEachOrg()` iteration
 (`refresh-church-records`). `records_field_settings`,
 `records_field_values`, `records_person_state` and `records_refresh_state` all
 carry the restrictive isolation floor; members hold only `select` on the
-settings and their own sources, and `select`/`update (notice_seen_at)` on
-their own notice. `supabase/tests/church_records_copy_suite.sql` proves the
+settings and on sources (their own; a household manager's, those of the people
+in their household; everyone in a household, the anniversary's), and
+`select`/`update (notice_seen_at)` on their own notice. `supabase/tests/church_records_copy_suite.sql` proves the
 boundary.
 
 ## Church records member edits — definer-function bypass surfaces
