@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import { loadPastTables, type RotationRow } from "./load";
+import { loadPastTables, loadRotationTitles, type RotationRow } from "./load";
 
 vi.mock("@/lib/log", () => ({ logError: vi.fn(), stepOf: (what: string) => what }));
 
@@ -91,5 +91,43 @@ describe("loadPastTables", () => {
     const chain = { S2: "S1", S1: "S0", S0: null };
     expect(await loadPastTables(fakeClient(chain, seats, members, "supper_rotations").client, rotation("S2"))).toBeNull();
     expect(await loadPastTables(fakeClient(chain, seats, members, "supper_seats").client, rotation("S2"))).toBeNull();
+  });
+});
+
+describe("loadRotationTitles", () => {
+  const rows = [
+    { id: "R1", group_id: "G", title: "Fall 2026" },
+    { id: "R2", group_id: "G", title: "Spring 2027" },
+    { id: "R3", group_id: "other", title: "Winter 2026" },
+  ];
+  function titlesClient(failing = false) {
+    const from = () => {
+      const filters: ((r: (typeof rows)[number]) => boolean)[] = [];
+      const chain = {
+        select: () => chain,
+        eq: (column: "group_id", value: string) => (filters.push((r) => r[column] === value), chain),
+        neq: (column: "id", value: string) => (filters.push((r) => r[column] !== value), chain),
+        then: (resolve: (v: unknown) => unknown) =>
+          resolve(
+            failing
+              ? failed
+              : { data: rows.filter((r) => filters.every((f) => f(r))).map(({ title }) => ({ title })), error: null }
+          ),
+      };
+      return chain;
+    };
+    return { from } as unknown as SupabaseClient<Database>;
+  }
+
+  it("returns every title in the group", async () => {
+    expect(await loadRotationTitles(titlesClient(), "G")).toEqual(["Fall 2026", "Spring 2027"]);
+  });
+
+  it("leaves out the rotation being edited", async () => {
+    expect(await loadRotationTitles(titlesClient(), "G", "R1")).toEqual(["Spring 2027"]);
+  });
+
+  it("returns null when the read fails", async () => {
+    expect(await loadRotationTitles(titlesClient(true), "G")).toBeNull();
   });
 });
