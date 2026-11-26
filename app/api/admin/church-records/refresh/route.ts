@@ -32,9 +32,14 @@ export async function POST() {
     loaded = await loadCredentials(orgId, secret);
   } catch (err) {
     // A key that won't open means RECORDS_KEY_SECRET changed since it was saved.
-    const step = err instanceof RecordsCryptoError ? "open_key" : "read_connection";
-    logError("Church records credentials unavailable", err, { route: "/api/admin/church-records/refresh", step, ids: { org: orgId } });
-    return NextResponse.json({ error: "Connect your church's records again." }, { status: 409 });
+    const keyLost = err instanceof RecordsCryptoError;
+    logError("Church records credentials unavailable", err, {
+      route: "/api/admin/church-records/refresh",
+      step: keyLost ? "open_key" : "read_connection",
+      ids: { org: orgId },
+    });
+    if (keyLost) return NextResponse.json({ error: "Connect your church's records again." }, { status: 409 });
+    return NextResponse.json({ error: "Couldn't load the connection." }, { status: 500 });
   }
   if (!loaded) return hidden();
 

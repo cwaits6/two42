@@ -10,6 +10,7 @@ vi.mock("@/lib/integrations/records/store", () => store);
 const refresh = vi.hoisted(() => ({ refreshNow: vi.fn() }));
 vi.mock("@/lib/integrations/records/refresh", () => refresh);
 
+import { RecordsCryptoError } from "@/lib/integrations/records/crypto";
 import { RecordsError } from "@/lib/integrations/records/errors";
 import { rockProvider } from "@/lib/integrations/rock/provider";
 import { POST } from "./route";
@@ -54,6 +55,19 @@ describe("POST /api/admin/church-records/refresh", () => {
     store.loadCredentials.mockResolvedValue(LOADED);
     refresh.refreshNow.mockResolvedValue(null);
     expect((await POST()).status).toBe(404);
+  });
+
+  it("asks for a reconnect only when the saved key won't open", async () => {
+    store.loadCredentials.mockRejectedValue(new RecordsCryptoError());
+    let res = await POST();
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe("Connect your church's records again.");
+
+    store.loadCredentials.mockRejectedValue(new Error("read failed"));
+    res = await POST();
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toBe("Couldn't load the connection.");
+    expect(refresh.refreshNow).not.toHaveBeenCalled();
   });
 
   it("says when a refresh is already running", async () => {
