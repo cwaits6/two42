@@ -9,13 +9,13 @@ import { LoadingState } from "@/components/states/LoadingState";
 import { NETWORK_ERROR } from "@/lib/errorCopy";
 import { FIELD_LABELS } from "@/lib/integrations/records/labels";
 import { logError } from "@/lib/log";
-import type { RecordsField } from "@/supabase/functions/_shared/records-copy";
 import {
   choicesFor,
   type FieldChoice,
-  RECORDS_FIELDS,
   type RefreshCounts,
   refreshMessage,
+  SETTINGS_FIELDS,
+  type SettingsField,
   settingsBody,
 } from "./copyFields";
 import { count, page, people } from "./linkLists";
@@ -31,13 +31,13 @@ interface ReviewRow {
 }
 
 interface CopyData {
-  fields: Partial<Record<RecordsField, "locked" | "member">>;
+  fields: Partial<Record<SettingsField, "locked" | "member">>;
   lastRefreshedAt: string | null;
   pending: number;
   review: ReviewRow[];
 }
 
-type Choices = Partial<Record<RecordsField, FieldChoice>>;
+type Choices = Partial<Record<SettingsField, FieldChoice>>;
 
 function when(iso: string): string {
   return new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
@@ -119,6 +119,7 @@ export function RecordsCopySettings({ label }: { label: string }) {
         pending: counted("pending"),
         failed: counted("failed"),
         photosSkipped: counted("photosSkipped"),
+        householdsUnavailable: res.data?.householdsUnavailable === true,
       });
       if (message.tone === "success") toast.success(message.text);
       else toast.warning(message.text);
@@ -165,7 +166,7 @@ export function RecordsCopySettings({ label }: { label: string }) {
   }
   if (!data) return <LoadingState thing="what two42 copies" />;
 
-  const changed = RECORDS_FIELDS.some((field) => (choices[field] ?? "off") !== (data.fields[field] ?? "off"));
+  const changed = SETTINGS_FIELDS.some((field) => (choices[field] ?? "off") !== (data.fields[field] ?? "off"));
   const review = page(data.review, reviewPage);
 
   return (
@@ -182,7 +183,7 @@ export function RecordsCopySettings({ label }: { label: string }) {
           </p>
           <fieldset disabled={saving} className="m-0 min-w-0 border-0 p-0">
             <ul className="divide-y divide-border">
-              {RECORDS_FIELDS.map((field) => (
+              {SETTINGS_FIELDS.map((field) => (
                 <li key={field} className="space-y-3 py-4">
                   <p id={`copy-${field}`} className="text-lg font-semibold">
                     {FIELD_LABELS[field]}
@@ -193,6 +194,12 @@ export function RecordsCopySettings({ label }: { label: string }) {
                     value={choices[field] ?? "off"}
                     onChange={(value) => setChoices((prev) => ({ ...prev, [field]: value }))}
                   />
+                  {field === "address" && (
+                    <p className="text-base text-muted-foreground">
+                      The family&apos;s address and home phone go to its household, once you confirm the household on
+                      the Households tab. Either adult in the household can change or clear them.
+                    </p>
+                  )}
                   {field === "name" && (
                     <p className="text-base text-muted-foreground">
                       First and last name. The preferred name is filled from the nick name only while a member

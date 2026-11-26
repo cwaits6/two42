@@ -55,7 +55,14 @@ describe("POST /api/admin/church-records/refresh", () => {
 
   it("refreshes the admin's own church and answers with counts only", async () => {
     const res = await POST();
-    expect(await res.json()).toEqual({ copied: 2, pending: 0, review: 1, photosSkipped: 0, failed: 0 });
+    expect(await res.json()).toEqual({
+      copied: 2,
+      pending: 0,
+      review: 1,
+      photosSkipped: 0,
+      failed: 0,
+      householdsUnavailable: false,
+    });
     expect(refresh.refreshNow).toHaveBeenCalledWith("org-1", LOADED);
   });
 

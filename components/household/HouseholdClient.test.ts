@@ -34,7 +34,7 @@ const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
 async function mount(
   family = FAMILY,
   householdProfiles: Profile[] = [],
-  records: { householdRecords?: Record<string, ProfileRecords>; anniversaryRecords?: ProfileRecords | null } = {},
+  records: { householdRecords?: Record<string, ProfileRecords>; householdDetailRecords?: ProfileRecords | null } = {},
 ) {
   const host = document.createElement("div");
   document.body.append(host);
@@ -244,7 +244,7 @@ describe("details from the church's records", () => {
 
   it("puts a changed anniversary back to the church's value", async () => {
     await mount(FAMILY, [], {
-      anniversaryRecords: {
+      householdDetailRecords: {
         settings: { anniversary: "member" },
         values: {
           anniversary: {
@@ -261,5 +261,32 @@ describe("details from the church's records", () => {
     expect(savedBody()).toEqual({ anniversary_month: "6", anniversary_day: "1", anniversary_year: "1985" });
     expect(toast.success).toHaveBeenCalledWith("Your church's value is back.");
     expect(field("anniversary_day").value).toBe("1");
+  });
+
+  it("puts a changed address back to the church's value, and shows a home phone from the records", async () => {
+    await mount(FAMILY, [], {
+      householdDetailRecords: {
+        settings: { address: "member", phone_home: "member" },
+        values: {
+          address: {
+            state: "changed",
+            churchValue: { address_line1: "505 Example Drive", address_line2: null, city: "Springfield", state: "IL", postal_code: "62703" },
+          },
+          phone_home: { state: "records", churchValue: { phone_home: "+15550105" } },
+        },
+        noticeDue: false,
+      },
+    });
+    expect(document.body.textContent).toContain("From your church's records");
+    const back = [...document.querySelectorAll("button")].find((b) => b.textContent === "Use your church's value")!;
+    await act(async () => back.click());
+    expect(savedBody()).toEqual({
+      address_line1: "505 Example Drive",
+      address_line2: "",
+      city: "Springfield",
+      state: "IL",
+      postal_code: "62703",
+    });
+    expect(field("address_line1").value).toBe("505 Example Drive");
   });
 });

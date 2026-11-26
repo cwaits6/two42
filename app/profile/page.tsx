@@ -14,7 +14,11 @@ import { PROFILE_COLUMNS, type ProfileColumns } from "@/lib/profileColumns";
 import { logError } from "@/lib/log";
 import { todayIn } from "@/lib/serving/dates";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
-import { householdAnniversary, readProfileRecords } from "@/lib/integrations/records/profileRecords";
+import {
+  readHouseholdRecords,
+  readProfileRecords,
+  readSuggestedChildren,
+} from "@/lib/integrations/records/profileRecords";
 import { changeableFilled } from "@/lib/integrations/records/labels";
 import { RecordsNotice } from "@/components/profile/RecordsNotice";
 
@@ -121,7 +125,7 @@ export default async function ProfilePage() {
   // Private buckets: exchange every stored avatar/photo URL for a
   // signed URL in one batch before the data reaches client renders. The
   // upload paths keep persisting raw URLs — this only touches what's shown.
-  const [signed, timeZone, recordsRead] = await Promise.all([
+  const [signed, timeZone, recordsRead, suggestedChildren] = await Promise.all([
     mintSignedUrls([
     profile.avatar_url,
     family?.photo_url,
@@ -130,8 +134,11 @@ export default async function ProfilePage() {
     ]),
     getOrgTimeZone(),
     readProfileRecords([user.id, ...householdProfiles.map((p) => p.id)], user.id),
+    family && canEditSpouseProfiles ? readSuggestedChildren(family.id) : Promise.resolve([]),
   ]);
-  if (!recordsRead.ok) {
+  const householdRead =
+    family && recordsRead.ok ? await readHouseholdRecords(family.id, recordsRead.byProfile) : ({ ok: true, records: null } as const);
+  if (!recordsRead.ok || !householdRead.ok) {
     return (
       <PageContainer>
         {header}
@@ -164,7 +171,8 @@ export default async function ProfilePage() {
         profile={profile}
         records={records}
         householdRecords={recordsRead.byProfile}
-        anniversaryRecords={householdAnniversary(recordsRead.byProfile)}
+        householdDetailRecords={householdRead.records}
+        suggestedChildren={suggestedChildren}
         family={family}
         householdProfiles={householdProfiles}
         familyMembers={familyMembers}

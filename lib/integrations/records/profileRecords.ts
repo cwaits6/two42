@@ -64,3 +64,68 @@ export function householdAnniversary(read: Record<string, ProfileRecords>): Prof
   const agreed = agreedAnniversary(withSource.map((records) => records.values.anniversary!));
   return agreed ? { ...withSource[0], values: { anniversary: agreed } } : null;
 }
+
+/**
+ * The household's own details from the records: its address and home phone,
+ * and the anniversary its linked people's sources agree on. Null when none
+ * came from the records; not ok when the read failed, as for people.
+ */
+export async function readHouseholdRecords(
+  familyId: string,
+  people: Record<string, ProfileRecords>,
+): Promise<{ ok: true; records: ProfileRecords | null } | { ok: false }> {
+  const supabase = await createClient();
+  const [settings, values] = await Promise.all([
+    supabase.from("records_field_settings").select("field, mode"),
+    supabase.from("records_household_values").select("field, state, church_value").eq("family_id", familyId),
+  ]);
+  const error = settings.error ?? values.error;
+  if (error) {
+    logError("Church records household labels read failed", error, { step: "records_household_labels" });
+    return { ok: false };
+  }
+  const anniversary = householdAnniversary(people);
+  const own = Object.fromEntries(
+    (values.data ?? []).map((row) => [row.field, { state: row.state, churchValue: row.church_value }]),
+  ) as ProfileRecords["values"];
+  if (!anniversary && Object.keys(own).length === 0) return { ok: true, records: null };
+  return {
+    ok: true,
+    records: {
+      settings: Object.fromEntries((settings.data ?? []).map((row) => [row.field, row.mode])),
+      values: { ...anniversary?.values, ...own },
+      noticeDue: false,
+    },
+  };
+}
+
+export interface SuggestedChild {
+  id: string;
+  first_name: string;
+  last_name: string;
+  birth_month: number | null;
+  birth_day: number | null;
+  graduation_year: number | null;
+}
+
+/**
+ * The children the church's records suggest for this household. RLS shows
+ * them only to its primary and spouse, and only while the church suggests
+ * children. A failed read shows no card: nothing is offered wrongly.
+ */
+export async function readSuggestedChildren(familyId: string): Promise<SuggestedChild[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("records_child_suggestions")
+    .select("id, first_name, last_name, birth_month, birth_day, graduation_year")
+    .eq("family_id", familyId)
+    .eq("state", "open")
+    .order("first_name");
+  if (error) {
+    logError("Suggested children read failed", error, { step: "records_child_suggestions" });
+    return [];
+  }
+  return (data ?? []).flatMap((row) =>
+    row.first_name && row.last_name ? [{ ...row, first_name: row.first_name, last_name: row.last_name }] : [],
+  );
+}

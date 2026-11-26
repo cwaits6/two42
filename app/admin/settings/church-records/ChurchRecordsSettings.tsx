@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Segmented } from "@/components/ui/segmented";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -17,6 +18,7 @@ import { logError } from "@/lib/log";
 import type { RecordsConnectStep } from "@/lib/integrations/records/types";
 import { PersonLinks } from "./PersonLinks";
 import { RecordsCopySettings } from "./RecordsCopySettings";
+import { RecordsHouseholds } from "./RecordsHouseholds";
 import { call, errorText } from "./requests";
 
 export interface Connection {
@@ -24,6 +26,8 @@ export interface Connection {
   providerLabel: string;
   /** Whether the provider offers copying people's details into two42. */
   canCopy: boolean;
+  /** Whether the provider reads families, for the Households tab. */
+  canSuggestHouseholds: boolean;
   baseUrl: string;
   keyHint: string;
   connectedAt: string;
@@ -79,15 +83,42 @@ export function ChurchRecordsSettings({ providers }: { providers: ProviderChoice
       ) : connection ? (
         <div className="space-y-8">
           <ConnectedCard connection={connection} providers={providers} onChange={setConnection} />
-          <PersonLinks key={connection.provider + connection.baseUrl + connection.keyHint} label={connection.providerLabel} />
-          {connection.canCopy && (
-            <RecordsCopySettings key={connection.provider + connection.baseUrl} label={connection.providerLabel} />
+          {connection.canSuggestHouseholds ? (
+            <Tabs defaultValue="people">
+              <TabsList className="mb-6">
+                <TabsTrigger value="people" className="px-6 text-base">
+                  People
+                </TabsTrigger>
+                <TabsTrigger value="households" className="px-6 text-base">
+                  Households
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="people" className="space-y-8">
+                <PeopleSettings connection={connection} />
+              </TabsContent>
+              <TabsContent value="households">
+                <RecordsHouseholds key={connection.provider + connection.baseUrl} label={connection.providerLabel} />
+              </TabsContent>
+            </Tabs>
+          ) : (
+            <PeopleSettings connection={connection} />
           )}
         </div>
       ) : (
         <ConnectForm providers={providers} onConnected={setConnection} />
       )}
     </PageContainer>
+  );
+}
+
+function PeopleSettings({ connection }: { connection: Connection }) {
+  return (
+    <>
+      <PersonLinks key={connection.provider + connection.baseUrl + connection.keyHint} label={connection.providerLabel} />
+      {connection.canCopy && (
+        <RecordsCopySettings key={connection.provider + connection.baseUrl} label={connection.providerLabel} />
+      )}
+    </>
   );
 }
 
