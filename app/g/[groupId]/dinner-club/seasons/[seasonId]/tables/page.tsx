@@ -98,6 +98,8 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
     .filter((d) => new Date(d.starts_at) <= now)
     .map((d) => dinnerKey(d.table_id, d.season_date_id));
   const futureDinners = data.dinners.filter((d) => new Date(d.starts_at) > now);
+  const cantHost = cantHostDinners(futureDinners, data.parties);
+  const cantHostIds = new Set(cantHost.map((d) => d.id));
   const pastPairs = pastPairsFromHistory(
     shuffleable.map((p) => ({ id: p.id, profileIds: peopleOf(data, p.id) })),
     pastTables
@@ -132,10 +134,7 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
             heldDinners={heldDinners}
             futureDateIds={data.dates.filter((d) => new Date(d.starts_at) > now).map((d) => d.id)}
             cantHost={Object.fromEntries(
-              cantHostDinners(futureDinners, data.parties).map((d) => [
-                dinnerKey(d.table_id, d.season_date_id),
-                d.host_party_id,
-              ])
+              cantHost.map((d) => [dinnerKey(d.table_id, d.season_date_id), d.host_party_id])
             )}
             pastPairs={pastPairs}
           />
@@ -162,7 +161,7 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
                           {d.host_party_id ? `Host: ${names[d.host_party_id] ?? ""}` : "No host"}
                           {d.host_party_id && addressOf.get(d.host_party_id) ? ` · ${addressOf.get(d.host_party_id)}` : ""}
                         </p>
-                        {d.host_unavailable && new Date(d.starts_at) > now && (
+                        {cantHostIds.has(d.id) && (
                           <p className="text-base font-semibold text-destructive">Host can&apos;t host</p>
                         )}
                       </div>
