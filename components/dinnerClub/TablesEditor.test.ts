@@ -75,7 +75,7 @@ async function mount() {
         initialDraft: fitted,
         heldDinners: [],
         futureDateIds: ["d1", "d2"],
-        cantHost: [],
+        cantHost: {},
         pastPairs: [],
       }),
     ),

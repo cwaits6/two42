@@ -112,8 +112,8 @@ export function TablesEditor({
   heldDinners: string[];
   /** Season dates still to come. */
   futureDateIds: string[];
-  /** Dinners still to come whose host said they can't host, as `dinnerKey(tableId, seasonDateId)`. */
-  cantHost: string[];
+  /** Dinners still to come whose host said they can't host: the published host, by `dinnerKey(tableId, seasonDateId)`. */
+  cantHost: Record<string, string | null>;
   /** Parties who shared a table in the last two seasons. */
   pastPairs: [string, string][];
 }) {
@@ -128,7 +128,6 @@ export function TablesEditor({
   const settings = { format, parties, dateIds, tableSize, allowBackToBack, pastPairs };
   const held = useMemo(() => new Set(heldDinners), [heldDinners]);
   const future = useMemo(() => new Set(futureDateIds), [futureDateIds]);
-  const cantHostKeys = useMemo(() => new Set(cantHost), [cantHost]);
   const warnings = draft ? draftWarnings(draft, settings, held) : null;
   const blocked = warnings ? blocksPublish(warnings) : false;
   const blockedId = useId();
@@ -321,7 +320,7 @@ export function TablesEditor({
                   ? t.hosts.filter((h) => !isHeld(h.seasonDateId))
                   : [{ seasonDateId: t.hosts[0]?.seasonDateId ?? "", partyId: mostHosting(t) }];
               const cantHostDates = t.tableId
-                ? t.hosts.filter((h) => cantHostKeys.has(dinnerKey(t.tableId!, h.seasonDateId)))
+                ? t.hosts.filter((h) => dinnerKey(t.tableId!, h.seasonDateId) in cantHost)
                 : [];
               const needsHost = cantHostDates.length > 0 || Boolean(w?.noHost);
               return (
@@ -387,6 +386,9 @@ export function TablesEditor({
                     </ul>
                     {cantHostDates.map((h) => {
                       const date = dateLabel.get(h.seasonDateId) ?? "this date";
+                      const absent = cantHost[dinnerKey(t.tableId!, h.seasonDateId)];
+                      const standIn = h.partyId && h.partyId !== absent ? h.partyId : null;
+                      const standIns = hostItems.filter((o) => o.value !== absent);
                       const swaps = t.hosts
                         .filter(
                           (o) =>
@@ -394,15 +396,18 @@ export function TablesEditor({
                             !isHeld(o.seasonDateId) &&
                             future.has(o.seasonDateId) &&
                             o.partyId &&
-                            o.partyId !== h.partyId &&
-                            !cantHostKeys.has(dinnerKey(t.tableId!, o.seasonDateId))
+                            o.partyId !== absent &&
+                            !(dinnerKey(t.tableId!, o.seasonDateId) in cantHost)
                         )
                         .map((o) => ({ value: o.seasonDateId, label: `${dateLabel.get(o.seasonDateId)}: ${names[o.partyId!]}` }));
                       return (
                         <div key={h.seasonDateId} className="space-y-3 rounded-xl border border-destructive/40 bg-destructive/5 p-4">
                           <p className="text-lg font-semibold">
-                            {h.partyId ? names[h.partyId] : "The host"} can&apos;t host on {date}.
+                            {absent ? names[absent] : "The host"} can&apos;t host on {date}.
                           </p>
+                          {standIn && (
+                            <p className="text-base">{names[standIn]} hosts instead. Publish to tell the table.</p>
+                          )}
                           {format === "same_table_rotating" && swaps.length > 0 && (
                             <OptionSelect
                               id={`swap-${t.key}-${h.seasonDateId}`}
@@ -414,12 +419,12 @@ export function TablesEditor({
                               onChange={(other) => void save(swapHostTurns(draft!, t.key, h.seasonDateId, other))}
                             />
                           )}
-                          {format === "same_table_one_host" && (
+                          {format === "same_table_one_host" && standIns.length > 0 && (
                             <OptionSelect
                               id={`standin-${t.key}-${h.seasonDateId}`}
                               label={`Host on ${date}`}
-                              items={hostItems}
-                              value={h.partyId}
+                              items={standIns}
+                              value={standIn}
                               placeholder="Choose a host"
                               disabled={saving || publishing}
                               onChange={(partyId) => void save(setTableHost(draft!, t.key, partyId, h.seasonDateId))}
@@ -431,11 +436,15 @@ export function TablesEditor({
                               disabled={saving || publishing}
                               onClick={() => {
                                 const moved = moveGuests(draft!, t.key, byId, tableSize.max, pastPairs);
-                                void save(moved.draft).then((ok) => {
-                                  if (ok && moved.unplaced.length > 0) {
-                                    toast.warning(`No room for: ${moved.unplaced.map((id) => names[id]).join("; ")}. Seat them below.`);
-                                  }
-                                });
+                                if (moved.draft === draft) {
+                                  toast.error(
+                                    moved.unplaced.length > 0
+                                      ? `Not enough room on ${date} for ${moved.unplaced.map((id) => names[id]).join("; ")}, so nobody was moved. Move or swap guests by hand, or move the dinner.`
+                                      : `No other table on ${date}, so nobody was moved. Move the dinner instead.`
+                                  );
+                                  return;
+                                }
+                                void save(moved.draft);
                               }}
                             >
                               Move guests

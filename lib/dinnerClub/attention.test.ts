@@ -78,6 +78,21 @@ describe("seasonAttention", () => {
     expect(result.room).toEqual([{ tableId: "T1", seasonDateId: null, free: 6 }]);
   });
 
+  it("counts a dinner once when its host said they can't host and then withdrew", () => {
+    const result = season({
+      parties: [
+        { id: "h1", status: "withdrawn" },
+        { id: "c1", status: "signed_up" },
+      ],
+      shuffleParties: [party("c1", 2)],
+      dinners: [
+        { id: "next", table_id: "T1", season_date_id: "d2", starts_at: LATER, host_party_id: "h1", host_unavailable: true },
+      ],
+    });
+    expect(result.hostLeft).toEqual(["next"]);
+    expect(result.cantHost).toEqual([]);
+  });
+
   it("reports no room when nobody is waiting", () => {
     expect(season({ parties: [{ id: "h1", status: "signed_up" }] }).room).toEqual([]);
   });

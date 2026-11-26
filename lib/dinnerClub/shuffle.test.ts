@@ -610,7 +610,24 @@ describe("when plans change after publishing", () => {
     expect(moved.tables.find((t) => t.key === "A")!.partyIds).toEqual(["h1"]);
   });
 
-  it("leaves a party no table has room for, and the host, off that night", () => {
+  it("leaves the host off that night", () => {
+    const parties = [party("h1", 2, { seats: 6 }), party("h2", 2, { seats: 6 }), party("s1", 1)];
+    const byId = new Map(parties.map((p) => [p.id, p]));
+    const draft = draftFromPublished(
+      published([
+        { id: "A", date: "d1", partyIds: ["h1"], hosts: [["d1", "h1"]] },
+        { id: "B", date: "d1", partyIds: ["h2", "s1"], hosts: [["d1", "h2"]] },
+      ]),
+      "new_tables",
+      ["d1"],
+      0
+    );
+    const { draft: moved, unplaced } = moveGuests(draft, "B", byId, 8, []);
+    expect(unplaced).toEqual([]);
+    expect(moved.tables).toEqual([{ ...draft.tables[0], partyIds: ["h1", "s1"] }]);
+  });
+
+  it("moves nobody when a guest has no table with room", () => {
     const parties = [party("h1", 2, { seats: 3 }), party("h2", 2, { seats: 6 }), party("c1", 2), party("s1", 1)];
     const byId = new Map(parties.map((p) => [p.id, p]));
     const draft = draftFromPublished(
@@ -624,7 +641,21 @@ describe("when plans change after publishing", () => {
     );
     const { draft: moved, unplaced } = moveGuests(draft, "B", byId, 8, []);
     expect(unplaced).toEqual(["c1"]);
-    expect(moved.tables).toEqual([{ ...draft.tables[0], partyIds: ["h1", "s1"] }]);
+    expect(moved).toBe(draft);
+  });
+
+  it("moves nobody when the cancelled table is the only one that night", () => {
+    const parties = [party("h1", 2, { seats: 6 }), party("c1", 2), party("s1", 1)];
+    const byId = new Map(parties.map((p) => [p.id, p]));
+    const draft = draftFromPublished(
+      published([{ id: "A", date: "d1", partyIds: ["h1", "c1", "s1"], hosts: [["d1", "h1"]] }]),
+      "new_tables",
+      ["d1"],
+      0
+    );
+    const { draft: moved, unplaced } = moveGuests(draft, "A", byId, 8, []);
+    expect(unplaced).toEqual(["c1", "s1"]);
+    expect(moved).toBe(draft);
   });
 
   it("seats a waiting party at a table with room and changes no other table", () => {

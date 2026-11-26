@@ -2,7 +2,7 @@ import type { SeasonStatus } from "./labels";
 import { draftFromPublished, freeSeats, type DinnerFormat, type ShuffleParty } from "./shuffle";
 
 export interface SeasonAttention {
-  /** Dinners still to come whose host said they can't host. */
+  /** Dinners still to come whose host said they can't host and is still in the season. */
   cantHost: string[];
   /** Dinners still to come whose host has withdrawn, or that have none. */
   hostLeft: string[];
@@ -59,9 +59,10 @@ export function seasonAttention(input: {
     0
   );
 
+  const hostLeft = future.filter((d) => !d.host_party_id || withdrawn.has(d.host_party_id)).map((d) => d.id);
   return {
-    cantHost: future.filter((d) => d.host_unavailable).map((d) => d.id),
-    hostLeft: future.filter((d) => !d.host_party_id || withdrawn.has(d.host_party_id)).map((d) => d.id),
+    cantHost: future.filter((d) => d.host_unavailable && !hostLeft.includes(d.id)).map((d) => d.id),
+    hostLeft,
     waiting,
     room:
       waiting.length === 0

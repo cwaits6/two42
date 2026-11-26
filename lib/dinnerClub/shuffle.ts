@@ -636,8 +636,10 @@ export function seatParty(draft: Draft, partyId: string, toKey: string): Draft {
  * that table's guests across the same night's other tables with room and
  * drops the table. Couples go first, then singles; each to the table with
  * the most free seats, then the fewest people they already shared a table
- * with this season or before, then the earlier table. The host, and any
- * party no table has room for, are left off that night for the leader to seat.
+ * with this season or before, then the earlier table. The host is left off
+ * that night for the leader to seat. When any guest has no table with room,
+ * nothing moves: dropping the table would leave that guest without a seat, or
+ * the night without a table, and the draft is returned unchanged.
  */
 export function moveGuests(
   draft: Draft,
@@ -662,6 +664,7 @@ export function moveGuests(
     ...guests.filter((id) => parties.get(id)?.size !== 2),
   ];
   let tables = draft.tables.filter((t) => t.key !== tableKey);
+  if (!tables.some((t) => t.seasonDateId === from.seasonDateId)) return { draft, unplaced: guests };
   const unplaced: string[] = [];
   for (const id of order) {
     const size = parties.get(id)?.size ?? 1;
@@ -687,6 +690,7 @@ export function moveGuests(
     const target = best.key;
     tables = tables.map((t) => (t.key === target ? { ...t, partyIds: [...t.partyIds, id] } : t));
   }
+  if (unplaced.length > 0) return { draft, unplaced };
   return { draft: withTables(draft, tables), unplaced };
 }
 

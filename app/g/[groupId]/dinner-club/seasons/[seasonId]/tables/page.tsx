@@ -8,6 +8,7 @@ import { MoveDinnerButton } from "@/components/dinnerClub/MoveDinnerButton";
 import { TablesEditor } from "@/components/dinnerClub/TablesEditor";
 import { formatAddress } from "@/lib/dinnerClub/ics";
 import { dinnerWhen, FORMAT_LABELS, partyName } from "@/lib/dinnerClub/labels";
+import { bringListFor } from "@/lib/dinnerClub/bringList";
 import { pastPairsFromHistory } from "@/lib/dinnerClub/history";
 import { dinnerKey, draftFromPublished, fitDraft, parseDraft, type Draft } from "@/lib/dinnerClub/shuffle";
 import { groupPath, isUuid } from "@/lib/groups/active";
@@ -101,30 +102,12 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
     pastTables
   );
   const firstNames = new Map(people.map((p) => [p.id, p.firstName]));
-  const startsOf = new Map(data.dinners.map((d) => [d.id, d.starts_at]));
-  const bringList = (d: (typeof data.dinners)[number]) => {
-    const guests = data.seats
-      .filter((s) => s.table_id === d.table_id && !s.left_at && s.party_id !== d.host_party_id)
-      .map((s) => s.party_id);
-    return {
-      dinner: { id: d.id, seasonId: season.id, groupId: group.id, tableId: d.table_id, label: dinnerWhen(d.starts_at, zone) },
-      guests: guests.map((partyId) => ({
-        partyId,
-        names: partyName(peopleOf(data, partyId).map((id) => firstNames.get(id) ?? "Someone who left")),
-        item: data.contributions.find((c) => c.dinner_id === d.id && c.party_id === partyId)?.item ?? null,
-      })),
-      earlier: Object.fromEntries(
-        guests.map((partyId) => [
-          partyId,
-          data.contributions
-            .filter((c) => c.party_id === partyId && (startsOf.get(c.dinner_id) ?? "") < d.starts_at)
-            .sort((a, b) => (startsOf.get(a.dinner_id) ?? "").localeCompare(startsOf.get(b.dinner_id) ?? ""))
-            .map((c) => c.item),
-        ])
-      ),
-      dinnerIndex: data.dates.findIndex((x) => x.id === d.season_date_id),
-    };
-  };
+  const bringList = (d: (typeof data.dinners)[number]) => ({
+    dinner: { id: d.id, seasonId: season.id, groupId: group.id, tableId: d.table_id, label: dinnerWhen(d.starts_at, zone) },
+    ...bringListFor(d, data, (partyId) =>
+      partyName(peopleOf(data, partyId).map((id) => firstNames.get(id) ?? "Someone who left"))
+    ),
+  });
 
   return (
     <PageContainer size="wide">
@@ -147,7 +130,11 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
             initialDraft={initialDraft}
             heldDinners={heldDinners}
             futureDateIds={data.dates.filter((d) => new Date(d.starts_at) > now).map((d) => d.id)}
-            cantHost={futureDinners.filter((d) => d.host_unavailable).map((d) => dinnerKey(d.table_id, d.season_date_id))}
+            cantHost={Object.fromEntries(
+              futureDinners
+                .filter((d) => d.host_unavailable && shuffleable.some((p) => p.id === d.host_party_id))
+                .map((d) => [dinnerKey(d.table_id, d.season_date_id), d.host_party_id])
+            )}
             pastPairs={pastPairs}
           />
         )}
