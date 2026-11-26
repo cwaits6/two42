@@ -14,7 +14,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(45);
+select plan(47);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -292,6 +292,17 @@ select is(
 select is(
   (select state from public.records_field_values where profile_id = pg_temp.fx('member2') and field = 'anniversary'),
   'cleared', 'a member''s cleared anniversary is kept while their records differ from their spouse''s');
+select is(
+  public.records_apply_copy(
+    pg_temp.fx('org'), pg_temp.fx('member'), pg_temp.expected(pg_temp.fx('member')),
+    '{}', '{}', '{}',
+    '[{"field": "anniversary", "state": "cleared", "church_value": {"anniversary_month": 7, "anniversary_day": 2, "anniversary_year": 1999}}]',
+    '{}'),
+  'applied', 'once both spouses'' records agree, the other spouse''s cleared copy is no longer held');
+select is(
+  (select array_agg(distinct (state, church_value ->> 'anniversary_month')::text)
+     from public.records_field_values where org_id = pg_temp.fx('org') and field = 'anniversary'),
+  array['(cleared,7)'], 'a held clear stays cleared and takes the corrected church value');
 rollback to savepoint anniversary_cleared;
 
 -- Both spouses changed the anniversary, then the church corrected both records.
