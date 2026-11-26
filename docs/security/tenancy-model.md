@@ -679,8 +679,14 @@ cannot hide one column:
 
 - **A host's address** (`supper_party_addresses`): read by the party, the
   group's leaders, and the parties seated at a table one of that party's
-  suppers is at, while the host is still seated there
-  (`supper_address_party_ids()`). Tables, seats and suppers are
+  suppers is at, while the host is still seated there and only for a supper
+  the guest's own seat was in place for (`seated_at <= starts_at`,
+  `supper_address_party_ids()` since
+  `20261207000000_supper_address_attendance.sql`). A party seated partway
+  through a rotation reads the address of a host with a supper still to come
+  at its table, never of a host whose only supper there was held before it
+  joined. The calendar link applies the same rule on the service client.
+  Tables, seats and suppers are
   created only by `supper_tables_publish()`, so before publish no guest reads
   any address. Later writes only narrow or reschedule what publish made: a
   withdrawal sets `left_at` on the party's seats (`supper_party_withdrawn()`),
@@ -688,7 +694,7 @@ cannot hide one column:
   `host_unavailable` under its RLS policy and column grant, checked by
   `suppers_guard()`.
 - **Allergies and food needs** (`supper_party_notes`): read by the party, the
-  leaders, and the host of a supper the party is seated at
+  leaders, and the host of a supper the party was seated in time for
   (`supper_food_note_party_ids()`).
 
 Neither has a church-admin arm: a church admin outside the group reads
@@ -703,9 +709,14 @@ the event reminder's, and the nightly `clean-up-expired-data` job deletes a
 church's passes older than 35 days through `supper_reminder_passes_prune()`.
 A reply is written by the person or the other person in the same party, a
 rule `supper_replies_guard()` checks on the party seated at that supper.
+Home's next-supper card reads all of this on the cookie client, so it shows
+only what the Supper club page would. Deleting a rotation date goes through a
+route that reads who to email on the service client, scoped to the caller's
+org, before the delete takes the suppers and seats, and sends only after the
+cookie client's delete passes row security.
 Proofs: `supabase/tests/supper_club_suite.sql`
 for every viewer, and `e2e/supper-club.spec.ts` for what a guest, an unseated
-member and someone outside the group see.
+member and someone outside the group see, on the Supper club page and on Home.
 
 ### Group invite links
 

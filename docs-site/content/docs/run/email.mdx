@@ -9,6 +9,8 @@ sources:
   - "supabase/functions/_shared/branding.ts"
   - "lib/config.ts"
   - "lib/email/resend.ts"
+  - "lib/email/send.ts"
+  - "supabase/functions/_shared/resend.ts"
 ---
 
 ## Who sends what
@@ -43,6 +45,12 @@ To set a church's display name and reply-to address, see [Add a church](/docs/ru
 The database and the send path support a per-church sending domain: when a church has a domain in `org_email_domains` whose status is `verified`, its email is sent from `noreply@<that domain>`. Any other status, or a domain that fails the address check at send time, falls back to the platform sending address.
 
 In this release church admins cannot claim a domain. The page that does it is turned off in code (`CUSTOM_SENDING_DOMAINS_ENABLED` in `lib/email/sendingDomains.ts` is `false`), so every church sends from the platform address. The operator's **Enable custom domains** button on a church's page still sets the per-church toggle, but has no visible effect while the page is off.
+
+## When Resend limits sending
+
+Resend limits how many requests a second an account can send. When it answers that the rate limit was exceeded, two42 waits the time Resend states (a second when it states none) and sends the same email again under the same idempotency key, so Resend still sends it once. It tries up to three times, and gives up at once when Resend asks for a wait longer than five seconds. An email that still doesn't go out counts as failed, as before: the page says so, or a reminder is left for the job's next run.
+
+Resend's daily and monthly quotas are not retried. Once one is reached, emails fail until it resets or you raise it in Resend; a reminder job stops sending for that run.
 
 ## Set a church's daily email limit
 
