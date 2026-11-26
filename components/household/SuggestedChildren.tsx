@@ -73,7 +73,7 @@ export function SuggestedChildren({ suggestions, today }: { suggestions: Suggest
         </p>
         <ul className="divide-y divide-border">
           {suggestions.map((child) => (
-            <li key={child.id} className="flex flex-wrap items-center gap-4 py-4">
+            <li key={child.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:gap-4">
               <div className="min-w-0 flex-1">
                 <p className="text-lg font-semibold">
                   {child.first_name} {child.last_name}
