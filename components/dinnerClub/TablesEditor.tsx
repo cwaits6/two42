@@ -74,18 +74,37 @@ function OptionSelect({
   );
 }
 
+type HostPick = { id: string; label: string; partyId: string | null; dateIds: string[] };
+
 /**
- * A one-host table's host: the party hosting the most of its dates. Dates
- * whose host can't host are left out, so a one-night stand-in never reads as
- * the table's host.
+ * The host selects a table offers, over its dates still open to a new host.
+ * A one-host table shows one select while those dates share a host, and one
+ * per date once they differ, as after a stand-in is published; a date whose
+ * host can't host has its own stand-in picker and is left out.
  */
-function mostHosting(t: DraftTable, skip: (seasonDateId: string) => boolean): string | null {
-  const counts = new Map<string, number>();
-  const regular = t.hosts.filter((h) => !skip(h.seasonDateId));
-  for (const h of regular.length > 0 ? regular : t.hosts) {
-    if (h.partyId) counts.set(h.partyId, (counts.get(h.partyId) ?? 0) + 1);
-  }
-  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+function hostPicks(
+  t: DraftTable,
+  format: DinnerFormat,
+  isHeld: (seasonDateId: string) => boolean,
+  isCantHost: (seasonDateId: string) => boolean,
+  dateLabel: Map<string, string>
+): HostPick[] {
+  const open = t.hosts.filter((h) => !isHeld(h.seasonDateId));
+  const perDate = (hosts: typeof open) =>
+    hosts.map((h) => ({
+      id: `host-${t.key}-${h.seasonDateId}`,
+      label: format === "new_tables" ? "Host" : `Host on ${dateLabel.get(h.seasonDateId) ?? "this date"}`,
+      partyId: h.partyId,
+      dateIds: [h.seasonDateId],
+    }));
+  if (format !== "same_table_one_host") return perDate(open);
+  const regular = open.filter((h) => !isCantHost(h.seasonDateId));
+  const hosts = new Set(regular.flatMap((h) => (h.partyId ? [h.partyId] : [])));
+  if (hosts.size > 1) return perDate(regular);
+  if (regular.length === 0) return [];
+  const partyId = [...hosts][0] ?? null;
+  const dateIds = open.filter((h) => h.partyId === partyId || h.partyId === null).map((h) => h.seasonDateId);
+  return [{ id: `host-${t.key}`, label: "Host", partyId, dateIds }];
 }
 
 export function TablesEditor({
@@ -319,14 +338,10 @@ export function TablesEditor({
               const hostItems = t.partyIds
                 .filter((id) => byId.get(id)?.canHost)
                 .map((id) => ({ value: id, label: names[id] ?? "Party" }));
-              // A held dinner keeps its host, so only a rotating table's
-              // dinners still to come offer a host to pick.
+              // A held dinner keeps its host, so only dinners still to come offer one to pick.
               const isHeld = (d: string) => Boolean(t.tableId && held.has(dinnerKey(t.tableId, d)));
               const isCantHost = (d: string) => Boolean(t.tableId && dinnerKey(t.tableId, d) in cantHost);
-              const hostDates =
-                format === "same_table_rotating"
-                  ? t.hosts.filter((h) => !isHeld(h.seasonDateId))
-                  : [{ seasonDateId: t.hosts[0]?.seasonDateId ?? "", partyId: mostHosting(t, isCantHost) }];
+              const picks = hostPicks(t, format, isHeld, isCantHost, dateLabel);
               const cantHostDates = t.hosts.filter((h) => isCantHost(h.seasonDateId));
               const needsHost = cantHostDates.length > 0 || Boolean(w?.noHost);
               return (
@@ -473,17 +488,17 @@ export function TablesEditor({
                           </div>
                         ))}
                     {hostItems.length > 0 &&
-                      hostDates.map((h) => (
+                      picks.map((pick) => (
                         <OptionSelect
-                          key={h.seasonDateId}
-                          id={`host-${t.key}-${h.seasonDateId}`}
-                          label={format === "same_table_rotating" ? `Host on ${dateLabel.get(h.seasonDateId) ?? "this date"}` : "Host"}
+                          key={pick.id}
+                          id={pick.id}
+                          label={pick.label}
                           items={hostItems}
-                          value={h.partyId}
+                          value={pick.partyId}
                           placeholder="Choose a host"
                           disabled={saving || publishing}
                           onChange={(partyId) =>
-                            void save(setTableHost(draft!, t.key, partyId, format === "same_table_rotating" ? h.seasonDateId : undefined))
+                            void save(pick.dateIds.reduce((d, dateId) => setTableHost(d, t.key, partyId, dateId), draft!))
                           }
                         />
                       ))}
