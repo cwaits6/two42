@@ -247,6 +247,7 @@ export function HouseholdsManager() {
     setEditing(null);
     anniversaryRequestRef.current++;
     setAnniversaryRecords(null);
+    setRestoringAnniversary(false);
     setForm(EMPTY_FORM);
     setFormErrors({});
     photoRequestRef.current++; // invalidate any in-flight mint
@@ -293,6 +294,9 @@ export function HouseholdsManager() {
     const label = recordsLabel(anniversaryRecords, "anniversary");
     if (!editing || label?.kind !== "changed" || !label.churchValue) return;
     const church = label.churchValue;
+    const family = editing;
+    // Opening another household bumps this, so a late answer can't reach its form.
+    const session = anniversaryRequestRef.current;
     setRestoringAnniversary(true);
     const { data, error } = await supabase
       .from("family_units")
@@ -302,8 +306,12 @@ export function HouseholdsManager() {
           "anniversary_month" | "anniversary_day" | "anniversary_year"
         >,
       )
-      .eq("id", editing.id)
+      .eq("id", family.id)
       .select("id");
+    if (anniversaryRequestRef.current !== session) {
+      loadFamilies();
+      return;
+    }
     setRestoringAnniversary(false);
     if (error || !data?.length) {
       if (error) logError("Failed to use the church's anniversary", error, { route: "/admin/families" });
@@ -313,12 +321,13 @@ export function HouseholdsManager() {
     const text = (column: string) => (church[column] == null ? "" : String(church[column]));
     setForm((prev) => ({ ...prev, ...Object.fromEntries(FIELD_COLUMNS.anniversary.map((column) => [column, text(column)])) }));
     toast.success("Your church's value is back.");
-    loadAnniversaryRecords(families.find((f) => f.id === editing.id));
+    loadAnniversaryRecords(families.find((f) => f.id === family.id));
     loadFamilies();
   }
 
   function openEdit(family: FamilyUnit) {
     setEditing(family);
+    setRestoringAnniversary(false);
     loadAnniversaryRecords(families.find((f) => f.id === family.id));
     setForm(fromFamily(family));
     setFormErrors({});

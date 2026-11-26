@@ -299,6 +299,10 @@ export function ProfileForm({
         FIELD_COLUMNS[field].filter((column) => column in prev).map((column) => [column, formValue(column)]),
       ) as Partial<FormState>),
     }));
+    // Otherwise the next save swaps a restored surname for the household's.
+    if (familySurname && FIELD_COLUMNS[field].includes("last_name")) {
+      setDifferentLastName(text("last_name") !== familySurname);
+    }
     if (field === "photo") setAvatarUrl(await mintSignedUrl(text("avatar_url")));
     toast.success("Your church's value is back.");
     router.refresh();
