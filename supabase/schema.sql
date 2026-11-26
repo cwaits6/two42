@@ -3187,15 +3187,18 @@ CREATE OR REPLACE FUNCTION "public"."supper_address_party_ids"() RETURNS "uuid"[
   from public.suppers d
   join public.supper_seats hs on hs.table_id = d.table_id and hs.party_id = d.host_party_id
    and hs.org_id = d.org_id and hs.left_at is null
-  where d.org_id = public.app_current_org_id()
-    and d.table_id = any (public.supper_my_table_ids());
+  -- The caller's own seat at the supper's table, in place by the time it starts.
+  join public.supper_seats s on s.table_id = d.table_id and s.org_id = d.org_id and s.left_at is null
+   and s.seated_at <= d.starts_at
+   and s.party_id = any (public.supper_my_party_ids())
+  where d.org_id = public.app_current_org_id();
 $$;
 
 
 ALTER FUNCTION "public"."supper_address_party_ids"() OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."supper_address_party_ids"() IS 'The parties hosting a supper at one of the caller''s tables and still seated there: the addresses the caller may read. Policy helper.';
+COMMENT ON FUNCTION "public"."supper_address_party_ids"() IS 'The parties hosting a supper at one of the caller''s tables, still seated there, that the caller''s party was seated in time for: the addresses the caller may read. Policy helper.';
 
 
 
