@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { failureMessage } from "@/lib/errorCopy";
-import { SUPPER_LENGTH_OPTIONS, isSupperLength } from "@/lib/supperClub/labels";
+import { SUPPER_LENGTH_OPTIONS } from "@/lib/supperClub/labels";
 import { createClient } from "@/lib/supabase/client";
 
 /** Change length, for the supper's host or a leader. Sends no email and keeps replies. */
@@ -24,13 +24,11 @@ export function SupperLengthButton({ supperId, lengthMinutes }: { supperId: stri
   }
 
   async function save() {
-    const minutes = Number(value);
-    if (!isSupperLength(minutes)) return;
     setSaving(true);
     // Row security lets the supper's host or a leader: anyone else matches no row.
     const { data, error } = await createClient()
       .from("suppers")
-      .update({ length_minutes: minutes })
+      .update({ length_minutes: Number(value) })
       .eq("id", supperId)
       .select("id");
     setSaving(false);

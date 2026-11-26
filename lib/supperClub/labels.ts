@@ -87,11 +87,6 @@ export const LENGTH_OPTIONS = [
 
 // The CHECK constraint on suppers.length_minutes.
 export const SUPPER_LENGTHS = [90, 120, 150, 180, 210, 240] as const;
-export type SupperLength = (typeof SUPPER_LENGTHS)[number];
-
-export function isSupperLength(value: number): value is SupperLength {
-  return (SUPPER_LENGTHS as readonly number[]).includes(value);
-}
 
 /** "2½ hours" for 150 minutes. */
 export function supperLengthLabel(minutes: number): string {
