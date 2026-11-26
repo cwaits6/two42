@@ -36,7 +36,7 @@ sources:
   - "lib/announcements.ts"
 ```
 
-- Globs are relative to the repository root. Only `*` (within one folder) and `**` (any number of folders) are special, so route folders such as `[groupId]` and `(auth)` are written as they are. Write the list one `- "glob"` per line.
+- Globs are relative to the repository root. Only `*` (within one folder) and `**` (any number of folders) are special, so route folders such as `[groupId]` and `(auth)` are written as they are.
 - Keep each glob as narrow as the page: the routes, components, lib modules, edge functions and setup files behind what it describes. Never list `package.json`, a lockfile or anything under `.github/`, so dependency updates pass on their own.
 - `npm run check:sources` fails when a page has no list or a glob matches no tracked file, naming the page and the glob. The frontmatter schema in `lib/source.ts` type-checks the list in the build.
 

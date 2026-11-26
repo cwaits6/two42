@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { posix } from 'node:path';
+import { frontmatter } from 'fumadocs-core/content/md/frontmatter';
 
 export const SKIP_LABEL = 'docs-not-needed';
 
@@ -40,34 +41,6 @@ export function isIndexPage(page) {
   return posix.basename(page) === 'index.mdx';
 }
 
-// Reads the `sources` block list from a page's frontmatter. The format is
-// kept to a block list so this needs no YAML dependency; anything else is
-// reported rather than read as no sources. The list ends only at the next
-// top-level key, so a stray line can never cut it short.
-export function parseSources(text) {
-  const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
-  if (!frontmatter) return { sources: null };
-  const lines = frontmatter[1].split(/\r?\n/);
-  const start = lines.findIndex((line) => /^sources\s*:/.test(line));
-  if (start === -1) return { sources: null };
-  if (!/^sources\s*:\s*$/.test(lines[start])) {
-    return { sources: null, error: 'write sources as a block list, one "- glob" per line' };
-  }
-  const sources = [];
-  for (const line of lines.slice(start + 1)) {
-    if (/^\s*(#.*)?$/.test(line)) continue;
-    const item = /^\s*-\s+(.+?)\s*$/.exec(line);
-    if (item) {
-      sources.push(item[1].replace(/^(["'])(.*)\1$/, '$2'));
-    } else if (/^[^\s#-]/.test(line)) {
-      break;
-    } else {
-      return { sources: null, error: `cannot read this line of the sources list: ${line.trim()}` };
-    }
-  }
-  return { sources };
-}
-
 export function readPages(root = REPO_ROOT) {
   const dir = posix.join(root.replaceAll('\\', '/'), CONTENT_DIR);
   return readdirSync(dir, { recursive: true })
@@ -76,7 +49,8 @@ export function readPages(root = REPO_ROOT) {
     .sort()
     .map((file) => {
       const page = `${CONTENT_DIR}/${file}`;
-      return { page, ...parseSources(readFileSync(posix.join(dir, file), 'utf8')) };
+      const { data } = frontmatter(readFileSync(posix.join(dir, file), 'utf8'));
+      return { page, sources: data.sources ?? null };
     });
 }
 
@@ -86,14 +60,12 @@ export function trackedFiles(root = REPO_ROOT) {
     .filter(Boolean);
 }
 
-// Every problem with the pages' sources lists: a page with none, a list that
-// cannot be read, or a glob that matches no tracked file.
+// Every problem with the pages' sources lists: a page with none, or a glob
+// that matches no tracked file.
 export function findSourceProblems(pages, files) {
   const problems = [];
-  for (const { page, sources, error } of pages) {
-    if (error) {
-      problems.push({ page, message: error });
-    } else if (!sources || sources.length === 0) {
+  for (const { page, sources } of pages) {
+    if (!sources || sources.length === 0) {
       if (!isIndexPage(page)) problems.push({ page, message: 'has no sources list' });
     } else {
       for (const glob of sources) {

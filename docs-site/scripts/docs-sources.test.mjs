@@ -4,7 +4,6 @@ import {
   findSourceProblems,
   findStalePages,
   globToRegExp,
-  parseSources,
   readPages,
   trackedFiles,
 } from './docs-sources.mjs';
@@ -30,34 +29,6 @@ describe('globToRegExp', () => {
   test('names one file when it has no wildcard', () => {
     assert.ok(globToRegExp('lib/roles.ts').test('lib/roles.ts'));
     assert.ok(!globToRegExp('lib/roles.ts').test('lib/roles.test.ts'));
-  });
-});
-
-describe('parseSources', () => {
-  test('reads a block list, quoted or not', () => {
-    const text = '---\ntitle: T\nsources:\n  - "app/a/**"\n  - lib/b.ts\ndescription: D\n---\nBody';
-    assert.deepEqual(parseSources(text), { sources: ['app/a/**', 'lib/b.ts'] });
-  });
-
-  test('reads past blank and comment lines to the end of the list', () => {
-    const text = '---\ntitle: T\nsources:\n  - a/**\n\n  # group\n  - lib/b.ts\n- lib/c.ts\ndescription: D\n---\n';
-    assert.deepEqual(parseSources(text), { sources: ['a/**', 'lib/b.ts', 'lib/c.ts'] });
-  });
-
-  test('reports a line it cannot read instead of ending the list there', () => {
-    const { sources, error } = parseSources('---\nsources:\n  - a/**\n  lib/b.ts\n---\n');
-    assert.equal(sources, null);
-    assert.match(error, /lib\/b\.ts/);
-  });
-
-  test('reports a flow list instead of reading it as none', () => {
-    const { sources, error } = parseSources('---\nsources: ["app/a/**"]\n---\n');
-    assert.equal(sources, null);
-    assert.match(error, /block list/);
-  });
-
-  test('returns null when the page lists no sources', () => {
-    assert.deepEqual(parseSources('---\ntitle: T\n---\n'), { sources: null });
   });
 });
 
@@ -113,10 +84,6 @@ describe('the docs pages', () => {
   const realPages = readPages();
 
   const files = trackedFiles();
-
-  test('every page lists sources that match tracked files', () => {
-    assert.deepEqual(findSourceProblems(realPages, files), []);
-  });
 
   test('a change to the event list without the calendar page names the calendar page', () => {
     const { stale } = findStalePages(realPages, [EVENT_LIST]);
