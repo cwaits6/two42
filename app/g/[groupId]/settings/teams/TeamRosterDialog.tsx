@@ -152,7 +152,7 @@ export function TeamRosterDialog({
     if (!query.trim()) return source;
     const q = query.trim().toLowerCase();
     return source.filter((p) =>
-      [p.first_name, p.last_name, p.preferred_name]
+      [p.first_name, p.last_name, p.preferred_name, displayName(p)]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()

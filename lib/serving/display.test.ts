@@ -51,6 +51,13 @@ describe("coupleName", () => {
     );
   });
 
+  it("spells out both names when either has a suffix, so the suffix stays with its person", () => {
+    const david = { ...blank, first_name: "David", last_name: "Reyes" };
+    const lena = { ...blank, first_name: "Lena", last_name: "Reyes" };
+    expect(coupleName({ ...david, suffix: "Jr." }, lena)).toBe("David Reyes Jr. & Lena Reyes");
+    expect(coupleName({ ...david, suffix: "Jr." }, { ...lena, suffix: "Sr." })).toBe("David Reyes Jr. & Lena Reyes Sr.");
+  });
+
   it("keeps both full names when the last names differ or one is missing", () => {
     expect(coupleName({ ...blank, first_name: "David", last_name: "Reyes" }, { ...blank, first_name: "Lena", last_name: "Cho" })).toBe(
       "David Reyes & Lena Cho",
