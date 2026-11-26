@@ -292,17 +292,19 @@ async function changedSince(
   cursor: string | null,
   fetcher: FetchLike,
 ): Promise<RecordsChanges> {
+  // Taken before either scan: a phone saved after the people were read must not
+  // carry the mark past a person saved in between.
+  const mark = latestOf([
+    await latestChange(creds, "/api/People", fetcher),
+    await latestChange(creds, "/api/PhoneNumbers", fetcher),
+  ]);
   if (cursor === null || !ROCK_TIME.test(cursor)) {
-    const mark = latestOf([
-      await latestChange(creds, "/api/People", fetcher),
-      await latestChange(creds, "/api/PhoneNumbers", fetcher),
-    ]);
     // A Rock with no people yet: start from the beginning.
     return { ids: [], cursor: mark ?? "1900-01-01T00:00:00" };
   }
   const people = await changedRows(creds, "/api/People", "Id", cursor, fetcher);
   const phones = await changedRows(creds, "/api/PhoneNumbers", "PersonId", cursor, fetcher);
-  let next = latestOf([cursor, people.latest, phones.latest]) as string;
+  let next = latestOf([cursor, mark]) as string;
   // A kind cut short is read on from where it stopped; the other kind repeats a little.
   if (people.cut && people.latest) next = earliest(next, people.latest);
   if (phones.cut && phones.latest) next = earliest(next, phones.latest);

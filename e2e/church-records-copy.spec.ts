@@ -15,7 +15,8 @@ const DB_CONTAINER = "supabase_db_small-group-hub";
 const ISAAC = PERSONAS.oneGroup.email;
 const CHLOE = PERSONAS.spouse.email;
 const CHURCH_MOBILE = "+15125550199";
-let seededMobile = "";
+// Undefined until captured, so a failed setup never writes over the seeded number.
+let seededMobile: string | undefined;
 
 function sql(statement: string): string {
   return execFileSync(
@@ -37,8 +38,8 @@ function removeFixtures() {
 
 test.beforeAll(() => {
   requireRecordsSecret();
-  removeFixtures();
   seededMobile = sql(`select coalesce(phone_mobile, '') from public.profiles where email = '${ISAAC}';`);
+  removeFixtures();
   sql(`
     insert into public.records_connections (org_id, provider, base_url, key_ciphertext, key_hint)
       values (${org}, 'rock', 'https://records.example.test', 'k1.fixture.fixture.fixture', 'test');
@@ -62,6 +63,7 @@ test.beforeAll(() => {
 });
 
 test.afterAll(() => {
+  if (seededMobile === undefined) return;
   removeFixtures();
   sql(`update public.profiles set phone_mobile = nullif('${seededMobile}', '') where email = '${ISAAC}';`);
 });

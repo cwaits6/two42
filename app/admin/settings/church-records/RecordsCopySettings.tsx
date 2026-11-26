@@ -52,7 +52,8 @@ export function RecordsCopySettings({ label }: { label: string }) {
   const [busy, setBusy] = useState(false);
   const [reviewPage, setReviewPage] = useState(0);
 
-  const load = useCallback(async () => {
+  // A refresh or unlink reloads too, and must not drop choices not yet saved.
+  const load = useCallback(async (resetChoices: boolean) => {
     setError(null);
     try {
       const res = await call("/api/admin/church-records/copy");
@@ -62,7 +63,7 @@ export function RecordsCopySettings({ label }: { label: string }) {
       }
       const loaded = res.data as unknown as CopyData;
       setData(loaded);
-      setChoices(loaded.fields);
+      if (resetChoices) setChoices(loaded.fields);
     } catch (err) {
       logError("Church records copy settings load failed", err, { route: "/admin/settings/church-records" });
       setError(NETWORK_ERROR);
@@ -70,7 +71,7 @@ export function RecordsCopySettings({ label }: { label: string }) {
   }, []);
 
   useEffect(() => {
-    load();
+    load(true);
   }, [load]);
 
   async function save() {
@@ -86,7 +87,7 @@ export function RecordsCopySettings({ label }: { label: string }) {
         return;
       }
       toast.success("Saved. The next refresh fills in what you turned on.");
-      await load();
+      await load(true);
     } catch (err) {
       logError("Church records copy settings save failed", err, { route: "/admin/settings/church-records" });
       toast.error(NETWORK_ERROR);
@@ -112,7 +113,7 @@ export function RecordsCopySettings({ label }: { label: string }) {
       });
       if (message.tone === "success") toast.success(message.text);
       else toast.warning(message.text);
-      await load();
+      await load(false);
     } catch (err) {
       logError("Church records refresh request failed", err, { route: "/admin/settings/church-records" });
       toast.error(NETWORK_ERROR);
@@ -130,7 +131,7 @@ export function RecordsCopySettings({ label }: { label: string }) {
         return;
       }
       toast.success(`Unlinked ${row.name}. Their details in two42 stay as they are.`);
-      await load();
+      await load(false);
     } catch (err) {
       logError("Church records unlink request failed", err, { route: "/admin/settings/church-records" });
       toast.error(NETWORK_ERROR);
@@ -146,7 +147,7 @@ export function RecordsCopySettings({ label }: { label: string }) {
           <p className="text-lg" role="alert">
             {error}
           </p>
-          <Button size="lg" variant="outline" onClick={load}>
+          <Button size="lg" variant="outline" onClick={() => load(true)}>
             Try again
           </Button>
         </CardContent>

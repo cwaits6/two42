@@ -102,6 +102,8 @@ export function safeFetch(input: URL | string, init: RequestInit = {}): Promise<
   const literal = url.hostname.replace(/^\[|\]$/g, "");
   if (isIP(literal) && !isPublicAddress(literal)) return Promise.reject(new RefusedAddressError());
   const headers = Object.fromEntries(new Headers(init.headers).entries());
+  // Bodies are returned as received, never decoded, so none may be compressed.
+  headers["accept-encoding"] ??= "identity";
 
   return new Promise((resolve, reject) => {
     const req = request(url, { method: "GET", headers, lookup: guardedLookup() }, (res) => {
@@ -125,7 +127,12 @@ export function safeFetch(input: URL | string, init: RequestInit = {}): Promise<
       res.on("end", () => {
         clearTimeout(timer);
         const empty = status === 204 || status === 205 || status === 304;
-        resolve(new Response(empty ? null : Buffer.concat(chunks), { status, headers: responseHeaders(res.headers) }));
+        try {
+          resolve(new Response(empty ? null : Buffer.concat(chunks), { status, headers: responseHeaders(res.headers) }));
+        } catch (err) {
+          // A status Response refuses, such as 600.
+          reject(err);
+        }
       });
       res.on("error", reject);
     });

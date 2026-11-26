@@ -136,20 +136,40 @@ Deno.test("changedSince asks only for people and phones changed since the mark",
     ids: ["100", "101"],
     cursor: "2026-11-23T09:00:00",
   });
-  for (const { url } of calls) {
+  for (const { url } of calls.filter((c) => c.url.searchParams.get("$top") !== "1")) {
     assertEquals(url.searchParams.get("$filter"), "ModifiedDateTime ge datetime'2026-11-21T08:00:00'");
   }
+});
+
+Deno.test("a phone saved after the people were read doesn't carry the mark past a person saved in between", async () => {
+  const { source } = rock({
+    "/api/People": (url) =>
+      json(url.searchParams.get("$top") === "1" ? [{ ModifiedDateTime: "2026-11-22T10:00:00" }] : []),
+    // Rock's newest phone row at the start was 09:00; the scan then sees one saved at 10:02.
+    "/api/PhoneNumbers": (url) =>
+      json(
+        url.searchParams.get("$top") === "1"
+          ? [{ ModifiedDateTime: "2026-11-22T09:00:00" }]
+          : [{ PersonId: 101, ModifiedDateTime: "2026-11-22T10:02:00" }],
+      ),
+  });
+  assertEquals(await source.changedSince(creds, "2026-11-21T08:00:00"), {
+    ids: ["101"],
+    cursor: "2026-11-22T10:00:00",
+  });
 });
 
 Deno.test("changedSince asks for each next page after the last row read, not by offset", async () => {
   const page = Array.from({ length: 500 }, (_, i) => ({ Id: i + 1, ModifiedDateTime: "2026-11-22T09:00:00.5" }));
   const { calls, source } = rock({
-    "/api/People": (url) => json(url.searchParams.get("$filter")!.includes("Id gt") ? [{ Id: 900, ModifiedDateTime: "2026-11-22T10:00:00" }] : page),
+    "/api/People": (url) => json(url.searchParams.get("$filter")?.includes("Id gt") ? [{ Id: 900, ModifiedDateTime: "2026-11-22T10:00:00" }] : page),
     "/api/PhoneNumbers": () => json([]),
   });
   const { ids } = await source.changedSince(creds, "2026-11-21T08:00:00");
   assertEquals(ids.length, 501);
-  const people = calls.filter((c) => c.url.pathname === "/api/People").map((c) => c.url.searchParams);
+  const people = calls
+    .filter((c) => c.url.pathname === "/api/People" && c.url.searchParams.get("$top") !== "1")
+    .map((c) => c.url.searchParams);
   assertEquals(
     people[1].get("$filter"),
     "ModifiedDateTime gt datetime'2026-11-22T09:00:00.5' or (ModifiedDateTime eq datetime'2026-11-22T09:00:00.5' and Id gt 500)",

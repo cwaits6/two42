@@ -276,6 +276,8 @@ export function ProfileForm({
   // as from the church's records again.
   const useChurchValue = async (field: ValueField) => {
     const label = recordsLabel(records, field);
+    // A save in flight would write the form's older value over the restored one.
+    if (saving) return;
     if (label?.kind !== "changed" || !label.churchValue) return;
     const value = label.churchValue;
     setRestoring(true);
@@ -328,6 +330,7 @@ export function ProfileForm({
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (restoring) return;
     setSaving(true);
 
     // Sanitize + normalize everything before writing.
@@ -537,7 +540,7 @@ export function ProfileForm({
                 </Button>
               )}
               <div className="basis-full">
-                <RecordsNote records={records} field="photo" onUseChurchValue={useChurchValue} busy={restoring} />
+                <RecordsNote records={records} field="photo" onUseChurchValue={useChurchValue} busy={restoring || saving} />
               </div>
             </div>
           )}
@@ -603,7 +606,7 @@ export function ProfileForm({
               </div>
             )}
             <div className="sm:col-span-2">
-              <RecordsNote records={records} field="name" onUseChurchValue={useChurchValue} busy={restoring} />
+              <RecordsNote records={records} field="name" onUseChurchValue={useChurchValue} busy={restoring || saving} />
             </div>
           </div>
           )}
@@ -623,7 +626,7 @@ export function ProfileForm({
               {...invalidFieldProps("preferred_name", errors.preferred_name)}
             />
             <FieldError fieldId="preferred_name" message={errors.preferred_name} />
-            <RecordsNote records={records} field="preferred_name" onUseChurchValue={useChurchValue} busy={restoring} />
+            <RecordsNote records={records} field="preferred_name" onUseChurchValue={useChurchValue} busy={restoring || saving} />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -643,7 +646,7 @@ export function ProfileForm({
                 {...invalidFieldProps("title", errors.title)}
               />
               <FieldError fieldId="title" message={errors.title} />
-              <RecordsNote records={records} field="title" onUseChurchValue={useChurchValue} busy={restoring} />
+              <RecordsNote records={records} field="title" onUseChurchValue={useChurchValue} busy={restoring || saving} />
             </div>
             )}
             {suffixLocked ? (
@@ -662,7 +665,7 @@ export function ProfileForm({
                 {...invalidFieldProps("suffix", errors.suffix)}
               />
               <FieldError fieldId="suffix" message={errors.suffix} />
-              <RecordsNote records={records} field="suffix" onUseChurchValue={useChurchValue} busy={restoring} />
+              <RecordsNote records={records} field="suffix" onUseChurchValue={useChurchValue} busy={restoring || saving} />
             </div>
             )}
           </div>
@@ -719,7 +722,7 @@ export function ProfileForm({
               {...invalidFieldProps("phone_mobile", errors.phone_mobile)}
             />
             <FieldError fieldId="phone_mobile" message={errors.phone_mobile} />
-            <RecordsNote records={records} field="phone_mobile" onUseChurchValue={useChurchValue} busy={restoring} />
+            <RecordsNote records={records} field="phone_mobile" onUseChurchValue={useChurchValue} busy={restoring || saving} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="phone_home" className="text-base">
@@ -756,7 +759,7 @@ export function ProfileForm({
               {...invalidFieldProps("phone_work", errors.phone_work)}
             />
             <FieldError fieldId="phone_work" message={errors.phone_work} />
-            <RecordsNote records={records} field="phone_work" onUseChurchValue={useChurchValue} busy={restoring} />
+            <RecordsNote records={records} field="phone_work" onUseChurchValue={useChurchValue} busy={restoring || saving} />
           </div>
 
           <Separator />
@@ -818,7 +821,7 @@ export function ProfileForm({
             <p className="text-base text-muted-foreground">
               The year is optional.
             </p>
-            <RecordsNote records={records} field="birthday" onUseChurchValue={useChurchValue} busy={restoring} />
+            <RecordsNote records={records} field="birthday" onUseChurchValue={useChurchValue} busy={restoring || saving} />
           </div>
 
           {genderLocked ? (
@@ -837,7 +840,7 @@ export function ProfileForm({
               value={state.gender}
               onChange={(v) => update("gender", v)}
             />
-            <RecordsNote records={records} field="gender" onUseChurchValue={useChurchValue} busy={restoring} />
+            <RecordsNote records={records} field="gender" onUseChurchValue={useChurchValue} busy={restoring || saving} />
             <p className="text-base text-muted-foreground">
               Lets people filter the directory by Male or Female. It isn&apos;t shown on the
               entry.
@@ -1036,7 +1039,7 @@ export function ProfileForm({
             <Button
               type="submit"
               size="lg"
-              disabled={saving}
+              disabled={saving || restoring}
               className="text-base"
             >
               <Check className="mr-2 h-5 w-5" aria-hidden="true" />

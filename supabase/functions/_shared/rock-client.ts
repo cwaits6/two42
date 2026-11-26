@@ -157,6 +157,8 @@ export function lastNameVariants(name: string): string[] {
   const variants = new Set([base]);
   const stripped = base.replace(/[^\p{L}\p{N}]/gu, "");
   if (stripped) variants.add(stripped);
+  // Phones type curly apostrophes; Rock usually holds straight ones.
+  if (/[‘’]/u.test(base)) variants.add(base.replace(/[‘’]/gu, "'"));
   if (base.includes("-")) variants.add(base.replace(/-/g, " "));
   if (base.includes(" ")) variants.add(base.replace(/ /g, "-"));
   if (/^[od][a-z]{2,}$/i.test(base)) variants.add(`${base[0]}'${base.slice(1)}`);
@@ -181,16 +183,17 @@ export async function peopleByLastName(
   fetcher: FetchLike = safeFetch,
 ): Promise<PeopleByLastName> {
   const originals = [...new Set(lastNames.map((n) => n.trim()).filter(Boolean))];
-  const spellings: { original: string; spelling: string }[] = [];
-  const seen = new Set<string>();
+  // Two names can share a spelling; each is told if that spelling's batch is cut short.
+  const byKey = new Map<string, { originals: string[]; spelling: string }>();
   for (const original of originals) {
     for (const spelling of lastNameVariants(original)) {
       const key = spelling.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      spellings.push({ original, spelling });
+      const entry = byKey.get(key);
+      if (entry) entry.originals.push(original);
+      else byKey.set(key, { originals: [original], spelling });
     }
   }
+  const spellings = [...byKey.values()];
   const found = new Map<number, RockPerson>();
   const truncated = new Set<string>();
   for (let i = 0; i < spellings.length; i += NAMES_PER_REQUEST) {
@@ -225,7 +228,7 @@ export async function peopleByLastName(
         break;
       }
     }
-    if (!complete) for (const b of batch) truncated.add(b.original);
+    if (!complete) for (const b of batch) for (const original of b.originals) truncated.add(original);
   }
   return { people: [...found.values()], truncated: [...truncated] };
 }

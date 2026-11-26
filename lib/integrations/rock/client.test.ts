@@ -89,6 +89,7 @@ describe("Rock client", () => {
   it.each([
     ["O'Brien", ["O'Brien", "OBrien"]],
     ["OBrien", ["OBrien", "O'Brien"]],
+    ["O’Brien", ["O’Brien", "OBrien", "O'Brien"]],
     ["Smith-Jones", ["Smith-Jones", "SmithJones", "Smith Jones"]],
     ["Van Dyke", ["Van Dyke", "VanDyke", "Van-Dyke"]],
     ["Lee", ["Lee"]],
@@ -102,6 +103,13 @@ describe("Rock client", () => {
     const { truncated } = await peopleByLastName(creds, { recordTypePerson: 1, recordStatusInactive: 4 }, ["Smith"], fetcher);
     expect(truncated).toEqual(["Smith"]);
     expect(fetcher).toHaveBeenCalledTimes(4);
+  });
+
+  it("reports every last name sharing a spelling whose batch was cut short", async () => {
+    const page = Array.from({ length: 500 }, (_, i) => ({ Id: i + 1, LastName: "O'Brien" }));
+    const fetcher = vi.fn().mockImplementation(async () => reply(page));
+    const { truncated } = await peopleByLastName(creds, { recordTypePerson: 1, recordStatusInactive: 4 }, ["OBrien", "O'Brien"], fetcher);
+    expect(truncated.sort()).toEqual(["O'Brien", "OBrien"]);
   });
 
   it("keeps only the ids it asked for", async () => {
