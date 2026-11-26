@@ -2117,14 +2117,14 @@ isOneToOne: false
                   ]
                 },"suppers": {
                   Row: {
-                    "created_at": string,"follows_rotation_date": boolean,"group_id": string,"host_party_id": string | null,"host_unavailable": boolean,"id": string,"org_id": string,"rotation_date_id": string,"rotation_id": string,"starts_at": string,"table_id": string,"updated_at": string
+                    "created_at": string,"follows_rotation_date": boolean,"group_id": string,"host_party_id": string | null,"host_unavailable": boolean,"id": string,"length_minutes": number,"org_id": string,"rotation_date_id": string,"rotation_id": string,"starts_at": string,"table_id": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"follows_rotation_date"?: boolean,"group_id": string,"host_party_id"?: string | null,"host_unavailable"?: boolean,"id"?: string,"org_id"?: string,"rotation_date_id": string,"rotation_id": string,"starts_at": string,"table_id": string,"updated_at"?: string
+                    "created_at"?: string,"follows_rotation_date"?: boolean,"group_id": string,"host_party_id"?: string | null,"host_unavailable"?: boolean,"id"?: string,"length_minutes"?: number,"org_id"?: string,"rotation_date_id": string,"rotation_id": string,"starts_at": string,"table_id": string,"updated_at"?: string
                   }
                   Update: {
-                    "created_at"?: string,"follows_rotation_date"?: boolean,"group_id"?: string,"host_party_id"?: string | null,"host_unavailable"?: boolean,"id"?: string,"org_id"?: string,"rotation_date_id"?: string,"rotation_id"?: string,"starts_at"?: string,"table_id"?: string,"updated_at"?: string
+                    "created_at"?: string,"follows_rotation_date"?: boolean,"group_id"?: string,"host_party_id"?: string | null,"host_unavailable"?: boolean,"id"?: string,"length_minutes"?: number,"org_id"?: string,"rotation_date_id"?: string,"rotation_id"?: string,"starts_at"?: string,"table_id"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     {
