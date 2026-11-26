@@ -316,7 +316,8 @@ export function ProfileForm({
       setDifferentLastName(text("last_name") !== familySurname);
     }
     if (field === "photo") setAvatarUrl(await mintSignedUrl(text("avatar_url")));
-    toast.success("Your church's value is back.");
+    if (claimed?.kept) toast.info(`Your church's value is back. ${CLAIMED_BIRTHDAY_KEPT}`);
+    else toast.success("Your church's value is back.");
     router.refresh();
   };
 
