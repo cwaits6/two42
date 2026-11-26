@@ -120,8 +120,16 @@ export async function loadRotationData(supabase: Client, rotationId: string): Pr
       .select("party_id, address_line1, address_line2, city, state, postal_code")
       .eq("rotation_id", rotationId),
     supabase.from("supper_party_notes").select("party_id, food_notes").eq("rotation_id", rotationId),
-    supabase.from("supper_tables").select("id, rotation_date_id, position").eq("rotation_id", rotationId).order("position"),
-    // Unavailable dates, seats, suppers and replies grow with parties times dates, so they page.
+    // Tables, unavailable dates, seats, suppers and replies grow with parties times dates, so they page.
+    fetchAll((from, to) =>
+      supabase
+        .from("supper_tables")
+        .select("id, rotation_date_id, position")
+        .eq("rotation_id", rotationId)
+        .order("position")
+        .order("id")
+        .range(from, to)
+    ),
     fetchAll((from, to) =>
       supabase
         .from("supper_party_unavailable_dates")
@@ -281,10 +289,13 @@ export async function loadPastTables(supabase: Client, rotation: RotationRow): P
     ).then((r) => readList(r, "Supper club earlier party members")),
   ]);
   if (!seats || !members) return null;
+  const partyPeople = new Map<string, string[]>();
+  for (const m of members) partyPeople.set(m.party_id, [...(partyPeople.get(m.party_id) ?? []), m.profile_id]);
   const tables = new Map<string, string[][]>();
   for (const seat of seats) {
-    const people = members.filter((m) => m.party_id === seat.party_id).map((m) => m.profile_id);
-    tables.set(seat.table_id, [...(tables.get(seat.table_id) ?? []), people]);
+    const table = tables.get(seat.table_id) ?? [];
+    table.push(partyPeople.get(seat.party_id) ?? []);
+    tables.set(seat.table_id, table);
   }
   return [...tables.values()];
 }

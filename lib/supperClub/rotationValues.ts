@@ -138,3 +138,10 @@ export function changeRotation<K extends keyof RotationValues>(
   if (!draft.titleFollowsDates || !DATE_KEYS.includes(key)) return { ...draft, values };
   return { ...draft, values: { ...values, title: rotationTitle(values.startsOn, endsOnOf(values), takenTitles) } };
 }
+
+/** Fills a title the leader emptied from the current dates, for when they leave the field or save. */
+export function settleTitle(draft: RotationDraft, takenTitles: readonly string[]): RotationDraft {
+  const { values } = draft;
+  if (!draft.titleFollowsDates || values.title.trim() !== "") return draft;
+  return { ...draft, values: { ...values, title: rotationTitle(values.startsOn, endsOnOf(values), takenTitles) } };
+}

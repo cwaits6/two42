@@ -18,18 +18,18 @@ You need a Supabase project, a Resend account with a verified sending domain, a 
 
 ## Set up the database and functions
 
-From a checkout, link the project, apply the migrations, deploy the functions and set their secrets:
+From a checkout, link the project, deploy the functions, apply the migrations and set the functions' secrets:
 
 ```bash
 npx supabase login
 npx supabase link --project-ref <project-ref>
-npx supabase db push --remote
 npx supabase functions deploy send-event-reminders send-serving-reminders clean-up-expired-data send-supper-reminders
+npx supabase db push --remote
 npx supabase secrets set RESEND_API_KEY=<key> SITE_URL=https://your.domain \
   SERVING_LINK_SECRET=<secret> EMAIL_FROM='Your Church <noreply@your.domain>'
 ```
 
-`db push` and `functions deploy` each ask before they change the project, unless `--yes` is passed or `SUPABASE_YES` is exported in the shell. Repeat both after every update; see [Upgrading](/docs/run/upgrading).
+`functions deploy` and `db push` each ask before they change the project, unless `--yes` is passed or `SUPABASE_YES` is exported in the shell. Repeat both after every update, functions first, since a migration can point a scheduled job at a new function; see [Upgrading](/docs/run/upgrading).
 
 The function secrets are listed in [Environment variables](/docs/run/environment#edge-function-secrets).
 

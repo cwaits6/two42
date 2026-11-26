@@ -661,9 +661,16 @@ every direct write path and the cross-org floor;
 ### Supper club
 
 A group's Supper club (`20261205000000_supper_club.sql`) is a set of
-`supper_*` tables, each with `org_id`, the restrictive floor and a
-`(rotation_id, group_id, org_id)` key pointing at its rotation, so the group a
-leader policy reads is always the rotation's own. A supper is its own dated
+`supper_*` tables, each with `org_id` and the restrictive floor. The tables a
+leader policy reads by group (`supper_rotation_dates`, `supper_parties`,
+`supper_party_members`, `supper_party_addresses`, `supper_party_notes`,
+`supper_party_unavailable_dates`, `supper_drafts`, `supper_tables`,
+`supper_seats`, `suppers` and `supper_contributions`) carry a
+`(rotation_id, group_id, org_id)` key pointing at their rotation, so the group
+such a policy reads is always the rotation's own. The rest reach the tenant
+through other composite keys: `supper_replies` and `supper_reminder_passes`
+through `(supper_id, org_id)` to their supper, `supper_feed_tokens` and
+`supper_reminder_sends` through `(profile_id, org_id)` to a profile. A supper is its own dated
 row in `suppers`, never an `events` row, so nothing reaches the group
 calendar or the group's subscription.
 
@@ -674,8 +681,12 @@ cannot hide one column:
   group's leaders, and the parties seated at a table one of that party's
   suppers is at, while the host is still seated there
   (`supper_address_party_ids()`). Tables, seats and suppers are
-  written only by `supper_tables_publish()`, so before publish no guest reads
-  any address.
+  created only by `supper_tables_publish()`, so before publish no guest reads
+  any address. Later writes only narrow or reschedule what publish made: a
+  withdrawal sets `left_at` on the party's seats (`supper_party_withdrawn()`),
+  and the host or a leader may change a supper's start, host or
+  `host_unavailable` under its RLS policy and column grant, checked by
+  `suppers_guard()`.
 - **Allergies and food needs** (`supper_party_notes`): read by the party, the
   leaders, and the host of a supper the party is seated at
   (`supper_food_note_party_ids()`).

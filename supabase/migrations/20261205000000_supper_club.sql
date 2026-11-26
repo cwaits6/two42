@@ -1619,6 +1619,13 @@ begin
    order by p.id
    for share;
 
+  -- A date deleted after the checks below would leave the rotation published
+  -- without its suppers and the draft gone, so a delete waits for publish.
+  perform 1 from public.supper_rotation_dates sd
+   where sd.rotation_id = _rotation.id and sd.org_id = _org
+   order by sd.id
+   for share;
+
   select d.body into _body from public.supper_drafts d
    where d.rotation_id = _rotation.id and d.org_id = _org
    for update;

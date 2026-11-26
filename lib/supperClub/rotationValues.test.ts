@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changeRotation, endsOnOf, NEW_ROTATION, nextRotationValues, valuesFromRotation, type RotationDraft } from "./rotationValues";
+import { changeRotation, endsOnOf, NEW_ROTATION, settleTitle, nextRotationValues, valuesFromRotation, type RotationDraft } from "./rotationValues";
 
 const ended = {
   title: "Winter 2026",
@@ -56,6 +56,19 @@ describe("changeRotation", () => {
     const draft = apply(fresh, ["startsOn", "2026-09-07"], ["endsOn", "2026-11-23"], ["title", "Mine"], ["title", " "]);
     expect(draft.values.title).toBe(" ");
     expect(apply(draft, ["endsOn", "2026-12-14"]).values.title).toBe("Sep – Dec 2026");
+  });
+
+  it("fills an emptied title from the current dates on leaving the field or saving", () => {
+    const draft = apply(fresh, ["startsOn", "2026-09-07"], ["endsOn", "2026-11-23"], ["title", ""]);
+    expect(settleTitle(draft, []).values.title).toBe("Fall 2026");
+    expect(settleTitle(draft, ["Fall 2026"]).values.title).toBe("Sep – Nov 2026");
+  });
+
+  it("leaves a typed or saved title alone when settling", () => {
+    const typed = apply(fresh, ["startsOn", "2026-09-07"], ["endsOn", "2026-11-23"], ["title", "Mine"]);
+    expect(settleTitle(typed, []).values.title).toBe("Mine");
+    const editing: RotationDraft = { values: { ...fresh.values, title: "" }, titleFollowsDates: false };
+    expect(settleTitle(editing, []).values.title).toBe("");
   });
 
   it("uses the end a length in months gives", () => {

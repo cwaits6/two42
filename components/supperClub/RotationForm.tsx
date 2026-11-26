@@ -23,7 +23,7 @@ import {
   WEEK_OF_MONTH_OPTIONS,
   WEEKDAY_OPTIONS,
 } from "@/lib/supperClub/labels";
-import { changeRotation, endsOnOf, MAX_LENGTH_MONTHS, type RotationValues } from "@/lib/supperClub/rotationValues";
+import { changeRotation, endsOnOf, settleTitle, MAX_LENGTH_MONTHS, type RotationValues } from "@/lib/supperClub/rotationValues";
 import { failureMessage } from "@/lib/errorCopy";
 import { groupPath } from "@/lib/groups/active";
 import { createClient } from "@/lib/supabase/client";
@@ -110,6 +110,9 @@ export function RotationForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    const settled = settleTitle(draft, takenTitles);
+    setDraft(settled);
+    const values = settled.values;
     const found = locked ? { title: check(values).title, closesOn: check(values).closesOn } : check(values);
     setErrors(found);
     const first = Object.entries(found).find(([, message]) => message)?.[0];
@@ -172,7 +175,9 @@ export function RotationForm({
         <CardContent className="space-y-6 pt-6">
           <div className="space-y-2">
             <Label htmlFor="rotation-title" className="text-lg">Title</Label>
-            <Input {...field("title")} value={values.title} maxLength={80} className={FIELD} onChange={(e) => set("title", e.target.value)} />
+            <Input {...field("title")} value={values.title} maxLength={80} className={FIELD} onChange={(e) => set("title", e.target.value)}
+              onBlur={() => setDraft((d) => settleTitle(d, takenTitles))}
+            />
             <FieldError fieldId="rotation-title" message={errors.title} />
           </div>
 

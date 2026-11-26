@@ -968,9 +968,11 @@ table, in a party that has not withdrawn, not pending, with an email and
 `profiles.email_supper_club` on, with no Not going reply, while the rotation is
 published and the group's Supper club is on — every table it joins filtered on
 `_org_id`. A supper whose start or host differs from the `_starts_at` and
-`_host_party_id` the job read claims nothing, so the email's host and address
-describe the supper the recipients are seated at, and a retried claim returns
-only recipients who still hold that active seat. EXECUTE: `service_role` only. `supper_reminder_passes` and
+`_host_party_id` the job read claims nothing, so at claim time the email's
+host and address describe the supper the recipients are seated at, and a
+retried claim returns only recipients who still hold that active seat. The
+lock that check takes ends when the claim commits: a move or rehost after it
+does not reach a reminder already claimed. EXECUTE: `service_role` only. `supper_reminder_passes` and
 `supper_reminder_sends` carry the restrictive isolation floor and no permissive
 policy or client grant.
 
