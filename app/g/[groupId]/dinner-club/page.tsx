@@ -9,12 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CalendarLinkCard } from "@/components/dinnerClub/CalendarLinkCard";
 import { DinnerCard } from "@/components/dinnerClub/DinnerCard";
-import {
-  SignUpForm,
-  type AddressFields,
-  type ExistingSignUp,
-  type LastSeasonPrefill,
-} from "@/components/dinnerClub/SignUpForm";
+import { NO_ADDRESS, type AddressFields } from "@/components/dinnerClub/HostingFields";
+import { SignUpForm, type ExistingSignUp, type LastSeasonPrefill } from "@/components/dinnerClub/SignUpForm";
 import { WaitlistForm } from "@/components/dinnerClub/WaitlistForm";
 import { WithdrawButton } from "@/components/dinnerClub/WithdrawButton";
 import { seasonAttention } from "@/lib/dinnerClub/attention";
@@ -51,8 +47,6 @@ import {
 } from "./load";
 
 export const generateMetadata = groupPageTitle("Dinner club");
-
-const NO_ADDRESS: AddressFields = { address_line1: "", address_line2: "", city: "", state: "", postal_code: "" };
 
 function text(value: string | null | undefined): string {
   return value ?? "";
