@@ -15,7 +15,6 @@ import { loadCredentials } from "@/lib/integrations/records/store";
  * requireOrgAdmin().
  */
 
-const ROUTE = "/api/admin/church-records/refresh";
 
 // The refresh stops starting people at 45 seconds; the rest wait for the next one.
 export const maxDuration = 60;
@@ -33,7 +32,7 @@ export async function POST() {
   } catch (err) {
     // A key that won't open means RECORDS_KEY_SECRET changed since it was saved.
     const step = err instanceof RecordsCryptoError ? "open_key" : "read_connection";
-    logError("Church records credentials unavailable", err, { route: ROUTE, step, ids: { org: orgId } });
+    logError("Church records credentials unavailable", err, { route: "/api/admin/church-records/refresh", step, ids: { org: orgId } });
     return NextResponse.json({ error: "Connect your church's records again." }, { status: 409 });
   }
   if (!loaded) return hidden();
@@ -53,7 +52,7 @@ export async function POST() {
     });
   } catch (err) {
     if (err instanceof RecordsError) return recordsFailure(err, loaded.provider.label);
-    logError("Church records refresh failed", err, { route: ROUTE, ids: { org: orgId } });
+    logError("Church records refresh failed", err, { route: "/api/admin/church-records/refresh", ids: { org: orgId } });
     return NextResponse.json({ error: "Couldn't refresh. Try again." }, { status: 500 });
   }
 }

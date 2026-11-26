@@ -25,7 +25,6 @@ import {
  * copying. The org is the caller's own, from requireOrgAdmin().
  */
 
-const ROUTE = "/api/admin/church-records/copy";
 
 async function copyProvider(orgId: string) {
   const connection = await readConnection(orgId);
@@ -54,7 +53,7 @@ export async function GET() {
       })),
     });
   } catch (err) {
-    logError("Church records copy settings read failed", err, { route: ROUTE, ids: { org: gate.orgId } });
+    logError("Church records copy settings read failed", err, { route: "/api/admin/church-records/copy", ids: { org: gate.orgId } });
     return NextResponse.json({ error: "Couldn't load what two42 copies." }, { status: 500 });
   }
 }
@@ -76,7 +75,7 @@ export async function PUT(request: Request) {
     await saveFieldSettings(gate.orgId, fields, gate.user.id);
     return NextResponse.json({ fields: await readFieldSettings(gate.orgId) });
   } catch (err) {
-    logError("Church records copy settings save failed", err, { route: ROUTE, ids: { org: gate.orgId } });
+    logError("Church records copy settings save failed", err, { route: "/api/admin/church-records/copy", ids: { org: gate.orgId } });
     return NextResponse.json({ error: "Couldn't save what two42 copies." }, { status: 500 });
   }
 }

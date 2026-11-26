@@ -25,7 +25,6 @@ import { normalizePhone } from "../_shared/phone.ts";
 import { resolveServiceKey } from "../_shared/service-key.ts";
 import { logError, logInfo } from "../_shared/log.ts";
 
-const ROUTE = "refresh-church-records";
 // Inside the edge runtime's 150 s request limit; what is left waits for the next night.
 const BUDGET_MS = 90_000;
 
@@ -49,7 +48,7 @@ function json(body: unknown, status: number) {
 Deno.serve(serviceKeyCallerOnly(async () => {
   const secret = parseRecordsSecret(Deno.env.get(RECORDS_SECRET_ENV));
   if (!secret) {
-    logInfo("church records refresh skipped: the integration is off", { route: ROUTE });
+    logInfo("church records refresh skipped: the integration is off", { route: "refresh-church-records" });
     return json({ orgs: 0 }, 200);
   }
   try {
@@ -99,13 +98,13 @@ Deno.serve(serviceKeyCallerOnly(async () => {
 
     const failed = results.filter((r) => r.error).map((r) => r.orgId);
     logInfo("church records refresh run", {
-      route: ROUTE,
+      route: "refresh-church-records",
       ids: { connected, copied, review, pending, orgsFailed: failed.length },
     });
     // The org failures carry ids only: an error's text could hold a database message.
     return json({ orgs: orgs.length, connected, copied, review, pending, failed }, failed.length ? 500 : 200);
   } catch (err) {
-    logError("church records refresh aborted before completion", err, { route: ROUTE });
+    logError("church records refresh aborted before completion", err, { route: "refresh-church-records" });
     return json({ error: "The church records refresh stopped before it finished." }, 500);
   }
 }));

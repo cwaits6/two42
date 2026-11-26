@@ -122,7 +122,6 @@ const BATCH = 50;
 // A run that died without releasing its claim stops blocking after this long.
 const LEASE_MS = 15 * 60_000;
 const PHOTO_EDGE = 400;
-const ROUTE = "refresh-church-records";
 
 async function allRows<T>(query: () => Rows<T>, what: string): Promise<T[]> {
   const found: T[] = [];
@@ -412,7 +411,7 @@ async function copyBatch(
       result.failed++;
       retry.push(link.profile_id);
       logError("church records copy failed for a person", err, {
-        route: ROUTE,
+        route: "refresh-church-records",
         ids: { org: orgId, profile: link.profile_id },
       });
     }
@@ -462,7 +461,7 @@ async function copyPerson(
   if (error) throw new Error(`apply failed: ${error.message}`);
   if (data === "stale") {
     logWarn("church records copy skipped a person edited meanwhile", undefined, {
-      route: ROUTE,
+      route: "refresh-church-records",
       ids: { org: orgId, profile: profileId },
     });
     return { copied: false, photoSkipped, stale: true };
