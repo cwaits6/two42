@@ -31,6 +31,8 @@ export function globToRegExp(glob) {
       pattern += char.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
     }
   }
+  // Every metacharacter but * is escaped above, and globs come from the pages.
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
   return new RegExp(`^${pattern}$`);
 }
 
@@ -40,7 +42,8 @@ export function isIndexPage(page) {
 
 // Reads the `sources` block list from a page's frontmatter. The format is
 // kept to a block list so this needs no YAML dependency; anything else is
-// reported rather than read as no sources.
+// reported rather than read as no sources. The list ends only at the next
+// top-level key, so a stray line can never cut it short.
 export function parseSources(text) {
   const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
   if (!frontmatter) return { sources: null };
@@ -52,9 +55,15 @@ export function parseSources(text) {
   }
   const sources = [];
   for (const line of lines.slice(start + 1)) {
-    const item = /^\s+-\s+(.+?)\s*$/.exec(line);
-    if (!item) break;
-    sources.push(item[1].replace(/^(["'])(.*)\1$/, '$2'));
+    if (/^\s*(#.*)?$/.test(line)) continue;
+    const item = /^\s*-\s+(.+?)\s*$/.exec(line);
+    if (item) {
+      sources.push(item[1].replace(/^(["'])(.*)\1$/, '$2'));
+    } else if (/^[^\s#-]/.test(line)) {
+      break;
+    } else {
+      return { sources: null, error: `cannot read this line of the sources list: ${line.trim()}` };
+    }
   }
   return { sources };
 }

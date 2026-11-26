@@ -39,6 +39,17 @@ describe('parseSources', () => {
     assert.deepEqual(parseSources(text), { sources: ['app/a/**', 'lib/b.ts'] });
   });
 
+  test('reads past blank and comment lines to the end of the list', () => {
+    const text = '---\ntitle: T\nsources:\n  - a/**\n\n  # group\n  - lib/b.ts\n- lib/c.ts\ndescription: D\n---\n';
+    assert.deepEqual(parseSources(text), { sources: ['a/**', 'lib/b.ts', 'lib/c.ts'] });
+  });
+
+  test('reports a line it cannot read instead of ending the list there', () => {
+    const { sources, error } = parseSources('---\nsources:\n  - a/**\n  lib/b.ts\n---\n');
+    assert.equal(sources, null);
+    assert.match(error, /lib\/b\.ts/);
+  });
+
   test('reports a flow list instead of reading it as none', () => {
     const { sources, error } = parseSources('---\nsources: ["app/a/**"]\n---\n');
     assert.equal(sources, null);
