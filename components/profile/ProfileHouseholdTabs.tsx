@@ -18,6 +18,10 @@ interface ProfileHouseholdTabsProps {
   /** The church's calendar date, YYYY-MM-DD, for working out a child's grade. */
   today: string;
   records?: ProfileRecords | null;
+  /** Each household member's records state, by profile id, for the edit sheet. */
+  householdRecords?: Record<string, ProfileRecords>;
+  /** The household anniversary's records state. */
+  anniversaryRecords?: ProfileRecords | null;
 }
 
 function ProfileHouseholdTabsInner({
@@ -27,6 +31,8 @@ function ProfileHouseholdTabsInner({
   familyMembers,
   today,
   records = null,
+  householdRecords = {},
+  anniversaryRecords = null,
 }: ProfileHouseholdTabsProps) {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<string>(
@@ -59,6 +65,8 @@ function ProfileHouseholdTabsInner({
           initialFamilyMembers={familyMembers}
           householdProfiles={householdProfiles}
           today={today}
+          householdRecords={householdRecords}
+          anniversaryRecords={anniversaryRecords}
           onEditSelf={() => setActiveTab("me")}
         />
       </TabsContent>

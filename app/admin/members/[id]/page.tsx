@@ -74,7 +74,15 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
     });
   }
   const adminCount = admins.count ?? 1;
-  const records = await readProfileRecords(profile.id);
+  const records = await readProfileRecords([profile.id]);
+  if (!records.ok) {
+    return (
+      <PageContainer>
+        <PageHeader title="Edit member" backHref="/admin/members" backLabel="Back to Members" />
+        <ErrorState thing="this member" />
+      </PageContainer>
+    );
+  }
 
   return (
     <PageContainer size="reading">
@@ -104,7 +112,7 @@ export default async function EditMemberPage({ params }: EditMemberPageProps) {
           family_id: currentProfile.family_id,
           relationship: currentProfile.relationship,
         }}
-        records={records}
+        records={records.byProfile[profile.id]}
       />
     </PageContainer>
   );

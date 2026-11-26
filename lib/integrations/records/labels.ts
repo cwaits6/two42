@@ -1,6 +1,7 @@
 // What the profile form shows for a detail that came from the church's
 // records. Members never see the product's name, only "your church".
 import type { Columns, FieldMode, RecordsField, ValueField, ValueState } from "@/supabase/functions/_shared/records-copy";
+import { HOUSEHOLD_TAB } from "@/lib/profileTabs";
 
 export interface ProfileRecords {
   settings: Partial<Record<RecordsField, FieldMode>>;
@@ -30,19 +31,34 @@ export function isLocked(records: ProfileRecords | null | undefined, field: Valu
   return recordsLabel(records, field)?.kind === "locked";
 }
 
-/** The form fields a member may change that the church filled in, for the one-time notice. */
-export const NOTICE_FIELDS: { field: ValueField; label: string; anchor: string }[] = [
-  { field: "name", label: "Name", anchor: "first_name" },
-  { field: "preferred_name", label: "Preferred name", anchor: "preferred_name" },
-  { field: "title", label: "Title", anchor: "title" },
-  { field: "suffix", label: "Suffix", anchor: "suffix" },
-  { field: "phone_mobile", label: "Mobile phone", anchor: "phone_mobile" },
-  { field: "phone_work", label: "Work phone", anchor: "phone_work" },
-  { field: "birthday", label: "Birthday", anchor: "birth_month" },
-  { field: "gender", label: "Gender", anchor: "gender-label" },
-  { field: "photo", label: "Photo", anchor: "profile-photo" },
-];
+/**
+ * Where the one-time notice sends a member to change or clear each detail.
+ * The anniversary is the household's and is edited on the Household tab. A
+ * linked person's grade is on no form a member can edit, so it has no link.
+ */
+export const NOTICE_FIELDS: Record<ValueField, { label: string; href: string; household?: true } | null> = {
+  name: { label: "Name", href: "#first_name" },
+  preferred_name: { label: "Preferred name", href: "#preferred_name" },
+  title: { label: "Title", href: "#title" },
+  suffix: { label: "Suffix", href: "#suffix" },
+  phone_mobile: { label: "Mobile phone", href: "#phone_mobile" },
+  phone_work: { label: "Work phone", href: "#phone_work" },
+  birthday: { label: "Birthday", href: "#birth_month" },
+  gender: { label: "Gender", href: "#gender-label" },
+  photo: { label: "Photo", href: "#profile-photo" },
+  anniversary: { label: "Anniversary", href: `?tab=${HOUSEHOLD_TAB}#anniversary_month`, household: true },
+  grade: null,
+};
 
-export function changeableFilled(records: ProfileRecords | null | undefined) {
-  return NOTICE_FIELDS.filter(({ field }) => recordsLabel(records, field)?.kind === "records");
+/** The filled details the member may change, for the one-time notice; the anniversary only for someone in a household. */
+export function changeableFilled(
+  records: ProfileRecords | null | undefined,
+  { household }: { household: boolean },
+): { field: ValueField; label: string; href: string }[] {
+  return (Object.entries(NOTICE_FIELDS) as [ValueField, (typeof NOTICE_FIELDS)[ValueField]][]).flatMap(
+    ([field, link]) =>
+      link && (household || !link.household) && recordsLabel(records, field)?.kind === "records"
+        ? [{ field, label: link.label, href: link.href }]
+        : [],
+  );
 }

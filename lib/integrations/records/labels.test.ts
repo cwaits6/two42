@@ -38,6 +38,23 @@ describe("recordsLabel", () => {
 
 describe("changeableFilled", () => {
   it("lists the filled details the member may change, never a locked one", () => {
-    expect(changeableFilled(records).map((f) => f.label)).toEqual(["Preferred name", "Mobile phone"]);
+    expect(changeableFilled(records, { household: false }).map((f) => f.label)).toEqual(["Preferred name", "Mobile phone"]);
+  });
+
+  it("links the anniversary to the Household tab, only for someone in a household", () => {
+    const withAnniversary: ProfileRecords = {
+      ...records,
+      settings: { ...records.settings, anniversary: "member", grade: "member" },
+      values: {
+        ...records.values,
+        anniversary: { state: "records", churchValue: { anniversary_month: 6, anniversary_day: 1, anniversary_year: 1985 } },
+        grade: { state: "records", churchValue: { graduation_year: 2031 } },
+      },
+    };
+    expect(changeableFilled(withAnniversary, { household: true }).find((f) => f.field === "anniversary")?.href).toBe(
+      "?tab=household#anniversary_month",
+    );
+    expect(changeableFilled(withAnniversary, { household: false }).map((f) => f.field)).not.toContain("anniversary");
+    expect(changeableFilled(withAnniversary, { household: true }).map((f) => f.field)).not.toContain("grade");
   });
 });

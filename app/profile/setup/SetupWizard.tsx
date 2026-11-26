@@ -22,6 +22,8 @@ import { CheckRow } from "@/components/profile/CheckRow";
 import { AnniversaryFields, type AnniversaryField } from "@/components/profile/AnniversaryFields";
 import { ChildListingNotice, DirectoryNotice } from "@/components/profile/DirectoryNotice";
 import { isChildWithoutAccount } from "@/lib/household";
+import { LockedValue } from "@/components/profile/RecordsNote";
+import { isLocked, type ProfileRecords } from "@/lib/integrations/records/labels";
 import { anniversaryColumns, birthdayColumns } from "@/components/profile/birthday";
 import { MonthSelect } from "@/components/profile/MonthSelect";
 import { useAvatarCrop } from "@/components/profile/useAvatarCrop";
@@ -242,9 +244,18 @@ interface SetupWizardProps {
   userEmail: string;
   /** The name of the household the profile already belongs to, if any */
   householdName: string | null;
+  /** Which of their details came from the church's records, so a locked one isn't offered for editing. */
+  records?: ProfileRecords | null;
 }
 
-export function SetupWizard({ profile, userEmail, householdName: initialHouseholdName }: SetupWizardProps) {
+export function SetupWizard({
+  profile,
+  userEmail,
+  householdName: initialHouseholdName,
+  records = null,
+}: SetupWizardProps) {
+  const nameLocked = isLocked(records, "name");
+  const genderLocked = isLocked(records, "gender");
   const router = useRouter();
   const supabase = createClient();
 
@@ -453,16 +464,16 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
   const handleFinish = async () => {
     setSaving(true);
     try {
+      // The church manages a locked detail; the form leaves it out of the save.
       const updates = {
-        first_name: titleCaseName(firstName) ?? "",
-        last_name: titleCaseName(lastName) ?? "",
+        ...(nameLocked ? {} : { first_name: titleCaseName(firstName) ?? "", last_name: titleCaseName(lastName) ?? "" }),
         preferred_name: titleCaseName(preferredName),
         ...birthdayColumns({ month: birthMonth, day: birthDay, year: birthYear }),
         phone_mobile: phoneMobile ? normalizePhone(phoneMobile) : null,
         phone_home: phoneHome ? normalizePhone(phoneHome) : null,
         phone_work: phoneWork ? normalizePhone(phoneWork) : null,
         hide_email: hideEmail,
-        gender,
+        ...(genderLocked ? {} : { gender }),
         family_id: householdId,
         occupation: occupation.trim() || null,
         employer: employer.trim() || null,
@@ -576,7 +587,11 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
               <p id="gender-label" className="sr-only">
                 Gender
               </p>
-              <GenderChoice labelledBy="gender-label" value={gender} onChange={setGender} />
+              {genderLocked ? (
+                <LockedValue id="gender-value" label="Gender" value={gender === "male" ? "Male" : gender === "female" ? "Female" : ""} />
+              ) : (
+                <GenderChoice labelledBy="gender-label" value={gender} onChange={setGender} />
+              )}
             </>
           )}
 
@@ -628,44 +643,51 @@ export function SetupWizard({ profile, userEmail, householdName: initialHousehol
 
               <Separator />
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="first_name" className="text-base">
-                    First name
-                  </Label>
-                  <Input
-                    id="first_name"
-                    value={firstName}
-                    onChange={(e) => {
-                      setFirstName(e.target.value);
-                      clearError("first_name");
-                    }}
-                    onBlur={(e) => setFirstName(titleCaseName(e.target.value) ?? "")}
-                    autoComplete="given-name"
-                    className="py-5 text-base"
-                    {...invalidFieldProps("first_name", errors.first_name)}
-                  />
-                  <FieldError fieldId="first_name" message={errors.first_name} />
+              {nameLocked ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <LockedValue id="first_name" label="First name" value={firstName} />
+                  <LockedValue id="last_name" label="Last name" value={lastName} />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="last_name" className="text-base">
-                    Last name
-                  </Label>
-                  <Input
-                    id="last_name"
-                    value={lastName}
-                    onChange={(e) => {
-                      setLastName(e.target.value);
-                      clearError("last_name");
-                    }}
-                    onBlur={(e) => setLastName(titleCaseName(e.target.value) ?? "")}
-                    autoComplete="family-name"
-                    className="py-5 text-base"
-                    {...invalidFieldProps("last_name", errors.last_name)}
-                  />
-                  <FieldError fieldId="last_name" message={errors.last_name} />
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="first_name" className="text-base">
+                      First name
+                    </Label>
+                    <Input
+                      id="first_name"
+                      value={firstName}
+                      onChange={(e) => {
+                        setFirstName(e.target.value);
+                        clearError("first_name");
+                      }}
+                      onBlur={(e) => setFirstName(titleCaseName(e.target.value) ?? "")}
+                      autoComplete="given-name"
+                      className="py-5 text-base"
+                      {...invalidFieldProps("first_name", errors.first_name)}
+                    />
+                    <FieldError fieldId="first_name" message={errors.first_name} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="last_name" className="text-base">
+                      Last name
+                    </Label>
+                    <Input
+                      id="last_name"
+                      value={lastName}
+                      onChange={(e) => {
+                        setLastName(e.target.value);
+                        clearError("last_name");
+                      }}
+                      onBlur={(e) => setLastName(titleCaseName(e.target.value) ?? "")}
+                      autoComplete="family-name"
+                      className="py-5 text-base"
+                      {...invalidFieldProps("last_name", errors.last_name)}
+                    />
+                    <FieldError fieldId="last_name" message={errors.last_name} />
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="preferred_name" className="text-base">

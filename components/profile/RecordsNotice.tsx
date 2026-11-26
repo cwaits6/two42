@@ -17,7 +17,7 @@ export function RecordsNotice({
   fields,
 }: {
   profileId: string;
-  fields: { label: string; anchor: string }[];
+  fields: { label: string; href: string }[];
 }) {
   const [open, setOpen] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -52,9 +52,9 @@ export function RecordsNotice({
           <p className="text-base">You can change or clear any of these:</p>
           <ul className="flex flex-wrap gap-x-4 gap-y-1">
             {fields.map((field) => (
-              <li key={field.anchor}>
+              <li key={field.href}>
                 <a
-                  href={`#${field.anchor}`}
+                  href={field.href}
                   className="inline-flex min-h-11 items-center text-base font-semibold text-brand-primary-text underline underline-offset-4"
                 >
                   {field.label}

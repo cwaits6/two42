@@ -52,7 +52,8 @@ import {
 import type { Profile, FamilyUnit, Gender } from "@/lib/types";
 import { logError } from "@/lib/log";
 import { isLocked, type ProfileRecords, recordsLabel } from "@/lib/integrations/records/labels";
-import type { ValueField } from "@/supabase/functions/_shared/records-copy";
+import { LockedValue, RecordsNote } from "@/components/profile/RecordsNote";
+import { FIELD_COLUMNS, type ValueField } from "@/supabase/functions/_shared/records-copy";
 
 interface ProfileFormProps {
   profile: Profile;
@@ -169,55 +170,6 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
 
 function Optional() {
   return <span className="font-normal text-muted-foreground">(optional)</span>;
-}
-
-/** Under a detail from the church's records: where it came from, and the way back to the church's value. */
-function RecordsNote({
-  records,
-  field,
-  onUseChurchValue,
-  busy,
-}: {
-  records: ProfileRecords | null;
-  field: ValueField;
-  onUseChurchValue: (field: ValueField) => void;
-  busy: boolean;
-}) {
-  const label = recordsLabel(records, field);
-  if (!label) return null;
-  if (label.kind === "locked") return <p className="text-base font-medium text-muted-foreground">Managed by your church</p>;
-  if (label.kind === "records") return <p className="text-base text-muted-foreground">From your church&apos;s records</p>;
-  return (
-    <p className="flex flex-wrap items-center gap-x-1 text-base text-muted-foreground">
-      Changed in two42
-      {label.churchValue && (
-        <>
-          <span aria-hidden="true">·</span>
-          <button
-            type="button"
-            className="inline-flex min-h-11 items-center font-semibold text-brand-primary-text underline underline-offset-4 disabled:opacity-50"
-            onClick={() => onUseChurchValue(field)}
-            disabled={busy}
-          >
-            Use your church&apos;s value
-          </button>
-        </>
-      )}
-    </p>
-  );
-}
-
-/** A locked detail, shown as text: the church manages it and there is nothing to edit. */
-function LockedValue({ id, label, value }: { id: string; label: string; value: string }) {
-  return (
-    <div className="space-y-1">
-      <p id={id} className="text-base font-medium">
-        {label}
-      </p>
-      <p className="text-lg">{value || "Not given"}</p>
-      <p className="text-base font-medium text-muted-foreground">Managed by your church</p>
-    </div>
-  );
 }
 
 export function ProfileForm({
@@ -338,19 +290,14 @@ export function ProfileForm({
       toast.error(failureMessage("use your church's value"));
       return;
     }
-    const text = (key: string) => (value[key] === null || value[key] === undefined ? "" : String(value[key]));
+    const text = (column: string) => (value[column] === null || value[column] === undefined ? "" : String(value[column]));
+    const formValue = (column: string) =>
+      column === "gender" ? value.gender ?? null : column.startsWith("phone_") ? formatPhone(text(column)) : text(column);
     setState((prev) => ({
       ...prev,
-      ...(field === "name" ? { first_name: text("first_name"), last_name: text("last_name") } : {}),
-      ...(field === "preferred_name" ? { preferred_name: text("preferred_name") } : {}),
-      ...(field === "title" ? { title: text("title") } : {}),
-      ...(field === "suffix" ? { suffix: text("suffix") } : {}),
-      ...(field === "gender" ? { gender: (value.gender as Gender | null) ?? null } : {}),
-      ...(field === "phone_mobile" ? { phone_mobile: formatPhone(text("phone_mobile")) } : {}),
-      ...(field === "phone_work" ? { phone_work: formatPhone(text("phone_work")) } : {}),
-      ...(field === "birthday"
-        ? { birth_month: text("birth_month"), birth_day: text("birth_day"), birth_year: text("birth_year") }
-        : {}),
+      ...(Object.fromEntries(
+        FIELD_COLUMNS[field].filter((column) => column in prev).map((column) => [column, formValue(column)]),
+      ) as Partial<FormState>),
     }));
     if (field === "photo") setAvatarUrl(await mintSignedUrl(text("avatar_url")));
     toast.success("Your church's value is back.");

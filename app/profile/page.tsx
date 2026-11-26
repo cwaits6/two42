@@ -14,7 +14,7 @@ import { PROFILE_COLUMNS, type ProfileColumns } from "@/lib/profileColumns";
 import { logError } from "@/lib/log";
 import { todayIn } from "@/lib/serving/dates";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
-import { readProfileRecords } from "@/lib/integrations/records/profileRecords";
+import { householdAnniversary, readProfileRecords } from "@/lib/integrations/records/profileRecords";
 import { changeableFilled } from "@/lib/integrations/records/labels";
 import { RecordsNotice } from "@/components/profile/RecordsNotice";
 
@@ -121,7 +121,7 @@ export default async function ProfilePage() {
   // Private buckets: exchange every stored avatar/photo URL for a
   // signed URL in one batch before the data reaches client renders. The
   // upload paths keep persisting raw URLs — this only touches what's shown.
-  const [signed, timeZone, records] = await Promise.all([
+  const [signed, timeZone, recordsRead] = await Promise.all([
     mintSignedUrls([
     profile.avatar_url,
     family?.photo_url,
@@ -129,8 +129,17 @@ export default async function ProfilePage() {
     ...familyMembers.map((fm) => fm.avatar_url),
     ]),
     getOrgTimeZone(),
-    readProfileRecords(user.id),
+    readProfileRecords([user.id, ...householdProfiles.map((p) => p.id)], user.id),
   ]);
+  if (!recordsRead.ok) {
+    return (
+      <PageContainer>
+        {header}
+        <ErrorState thing="your profile" />
+      </PageContainer>
+    );
+  }
+  const records = recordsRead.byProfile[user.id];
   profile.avatar_url = signed[0];
   if (family) family.photo_url = signed[1];
   householdProfiles.forEach((p, i) => {
@@ -144,16 +153,18 @@ export default async function ProfilePage() {
     <PageContainer>
       {header}
 
-      {records?.noticeDue && (
+      {records.noticeDue && (
         <RecordsNotice
           profileId={profile.id}
-          fields={changeableFilled(records).map(({ label, anchor }) => ({ label, anchor }))}
+          fields={changeableFilled(records, { household: !!family }).map(({ label, href }) => ({ label, href }))}
         />
       )}
 
       <ProfileHouseholdTabs
         profile={profile}
         records={records}
+        householdRecords={recordsRead.byProfile}
+        anniversaryRecords={householdAnniversary(recordsRead.byProfile)}
         family={family}
         householdProfiles={householdProfiles}
         familyMembers={familyMembers}

@@ -38,6 +38,8 @@ import { Pencil, Plus, User, UserPlus, Users } from "lucide-react";
 import { DirectoryNotice } from "@/components/profile/DirectoryNotice";
 import { EmptyState } from "@/components/states/EmptyState";
 import { AnniversaryFields } from "@/components/profile/AnniversaryFields";
+import { RecordsNote } from "@/components/profile/RecordsNote";
+import { type ProfileRecords, recordsLabel } from "@/lib/integrations/records/labels";
 import { FieldError, invalidFieldProps } from "@/components/ui/field-error";
 import { householdFieldErrors, type HouseholdFieldErrors } from "@/app/api/household/householdUpdates";
 import { calendarDate, relLabel } from "@/components/directory/utils";
@@ -97,6 +99,10 @@ interface HouseholdClientProps {
   today: string;
   /** Called when the user clicks "Edit" on their own row — the parent switches to the Me tab */
   onEditSelf: () => void;
+  /** Each household member's records state, by profile id. */
+  householdRecords?: Record<string, ProfileRecords>;
+  /** The household anniversary's records state. */
+  anniversaryRecords?: ProfileRecords | null;
 }
 
 function fromFamily(f: FamilyUnit): HouseholdInfo {
@@ -154,6 +160,8 @@ export function HouseholdClient({
   householdProfiles,
   today,
   onEditSelf,
+  householdRecords = {},
+  anniversaryRecords = null,
 }: HouseholdClientProps) {
   const router = useRouter();
   const todayDate = calendarDate(today);
@@ -269,6 +277,34 @@ export function HouseholdClient({
     }
 
     toast.success("Household saved.");
+    router.refresh();
+  }
+
+  // Writing the church's value back is enough: the database marks the
+  // anniversary as from the church's records again.
+  const [restoringAnniversary, setRestoringAnniversary] = useState(false);
+  async function restoreChurchAnniversary() {
+    const label = recordsLabel(anniversaryRecords, "anniversary");
+    if (label?.kind !== "changed" || !label.churchValue) return;
+    const church = Object.fromEntries(
+      (["anniversary_month", "anniversary_day", "anniversary_year"] as const).map((column) => [
+        column,
+        label.churchValue?.[column] == null ? "" : String(label.churchValue[column]),
+      ]),
+    ) as Pick<HouseholdInfo, "anniversary_month" | "anniversary_day" | "anniversary_year">;
+    setRestoringAnniversary(true);
+    const res = await fetch("/api/household", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(church),
+    }).catch(() => null);
+    setRestoringAnniversary(false);
+    if (!res?.ok) {
+      toast.error(failureMessage("use your church's value", res?.status ?? "network"));
+      return;
+    }
+    edit(church);
+    toast.success("Your church's value is back.");
     router.refresh();
   }
 
@@ -526,6 +562,12 @@ export function HouseholdClient({
                 onChange={edit}
                 errors={errors}
               />
+              <RecordsNote
+                records={anniversaryRecords}
+                field="anniversary"
+                onUseChurchValue={restoreChurchAnniversary}
+                busy={restoringAnniversary}
+              />
             </div>
 
             <div className="border-t pt-5">
@@ -777,6 +819,7 @@ export function HouseholdClient({
                   // gated behind canEditSpouseProfiles — the same condition under which
                   // householdProfiles is fetched as full Profile rows (see app/profile/page.tsx).
                   profile={editingProfile as Profile}
+                  records={householdRecords[editingProfile.id] ?? null}
                   onSaved={() => {
                     setEditingMemberId(null);
                     router.refresh();

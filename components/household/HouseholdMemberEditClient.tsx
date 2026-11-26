@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { failureMessage } from "@/lib/errorCopy";
 import type { Profile, FamilyUnit, FamilyMemberRelationship } from "@/lib/types";
+import type { ProfileRecords } from "@/lib/integrations/records/labels";
 
 const RELATIONSHIPS: { value: FamilyMemberRelationship; label: string }[] = [
   { value: "primary", label: "Primary" },
@@ -29,9 +30,11 @@ const RELATIONSHIPS: { value: FamilyMemberRelationship; label: string }[] = [
 interface Props {
   profile: Profile;
   onSaved: () => void;
+  /** Which of their details came from the church's records, so a locked one isn't offered for editing. */
+  records: ProfileRecords | null;
 }
 
-export function HouseholdMemberEditClient({ profile, onSaved }: Props) {
+export function HouseholdMemberEditClient({ profile, onSaved, records }: Props) {
   const router = useRouter();
   const supabase = createClient();
   const [relationship, setRelationship] = useState<FamilyMemberRelationship>(profile.relationship);
@@ -103,6 +106,7 @@ export function HouseholdMemberEditClient({ profile, onSaved }: Props) {
         isAdmin={false}
         editingOther
         onSaved={onSaved}
+        records={records}
       />
     </div>
   );
