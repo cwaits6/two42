@@ -38,7 +38,7 @@ export async function POST() {
       step: keyLost ? "open_key" : "read_connection",
       ids: { org: orgId },
     });
-    if (keyLost) return NextResponse.json({ error: "Connect your church's records again." }, { status: 409 });
+    if (keyLost) return NextResponse.json({ error: "The saved key can't be opened. Choose Change key and enter it again; your links stay." }, { status: 409 });
     return NextResponse.json({ error: "Couldn't load the connection." }, { status: 500 });
   }
   if (!loaded) return hidden();

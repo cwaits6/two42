@@ -61,7 +61,7 @@ describe("POST /api/admin/church-records/refresh", () => {
     store.loadCredentials.mockRejectedValue(new RecordsCryptoError());
     let res = await POST();
     expect(res.status).toBe(409);
-    expect((await res.json()).error).toBe("Connect your church's records again.");
+    expect((await res.json()).error).toBe("The saved key can't be opened. Choose Change key and enter it again; your links stay.");
 
     store.loadCredentials.mockRejectedValue(new Error("read failed"));
     res = await POST();

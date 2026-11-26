@@ -83,7 +83,7 @@ async function credentials(orgId: string, secret: Buffer): Promise<Loaded> {
     });
     const error =
       err instanceof RecordsCryptoError
-        ? "The saved key can't be used any more. Connect your church's records again."
+        ? "The saved key can't be opened. Choose Change key and enter it again; your links stay."
         : "Couldn't load the connection.";
     return { ok: false, response: NextResponse.json({ error }, { status: 500 }) };
   }
