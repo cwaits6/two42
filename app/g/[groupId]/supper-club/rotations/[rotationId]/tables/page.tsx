@@ -5,9 +5,10 @@ import { ErrorState } from "@/components/states/ErrorState";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BringListDialog } from "@/components/supperClub/BringListDialog";
 import { MoveSupperButton } from "@/components/supperClub/MoveSupperButton";
+import { SupperLengthButton } from "@/components/supperClub/SupperLengthButton";
 import { TablesEditor } from "@/components/supperClub/TablesEditor";
 import { formatAddress } from "@/lib/supperClub/ics";
-import { supperWhen, FORMAT_LABELS, partyName } from "@/lib/supperClub/labels";
+import { supperWhen, supperLengthLabel, FORMAT_LABELS, partyName } from "@/lib/supperClub/labels";
 import { cantHostSuppers } from "@/lib/supperClub/attention";
 import { bringListFor } from "@/lib/supperClub/bringList";
 import { pastPairsFromHistory } from "@/lib/supperClub/history";
@@ -165,6 +166,8 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
                           Table {table ? data.tables.filter((t) => t.rotation_date_id === table.rotation_date_id).indexOf(table) + 1 : ""}
                           {" · "}
                           {supperWhen(d.starts_at, zone)}
+                          {" · "}
+                          {supperLengthLabel(d.length_minutes)}
                         </p>
                         <p className="text-base text-muted-foreground">
                           {d.host_party_id ? `Host: ${names[d.host_party_id] ?? ""}` : "No host"}
@@ -177,6 +180,7 @@ export default async function TablesPage({ params }: { params: Promise<{ groupId
                       {rotation.status === "published" && new Date(d.starts_at) > now && (
                         <div className="flex flex-col gap-3 sm:flex-row">
                           <MoveSupperButton supperId={d.id} startsAt={d.starts_at} zone={zone} />
+                          <SupperLengthButton supperId={d.id} lengthMinutes={d.length_minutes} />
                           {rotation.bring_list_enabled && <BringListDialog {...bringList(d)} />}
                         </div>
                       )}

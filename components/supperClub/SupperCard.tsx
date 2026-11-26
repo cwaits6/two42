@@ -8,16 +8,17 @@ import { toast } from "sonner";
 import { AddToCalendarButton } from "@/components/events/AddToCalendarButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Segmented } from "@/components/ui/segmented";
-import { SUPPER_HOURS } from "@/lib/supperClub/ics";
-import { supperWhen, REPLY_OPTIONS, type ReplyStatus } from "@/lib/supperClub/labels";
+import { supperEndsAt, supperLengthLabel, supperWhen, REPLY_OPTIONS, type ReplyStatus } from "@/lib/supperClub/labels";
 import { failureMessage } from "@/lib/errorCopy";
 import { createClient } from "@/lib/supabase/client";
 import { BringListDialog, type BringGuest } from "./BringListDialog";
 import { MoveSupperButton } from "./MoveSupperButton";
+import { SupperLengthButton } from "./SupperLengthButton";
 
 export interface SupperCardProps {
   supperId: string;
   startsAt: string;
+  lengthMinutes: number;
   zone: string;
   rotationTitle: string;
   heading: string;
@@ -94,7 +95,7 @@ export function SupperCard(props: SupperCardProps) {
     router.refresh();
   }
 
-  const end = new Date(new Date(props.startsAt).getTime() + SUPPER_HOURS * 3_600_000).toISOString();
+  const end = supperEndsAt(props.startsAt, props.lengthMinutes);
 
   return (
     <Card>
@@ -104,6 +105,10 @@ export function SupperCard(props: SupperCardProps) {
       </CardHeader>
       <CardContent className="space-y-5">
         <dl className="space-y-3 text-lg">
+          <div>
+            <dt className="text-base text-muted-foreground">Length</dt>
+            <dd>{supperLengthLabel(props.lengthMinutes)}</dd>
+          </div>
           <div>
             <dt className="text-base text-muted-foreground">Host</dt>
             <dd>{props.isHost ? "You" : (props.hostNames ?? "Not chosen yet")}</dd>
@@ -185,7 +190,12 @@ export function SupperCard(props: SupperCardProps) {
 
         {props.open && (
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-            {props.canMove && <MoveSupperButton supperId={props.supperId} startsAt={props.startsAt} zone={props.zone} />}
+            {props.canMove && (
+              <>
+                <MoveSupperButton supperId={props.supperId} startsAt={props.startsAt} zone={props.zone} />
+                <SupperLengthButton supperId={props.supperId} lengthMinutes={props.lengthMinutes} />
+              </>
+            )}
             {props.bringList && <BringListDialog {...props.bringList} />}
             {props.isHost &&
               (props.hostUnavailable ? (
