@@ -14,9 +14,9 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
-const requireGroupSettingsLeader = vi.fn();
+const requireGroupSettingsAccess = vi.fn();
 vi.mock("@/lib/groups/server", () => ({
-  requireGroupSettingsLeader: (groupId: string) => requireGroupSettingsLeader(groupId),
+  requireGroupSettingsAccess: (groupId: string, needs: string) => requireGroupSettingsAccess(groupId, needs),
 }));
 vi.mock("@/lib/supabase/current-user", () => ({ getOptionalUser: async () => ({ id: "me" }) }));
 vi.mock("@/lib/supabase/server", () => ({
@@ -58,16 +58,16 @@ function flatten(node: ReactNode, out: Element[] = []): Element[] {
 const render = async () => (await GroupTeamsSettingsPage({ params: Promise.resolve({ groupId: A_ID }) })) as Element;
 
 beforeEach(() => {
-  requireGroupSettingsLeader.mockReset();
-  requireGroupSettingsLeader.mockResolvedValue(leader);
+  requireGroupSettingsAccess.mockReset();
+  requireGroupSettingsAccess.mockResolvedValue(leader);
   settings = Promise.resolve({ serving_link_mode: "login" });
 });
 
 describe("GroupTeamsSettingsPage", () => {
-  it("does not render for a member who does not lead the group", async () => {
-    requireGroupSettingsLeader.mockRejectedValue(new RedirectSentinel(`/g/${A_ID}/dashboard`));
+  it("does not render for a member without the teams ability", async () => {
+    requireGroupSettingsAccess.mockRejectedValue(new RedirectSentinel(`/g/${A_ID}/dashboard`));
     await expect(render()).rejects.toMatchObject({ target: `/g/${A_ID}/dashboard` });
-    expect(requireGroupSettingsLeader).toHaveBeenCalledWith(A_ID);
+    expect(requireGroupSettingsAccess).toHaveBeenCalledWith(A_ID, "teams");
   });
 
   it("holds the group's teams and its serving settings in one place", async () => {

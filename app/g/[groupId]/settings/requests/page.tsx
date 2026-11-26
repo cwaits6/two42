@@ -1,7 +1,7 @@
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { NO_PENDING_TEXT, parseJoinPolicy, pendingRequestsEmptyText } from "@/lib/groups/joining";
-import { requireGroupSettingsLeader } from "@/lib/groups/server";
+import { requireGroupSettingsAccess } from "@/lib/groups/server";
 import { groupPageTitle } from "@/lib/pageTitle";
 import { createClient } from "@/lib/supabase/server";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
@@ -16,7 +16,7 @@ export default async function GroupRequestsSettingsPage({
   params: Promise<{ groupId: string }>;
 }) {
   const { groupId } = await params;
-  const group = await requireGroupSettingsLeader(groupId);
+  const group = await requireGroupSettingsAccess(groupId, "members");
   const supabase = await createClient();
   const [{ data: flags, error }, timeZone] = await Promise.all([
     supabase.from("groups").select("join_policy").eq("id", group.id).maybeSingle(),

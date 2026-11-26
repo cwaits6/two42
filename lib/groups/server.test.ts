@@ -41,8 +41,15 @@ vi.mock("@/lib/groups/memberships", () => ({
   loadGroupMemberships: (...args: unknown[]) => loadGroupMemberships(...args),
 }));
 
-const { getActiveGroup, getGroupMemberships, requireActiveGroup, requireGroupLeader, requireGroupSettingsLeader } =
-  await import("@/lib/groups/server");
+const {
+  getActiveGroup,
+  getGroupMemberships,
+  requireActiveGroup,
+  requireGroupAbility,
+  requireGroupLeader,
+  requireGroupSettingsAccess,
+  requireGroupSettingsLeader,
+} = await import("@/lib/groups/server");
 
 const A_ID = "11111111-1111-4111-8111-111111111111";
 const B_ID = "22222222-2222-4222-8222-222222222222";
@@ -188,5 +195,35 @@ describe("requireGroupSettingsLeader", () => {
 
   it("404s a signed-in viewer who is not in the group", async () => {
     await expect(requireGroupSettingsLeader(Z_ID)).rejects.toBeInstanceOf(NotFoundSentinel);
+  });
+});
+
+describe("requireGroupAbility", () => {
+  it("returns the group for a leader, who holds every ability", async () => {
+    expect(await requireGroupAbility(A_ID, "calendar")).toBe(A);
+  });
+
+  it("returns the group for a member given the ability", async () => {
+    const helper = { ...B, abilities: ["calendar" as const] };
+    loadGroupMemberships.mockResolvedValue([A, helper]);
+    expect(await requireGroupAbility(B_ID, "calendar")).toBe(helper);
+  });
+
+  it("404s a member given a different ability", async () => {
+    loadGroupMemberships.mockResolvedValue([A, { ...B, abilities: ["lessons" as const] }]);
+    await expect(requireGroupAbility(B_ID, "calendar")).rejects.toBeInstanceOf(NotFoundSentinel);
+  });
+});
+
+describe("requireGroupSettingsAccess", () => {
+  it("lets a member with the page's ability in", async () => {
+    const helper = { ...B, abilities: ["members" as const] };
+    loadGroupMemberships.mockResolvedValue([A, helper]);
+    expect(await requireGroupSettingsAccess(B_ID, "members")).toBe(helper);
+  });
+
+  it("keeps a member with an ability out of the leader-only pages", async () => {
+    loadGroupMemberships.mockResolvedValue([A, { ...B, abilities: ["members" as const] }]);
+    await expect(requireGroupSettingsAccess(B_ID, "leader")).rejects.toMatchObject({ target: `/g/${B_ID}/dashboard` });
   });
 });

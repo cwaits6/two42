@@ -3,7 +3,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ErrorState } from "@/components/states/ErrorState";
 import { groupPath } from "@/lib/groups/active";
-import { requireGroupLeader } from "@/lib/groups/server";
+import { requireGroupAbility } from "@/lib/groups/server";
 import { groupPageTitle } from "@/lib/pageTitle";
 import { readList } from "@/lib/supabase/readList";
 import { LessonForm } from "../LessonForm";
@@ -19,7 +19,7 @@ export default async function NewLessonPage({
   searchParams: Promise<{ series?: string }>;
 }) {
   const { groupId } = await params;
-  const group = await requireGroupLeader(groupId);
+  const group = await requireGroupAbility(groupId, "lessons");
   const { series: preselected } = await searchParams;
   const supabase = await createClient();
 

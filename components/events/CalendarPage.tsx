@@ -1,3 +1,4 @@
+import { can } from "@/lib/groups/abilities";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getGroupMemberships, requireActiveGroup } from "@/lib/groups/server";
@@ -31,7 +32,7 @@ export async function CalendarPage({ pinnedGroupId }: { pinnedGroupId?: string }
     id: g.id,
     name: g.name,
     color: g.color,
-    isLeader: g.role === "leader",
+    canManage: can(g, "calendar"),
   }));
 
   const now = new Date();

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { ErrorState } from "@/components/states/ErrorState";
-import { requireGroupSettingsLeader } from "@/lib/groups/server";
+import { requireGroupSettingsAccess } from "@/lib/groups/server";
 import { getGroupSettings } from "@/lib/groups/settings";
 import { groupPageTitle } from "@/lib/pageTitle";
 import { defaultServingLinkMode } from "@/lib/serving/config";
@@ -20,7 +20,7 @@ export default async function GroupTeamsSettingsPage({
   params: Promise<{ groupId: string }>;
 }) {
   const { groupId } = await params;
-  const group = await requireGroupSettingsLeader(groupId);
+  const group = await requireGroupSettingsAccess(groupId, "teams");
   const supabase = await createClient();
   const user = await getOptionalUser();
   if (!user) redirect("/login");

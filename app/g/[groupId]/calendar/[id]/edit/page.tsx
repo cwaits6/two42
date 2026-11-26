@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { requireGroupLeader } from "@/lib/groups/server";
+import { requireGroupAbility } from "@/lib/groups/server";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -23,7 +23,7 @@ export default async function EditEventPage({
   params: Promise<{ groupId: string; id: string }>;
 }) {
   const { groupId, id } = await params;
-  const group = await requireGroupLeader(groupId);
+  const group = await requireGroupAbility(groupId, "calendar");
   const supabase = await createClient();
   const [{ data: event, error }, timeZone] = await Promise.all([
     supabase.from("events").select("*").eq("id", id).eq("group_id", group.id).maybeSingle(),

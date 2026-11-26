@@ -177,7 +177,7 @@ export function EventListView({
                       >
                         View
                       </Button>
-                      {group?.isLeader && (
+                      {group?.canManage && (
                         <Button
                           variant="outline"
                           size="sm"

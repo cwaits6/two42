@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { Fragment, type ComponentType } from "react";
 import { ArrowLeft } from "lucide-react";
 import { adminNavGroups } from "@/lib/admin-nav";
-import { groupPath } from "@/lib/groups/active";
+import { groupPath, type ActiveGroup } from "@/lib/groups/active";
 import { GROUP_REQUESTS_SECTION, groupSettingsNavItems } from "@/lib/groups/settingsNav";
 import { platformNavItems } from "@/lib/platform-nav";
 import { useGroupWaitingRequests, useWaitingRequests } from "./SidebarContext";
@@ -45,13 +45,13 @@ const AREAS: Record<Exclude<AreaKey, "groupSettings">, Area> = {
   },
 };
 
-type AreaGroup = { id: string; name: string };
+type AreaGroup = Pick<ActiveGroup, "id" | "name" | "role" | "abilities">;
 
 function groupSettingsArea(group: AreaGroup): Area {
   return {
     label: "Group settings navigation",
     back: { href: groupPath(group.id, "/dashboard"), label: `Back to ${group.name}` },
-    sections: [{ items: groupSettingsNavItems(group.id) }],
+    sections: [{ items: groupSettingsNavItems(group) }],
     counted: groupPath(group.id, GROUP_REQUESTS_SECTION),
   };
 }

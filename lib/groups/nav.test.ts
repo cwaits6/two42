@@ -13,13 +13,17 @@ const base: SidebarInput = {
   memberships: [],
   activeGroup: null,
   discoveryOn: false,
-  isLeader: false,
+  settingsHref: null,
   hasServingAccess: false,
   orgName: "Grace Church",
 };
 
-function input(overrides: Partial<SidebarInput>): SidebarInput {
-  return { ...base, ...overrides };
+/** `isLeader` stands in for a viewer who reaches Group settings, which opens on the group's settings path. */
+function input(overrides: Partial<SidebarInput> & { isLeader?: boolean }): SidebarInput {
+  const { isLeader, ...rest } = overrides;
+  const merged = { ...base, ...rest };
+  const group = merged.activeGroup;
+  return { ...merged, settingsHref: isLeader && group ? `/g/${group.id}/settings` : merged.settingsHref };
 }
 
 /** Labels in render order; structural items appear as their kind in brackets. */

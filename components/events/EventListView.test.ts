@@ -58,7 +58,7 @@ const SUNDAYS = {
   is_cancelled: false,
 } as Event;
 const dates = expandOccurrences(SUNDAYS, ZONE, undefined, new Date("2033-01-01T00:00:00Z"));
-const groups = [{ id: "b", name: "Group B", color: "#B5532E", isLeader: false }];
+const groups = [{ id: "b", name: "Group B", color: "#B5532E", canManage: false }];
 
 let mounted: { root: Root; container: HTMLElement } | null = null;
 

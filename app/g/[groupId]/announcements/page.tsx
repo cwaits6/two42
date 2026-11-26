@@ -1,3 +1,4 @@
+import { can } from "@/lib/groups/abilities";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { Megaphone, Plus } from "lucide-react";
@@ -18,7 +19,7 @@ import { formatInZone } from "@/lib/time/zone";
 
 export const generateMetadata = groupPageTitle("Announcements");
 
-type LeaderRow = {
+type ManagerRow = {
   id: string;
   title: string;
   is_published: boolean;
@@ -33,7 +34,7 @@ export default async function AnnouncementsPage({
 }) {
   const { groupId } = await params;
   const group = await requireActiveGroup(groupId);
-  const isLeader = group.role === "leader";
+  const canManage = can(group, "announcements");
   const listHref = groupPath(group.id, "/announcements");
   const supabase = await createClient();
   const now = new Date();
@@ -48,19 +49,19 @@ export default async function AnnouncementsPage({
       .lte("published_at", nowIso)
       .order("published_at", { ascending: false })
       .then((read) => readList(read, "announcements")),
-    isLeader
+    canManage
       ? supabase
           .from("announcements")
           .select("id, title, is_published, published_at, created_at")
           .eq("group_id", group.id)
           .or(`is_published.eq.false,published_at.gt.${nowIso}`)
           .order("created_at", { ascending: false })
-          .then((read) => readList<LeaderRow>(read, "announcements"))
+          .then((read) => readList<ManagerRow>(read, "announcements"))
       : [],
     getOrgTimeZone(),
   ]);
 
-  const addAnnouncement = isLeader && (
+  const addAnnouncement = canManage && (
     <Button nativeButton={false} render={<Link href={`${listHref}/new`} />}>
       <Plus aria-hidden="true" />
       Add announcement
@@ -123,7 +124,7 @@ export default async function AnnouncementsPage({
                   key={announcement.id}
                   announcement={announcement}
                   timeZone={timeZone}
-                  editHref={isLeader ? `${listHref}/${announcement.id}/edit` : undefined}
+                  editHref={canManage ? `${listHref}/${announcement.id}/edit` : undefined}
                 />
               ))}
             </div>

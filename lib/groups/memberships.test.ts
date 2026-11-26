@@ -152,4 +152,52 @@ describe("loadGroupMemberships", () => {
       expect.objectContaining({ what: "Failed to load group calendars", code: "PGRST301" }),
     ]);
   });
+
+  it("reads the viewer's abilities, given directly or through a linked team, scoped to the caller's org", async () => {
+    const { client, calls } = makeClient({
+      group_members: { data: rows, error: null },
+      group_member_abilities: {
+        data: [
+          { group_id: "g2", ability: "calendar" },
+          { group_id: "g2", ability: "not_an_ability" },
+        ],
+        error: null,
+      },
+      team_members: {
+        data: [
+          { teams: { group_id: "g2", team_abilities: [{ ability: "prayer_care" }] } },
+          { teams: { group_id: "g2", team_abilities: [] } },
+          { teams: null },
+        ],
+        error: null,
+      },
+    });
+
+    const result = await loadGroupMemberships(client, { profileId: "p1", orgId: "org-1" });
+
+    expect(calls.group_member_abilities.eq).toEqual([
+      ["profile_id", "p1"],
+      ["org_id", "org-1"],
+    ]);
+    expect(calls.team_members.eq).toEqual([
+      ["profile_id", "p1"],
+      ["org_id", "org-1"],
+    ]);
+    expect(result[0].abilities).toBeUndefined();
+    expect(result[1].abilities).toEqual(["calendar", "prayer_care"]);
+  });
+
+  it("throws fixed text on an ability query error so a failed read never reads as no abilities", async () => {
+    const logged = vi.mocked(console.log);
+    logged.mockClear();
+    const { client } = makeClient({
+      group_members: { data: rows, error: null },
+      group_member_abilities: { data: null, error: { code: "PGRST301", message: MARKER } },
+    });
+
+    const thrown = await loadGroupMemberships(client, { profileId: "p1", orgId: "org-1" }).catch((e: Error) => e);
+
+    expect((thrown as Error).message).toBe("Failed to load group abilities");
+    expect(JSON.stringify(loggedLines(logged))).not.toContain(MARKER);
+  });
 });

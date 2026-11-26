@@ -1,3 +1,4 @@
+import { can } from "@/lib/groups/abilities";
 import Link from "next/link";
 import { BookOpen, CircleCheck, Play, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -44,7 +45,7 @@ export default async function LessonsPage({
   const { groupId } = await params;
   const group = await requireActiveGroup(groupId);
   const libraryHref = groupPath(group.id, "/lectures");
-  const isLeader = group.role === "leader";
+  const canManage = can(group, "lessons");
   const { view, filter } = await searchParams;
   const supabase = await createClient();
 
@@ -66,7 +67,7 @@ export default async function LessonsPage({
       .then((read) => readList<Series>(read, "lesson series")),
   ]);
 
-  const addLesson = isLeader && (
+  const addLesson = canManage && (
     <Button nativeButton={false} render={<Link href={`${libraryHref}/new`} />}>
       <Plus aria-hidden="true" />
       Add lesson
@@ -82,7 +83,7 @@ export default async function LessonsPage({
         title="Lessons"
         subtitle={`Recordings and lesson summaries from ${group.name}.`}
         actions={
-          isLeader && (
+          canManage && (
             <>
               <Button
                 variant="outline"
@@ -105,8 +106,8 @@ export default async function LessonsPage({
           libraryHref={libraryHref}
           lessons={lessons}
           series={series}
-          isLeader={isLeader}
-          shown={isLeader && filter === "needs-summary" ? "needs-summary" : view === "all" ? "all" : "series"}
+          canManage={canManage}
+          shown={canManage && filter === "needs-summary" ? "needs-summary" : view === "all" ? "all" : "series"}
         />
       )}
     </PageContainer>
@@ -117,13 +118,13 @@ function Library({
   libraryHref,
   lessons,
   series,
-  isLeader,
+  canManage,
   shown,
 }: {
   libraryHref: string;
   lessons: Lesson[];
   series: Series[];
-  isLeader: boolean;
+  canManage: boolean;
   shown: "series" | "all" | "needs-summary";
 }) {
   const parts = partNumbers(lessons);
@@ -134,7 +135,7 @@ function Library({
   const dateLabel = (lesson: Lesson) =>
     lesson.lecture_date ? formatLessonDate(lesson.lecture_date) : null;
 
-  const editHref = (lesson: Lesson) => (isLeader ? `${libraryHref}/${lesson.id}/edit` : undefined);
+  const editHref = (lesson: Lesson) => (canManage ? `${libraryHref}/${lesson.id}/edit` : undefined);
 
   const seriesName = (lesson: Lesson) =>
     series.find((s) => s.id === lesson.series_id)?.name;
@@ -170,7 +171,7 @@ function Library({
         options={[
           { href: libraryHref, label: "By series", current: shown === "series" },
           { href: `${libraryHref}?view=all`, label: "All lessons", current: shown === "all" },
-          ...(isLeader
+          ...(canManage
             ? [
                 {
                   href: `${libraryHref}?filter=needs-summary`,
@@ -219,7 +220,7 @@ function Library({
                     >
                       View series
                     </Button>
-                    {isLeader && (
+                    {canManage && (
                       <Button
                         variant="outline"
                         nativeButton={false}

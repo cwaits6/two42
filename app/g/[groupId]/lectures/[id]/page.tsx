@@ -1,3 +1,4 @@
+import { can } from "@/lib/groups/abilities";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BookOpen, ExternalLink, Play } from "lucide-react";
@@ -120,7 +121,7 @@ export default async function LessonPage({
         backLabel="Back to Lessons"
         className="mb-4"
         actions={
-          group.role === "leader" && (
+          can(group, "lessons") && (
             <Button
               variant="outline"
               nativeButton={false}

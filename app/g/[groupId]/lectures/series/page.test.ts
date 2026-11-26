@@ -10,7 +10,7 @@ vi.mock("next/link", () => ({
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }));
 vi.mock("@/lib/groups/server", () => ({
-  requireGroupLeader: async (id: string) => ({ id, name: "Grace", role: "leader" }),
+  requireGroupAbility: async (id: string) => ({ id, name: "Grace", role: "leader" }),
 }));
 vi.mock("@/lib/pageTitle", () => ({ groupPageTitle: () => async () => ({}) }));
 vi.mock("@/lib/supabase/server", () => ({

@@ -1,3 +1,4 @@
+import { can } from "@/lib/groups/abilities";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BookOpen } from "lucide-react";
@@ -47,7 +48,7 @@ export default async function SeriesPage({
   const { groupId, id } = await params;
   const group = await requireActiveGroup(groupId);
   const libraryHref = groupPath(group.id, "/lectures");
-  const isLeader = group.role === "leader";
+  const canManage = can(group, "lessons");
   const supabase = await createClient();
 
   const [seriesRead, lessonsRead] = await Promise.all([
@@ -88,7 +89,7 @@ export default async function SeriesPage({
         backLabel="Back to Lessons"
         className="mb-4"
         actions={
-          isLeader && (
+          canManage && (
             <>
               <Button
                 variant="outline"
@@ -134,7 +135,7 @@ export default async function SeriesPage({
                 `Part ${parts.get(l.id)}`,
                 l.lecture_date && formatLessonDate(l.lecture_date),
               ],
-              editHref: isLeader ? `${libraryHref}/${l.id}/edit` : undefined,
+              editHref: canManage ? `${libraryHref}/${l.id}/edit` : undefined,
             }))}
         />
       )}

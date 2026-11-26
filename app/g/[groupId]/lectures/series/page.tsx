@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/states/EmptyState";
 import { ErrorState } from "@/components/states/ErrorState";
 import { Button } from "@/components/ui/button";
 import { groupPath } from "@/lib/groups/active";
-import { requireGroupLeader } from "@/lib/groups/server";
+import { requireGroupAbility } from "@/lib/groups/server";
 import { groupPageTitle } from "@/lib/pageTitle";
 import { readList } from "@/lib/supabase/readList";
 
@@ -27,7 +27,7 @@ export default async function ManageSeriesPage({
   params: Promise<{ groupId: string }>;
 }) {
   const { groupId } = await params;
-  const group = await requireGroupLeader(groupId);
+  const group = await requireGroupAbility(groupId, "lessons");
   const base = groupPath(group.id, "/lectures");
   const supabase = await createClient();
 

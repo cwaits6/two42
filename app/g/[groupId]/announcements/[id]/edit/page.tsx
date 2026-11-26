@@ -4,7 +4,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ErrorState } from "@/components/states/ErrorState";
 import { groupPath } from "@/lib/groups/active";
-import { requireGroupLeader } from "@/lib/groups/server";
+import { requireGroupAbility } from "@/lib/groups/server";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { groupPageTitle } from "@/lib/pageTitle";
 import { AnnouncementForm } from "../../AnnouncementForm";
@@ -18,7 +18,7 @@ export default async function EditAnnouncementPage({
   params: Promise<{ groupId: string; id: string }>;
 }) {
   const { groupId, id } = await params;
-  const group = await requireGroupLeader(groupId);
+  const group = await requireGroupAbility(groupId, "announcements");
   const supabase = await createClient();
   const [{ data, error }, timeZone] = await Promise.all([
     supabase

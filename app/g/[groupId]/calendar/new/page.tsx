@@ -6,7 +6,7 @@ import { LoadingState } from "@/components/states/LoadingState";
 import { NewEventForm } from "@/components/events/NewEventForm";
 import { createClient } from "@/lib/supabase/server";
 import { getGroupCalendar } from "@/lib/groups/calendar";
-import { requireGroupLeader } from "@/lib/groups/server";
+import { requireGroupAbility } from "@/lib/groups/server";
 import { getOptionalUser } from "@/lib/supabase/current-user";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
 import { groupPageTitle } from "@/lib/pageTitle";
@@ -22,7 +22,7 @@ export default async function NewEventPage({
   params: Promise<{ groupId: string }>;
 }) {
   const { groupId } = await params;
-  const group = await requireGroupLeader(groupId);
+  const group = await requireGroupAbility(groupId, "calendar");
   const supabase = await createClient();
   const user = await getOptionalUser();
   if (!user) redirect("/login");

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { groupPath } from "@/lib/groups/active";
-import { requireGroupSettingsLeader } from "@/lib/groups/server";
+import { requireActiveGroup } from "@/lib/groups/server";
+import { firstGroupSettingsSection } from "@/lib/groups/settingsNav";
 import { groupPageTitle } from "@/lib/pageTitle";
 
 export const generateMetadata = groupPageTitle("Group settings");
@@ -11,6 +12,6 @@ export default async function GroupSettingsPage({
   params: Promise<{ groupId: string }>;
 }) {
   const { groupId } = await params;
-  const group = await requireGroupSettingsLeader(groupId);
-  redirect(groupPath(group.id, "/settings/details"));
+  const group = await requireActiveGroup(groupId);
+  redirect(firstGroupSettingsSection(group) ?? groupPath(group.id, "/dashboard"));
 }

@@ -13,9 +13,11 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
-const requireGroupSettingsLeader = vi.fn();
+const requireActiveGroup = vi.fn();
+const requireGroupSettingsAccess = vi.fn();
 vi.mock("@/lib/groups/server", () => ({
-  requireGroupSettingsLeader: (groupId: string) => requireGroupSettingsLeader(groupId),
+  requireActiveGroup: (groupId: string) => requireActiveGroup(groupId),
+  requireGroupSettingsAccess: (groupId: string, needs: string) => requireGroupSettingsAccess(groupId, needs),
 }));
 
 const { default: GroupSettingsPage } = await import("./page");
@@ -26,26 +28,35 @@ const leader: ActiveGroup = { id: A_ID, name: "Grace", color: GROUP_DEFAULT_COLO
 const params = Promise.resolve({ groupId: A_ID });
 
 beforeEach(() => {
-  requireGroupSettingsLeader.mockReset();
-  requireGroupSettingsLeader.mockResolvedValue(leader);
+  requireActiveGroup.mockReset();
+  requireActiveGroup.mockResolvedValue(leader);
+  requireGroupSettingsAccess.mockReset();
+  requireGroupSettingsAccess.mockResolvedValue(leader);
 });
 
-describe("old Group settings addresses", () => {
-  it("opens Group settings on Details", async () => {
+describe("Group settings addresses", () => {
+  it("opens Group settings on Details for a leader", async () => {
     await expect(GroupSettingsPage({ params })).rejects.toMatchObject({ target: `/g/${A_ID}/settings/details` });
-    expect(requireGroupSettingsLeader).toHaveBeenCalledWith(A_ID);
+    expect(requireActiveGroup).toHaveBeenCalledWith(A_ID);
   });
 
-  it("sends the serving settings address to Teams", async () => {
+  it("opens Group settings on the first page a member's abilities reach", async () => {
+    requireActiveGroup.mockResolvedValue({ ...leader, role: "member", abilities: ["teams"] });
+    await expect(GroupSettingsPage({ params })).rejects.toMatchObject({ target: `/g/${A_ID}/settings/teams` });
+  });
+
+  it("sends a member with no abilities to the group's Home", async () => {
+    requireActiveGroup.mockResolvedValue({ ...leader, role: "member" });
+    await expect(GroupSettingsPage({ params })).rejects.toMatchObject({ target: `/g/${A_ID}/dashboard` });
+  });
+
+  it("sends the serving settings address to Teams, for whoever manages teams", async () => {
     await expect(GroupServingSettingsPage({ params })).rejects.toMatchObject({ target: `/g/${A_ID}/settings/teams` });
-    expect(requireGroupSettingsLeader).toHaveBeenCalledWith(A_ID);
+    expect(requireGroupSettingsAccess).toHaveBeenCalledWith(A_ID, "teams");
   });
 
-  it.each([
-    ["Group settings", GroupSettingsPage],
-    ["the serving settings", GroupServingSettingsPage],
-  ])("sends a member who opens %s wherever the guard sends them", async (_name, Page) => {
-    requireGroupSettingsLeader.mockRejectedValue(new RedirectSentinel(`/g/${A_ID}/dashboard`));
-    await expect(Page({ params })).rejects.toMatchObject({ target: `/g/${A_ID}/dashboard` });
+  it("sends someone who cannot manage teams wherever the guard sends them", async () => {
+    requireGroupSettingsAccess.mockRejectedValue(new RedirectSentinel(`/g/${A_ID}/dashboard`));
+    await expect(GroupServingSettingsPage({ params })).rejects.toMatchObject({ target: `/g/${A_ID}/dashboard` });
   });
 });

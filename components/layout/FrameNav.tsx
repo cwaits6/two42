@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useActiveGroup } from "@/components/groups/GroupProvider";
 import type { Account } from "./account";
+import { canManageAnything } from "@/lib/groups/abilities";
 import { AreaNav, areaFor } from "./AreaNav";
 import { SidebarNav } from "./SidebarNav";
 import { useSidebarModel } from "./useSidebarModel";
@@ -31,7 +32,7 @@ export function FrameNav({
     return <AreaNav area="platform" hasChurch={account.hasChurch} collapsed={collapsed} onNavigate={onNavigate} />;
   }
   if (!account.isMember) return null;
-  if (area === "groupSettings" && group?.role === "leader") {
+  if (area === "groupSettings" && group && canManageAnything(group)) {
     return <AreaNav area="groupSettings" group={group} collapsed={collapsed} onNavigate={onNavigate} />;
   }
   return <MemberNav collapsed={collapsed} onNavigate={onNavigate} />;

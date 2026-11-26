@@ -35,7 +35,8 @@ export type CalendarGroup = {
   id: string;
   name: string;
   color: string;
-  isLeader: boolean;
+  /** The viewer can add and edit this group's events. */
+  canManage: boolean;
 };
 
 interface EventsPageClientProps {
@@ -130,9 +131,9 @@ export function EventsPageClient({ groups, allEvents, replies, userId, timeZone 
     [allEvents, visibleGroupIds, timeZone]
   );
 
-  // Add event targets a group the viewer leads. One such visible group is a
+  // Add event targets a group whose calendar the viewer manages. One such visible group is a
   // direct link; several are a choice.
-  const ledVisible = groups.filter((g) => g.isLeader && visibleGroupIds.has(g.id));
+  const ledVisible = groups.filter((g) => g.canManage && visibleGroupIds.has(g.id));
   const newEventHref = (groupId: string, date?: string) =>
     groupPath(groupId, `/calendar/new${date ? `?date=${date}` : ""}`);
   const onDateClick =

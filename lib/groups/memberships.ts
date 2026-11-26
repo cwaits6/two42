@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { GROUP_DEFAULT_COLOR, groupColor } from "@/lib/groups/calendar";
 import type { ActiveGroup, GroupRole } from "@/lib/groups/active";
+import { isGroupAbility, type GroupAbility } from "@/lib/groups/abilities";
 import { logError } from "@/lib/log";
 
 type MembershipRow = {
@@ -12,6 +13,12 @@ type MembershipRow = {
 };
 
 type CalendarRow = { group_id: string; color: string | null; created_at: string; id: string };
+
+type AbilityRow = { group_id: string; ability: string };
+
+type TeamRow = {
+  teams: { group_id: string; team_abilities: { ability: string }[] | null } | null;
+};
 
 function toRole(value: string): GroupRole {
   return value === "leader" ? "leader" : "member";
@@ -73,10 +80,57 @@ export async function loadGroupMemberships(
     colors.set(calendar.group_id, groupColor(calendar.color));
   }
 
-  return rows.map((row) => ({
-    id: row.group_id,
-    name: groupName(row),
-    color: colors.get(row.group_id) ?? GROUP_DEFAULT_COLOR,
-    role: toRole(row.role),
-  }));
+  const abilities = await loadAbilities(client, opts);
+
+  return rows.map((row) => {
+    const held = abilities.get(row.group_id);
+    return {
+      id: row.group_id,
+      name: groupName(row),
+      color: colors.get(row.group_id) ?? GROUP_DEFAULT_COLOR,
+      role: toRole(row.role),
+      ...(held ? { abilities: [...held] } : {}),
+    };
+  });
+}
+
+/**
+ * The abilities a leader gave the viewer in each group, directly or through a
+ * team linked to one. Same contract as loadGroupMemberships(): `orgId` is the
+ * caller's validated org, and a failed read throws rather than reading as "none".
+ */
+async function loadAbilities(
+  client: SupabaseClient<Database>,
+  opts: { profileId: string; orgId: string }
+): Promise<Map<string, Set<GroupAbility>>> {
+  const [direct, viaTeams] = await Promise.all([
+    client
+      .from("group_member_abilities")
+      .select("group_id, ability")
+      .eq("profile_id", opts.profileId)
+      .eq("org_id", opts.orgId),
+    client
+      .from("team_members")
+      .select("teams(group_id, team_abilities(ability))")
+      .eq("profile_id", opts.profileId)
+      .eq("org_id", opts.orgId),
+  ]);
+  if (direct.error || viaTeams.error) {
+    logError("Failed to load group abilities", direct.error ?? viaTeams.error);
+    throw new Error("Failed to load group abilities");
+  }
+
+  const byGroup = new Map<string, Set<GroupAbility>>();
+  const add = (groupId: string, ability: string) => {
+    if (!isGroupAbility(ability)) return;
+    const held = byGroup.get(groupId) ?? new Set<GroupAbility>();
+    held.add(ability);
+    byGroup.set(groupId, held);
+  };
+  for (const row of (direct.data ?? []) as AbilityRow[]) add(row.group_id, row.ability);
+  for (const row of (viaTeams.data ?? []) as unknown as TeamRow[]) {
+    if (!row.teams) continue;
+    for (const link of row.teams.team_abilities ?? []) add(row.teams.group_id, link.ability);
+  }
+  return byGroup;
 }

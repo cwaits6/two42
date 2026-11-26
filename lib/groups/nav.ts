@@ -66,9 +66,9 @@ export type SidebarInput = {
   /** Inside-a-group semantics (useActiveGroup): null at the church level. */
   activeGroup: ActiveGroup | null;
   discoveryOn: boolean;
-  /** The viewer leads the active group. */
-  isLeader: boolean;
-  /** Requests to join waiting on the active group, for its leader; null at zero or when not counted. */
+  /** Where Group settings opens for the viewer in the active group; null when they reach none of it. */
+  settingsHref: string | null;
+  /** Requests to join waiting on the active group, for whoever answers them; null at zero or when not counted. */
   waitingRequests?: number | null;
   hasServingAccess: boolean;
   /** The viewer's groups whose leader turned the Supper club on. */
@@ -120,8 +120,8 @@ function groupPages(group: ActiveGroup, churchBase: string, input: SidebarInput)
     link(groupBase, "/give", "Give", "give"),
     link(groupBase, "/about", "About", "about")
   );
-  if (input.isLeader) {
-    const settings = link(groupBase, "/settings", "Group settings", "group-settings");
+  if (input.settingsHref) {
+    const settings: SidebarLink = { kind: "link", href: input.settingsHref, label: "Group settings", icon: "group-settings" };
     if (input.waitingRequests) settings.count = input.waitingRequests;
     items.push({ kind: "separator" }, settings);
   }

@@ -4,9 +4,9 @@ import { GROUP_DEFAULT_COLOR } from "@/lib/groups/calendar";
 
 class GuardRefusal extends Error {}
 
-const requireGroupSettingsLeader = vi.fn();
+const requireGroupSettingsAccess = vi.fn();
 vi.mock("@/lib/groups/server", () => ({
-  requireGroupSettingsLeader: (groupId: string) => requireGroupSettingsLeader(groupId),
+  requireGroupSettingsAccess: (groupId: string, needs: string) => requireGroupSettingsAccess(groupId, needs),
 }));
 
 vi.mock("./LabelsManager", () => ({ LabelsManager: () => null }));
@@ -18,21 +18,21 @@ const A_ID = "11111111-1111-4111-8111-111111111111";
 const leader: ActiveGroup = { id: A_ID, name: "Grace", color: GROUP_DEFAULT_COLOR, role: "leader" };
 
 beforeEach(() => {
-  requireGroupSettingsLeader.mockReset();
+  requireGroupSettingsAccess.mockReset();
 });
 
 describe("GroupLabelsSettingsPage", () => {
-  it("does not render for a member who does not lead the group", async () => {
-    requireGroupSettingsLeader.mockRejectedValue(new GuardRefusal("sent to Home"));
+  it("does not render for a member without the members ability", async () => {
+    requireGroupSettingsAccess.mockRejectedValue(new GuardRefusal("sent to Home"));
 
     await expect(
       GroupLabelsSettingsPage({ params: Promise.resolve({ groupId: A_ID }) }),
     ).rejects.toBeInstanceOf(GuardRefusal);
-    expect(requireGroupSettingsLeader).toHaveBeenCalledWith(A_ID);
+    expect(requireGroupSettingsAccess).toHaveBeenCalledWith(A_ID, "members");
   });
 
   it("renders the manager for the resolved group when the viewer leads it", async () => {
-    requireGroupSettingsLeader.mockResolvedValue(leader);
+    requireGroupSettingsAccess.mockResolvedValue(leader);
 
     const element = await GroupLabelsSettingsPage({ params: Promise.resolve({ groupId: A_ID }) });
 

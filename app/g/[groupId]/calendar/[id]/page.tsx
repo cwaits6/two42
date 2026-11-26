@@ -1,3 +1,4 @@
+import { can } from "@/lib/groups/abilities";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
@@ -100,7 +101,7 @@ export default async function EventDetailPage({
   const user = await getOptionalUser();
 
   // requireActiveGroup() admitted only an approved member of this group.
-  const isLeader = group.role === "leader";
+  const canEdit = can(group, "calendar");
 
   // Formatting helpers.
   // When viewing a specific occurrence of a recurring series, shift the displayed
@@ -274,7 +275,7 @@ export default async function EventDetailPage({
         backHref={groupPath(group.id, "/calendar")}
         backLabel="Back to Calendar"
         actions={
-          isLeader && (
+          canEdit && (
             <Button variant="outline" nativeButton={false} render={<Link href={editHref} />}>
               <Pencil aria-hidden="true" />
               Edit event

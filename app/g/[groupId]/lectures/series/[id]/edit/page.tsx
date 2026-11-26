@@ -4,7 +4,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ErrorState } from "@/components/states/ErrorState";
 import { groupPath } from "@/lib/groups/active";
-import { requireGroupLeader } from "@/lib/groups/server";
+import { requireGroupAbility } from "@/lib/groups/server";
 import { groupPageTitle } from "@/lib/pageTitle";
 import { SeriesForm } from "../../SeriesForm";
 import { logError } from "@/lib/log";
@@ -17,7 +17,7 @@ export default async function EditSeriesPage({
   params: Promise<{ groupId: string; id: string }>;
 }) {
   const { groupId, id } = await params;
-  const group = await requireGroupLeader(groupId);
+  const group = await requireGroupAbility(groupId, "lessons");
   const supabase = await createClient();
 
   const { data: series, error } = await supabase

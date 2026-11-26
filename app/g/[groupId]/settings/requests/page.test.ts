@@ -6,9 +6,9 @@ import { NO_PENDING_TEXT, OPEN_POLICY_EMPTY_TEXT } from "@/lib/groups/joining";
 
 class GuardRefusal extends Error {}
 
-const requireGroupSettingsLeader = vi.fn();
+const requireGroupSettingsAccess = vi.fn();
 vi.mock("@/lib/groups/server", () => ({
-  requireGroupSettingsLeader: (groupId: string) => requireGroupSettingsLeader(groupId),
+  requireGroupSettingsAccess: (groupId: string, needs: string) => requireGroupSettingsAccess(groupId, needs),
 }));
 vi.mock("@/lib/time/orgZone", () => ({ getOrgTimeZone: async () => "America/Chicago" }));
 
@@ -45,18 +45,18 @@ function manager(node: ReactNode): Element | undefined {
 const render = async () => manager(await GroupRequestsSettingsPage({ params: Promise.resolve({ groupId: A_ID }) }));
 
 beforeEach(() => {
-  requireGroupSettingsLeader.mockReset();
-  requireGroupSettingsLeader.mockResolvedValue(leader);
+  requireGroupSettingsAccess.mockReset();
+  requireGroupSettingsAccess.mockResolvedValue(leader);
   policyRead.mockReset();
   filters.length = 0;
   vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 describe("GroupRequestsSettingsPage", () => {
-  it("does not render for a member who does not lead the group", async () => {
-    requireGroupSettingsLeader.mockRejectedValue(new GuardRefusal("sent to Home"));
+  it("does not render for a member without the members ability", async () => {
+    requireGroupSettingsAccess.mockRejectedValue(new GuardRefusal("sent to Home"));
     await expect(render()).rejects.toBeInstanceOf(GuardRefusal);
-    expect(requireGroupSettingsLeader).toHaveBeenCalledWith(A_ID);
+    expect(requireGroupSettingsAccess).toHaveBeenCalledWith(A_ID, "members");
   });
 
   it("lists this group's requests, worded for its join policy", async () => {

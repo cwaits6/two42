@@ -703,6 +703,32 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"group_member_abilities": {
+                  Row: {
+                    "ability": string,"granted_at": string,"granted_by": string | null,"group_id": string,"org_id": string,"profile_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "ability": string,"granted_at"?: string,"granted_by"?: string | null,"group_id": string,"org_id"?: string,"profile_id": string
+                  }
+                  Update: {
+                    "ability"?: string,"granted_at"?: string,"granted_by"?: string | null,"group_id"?: string,"org_id"?: string,"profile_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "group_member_abilities_member_fkey"
+      columns: ["group_id","profile_id","org_id"]
+isOneToOne: false
+      referencedRelation: "group_members"
+      referencedColumns: ["group_id","profile_id","org_id"]
+    },{
+      foreignKeyName: "group_member_abilities_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"group_member_labels": {
                   Row: {
                     "applied_at": string,"applied_by": string | null,"group_id": string,"group_member_id": string,"label_id": string,"org_id": string
@@ -2159,6 +2185,32 @@ isOneToOne: false
       referencedColumns: ["id","rotation_id","org_id"]
     }
                   ]
+                },"team_abilities": {
+                  Row: {
+                    "ability": string,"granted_at": string,"granted_by": string | null,"org_id": string,"team_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "ability": string,"granted_at"?: string,"granted_by"?: string | null,"org_id"?: string,"team_id": string
+                  }
+                  Update: {
+                    "ability"?: string,"granted_at"?: string,"granted_by"?: string | null,"org_id"?: string,"team_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "team_abilities_org_id_fkey"
+      columns: ["org_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "team_abilities_team_fkey"
+      columns: ["team_id","org_id"]
+isOneToOne: false
+      referencedRelation: "teams"
+      referencedColumns: ["id","org_id"]
+    }
+                  ]
                 },"team_members": {
                   Row: {
                     "assigned_at": string,"assigned_by": string | null,"is_leader": boolean,"org_id": string,"profile_id": string,"team_id": string
@@ -2364,6 +2416,9 @@ isOneToOne: false
 "app_request_org_id":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
+"can_change_team_members":
+{ Args: { "_row_is_lead": boolean,"_team_id": string }; Returns: boolean
+                           },
 "create_own_household":
 { Args: { "_family_name": string }; Returns: string
                            },
@@ -2432,6 +2487,12 @@ isOneToOne: false
                            },
 "group_request_approve":
 { Args: { "_request_id": string }; Returns: string
+                           },
+"has_group_ability":
+{ Args: { "_ability": string,"_group_id": string }; Returns: boolean
+                           },
+"has_group_ability_directly":
+{ Args: { "_ability": string,"_group_id": string }; Returns: boolean
                            },
 "household_visible":
 { Args: { "_directory_open": boolean,"_family_id": string,"_hidden_family_ids": (string)[],"_is_admin": boolean,"_is_member": boolean,"_own_family_id": string }; Returns: boolean
@@ -2597,6 +2658,9 @@ isOneToOne: false
 { Args: { "_rotation_id": string }; Returns: {
               "profile_id": string
             }[]
+                           },
+"team_has_ability":
+{ Args: { "_ability": string,"_team_id": string }; Returns: boolean
                            },
 "unlisted_household_ids":
 { Args: Record<PropertyKey, never>; Returns: (string)[]

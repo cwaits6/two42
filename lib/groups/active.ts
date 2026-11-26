@@ -2,6 +2,8 @@
 // and the client frame. No React, no next/* imports, so every rule here is
 // testable without I/O.
 
+import { canManageAnything, type GroupAbility } from "@/lib/groups/abilities";
+
 export type GroupRole = "leader" | "member";
 
 export type ActiveGroup = {
@@ -9,6 +11,8 @@ export type ActiveGroup = {
   name: string;
   color: string;
   role: GroupRole;
+  /** What a leader gave this member, directly or through a team. Absent means none; a leader holds every ability. */
+  abilities?: GroupAbility[];
 };
 
 export const GROUP_COOKIE = "two42-group";
@@ -70,7 +74,7 @@ export function swapGroupInPath(pathname: string, target: ActiveGroup): string {
 
   const [section = "", sub] = (match[2] ?? "").split("/");
   if (section === "") return groupPath(target.id, "/dashboard");
-  if (section === "settings" && target.role !== "leader") {
+  if (section === "settings" && !canManageAnything(target)) {
     return groupPath(target.id, "/dashboard");
   }
   const kept = sub && KEPT_SUBPATHS[section]?.has(sub) ? `/${sub}` : "";

@@ -11,6 +11,7 @@ import {
   resolveActiveGroup,
   type ActiveGroup,
 } from "@/lib/groups/active";
+import { can, type GroupAbility } from "@/lib/groups/abilities";
 import { logError } from "@/lib/log";
 
 /**
@@ -76,12 +77,29 @@ export async function requireGroupLeader(groupId: string): Promise<ActiveGroup> 
   return group;
 }
 
-/**
- * For Group settings pages: a member of the group who does not lead it is not
- * enumerating anything, so they land on the group's Home rather than a 404.
- */
-export async function requireGroupSettingsLeader(groupId: string): Promise<ActiveGroup> {
+/** For pages under a group that need one ability: a member without it gets a 404. Leaders hold every ability. */
+export async function requireGroupAbility(groupId: string, ability: GroupAbility): Promise<ActiveGroup> {
   const group = await requireActiveGroup(groupId);
-  if (group.role !== "leader") redirect(groupPath(group.id, "/dashboard"));
+  if (!can(group, ability)) notFound();
   return group;
+}
+
+/**
+ * For Group settings pages: a member of the group who lacks the page's
+ * ability is not enumerating anything, so they land on the group's Home
+ * rather than a 404. "leader" names the pages no ability reaches.
+ */
+export async function requireGroupSettingsAccess(
+  groupId: string,
+  needs: GroupAbility | "leader",
+): Promise<ActiveGroup> {
+  const group = await requireActiveGroup(groupId);
+  const allowed = needs === "leader" ? group.role === "leader" : can(group, needs);
+  if (!allowed) redirect(groupPath(group.id, "/dashboard"));
+  return group;
+}
+
+/** requireGroupSettingsAccess() for the pages only a leader reaches. */
+export async function requireGroupSettingsLeader(groupId: string): Promise<ActiveGroup> {
+  return requireGroupSettingsAccess(groupId, "leader");
 }

@@ -136,6 +136,10 @@ begin
 
   insert into public.team_members (org_id, profile_id, team_id)
     values (_org, _owner, _serving_group);
+  insert into public.group_member_abilities (org_id, group_id, profile_id, ability, granted_by)
+    values (_org, _group, _owner, 'calendar', _owner);
+  insert into public.team_abilities (org_id, team_id, ability, granted_by)
+    values (_org, _serving_group, 'prayer_care', _owner);
   insert into public.serving_team_settings (org_id, team_id, enabled)
     values (_org, _serving_group, true);
   insert into public.serving_signups (org_id, team_id, service_date, family_id, created_by)

@@ -71,10 +71,10 @@ const UPCOMING = {
   is_cancelled: false,
 } as Event;
 
-type TestGroup = { id: string; name: string; color: string; isLeader: boolean };
+type TestGroup = { id: string; name: string; color: string; canManage: boolean };
 
 async function mount({
-  isLeader = false,
+  canManage = false,
   allEvents = [] as Event[],
   groups = undefined as TestGroup[] | undefined,
 } = {}) {
@@ -85,7 +85,7 @@ async function mount({
   await act(async () =>
     root.render(
       createElement(EventsPageClient, {
-        groups: groups ?? [{ id: "g1", name: "Group", color: "#b4532a", isLeader }],
+        groups: groups ?? [{ id: "g1", name: "Group", color: "#b4532a", canManage }],
         allEvents,
         replies: [],
         userId: "u1",
@@ -127,7 +127,7 @@ describe("EventsPageClient Add event", () => {
     Array.from(container.querySelectorAll("a")).filter((a) => a.textContent === "Add event");
 
   it("offers Add event once in an empty list view, from the empty state and not the header", async () => {
-    const { container, radio } = await mount({ isLeader: true });
+    const { container, radio } = await mount({ canManage: true });
     expect(addEvents(container)).toHaveLength(1);
     await act(async () => radio("List").click());
     const links = addEvents(container);
@@ -136,7 +136,7 @@ describe("EventsPageClient Add event", () => {
   });
 
   it("keeps Add event in the header when the list has upcoming events", async () => {
-    const { container, radio } = await mount({ isLeader: true, allEvents: [UPCOMING] });
+    const { container, radio } = await mount({ canManage: true, allEvents: [UPCOMING] });
     await act(async () => radio("List").click());
     const links = addEvents(container);
     expect(links).toHaveLength(1);
@@ -237,8 +237,8 @@ describe("EventsPageClient Subscribe", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { container } = await mount({
       groups: [
-        { id: "g1", name: "Group", color: "#b4532a", isLeader: false },
-        { id: "g2", name: "Other group", color: "#c99a2e", isLeader: false },
+        { id: "g1", name: "Group", color: "#b4532a", canManage: false },
+        { id: "g2", name: "Other group", color: "#c99a2e", canManage: false },
       ],
     });
     await choose(container, "Group");
