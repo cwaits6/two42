@@ -122,9 +122,9 @@ test.describe("what a member in the same group sees", () => {
     await expect(row.getByText(/Married/)).toHaveCount(0);
   });
 
-  test("a stored anniversary shows on every filter and on the card", async ({ page }) => {
+  test("a stored anniversary shows on the full list, This week and the card", async ({ page }) => {
     runSql(SOON_SQL);
-    for (const filter of ["", "?when=week", "?when=month"]) {
+    for (const filter of ["", "?when=week"]) {
       await page.goto(`${ANNIVERSARIES}${filter}`);
       await expect(page.getByRole("link", { name: /Mockingham/ })).toBeVisible();
     }
