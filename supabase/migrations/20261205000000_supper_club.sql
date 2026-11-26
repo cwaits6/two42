@@ -85,7 +85,6 @@ drop function public.dinner_reminder_claim(uuid, uuid, date, timestamptz, uuid);
 drop function public.dinner_reminder_passes_prune(uuid, date, integer);
 
 alter table public.group_settings drop column dinner_club_enabled;
-alter table public.profiles drop column email_dinner_club;
 
 -- ── Switches ────────────────────────────────────────────────────────────────
 alter table public.group_settings
@@ -104,6 +103,10 @@ comment on column public.profiles.email_supper_club is
 
 -- ADD COLUMN adds nothing to the column-level select grant on profiles.
 grant select (email_supper_club) on public.profiles to anon, authenticated;
+
+-- A person who turned the dinner club emails off keeps them off.
+update public.profiles set email_supper_club = false where not email_dinner_club;
+alter table public.profiles drop column email_dinner_club;
 
 -- The profile update policy lets a church admin and a household manager
 -- write another person's row, so the column needs its own rule.
@@ -1617,8 +1620,10 @@ begin
   select d.body into _body from public.supper_drafts d
    where d.rotation_id = _rotation.id and d.org_id = _org
    for update;
-  if _body is null or jsonb_typeof(_body -> 'tables') is distinct from 'array'
-    or jsonb_array_length(_body -> 'tables') = 0 then
+  if _body is null or jsonb_typeof(_body -> 'tables') is distinct from 'array' then
+    raise exception 'there is no draft to publish' using errcode = 'SC002';
+  end if;
+  if jsonb_array_length(_body -> 'tables') = 0 then
     raise exception 'there is no draft to publish' using errcode = 'SC002';
   end if;
 
@@ -1652,7 +1657,10 @@ begin
         where coalesce(h ->> 'rotationDateId', '') !~* '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$'
           or coalesce(h ->> 'partyId', '') !~* '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$'
       )
-  ) or exists (
+  ) then
+    raise exception 'a table lists a party not signed up this rotation' using errcode = 'SC002';
+  end if;
+  if exists (
     select 1
     from jsonb_array_elements(_body -> 'tables') t,
          jsonb_array_elements_text(t -> 'partyIds') pid
