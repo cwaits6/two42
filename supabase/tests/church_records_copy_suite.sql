@@ -14,7 +14,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(49);
+select plan(50);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -436,6 +436,16 @@ select pg_temp.attempt('admin@local.dev',
 select is(
   (select graduation_year from public.family_members where claimed_profile_id = pg_temp.fx('member')),
   2032::smallint, 'a locked grade keeps the church''s value, even for a church admin');
+
+-- A second row claimed by the same person isn't the one the copy owns, so the lock doesn't reach it.
+insert into public.family_members (id, family_id, first_name, relationship, claimed_profile_id, org_id)
+  select 'ffffffff-ffff-4fff-bfff-ffffffffffff', family_id, 'Leo', 'other', id, org_id
+    from public.profiles where id = pg_temp.fx('member');
+select pg_temp.attempt('admin@local.dev',
+  'update public.family_members set graduation_year = 2030 where id = ''ffffffff-ffff-4fff-bfff-ffffffffffff''');
+select is(
+  (select array_agg(graduation_year order by id) from public.family_members where claimed_profile_id = pg_temp.fx('member')),
+  array[2032, 2030]::smallint[], 'an edit to another row the person claims lands, and the copied row keeps its grade');
 
 select is(
   pg_temp.attempt('leo.loremsworth@example.test',

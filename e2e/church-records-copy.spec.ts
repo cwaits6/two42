@@ -47,6 +47,13 @@ test.beforeAll(() => {
   if (existing !== "0") {
     throw new Error("The seeded church already has a records connection on this stack; this spec won't replace it.");
   }
+  // Settings left without a connection are someone's on the shared stack; removeFixtures() would delete them.
+  const orphaned = sql(`select count(*) from public.records_field_settings
+                         where org_id = ${org}
+                           and not exists (select 1 from public.records_connections where org_id = ${org});`);
+  if (orphaned !== "0") {
+    throw new Error("The seeded church has records settings without a connection on this stack; this spec won't remove them.");
+  }
   seededMobile = sql(`select coalesce(phone_mobile, '') from public.profiles where email = '${ISAAC}';`);
   removeFixtures();
   sql(`

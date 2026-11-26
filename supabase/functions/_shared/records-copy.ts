@@ -243,7 +243,8 @@ export function planPersonCopy(input: CopyInput): CopyPlan {
     if (!prior) {
       if (isEmptyValue(value)) continue;
       if (equal) {
-        record(field, "records", value);
+        // A preferred name the member already set stays theirs, even when the nick name matches it.
+        if (field !== "preferred_name") record(field, "records", value);
       } else if (isEmptyValue(now)) {
         write(field, value);
         record(field, "records", value);
@@ -257,8 +258,6 @@ export function planPersonCopy(input: CopyInput): CopyPlan {
 
     if (prior.state === "records") {
       if (!equal) write(field, value);
-      record(field, "records", value);
-    } else if (prior.state === "changed" && equal && !isEmptyValue(now)) {
       record(field, "records", value);
     } else {
       // The member's own value, or their clear, stays; only what the church holds is kept up to date.

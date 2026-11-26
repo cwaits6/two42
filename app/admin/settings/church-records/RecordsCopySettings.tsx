@@ -219,7 +219,8 @@ export function RecordsCopySettings({ label }: { label: string }) {
         <CardContent className="space-y-4">
           <p className="text-lg">
             {data.lastRefreshedAt ? `Last refreshed ${when(data.lastRefreshedAt)}.` : "Not refreshed yet."} two42
-            refreshes every night, reading only people changed in {label} since the last refresh.
+            refreshes every night, reading people changed in {label} since the last refresh and anyone not copied
+            yet, such as everyone after a change to what two42 copies.
           </p>
           {data.pending > 0 && (
             <p className="text-lg">{people(data.pending)} still to copy on the next refresh.</p>

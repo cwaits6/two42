@@ -573,6 +573,13 @@ begin
      or public.records_pick(to_jsonb(new), _columns) = public.records_pick(to_jsonb(old), _columns) then
     return new;
   end if;
+  -- The copy owns only the person's lowest-id claimed row, as records_apply_copy() picks it.
+  if exists (
+    select 1 from public.family_members m
+     where m.claimed_profile_id = old.claimed_profile_id and m.org_id = old.org_id and m.id < old.id
+  ) then
+    return new;
+  end if;
   select v.church_value, s.mode into _value
     from public.records_field_values v
     left join public.records_field_settings s on s.org_id = v.org_id and s.field = v.field

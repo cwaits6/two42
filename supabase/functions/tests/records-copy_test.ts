@@ -109,6 +109,17 @@ Deno.test("a member's edit is left alone; only the church's value is kept up to 
   assertEquals(plan.values, [{ field: "phone_mobile", state: "changed", church_value: { phone_mobile: "+15125550123" } }]);
 });
 
+Deno.test("a member's edit stays theirs when the church's value comes to match it", () => {
+  const plan = planPersonCopy(
+    input({ phone_mobile: "member" }, {
+      stored: { phone_mobile: { state: "changed", churchValue: { phone_mobile: "+15125550100" } } },
+      current: { profile: profile({ phone_mobile: "+15125550123" }), household: null, grade: null },
+    }),
+  );
+  assertEquals(plan.profile, {});
+  assertEquals(plan.values, [{ field: "phone_mobile", state: "changed", church_value: { phone_mobile: "+15125550123" } }]);
+});
+
 Deno.test("a cleared birthday stays empty when the records still hold one", () => {
   const plan = planPersonCopy(
     input({ birthday: "member" }, {
@@ -173,6 +184,12 @@ Deno.test("the nick name fills the preferred name only while the member hasn't s
   );
   assertEquals(own.profile, {});
   assertEquals(own.values.filter((v) => v.field === "preferred_name"), []);
+
+  const matching = planPersonCopy(
+    input({ name: "member" }, { person: nick, current: { profile: profile({ preferred_name: "Peggy" }), household: null, grade: null } }),
+  );
+  assertEquals(matching.profile, {});
+  assertEquals(matching.values.filter((v) => v.field === "preferred_name"), []);
 
   const sameAsFirst = planPersonCopy(input({ name: "member" }, { person: person({ nickName: "Margaret" }) }));
   assertEquals(sameAsFirst.profile, {});
