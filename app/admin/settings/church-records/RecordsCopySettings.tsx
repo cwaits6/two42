@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,19 +52,28 @@ export function RecordsCopySettings({ label }: { label: string }) {
   const [busy, setBusy] = useState(false);
   const [reviewPage, setReviewPage] = useState(0);
 
+  const latest = useRef(0);
+  // Kept until a load lands, so Try again after a failed reset still resets.
+  const resetPending = useRef(false);
+
   // A refresh or unlink reloads too, and must not drop choices not yet saved.
   const load = useCallback(async (resetChoices: boolean) => {
+    const seq = ++latest.current;
+    resetPending.current ||= resetChoices;
     setError(null);
     try {
       const res = await call("/api/admin/church-records/copy");
+      if (seq !== latest.current) return;
       if (!res.ok) {
         setError(errorText("load what two42 copies", res.status, res.data));
         return;
       }
       const loaded = res.data as unknown as CopyData;
       setData(loaded);
-      if (resetChoices) setChoices(loaded.fields);
+      if (resetPending.current) setChoices(loaded.fields);
+      resetPending.current = false;
     } catch (err) {
+      if (seq !== latest.current) return;
       logError("Church records copy settings load failed", err, { route: "/admin/settings/church-records" });
       setError(NETWORK_ERROR);
     }
@@ -147,7 +156,7 @@ export function RecordsCopySettings({ label }: { label: string }) {
           <p className="text-lg" role="alert">
             {error}
           </p>
-          <Button size="lg" variant="outline" onClick={() => load(true)}>
+          <Button size="lg" variant="outline" onClick={() => load(false)}>
             Try again
           </Button>
         </CardContent>
@@ -171,27 +180,29 @@ export function RecordsCopySettings({ label }: { label: string }) {
             detail they can change keeps their own from then on. Only name, suffix, title, gender and a child&apos;s
             grade can be locked.
           </p>
-          <ul className="divide-y divide-border">
-            {RECORDS_FIELDS.map((field) => (
-              <li key={field} className="space-y-3 py-4">
-                <p id={`copy-${field}`} className="text-lg font-semibold">
-                  {FIELD_LABELS[field]}
-                </p>
-                <Segmented
-                  label={FIELD_LABELS[field]}
-                  options={choicesFor(field)}
-                  value={choices[field] ?? "off"}
-                  onChange={(value) => setChoices((prev) => ({ ...prev, [field]: value }))}
-                />
-                {field === "name" && (
-                  <p className="text-base text-muted-foreground">
-                    First and last name. The preferred name is filled from the nick name only while a member
-                    hasn&apos;t set their own, and members can always change it.
+          <fieldset disabled={saving} className="m-0 min-w-0 border-0 p-0">
+            <ul className="divide-y divide-border">
+              {RECORDS_FIELDS.map((field) => (
+                <li key={field} className="space-y-3 py-4">
+                  <p id={`copy-${field}`} className="text-lg font-semibold">
+                    {FIELD_LABELS[field]}
                   </p>
-                )}
-              </li>
-            ))}
-          </ul>
+                  <Segmented
+                    label={FIELD_LABELS[field]}
+                    options={choicesFor(field)}
+                    value={choices[field] ?? "off"}
+                    onChange={(value) => setChoices((prev) => ({ ...prev, [field]: value }))}
+                  />
+                  {field === "name" && (
+                    <p className="text-base text-muted-foreground">
+                      First and last name. The preferred name is filled from the nick name only while a member
+                      hasn&apos;t set their own, and members can always change it.
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </fieldset>
           <p className="text-base text-muted-foreground">
             The sign-in email is never changed. Unlisted phone numbers are never copied.
           </p>

@@ -196,10 +196,9 @@ Deno.test("a photo comes from Rock's image handler without the key, and only as 
 
   assertEquals(await rock({ "/GetImage.ashx": image(jpeg, "image/png") }).source.photo(creds, "77", 400), null);
   assertEquals(await rock({ "/GetImage.ashx": image(new Uint8Array([1, 2, 3, 4])) }).source.photo(creds, "77", 400), null);
-  assertEquals(
-    await rock({ "/GetImage.ashx": image(new Uint8Array(600_000).fill(0xff)) }).source.photo(creds, "77", 400),
-    null,
-  );
+  const oversized = new Uint8Array(600_000);
+  oversized.set(jpeg);
+  assertEquals(await rock({ "/GetImage.ashx": image(oversized) }).source.photo(creds, "77", 400), null);
   assertEquals(await rock({ "/GetImage.ashx": image(jpeg, "image/jpeg", 404) }).source.photo(creds, "77", 400), null);
   for (const status of [500, 503, 429]) {
     await assertRejects(

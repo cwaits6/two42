@@ -8,13 +8,15 @@ import { requireRecordsSecret } from "./fixtures/recordsSecret";
 // called: the connection, Isaac's and Chloe's links, the church's settings and
 // where each value came from are written here as fixture rows through the
 // stack's own Postgres container, and afterAll removes them with the
-// connection and puts Isaac's seeded mobile number back.
+// connection and puts Isaac's seeded mobile number back. A connection someone
+// made by hand on the shared stack stops the spec rather than being replaced.
 test.describe.configure({ mode: "serial" });
 
 const DB_CONTAINER = "supabase_db_small-group-hub";
 const ISAAC = PERSONAS.oneGroup.email;
 const CHLOE = PERSONAS.spouse.email;
 const CHURCH_MOBILE = "+15125550199";
+const FIXTURE_URL = "https://records.example.test";
 // Undefined until captured, so a failed setup never writes over the seeded number.
 let seededMobile: string | undefined;
 
@@ -31,18 +33,25 @@ const isaac = `(select id from public.profiles where email = '${ISAAC}')`;
 const chloe = `(select id from public.profiles where email = '${CHLOE}')`;
 const org = `(select org_id from public.profiles where email = '${ISAAC}')`;
 
+// The stack is shared, so only this spec's own connection is ever removed.
 function removeFixtures() {
-  sql(`delete from public.records_connections where org_id = ${org};
-       delete from public.records_field_settings where org_id = ${org};`);
+  sql(`delete from public.records_connections where org_id = ${org} and base_url = '${FIXTURE_URL}';
+       delete from public.records_field_settings where org_id = ${org}
+          and not exists (select 1 from public.records_connections where org_id = ${org});`);
 }
 
 test.beforeAll(() => {
   requireRecordsSecret();
+  const existing = sql(`select count(*) from public.records_connections
+                         where org_id = ${org} and base_url <> '${FIXTURE_URL}';`);
+  if (existing !== "0") {
+    throw new Error("The seeded church already has a records connection on this stack; this spec won't replace it.");
+  }
   seededMobile = sql(`select coalesce(phone_mobile, '') from public.profiles where email = '${ISAAC}';`);
   removeFixtures();
   sql(`
     insert into public.records_connections (org_id, provider, base_url, key_ciphertext, key_hint)
-      values (${org}, 'rock', 'https://records.example.test', 'k1.fixture.fixture.fixture', 'test');
+      values (${org}, 'rock', '${FIXTURE_URL}', 'k1.fixture.fixture.fixture', 'test');
     insert into public.records_person_links (org_id, connection_id, profile_id, external_person_id)
       select org_id, connection_id, l.profile_id, l.person from public.records_connections,
              (values (${isaac}, 'e2e-1001'), (${chloe}, 'e2e-1002')) l(profile_id, person)

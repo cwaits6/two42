@@ -105,7 +105,10 @@ export function safeFetch(input: URL | string, init: RequestInit = {}): Promise<
   // Bodies are returned as received, never decoded, so none may be compressed.
   headers["accept-encoding"] ??= "identity";
 
-  return new Promise((resolve, reject) => {
+  const signal = init.signal;
+  // A caller's signal can outlive this request, so its listener goes once the request settles.
+  let onAbort: (() => void) | undefined;
+  return new Promise<Response>((resolve, reject) => {
     const req = request(url, { method: "GET", headers, lookup: guardedLookup() }, (res) => {
       const status = res.statusCode ?? 0;
       if (status >= 300 && status < 400) {
@@ -141,12 +144,16 @@ export function safeFetch(input: URL | string, init: RequestInit = {}): Promise<
       clearTimeout(timer);
       reject(err);
     });
-    const signal = init.signal;
     if (signal) {
       if (signal.aborted) req.destroy(new TypeError("The request was aborted."));
-      else signal.addEventListener("abort", () => req.destroy(new TypeError("The request was aborted.")), { once: true });
+      else {
+        onAbort = () => req.destroy(new TypeError("The request was aborted."));
+        signal.addEventListener("abort", onAbort, { once: true });
+      }
     }
     req.end();
+  }).finally(() => {
+    if (onAbort) signal?.removeEventListener("abort", onAbort);
   });
 }
 
