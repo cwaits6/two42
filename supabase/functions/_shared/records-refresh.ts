@@ -616,7 +616,13 @@ async function copyPerson(
       profile: current.profile,
       household: current.household,
       grade: current.grade,
-      states: Object.fromEntries([...settings.keys()].map((field) => [field, stored?.get(field as ValueField)?.state ?? null])),
+      // The planner copies preferred_name along with name, and it has a state of its own.
+      states: Object.fromEntries(
+        [...settings.keys(), ...(settings.has("name") ? ["preferred_name"] : [])].map((field) => [
+          field,
+          stored?.get(field as ValueField)?.state ?? null,
+        ]),
+      ),
     },
     _profile: plan.profile,
     _household: plan.household,

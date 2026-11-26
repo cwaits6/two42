@@ -236,6 +236,13 @@ Deno.test("the copy is handed the state each copied field had when it was read",
   assertEquals((rpcs[0]._expected as { states: unknown }).states, { phone_mobile: "cleared", gender: null });
 });
 
+Deno.test("with name copied, the copy is also handed the preferred name's state", async () => {
+  const cleared = { profile_id: P1, field: "preferred_name", state: "cleared", church_value: { preferred_name: null } };
+  const { db, rpcs } = fakeDb({ ...FIXTURE, settings: [{ field: "name", mode: "member" }], values: [cleared] });
+  await refreshOrg(db, options(fakeSource().source));
+  assertEquals((rpcs[0]._expected as { states: unknown }).states, { name: null, preferred_name: "cleared" });
+});
+
 Deno.test("with every field not from the records, nobody is copied", async () => {
   const { db, rpcs } = fakeDb({ ...FIXTURE, settings: [] });
   const { source, asked } = fakeSource();
