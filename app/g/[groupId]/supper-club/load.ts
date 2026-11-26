@@ -73,12 +73,17 @@ export async function loadRotations(supabase: Client, groupId: string): Promise<
 }
 
 /** Every rotation title in the group, drafts included; null when the read failed. */
-export async function loadRotationTitles(supabase: Client, groupId: string): Promise<string[] | null> {
+/** The group's rotation titles, leaving out the one being edited. */
+export async function loadRotationTitles(
+  supabase: Client,
+  groupId: string,
+  exceptRotationId?: string
+): Promise<string[] | null> {
   const rows = readList(
-    await supabase.from("supper_rotations").select("title").eq("group_id", groupId),
+    await supabase.from("supper_rotations").select("id, title").eq("group_id", groupId),
     "Supper club rotation titles"
   );
-  return rows && rows.map((r) => r.title);
+  return rows && rows.filter((r) => r.id !== exceptRotationId).map((r) => r.title);
 }
 
 /** One rotation: `{ rotation: null }` when the caller has no such rotation, null when the read failed. */

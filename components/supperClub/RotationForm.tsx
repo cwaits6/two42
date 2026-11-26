@@ -80,7 +80,7 @@ export function RotationForm({
   initial,
   locked = false,
   previousRotationId,
-  takenTitles = [],
+  takenTitles,
 }: {
   groupId: string;
   zone: string;
@@ -92,7 +92,7 @@ export function RotationForm({
   /** The ended rotation a new one starts from. */
   previousRotationId?: string;
   /** The group's other rotation titles, which a generated title avoids. */
-  takenTitles?: readonly string[];
+  takenTitles: readonly string[];
 }) {
   const router = useRouter();
   // Editing keeps the saved title whatever the dates do.

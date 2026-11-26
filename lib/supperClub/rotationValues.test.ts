@@ -70,6 +70,12 @@ describe("changeRotation", () => {
     expect(draft.values.title).toBe("Sep – Nov 2026");
   });
 
+  it("avoids the group's other titles once an edited title is emptied", () => {
+    const saved = { ...fresh.values, title: "Harvest suppers", startsOn: "2026-09-07", endsOn: "2026-12-14" };
+    const emptied = changeRotation({ values: saved, titleFollowsDates: false }, "title", "", ["Fall 2026"]);
+    expect(changeRotation(emptied, "endsOn", "2026-11-23", ["Fall 2026"]).values.title).toBe("Sep – Nov 2026");
+  });
+
   it("has no end yet while the start is empty", () => {
     expect(endsOnOf(NEW_ROTATION)).toBe("");
   });

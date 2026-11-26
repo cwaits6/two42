@@ -9,7 +9,7 @@ import { requireGroupLeader } from "@/lib/groups/server";
 import { groupPageTitle } from "@/lib/pageTitle";
 import { createClient } from "@/lib/supabase/server";
 import { getOrgTimeZone } from "@/lib/time/orgZone";
-import { loadRotation } from "../../../load";
+import { loadRotation, loadRotationTitles } from "../../../load";
 
 export const generateMetadata = groupPageTitle("Edit rotation");
 
@@ -21,7 +21,11 @@ export default async function EditRotationPage({
   const { groupId, rotationId } = await params;
   const group = await requireGroupLeader(groupId);
   if (!isUuid(rotationId)) notFound();
-  const read = await loadRotation(await createClient(), group.id, rotationId);
+  const supabase = await createClient();
+  const [read, titles] = await Promise.all([
+    loadRotation(supabase, group.id, rotationId),
+    loadRotationTitles(supabase, group.id, rotationId),
+  ]);
   const back = { backHref: groupPath(group.id, `/supper-club/rotations/${rotationId}`), backLabel: "Back to the rotation" };
   if (!read) {
     return (
@@ -47,6 +51,7 @@ export default async function EditRotationPage({
         rotationId={rotation.id}
         initial={valuesFromRotation(rotation)}
         locked={locked}
+        takenTitles={titles ?? []}
       />
     </PageContainer>
   );
