@@ -320,8 +320,9 @@ and kept up to date.
   `phone_mobile`, `phone_work`, `birthday`, `anniversary` (the household's;
   each linked person's records hold their own, so while two linked people in
   a household differ, the first one copied stands and the other's isn't
-  recorded; a member's change or clear of it keeps its state and takes the
-  new church value, so the two agree again once the church corrects both),
+  recorded; a member's change or clear of it is still worked out as usual and
+  takes the new church value, so the two agree again once the church corrects
+  both),
   `photo` and `grade` (the person's own household member row). The preferred
   name follows `name`, and is never locked. Turning a field off removes its
   sources, so its values become ordinary two42 data; any change asks the next

@@ -14,7 +14,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(43);
+select plan(45);
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 create function pg_temp.uid(_email text) returns uuid language sql stable as $$
@@ -316,6 +316,24 @@ select is(
      from public.records_field_values where org_id = pg_temp.fx('org') and field = 'anniversary'),
   array['(changed,5)'], 'a held change keeps its state and takes the corrected church value');
 rollback to savepoint anniversary_corrected;
+
+-- Both spouses changed the anniversary to the household's value; the church corrected only the first's records.
+savepoint anniversary_matches;
+update public.records_field_values
+   set state = 'changed', church_value = '{"anniversary_month": 5, "anniversary_day": 5, "anniversary_year": 2005}'
+ where org_id = pg_temp.fx('org') and field = 'anniversary';
+select is(
+  public.records_apply_copy(
+    pg_temp.fx('org'), pg_temp.fx('member'), pg_temp.expected(pg_temp.fx('member')),
+    '{}', '{}', '{}',
+    '[{"field": "anniversary", "state": "records", "church_value": {"anniversary_month": 6, "anniversary_day": 1, "anniversary_year": 2001}}]',
+    '{}'),
+  'held', 'non-vacuity: the corrected spouse is held against the other''s older records');
+select is(
+  (select (state, church_value ->> 'anniversary_month')::text
+     from public.records_field_values where profile_id = pg_temp.fx('member') and field = 'anniversary'),
+  '(records,6)', 'a held change that now matches the church''s value goes back to the church''s records');
+rollback to savepoint anniversary_matches;
 
 select is(
   public.records_apply_copy(

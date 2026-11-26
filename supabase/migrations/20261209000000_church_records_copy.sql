@@ -395,10 +395,10 @@ begin
   -- The anniversary is one value for the household but each linked person's
   -- records hold their own. While another linked person's differs, the first
   -- one copied stands: this person's isn't written or announced, and an older
-  -- church value is forgotten. A member's change or clear keeps its state but
-  -- takes the new church value, so the spouses' sources can agree again once
-  -- the church corrects both. The answer is 'held' so the caller doesn't count
-  -- the household.
+  -- church value is forgotten. A member's change or clear keeps the planned
+  -- state and the new church value, so the spouses' sources can agree again
+  -- once the church corrects both. The answer is 'held' so the caller doesn't
+  -- count the household.
   if _anniversary is not null and _family.id is not null and exists (
     select 1
       from public.records_field_values v
@@ -412,15 +412,13 @@ begin
   ) then
     _household := '{}'::jsonb;
     _values := (
-      select coalesce(jsonb_agg(kept.v), '[]'::jsonb) from (
-        select v from jsonb_array_elements(_values) as v
-         where v ->> 'field' <> 'anniversary'
-        union all
-        select jsonb_build_object('field', 'anniversary', 'state', k.state, 'church_value', _anniversary)
-          from public.records_field_values k
-         where k.org_id = _org_id and k.profile_id = _profile_id and k.field = 'anniversary'
-           and k.state <> 'records'
-      ) as kept(v)
+      select coalesce(jsonb_agg(v), '[]'::jsonb) from jsonb_array_elements(_values) as v
+       where v ->> 'field' <> 'anniversary'
+          or exists (
+            select 1 from public.records_field_values k
+             where k.org_id = _org_id and k.profile_id = _profile_id and k.field = 'anniversary'
+               and k.state <> 'records'
+          )
     );
     _filled := array_remove(_filled, 'anniversary');
     _held := true;
