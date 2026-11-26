@@ -159,7 +159,9 @@ select is(pg_temp.by_function('viewer'), pg_temp.by_policy('viewer'),
 select is(
   (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.prosrc ~ '''child'''
-      and p.proname <> 'is_child_without_account'),
+      and p.proname <> 'is_child_without_account'
+      -- Writes a new household member as a child; it decides nothing about who is one.
+      and p.proname <> 'records_add_suggested_child'),
   0::bigint, 'no function but is_child_without_account() spells out the child rule');
 select is(
   (select count(*) from pg_policies

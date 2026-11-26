@@ -3,9 +3,14 @@
 import type { RecordsCopySource, RecordsCredentials } from "@/supabase/functions/_shared/records-types";
 
 export type {
+  RecordsAddress,
+  RecordsChild,
   RecordsCopyPerson,
   RecordsCopySource,
   RecordsCredentials,
+  RecordsFamily,
+  RecordsFamilyMember,
+  RecordsHouseholdSource,
   RecordsPresence,
 } from "@/supabase/functions/_shared/records-types";
 

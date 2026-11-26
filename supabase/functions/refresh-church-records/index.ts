@@ -2,8 +2,9 @@
 //
 // Nightly, for every church connected to its church records: copies the
 // details of people changed since the last run, and of links not yet copied,
-// into two42, and lists people who went inactive or disappeared under Needs
-// review. The rules live in _shared/records-refresh.ts and
+// into two42, lists people who went inactive or disappeared under Needs
+// review, and reads every linked person's family for household suggestions,
+// linked households' address and home phone, and suggested children. The rules live in _shared/records-refresh.ts and
 // _shared/records-copy.ts; a church admin's Refresh now runs the same code.
 // No migration schedules it: the operator adds the schedule.
 //
@@ -19,7 +20,13 @@ import { serviceKeyCallerOnly } from "../_shared/caller-auth.ts";
 import { listActiveOrgs, type OrgListClient } from "../_shared/orgs.ts";
 import { openKey, parseRecordsSecret, RECORDS_SECRET_ENV } from "../_shared/records-crypto.ts";
 import { assertAddressGuard } from "../_shared/records-fetch.ts";
-import { type RecordsPhotoStorage, removeRecordsPhoto, storeRecordsPhoto } from "../_shared/records-photo.ts";
+import {
+  type RecordsPhotoStorage,
+  removeRecordsChildPhoto,
+  removeRecordsPhoto,
+  storeRecordsChildPhoto,
+  storeRecordsPhoto,
+} from "../_shared/records-photo.ts";
 import { copySourceFor } from "../_shared/records-providers.ts";
 import { type RecordsRefreshClient, refreshAllOrgs, refreshOrg } from "../_shared/records-refresh.ts";
 import { normalizePhone } from "../_shared/phone.ts";
@@ -101,6 +108,10 @@ Deno.serve(serviceKeyCallerOnly(async () => {
             storeRecordsPhoto(supabase as unknown as RecordsPhotoStorage, orgId, profileId, bytes),
           removePhoto: (orgId, profileId) =>
             removeRecordsPhoto(supabase as unknown as RecordsPhotoStorage, orgId, profileId),
+          storeChildPhoto: (orgId, memberId, bytes) =>
+            storeRecordsChildPhoto(supabase as unknown as RecordsPhotoStorage, orgId, memberId, bytes),
+          removeChildPhoto: (orgId, memberId) =>
+            removeRecordsChildPhoto(supabase as unknown as RecordsPhotoStorage, orgId, memberId),
           now: () => new Date(),
           elapsed,
           budgetMs: BUDGET_MS,

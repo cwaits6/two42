@@ -12,6 +12,14 @@ export function recordsPhotoKey(orgId: string, profileId: string): string {
   return `${orgId}/profiles/${profileId}/records-photo.jpg`;
 }
 
+/** A child added to a household from the records: their household member folder, which delete_person() also clears. */
+export function recordsChildPhotoKey(orgId: string, familyMemberId: string): string {
+  if (!UUID.test(orgId) || !UUID.test(familyMemberId)) {
+    throw new Error("records photo key needs an org and a household member id");
+  }
+  return `${orgId}/family-members/${familyMemberId}/records-photo.jpg`;
+}
+
 export interface RecordsPhotoStorage {
   storage: {
     from(bucket: "avatars"): {
@@ -27,13 +35,31 @@ export interface RecordsPhotoStorage {
 }
 
 /** Stores the photo for this person in this church and returns the address profiles.avatar_url holds. */
-export async function storeRecordsPhoto(
+export function storeRecordsPhoto(
   client: RecordsPhotoStorage,
   orgId: string,
   profileId: string,
   bytes: Uint8Array,
 ): Promise<string> {
-  const key = recordsPhotoKey(orgId, profileId);
+  return storeAt(client, recordsPhotoKey(orgId, profileId), bytes);
+}
+
+/** Stores the photo for a child added to a household and returns the address family_members.avatar_url holds. */
+export function storeRecordsChildPhoto(
+  client: RecordsPhotoStorage,
+  orgId: string,
+  familyMemberId: string,
+  bytes: Uint8Array,
+): Promise<string> {
+  return storeAt(client, recordsChildPhotoKey(orgId, familyMemberId), bytes);
+}
+
+/** Removes the photo stored for a child added to a household. */
+export function removeRecordsChildPhoto(client: RecordsPhotoStorage, orgId: string, familyMemberId: string): Promise<void> {
+  return removeAt(client, recordsChildPhotoKey(orgId, familyMemberId));
+}
+
+async function storeAt(client: RecordsPhotoStorage, key: string, bytes: Uint8Array): Promise<string> {
   // org-anchor: storage objects carry no org_id; the key's first segment is orgId, which the caller resolved by iterating orgs.
   const bucket = client.storage.from("avatars");
   const { error } = await bucket.upload(key, bytes, { contentType: "image/jpeg", upsert: true, cacheControl: "3600" });
@@ -42,8 +68,11 @@ export async function storeRecordsPhoto(
 }
 
 /** Removes the photo stored for this person in this church. */
-export async function removeRecordsPhoto(client: RecordsPhotoStorage, orgId: string, profileId: string): Promise<void> {
-  const key = recordsPhotoKey(orgId, profileId);
+export function removeRecordsPhoto(client: RecordsPhotoStorage, orgId: string, profileId: string): Promise<void> {
+  return removeAt(client, recordsPhotoKey(orgId, profileId));
+}
+
+async function removeAt(client: RecordsPhotoStorage, key: string): Promise<void> {
   // org-anchor: storage objects carry no org_id; the key's first segment is orgId, which the caller resolved by iterating orgs.
   const { error } = await client.storage.from("avatars").remove([key]);
   if (error) throw new Error(`records photo removal failed: ${error.message}`);

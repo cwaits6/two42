@@ -4,7 +4,14 @@
 
 import { assert, assertEquals, assertFalse, assertRejects } from "jsr:@std/assert@1";
 import { refreshAllOrgs, refreshOrg, type RecordsRefreshClient, type RefreshOptions } from "../_shared/records-refresh.ts";
-import type { RecordsCopyPerson, RecordsCopySource, RecordsPresence } from "../_shared/records-types.ts";
+import type {
+  RecordsCopyPerson,
+  RecordsCopySource,
+  RecordsFamily,
+  RecordsHouseholdSource,
+  RecordsPresence,
+} from "../_shared/records-types.ts";
+import { RecordsError } from "../_shared/records-errors.ts";
 import { normalizePhone } from "../_shared/phone.ts";
 import { logged } from "./logged.ts";
 
@@ -34,11 +41,18 @@ interface Fixture {
   releaseFails?: boolean;
   /** Unlinked after the refresh read its links: their state row fails the link foreign key. */
   unlinked?: string;
+  orgSettings?: Record<string, unknown>[];
+  householdLinks?: Record<string, unknown>[];
+  householdValues?: Record<string, unknown>[];
+  childSuggestions?: Record<string, unknown>[];
+  /** Rows an update that returns its rows answers with, by table. */
+  updated?: Record<string, Record<string, unknown>[]>;
 }
 
 function fakeDb(fixture: Fixture) {
   const calls: Call[] = [];
   const rpcs: Record<string, unknown>[] = [];
+  const fns: string[] = [];
   const rows: Record<string, Record<string, unknown>[]> = {
     records_field_settings: fixture.settings,
     records_person_links: [
@@ -53,18 +67,28 @@ function fakeDb(fixture: Fixture) {
     family_units: fixture.familyUnits ?? [],
     family_members: fixture.familyMembers ?? [],
     records_field_values: fixture.values ?? [],
+    records_org_settings: fixture.orgSettings ?? [],
+    records_household_links: fixture.householdLinks ?? [],
+    records_household_values: fixture.householdValues ?? [],
+    records_child_suggestions: fixture.childSuggestions ?? [],
   };
   const chain = (call: Call) => {
     const self = {
       eq: (c: string, v: unknown) => (call.filters.push(["eq", c, v]), self),
       in: (c: string, v: unknown) => (call.filters.push(["in", c, v]), self),
+      is: (c: string, v: unknown) => (call.filters.push(["is", c, v]), self),
       or: (f: string) => (call.filters.push(["or", f]), self),
       order: (c: string) => (call.filters.push(["order", c]), self),
       range: () => self,
       select: () => ((call.op = `${call.op}+select`), self),
       then(resolve: (r: unknown) => void) {
         if (call.op === "select") resolve({ data: structuredClone(rows[call.table] ?? []), error: null });
-        else if (call.op === "update+select") resolve({ data: fixture.claim, error: null });
+        else if (call.op === "update+select") {
+          resolve({
+            data: call.table === "records_refresh_state" ? fixture.claim : fixture.updated?.[call.table] ?? [],
+            error: null,
+          });
+        }
         else if (
           call.op === "upsert" && call.table === "records_person_state" && fixture.unlinked &&
           (call.values as { profile_id: string }[]).some((v) => v.profile_id === fixture.unlinked)
@@ -91,12 +115,13 @@ function fakeDb(fixture: Fixture) {
         upsert: (values: unknown) => start("upsert", values),
       };
     },
-    rpc(_fn: string, args: Record<string, unknown>) {
+    rpc(fn: string, args: Record<string, unknown>) {
       rpcs.push(args);
-      return Promise.resolve(fixture.apply(args));
+      fns.push(fn);
+      return Promise.resolve(fixture.apply({ ...args, fn }));
     },
   };
-  return { db: db as unknown as RecordsRefreshClient, calls, rpcs, rows };
+  return { db: db as unknown as RecordsRefreshClient, calls, rpcs, fns, rows };
 }
 
 const CHURCH: RecordsCopyPerson = {
@@ -145,6 +170,8 @@ function options(source: RecordsCopySource, over: Partial<RefreshOptions> = {}):
     normalizePhone,
     storePhoto: () => Promise.reject(new Error("no photo expected")),
     removePhoto: () => Promise.reject(new Error("no photo removal expected")),
+    storeChildPhoto: () => Promise.reject(new Error("no child photo expected")),
+    removeChildPhoto: () => Promise.reject(new Error("no child photo removal expected")),
     now: () => new Date("2026-11-26T03:00:00Z"),
     elapsed: () => 0,
     budgetMs: 60_000,
@@ -201,7 +228,17 @@ Deno.test("details are read only for people changed since the last run, and for 
   assertEquals(rpcs[0]._profile_id, P1);
   assertEquals(rpcs[0]._profile, { phone_mobile: "+15125550123" });
   assertEquals(rpcs[0]._filled, ["phone_mobile"]);
-  assertEquals(result, { status: "done", copied: 1, pending: 0, review: 2, photosSkipped: 0, failed: 0, stoppedAtBudget: false });
+  assertEquals(result, {
+    status: "done",
+    copied: 1,
+    pending: 0,
+    review: 2,
+    photosSkipped: 0,
+    failed: 0,
+    stoppedAtBudget: false,
+    householdsCopied: 0,
+    householdsUnavailable: false,
+  });
   const release = calls.at(-1)!;
   assertEquals((release.values as { cursor: string }).cursor, "2026-11-25T00:00:00");
   assertEquals((release.values as { running_since: null }).running_since, null);
@@ -498,7 +535,8 @@ Deno.test("a copy whose anniversary was held still counts the person's own write
 Deno.test("the nightly run shares one budget: a church reached after it is spent isn't started, and any unfinished or held church fails the run", async () => {
   const org = (n: number) => ({ id: `org-${n}`, name: "", timezone: "UTC", branding: null, org_email_domains: [] });
   const done = (over: Partial<Awaited<ReturnType<typeof refreshOrg>>> = {}) => ({
-    status: "done" as const, copied: 1, pending: 0, review: 0, photosSkipped: 0, failed: 0, stoppedAtBudget: false, ...over,
+    status: "done" as const, copied: 1, pending: 0, review: 0, photosSkipped: 0, failed: 0, stoppedAtBudget: false,
+    householdsCopied: 0, householdsUnavailable: false, ...over,
   });
   let clock = 0;
   const started: string[] = [];
@@ -572,4 +610,178 @@ Deno.test("the nightly run shares one budget: a church reached after it is spent
   assertEquals(broken?.failed, ["org-1"]);
   assertFalse(broken?.finished);
   assert(lines.length > 0);
+});
+
+const H1 = "00000000-0000-0000-0000-00000000f001";
+const H2 = "00000000-0000-0000-0000-00000000f002";
+const MEMBER = "00000000-0000-0000-0000-00000000e001";
+
+const FAMILY: RecordsFamily = {
+  id: "500",
+  members: [{ id: "100", adult: true, married: true }, { id: "103", adult: true, married: true }],
+  children: [{ id: "900", firstName: "Lily", lastName: "Quux", birthday: { month: 3, day: 3 }, graduationYear: 2034, photo: "7" }],
+  address: { street1: "12 Oak St", street2: "", city: "Austin", state: "TX", postalCode: "78701", country: "US" },
+  homePhone: { countryCode: "1", number: "5125550122" },
+};
+
+function householdSource(over: Partial<RecordsHouseholdSource> = {}) {
+  const asked: { children: boolean[] } = { children: [] };
+  const households: RecordsHouseholdSource = {
+    familyOf: () => Promise.resolve(new Map([["100", "500"], ["103", "500"]])),
+    families: (_creds, ids, options) => {
+      asked.children.push(options.children);
+      return Promise.resolve(ids.includes("500") ? [FAMILY] : []);
+    },
+    ...over,
+  };
+  const { source } = fakeSource();
+  return { source: { ...source, households }, asked };
+}
+
+const HOUSEHOLD_FIXTURE: Fixture = {
+  ...FIXTURE,
+  settings: [{ field: "phone_mobile", mode: "member" }, { field: "address", mode: "member" }],
+  profiles: [
+    { id: P1, family_id: H1, relationship: "primary", role: "member", first_name: "Kept", last_name: "Name", phone_mobile: null },
+    { id: P4, family_id: H2, relationship: "primary", role: "member", first_name: "Also", last_name: "Name", phone_mobile: null },
+  ],
+  familyUnits: [
+    { id: H1, created_at: "2026-01-01", address_line1: null, address_line2: null, city: null, state: null, postal_code: null, phone_home: null, phone_profile_id: null },
+    { id: H2, created_at: "2026-02-01", address_line1: null, address_line2: null, city: null, state: null, postal_code: null, phone_home: null, phone_profile_id: null },
+  ],
+  apply: () => ({ data: "applied", error: null }),
+};
+
+Deno.test("every household read and write is bound to the church being refreshed", async () => {
+  const { db, calls, rpcs, fns } = fakeDb({
+    ...HOUSEHOLD_FIXTURE,
+    orgSettings: [{ suggest_children: true }],
+    householdLinks: [{ family_id: H1, external_family_id: "500" }],
+    childSuggestions: [{ id: "c1", family_member_id: MEMBER, photo: "7" }],
+    updated: { family_members: [{ id: MEMBER }] },
+  });
+  const { source } = householdSource();
+  source.photo = () => Promise.resolve(new Uint8Array([0xff, 0xd8, 0xff, 0x00]));
+  await refreshOrg(db, options(source, { storeChildPhoto: () => Promise.resolve("https://storage/child.jpg") }));
+  for (const call of calls) assert(scopedToOrg(call), `${call.op} on ${call.table} has no org_id`);
+  assert(rpcs.every((args) => args._org_id === ORG));
+  assert(fns.includes("records_replace_household_suggestions"));
+  assert(fns.includes("records_apply_household_copy"));
+  assert(fns.includes("records_sync_child_suggestions"));
+});
+
+Deno.test("no refresh changes a household's people: groupings are only stored as suggestions", async () => {
+  const { db, calls, rpcs, fns } = fakeDb({
+    ...HOUSEHOLD_FIXTURE,
+    householdLinks: [{ family_id: H1, external_family_id: "500" }],
+  });
+  await refreshOrg(db, options(householdSource().source));
+  assertFalse(calls.some((c) => c.table === "profiles" && c.op !== "select"));
+  assertFalse(calls.some((c) => c.table === "family_units" && c.op !== "select"));
+  assertFalse(fns.includes("records_confirm_household"));
+  const replace = rpcs[fns.indexOf("records_replace_household_suggestions")];
+  // P4 is in H2, so joining H1 is a suggestion to check first.
+  assertEquals(replace._suggestions, [{
+    external_family_id: "500",
+    target_family_id: H1,
+    family_name: null,
+    people: [{ profile_id: P4, from_family_id: H2, relationship: "spouse" }],
+    ready: false,
+  }]);
+  // The linked household's address is filled through the copy's own check.
+  const apply = rpcs[fns.indexOf("records_apply_household_copy")];
+  assertEquals((apply._household as Record<string, unknown>).address_line1, "12 Oak St");
+  assertEquals((apply._expected as { family: string }).family, "500");
+});
+
+Deno.test("a refresh cut short before every family was read keeps the last suggestions", async () => {
+  const { db, fns } = fakeDb(HOUSEHOLD_FIXTURE);
+  let spent = 0;
+  const { source } = householdSource({
+    familyOf: () => {
+      spent = 100_000;
+      return Promise.resolve(new Map([["100", "500"]]));
+    },
+  });
+  const result = await refreshOrg(db, options(source, { elapsed: () => spent }));
+  assertFalse(fns.includes("records_replace_household_suggestions"));
+  assertEquals(result.householdsCopied, 0);
+});
+
+Deno.test("with the children switch off, no child is asked for or suggested", async () => {
+  const { db, fns } = fakeDb({ ...HOUSEHOLD_FIXTURE, householdLinks: [{ family_id: H1, external_family_id: "500" }] });
+  const { source, asked } = householdSource();
+  await refreshOrg(db, options(source));
+  assertEquals(asked.children, [false]);
+  assertFalse(fns.includes("records_sync_child_suggestions"));
+});
+
+Deno.test("with the switch on, a linked household's children are suggested without a birth year", async () => {
+  const { db, fns, rpcs } = fakeDb({
+    ...HOUSEHOLD_FIXTURE,
+    orgSettings: [{ suggest_children: true }],
+    householdLinks: [{ family_id: H1, external_family_id: "500" }],
+  });
+  const { source, asked } = householdSource();
+  await refreshOrg(db, options(source));
+  assertEquals(asked.children, [true]);
+  const sync = rpcs[fns.indexOf("records_sync_child_suggestions")];
+  assertEquals(sync._children, [{
+    external_person_id: "900",
+    first_name: "Lily",
+    last_name: "Quux",
+    birth_month: 3,
+    birth_day: 3,
+    graduation_year: 2034,
+    photo: "7",
+  }]);
+});
+
+Deno.test("a key that can't read families still copies people, releases its claim and says so", async () => {
+  const { db, calls, fns } = fakeDb(HOUSEHOLD_FIXTURE);
+  const { source } = householdSource({ familyOf: () => Promise.reject(new RecordsError("unauthorized", 401)) });
+  let result: Awaited<ReturnType<typeof refreshOrg>> | undefined;
+  const lines = await logged(async () => {
+    result = await refreshOrg(db, options(source));
+  });
+  assertEquals(result?.householdsUnavailable, true);
+  assertEquals(result?.copied, 1);
+  assert(fns.includes("records_apply_copy"));
+  assertFalse(fns.includes("records_replace_household_suggestions"));
+  const release = calls.filter((c) => c.table === "records_refresh_state" && c.op === "update").at(-1)!;
+  assertEquals((release.values as { running_since: null }).running_since, null);
+  assertEquals((release.values as { last_counts: Record<string, number> }).last_counts.householdsUnavailable, 1);
+  const text = JSON.stringify(lines);
+  for (const fromRecords of ["Zebulon", "Quux", "500", "Oak", "5125550122"]) assert(!text.includes(fromRecords), fromRecords);
+});
+
+Deno.test("an added child's photo fills an empty photo only, and the token is let go either way", async () => {
+  const stored: string[] = [];
+  const removed: string[] = [];
+  const { db, calls } = fakeDb({
+    ...HOUSEHOLD_FIXTURE,
+    childSuggestions: [{ id: "c1", family_member_id: MEMBER, photo: "7" }, { id: "c2", family_member_id: null, photo: null }],
+    updated: { family_members: [] },
+  });
+  const { source } = householdSource();
+  source.photo = () => Promise.resolve(new Uint8Array([0xff, 0xd8, 0xff, 0x00]));
+  await refreshOrg(db, options(source, {
+    storeChildPhoto: (_org, id) => (stored.push(id), Promise.resolve("https://storage/child.jpg")),
+    removeChildPhoto: (_org, id) => (removed.push(id), Promise.resolve()),
+  }));
+  assertEquals(stored, [MEMBER]);
+  // The household gave the child its own photo meanwhile, so the church's is removed again.
+  assertEquals(removed, [MEMBER]);
+  const write = calls.find((c) => c.table === "family_members" && c.op === "update+select")!;
+  assert(write.filters.some(([op, column]) => op === "is" && column === "avatar_url"));
+  const cleared = calls.filter((c) => c.table === "records_child_suggestions" && c.op === "update");
+  assertEquals(cleared.map((c) => c.filters.find(([, column]) => column === "id")?.[2]), ["c1"]);
+});
+
+Deno.test("a child's photo the records can't give right now is tried again next time", async () => {
+  const { db, calls } = fakeDb({ ...HOUSEHOLD_FIXTURE, childSuggestions: [{ id: "c1", family_member_id: MEMBER, photo: "7" }] });
+  const { source } = householdSource();
+  source.photo = () => Promise.reject(new RecordsError("unreachable"));
+  await refreshOrg(db, options(source));
+  assertFalse(calls.some((c) => c.table === "records_child_suggestions" && c.op === "update"));
 });

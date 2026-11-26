@@ -2,7 +2,7 @@
 // and restated in SQL, where nothing else ties the two: a field added on one
 // side only would be copied and never detached or locked, or refused.
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   FIELD_COLUMNS,
   FIELD_TABLE,
@@ -12,11 +12,18 @@ import {
   VALUE_STATES,
   type ValueField,
 } from "@/supabase/functions/_shared/records-copy";
-import { APPLY_OUTCOMES, LEASE_MS } from "@/supabase/functions/_shared/records-refresh";
+import {
+  HOUSEHOLD_COPY_COLUMNS,
+  HOUSEHOLD_FIELD_COLUMNS,
+  HOUSEHOLD_FIELDS,
+} from "@/supabase/functions/_shared/records-households";
+import { APPLY_HOUSEHOLD_OUTCOMES, APPLY_OUTCOMES, LEASE_MS } from "@/supabase/functions/_shared/records-refresh";
 
-const sql = readFileSync("supabase/migrations/20261209000000_church_records_copy.sql", "utf8");
+const copySql = readFileSync("supabase/migrations/20261209000000_church_records_copy.sql", "utf8");
+const householdsSql = readFileSync("supabase/migrations/20261210000000_church_records_households.sql", "utf8");
+let sql = copySql;
 
-const quoted = (text: string) => [...text.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+const quoted = (text: string) => [...text.matchAll(/'([a-z_0-9]+)'/g)].map((m) => m[1]);
 const sorted = (values: readonly string[]) => [...values].sort();
 
 function between(start: string, end: string): string {
@@ -32,11 +39,12 @@ function table(name: string): string {
 }
 
 describe("the copy migration agrees with the copy rules", () => {
-  it("lists the same fields to choose a setting for", () => {
+  beforeEach(() => {
+    sql = copySql;
+  });
+
+  it("lets only the same fields be locked", () => {
     const settings = table("records_field_settings");
-    expect(sorted(quoted(settings.slice(settings.indexOf("field text"), settings.indexOf("mode text"))))).toEqual(
-      sorted(RECORDS_FIELDS),
-    );
     expect(sorted(quoted(settings.slice(settings.indexOf("records_field_settings_lockable"))))).toEqual(
       sorted(["member", ...LOCKABLE_FIELDS]),
     );
@@ -104,5 +112,65 @@ describe("the copy migration agrees with the copy rules", () => {
     const body = between("create function public.records_save_field_settings(", "$$;");
     const minutes = Number(body.match(/interval '(\d+) minutes'/)?.[1]);
     expect(minutes * 60_000).toBe(LEASE_MS);
+  });
+});
+
+describe("the households migration agrees with the household rules", () => {
+  beforeEach(() => {
+    sql = householdsSql;
+  });
+
+  it("lists the person and household fields to choose a setting for", () => {
+    const check = between("add constraint records_field_settings_field_check check (", "));");
+    expect(sorted(quoted(check))).toEqual(sorted([...RECORDS_FIELDS, ...HOUSEHOLD_FIELDS]));
+  });
+
+  it("records a household source for the same fields, in the same states", () => {
+    const values = table("records_household_values");
+    expect(sorted(quoted(values.slice(values.indexOf("field text"), values.indexOf("state text"))))).toEqual(
+      sorted(HOUSEHOLD_FIELDS),
+    );
+    expect(sorted(quoted(values.slice(values.indexOf("state text"), values.indexOf("church_value"))))).toEqual(
+      sorted(VALUE_STATES),
+    );
+  });
+
+  it("writes, and watches for a member's edit, the same household columns a copy plans", () => {
+    const apply = between("create function public.records_apply_household_copy(", "$$;");
+    const update = apply.indexOf("update public.family_units set");
+    const set = apply.slice(update, apply.indexOf("where id = _family_id", update));
+    // Each column is set from its own key, so two swapped keys fail here.
+    const pairs = [...set.matchAll(/([a-z_0-9]+) = case when _household \? '([a-z_0-9]+)' then _household ->> '([a-z_0-9]+)'/g)];
+    const columns = sorted(HOUSEHOLD_FIELDS.flatMap((f) => HOUSEHOLD_FIELD_COLUMNS[f]));
+    expect(sorted(pairs.map((m) => m[1]))).toEqual(columns);
+    for (const [, column, key, read] of pairs) expect([key, read]).toEqual([column, column]);
+
+    const watched = sql.match(/before update of ([a-z_0-9, ]+)\s+on public\.family_units/)?.[1];
+    expect(sorted(watched?.split(", ") ?? [])).toEqual(sorted(HOUSEHOLD_COPY_COLUMNS));
+
+    const trigger = between("create function public.records_household_value_edit()", "$$;");
+    const address = trigger.match(/when 'address' then array\[([^\]]*)\]/)?.[1] ?? "";
+    expect(quoted(address)).toEqual([...HOUSEHOLD_FIELD_COLUMNS.address]);
+    expect(trigger).toContain("else array['phone_home']");
+  });
+
+  it("answers a household copy with the outcomes the refresh reads", () => {
+    const body = between("create function public.records_apply_household_copy(", "$$;");
+    const answers = [...body.matchAll(/return ([^;]*);/g)].flatMap((m) => quoted(m[1]));
+    expect(sorted([...new Set(answers)])).toEqual(sorted(APPLY_HOUSEHOLD_OUTCOMES));
+  });
+
+  it("holds a settings save and a household confirmation back for as long as a refresh's claim lasts", () => {
+    for (const fn of ["records_save_field_settings", "records_confirm_household"]) {
+      const body = between(`function public.${fn}(`, "$$;");
+      const minutes = Number(body.match(/interval '(\d+) minutes'/)?.[1]);
+      expect(minutes * 60_000, fn).toBe(LEASE_MS);
+    }
+  });
+
+  it("never gives a suggested child a birth year", () => {
+    expect(table("records_child_suggestions")).not.toContain("birth_year");
+    const add = between("create function public.records_add_suggested_child(", "$$;");
+    expect(add).not.toContain("birth_year");
   });
 });

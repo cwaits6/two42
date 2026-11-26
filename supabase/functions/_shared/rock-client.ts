@@ -101,13 +101,23 @@ export function parsePerson(value: unknown): RockPerson | null {
   };
 }
 
+/** Every REST controller two42 reads, each only viewed. */
+export const ROCK_REST_PATHS = [
+  "/api/People",
+  "/api/PhoneNumbers",
+  "/api/DefinedValues",
+  "/api/Groups",
+  "/api/GroupMembers",
+  "/api/Locations",
+] as const;
+
 /**
  * Proves the address is a Rock and the key can read every controller a
  * refresh reads, so a missing permission fails on save rather than nightly.
  * Rock answers a key without a permission with 401, the same as a wrong key.
  */
 export async function checkConnection(creds: RecordsCredentials, fetcher: FetchLike = safeFetch): Promise<void> {
-  for (const path of ["/api/People", "/api/PhoneNumbers", "/api/DefinedValues"]) {
+  for (const path of ROCK_REST_PATHS) {
     const body = await getJson(creds, path, { $top: "1", $select: "Id" }, fetcher);
     if (!Array.isArray(body)) throw new RecordsError("not_provider");
   }

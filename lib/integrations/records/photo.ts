@@ -10,14 +10,27 @@ export function recordsPhotoPath(orgId: string, profileId: string): string {
   return `${orgObjectPath(orgId, relObjectPath("profiles", profileId, "records-photo"))}.jpg`;
 }
 
+/** A child's household member folder, the same key the nightly refresh builds. */
+export function recordsChildPhotoPath(orgId: string, familyMemberId: string): string {
+  return `${orgObjectPath(orgId, relObjectPath("family-members", familyMemberId, "records-photo"))}.jpg`;
+}
+
 /**
  * Stores the photo and returns the address profiles.avatar_url holds. `orgId`
  * must come from requireOrgAdmin(): the service client ignores the storage
  * policies, so the org prefix built from it is the tenant boundary here.
  */
-export async function storeRecordsPhoto(orgId: string, profileId: string, bytes: Uint8Array): Promise<string> {
+export function storeRecordsPhoto(orgId: string, profileId: string, bytes: Uint8Array): Promise<string> {
+  return storeAt(recordsPhotoPath(orgId, profileId), bytes);
+}
+
+/** Stores a child's photo for family_members.avatar_url; `orgId` as for storeRecordsPhoto(). */
+export function storeRecordsChildPhoto(orgId: string, familyMemberId: string, bytes: Uint8Array): Promise<string> {
+  return storeAt(recordsChildPhotoPath(orgId, familyMemberId), bytes);
+}
+
+async function storeAt(path: string, bytes: Uint8Array): Promise<string> {
   const service = await createServiceClient();
-  const path = recordsPhotoPath(orgId, profileId);
   // org-anchor: storage.objects has no org_id; the key's first segment is orgId from requireOrgAdmin().
   const avatars = service.storage.from("avatars");
   const { error } = await avatars.upload(path, bytes, { contentType: "image/jpeg", upsert: true, cacheControl: "3600" });
@@ -28,4 +41,8 @@ export async function storeRecordsPhoto(orgId: string, profileId: string, bytes:
 /** Removes the stored photo; removeAvatarObjects() refuses a key outside `orgId` and logs what it couldn't remove. */
 export async function removeRecordsPhoto(orgId: string, profileId: string): Promise<void> {
   await removeAvatarObjects(orgId, [recordsPhotoPath(orgId, profileId)]);
+}
+
+export async function removeRecordsChildPhoto(orgId: string, familyMemberId: string): Promise<void> {
+  await removeAvatarObjects(orgId, [recordsChildPhotoPath(orgId, familyMemberId)]);
 }

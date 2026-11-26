@@ -20,7 +20,17 @@ const LOADED = {
   creds: { baseUrl: "https://rock.example.org", key: "secret-key" },
   connectionId: "conn-1",
 };
-const DONE = { status: "done", copied: 2, pending: 0, review: 1, photosSkipped: 0, failed: 0, stoppedAtBudget: false };
+const DONE = {
+  status: "done",
+  copied: 2,
+  pending: 0,
+  review: 1,
+  photosSkipped: 0,
+  failed: 0,
+  stoppedAtBudget: false,
+  householdsCopied: 0,
+  householdsUnavailable: false,
+};
 
 beforeEach(() => {
   vi.clearAllMocks();

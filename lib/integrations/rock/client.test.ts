@@ -39,6 +39,9 @@ describe("Rock client", () => {
       "/api/People",
       "/api/PhoneNumbers",
       "/api/DefinedValues",
+      "/api/Groups",
+      "/api/GroupMembers",
+      "/api/Locations",
     ]);
   });
 

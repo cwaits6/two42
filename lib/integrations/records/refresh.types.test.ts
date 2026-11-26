@@ -4,8 +4,17 @@
 import { describe, expectTypeOf, it } from "vitest";
 import type { Database } from "@/lib/supabase/database.types";
 import type { PROFILE_COPY_COLUMNS } from "@/supabase/functions/_shared/records-copy";
+import type { HOUSEHOLD_COPY_COLUMNS } from "@/supabase/functions/_shared/records-households";
 import type {
   ApplyCopyArgs,
+  ApplyHouseholdCopyArgs,
+  ChildSuggestionRow,
+  HouseholdLinkRow,
+  HouseholdMemberRow,
+  HouseholdValueDbRow,
+  OrgSettingsRow,
+  ReplaceSuggestionsArgs,
+  SyncChildrenArgs,
   FieldSettingRow,
   FieldValueRow,
   GradeRow,
@@ -34,12 +43,35 @@ describe("the refresh's database shapes", () => {
       Pick<Row<"family_units">, "id" | "anniversary_month" | "anniversary_day" | "anniversary_year">
     >().toMatchTypeOf<HouseholdRow>();
     expectTypeOf<Pick<Row<"family_members">, "id" | "claimed_profile_id" | "graduation_year">>().toMatchTypeOf<GradeRow>();
+    expectTypeOf<
+      Pick<Row<"family_members">, "id" | "family_id" | "first_name" | "last_name" | "avatar_url">
+    >().toMatchTypeOf<HouseholdMemberRow>();
+    expectTypeOf<
+      Pick<Row<"family_units">, "id" | "created_at" | (typeof HOUSEHOLD_COPY_COLUMNS)[number]>
+    >().toMatchTypeOf<HouseholdRow>();
+    expectTypeOf<Pick<Row<"profiles">, "id" | "family_id" | "relationship" | "role" | "first_name" | "last_name">>()
+      .toMatchTypeOf<ProfileRow>();
+    expectTypeOf<Row<"records_org_settings">>().toMatchTypeOf<OrgSettingsRow>();
+    expectTypeOf<Row<"records_household_links">>().toMatchTypeOf<HouseholdLinkRow>();
+    expectTypeOf<Row<"records_household_values">>().toMatchTypeOf<Omit<HouseholdValueDbRow, "church_value">>();
+    expectTypeOf<Row<"records_child_suggestions">>().toMatchTypeOf<ChildSuggestionRow>();
   });
 
   it("write what the database accepts", () => {
     expectTypeOf<Omit<Partial<RefreshStateRow>, "last_counts">>().toMatchTypeOf<Write<"records_refresh_state">>();
     expectTypeOf<Partial<RefreshStateRow>["last_counts"]>().toMatchTypeOf<Write<"records_refresh_state">["last_counts"]>();
     expectTypeOf<Partial<PersonStateRow>>().toMatchTypeOf<Write<"records_person_state">>();
+    expectTypeOf<Pick<HouseholdMemberRow, "avatar_url">>().toMatchTypeOf<Write<"family_members">>();
+    expectTypeOf<Pick<ChildSuggestionRow, "photo">>().toMatchTypeOf<Write<"records_child_suggestions">>();
+  });
+
+  it("call the household functions with their arguments", () => {
+    type Fn<T extends keyof Database["public"]["Functions"]> = Database["public"]["Functions"][T]["Args"];
+    expectTypeOf<Omit<ReplaceSuggestionsArgs, "_suggestions">>().toMatchTypeOf<Omit<Fn<"records_replace_household_suggestions">, "_suggestions">>();
+    expectTypeOf<Omit<ApplyHouseholdCopyArgs, "_expected" | "_household" | "_values">>().toMatchTypeOf<
+      Omit<Fn<"records_apply_household_copy">, "_expected" | "_household" | "_values">
+    >();
+    expectTypeOf<Omit<SyncChildrenArgs, "_children">>().toMatchTypeOf<Omit<Fn<"records_sync_child_suggestions">, "_children">>();
   });
 
   it("call records_apply_copy() with its arguments", () => {
