@@ -45,7 +45,7 @@ function SectionTitle({ children, total }: { children: ReactNode; total: number 
   );
 }
 
-function Pager({ index, pageTotal, onChange, label }: { index: number; pageTotal: number; onChange: (i: number) => void; label: string }) {
+export function Pager({ index, pageTotal, onChange, label }: { index: number; pageTotal: number; onChange: (i: number) => void; label: string }) {
   if (pageTotal <= 1) return null;
   return (
     <nav aria-label={`${label} pages`} className="flex items-center justify-between gap-4 pt-4">
@@ -62,7 +62,7 @@ function Pager({ index, pageTotal, onChange, label }: { index: number; pageTotal
   );
 }
 
-function OpenLink({ href, label }: { href: string; label: string }) {
+export function OpenLink({ href, label }: { href: string; label: string }) {
   return (
     <a className="inline-block py-2 text-base text-brand-primary-text underline" href={href} target="_blank" rel="noreferrer">
       Open in {label}
