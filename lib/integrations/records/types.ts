@@ -1,11 +1,8 @@
 // What two42 needs from a church's records, whichever software keeps them.
 
-/** The address and key two42 reaches a church's records with. */
-export interface RecordsCredentials {
-  /** An origin accepted by parseRecordsAddress(). */
-  baseUrl: string;
-  key: string;
-}
+import type { RecordsCredentials } from "@/supabase/functions/_shared/records-types";
+
+export type { RecordsCredentials };
 
 /** A person in the church's records, holding only what matching needs. */
 export interface RecordsPerson {
