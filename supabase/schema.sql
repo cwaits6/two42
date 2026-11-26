@@ -2492,6 +2492,350 @@ COMMENT ON FUNCTION "public"."provision_organization"("_name" "text", "_owner_em
 
 
 
+CREATE OR REPLACE FUNCTION "public"."records_apply_copy"("_org_id" "uuid", "_profile_id" "uuid", "_expected" "jsonb", "_profile" "jsonb", "_household" "jsonb", "_grade" "jsonb", "_values" "jsonb", "_filled" "text"[]) RETURNS "text"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _person public.profiles%rowtype;
+  _family public.family_units%rowtype;
+  _member public.family_members%rowtype;
+  _key text;
+  _held boolean := false;
+  _anniversary jsonb := (
+    select v -> 'church_value' from jsonb_array_elements(coalesce(_values, '[]'::jsonb)) as v
+     where v ->> 'field' = 'anniversary'
+  );
+begin
+  select * into _person from public.profiles
+   where id = _profile_id and org_id = _org_id
+     for update;
+  if not found then
+    return 'gone';
+  end if;
+  if not exists (
+    select 1 from public.records_person_links
+     where org_id = _org_id and profile_id = _profile_id
+       and external_person_id = _expected ->> 'person'
+  ) then
+    return 'unlinked';
+  end if;
+
+  for _key in select jsonb_object_keys(coalesce(_expected -> 'profile', '{}'::jsonb)) loop
+    if public.records_pick(to_jsonb(_person), array[_key]) <> public.records_pick(_expected -> 'profile', array[_key]) then
+      return 'stale';
+    end if;
+  end loop;
+
+  if _person.family_id is not null then
+    select * into _family from public.family_units
+     where id = _person.family_id and org_id = _org_id
+       for update;
+  end if;
+  if jsonb_typeof(_expected -> 'household') = 'object' then
+    if _family.id is null then
+      return 'stale';
+    end if;
+    for _key in select jsonb_object_keys(_expected -> 'household') loop
+      if public.records_pick(to_jsonb(_family), array[_key]) <> public.records_pick(_expected -> 'household', array[_key]) then
+        return 'stale';
+      end if;
+    end loop;
+  elsif _family.id is not null then
+    return 'stale';
+  end if;
+
+  select * into _member from public.family_members
+   where claimed_profile_id = _profile_id and org_id = _org_id
+   order by id
+   limit 1
+     for update;
+  if jsonb_typeof(_expected -> 'grade') = 'object' then
+    if _member.id is null
+       or public.records_pick(to_jsonb(_member), public.records_field_columns('grade'))
+          <> public.records_pick(_expected -> 'grade', public.records_field_columns('grade')) then
+      return 'stale';
+    end if;
+  elsif _member.id is not null then
+    return 'stale';
+  end if;
+
+  -- A member's change or clear moves a field's state even when its value ends
+  -- where the plan read it, and the plan was worked out for the state it read.
+  for _key in select jsonb_object_keys(coalesce(_expected -> 'states', '{}'::jsonb)) loop
+    if (select v.state from public.records_field_values v
+         where v.org_id = _org_id and v.profile_id = _profile_id and v.field = _key)
+       is distinct from (_expected -> 'states' ->> _key) then
+      return 'stale';
+    end if;
+  end loop;
+
+  if _profile <> '{}'::jsonb then
+    update public.profiles set
+      first_name = case when _profile ? 'first_name' then _profile ->> 'first_name' else first_name end,
+      last_name = case when _profile ? 'last_name' then _profile ->> 'last_name' else last_name end,
+      preferred_name = case when _profile ? 'preferred_name' then _profile ->> 'preferred_name' else preferred_name end,
+      title = case when _profile ? 'title' then _profile ->> 'title' else title end,
+      suffix = case when _profile ? 'suffix' then _profile ->> 'suffix' else suffix end,
+      gender = case when _profile ? 'gender' then _profile ->> 'gender' else gender end,
+      phone_mobile = case when _profile ? 'phone_mobile' then _profile ->> 'phone_mobile' else phone_mobile end,
+      phone_work = case when _profile ? 'phone_work' then _profile ->> 'phone_work' else phone_work end,
+      birth_month = case when _profile ? 'birth_month' then (_profile ->> 'birth_month')::smallint else birth_month end,
+      birth_day = case when _profile ? 'birth_day' then (_profile ->> 'birth_day')::smallint else birth_day end,
+      birth_year = case when _profile ? 'birth_year' then (_profile ->> 'birth_year')::smallint else birth_year end,
+      avatar_url = case when _profile ? 'avatar_url' then _profile ->> 'avatar_url' else avatar_url end
+    where id = _profile_id and org_id = _org_id;
+  end if;
+
+  -- The anniversary is one value for the household but each linked person's
+  -- records hold their own. While another linked person's differs, the first
+  -- one copied stands: this person's isn't written or announced, and an older
+  -- church value is forgotten. A member's change or clear keeps the planned
+  -- state and the new church value, so the spouses' sources can agree again
+  -- once the church corrects both. The answer is 'held' so the caller doesn't
+  -- count the household.
+  if _anniversary is not null and _family.id is not null and exists (
+    select 1
+      from public.records_field_values v
+      join public.profiles p on p.id = v.profile_id and p.org_id = v.org_id
+     where v.org_id = _org_id
+       and v.field = 'anniversary'
+       and v.profile_id <> _profile_id
+       and p.family_id = _family.id
+       and public.records_pick(v.church_value, public.records_field_columns('anniversary'))
+           <> public.records_pick(_anniversary, public.records_field_columns('anniversary'))
+  ) then
+    _household := '{}'::jsonb;
+    _values := (
+      select coalesce(jsonb_agg(v), '[]'::jsonb) from jsonb_array_elements(_values) as v
+       where v ->> 'field' <> 'anniversary'
+          or exists (
+            select 1 from public.records_field_values k
+             where k.org_id = _org_id and k.profile_id = _profile_id and k.field = 'anniversary'
+               and k.state <> 'records'
+          )
+    );
+    _filled := array_remove(_filled, 'anniversary');
+    _held := true;
+    delete from public.records_field_values
+     where org_id = _org_id and profile_id = _profile_id and field = 'anniversary' and state = 'records';
+  end if;
+
+  if _household <> '{}'::jsonb and _family.id is not null then
+    update public.family_units set
+      anniversary_month = (_household ->> 'anniversary_month')::smallint,
+      anniversary_day = (_household ->> 'anniversary_day')::smallint,
+      anniversary_year = (_household ->> 'anniversary_year')::smallint
+    where id = _family.id and org_id = _org_id;
+  end if;
+
+  if _grade <> '{}'::jsonb and _member.id is not null then
+    update public.family_members set graduation_year = (_grade ->> 'graduation_year')::smallint
+     where id = _member.id and org_id = _org_id;
+  end if;
+
+  insert into public.records_field_values (org_id, profile_id, field, state, church_value, updated_at)
+  select _org_id, _profile_id, v.field, v.state, v.church_value, now()
+    from jsonb_to_recordset(coalesce(_values, '[]'::jsonb)) as v(field text, state text, church_value jsonb)
+  on conflict (org_id, profile_id, field) do update
+    set state = excluded.state, church_value = excluded.church_value, updated_at = excluded.updated_at
+    where (public.records_field_values.state, public.records_field_values.church_value)
+          is distinct from (excluded.state, excluded.church_value);
+
+  insert into public.records_person_state (org_id, profile_id, copied_at, notice_filled_at)
+  values (_org_id, _profile_id, now(), case when cardinality(_filled) > 0 then now() end)
+  on conflict (org_id, profile_id) do update
+    set copied_at = excluded.copied_at,
+        notice_filled_at = case
+          when cardinality(_filled) > 0 and public.records_person_state.notice_seen_at is null
+            then coalesce(public.records_person_state.notice_filled_at, excluded.notice_filled_at)
+          else public.records_person_state.notice_filled_at
+        end;
+
+  return case when _held then 'held' else 'applied' end;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_apply_copy"("_org_id" "uuid", "_profile_id" "uuid", "_expected" "jsonb", "_profile" "jsonb", "_household" "jsonb", "_grade" "jsonb", "_values" "jsonb", "_filled" "text"[]) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_edit_state"("_new" "jsonb", "_church_value" "jsonb", "_columns" "text"[]) RETURNS "text"
+    LANGUAGE "sql" IMMUTABLE
+    SET "search_path" TO ''
+    AS $$
+  select case
+    when public.records_is_empty(public.records_pick(_new, _columns)) then 'cleared'
+    when public.records_pick(_new, _columns) = public.records_pick(_church_value, _columns) then 'records'
+    else 'changed'
+  end;
+$$;
+
+
+ALTER FUNCTION "public"."records_edit_state"("_new" "jsonb", "_church_value" "jsonb", "_columns" "text"[]) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_field_columns"("_field" "text") RETURNS "text"[]
+    LANGUAGE "sql" IMMUTABLE
+    SET "search_path" TO ''
+    AS $$
+  select case _field
+    when 'name' then array['first_name', 'last_name']
+    when 'preferred_name' then array['preferred_name']
+    when 'suffix' then array['suffix']
+    when 'title' then array['title']
+    when 'gender' then array['gender']
+    when 'phone_mobile' then array['phone_mobile']
+    when 'phone_work' then array['phone_work']
+    when 'birthday' then array['birth_month', 'birth_day', 'birth_year']
+    when 'anniversary' then array['anniversary_month', 'anniversary_day', 'anniversary_year']
+    when 'photo' then array['avatar_url']
+    when 'grade' then array['graduation_year']
+  end;
+$$;
+
+
+ALTER FUNCTION "public"."records_field_columns"("_field" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_grade_member_edit"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _value record;
+  _columns text[] := public.records_field_columns('grade');
+begin
+  if coalesce(current_setting('role', true), '') not in ('anon', 'authenticated')
+     or old.claimed_profile_id is null
+     or public.records_pick(to_jsonb(new), _columns) = public.records_pick(to_jsonb(old), _columns) then
+    return new;
+  end if;
+  -- The copy owns only the person's lowest-id claimed row, as records_apply_copy() picks it.
+  if exists (
+    select 1 from public.family_members m
+     where m.claimed_profile_id = old.claimed_profile_id and m.org_id = old.org_id and m.id < old.id
+  ) then
+    return new;
+  end if;
+  select v.church_value, s.mode into _value
+    from public.records_field_values v
+    left join public.records_field_settings s on s.org_id = v.org_id and s.field = v.field
+   where v.org_id = old.org_id and v.profile_id = old.claimed_profile_id and v.field = 'grade';
+  if not found then
+    return new;
+  end if;
+  if _value.mode = 'locked' then
+    new := jsonb_populate_record(new, public.records_pick(to_jsonb(old), _columns));
+    return new;
+  end if;
+  update public.records_field_values
+     set state = public.records_edit_state(to_jsonb(new), _value.church_value, _columns), updated_at = now()
+   where org_id = old.org_id and profile_id = old.claimed_profile_id and field = 'grade';
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_grade_member_edit"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_household_member_edit"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _columns text[] := public.records_field_columns('anniversary');
+begin
+  if coalesce(current_setting('role', true), '') not in ('anon', 'authenticated') then
+    return new;
+  end if;
+  if public.records_pick(to_jsonb(new), _columns) = public.records_pick(to_jsonb(old), _columns) then
+    return new;
+  end if;
+  update public.records_field_values v
+     set state = public.records_edit_state(to_jsonb(new), v.church_value, _columns), updated_at = now()
+   where v.org_id = old.org_id
+     and v.field = 'anniversary'
+     and v.profile_id in (select p.id from public.profiles p where p.family_id = old.id and p.org_id = old.org_id)
+     and v.state <> public.records_edit_state(to_jsonb(new), v.church_value, _columns);
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_household_member_edit"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_is_empty"("_value" "jsonb") RETURNS boolean
+    LANGUAGE "sql" IMMUTABLE
+    SET "search_path" TO ''
+    AS $$
+  select not exists (select 1 from jsonb_each(_value) as e where e.value <> 'null'::jsonb);
+$$;
+
+
+ALTER FUNCTION "public"."records_is_empty"("_value" "jsonb") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_pick"("_row" "jsonb", "_columns" "text"[]) RETURNS "jsonb"
+    LANGUAGE "sql" IMMUTABLE
+    SET "search_path" TO ''
+    AS $$
+  select coalesce(
+    jsonb_object_agg(c, case when _row -> c is null or _row -> c = '""'::jsonb then 'null'::jsonb else _row -> c end),
+    '{}'::jsonb
+  )
+  from unnest(_columns) as c;
+$$;
+
+
+ALTER FUNCTION "public"."records_pick"("_row" "jsonb", "_columns" "text"[]) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_profile_member_edit"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  _value record;
+  _columns text[];
+  _restore jsonb := '{}'::jsonb;
+  _state text;
+begin
+  if coalesce(current_setting('role', true), '') not in ('anon', 'authenticated') then
+    return new;
+  end if;
+  for _value in
+    select v.field, v.church_value, s.mode
+      from public.records_field_values v
+      left join public.records_field_settings s on s.org_id = v.org_id and s.field = v.field
+     where v.org_id = old.org_id
+       and v.profile_id = old.id
+       and v.field not in ('anniversary', 'grade')
+  loop
+    _columns := public.records_field_columns(_value.field);
+    continue when public.records_pick(to_jsonb(new), _columns) = public.records_pick(to_jsonb(old), _columns);
+    if _value.mode = 'locked' then
+      _restore := _restore || public.records_pick(to_jsonb(old), _columns);
+      continue;
+    end if;
+    _state := public.records_edit_state(to_jsonb(new), _value.church_value, _columns);
+    update public.records_field_values
+       set state = _state, updated_at = now()
+     where org_id = old.org_id and profile_id = old.id and field = _value.field and state <> _state;
+  end loop;
+  if _restore <> '{}'::jsonb then
+    new := jsonb_populate_record(new, _restore);
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_profile_member_edit"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."records_save_connection"("_org_id" "uuid", "_provider" "text", "_base_url" "text", "_key_ciphertext" "text", "_key_hint" "text", "_connected_by" "uuid") RETURNS "void"
     LANGUAGE "plpgsql"
     SET "search_path" TO ''
@@ -2525,6 +2869,59 @@ $$;
 
 
 ALTER FUNCTION "public"."records_save_connection"("_org_id" "uuid", "_provider" "text", "_base_url" "text", "_key_ciphertext" "text", "_key_hint" "text", "_connected_by" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."records_save_field_settings"("_org_id" "uuid", "_settings" "jsonb", "_updated_by" "uuid") RETURNS "text"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  _before jsonb;
+  _after jsonb;
+  _running timestamptz;
+begin
+  -- Before a church's first refresh there is no row to lock, so one is made.
+  insert into public.records_refresh_state (org_id, connection_id)
+  select org_id, connection_id from public.records_connections where org_id = _org_id
+  on conflict (org_id) do nothing;
+  select running_since into _running from public.records_refresh_state
+   where org_id = _org_id
+     for update;
+  if _running is not null and _running > now() - interval '15 minutes' then
+    return 'busy';
+  end if;
+
+  select coalesce(jsonb_object_agg(field, mode), '{}'::jsonb) into _before
+    from public.records_field_settings where org_id = _org_id;
+
+  delete from public.records_field_settings
+   where org_id = _org_id and not (_settings ? field);
+
+  insert into public.records_field_settings (org_id, field, mode, updated_by, updated_at)
+  select _org_id, s.key, s.value #>> '{}', _updated_by, now()
+    from jsonb_each(_settings) as s
+  on conflict (org_id, field) do update
+    set mode = excluded.mode, updated_by = excluded.updated_by, updated_at = excluded.updated_at
+    where public.records_field_settings.mode is distinct from excluded.mode;
+
+  select coalesce(jsonb_object_agg(field, mode), '{}'::jsonb) into _after
+    from public.records_field_settings where org_id = _org_id;
+  if _after = _before then
+    return 'saved';
+  end if;
+
+  delete from public.records_field_values v
+   where v.org_id = _org_id
+     and not (_after ? (case v.field when 'preferred_name' then 'name' else v.field end));
+
+  update public.records_person_state set copied_at = null
+   where org_id = _org_id and copied_at is not null;
+  return 'saved';
+end;
+$$;
+
+
+ALTER FUNCTION "public"."records_save_field_settings"("_org_id" "uuid", "_settings" "jsonb", "_updated_by" "uuid") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."review_group_join_request"("_request_id" "uuid", "_approve" boolean) RETURNS "text"
@@ -5640,6 +6037,45 @@ COMMENT ON TABLE "public"."records_connections" IS 'A church''s connection to it
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."records_field_settings" (
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "field" "text" NOT NULL,
+    "mode" "text" NOT NULL,
+    "updated_by" "uuid",
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "records_field_settings_field_check" CHECK (("field" = ANY (ARRAY['name'::"text", 'suffix'::"text", 'title'::"text", 'gender'::"text", 'phone_mobile'::"text", 'phone_work'::"text", 'birthday'::"text", 'anniversary'::"text", 'photo'::"text", 'grade'::"text"]))),
+    CONSTRAINT "records_field_settings_lockable" CHECK ((("mode" = 'member'::"text") OR ("field" = ANY (ARRAY['name'::"text", 'suffix'::"text", 'title'::"text", 'gender'::"text", 'grade'::"text"])))),
+    CONSTRAINT "records_field_settings_mode_check" CHECK (("mode" = ANY (ARRAY['locked'::"text", 'member'::"text"])))
+);
+
+
+ALTER TABLE "public"."records_field_settings" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."records_field_settings" IS 'Which fields a church fills from its church records, and whether members may change them. No row: not from the records. Members read it; only the service key writes it, through records_save_field_settings().';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."records_field_values" (
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "profile_id" "uuid" NOT NULL,
+    "field" "text" NOT NULL,
+    "state" "text" NOT NULL,
+    "church_value" "jsonb" DEFAULT '{}'::"jsonb" NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "records_field_values_church_value_check" CHECK (("jsonb_typeof"("church_value") = 'object'::"text")),
+    CONSTRAINT "records_field_values_field_check" CHECK (("field" = ANY (ARRAY['name'::"text", 'preferred_name'::"text", 'suffix'::"text", 'title'::"text", 'gender'::"text", 'phone_mobile'::"text", 'phone_work'::"text", 'birthday'::"text", 'anniversary'::"text", 'photo'::"text", 'grade'::"text"]))),
+    CONSTRAINT "records_field_values_state_check" CHECK (("state" = ANY (ARRAY['records'::"text", 'changed'::"text", 'cleared'::"text"])))
+);
+
+
+ALTER TABLE "public"."records_field_values" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."records_field_values" IS 'Per linked person and field: whether the value came from the church''s records or the member changed or cleared it, and the church''s last value. A person reads their own rows and a church admin every row; only the service key and the member-edit triggers write it. Goes with the link.';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."records_person_links" (
     "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
     "connection_id" "uuid" NOT NULL,
@@ -5655,6 +6091,43 @@ ALTER TABLE "public"."records_person_links" OWNER TO "postgres";
 
 
 COMMENT ON TABLE "public"."records_person_links" IS 'Which person in the church''s records a two42 profile is, as a church admin confirmed it. Goes with the profile, and with the connection when the records are disconnected. Read and written by the service key only.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."records_person_state" (
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "profile_id" "uuid" NOT NULL,
+    "copied_at" timestamp with time zone,
+    "notice_filled_at" timestamp with time zone,
+    "notice_seen_at" timestamp with time zone,
+    "review_reason" "text",
+    "review_since" timestamp with time zone,
+    CONSTRAINT "records_person_state_review_reason_check" CHECK (("review_reason" = ANY (ARRAY['inactive'::"text", 'missing'::"text"])))
+);
+
+
+ALTER TABLE "public"."records_person_state" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."records_person_state" IS 'Per linked person: whether their first copy is done, their one-time notice, and why a church admin should review them. A member reads their notice columns and marks it seen; everything else is the service key''s.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."records_refresh_state" (
+    "org_id" "uuid" DEFAULT "public"."app_current_org_id"() NOT NULL,
+    "connection_id" "uuid" NOT NULL,
+    "cursor" "text",
+    "last_refreshed_at" timestamp with time zone,
+    "last_counts" "jsonb" DEFAULT '{}'::"jsonb" NOT NULL,
+    "running_since" timestamp with time zone,
+    CONSTRAINT "records_refresh_state_cursor_check" CHECK (("char_length"("cursor") <= 100))
+);
+
+
+ALTER TABLE "public"."records_refresh_state" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."records_refresh_state" IS 'The church records refresh''s mark in the records, its last run and its claim against overlapping runs. Service key only; goes with the connection.';
 
 
 
@@ -6602,6 +7075,16 @@ ALTER TABLE ONLY "public"."records_connections"
 
 
 
+ALTER TABLE ONLY "public"."records_field_settings"
+    ADD CONSTRAINT "records_field_settings_pkey" PRIMARY KEY ("org_id", "field");
+
+
+
+ALTER TABLE ONLY "public"."records_field_values"
+    ADD CONSTRAINT "records_field_values_pkey" PRIMARY KEY ("org_id", "profile_id", "field");
+
+
+
 ALTER TABLE ONLY "public"."records_person_links"
     ADD CONSTRAINT "records_person_links_one_profile_per_person" UNIQUE ("org_id", "external_person_id");
 
@@ -6609,6 +7092,16 @@ ALTER TABLE ONLY "public"."records_person_links"
 
 ALTER TABLE ONLY "public"."records_person_links"
     ADD CONSTRAINT "records_person_links_pkey" PRIMARY KEY ("org_id", "profile_id");
+
+
+
+ALTER TABLE ONLY "public"."records_person_state"
+    ADD CONSTRAINT "records_person_state_pkey" PRIMARY KEY ("org_id", "profile_id");
+
+
+
+ALTER TABLE ONLY "public"."records_refresh_state"
+    ADD CONSTRAINT "records_refresh_state_pkey" PRIMARY KEY ("org_id");
 
 
 
@@ -7116,6 +7609,14 @@ CREATE INDEX "records_connections_connected_by_idx" ON "public"."records_connect
 
 
 
+CREATE INDEX "records_field_settings_updated_by_idx" ON "public"."records_field_settings" USING "btree" ("updated_by") WHERE ("updated_by" IS NOT NULL);
+
+
+
+CREATE INDEX "records_field_values_profile_id_idx" ON "public"."records_field_values" USING "btree" ("profile_id");
+
+
+
 CREATE INDEX "records_person_links_connection_idx" ON "public"."records_person_links" USING "btree" ("org_id", "connection_id");
 
 
@@ -7125,6 +7626,10 @@ CREATE INDEX "records_person_links_linked_by_idx" ON "public"."records_person_li
 
 
 CREATE INDEX "records_person_links_profile_id_idx" ON "public"."records_person_links" USING "btree" ("profile_id");
+
+
+
+CREATE INDEX "records_person_state_profile_id_idx" ON "public"."records_person_state" USING "btree" ("profile_id");
 
 
 
@@ -7463,6 +7968,18 @@ CREATE OR REPLACE TRIGGER "profiles_own_supper_club_email" BEFORE UPDATE OF "ema
 
 
 CREATE OR REPLACE TRIGGER "profiles_touch_updated_at" BEFORE UPDATE ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."touch_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "records_grade_member_edit" BEFORE UPDATE OF "graduation_year" ON "public"."family_members" FOR EACH ROW EXECUTE FUNCTION "public"."records_grade_member_edit"();
+
+
+
+CREATE OR REPLACE TRIGGER "records_household_member_edit" BEFORE UPDATE OF "anniversary_month", "anniversary_day", "anniversary_year" ON "public"."family_units" FOR EACH ROW EXECUTE FUNCTION "public"."records_household_member_edit"();
+
+
+
+CREATE OR REPLACE TRIGGER "records_profile_member_edit" BEFORE UPDATE ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."records_profile_member_edit"();
 
 
 
@@ -8076,6 +8593,21 @@ ALTER TABLE ONLY "public"."records_connections"
 
 
 
+ALTER TABLE ONLY "public"."records_field_settings"
+    ADD CONSTRAINT "records_field_settings_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."records_field_settings"
+    ADD CONSTRAINT "records_field_settings_updated_by_fkey" FOREIGN KEY ("updated_by", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE SET NULL ("updated_by");
+
+
+
+ALTER TABLE ONLY "public"."records_field_values"
+    ADD CONSTRAINT "records_field_values_link_fkey" FOREIGN KEY ("org_id", "profile_id") REFERENCES "public"."records_person_links"("org_id", "profile_id") ON DELETE CASCADE;
+
+
+
 ALTER TABLE ONLY "public"."records_person_links"
     ADD CONSTRAINT "records_person_links_connection_fkey" FOREIGN KEY ("org_id", "connection_id") REFERENCES "public"."records_connections"("org_id", "connection_id") ON DELETE CASCADE;
 
@@ -8088,6 +8620,21 @@ ALTER TABLE ONLY "public"."records_person_links"
 
 ALTER TABLE ONLY "public"."records_person_links"
     ADD CONSTRAINT "records_person_links_profile_id_fkey" FOREIGN KEY ("profile_id", "org_id") REFERENCES "public"."profiles"("id", "org_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."records_person_state"
+    ADD CONSTRAINT "records_person_state_link_fkey" FOREIGN KEY ("org_id", "profile_id") REFERENCES "public"."records_person_links"("org_id", "profile_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."records_refresh_state"
+    ADD CONSTRAINT "records_refresh_state_connection_fkey" FOREIGN KEY ("org_id", "connection_id") REFERENCES "public"."records_connections"("org_id", "connection_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."records_refresh_state"
+    ADD CONSTRAINT "records_refresh_state_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
 
 
 
@@ -9035,6 +9582,10 @@ CREATE POLICY "Members can withdraw own prayer responses" ON "public"."prayer_re
 
 
 
+CREATE POLICY "Members mark their own notice seen" ON "public"."records_person_state" FOR UPDATE TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("profile_id" = ( SELECT "auth"."uid"() AS "uid")))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("profile_id" = ( SELECT "auth"."uid"() AS "uid"))));
+
+
+
 CREATE POLICY "Members read rotation dates" ON "public"."supper_rotation_dates" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("public"."is_group_leader"("group_id") OR ("public"."is_group_member"("group_id") AND (EXISTS ( SELECT 1
    FROM "public"."supper_rotations" "s"
   WHERE (("s"."id" = "supper_rotation_dates"."rotation_id") AND ("s"."status" <> 'draft'::"text"))))))));
@@ -9042,6 +9593,14 @@ CREATE POLICY "Members read rotation dates" ON "public"."supper_rotation_dates" 
 
 
 CREATE POLICY "Members read rotations" ON "public"."supper_rotations" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("public"."is_group_leader"("group_id") OR (("status" <> 'draft'::"text") AND "public"."is_group_member"("group_id")))));
+
+
+
+CREATE POLICY "Members read the church's field settings" ON "public"."records_field_settings" FOR SELECT TO "authenticated" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "Members read their own notice" ON "public"."records_person_state" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND ("profile_id" = ( SELECT "auth"."uid"() AS "uid"))));
 
 
 
@@ -9088,6 +9647,12 @@ CREATE POLICY "Party or leaders write food notes" ON "public"."supper_party_note
 
 
 CREATE POLICY "Party or leaders write unavailable dates" ON "public"."supper_party_unavailable_dates" TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("party_id" = ANY (( SELECT "public"."supper_my_party_ids"() AS "supper_my_party_ids")::"uuid"[])) OR "public"."is_group_leader"("group_id")))) WITH CHECK ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("party_id" = ANY (( SELECT "public"."supper_my_party_ids"() AS "supper_my_party_ids")::"uuid"[])) OR "public"."is_group_leader"("group_id"))));
+
+
+
+CREATE POLICY "People read the value sources of details they edit" ON "public"."records_field_values" FOR SELECT TO "authenticated" USING ((("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")) AND (("profile_id" = ( SELECT "auth"."uid"() AS "uid")) OR ( SELECT "public"."is_admin"() AS "is_admin") OR (EXISTS ( SELECT 1
+   FROM "public"."profiles" "p"
+  WHERE (("p"."id" = "records_field_values"."profile_id") AND ("p"."org_id" = "records_field_values"."org_id") AND ("p"."family_id" IS NOT NULL) AND ("p"."family_id" = ( SELECT "public"."current_family_id"() AS "current_family_id")) AND (("records_field_values"."field" = 'anniversary'::"text") OR ( SELECT "public"."is_household_manager"() AS "is_household_manager"))))))));
 
 
 
@@ -9389,7 +9954,23 @@ CREATE POLICY "org isolation" ON "public"."records_connections" AS RESTRICTIVE T
 
 
 
+CREATE POLICY "org isolation" ON "public"."records_field_settings" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."records_field_values" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
 CREATE POLICY "org isolation" ON "public"."records_person_links" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."records_person_state" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
+
+
+
+CREATE POLICY "org isolation" ON "public"."records_refresh_state" AS RESTRICTIVE TO "authenticated", "anon" USING (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id"))) WITH CHECK (("org_id" = ( SELECT "public"."app_request_org_id"() AS "app_request_org_id")));
 
 
 
@@ -9541,7 +10122,19 @@ ALTER TABLE "public"."profiles" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."records_connections" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."records_field_settings" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."records_field_values" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."records_person_links" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."records_person_state" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."records_refresh_state" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."rsvps" ENABLE ROW LEVEL SECURITY;
@@ -9973,8 +10566,53 @@ GRANT ALL ON FUNCTION "public"."provision_organization"("_name" "text", "_owner_
 
 
 
+REVOKE ALL ON FUNCTION "public"."records_apply_copy"("_org_id" "uuid", "_profile_id" "uuid", "_expected" "jsonb", "_profile" "jsonb", "_household" "jsonb", "_grade" "jsonb", "_values" "jsonb", "_filled" "text"[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_apply_copy"("_org_id" "uuid", "_profile_id" "uuid", "_expected" "jsonb", "_profile" "jsonb", "_household" "jsonb", "_grade" "jsonb", "_values" "jsonb", "_filled" "text"[]) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_edit_state"("_new" "jsonb", "_church_value" "jsonb", "_columns" "text"[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_edit_state"("_new" "jsonb", "_church_value" "jsonb", "_columns" "text"[]) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_field_columns"("_field" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_field_columns"("_field" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_grade_member_edit"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_grade_member_edit"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_household_member_edit"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_household_member_edit"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_is_empty"("_value" "jsonb") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_is_empty"("_value" "jsonb") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_pick"("_row" "jsonb", "_columns" "text"[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_pick"("_row" "jsonb", "_columns" "text"[]) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_profile_member_edit"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_profile_member_edit"() TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."records_save_connection"("_org_id" "uuid", "_provider" "text", "_base_url" "text", "_key_ciphertext" "text", "_key_hint" "text", "_connected_by" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."records_save_connection"("_org_id" "uuid", "_provider" "text", "_base_url" "text", "_key_ciphertext" "text", "_key_hint" "text", "_connected_by" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."records_save_field_settings"("_org_id" "uuid", "_settings" "jsonb", "_updated_by" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."records_save_field_settings"("_org_id" "uuid", "_settings" "jsonb", "_updated_by" "uuid") TO "service_role";
 
 
 
@@ -10751,7 +11389,41 @@ GRANT ALL ON TABLE "public"."records_connections" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."records_field_settings" TO "service_role";
+GRANT SELECT ON TABLE "public"."records_field_settings" TO "authenticated";
+
+
+
+GRANT ALL ON TABLE "public"."records_field_values" TO "service_role";
+GRANT SELECT ON TABLE "public"."records_field_values" TO "authenticated";
+
+
+
 GRANT ALL ON TABLE "public"."records_person_links" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."records_person_state" TO "service_role";
+
+
+
+GRANT SELECT("org_id") ON TABLE "public"."records_person_state" TO "authenticated";
+
+
+
+GRANT SELECT("profile_id") ON TABLE "public"."records_person_state" TO "authenticated";
+
+
+
+GRANT SELECT("notice_filled_at") ON TABLE "public"."records_person_state" TO "authenticated";
+
+
+
+GRANT SELECT("notice_seen_at"),UPDATE("notice_seen_at") ON TABLE "public"."records_person_state" TO "authenticated";
+
+
+
+GRANT ALL ON TABLE "public"."records_refresh_state" TO "service_role";
 
 
 
