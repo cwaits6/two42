@@ -10,12 +10,17 @@ const NO_GENDER = "Ruth Fixtureton";
 const OUTSIDE = "Oliver Stubbins";
 
 const genderFilter = (page: Page) => page.getByRole("group", { name: "Gender" });
-const option = (page: Page, label: string) =>
-  genderFilter(page).getByRole("button", { name: new RegExp(`^${label} \\(\\d+\\)$`) });
+const OPTION_NAME = {
+  All: /^All \(\d+\)$/,
+  Male: /^Male \(\d+\)$/,
+  Female: /^Female \(\d+\)$/,
+} as const;
+const option = (page: Page, label: keyof typeof OPTION_NAME) =>
+  genderFilter(page).getByRole("button", { name: OPTION_NAME[label] });
 const personRows = (page: Page) => page.locator("section h2 + div > button");
 const person = (page: Page, name: string) => personRows(page).filter({ hasText: name });
 
-async function choose(page: Page, label: string): Promise<number> {
+async function choose(page: Page, label: keyof typeof OPTION_NAME): Promise<number> {
   await option(page, label).click();
   await expect(option(page, label)).toHaveAttribute("aria-pressed", "true");
   const count = Number((await option(page, label).textContent())!.match(/\((\d+)\)/)![1]);
