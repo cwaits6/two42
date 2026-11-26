@@ -87,6 +87,6 @@ describe("POST /api/supper-club/suppers/[supperId]/move", () => {
     const res = await move("2031-02-01T18:00:00.000Z");
     expect(updates).toEqual([]);
     expect(notifySuppersMoved).not.toHaveBeenCalled();
-    expect(await res.json()).toEqual({ sent: 0, capped: false, unsent: false });
+    expect(await res.json()).toEqual({ sent: 0, capped: false, unsent: false, unchanged: true });
   });
 });

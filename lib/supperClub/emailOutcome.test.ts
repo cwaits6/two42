@@ -11,6 +11,13 @@ describe("emailOutcome", () => {
 });
 
 describe("movedNotice", () => {
+  it("says nothing changed when the supper already starts then", () => {
+    expect(movedNotice("Supper moved.", { ...emailOutcome({ sent: 0, failed: 0, capped: false }), unchanged: true })).toEqual({
+      kind: "success",
+      text: "It already starts then. Nothing changed and no emails went out.",
+    });
+  });
+
   it("only succeeds when everyone at the table was emailed", () => {
     expect(movedNotice("Supper moved.", emailOutcome({ sent: 4, failed: 0, capped: false }))).toEqual({
       kind: "success",

@@ -14,6 +14,8 @@ export interface EmailOutcome {
   capped: boolean;
   /** True when someone who should have had an email did not. */
   unsent: boolean;
+  /** True when the save changed nothing, so no one was emailed or asked again. */
+  unchanged?: boolean;
 }
 
 /** The outcome of a send, or of one that threw before it finished (null). */
@@ -37,6 +39,7 @@ function unsentCount(outcome: EmailOutcome): string {
 
 /** After a supper or a rotation date moved. */
 export function movedNotice(saved: string, outcome: EmailOutcome | null): Notice {
+  if (outcome?.unchanged) return { kind: "success", text: "It already starts then. Nothing changed and no emails went out." };
   if (!outcome || !outcome.unsent) return { kind: "success", text: saved };
   if (outcome.capped) {
     return { kind: "warning", text: `${saved} Today's email limit was reached, so no emails went out. Let the table know the new date.` };
