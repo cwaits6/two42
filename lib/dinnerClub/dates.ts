@@ -30,8 +30,12 @@ function toDay(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-function addDays(day: string, n: number): string {
+export function addDays(day: string, n: number): string {
   return toDay(new Date(toUTC(day).getTime() + n * DAY_MS));
+}
+
+export function daysBetween(from: string, to: string): number {
+  return Math.round((toUTC(to).getTime() - toUTC(from).getTime()) / DAY_MS);
 }
 
 /** The day `months` months on, kept to the last day of a shorter month. */

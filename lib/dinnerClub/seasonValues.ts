@@ -1,3 +1,4 @@
+import { addDays, daysBetween } from "./dates";
 import type { RepeatKind } from "./labels";
 import type { DinnerFormat } from "./shuffle";
 
@@ -78,16 +79,6 @@ export function valuesFromSeason(row: SeasonRow): SeasonValues {
     backToBack: row.allow_back_to_back_hosting,
     bringList: row.bring_list_enabled,
   };
-}
-
-function addDays(day: string, days: number): string {
-  const d = new Date(`${day}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-function daysBetween(from: string, to: string): number {
-  return Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86_400_000);
 }
 
 /**
