@@ -55,5 +55,6 @@ When a change touches a listed file but nobody can see the difference, add the `
 ## Where things live
 
 - `content/docs/` holds the pages as MDX, one folder per section (`use`, `administer`, `run`, `develop`). Each folder's `meta.json` sets the page order.
+- `public/docs/<section>/<old-slug>.html` keeps a moved page's old URL working. The site is a static export, so `redirects()` in `next.config.mjs` is not applied; when a page moves, add a stub here with a `<meta http-equiv="refresh">` and a canonical link to the new page.
 - `app/global.css` maps the two42 palette from `docs/design/DESIGN.md` onto the Fumadocs theme, light and dark.
 - `public/brand/` holds copies of the app's wordmark and mark SVGs (`public/brand/` in the app), and `app/icon.svg` is a copy of the app's `app/icon.svg`. Nothing keeps them in step: when the app's brand files or the palette in `docs/design/DESIGN.md` change, update these copies and `app/global.css` in the same change.

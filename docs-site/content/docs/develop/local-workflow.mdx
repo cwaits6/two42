@@ -64,7 +64,7 @@ deno test --lock=deno.lock --frozen --allow-env supabase/functions/tests/
 deno check --lock=deno.lock --frozen supabase/functions/send-event-reminders/index.ts \
            supabase/functions/send-serving-reminders/index.ts \
            supabase/functions/clean-up-expired-data/index.ts \
-           supabase/functions/send-dinner-reminders/index.ts
+           supabase/functions/send-supper-reminders/index.ts
 ```
 
 CI runs the same three steps in the `deno-test` job. After changing an edge function's imports, refresh the lock by running them once with `--frozen=false`.

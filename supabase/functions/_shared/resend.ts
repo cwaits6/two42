@@ -36,9 +36,9 @@ export function eventReminderIdempotencyKey(r: { eventId: string; occurrenceDate
   return `event-reminder/${r.eventId}/${r.occurrenceDate}/${r.profileId}`;
 }
 
-/** The key under which Resend deduplicates one person's reminder for one dinner on one date. */
-export function dinnerReminderIdempotencyKey(r: { dinnerId: string; dinnerDate: string; profileId: string }): string {
-  return `dinner-reminder/${r.dinnerId}/${r.dinnerDate}/${r.profileId}`;
+/** The key under which Resend deduplicates one person's reminder for one supper on one date. */
+export function supperReminderIdempotencyKey(r: { supperId: string; supperDate: string; profileId: string }): string {
+  return `supper-reminder/${r.supperId}/${r.supperDate}/${r.profileId}`;
 }
 
 /** Maps Resend's answer to what the caller does next. */

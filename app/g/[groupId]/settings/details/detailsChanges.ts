@@ -8,12 +8,12 @@ export type DetailsFields = {
   color: string;
   calendar: Record<CalendarSetting, boolean>;
   reminders: GroupReminders;
-  dinnerClub: boolean;
+  supperClub: boolean;
 };
 
 /** The group_settings columns a Save writes; each is present only when it changed. */
 export type SettingsChanges = Partial<
-  Pick<GroupSettingsValues, CalendarSetting | "event_reminders_enabled" | "event_reminder_default_days" | "dinner_club_enabled">
+  Pick<GroupSettingsValues, CalendarSetting | "event_reminders_enabled" | "event_reminder_default_days" | "supper_club_enabled">
 >;
 
 export type DetailsChanges = { color?: string; settings?: SettingsChanges };
@@ -38,7 +38,7 @@ export function detailsChanges(saved: DetailsFields, draft: DetailsFields): Deta
   if (draft.reminders.defaultDays !== saved.reminders.defaultDays) {
     settings.event_reminder_default_days = draft.reminders.defaultDays;
   }
-  if (draft.dinnerClub !== saved.dinnerClub) settings.dinner_club_enabled = draft.dinnerClub;
+  if (draft.supperClub !== saved.supperClub) settings.supper_club_enabled = draft.supperClub;
   if (Object.keys(settings).length > 0) changes.settings = settings;
   return changes;
 }

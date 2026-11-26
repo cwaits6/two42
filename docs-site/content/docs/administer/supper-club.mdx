@@ -1,0 +1,97 @@
+---
+title: Supper club
+description: "Run a rotation of suppers in members' homes: sign-ups, the shuffle into tables, changes mid-rotation, what guests bring, the next rotation, and who sees an address."
+sources:
+  - "app/g/[groupId]/supper-club/**"
+  - "components/supperClub/**"
+  - "lib/supperClub/**"
+  - "app/api/supper-club/**"
+  - "supabase/functions/send-supper-reminders/**"
+  - "supabase/functions/_shared/supper-*.ts"
+  - "app/g/[groupId]/settings/details/SupperClubCard.tsx"
+---
+
+A Supper club is a group's suppers in members' homes, run as **rotations**. Members sign up as a **party** of one or two, a leader shuffles the parties into **tables**, and each table has a **host** whose home it meets at for each **supper**. A church that wants a Supper club for everyone makes a group for it and uses the same page.
+
+## Turn it on
+
+In **Group settings › Details**, turn on **Supper club** and save. The group's menu gains **Supper club**, after Serving. It starts off for every group. Turning it off hides the page and keeps every rotation, so turning it on again brings them back.
+
+## Add a rotation
+
+On the Supper club page, choose **Add rotation** and fill in:
+
+- **Title**: filled in from the dates. Dates inside one part of the year give its name, such as "Fall 2026"; winter runs December to February and takes its December's year. Other dates give the months, such as "Sep – Dec 2026" or "Nov 2026 – Jan 2027". When another rotation in the group already has that title, the months are used, then a number such as "Sep – Nov 2026 (2)". Type your own title and changing the dates leaves it alone; clear it and it is filled in from the dates again. **Edit rotation** shows the saved title, and you can change it at any time.
+- **Format**, one per rotation:
+  - **Same table, one host**: the tables stay the same for the whole rotation, and each table's host party hosts every supper.
+  - **Same table, hosts take turns**: the tables stay the same, and the parties at each table who can host take turns.
+  - **New tables each supper**: a new shuffle for every supper, from the hosts free that night. Nobody hosts two suppers in a row unless you allow it.
+- **Start date** and **Length**, as a number of months or an end date.
+- **How often**: every few weeks on a day, or monthly on a weekday such as the 2nd Saturday, and a **Start time**.
+- **Table size**: the fewest and most people at a table, 6 to 8 to start.
+- **Sign-ups close**: the last day members can sign up or change their sign-up.
+- **Hosts say what each guest brings**: on to start. Turn it off for a rotation whose hosts cook everything. You can change it after publishing.
+
+The supper dates are proposed from these. On the rotation's page you can **Add date**, **Move date** and **Delete date**, before and after publishing, and **Propose dates again** before publishing. A date whose suppers have happened can't be deleted. A rotation starts as a draft that members don't see; **Delete rotation** removes a draft.
+
+Only one rotation per group takes sign-ups or runs at a time.
+
+## Sign-ups
+
+Choose **Open sign-ups**. Members then see the rotation on the Supper club page and sign up alone, with someone in their household, or with anyone else in the group. A person is in one party per rotation. A party who can host gives their seats (their own party included) and the address for the suppers, which starts from their household's directory address. Depending on the format they can say which date they'd like to host or which dates they can't. Anyone can add their allergies and food needs. Kids aren't seated: a party is the adults coming.
+
+The **Sign-ups** list on the rotation's page shows each party, the number of parties, hosts, people and seats, and a warning when there are too few hosts: people divided by the most per table, rounded up, for each supper when tables change each supper, and for the rotation otherwise. **Add party** signs someone up, with one other person if they're coming together, and **Remove party** takes a party off while sign-ups are open.
+
+A member can **Withdraw** while sign-ups are open, and **Withdraw from this rotation** after they close.
+
+## Shuffle and publish
+
+On the rotation's page choose **Make tables**, then **Shuffle**. The shuffle keeps each party together, gives every table a host, keeps each table within its host's seats (the fewest seats of its hosts when they take turns), evens out the table sizes, and avoids leaving one single person alone among couples. When tables change each supper it also tries to keep apart people who already ate together this rotation; when the table stays the same, its people eat together at every supper. In a rotation started from an earlier one, it also keeps apart people who shared a table in the last two rotations, after its other rules: with enough people, nobody sits with the last rotation's tablemates. The draft is only for leaders. Change it with **Shuffle again**, **Move or swap** on a party, or **Host** on a table. Warnings show a table over its seats, a supper with no host, a repeat pairing and a host with two suppers in a row.
+
+**Publish tables** shows each member their own table and emails each person their suppers, dates and host. After publishing you can change the tables and choose **Publish changes**; only the people whose table or host changed get an email. A supper that has happened keeps its table and host, so once the first suppers have happened, change later tables by hand, not with **Shuffle again**. Emails count toward the church's daily email limit; if it is reached, the tables are still published and no email goes out.
+
+## Suppers
+
+Each table's supper takes its date's time. Its host can **Move supper** to another date and time within the rotation, and a leader can move any table's supper. Moving a supper emails the people at that table, except the person who moved it, and clears its replies so people answer again. Moving a rotation date moves each table's supper on it, except one already moved on its own.
+
+Each person answers **Going** or **Not going** for each of their suppers, and can answer for their partner. The host sees who is going, the counts, and the food needs of the parties coming. Replies stop once the supper starts.
+
+The day before each supper, everyone at the table who hasn't said Not going gets a reminder with the time, host, address and who's coming. A person who turns off **Email me about Supper club suppers** in Settings gets no Supper club email.
+
+## When plans change
+
+The rotation's page shows **Needs attention** when a host can't host a supper, a host has withdrawn, or a party is waiting for a table, with the tables that have room. The Supper club page shows a leader the same in one line. **Open tables** goes to the tables, where each change is made in the draft and sent with **Publish changes**. Only the people whose table or host changed get an email.
+
+**A host can't host one supper.** The host chooses **Can't host this supper** on their supper. The table shows which supper, and what you can do depends on the format:
+
+- **Same table, one host**: choose **Host on** that date to have another party at the table host that one supper, or **Move supper** in the list of published suppers. A party that didn't offer to host needs **Add hosting details** first, once they've agreed: their seats and the address for the suppers. Once a stand-in is published, the table shows **Host on** for each supper, so changing one supper's host leaves the others alone.
+- **Same table, hosts take turns**: **Swap turns with** another date's host at the table, or pick another host for that date.
+- **New tables each supper**: **Move guests** spreads the table's guests across that night's other tables with room, couples first, keeping apart people who already ate together where it can. The host is left off that night and listed under **Waiting for a table** for that date. When a guest would have no table with room, or it is the only table that night, nobody moves: move or swap guests by hand, or move the supper.
+
+Moving the supper asks its host again.
+
+**A party withdraws.** Their seats at suppers still to come are freed, and suppers that have happened keep them. After publishing, **Remove party** on the rotation's page does the same. When the one host of a table withdraws, its suppers still to come have no host until you choose one with **Host** on the table, or **Add hosting details** for a party there who agrees to take it on.
+
+**Waiting list and late parties.** After publishing, a member who isn't signed up can **Join the waiting list**, and **Add party** on the rotation's page adds a party to it. On the tables page, **Waiting for a table** lists them: **Seat at** puts a party at a table with room and changes no other table, so only that table gets an email when you publish. When tables change each supper, seat them for each date. A waiting party sees no table, address or list until seated. They can't add food needs after sign-ups close, so they tell you.
+
+## What guests bring
+
+When the rotation has **Hosts say what each guest brings** on, the host of a supper chooses **What guests bring** on it, and a leader does the same from the list of published suppers. Pick Side, Salad, Dessert, Drinks, Bread, **Something else** with your own words, or **Nothing** for each guest party, then **Save list**. **Suggest** fills the list for you to change: a different thing for each guest, and for each party something other than what they brought last time. Each guest sees **You're bringing** on their supper, and the reminder email says it.
+
+## End and start the next rotation
+
+When the last supper is done, choose **End rotation**. Members keep seeing their tables; replies, moves and supper emails stop. An ended rotation can't be changed.
+
+On an ended rotation, **Start next rotation** opens **Add rotation** with the same format, how often, start time, table size and settings, starting the day after its end date and running as long. The title is filled in from the new dates; add when sign-ups close. When you open sign-ups, the last rotation's parties see **Sign up again** with their own answers filled in, to change before they sign up. Their address, food needs and home notes carry over only when the same people sign up together.
+
+## Who sees what
+
+- **A host's address**: the host, the group's leaders, and the people seated at that host's table, only after tables are published.
+- **Allergies and food needs**: the person, their partner, the group's leaders, and the host of a supper they're at.
+- **Tables**: each member sees only their own. Leaders see every table.
+- **What guests bring**: each guest sees what their own party brings; the host and the group's leaders see the whole list for that supper. Nobody sees another table's list.
+- **The waiting list**: a waiting party sees no table, address or list until they're seated.
+
+A church admin who isn't in the group sees none of it.
+
+Suppers never appear on the group calendar, on Home, or in the group's calendar subscription. Each person has their own **Calendar link** on the Supper club page for their own suppers, with times and addresses. **Reset link** ends the old one, for example if it was shared.

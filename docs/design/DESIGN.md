@@ -112,7 +112,7 @@ Who sees which row is decided on the server, from the signed-in person's own row
 **Page order** (`lib/groups/nav.ts`). Inside a group the pages are three clusters separated by spacing, with no section labels:
 
 1. Home, Calendar, Announcements
-2. Prayer, Lessons, Serving, Dinner club (Serving only for people on a serving team; Dinner club only where the group has turned it on)
+2. Prayer, Lessons, Serving, Supper club (Serving only for people on a serving team; Supper club only where the group has turned it on)
 3. Directory, Give, About
 
 Then, below a rule, **Group settings** for leaders only, showing the number of requests to join waiting on that group, and no number at zero.
@@ -124,7 +124,7 @@ Then, below a rule, **Group settings** for leaders only, showing the number of r
 Why this order:
 
 - What's happening comes first, because finding out what's on and when is the main reason people open the app.
-- Taking part comes next. Serving and Dinner club are last in their cluster, so the list differs only by the rows a person or group has.
+- Taking part comes next. Serving and Supper club are last in their cluster, so the list differs only by the rows a person or group has.
 - Pages people look things up in come last, most-used first.
 - Managing the group sits apart from member pages.
 - People scan a new menu from the top and later rely on remembered positions, so the order should not change again without usage counts that justify it. Directory's place is the one to recheck once the pilot has counts.

@@ -35,7 +35,7 @@ const ICONS: Record<IconName, ComponentType<{ className?: string }>> = {
   lectures: BookOpen,
   about: Info,
   serving: HandHelping,
-  "dinner-club": UtensilsCrossed,
+  "supper-club": UtensilsCrossed,
   prayer: HeartHandshake,
   give: HandCoins,
   "group-settings": SlidersHorizontal,

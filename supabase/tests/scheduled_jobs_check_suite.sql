@@ -73,7 +73,7 @@ begin
   perform pg_temp.ran('send-event-reminders-daily', '2031-03-05T15:00:00Z');
   perform pg_temp.answered('2031-03-05T15:00:00Z', 200);
   perform pg_temp.answered('2031-03-05T15:00:00Z', null, true);
-  perform pg_temp.ran('send-dinner-reminders-daily', '2031-03-05T15:00:00Z');
+  perform pg_temp.ran('send-supper-reminders-daily', '2031-03-05T15:00:00Z');
   perform pg_temp.answered('2031-03-05T15:00:00Z', 200);
 end $$;
 
@@ -98,7 +98,7 @@ do $$
 begin
   perform pg_temp.ran('send-serving-reminders-hourly', '2031-04-01T15:00:00Z');
   perform pg_temp.ran('send-event-reminders-daily', '2031-04-01T15:00:00Z');
-  perform pg_temp.ran('send-dinner-reminders-daily', '2031-04-01T15:00:00Z');
+  perform pg_temp.ran('send-supper-reminders-daily', '2031-04-01T15:00:00Z');
   perform pg_temp.ran('send-serving-monthly-broadcast', '2031-04-01T15:00:00Z');
   perform pg_temp.answered('2031-04-01T15:00:00Z', 200);
   perform pg_temp.answered('2031-04-01T15:00:00Z', 200);

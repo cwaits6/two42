@@ -112,7 +112,7 @@ function fakeClient(tables: Record<string, Row[]>, options: FakeOptions = {}) {
   const PRUNE_DAY: Record<string, string> = {
     serving_reminder_passes: "send_date",
     event_reminder_passes: "occurrence_date",
-    dinner_reminder_passes: "dinner_date",
+    supper_reminder_passes: "supper_date",
     usage_counts: "usage_date",
   };
   function prune(fn: string, args: { _org_id: string; _before: string; _limit: number }) {
@@ -469,21 +469,21 @@ Deno.test("event_reminder_passes: a backlog is asked for a batch at a time until
   assertEquals(queries.filter((q) => q.table === "event_reminder_passes").length, 2);
 });
 
-Deno.test("dinner_reminder_passes: a pass older than 35 days goes, one on the cutoff stays", async () => {
+Deno.test("supper_reminder_passes: a pass older than 35 days goes, one on the cutoff stays", async () => {
   const { client, tables } = fakeClient({
     organizations: [org()],
-    dinner_reminder_passes: [
-      { id: "old", org_id: ORG, dinner_date: JUST_PAST_REMINDERS },
-      { id: "on-cutoff", org_id: ORG, dinner_date: REMINDER_CUTOFF },
-      { id: "theirs", org_id: OTHER_ORG, dinner_date: JUST_PAST_REMINDERS },
+    supper_reminder_passes: [
+      { id: "old", org_id: ORG, supper_date: JUST_PAST_REMINDERS },
+      { id: "on-cutoff", org_id: ORG, supper_date: REMINDER_CUTOFF },
+      { id: "theirs", org_id: OTHER_ORG, supper_date: JUST_PAST_REMINDERS },
     ],
   });
 
   const { removed, failures } = await cleanUpOrg(client, ORG, NOW);
 
   assertEquals(failures, []);
-  assertEquals(removed.dinnerReminderPasses, 1);
-  assertEquals(ids(tables.dinner_reminder_passes), ["on-cutoff", "theirs"]);
+  assertEquals(removed.supperReminderPasses, 1);
+  assertEquals(ids(tables.supper_reminder_passes), ["on-cutoff", "theirs"]);
 });
 
 Deno.test("event_reminder_passes: a refused delete is a failure and the serving passes still go", async () => {
@@ -559,7 +559,7 @@ Deno.test("every query is bound to the org being cleaned, and another church's r
     prayer_requests: [{ id: "theirs", org_id: OTHER_ORG, created_at: JUST_PAST_SIX_MONTHS }],
     serving_reminder_passes: [{ id: "theirs", org_id: OTHER_ORG, send_date: JUST_PAST_REMINDERS }],
     event_reminder_passes: [{ id: "theirs", org_id: OTHER_ORG, occurrence_date: JUST_PAST_REMINDERS }],
-    dinner_reminder_passes: [{ id: "theirs", org_id: OTHER_ORG, dinner_date: JUST_PAST_REMINDERS }],
+    supper_reminder_passes: [{ id: "theirs", org_id: OTHER_ORG, supper_date: JUST_PAST_REMINDERS }],
     usage_counts: [{ id: "theirs", org_id: OTHER_ORG, usage_date: JUST_PAST_USAGE }],
   });
 
@@ -574,10 +574,10 @@ Deno.test("every query is bound to the org being cleaned, and another church's r
     prayerRequests: 0,
     reminderPasses: 0,
     eventReminderPasses: 0,
-    dinnerReminderPasses: 0,
+    supperReminderPasses: 0,
     usageCounts: 0,
   });
-  for (const table of ["access_requests", "family_invites", "group_invites", "feedback", "prayer_requests", "serving_reminder_passes", "event_reminder_passes", "dinner_reminder_passes", "usage_counts"]) {
+  for (const table of ["access_requests", "family_invites", "group_invites", "feedback", "prayer_requests", "serving_reminder_passes", "event_reminder_passes", "supper_reminder_passes", "usage_counts"]) {
     assertEquals(ids(tables[table]), ["theirs"], table);
   }
   assertEquals(queries.length > 0, true);
@@ -678,7 +678,7 @@ for (
 }
 
 Deno.test("a clean run summarizes with no failures", () => {
-  const removed = { accessRequests: 1, familyInvites: 2, groupInvites: 3, feedback: 4, prayerRequests: 5, reminderPasses: 6, eventReminderPasses: 7, dinnerReminderPasses: 9, usageCounts: 8 };
+  const removed = { accessRequests: 1, familyInvites: 2, groupInvites: 3, feedback: 4, prayerRequests: 5, reminderPasses: 6, eventReminderPasses: 7, supperReminderPasses: 9, usageCounts: 8 };
   assertEquals(summarizeCleanup([{ orgId: ORG, removed, failures: [] }]), {
     orgs: 1,
     removed: [{ org: ORG, ...removed }],

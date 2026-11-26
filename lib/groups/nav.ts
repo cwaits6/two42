@@ -17,7 +17,7 @@ export type IconName =
   | "lectures"
   | "about"
   | "serving"
-  | "dinner-club"
+  | "supper-club"
   | "prayer"
   | "give"
   | "group-settings"
@@ -71,8 +71,8 @@ export type SidebarInput = {
   /** Requests to join waiting on the active group, for its leader; null at zero or when not counted. */
   waitingRequests?: number | null;
   hasServingAccess: boolean;
-  /** The viewer's groups whose leader turned the dinner club on. */
-  dinnerClubGroupIds?: readonly string[];
+  /** The viewer's groups whose leader turned the Supper club on. */
+  supperClubGroupIds?: readonly string[];
   orgName: string;
 };
 
@@ -110,8 +110,8 @@ function groupPages(group: ActiveGroup, churchBase: string, input: SidebarInput)
     link(groupBase, "/lectures", "Lessons", "lectures"),
   ];
   if (input.hasServingAccess) items.push(link(groupBase, "/serving", "Serving", "serving"));
-  if (input.dinnerClubGroupIds?.includes(group.id)) {
-    items.push(link(groupBase, "/dinner-club", "Dinner club", "dinner-club"));
+  if (input.supperClubGroupIds?.includes(group.id)) {
+    items.push(link(groupBase, "/supper-club", "Supper club", "supper-club"));
   }
   items.push(
     GAP,

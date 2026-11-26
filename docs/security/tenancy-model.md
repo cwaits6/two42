@@ -658,42 +658,53 @@ open vs approval joining, who may review, the org switch as a ceiling,
 every direct write path and the cross-org floor;
 `e2e/group-discovery.spec.ts` asserts the rendered consequence.
 
-### Dinner club
+### Supper club
 
-A group's dinner club (`20261203000000_dinner_club.sql`) is a set of
-`dinner_*` tables, each with `org_id`, the restrictive floor and a
-`(season_id, group_id, org_id)` key pointing at its season, so the group a
-leader policy reads is always the season's own. A dinner is its own dated
-row in `dinners`, never an `events` row, so nothing reaches the group
+A group's Supper club (`20261205000000_supper_club.sql`) is a set of
+`supper_*` tables, each with `org_id` and the restrictive floor. The tables a
+leader policy reads by group (`supper_rotation_dates`, `supper_parties`,
+`supper_party_members`, `supper_party_addresses`, `supper_party_notes`,
+`supper_party_unavailable_dates`, `supper_drafts`, `supper_tables`,
+`supper_seats`, `suppers` and `supper_contributions`) carry a
+`(rotation_id, group_id, org_id)` key pointing at their rotation, so the group
+such a policy reads is always the rotation's own. The rest reach the tenant
+through other composite keys: `supper_replies` and `supper_reminder_passes`
+through `(supper_id, org_id)` to their supper, `supper_feed_tokens` and
+`supper_reminder_sends` through `(profile_id, org_id)` to a profile. A supper is its own dated
+row in `suppers`, never an `events` row, so nothing reaches the group
 calendar or the group's subscription.
 
 Two things are private, and each lives in its own table because a row policy
 cannot hide one column:
 
-- **A host's address** (`dinner_party_addresses`): read by the party, the
+- **A host's address** (`supper_party_addresses`): read by the party, the
   group's leaders, and the parties seated at a table one of that party's
-  dinners is at, while the host is still seated there
-  (`dinner_address_party_ids()`). Tables, seats and dinners are
-  written only by `dinner_tables_publish()`, so before publish no guest reads
-  any address.
-- **Allergies and food needs** (`dinner_party_notes`): read by the party, the
-  leaders, and the host of a dinner the party is seated at
-  (`dinner_food_note_party_ids()`).
+  suppers is at, while the host is still seated there
+  (`supper_address_party_ids()`). Tables, seats and suppers are
+  created only by `supper_tables_publish()`, so before publish no guest reads
+  any address. Later writes only narrow or reschedule what publish made: a
+  withdrawal sets `left_at` on the party's seats (`supper_party_withdrawn()`),
+  and the host or a leader may change a supper's start, host or
+  `host_unavailable` under its RLS policy and column grant, checked by
+  `suppers_guard()`.
+- **Allergies and food needs** (`supper_party_notes`): read by the party, the
+  leaders, and the host of a supper the party is seated at
+  (`supper_food_note_party_ids()`).
 
 Neither has a church-admin arm: a church admin outside the group reads
-neither. Parties, seats, tables and dinners are read by the leaders and the
-parties at the same table; seasons by the group's members once out of draft.
+neither. Parties, seats, tables and suppers are read by the leaders and the
+parties at the same table; rotations by the group's members once out of draft.
 The policies reach each other only through the six zero-argument definer
 helpers listed in `service-role-inventory.md`, so there is no policy cycle.
-The per-person calendar link (`dinner_feed_tokens`) follows
+The per-person calendar link (`supper_feed_tokens`) follows
 `calendar_subscription_tokens`. The reminder's sent record
-(`dinner_reminder_passes`, `dinner_reminder_sends`) is service-key only, like
+(`supper_reminder_passes`, `supper_reminder_sends`) is service-key only, like
 the event reminder's, and the nightly `clean-up-expired-data` job deletes a
-church's passes older than 35 days through `dinner_reminder_passes_prune()`.
+church's passes older than 35 days through `supper_reminder_passes_prune()`.
 A reply is written by the person or the other person in the same party, a
-rule `dinner_replies_guard()` checks on the party seated at that dinner.
-Proofs: `supabase/tests/dinner_club_suite.sql`
-for every viewer, and `e2e/dinner-club.spec.ts` for what a guest, an unseated
+rule `supper_replies_guard()` checks on the party seated at that supper.
+Proofs: `supabase/tests/supper_club_suite.sql`
+for every viewer, and `e2e/supper-club.spec.ts` for what a guest, an unseated
 member and someone outside the group see.
 
 ### Group invite links

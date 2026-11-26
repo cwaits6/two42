@@ -1,0 +1,59 @@
+---
+title: Supper club
+description: Sign up for a rotation of suppers in members' homes, see your table, say what you bring, and change your plans.
+sources:
+  - "app/g/[groupId]/supper-club/page.tsx"
+  - "app/g/[groupId]/supper-club/load.ts"
+  - "components/supperClub/SignUpForm.tsx"
+  - "components/supperClub/WaitlistForm.tsx"
+  - "components/supperClub/SupperCard.tsx"
+  - "components/supperClub/BringListDialog.tsx"
+  - "components/supperClub/CalendarLinkCard.tsx"
+  - "components/supperClub/HostingDetailsDialog.tsx"
+  - "components/supperClub/HostingFields.tsx"
+  - "components/supperClub/MoveSupperButton.tsx"
+  - "components/supperClub/MoveDialog.tsx"
+  - "components/supperClub/WithdrawButton.tsx"
+  - "lib/supperClub/bringList.ts"
+  - "lib/supperClub/notify.ts"
+  - "lib/supperClub/ics.ts"
+  - "app/api/supper-club/feed-token/**"
+  - "app/api/supper-club/feed.ics/**"
+  - "app/api/supper-club/suppers/[supperId]/move/**"
+  - "supabase/functions/send-supper-reminders/**"
+  - "supabase/functions/_shared/supper-reminders.ts"
+---
+
+## How a Supper club works
+
+A Supper club is a group's suppers in members' homes, a **rotation** at a time. You sign up as a **party**: you alone, or you and one other person. A leader puts the parties at **tables**, and each table meets at a **host**'s home for each **supper**. Leaders set it up as described in [Supper club](/docs/administer/supper-club).
+
+**Supper club** appears in the menu once a leader of the group turns it on.
+
+## Sign up
+
+While sign-ups are open, the Supper club page shows the rotation, its format and its suppers. Under **Who's coming**, choose **Just me**, someone in your household, or someone else in the group. Check **I can host** if you can, with your seats (you included) and the address for the suppers. Add any allergies or food needs, then **Sign up**. Until sign-ups close you can change it and **Save sign-up**, or **Withdraw**.
+
+If you were in the last rotation, the page shows **Sign up again** with your answers filled in. Change anything, then **Sign up**. Your address, food needs and home notes carry over only when you sign up with the same person as last rotation.
+
+## The waiting list
+
+Once the tables are published, **Join the waiting list** if you're not signed up. The leader seats you at a table with room, and your table shows on the Supper club page once they publish the change. Until then you see no table. Tell the leader about any food needs. **Leave the waiting list** takes you off it.
+
+## Your table
+
+Once the tables are published, the page shows **Your next supper** and your later ones: the time, the host, the address and who is at the table. Answer **Going** or **Not going** for yourself and your partner. If the host has said, **You're bringing** shows what your party brings, and the reminder email the day before says it too.
+
+**Calendar link** gives you a link for your own suppers in your calendar app.
+
+## If you're hosting
+
+You see who is going and the food needs of the parties coming. **What guests bring** lets you pick something for each guest party, or **Suggest** to fill the list and change what you like, then **Save list**. Your supper shows the list once it's saved.
+
+If you can't host one supper, choose **Can't host this supper**. The leader finds another host, moves the supper or moves your guests, and your table hears once it's sorted. **I can host after all** takes it back. You can also **Move supper** to another date and time within the rotation.
+
+## Withdraw from a rotation
+
+After sign-ups close, **Withdraw from this rotation** frees your seats at the suppers still to come. Suppers that have happened keep you.
+
+When a leader ends the rotation, you keep seeing your tables, and replies and supper emails stop.
